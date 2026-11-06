@@ -15,7 +15,7 @@ import { cn } from "../ui/brand/cn";
 import { fillYearRange, humaniseLabel, normaliseGeographies } from "../ui/charts/EvidenceDistributionChart";
 import "./landscape.css";
 import { PANE_LABEL_CLASS } from "../ui/brand/label";
-import { evidenceTypeLabel } from "./sourcesPresentation";
+import { evidenceTypeLabel, FULL_TEXT } from "../ui/brand/evidence";
 
 /* ---------------------------------------------------------------------------
  * Landscape charts (task 058, landscape polish; lead rulings 2026-11-05).
@@ -161,7 +161,7 @@ const FUNNEL_STAGES = [
   { key: "found", label: "Found", stages: ["acquire"] },
   { key: "relevant", label: "Relevant", stages: ["screen"] },
   { key: "quality_checked", label: "Quality-checked", stages: ["classify", "appraise"] },
-  { key: "read_in_full", label: "Full text", stages: ["ingest"] },
+  { key: "read_in_full", label: FULL_TEXT, stages: ["ingest"] },
   { key: "selected", label: "Shortlisted", stages: ["select"] },
   { key: "cited", label: "Cited", stages: ["synthesise"] },
 ] as const;

@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import { Link } from "react-router";
 
 import type { components } from "../api/gen/types";
 import { Figures } from "../lib/figures";
@@ -8,7 +9,10 @@ import { cn } from "../ui/brand/cn";
 import { Collapse } from "../ui/motion/Collapse";
 import { ChevronIcon } from "../ui/brand/icons";
 import { TABLE_HEADER_TEXT_CLASS } from "./sourcesPresentation";
-import { CAPTION_LABEL_CLASS } from "../ui/brand/label";
+import { CAPTION_LABEL_CLASS, PANE_LABEL_CLASS } from "../ui/brand/label";
+
+/** The block's heading, live and finished (owner, round 12: plain). */
+export const SEARCH_QUERIES_TITLE = "Search queries";
 
 /** One row of the block, from the stream or the committed coverage. */
 export type QueryRow = {
@@ -20,7 +24,18 @@ export type QueryRow = {
   pass: "citations" | "lookup" | null;
   /** Null until the query returns. */
   results: number | null;
+  /** The key the table filters on (`?query=`, the coverage row's
+   *  `query_id`, round 12); null on a live row while the stream carries
+   *  none, which then reads as plain words. */
+  queryId: string | null;
 };
+
+/** A row's `query_id` as the URL carries it. The coverage read always has
+ *  one; a live row has one only once the stream sends it. */
+function queryIdOf(item: object): string | null {
+  const id = (item as { query_id?: number | string | null }).query_id;
+  return (typeof id === "number" && Number.isInteger(id)) || (typeof id === "string" && id !== "") ? String(id) : null;
+}
 
 /** The block's rows grouped by backend, in the order each backend first
  *  appears; within a group, in the order the queries went out. */
@@ -71,6 +86,7 @@ export function queryGroups(
       muted: false,
       pass: null,
       results: item.results,
+      queryId: queryIdOf(item),
     })),
     ...(detail.passes ?? []).map((item) => ({
       backend: backendName(detail.backend),
@@ -78,6 +94,7 @@ export function queryGroups(
       muted: true,
       pass: item.pass,
       results: item.results,
+      queryId: queryIdOf(item),
     })),
   ]);
   const liveRows: QueryRow[] = (live ?? []).map((item) => {
@@ -88,6 +105,7 @@ export function queryGroups(
       muted: pass !== null,
       pass,
       results: item.results,
+      queryId: queryIdOf(item),
     };
   });
   const rows = searching || committedRows.length === 0 ? liveRows : committedRows;
@@ -113,6 +131,33 @@ export function queryTotals(groups: readonly QueryGroup[]): string {
   return `Found with ${words.join(" and ")}`;
 }
 
+/** The row a `?query=` value names, if the block holds it. */
+export function findQueryRow(groups: readonly QueryGroup[], param: string): QueryRow | undefined {
+  return groups.flatMap((group) => group.rows).find((row) => row.queryId === param);
+}
+
+/** The applied query filter's words: "Query: " and the first 40 characters,
+ *  an ellipsis when cut (round 12, as the Country chip reads). */
+export function queryChipLabel(text: string): string {
+  const words = text.trim();
+  return words.length > 40 ? `${words.slice(0, 40).trimEnd()}…` : words;
+}
+
+/** The query or pass as a prose link that filters the table to the records
+ *  it returned (round 12): the row's colour over a Line 2 underline, Electric
+ *  Blue on hover. A row without a key reads as plain words. */
+function QueryLink({ row, hrefFor }: { row: QueryRow; hrefFor: (param: string) => string }) {
+  if (row.queryId === null) return <>{scrub(row.query)}</>;
+  return (
+    <Link
+      to={hrefFor(row.queryId)}
+      className="underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 hover:text-blue hover:decoration-blue"
+    >
+      {scrub(row.query)}
+    </Link>
+  );
+}
+
 /** A count on its way: the Sources tab's placeholder bar, right-aligned. */
 function ResultsPulse() {
   return (
@@ -123,126 +168,168 @@ function ResultsPulse() {
 }
 
 /**
- * The search queries at the top of All sources (task 058, owner round 9).
- * While the search runs it is open under the heading "Search queries", one
- * row per query as it goes out: the backend once per group as a small grey
- * label, the query (a citation pass's or lookup's description in grey), and
- * in the Results column a pulsing bar until the count returns, then the
- * count in tabular figures, right-aligned (the owner: good as it is).
- *
- * Once the search has ended (round 11) it is no box: one Meta Grey line in
- * the filter bar's column, "Found with 12 queries and 3 citation passes ·
- * Show", with the app's one disclosure (the chevron, Show / Hide). Open, the
- * queries are ruled rows at the sources table's Meta size and full width:
- * the query in Navy (a pass's description in Grey, as its own row), the
- * database it went to in Grey, and the results count right-aligned.
+ * The search queries at the top of All sources while the search runs (task
+ * 058, owner round 9): open under the heading "Search queries", one row per
+ * query as it goes out: the backend once per group as a small grey label,
+ * the query (a citation pass's or lookup's description in grey), and in the
+ * Results column a pulsing bar until the count returns, then the count in
+ * tabular figures, right-aligned (the owner: good as it is). Each query is a
+ * link that filters the table to what it returned (round 12). When the
+ * search ends the block folds over 200 ms and `QueriesSummary` takes over in
+ * the count row.
  */
-export function SearchQueries({ groups, searching }: { groups: readonly QueryGroup[]; searching: boolean }) {
+export function SearchQueries({
+  groups,
+  searching,
+  hrefFor,
+}: {
+  groups: readonly QueryGroup[];
+  searching: boolean;
+  hrefFor: (param: string) => string;
+}) {
+  if (groups.length === 0) return null;
+  return (
+    <section aria-label={searching ? SEARCH_QUERIES_TITLE : undefined} data-testid="search-queries" className={searching ? "mb-6" : undefined}>
+      {searching && (
+        <h2 className="text-lead font-semibold text-navy">
+          {SEARCH_QUERIES_TITLE}
+        </h2>
+      )}
+      <Collapse show={searching} durationMs={200}>
+        <div className="pt-3">
+          <table className="w-full table-fixed border-y border-line text-left text-meta">
+            <thead className={cn("border-b border-line", TABLE_HEADER_TEXT_CLASS)}>
+              <tr>
+                <th scope="col" className="py-2 pr-4">
+                  Query
+                </th>
+                <th scope="col" className="w-24 py-2 text-right max-md:w-16">
+                  Results
+                </th>
+              </tr>
+            </thead>
+            {groups.map((group) => (
+              <tbody key={group.backend} className="border-b border-line last:border-b-0">
+                <tr>
+                  <th scope="rowgroup" colSpan={2} className={cn(CAPTION_LABEL_CLASS, "pt-3 pb-1")}>
+                    {scrub(group.backend)}
+                  </th>
+                </tr>
+                {group.rows.map((row, rowIndex) => {
+                  return (
+                    // A query that goes out while the reader watches fades in.
+                    <tr key={`${row.query}:${rowIndex}`} className={cn(rowIndex > 0 && "border-t border-line", "anim-swap-in")}>
+                      <td className={cn("py-2 pr-4 break-words leading-[1.5]", row.muted ? "text-grey" : "text-navy")}>
+                        <QueryLink row={row} hrefFor={hrefFor} />
+                      </td>
+                      <td className="py-2 text-right tabular-nums text-navy">
+                        {row.results === null ? <ResultsPulse /> : row.results.toLocaleString("en-GB")}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            ))}
+          </table>
+        </div>
+      </Collapse>
+    </section>
+  );
+}
+
+/**
+ * The finished search as a section of its own above the filter bar (owner,
+ * round 12: the search came before the filtering). One line in the
+ * Landscape's section pattern: the Label-style heading "Search queries" at
+ * the left and, right-aligned on the same line, the Body sentence
+ * in Ink "Found with 12 queries and 3 citation passes · Show", "Show" the
+ * quiet control with the disclosure chevron ("Hide" when open); on phones the
+ * sentence wraps under the heading. The hairline runs under that line; open,
+ * the queries are ruled rows under it at the sources table's Meta size
+ * (round 11): the query in Navy (a pass's description in Grey, as its own
+ * row), the database in Grey, the results count right-aligned; each query is
+ * a link that filters the table (round 12). Hidden while the live list shows.
+ */
+export function QueriesSummary({
+  groups,
+  hrefFor,
+}: {
+  groups: readonly QueryGroup[];
+  hrefFor: (param: string) => string;
+}) {
   const [open, setOpen] = useState(false);
   const tableId = useId();
   const headingId = useId();
   if (groups.length === 0) return null;
   const rows = groups.flatMap((group) => group.rows);
   return (
-    <section aria-labelledby={headingId} data-testid="search-queries" className={searching ? "mb-6" : "mb-3"}>
-      {searching ? (
-        <h2 id={headingId} className="text-lead font-semibold text-navy">
-          Search queries
+    <section aria-labelledby={headingId} data-testid="search-queries-summary" className="min-w-0">
+      {/* The Landscape section's heading row (LandscapeSection), without its
+          content padding, so the section ends at its hairline when shut. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-0.5 border-b border-line pt-3.5 pb-2">
+        <h2 id={headingId} className={PANE_LABEL_CLASS}>
+          {SEARCH_QUERIES_TITLE}
         </h2>
-      ) : (
-        <h2 id={headingId} className="text-meta">
+        <p className="text-body text-ink">
           <button
             type="button"
             aria-expanded={open}
             aria-controls={open ? tableId : undefined}
+            // The visible separator holds with a no-break space; the name
+            // keeps plain spaces.
+            aria-label={`${queryTotals(groups)} · ${open ? "Hide" : "Show"}`}
             onClick={() => setOpen((value) => !value)}
-            className="group inline-flex min-h-6 cursor-pointer items-center gap-1 text-left text-grey"
+            className="group cursor-pointer text-left"
           >
-            <ChevronIcon
-              size={12}
-              className={cn(
-                "-ml-0.5 shrink-0 transition-transform duration-200 ease-[var(--ease-out-strong)]",
-                open && "rotate-90",
-              )}
-            />
-            <span>
-              <Figures text={queryTotals(groups)} />
-              {" · "}
-              <span className="font-semibold underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 group-hover:text-navy group-hover:decoration-navy">
+            <Figures text={queryTotals(groups)} />
+            {/* The dot holds to the sentence's last word, so a wrapped line
+                starts with the control, never with the dot. */}
+            {"\u00a0· "}
+            <span className="inline-flex items-baseline gap-1 whitespace-nowrap">
+              <ChevronIcon
+                size={12}
+                className={cn(
+                  "shrink-0 self-center text-grey transition-transform duration-200 ease-[var(--ease-out-strong)] group-hover:text-navy",
+                  open && "rotate-90",
+                )}
+              />
+              <span className="font-semibold text-grey underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 group-hover:text-navy group-hover:decoration-navy">
                 {open ? "Hide" : "Show"}
               </span>
             </span>
           </button>
-        </h2>
-      )}
-      {/* The block folds to its line when the search ends. */}
-      <Collapse show={searching || open} durationMs={200}>
-        {searching ? (
-          <div id={tableId} className="pt-3">
-            <table className="w-full table-fixed border-y border-line text-left text-meta">
-              <thead className={cn("border-b border-line", TABLE_HEADER_TEXT_CLASS)}>
-                <tr>
-                  <th scope="col" className="py-2 pr-4">
-                    Query
-                  </th>
-                  <th scope="col" className="w-24 py-2 text-right max-md:w-16">
-                    Results
-                  </th>
+        </p>
+      </div>
+      <Collapse show={open} durationMs={200}>
+        <div id={tableId}>
+          <table className="w-full table-fixed text-left text-meta">
+            <colgroup>
+              <col />
+              <col className="w-28 max-md:w-24" />
+              <col className="w-16" />
+            </colgroup>
+            <thead className="sr-only">
+              <tr>
+                <th scope="col">Query</th>
+                <th scope="col">Database</th>
+                <th scope="col">Results</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, index) => (
+                <tr key={`${row.backend}:${row.query}:${index}`} className="border-b border-line">
+                  <td className={cn("py-2 pr-4 break-words leading-[1.5]", row.muted ? "text-grey" : "text-navy")}>
+                    <QueryLink row={row} hrefFor={hrefFor} />
+                  </td>
+                  <td className="py-2 pr-4 align-top text-grey">{scrub(row.backend)}</td>
+                  <td className="py-2 text-right align-top tabular-nums text-navy">
+                    {row.results === null ? <ResultsPulse /> : row.results.toLocaleString("en-GB")}
+                  </td>
                 </tr>
-              </thead>
-              {groups.map((group) => (
-                <tbody key={group.backend} className="border-b border-line last:border-b-0">
-                  <tr>
-                    <th scope="rowgroup" colSpan={2} className={cn(CAPTION_LABEL_CLASS, "pt-3 pb-1")}>
-                      {scrub(group.backend)}
-                    </th>
-                  </tr>
-                  {group.rows.map((row, index) => (
-                    // A query that goes out while the reader watches fades in.
-                    <tr key={`${row.query}:${index}`} className={cn(index > 0 && "border-t border-line", "anim-swap-in")}>
-                      <td className={cn("py-2 pr-4 break-words leading-[1.5]", row.muted ? "text-grey" : "text-navy")}>
-                        {scrub(row.query)}
-                      </td>
-                      <td className="py-2 text-right tabular-nums text-navy">
-                        {row.results === null ? <ResultsPulse /> : row.results.toLocaleString("en-GB")}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
               ))}
-            </table>
-          </div>
-        ) : (
-          <div id={tableId} className="pt-2 pb-3">
-            <table className="w-full table-fixed text-left text-meta">
-              <colgroup>
-                <col />
-                <col className="w-28 max-md:w-24" />
-                <col className="w-16" />
-              </colgroup>
-              <thead className="sr-only">
-                <tr>
-                  <th scope="col">Query</th>
-                  <th scope="col">Database</th>
-                  <th scope="col">Results</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, index) => (
-                  <tr key={`${row.backend}:${row.query}:${index}`} className="border-b border-line first:border-t">
-                    <td className={cn("py-2 pr-4 break-words leading-[1.5]", row.muted ? "text-grey" : "text-navy")}>
-                      {scrub(row.query)}
-                    </td>
-                    <td className="py-2 pr-4 align-top text-grey">{scrub(row.backend)}</td>
-                    <td className="py-2 text-right align-top tabular-nums text-navy">
-                      {row.results === null ? <ResultsPulse /> : row.results.toLocaleString("en-GB")}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+            </tbody>
+          </table>
+        </div>
       </Collapse>
     </section>
   );

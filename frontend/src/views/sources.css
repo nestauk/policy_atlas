@@ -8,8 +8,12 @@
  * - Fixed columns: the source takes what the value columns leave, so a
  *   filter or a page change never moves a column, and values never wrap (a
  *   long one ends in an ellipsis; its hover and the dossier carry it whole).
- * - Values are plain Meta text; the one chip left is the green "Cited".
- * - Below lg each source is a stacked row in the same markup: the title, its
+ * - Values are plain Meta text; no chips (round 12: "Cited" sits under the
+ *   Status with a green tick).
+ * - The widths follow the column, not the window (`@container/sources` on
+ *   the view's main, round 12): as the column narrows (the sidebar open) the
+ *   evidence type gives way first, wrapping to two lines, and below 54 rem
+ *   each source is a stacked row in the same markup: the title, its
  *   "Venue · Year · Origin" line, then the values in column order joined by
  *   " · ", each placeholder bar in its slot. The headers hide; sorting moves
  *   to the filter row's Sort select.
@@ -29,8 +33,8 @@
 }
 
 /* Widths hold every value of the classifier's vocabulary, and every header
-   with its sort arrow, on one line from xl up (measured in Averta; the
-   fallback face is wider, and a value too long ends in an ellipsis). */
+   with its sort arrow, on one line when the column is 72 rem or wider
+   (measured in Averta; the fallback face is wider). */
 .sources-col-year {
   width: 4rem;
 }
@@ -43,16 +47,34 @@
 .sources-col-relevant {
   width: 6.25rem;
 }
+/* The tone square and "Abstract only" on one line (round 12). */
 .sources-col-status {
-  width: 6.5rem;
+  width: 8rem;
 }
 
-/* Between lg and xl a long evidence type gives way to the title and ends in
-   an ellipsis (its hover and the dossier carry it whole). */
-@media (max-width: 79.99rem) {
+/* The evidence type takes the slack as the column narrows (round 12): it
+   wraps to two lines before the source gives way, and a value longer than
+   two lines ends in an ellipsis (its hover and the dossier carry it whole).
+   At 54 rem the source keeps 16 rem; below it the row stacks. */
+@container sources (max-width: 71.99rem) {
   .sources-col-type {
-    width: 13rem;
+    width: 12.5rem;
   }
+}
+@container sources (max-width: 61.99rem) {
+  .sources-col-type {
+    width: 9.75rem;
+  }
+}
+.sources-type,
+.sources-type > .sources-hint {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
 }
 
 .sources-th {
@@ -114,17 +136,37 @@
   vertical-align: middle;
 }
 
-/* The title's second line: Meta Grey, the green "Cited" chip at its end. */
+/* The title's second line: Meta Grey. */
 .sources-meta {
   margin-top: 2px;
   font-size: var(--text-meta);
   line-height: var(--text-meta--line-height);
   color: var(--color-grey);
 }
+
+/* "Cited" under the Status (round 12): a 12 px Green tick and the word in
+   Ink, on the line under the depth, the tick in the tone square's slot. */
 .sources-cited {
-  margin-left: 8px;
-  vertical-align: 1px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: -3px;
   white-space: nowrap;
+  color: var(--color-ink);
+}
+
+/* "Full text" as the link to the document (round 12): the word in Navy
+   over a Line 2 underline that turns Navy on hover, as the report's
+   addresses do. */
+.sources-text-link {
+  text-decoration: underline;
+  text-decoration-color: var(--color-line-2);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 150ms ease;
+}
+.sources-text-link:hover {
+  text-decoration-color: var(--color-navy);
 }
 
 /* One line per value; a value too long for its column ends in an ellipsis. */
@@ -150,28 +192,15 @@
   align-items: center;
   gap: 6px;
 }
-/* The standard affordance for a value with a reason behind it (round 11):
-   a dotted Grey underline and the help cursor, so the hover is found. */
-.sources-hint-word {
-  text-decoration: underline dotted var(--color-grey);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-}
+/* A value with a reason behind it: the shared `reason-word` utility
+   (index.css) underlines the word; `.sources-hint` gives the help cursor. */
 
-/* The strength's tone: the 6 px status square before the word. */
+/* The tone square's place in the table's running text (rounds 11 and 12):
+   its size and colour are the shared `ToneSquare`'s (ui/brand/evidence);
+   here only the gap to its word and its seat on the line. */
 .sources-tone {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
   margin-right: 7px;
   vertical-align: 2px;
-  background-color: var(--color-grey);
-}
-.sources-tone[data-tone="strong"] {
-  background-color: var(--color-green);
-}
-.sources-tone[data-tone="moderate"] {
-  background-color: var(--color-navy);
 }
 
 .sources-pulse {
@@ -183,10 +212,11 @@
   justify-content: flex-end;
 }
 
-/* Below lg the six fixed columns would leave the title under 100 px (at 768
-   the value columns alone take 600 of 672), so the stacked row the brief
-   gives phones holds from lg down. */
-@media (max-width: 63.99rem) {
+/* Below 54 rem of column the six fixed columns would leave the title under
+   16 rem (with the sidebar open at 1280 they left it under 100 px), so the
+   stacked row the brief gives phones holds there (round 12: by the column,
+   not the window). */
+@container sources (max-width: 53.99rem) {
   .sources-table,
   .sources-table tbody {
     display: block;
@@ -235,9 +265,17 @@
     text-align: left;
   }
   .sources-nowrap,
-  .sources-nowrap > .sources-hint {
+  .sources-nowrap > .sources-hint,
+  .sources-type,
+  .sources-type > .sources-hint {
     display: inline;
     white-space: normal;
+  }
+  /* "Cited" follows the depth on the same line. */
+  .sources-cited {
+    display: inline-flex;
+    margin-left: 6px;
+    vertical-align: -1px;
   }
   .sources-pulse {
     display: inline-flex;

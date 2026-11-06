@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { components } from "../api/gen/types";
 import { useRunStream } from "../store";
+import { humanReason } from "../ui/brand/evidence";
 import { CAPTION_LABEL_CLASS } from "../ui/brand/label";
 
 type EvidenceItem = components["schemas"]["EvidenceItemOut"];
@@ -80,35 +81,10 @@ export function switchChoiceClass(chosen: boolean): string {
   }`;
 }
 
-/** The tone of an appraised strength (round 11): a 6 px square before the
- *  word, as the status column marks its states. Green for strong, Navy for
- *  moderate, Grey for weak and not assessed; ordered as the sort is. A tier
- *  outside the vocabulary has no mark. */
-export type StrengthTone = "strong" | "moderate" | "weak";
-
-const STRENGTH_TONES: Record<string, StrengthTone> = {
-  "Very strong": "strong",
-  Strong: "strong",
-  Moderate: "moderate",
-  Limited: "weak",
-  Weak: "weak",
-  Unrated: "weak",
-};
-
-/** The strength's tone, or `null` for a tier the vocabulary does not hold. */
-export function strengthTone(tier: string | null | undefined): StrengthTone | null {
-  return tier ? (STRENGTH_TONES[tier] ?? null) : null;
-}
-
 /** Table header type: the Label style at Caption size (12 px Bold,
  *  uppercase, tracked), one line, so the headers label the columns without
  *  outweighing the rows (task 058, round 10, sources table entry 6). */
 export const TABLE_HEADER_TEXT_CLASS = `${CAPTION_LABEL_CLASS} whitespace-nowrap`;
-
-/** Evidence types in sentence case: the report's one formatter (round 10),
- *  re-exported so the Sources views keep one import. Display only; filters
- *  and links keep the classifier's own value. */
-export { evidenceTypeLabel } from "./artefactPresentation";
 
 /**
  * The phone's sort choices (below `md` the table's headers are hidden, so
@@ -133,9 +109,49 @@ const PHONE_SORTS: ReadonlyArray<{ label: string; sort: EvidenceSortField; order
 /** The phone's sort choices with their select values (`sort:order`). */
 export const PHONE_SORT_OPTIONS = PHONE_SORTS.map((option) => ({ ...option, value: `${option.sort}:${option.order}` }));
 
+/** The sources table's page sizes (round 12): 25 by default, 50 or 100 by
+ *  choice. The server keeps its own default; the client always asks. */
+export const SOURCES_PAGE_SIZES = [25, 50, 100] as const;
+export type SourcesPageSize = (typeof SOURCES_PAGE_SIZES)[number];
+export const DEFAULT_SOURCES_PAGE_SIZE: SourcesPageSize = 25;
+
+/** One of the page sizes, or `null` for anything else. */
+export function sourcesPageSize(value: string | number | null | undefined): SourcesPageSize | null {
+  const size = Number(value);
+  return SOURCES_PAGE_SIZES.find((candidate) => candidate === size) ?? null;
+}
+
+const pageSizeKey = (taskId: string) => `policy-atlas:sources-page-size:${taskId}`;
+
+/**
+ * Remember the page size the reader chose on a task (round 12), beside the
+ * subtab memory: a per-viewer convenience in `localStorage`; a storage that
+ * is missing, blocked or full means the default applies.
+ *
+ * Args:
+ *   taskId: The task.
+ *   size: The chosen page size.
+ */
+export function rememberSourcesPageSize(taskId: string, size: SourcesPageSize): void {
+  try {
+    window.localStorage.setItem(pageSizeKey(taskId), String(size));
+  } catch {
+    // Without storage the default applies.
+  }
+}
+
+/** The page size the reader last chose on a task, or `null`. */
+export function rememberedSourcesPageSize(taskId: string): SourcesPageSize | null {
+  try {
+    return sourcesPageSize(window.localStorage.getItem(pageSizeKey(taskId)));
+  } catch {
+    return null;
+  }
+}
+
 /** The URL params the filter row sets, besides the screening toggles:
  *  "Clear filters" removes these and keeps the screening choice. */
-export const FACET_PARAMS = ["cited", "theme", "origin", "type", "strength", "year_from", "year_to", "country"] as const;
+export const FACET_PARAMS = ["cited", "theme", "origin", "type", "strength", "year_from", "year_to", "country", "query"] as const;
 
 /**
  * A year range in words: "2015 to 2020", "2016" for one year, "2015 to
@@ -171,91 +187,6 @@ export function nextEvidenceSort(
  *  "Uploaded" is deliberately not offered — document upload isn't a live
  *  feature yet (owner, 2026-08-05). */
 export const ORIGIN_FILTER_OPTIONS = ["OpenAlex", "Overton"] as const;
-export const STRENGTH_FILTER_OPTIONS = [
-  "Very strong",
-  "Strong",
-  "Moderate",
-  "Limited",
-  "Weak",
-  // Task 056: no score (Unknown or Non-evidence documents); always last.
-  "Unrated",
-] as const;
-
-/**
- * Read depth — what of the source the analysis actually read (owner,
- * 2026-08-05: the old ladder label collapsed this once a source was cited).
- * Not read past screening → null (the cell stays empty).
- */
-export function readDepthLabel(
-  item: Pick<EvidenceItem, "read_in_full" | "screen_status" | "status">,
-): string | null {
-  // "Full text", not "Read in full": the text is fetched and made
-  // searchable, not read by a model at that step (owner, round 9).
-  if (item.read_in_full) return "Full text";
-  if (item.status === "unavailable" || item.screen_status === "relevant") return "Abstract only";
-  return null;
-}
-
-/** Human sentences for the backend's reason codes — raw codes never render.
- *  The fetch codes mirror `ingest_full_text`'s failure vocabulary. */
-const HUMAN_REASON: Record<string, string> = {
-  title_only: "Screened on the title only",
-  title_abstract: "Screened on the title and abstract",
-  fetch_failed: "The full text couldn't be fetched",
-  parse_failed: "The document couldn't be parsed",
-  no_url: "No full-text link was available",
-  paywall: "The full text is behind a paywall",
-  not_found: "The full-text link no longer works",
-  too_large: "The document was too large to process",
-  timeout: "The fetch timed out",
-  corrupt: "The file was corrupt",
-  no_text_layer: "The PDF had no extractable text",
-  thin_text: "The document contained too little text to use",
-  empty: "The fetched document was empty",
-  blocked: "The publisher blocked the fetch",
-  blocked_by_host: "The publisher's site blocked the fetch",
-  fetch_error: "The fetch failed",
-  unsupported_type: "The fetched file was not a text document",
-};
-
-/** Humanize a backend reason code; unknown snake_case codes de-snake rather
- *  than render as variables, anything else passes through untouched. */
-function humanReason(code: string): string {
-  if (HUMAN_REASON[code] !== undefined) return HUMAN_REASON[code];
-  if (/^[a-z0-9_]+$/.test(code)) {
-    const phrase = code.replaceAll("_", " ");
-    return phrase.charAt(0).toUpperCase() + phrase.slice(1);
-  }
-  return code;
-}
-
-/**
- * The Abstract-only hover: why the full text wasn't read, in plain words.
- * `null` for read-in-full rows (no hover needed).
- */
-export function readDepthHint(
-  item: Pick<EvidenceItem, "read_in_full" | "status" | "status_reason">,
-): string | null {
-  if (item.read_in_full) return null;
-  if (item.status === "unavailable") {
-    return item.status_reason
-      ? `${humanReason(item.status_reason)} — only the abstract was read.`
-      : "The full text couldn't be obtained — only the abstract was read.";
-  }
-  return "The full text hasn't been collected — screening and appraisal used the title and abstract.";
-}
-
-/** The strength hover, composed the same way as the citation sidebar's. */
-export function strengthHint(
-  item: Pick<EvidenceItem, "appraisal_tier" | "evidence_type">,
-): string {
-  if (item.appraisal_tier === "Unrated" && item.evidence_type) {
-    return `Unrated — the document type (${item.evidence_type}) is not scored; the source can be cited but counts below the evidence bar.`;
-  }
-  return item.appraisal_tier && item.evidence_type
-    ? `${item.appraisal_tier} evidence strength — appraised from the document type: ${item.evidence_type}.`
-    : "The source's appraised evidence strength — five bands from Weak to Very strong, scored from its classified document type; Unrated when the type is not scored.";
-}
 
 const STATUS_LABELS: Record<EvidenceItem["status"], string> = {
   found: "Found",

@@ -1,4 +1,4 @@
-import { forwardRef, useRef, useState, type ComponentPropsWithoutRef, type KeyboardEvent, type ReactNode } from "react";
+import { forwardRef, useRef, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 
 import { useApiClient, useCoverage, useEvidence, useFindings, useLandscape, useTask, useSourceDossier, useSourceRecords } from "../api/queries";
@@ -9,40 +9,39 @@ import { safeHref } from "../lib/safeHref";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
 import { useRunStream } from "../store";
-import { Button } from "../ui/brand/Button";
-import { Divider, PaneHeading } from "../ui/brand/Card";
-import { Chip } from "../ui/brand/Chip";
+import { Button, buttonVariants } from "../ui/brand/Button";
+import { Select } from "../ui/brand/Select";
 import { ReauthRedirect } from "../ui/feedback";
 import { cn } from "../ui/brand/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { Tooltip } from "../ui/radix/Tooltip";
-import { CloseIcon } from "../ui/brand/icons";
+import { CloseIcon, DownloadIcon } from "../ui/brand/icons";
 import { Arrival, ArrivalProvider, useFirstPaintDone } from "../ui/motion/arrivals";
-import { queryGroups, SearchQueries } from "./SearchQueries";
+import { findQueryRow, queryChipLabel, queryGroups, QueriesSummary, SearchQueries } from "./SearchQueries";
 import {
   abstractSourceLabel,
   cellPulses,
-  evidenceTypeLabel,
   feedsSources,
   liveStages,
   nextEvidenceSort,
-  readDepthHint,
-  readDepthLabel,
   screeningDetails,
   sourceStatusLabel,
-  strengthHint,
   yearRangeLabel,
+  DEFAULT_SOURCES_PAGE_SIZE,
   FACET_PARAMS,
   ORIGIN_FILTER_OPTIONS,
+  rememberedSourcesPageSize,
+  rememberSourcesPageSize,
+  SOURCES_PAGE_SIZES,
+  sourcesPageSize,
+  STATUS_COLUMN_HEADER,
   PHONE_SORT_OPTIONS,
   SOURCE_SORT_COLUMNS,
-  STRENGTH_FILTER_OPTIONS,
   TABLE_HEADER_TEXT_CLASS,
   FILTER_CHIP_APPLIED,
   FILTER_CHIP_PART,
   FILTER_CONTROL_IDLE,
-  strengthTone,
   switchChoiceClass,
   type CellPulses,
   type EvidenceSortField,
@@ -50,10 +49,20 @@ import {
   useLandedSources,
   useLiveRefetch,
 } from "./sourcesPresentation";
-import { numberedAuthorships } from "./artefactPresentation";
+import {
+  evidenceTypeLabel,
+  readDepthColour,
+  readDepthHint,
+  readDepthLabel,
+  strengthHint,
+  STRENGTH_LEGEND,
+  STRENGTH_TIERS,
+  type ReadDepth,
+} from "../ui/brand/evidence";
+import { DepthMark, StrengthMark, ToneSquare } from "../ui/brand/EvidenceMarks";
+import { displayUrl, numberedAuthorships, referenceParts } from "./artefactPresentation";
 import { isScoping } from "./scopingActivity";
 import { isFinished } from "./workspace/runProgress";
-import { PANE_LABEL_CLASS } from "../ui/brand/label";
 import { Pagination } from "./Pagination";
 import { normaliseGeographies } from "../ui/charts/EvidenceDistributionChart";
 import "./sources.css";
@@ -64,10 +73,10 @@ const STATUS_FILTERS = [
   { key: "screened_out", label: "Screened out" },
 ] as const;
 
-const PAGE_SIZE = 50;
 
 type EvidenceItem = components["schemas"]["EvidenceItemOut"];
 type EvidenceQuery = NonNullable<Parameters<typeof useEvidence>[1]>;
+
 
 /** The 40 px ghost inside the table's frame (the list pages' `ListError`
  *  control): Try again, Clear filters. */
@@ -96,14 +105,21 @@ export function SourcesView() {
   const citedFilter = searchParams.get("cited") === "true";
   const originFilter = ORIGIN_FILTER_OPTIONS.find((value) => value === searchParams.get("origin"));
   const typeFilter = searchParams.get("type") ?? undefined;
-  const strengthFilter = STRENGTH_FILTER_OPTIONS.find(
+  const strengthFilter = STRENGTH_TIERS.find(
     (value) => value === searchParams.get("strength"),
   );
   const countryFilter = searchParams.get("country") ?? undefined;
+  // One search query's results (round 12): the coverage row's `query_id`.
+  const rawQuery = searchParams.get("query");
+  const queryFilter = rawQuery !== null && /^\d+$/.test(rawQuery) ? rawQuery : undefined;
   const yearFrom = parseYearParam(searchParams.get("year_from"));
   const yearTo = parseYearParam(searchParams.get("year_to"));
   const rawPage = Number(searchParams.get("page") ?? "1");
   const page = Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : 1;
+  // 25 a page unless the reader chose more (round 12): the URL names a size
+  // other than 25; otherwise the size they last chose on this task.
+  const requestedPageSize =
+    sourcesPageSize(searchParams.get("page_size")) ?? rememberedSourcesPageSize(taskId) ?? DEFAULT_SOURCES_PAGE_SIZE;
   const sourceId = searchParams.get("source");
   // Task 046, amendment 3 (R67): an option card's document link adds the
   // option, so the dossier's slot reads "In this option"; a row here opens
@@ -138,7 +154,7 @@ export function SourcesView() {
   const filtered = FACET_PARAMS.some((key) => searchParams.has(key));
   const evidence = useEvidence(taskId, {
     page,
-    page_size: PAGE_SIZE,
+    page_size: requestedPageSize,
     status: statusFilter === "all" ? undefined : [statusFilter],
     cited: citedFilter || undefined,
     sort: effectiveSort,
@@ -150,6 +166,7 @@ export function SourcesView() {
     year_from: yearFrom,
     year_to: yearTo,
     country: countryFilter,
+    query: queryFilter !== undefined ? Number(queryFilter) : undefined,
   });
   const dossier = useSourceDossier(taskId, sourceId);
   const findings = useFindings(taskId, sourceId ? { page_size: 200, source_id: sourceId } : undefined);
@@ -159,6 +176,17 @@ export function SourcesView() {
   // The search queries, live as they go out (owner, round 9).
   const searching = live.has("acquire");
   const groups = queryGroups(stream.liveSearchQueries, coverage.data?.backends_detail, searching);
+  const appliedQuery = queryFilter !== undefined ? findQueryRow(groups, queryFilter) : undefined;
+  // A query's link shows every record it returned: the screening choice
+  // opens to All, and the other filters stay as they are.
+  const queryHref = (param: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("query", param);
+    next.set("status", "all");
+    next.delete("page");
+    next.delete("source");
+    return `?${next.toString()}`;
+  };
   // Rows and values that land while a stage runs fade in (the animation
   // sweep's entry 7); a filter, a sort or a page change holds still.
   const viewKey = searchParams.toString();
@@ -174,7 +202,7 @@ export function SourcesView() {
   });
   const results = useRef<HTMLDivElement>(null);
   const totalItems = evidence.data?.pagination.total_items ?? 0;
-  const pageSize = evidence.data?.pagination.page_size ?? PAGE_SIZE;
+  const pageSize = evidence.data?.pagination.page_size ?? requestedPageSize;
   const totalPages = evidence.data === undefined ? 0 : Math.ceil(totalItems / pageSize);
 
   const updateParams = (update: (next: URLSearchParams) => void) => {
@@ -182,6 +210,15 @@ export function SourcesView() {
       const next = new URLSearchParams(current);
       update(next);
       return next;
+    });
+  };
+  const choosePageSize = (value: string) => {
+    const size = sourcesPageSize(value) ?? DEFAULT_SOURCES_PAGE_SIZE;
+    rememberSourcesPageSize(taskId, size);
+    updateParams((next) => {
+      if (size === DEFAULT_SOURCES_PAGE_SIZE) next.delete("page_size");
+      else next.set("page_size", String(size));
+      next.delete("page");
     });
   };
   const setFacet = (key: string, value: string | undefined) =>
@@ -225,19 +262,50 @@ export function SourcesView() {
       ? `${firstRow.toLocaleString("en-GB")}–${(firstRow + rows.length - 1).toLocaleString("en-GB")} of ${totalItems.toLocaleString("en-GB")} sources`
       : `${totalItems.toLocaleString("en-GB")} ${totalItems === 1 ? "source" : "sources"}`;
 
+  // While the search runs and nothing has landed, the queries are the page:
+  // the table waits for the first results (owner, round 9), and the filter
+  // bar waits with it (round 12). A filter the reader set keeps the bar, so
+  // it can always be cleared.
+  // A search from before queries were linked to their results keeps no
+  // records (the server's rule): a query that returned some, filtered on
+  // alone over every screening choice, that comes back empty is one.
+  const preChangeQuery =
+    queryFilter !== undefined &&
+    evidence.data !== undefined &&
+    rows.length === 0 &&
+    (appliedQuery?.results ?? 0) > 0 &&
+    statusFilter === "all" &&
+    FACET_PARAMS.every((key) => key === "query" || !searchParams.has(key));
+  const waiting =
+    searching && !filtered && requestedStatus === null && (evidence.isPending || (evidence.data !== undefined && rows.length === 0));
+
   return (
-    <main className="py-8">
-      <SearchQueries groups={groups} searching={searching} />
-      {/* The filter bar (task 058, round 11): one row above the table it
-          scopes, every control a 32 px outline box at Meta size on one
-          baseline, an applied filter a filled Navy chip with its ×, and
-          Download CSV at the row's right end. It wraps on narrow screens,
-          the gaps the same on every line. */}
+    // The column is the table's container: its widths and the stacked row
+    // follow the column, not the window, so the source stays readable when
+    // the sidebar narrows the page (round 12).
+    <main className="@container/sources py-8">
+      <SearchQueries groups={groups} searching={searching} hrefFor={queryHref} />
+      {/* The finished search as its own one-line section above the filter
+          bar (owner, round 12: the search came before the filtering), 24 px
+          clear of the bar, so the bar reads as the table's own head; hidden
+          while the live list shows. */}
+      {!searching && groups.length > 0 && (
+        <div className="mb-6">
+          <QueriesSummary groups={groups} hrefFor={queryHref} />
+        </div>
+      )}
+      {/* The filter bar (task 058, rounds 11 and 12): filters only, one row
+          above the table it scopes, every control a 32 px outline box at
+          Meta size on one baseline, 12 px apart on every line when it wraps;
+          an applied filter a filled Navy chip with its ×. */}
+      {!waiting && (
       <div
         role="group"
         aria-label="Filter sources"
-        className={cn("mb-4 flex flex-wrap items-center gap-2", groups.length > 0 && searching && "mt-8")}
+        className={cn("mb-4 flex flex-col items-start gap-2", groups.length > 0 && searching && "mt-8")}
       >
+        {/* Two rows (round 12): the screening switch alone, then the facets
+            wrapping as they must, 8 px between the rows, nothing squeezed. */}
         <div role="group" aria-label="Screening" className="flex">
           {STATUS_FILTERS.map((filter, index) => (
             <button
@@ -254,6 +322,7 @@ export function SourcesView() {
             </button>
           ))}
         </div>
+        <div data-testid="sources-facets" className="flex flex-wrap items-center gap-3">
         {citedFilter ? (
           <span className={FILTER_CHIP_APPLIED}>
             <button
@@ -296,7 +365,7 @@ export function SourcesView() {
           label="Strength"
           allLabel="All"
           value={strengthFilter ?? ""}
-          options={STRENGTH_FILTER_OPTIONS.map((value) => ({ value, label: value }))}
+          options={STRENGTH_TIERS.map((value) => ({ value, label: value }))}
           onChange={(value) => setFacet("strength", value)}
         />
         <FilterSelect
@@ -317,9 +386,28 @@ export function SourcesView() {
             next.delete("page");
           })}
         />
-        {/* Below lg the headers are hidden, so sorting moves here. */}
+        {/* One search query's results (round 12): set from the query's link,
+            shown as the Country chip is, its × clearing it. */}
+        {queryFilter !== undefined && (
+          <span className={FILTER_CHIP_APPLIED}>
+            <span className={cn(FILTER_CHIP_PART, "cursor-default pl-2.5 pr-2 hover:bg-transparent")}>
+              <span className="truncate max-md:max-w-52">
+                {`Query: ${appliedQuery !== undefined ? queryChipLabel(scrub(appliedQuery.query)) : "…"}`}
+              </span>
+            </span>
+            <button
+              type="button"
+              aria-label="Clear the query filter"
+              onClick={() => setFacet("query", undefined)}
+              className={cn(FILTER_CHIP_PART, "border-l border-navy-line px-2")}
+            >
+              <CloseIcon size={12} />
+            </button>
+          </span>
+        )}
+        {/* When the table stacks the headers hide, so sorting moves here. */}
         <FilterSelect
-          className="lg:hidden"
+          className="@min-[54rem]/sources:hidden"
           label="Sort"
           value={`${effectiveSort}:${effectiveOrder ?? "desc"}`}
           options={PHONE_SORT_OPTIONS}
@@ -342,13 +430,12 @@ export function SourcesView() {
             Clear filters
           </Button>
         )}
-        <span className="ml-auto">
-          <DownloadSourcesButton taskId={taskId} taskName={task.data?.name} />
-        </span>
+        </div>
       </div>
+      )}
 
       <div ref={results} className="scroll-mt-4">
-        {evidence.isPending && <SourcesLoading header={header} />}
+        {evidence.isPending && !waiting && <SourcesLoading header={header} />}
 
         {evidence.isError &&
           (errorCode(evidence.error) === "unauthenticated" ? (
@@ -362,9 +449,22 @@ export function SourcesView() {
             </div>
           ))}
 
-        {/* While the search runs and nothing has landed, the queries above are
-            the page: the table waits for the first results (owner, round 9). */}
-        {evidence.data !== undefined && rows.length === 0 && !searching && (
+        {/* A search that ran before queries were linked to their results
+            cannot filter: the table's empty state says so (round 12). */}
+        {preChangeQuery && (
+          <SourcesEmpty
+            label="No sources match"
+            action={
+              <Button variant="ghost" className={FRAME_CONTROL_CLASS} onClick={clearFilters}>
+                Clear filters
+              </Button>
+            }
+          >
+            This search ran before queries were linked to their results.
+          </SourcesEmpty>
+        )}
+
+        {!preChangeQuery && evidence.data !== undefined && rows.length === 0 && !waiting && (
           filtered ? (
             <SourcesNoMatch
               taskId={taskId}
@@ -379,13 +479,10 @@ export function SourcesView() {
         )}
 
         {evidence.data !== undefined && rows.length > 0 && (
-          // The count line and the table appear together, rising in, when the
+          // The table and its count appear together, rising in, when the
           // first results land after the page opened.
           <ArrivalProvider settled={firstPaintDone} scopeKey={`${taskId}?${viewKey}`}>
           <Arrival arrivalId="sources-table">
-            <p className="mb-3 text-meta text-grey" role="status">
-              <Figures text={countLine} />
-            </p>
             <div className="sources-frame">
               <table role="table" className="sources-table">
                 <SourcesColumns />
@@ -404,11 +501,35 @@ export function SourcesView() {
                 </tbody>
               </table>
             </div>
+            {/* The line under the table (owner, round 12): Download CSV at the
+                left; at the right the page size, the range, then the page
+                controls. */}
+            <div data-testid="sources-foot" className="mt-5 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+              <DownloadSourcesButton taskId={taskId} taskName={task.data?.name} />
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-3 [&>nav]:mt-0">
+                {totalItems > DEFAULT_SOURCES_PAGE_SIZE && (
+                  <Select
+                    label="Sources per page"
+                    size={32}
+                    // The size the page asked for (a server may echo another).
+                    value={String(requestedPageSize)}
+                    options={SOURCES_PAGE_SIZES.map((size) => ({ value: String(size), label: `${size} per page` }))}
+                    onChange={choosePageSize}
+                    className="w-36"
+                  />
+                )}
+                <p className="text-meta text-grey" role="status">
+                  <Figures text={countLine} />
+                </p>
+                {totalPages > 1 && <Pagination page={page} totalPages={totalPages} onPage={goToPage} />}
+              </div>
+            </div>
           </Arrival>
           </ArrivalProvider>
         )}
 
-        {evidence.data !== undefined && totalPages > 1 && (
+        {/* A page past the end shows its controls alone, the way back. */}
+        {evidence.data !== undefined && rows.length === 0 && totalPages > 1 && (
           <Pagination page={page} totalPages={totalPages} onPage={goToPage} />
         )}
       </div>
@@ -462,7 +583,7 @@ function SourcesHeaderRow({
         <SortableColumnHeader column={column("title")} className="pl-4" {...props} />
         <SortableColumnHeader column={column("year")} {...props} />
         <SortableColumnHeader column={column("type")} {...props} />
-        <SortableColumnHeader column={column("strength")} {...props} />
+        <SortableColumnHeader column={column("strength")} hint={<StrengthLegend />} {...props} />
         <SortableColumnHeader column={column("relevance")} align="end" {...props} />
         <SortableColumnHeader column={column("status")} {...props} />
       </tr>
@@ -503,14 +624,14 @@ function SourceRow({
         <SourceMetaLine item={item} />
       </td>
       <td role="cell" className="sources-cell sources-cell-year">{item.year ?? ""}</td>
-      <td role="cell" className="sources-cell sources-value">
+      <td role="cell" className="sources-cell sources-value sources-cell-type">
         {pulses.type && <CellPulse width="w-20" />}
         {type !== null && (
-          <span className={cn("sources-nowrap", fade("type"))}>
+          <span className={cn("sources-type", fade("type"))}>
             {item.classification_reason ? (
               <Tooltip content={<p>{scrub(item.classification_reason)}</p>}>
                 <button type="button" tabIndex={-1} aria-label={`${type}: why this type`} className="sources-hint">
-                  <span className="sources-hint-word">{type}</span>
+                  <span className="reason-word">{type}</span>
                 </button>
               </Tooltip>
             ) : (
@@ -523,14 +644,10 @@ function SourceRow({
         {pulses.strength && <CellPulse width="w-14" />}
         {item.appraisal_tier && (
           <span className={cn("sources-nowrap", fade("strength"))}>
-            <Tooltip content={<p>{scrub(strengthHint(item))}</p>}>
+            <Tooltip content={<p>{scrub(strengthHint(item.appraisal_tier, item.evidence_type))}</p>}>
               <button type="button" tabIndex={-1} aria-label={`${item.appraisal_tier}: how strength is appraised`} className="sources-hint">
-                {/* The strength's tone (round 11): green strong, Navy
-                    moderate, Grey weak and not assessed, beside its word. */}
-                {strengthTone(item.appraisal_tier) !== null && (
-                  <span aria-hidden="true" data-testid="strength-mark" className="sources-tone" data-tone={strengthTone(item.appraisal_tier)} />
-                )}
-                <span className="sources-hint-word">{scrub(item.appraisal_tier)}</span>
+                {/* The strength's tone square and word, the shared mark. */}
+                <StrengthMark tier={item.appraisal_tier} squareClassName="sources-tone" wordClassName="reason-word" />
               </button>
             </Tooltip>
           </span>
@@ -541,35 +658,94 @@ function SourceRow({
           item.screen_status != null && <span className={fade("relevant")}><RelevantCell item={item} /></span>
         )}
       </td>
-      <td role="cell" className="sources-cell sources-value">
+      <td role="cell" className="sources-cell sources-value sources-cell-status">
         {pulses.status && <CellPulse width="w-16" />}
         {!pulses.status && depth !== null && (
           <span className={cn("sources-nowrap", fade("status"))}>
-            {item.read_in_full ? (
-              <span className="text-navy">{depth}</span>
-            ) : (
-              <Tooltip content={<p>{scrub(readDepthHint(item) ?? "")}</p>}>
-                <button type="button" tabIndex={-1} aria-label="Abstract only: why" className="sources-hint text-grey">
-                  <span className="sources-hint-word">{depth}</span>
-                </button>
-              </Tooltip>
-            )}
+            <DepthValue item={item} depth={depth} />
           </span>
         )}
+        {item.cited && <CitedMark />}
       </td>
     </tr>
   );
 }
 
-/** The title's second line: "Venue · Origin" and, for a cited source, the
- *  green "Cited" chip at its end (lead, round 10: Origin and Cited fold in
- *  here). Below `lg` the year joins it after the venue, its column hidden. */
+/** Shown only while the table stacks (its column narrower than 54 rem):
+ *  the year joins the source's line when its column hides. */
+const STACKED_ONLY = "@min-[54rem]/sources:hidden";
+
+/**
+ * The Status cell's word (round 12): the tone square (green full text,
+ * yellow abstract, red neither) and the word. "Full text" links to the
+ * document's own address when the text was collected and the row carries it,
+ * opening in a new tab as the report's addresses do; "Abstract only" and
+ * "Title only" carry their reason on hover, out of the tab order.
+ */
+function DepthValue({ item, depth }: { item: EvidenceItem; depth: ReadDepth }) {
+  const mark = <ToneSquare colour={readDepthColour(depth)} className="sources-tone" testId="status-mark" />;
+  if (item.read_in_full) {
+    const href = item.full_text_url ? safeHref(item.full_text_url) : undefined;
+    return (
+      <span className="text-navy">
+        {mark}
+        {href ? (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`${depth} (opens the document in a new tab)`}
+            className="sources-text-link"
+          >
+            {depth}
+          </a>
+        ) : (
+          depth
+        )}
+      </span>
+    );
+  }
+  return (
+    <Tooltip content={<p>{scrub(readDepthHint(item) ?? "")}</p>}>
+      <button type="button" tabIndex={-1} aria-label={`${depth}: why`} className="sources-hint text-grey">
+        {mark}
+        <span className="reason-word">{depth}</span>
+      </button>
+    </Tooltip>
+  );
+}
+
+/** A cited source, under its Status (round 12, in place of the chip): a
+ *  12 px Green tick and the word, Meta Ink. */
+function CitedMark() {
+  return (
+    <span className="sources-cited">
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        className="h-3 w-3 shrink-0 text-green"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M4 12.5l5 5L20 6.5" />
+      </svg>
+      Cited
+    </span>
+  );
+}
+
+/** The title's second line: "Venue · Origin" (lead, round 10: Origin folds
+ *  in here). While the table stacks the year joins it after the venue, its
+ *  column hidden. */
 function SourceMetaLine({ item }: { item: EvidenceItem }) {
   const pieces: Array<{ key: string; text: string; phoneOnly: boolean }> = [];
   if (item.venue) pieces.push({ key: "venue", text: scrub(item.venue), phoneOnly: false });
   if (item.year != null) pieces.push({ key: "year", text: String(item.year), phoneOnly: true });
   if (item.origin) pieces.push({ key: "origin", text: scrub(item.origin), phoneOnly: false });
-  if (pieces.length === 0 && !item.cited) return null;
+  if (pieces.length === 0) return null;
   return (
     <p className="sources-meta">
       {pieces.map((piece, index) => {
@@ -579,12 +755,11 @@ function SourceMetaLine({ item }: { item: EvidenceItem }) {
         const sepPhoneOnly = piece.phoneOnly || (before?.phoneOnly === true && index - 1 === 0);
         return (
           <span key={piece.key}>
-            {index > 0 && <span className={sepPhoneOnly ? "lg:hidden" : undefined}>{" · "}</span>}
-            <span className={piece.phoneOnly ? "lg:hidden" : undefined}>{piece.text}</span>
+            {index > 0 && <span className={sepPhoneOnly ? STACKED_ONLY : undefined}>{" · "}</span>}
+            <span className={piece.phoneOnly ? STACKED_ONLY : undefined}>{piece.text}</span>
           </span>
         );
       })}
-      {item.cited && <Chip tone="green" className="sources-cited">Cited</Chip>}
     </p>
   );
 }
@@ -758,13 +933,38 @@ function DownloadSourcesButton({ taskId, taskName }: { taskId: string; taskName?
     }
   };
 
+  // The quiet control with the download glyph (round 12: the outline box
+  // read as one more filter), at the end of the line under the table.
   return (
     <span className="flex items-center gap-3">
       {failed && <span role="alert" className="text-meta text-red">The download failed. Try again.</span>}
-      <Button type="button" variant="outline" size="sm" className="h-8 py-0" disabled={downloading} onClick={() => void download()}>
-        {downloading ? "Preparing…" : "Download CSV"}
-      </Button>
+      <button
+        type="button"
+        disabled={downloading}
+        onClick={() => void download()}
+        className="group inline-flex h-8 cursor-pointer items-center gap-1.5 whitespace-nowrap text-meta font-semibold text-grey transition-colors duration-150 hover:text-navy disabled:cursor-default disabled:hover:text-grey"
+      >
+        <DownloadIcon className="shrink-0" />
+        <span className="underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 group-hover:decoration-navy group-disabled:no-underline">
+          {downloading ? "Preparing…" : "Download CSV"}
+        </span>
+      </button>
     </span>
+  );
+}
+
+/** The strength column's legend (round 12): each tone square beside the
+ *  tiers it marks, in the sort's order. */
+function StrengthLegend() {
+  return (
+    <ul aria-label="Evidence strength tones" className="space-y-1">
+      {STRENGTH_LEGEND.map(({ colour, tiers }) => (
+        <li key={colour} className="flex items-center gap-2">
+          <ToneSquare colour={colour} />
+          {tiers}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -808,8 +1008,11 @@ function SortableColumnHeader({
   onSort,
   align = "start",
   className,
+  hint,
 }: {
   column: (typeof SOURCE_SORT_COLUMNS)[number];
+  /** A legend shown on hover and focus (the strength's tones, round 12). */
+  hint?: ReactNode;
   activeSort: EvidenceSortField | null;
   activeOrder: SortOrder | null;
   onSort: (field: EvidenceSortField) => void;
@@ -818,22 +1021,25 @@ function SortableColumnHeader({
 }) {
   const order = activeSort === column.key ? activeOrder : null;
   const ariaSort = order === "asc" ? "ascending" : order === "desc" ? "descending" : "none";
+  const button = (
+    <button
+      type="button"
+      aria-label={`Sort by ${column.label.toLowerCase()}`}
+      onClick={() => onSort(column.key)}
+      className={cn(
+        "group inline-flex min-h-6 cursor-pointer items-center gap-1 py-1 transition-colors duration-150 hover:text-navy",
+        TABLE_HEADER_TEXT_CLASS,
+        order !== null && "text-navy",
+        align === "end" && "flex-row-reverse",
+      )}
+    >
+      {column.label}
+      <SortArrow order={order} />
+    </button>
+  );
   return (
     <th role="columnheader" scope="col" className={cn("sources-th", align === "end" && "text-right", className)} aria-sort={ariaSort}>
-      <button
-        type="button"
-        aria-label={`Sort by ${column.label.toLowerCase()}`}
-        onClick={() => onSort(column.key)}
-        className={cn(
-          "group inline-flex min-h-6 cursor-pointer items-center gap-1 py-1 transition-colors duration-150 hover:text-navy",
-          TABLE_HEADER_TEXT_CLASS,
-          order !== null && "text-navy",
-          align === "end" && "flex-row-reverse",
-        )}
-      >
-        {column.label}
-        <SortArrow order={order} />
-      </button>
+      {hint === undefined ? button : <Tooltip content={hint}>{button}</Tooltip>}
     </th>
   );
 }
@@ -976,7 +1182,8 @@ function YearFilter({
   );
 }
 
-/** One facet dropdown in the sources filter bar. With `allLabel` the list
+/** One facet dropdown in the sources filter bar: the app's one dropdown
+ *  (`Select`, round 12) with the bar's own trigger. With `allLabel` the list
  *  opens on an "all" choice (value "") and a chosen value turns the control
  *  into the applied chip; without it (Sort) every choice is one of
  *  `options` and the control stays an outline box naming its value. */
@@ -995,90 +1202,28 @@ function FilterSelect({
   onChange: (value: string) => void;
   className?: string;
 }) {
-  // App-styled Popover listbox (the NewTaskView ProjectPicker pattern), not a
-  // native <select>: consistent chrome at every width, and long theme names
-  // wrap in the menu instead of sizing (and overflowing) the closed control.
-  const [open, setOpen] = useState(false);
-  const listRef = useRef<HTMLUListElement>(null);
-  const selected = options.find((option) => option.value === value);
-  const pick = (next: string) => {
-    onChange(next);
-    setOpen(false);
-  };
-  const optionButtons = () =>
-    Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []);
-  // The native <select> this replaced gave arrow-key navigation for free;
-  // Radix Popover only owns Esc/dismiss/focus-return, so the listbox moves
-  // focus itself (040 review finding).
-  const onListKeyDown = (event: KeyboardEvent<HTMLUListElement>) => {
-    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-    event.preventDefault();
-    const buttons = optionButtons();
-    if (buttons.length === 0) return;
-    const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
-    const next =
-      event.key === "Home"
-        ? 0
-        : event.key === "End"
-          ? buttons.length - 1
-          : event.key === "ArrowDown"
-            ? Math.min(current + 1, buttons.length - 1)
-            : Math.max(current - 1, 0);
-    buttons[next]?.focus();
-  };
-  const optionClass = (active: boolean) =>
-    cn(
-      "block w-full cursor-pointer px-3 py-2 text-left text-meta font-normal text-navy hover:bg-blue-tint-2 hover:text-blue",
-      active && "bg-blue-tint-2 font-semibold",
-    );
-  const choices = allLabel === undefined ? options : [{ value: "", label: allLabel }, ...options];
   const facet = allLabel !== undefined;
-  const shown = facet ? (value === "" ? null : (selected?.label ?? value)) : (selected?.label ?? null);
+  const choices = facet ? [{ value: "", label: allLabel }, ...options] : options;
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+    <Select
+      label={label}
+      value={value}
+      options={choices}
+      onChange={onChange}
+      // Long theme names wrap in the list rather than size the closed control.
+      contentClassName="w-72"
+      renderTrigger={({ open, chosen }) => (
         <FilterTrigger
           label={label}
-          shown={shown}
-          name={`${label}: ${selected?.label ?? allLabel ?? ""}`}
+          shown={facet ? (value === "" ? null : (chosen?.label ?? value)) : (chosen?.label ?? null)}
+          name={`${label}: ${chosen?.label ?? allLabel ?? ""}`}
           onClear={facet ? () => onChange("") : undefined}
           aria-haspopup="listbox"
           aria-expanded={open}
           className={className}
         />
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        className="w-72 max-w-[calc(100vw-2rem)] p-1"
-        onOpenAutoFocus={(event) => {
-          event.preventDefault();
-          const buttons = optionButtons();
-          (buttons.find((button) => button.getAttribute("aria-selected") === "true") ?? buttons[0])?.focus();
-        }}
-      >
-        <ul
-          ref={listRef}
-          role="listbox"
-          aria-label={label}
-          onKeyDown={onListKeyDown}
-          className="flex max-h-80 flex-col overflow-y-auto"
-        >
-          {choices.map((option) => (
-            <li key={option.value} role="none">
-              <button
-                type="button"
-                role="option"
-                aria-selected={value === option.value}
-                onClick={() => pick(option.value)}
-                className={optionClass(value === option.value)}
-              >
-                {option.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </PopoverContent>
-    </Popover>
+      )}
+    />
   );
 }
 
@@ -1138,8 +1283,8 @@ function RelevantCell({ item }: { item: Parameters<typeof screeningDetails>[0] }
     <Tooltip content={content}>
       <button type="button" tabIndex={-1} aria-label={name} className="sources-hint">
         <VerdictMark relevant={relevant} />
-        {figure !== null && <span className="sources-hint-word tabular-nums text-navy">{figure}</span>}
-        {retracted && <span className="sources-hint-word text-red">retracted</span>}
+        {figure !== null && <span className="reason-word tabular-nums text-navy">{figure}</span>}
+        {retracted && <span className="reason-word text-red">retracted</span>}
       </button>
     </Tooltip>
   );
@@ -1253,8 +1398,8 @@ function RecordEntry({
   withOption: boolean;
 }) {
   return (
-    <div className="border-l-2 border-line-2 pl-3">
-      {withOption && <p className="text-body font-semibold text-navy">{scrub(record.option_name)}</p>}
+    <div className="border-b border-line py-3 first:border-t">
+      {withOption && <p className="text-body text-navy">{scrub(record.option_name)}</p>}
       <dl className="mt-1 space-y-1">
         {RECORD_LINES.map(([label, key]) => {
           const value = record[key];
@@ -1324,6 +1469,8 @@ export function SourceDossierBody({
   }
   const statusLabel = sourceStatusLabel(source);
   const href = source.url ? safeHref(source.url) : undefined;
+  const reference = referenceParts(source);
+  const depth = readDepthLabel(source);
   const details = [
     ["Publisher", source.publisher],
     ["Record type", source.record_type],
@@ -1332,104 +1479,164 @@ export function SourceDossierBody({
     ["Cited by", source.cited_by_count],
     ["Field-weighted citation impact", source.fwci],
   ] as const;
+  const hasAuthors = numberedAuthorships(source.authorships).authors.length > 0;
+  const hasInstitutions = numberedAuthorships(source.authorships).institutions.length > 0;
+  const shownDetails = details.filter(([, value]) => value !== null && value !== undefined);
   return (
-    <div className="space-y-6 text-caption">
-      <header>
-        {/* The sheet header already shows the title (042 item 4) — the body
-            starts at the authors line. */}
-        <AuthorsLine authorships={source.authorships} className="text-grey" />
-        {(source.year || source.venue) && <p className="mt-1 text-grey">{[source.year, source.venue].filter(Boolean).map(String).map(scrub).join(" · ")}</p>}
-        <InstitutionsLine authorships={source.authorships} className="mt-1 text-grey" />
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          <Chip tone="soft">{scrub(source.origin)}</Chip>
-          {source.appraisal_tier && <Chip tone="soft">{scrub(source.appraisal_tier)}</Chip>}
-          {href && <a className="border border-blue px-2.5 py-1 text-caption font-semibold text-blue hover:underline" href={href} target="_blank" rel="noreferrer">Open original</a>}
-        </div>
-      </header>
+    // One type scale (round 12): the sheet's title, Body for the reference
+    // line and every sentence, Meta for the labels and the facts. No chips
+    // and no bold below the title; the facts are ruled lists with their
+    // labels at Meta Grey; the actions at the foot.
+    <div className="space-y-6 text-meta text-ink">
+      {/* The reference line as the report's References read it (the sheet
+          header holds the title): authors (year), the venue, the address. */}
+      {(reference.lead !== null || reference.venue !== null || reference.url !== null) && (
+        <p data-testid="dossier-reference" className="text-body text-ink [overflow-wrap:anywhere]">
+          {reference.lead !== null && <span>{scrub(reference.lead)}</span>}
+          {reference.venue !== null && <span className="text-grey">{scrub(reference.venue)}</span>}
+          {reference.url !== null && href !== undefined && (
+            <>
+              {" "}
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-grey underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 hover:text-navy hover:decoration-navy"
+              >
+                {displayUrl(reference.url)}
+              </a>
+            </>
+          )}
+        </p>
+      )}
+      <dl aria-label="About this source" className="border-t border-line">
+        {source.evidence_type && <DetailRow label="Evidence type" value={evidenceTypeLabel(source.evidence_type)} />}
+        {source.classification_reason && <DetailRow label="Why this type" value={source.classification_reason} prose />}
+        {source.appraisal_tier && (
+          <DetailRow label="Strength">
+            <StrengthMark tier={source.appraisal_tier} squareClassName="sources-tone" />
+          </DetailRow>
+        )}
+        {depth !== null && (
+          <DetailRow label={STATUS_COLUMN_HEADER}>
+            <DepthMark depth={depth} squareClassName="sources-tone" />
+            {source.cited && <CitedMark />}
+          </DetailRow>
+        )}
+        {source.year != null && <DetailRow label="Year" value={String(source.year)} />}
+        <DetailRow label="Origin" value={source.origin} />
+      </dl>
       {source.abstract && (
-        <DossierSection title="About">
-          {abstractSourceLabel(source.abstract_source) && <Chip tone="yellow">AI description</Chip>}
-          <p className="mt-2 max-w-prose-measure text-body text-grey">{scrub(source.abstract)}</p>
+        <DossierSection title={abstractSourceLabel(source.abstract_source) ? "About · AI description" : "About"}>
+          <p className="max-w-prose-measure text-body text-ink">{scrub(source.abstract)}</p>
         </DossierSection>
       )}
       {statusLabel && (
         <DossierSection title="What happened to it">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Chip tone="soft">{statusLabel}</Chip>
-            {readDepthLabel(source) !== null && (
-              <Chip tone={source.read_in_full ? "blue" : "yellow"}>{readDepthLabel(source)}</Chip>
-            )}
-          </div>
-          <dl className="mt-3 space-y-1.5">
-            {screeningDetails(source).map(([label, value]) => <DetailRow key={label} label={label} value={value} />)}
+          <dl className="border-t border-line">
+            <DetailRow label="Stage" value={statusLabel} />
+            {screeningDetails(source).map(([label, value]) => (
+              <DetailRow key={label} label={label} value={value} prose={label === "Reasoning" || label === "Reason"} />
+            ))}
           </dl>
         </DossierSection>
       )}
-      {(source.evidence_type || source.appraisal_tier) && (
-        <DossierSection title="Quality">
-          <dl className="space-y-1.5">
-            {source.evidence_type && <DetailRow label="Evidence type" value={evidenceTypeLabel(source.evidence_type)} />}
-            {source.classification_reason && (
-              <DetailRow label="Why this type" value={source.classification_reason} />
-            )}
-            {source.appraisal_tier && <DetailRow label="Appraised strength" value={source.appraisal_tier} />}
-          </dl>
-        </DossierSection>
-      )}
-      {details.some(([, value]) => value !== null && value !== undefined) && (
+      {(hasAuthors || shownDetails.length > 0) && (
         <DossierSection title="Details">
-          <dl className="space-y-1.5">{details.filter(([, value]) => value !== null && value !== undefined).map(([label, value]) => <DetailRow key={label} label={label} value={String(value)} />)}</dl>
+          <dl className="border-t border-line">
+            {hasAuthors && (
+              <DetailRow label="Authors">
+                <AuthorsLine authorships={source.authorships} />
+              </DetailRow>
+            )}
+            {hasInstitutions && (
+              <DetailRow label="Institutions">
+                <InstitutionsLine authorships={source.authorships} />
+              </DetailRow>
+            )}
+            {shownDetails.map(([label, value]) => <DetailRow key={label} label={label} value={String(value)} />)}
+          </dl>
         </DossierSection>
       )}
       {byAsserter.size > 0 && (
         <DossierSection title="Tags">
-          {[...byAsserter.entries()].map(([asserter, tags]) => (
-            <div key={asserter} className="mb-3">
-              <p className={cn(PANE_LABEL_CLASS, "mb-1")}>Asserted by {scrub(asserter)}</p>
-              <div className="flex flex-wrap gap-1.5">{tags.map((tag) => <Chip key={`${tag.tag_type}-${tag.tag}`} tone="soft">{scrub(tag.tag)}</Chip>)}</div>
-            </div>
-          ))}
+          <dl className="border-t border-line">
+            {[...byAsserter.entries()].map(([asserter, tags]) => (
+              <DetailRow key={asserter} label={`Asserted by ${scrub(asserter)}`} value={tags.map((tag) => tag.tag).join(", ")} />
+            ))}
+          </dl>
         </DossierSection>
       )}
       {(source.cited_in ?? []).length > 0 && (
         <DossierSection title="Cited in the report">
-          <div className="space-y-3">{source.cited_in?.map((citation, index) => (
-            <div key={`${citation.section_title}-${index}`} className="border-l-2 border-blue pl-3">
-              <p className="text-body leading-snug text-navy">{scrub(citation.claim)}</p>
-              <p className="mt-1 text-body italic text-grey">“{scrub(citation.quote)}”</p>
-              <p className={cn(PANE_LABEL_CLASS, "mt-1")}>{scrub(citation.section_title)}</p>
-            </div>
-          ))}</div>
+          <ul className="border-t border-line">
+            {source.cited_in?.map((citation, index) => (
+              <li key={`${citation.section_title}-${index}`} className="border-b border-line py-3">
+                <p className="text-body text-navy">{scrub(citation.claim)}</p>
+                <p className="mt-1 text-body italic text-grey">“{scrub(citation.quote)}”</p>
+                <p className="mt-1 text-meta text-grey">{scrub(citation.section_title)}</p>
+              </li>
+            ))}
+          </ul>
         </DossierSection>
       )}
       {records !== undefined && records.length > 0 ? (
         <DossierSection title={fromOption ? "In this option" : "Records"}>
-          <div className="space-y-3">
+          <div>
             {records.map((record) => (
               <RecordEntry key={`${record.option_id}-${record.record_id}`} record={record} withOption={!fromOption} />
             ))}
           </div>
         </DossierSection>
       ) : (
-      <DossierSection title="Findings from this source">
-        {(findingsPending || recordsPending) && <p className="text-body text-grey">Loading findings…</p>}
-        {!findingsPending && !recordsPending && (!findings || findings.length === 0) && <p className="text-body text-grey">No findings extracted from this source.</p>}
-        {!recordsPending && findings && findings.length > 0 && <div className="space-y-2">{findings.map((finding) => (
-          <div key={finding.finding_id} className="border-l-2 border-line-2 pl-3">
-            <Chip tone="soft">{finding.profile === "iof" ? "Intervention–outcome" : "Implementation context"}</Chip>
-            <p className="mt-1 text-body leading-snug text-navy">{scrub(finding.statement)}</p>
-          </div>
-        ))}</div>}
-      </DossierSection>
+        <DossierSection title="Findings from this source">
+          {(findingsPending || recordsPending) && <p className="text-body text-grey">Loading findings…</p>}
+          {!findingsPending && !recordsPending && (!findings || findings.length === 0) && (
+            <p className="text-body text-grey">No findings extracted from this source.</p>
+          )}
+          {!recordsPending && findings && findings.length > 0 && (
+            <ul className="border-t border-line">
+              {findings.map((finding) => (
+                <li key={finding.finding_id} className="border-b border-line py-3">
+                  <p className="text-meta text-grey">{finding.profile === "iof" ? "Intervention–outcome" : "Implementation context"}</p>
+                  <p className="mt-1 text-body text-navy">{scrub(finding.statement)}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </DossierSection>
+      )}
+      {href && (
+        <footer className="border-t border-line pt-4">
+          <a href={href} target="_blank" rel="noopener noreferrer" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            Open original
+          </a>
+        </footer>
       )}
     </div>
   );
 }
 
+/** A dossier block under its label: Meta Grey, sentence case, no rule of
+ *  its own (the list under it carries the rules). */
 function DossierSection({ title, children }: { title: string; children: ReactNode }) {
-  return <section><PaneHeading className="px-0 pt-0">{title}</PaneHeading><Divider className="mb-3" />{children}</section>;
+  return (
+    <section>
+      <h3 className="mb-2 text-meta text-grey">{title}</h3>
+      {children}
+    </section>
+  );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return <div className="flex justify-between gap-4"><dt className="text-grey">{label}</dt><dd className="text-right text-navy">{scrub(value)}</dd></div>;
+/** One ruled fact: the label at Meta Grey in a fixed column, the value at
+ *  Meta Ink (a sentence at Body, the floor for prose). */
+function DetailRow({ label, value, prose = false, children }: { label: string; value?: string; prose?: boolean; children?: ReactNode }) {
+  return (
+    <div className="grid grid-cols-[9rem_minmax(0,1fr)] gap-4 border-b border-line py-2 max-md:grid-cols-[6.5rem_minmax(0,1fr)] max-md:gap-3">
+      <dt className="text-grey">{label}</dt>
+      <dd className={cn("[overflow-wrap:anywhere]", prose ? "text-body text-ink" : "text-ink")}>
+        {children ?? scrub(value ?? "")}
+      </dd>
+    </div>
+  );
 }
