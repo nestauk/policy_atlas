@@ -1343,6 +1343,40 @@ coordination". 6 (the mock's dossier for the card's document ids) goes to the ba
     typically involves:") in Semibold Navy, the rest regular (`leverLineParts`,
     `deliveredLeadInParts`, rendered by the card's `SentenceRuns` as the profile sentence is).
 
+Round 12 follow-up (owner, items 43 to 49, on the committed round):
+
+43. **A document's facts as a labelled list** in the dossier's facts pattern (`documentFacts`):
+    the label at Meta Grey in a 6.5rem column, the value at the block's size in Ink; rows Where,
+    Type, Targeted, Measures or Discusses, a row with no value left out; no middots.
+44. **"Type"**, never "Design": the classifier's evidence type through `evidenceTypeLabel`, the
+    Sources table's Type column.
+45. **No "also found as N other records"** on the card; the dossier keeps the provenance.
+46. **The plan's place has no mark** in "Where it has been evaluated"; leading the list is enough.
+47 and 49. **What it could take, shut** (49 replaces 47's sentence): an intro line at the
+    block's size, "Compared with the other options on the longlist, this option is:" (the marks are relative across
+    the list), then the shared `BulletList`: the ambition first ("Ambitious" / "Moderate
+    ambition" / "Modest"), the potential impact second ("High / Average / Lower potential
+    impact"), then one point per other line not in the middle (`PROFILE_POINTS`: "Costs more" /
+    "Costs less", "Longer to set up" / "Quicker to set up", "Slower to show results" / "Shows
+    results sooner", "High workforce requirements" / "Low workforce requirements", "Needs more
+    coordination" / "Needs less coordination", "More complex to deliver" / "Simpler to deliver"),
+    or "Average on cost, time, workforce, coordination and delivery"; no bold, no full stops
+    (`profilePoints`; the sentence builder and its phrase table are gone). Open, the lines.
+48. **One reading size in Evidence** (owner): the "Your target and outcomes" table and the
+    documents' fact values lose their own Body size and take the block's (`REPORT_BODY_CLASS`), as
+    the places list; only the labels are Meta.
+50. **The documents not dense** (owner, changing 43): one size for a whole entry, the block's
+    reading size; the fact labels the same size in Grey in a fixed 7.5rem column (6.5rem on a
+    phone), the values in Ink wrapping freely; the group headings and the "Read from titles and
+    abstracts only." note at the same size; 20 px between documents with one hairline between
+    them; nothing smaller.
+51. **Under the list, "See these 12 documents in Sources"** ("See this document in Sources" for
+    one; `seeInSourcesWords`), a prose link to `/tasks/{id}/sources/all?option={optionId}`.
+52. **Every point relative to the longlist** (owner): the ambition "More ambitious" / "Average
+    ambition" / "Less ambitious"; the impact "Higher / Average / Lower potential impact";
+    workforce "Higher / Lower workforce requirements" (`AMBITION_POINTS`, `IMPACT_POINTS`,
+    `PROFILE_POINTS`).
+
 ## Round 11, Sources (owner, 2026-11-06)
 
 Brief: `research/briefs/round-11-sources.md`; screenshots in `research/screenshots/round11-sources/`

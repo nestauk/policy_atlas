@@ -336,59 +336,72 @@ export const GRID_COLUMN_LINES: readonly (ProfileLineKey | "ambition")[] = [
   "potential_impact",
 ];
 
-/** Which way a marked line leans for the reader: "hard" asks more of
- *  them (it costs more, takes longer), "easy" asks less or gives more. */
-type ProfileSide = "hard" | "easy";
-
 /**
  * The words for "What it could take" when it is shut (round 12, owner): one
- * phrase per line and marked level. A hard phrase follows "will" ("take
- * longer to set up"); an easy one stands as its own clause after "but"
- * ("delivery is simpler"). The lead adjusts the words here.
+ * short point per line and marked level, its first letter capitalised and no
+ * full stop. The lead adjusts the words here.
  */
-export const PROFILE_SENTENCE_PHRASES: Record<
+export const PROFILE_POINTS: Record<
   Exclude<ProfileLineKey, "who_decides" | "dependencies" | "potential_impact">,
-  Record<Mark, { side: ProfileSide; words: string }>
+  Record<Mark, string>
 > = {
-  cost: { more: { side: "hard", words: "cost more" }, less: { side: "easy", words: "it costs less" } },
-  time_to_set_up: {
-    more: { side: "hard", words: "take longer to set up" },
-    less: { side: "easy", words: "it is quick to set up" },
-  },
-  time_to_effect: {
-    more: { side: "hard", words: "take longer to show results" },
-    less: { side: "easy", words: "it shows results sooner" },
-  },
-  workforce: {
-    more: { side: "hard", words: "have high workforce requirements" },
-    less: { side: "easy", words: "it needs few staff" },
-  },
-  coordination: {
-    more: { side: "hard", words: "need more coordination" },
-    less: { side: "easy", words: "it needs less coordination" },
-  },
-  delivery_complexity: {
-    more: { side: "hard", words: "be complex to deliver" },
-    less: { side: "easy", words: "delivery is simpler" },
-  },
+  cost: { more: "Costs more", less: "Costs less" },
+  time_to_set_up: { more: "Longer to set up", less: "Quicker to set up" },
+  time_to_effect: { more: "Slower to show results", less: "Shows results sooner" },
+  workforce: { more: "Higher workforce requirements", less: "Lower workforce requirements" },
+  coordination: { more: "Needs more coordination", less: "Needs less coordination" },
+  delivery_complexity: { more: "More complex to deliver", less: "Simpler to deliver" },
 };
 
-/** The sentence always opens with the ambition and the potential impact,
- *  middle or not (round 12, owner): "This is a moderate option with average
- *  potential impact". The middle is the null mark. */
-export const AMBITION_WORDS: Record<Mark | "middle", { article: string; word: string }> = {
-  more: { article: "an", word: "ambitious" },
-  middle: { article: "a", word: "moderate-ambition" },
-  less: { article: "a", word: "modest" },
+/** The first two points, always given, middle or not, and relative to the
+ *  longlist as every point is (round 12, owner). */
+export const AMBITION_POINTS: Record<Mark | "middle", string> = {
+  more: "More ambitious",
+  middle: "Average ambition",
+  less: "Less ambitious",
 };
-export const IMPACT_PHRASES: Record<Mark | "middle", string> = {
-  more: "high potential impact",
-  middle: "average potential impact",
-  less: "lower potential impact",
+export const IMPACT_POINTS: Record<Mark | "middle", string> = {
+  more: "Higher potential impact",
+  middle: "Average potential impact",
+  less: "Lower potential impact",
 };
 
-/** The close when every other line is in the middle (round 12, owner). */
-export const OTHERS_MIDDLE_TAIL = ", and average on cost, time, workforce, coordination and delivery.";
+/** The intro over the points: the marks are relative across the list. */
+export const PROFILE_POINTS_INTRO = "Compared with the other options on the longlist, this option is:";
+
+/** The last point when every other line is in the middle (round 12, owner). */
+export const OTHERS_MIDDLE_POINT = "Average on cost, time, workforce, coordination and delivery";
+
+/**
+ * "What it could take" when it is shut (round 12, owner): the points under
+ * `PROFILE_POINTS_INTRO`. The ambition first and the potential impact second,
+ * always; then one point per other line not in the middle, in the lines'
+ * order; when none is, `OTHERS_MIDDLE_POINT`. A line the profile does not
+ * carry is left out; a missing impact reads as average.
+ *
+ * Args:
+ *   ambition: The ambition's mark; null or undefined is the middle.
+ *   lines: The profile's lines that are present, each with its mark (null is the middle).
+ *
+ * Returns:
+ *   The points in order.
+ */
+export function profilePoints(
+  ambition: Mark | null | undefined,
+  lines: readonly { key: string; mark: Mark | null }[],
+): string[] {
+  const impact = lines.find((line) => line.key === "potential_impact")?.mark ?? null;
+  const others = lines.flatMap(({ key, mark }) => {
+    if (mark === null) return [];
+    const point = (PROFILE_POINTS as Record<string, Record<Mark, string>>)[key]?.[mark];
+    return point === undefined ? [] : [point];
+  });
+  return [
+    AMBITION_POINTS[ambition ?? "middle"],
+    IMPACT_POINTS[impact ?? "middle"],
+    ...(others.length > 0 ? others : [OTHERS_MIDDLE_POINT]),
+  ];
+}
 
 /** One run of the sentence: the takeaways are strong (round 12, owner). */
 export type SentencePart = { text: string; strong: boolean };
@@ -403,67 +416,6 @@ function joinStrong(phrases: readonly string[]): SentencePart[] {
   return parts;
 }
 
-/**
- * The one sentence that stands for "What it could take" while it is shut
- * (round 12, owner), as runs, the takeaways strong. It always opens with
- * the ambition and the potential impact ("This is an ambitious option with
- * high potential impact"); then the other lines not in the middle: the
- * harder ones after " that will ", joined with "and", then ", but " and the
- * easier ones; every other line in the middle closes it with "and average on
- * cost, time, workforce, coordination and delivery". A line the profile does
- * not carry is left out; a missing impact reads as average.
- *
- * Args:
- *   ambition: The ambition's mark; null or undefined is the middle.
- *   lines: The profile's lines that are present, each with its mark (null is the middle).
- *
- * Returns:
- *   The runs, the last ending in a full stop.
- */
-export function profileSentenceParts(
-  ambition: Mark | null | undefined,
-  lines: readonly { key: string; mark: Mark | null }[],
-): SentencePart[] {
-  const ambitionWords = AMBITION_WORDS[ambition ?? "middle"];
-  const impact = lines.find((line) => line.key === "potential_impact")?.mark ?? null;
-  const opening: SentencePart[] = [
-    { text: `This is ${ambitionWords.article} `, strong: false },
-    { text: ambitionWords.word, strong: true },
-    { text: " option with ", strong: false },
-    { text: IMPACT_PHRASES[impact ?? "middle"], strong: true },
-  ];
-  const hard: string[] = [];
-  const easy: string[] = [];
-  for (const { key, mark } of lines) {
-    if (mark === null) continue;
-    const phrase = (PROFILE_SENTENCE_PHRASES as Record<string, Record<Mark, { side: ProfileSide; words: string }>>)[key]?.[mark];
-    if (phrase === undefined) continue;
-    (phrase.side === "hard" ? hard : easy).push(phrase.words);
-  }
-  const stop: SentencePart = { text: ".", strong: false };
-  if (hard.length > 0) {
-    return [
-      ...opening,
-      { text: " that will ", strong: false },
-      ...joinStrong(hard),
-      ...(easy.length > 0 ? [{ text: ", but ", strong: false }, ...joinStrong(easy)] : []),
-      stop,
-    ];
-  }
-  if (easy.length > 0) return [...opening, { text: ", and ", strong: false }, ...joinStrong(easy), stop];
-  return [...opening, { text: OTHERS_MIDDLE_TAIL, strong: false }];
-}
-
-/** The sentence as plain text (its runs joined). */
-export function profileSentence(
-  ambition: Mark | null | undefined,
-  lines: readonly { key: string; mark: Mark | null }[],
-): string {
-  return profileSentenceParts(ambition, lines)
-    .map((part) => part.text)
-    .join("");
-}
-
 /** A phrase as it reads after a word mid-sentence: its first letter lowered
  *  unless it starts an acronym ("Sustained employment" → "sustained
  *  employment", "NEET rate" stays). */
@@ -474,50 +426,37 @@ export function midSentence(phrase: string): string {
     : phrase;
 }
 
+/** One labelled fact under a document on the option card. */
+export type DocumentFact = { label: "Where" | "Type" | "Targeted" | "Measures" | "Discusses"; value: string };
+
 /**
  * A document's facts under its reference on the option card (round 12,
- * owner): two lines at most. The first says where and how: "Evaluated in
- * the United Kingdom · Randomised or quasi-experimental study" ("Described
- * in …" when the document only describes the option; the place alone when
- * none is given), then " · also found as N other records" when it was
- * folded from others. The second, only when there is one, the outcome:
- * "Measures <outcome>".
+ * owner): a small labelled list, in this order, a row with no value left
+ * out. Where it was studied; its Type (the classifier's evidence type
+ * through the shared label, as the Sources table's Type column); whom it
+ * Targeted (the plan's own target-unit words when the study's subjects fold
+ * into it, else the folded kind); and the outcome, "Measures" on an
+ * evaluation, "Discusses" on a document that only describes the option.
  *
  * Args:
  *   document: The document as the option read gives it.
  *
  * Returns:
- *   The lines in order; empty when it carries no fact.
+ *   The facts in order.
  */
-export function documentFactLines(
-  document: Pick<OptionDocumentOut, "role" | "place" | "evidence_type" | "measured" | "records_count" | "tried_on_kind">,
-): string[] {
-  const first: string[] = [];
-  const place = documentPlaceLabel(document.place);
-  if (place !== null) {
-    const realPlace = place === document.place;
-    const verb = document.role === "evaluated" ? "Evaluated" : "Described";
-    first.push(realPlace ? `${verb} in ${countryWithArticle(place)}` : capitalise(place));
-  }
-  if (document.evidence_type != null && document.evidence_type.trim() !== "") {
-    const design = evidenceTypeLabel(document.evidence_type);
-    first.push(first.length === 0 ? capitalise(design) : design);
-  }
-  const others = document.records_count - 1;
-  if (others > 0) first.push(`also found as ${countOf(others, "other record", "other records")}`);
-  const lines = first.length > 0 ? [first.join(" · ")] : [];
-  // Whom it targeted, on its own line (round 12, owner): the plan's own
-  // target-unit words when the study's subjects fold into it, else the
-  // folded kind.
-  if (document.tried_on_kind != null && document.tried_on_kind.trim() !== "") {
-    lines.push(`Targeted ${document.tried_on_kind.trim()}`);
-  }
-  // An evaluation measures its outcome; a document that only describes the
-  // option discusses it (round 12, owner).
-  if (document.measured != null && document.measured.trim() !== "") {
-    lines.push(`${document.role === "evaluated" ? "Measures" : "Discusses"} ${midSentence(document.measured.trim())}`);
-  }
-  return lines;
+export function documentFacts(
+  document: Pick<OptionDocumentOut, "role" | "place" | "evidence_type" | "measured" | "tried_on_kind">,
+): DocumentFact[] {
+  const facts: DocumentFact[] = [];
+  const place = (document.place ?? "").trim();
+  if (place !== "" && fold(place) !== "not stated") facts.push({ label: "Where", value: capitalise(documentPlaceLabel(place) ?? place) });
+  const type = (document.evidence_type ?? "").trim();
+  if (type !== "") facts.push({ label: "Type", value: evidenceTypeLabel(type) });
+  const targeted = (document.tried_on_kind ?? "").trim();
+  if (targeted !== "") facts.push({ label: "Targeted", value: targeted });
+  const outcome = (document.measured ?? "").trim();
+  if (outcome !== "") facts.push({ label: document.role === "evaluated" ? "Measures" : "Discusses", value: outcome });
+  return facts;
 }
 
 /** One plan outcome's coverage in the option's documents (round 12, owner). */
@@ -622,6 +561,13 @@ export function actsOnParts(names: readonly string[] | undefined): SentencePart[
     listed.push({ text: name, strong: true });
   });
   return [lead, ...listed, { text: ` and ${rest} more`, strong: false }, stop];
+}
+
+/** The link under the option's documents to the same documents in Sources
+ *  (round 12, owner): "See these 12 documents in Sources", "See this
+ *  document in Sources" for one. */
+export function seeInSourcesWords(count: number): string {
+  return count === 1 ? "See this document in Sources" : `See these ${count} documents in Sources`;
 }
 
 /** The documents disclosure's words (round 12, owner): closed, the count

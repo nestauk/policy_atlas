@@ -37,17 +37,19 @@ import {
   deliveredLeadInParts,
   leverLineParts,
   ABSTRACTS_NOTE,
-  documentFactLines,
+  documentFacts,
+  seeInSourcesWords,
   documentsToggleWords,
   exclusionLine,
-  profileSentenceParts,
+  PROFILE_POINTS_INTRO,
+  profilePoints,
   type SentencePart,
   originLabel,
   relationLabel,
 } from "./longlistPresentation";
 import { ExcludeReasonForm, OptionActionButton, ShortlistToggle, useOptionActions } from "./optionActions";
 import { RetryCard } from "../../ui/feedback/RetryCard";
-import { LINK_CLASS } from "../../ui/brand/inlineActions";
+import { LINK_CLASS, PROSE_LINK_CLASS } from "../../ui/brand/inlineActions";
 import { InfoHint } from "./InfoHint";
 import { BulletList } from "../../ui/brand/BulletList";
 import { ChevronIcon } from "../../ui/brand/icons";
@@ -79,7 +81,7 @@ function SentenceRuns({ parts }: { parts: readonly SentencePart[] }) {
 const BLOCK_SUBHEADING_CLASS = "text-lead font-bold text-navy max-md:text-body";
 
 /** A document group's heading ("Evaluated it · 3"): Body Semibold Navy. */
-const DOCUMENT_GROUP_HEADING_CLASS = "text-body font-semibold text-navy";
+const DOCUMENT_GROUP_HEADING_CLASS = "font-semibold text-navy";
 
 /** Documents shown in a group before "Show all N". */
 const DOCUMENTS_SHOWN = 5;
@@ -118,10 +120,10 @@ function DocumentLine({
     venue: document.venue == null ? null : scrub(document.venue),
     authorships: (document.authors ?? []).map((name) => ({ name: scrub(name) })),
   });
-  const facts = documentFactLines(document).map(scrub);
+  const facts = documentFacts(document);
   return (
-    <li>
-      <p className="text-body text-ink [overflow-wrap:anywhere]">
+    <li className="py-2.5 first:pt-0 last:pb-0">
+      <p className="text-ink [overflow-wrap:anywhere]">
         {lead}
         {dossier !== null ? (
           <Link className={REFERENCE_TITLE_LINK_CLASS} to={dossier}>
@@ -133,13 +135,19 @@ function DocumentLine({
         {afterTitle}
         {venue !== null && <span className="text-grey"> {venue}</span>}
       </p>
-      {/* Its facts at Body in Grey (round 12, owner): where and how, then
-          the outcome on its own line. */}
-      {facts.map((fact) => (
-        <p key={fact} className="mt-1 text-body text-grey">
-          {fact}
-        </p>
-      ))}
+      {/* Its facts as a small labelled list, the dossier's facts pattern
+          (round 12, owner): the label at Meta Grey in a fixed column, the
+          value at Body Ink beside it; no middots. */}
+      {facts.length > 0 && (
+        <dl className="mt-1.5 space-y-1">
+          {facts.map((fact) => (
+            <div key={fact.label} className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-baseline gap-3 max-md:grid-cols-[6.5rem_minmax(0,1fr)]">
+              <dt className="text-grey">{fact.label}</dt>
+              <dd className="text-ink [overflow-wrap:anywhere]">{scrub(fact.value)}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
     </li>
   );
 }
@@ -199,7 +207,9 @@ function DocumentGroup({
       <h3 className={DOCUMENT_GROUP_HEADING_CLASS}>
         {heading} · {documents.length}
       </h3>
-      <ul role="list" className="space-y-3">
+      {/* One size for the whole entry, 20 px between documents with one
+          hairline between them (round 12, owner: not dense). */}
+      <ul role="list" className="divide-y divide-line">
         {shown.map((document, index) => (
           <DocumentLine
             key={document.task_source_snapshot_id ?? `${document.title}-${index}`}
@@ -576,14 +586,9 @@ export function OptionCard() {
                       data-where={entry.where ? "true" : undefined}
                       className="grid gap-x-4 py-1.5 sm:grid-cols-[10rem_1fr]"
                     >
-                      {/* The plan's own place carries the profile's Navy mark,
-                          not a tint (round 10). */}
-                      <dt className="flex items-baseline gap-1.5 text-navy">
-                        {entry.where && (
-                          <span aria-hidden="true" className="inline-block size-1.5 flex-none -translate-y-0.5 bg-navy" />
-                        )}
-                        {scrub(entry.place)}
-                      </dt>
+                      {/* The plan's own place leads the list; no mark of its
+                          own (round 12, owner). */}
+                      <dt className="text-navy">{scrub(entry.place)}</dt>
                       <dd>{scrub(entry.sentence)}</dd>
                     </div>
                   ))}
@@ -600,7 +605,7 @@ export function OptionCard() {
             <h3 id="your-outcomes-heading" className={BLOCK_SUBHEADING_CLASS}>
               Your target and outcomes
             </h3>
-            <table aria-labelledby="your-outcomes-heading" className="mt-1.5 w-full border-t border-line text-body">
+            <table aria-labelledby="your-outcomes-heading" className="mt-1.5 w-full border-t border-line">
               <tbody>
                 {target !== null && (
                   <tr className="border-b border-line">
@@ -667,7 +672,7 @@ export function OptionCard() {
         {item.document_count === 0 && <p className="text-grey">No document names this option yet.</p>}
         {item.document_count > 0 && (
             <DocumentsDisclosure evaluated={evaluatedDocuments.length} describing={describingDocuments.length}>
-              <p className="text-meta text-grey">{capitalise(ABSTRACTS_NOTE)}.</p>
+              <p className="text-grey">{capitalise(ABSTRACTS_NOTE)}.</p>
               <DocumentGroup heading="Evaluated it" taskId={taskId} optionId={item.option_id} documents={evaluatedDocuments} />
               <DocumentGroup
                 heading="Describe or recommend it"
@@ -675,6 +680,13 @@ export function OptionCard() {
                 optionId={item.option_id}
                 documents={describingDocuments}
               />
+              {/* The same documents in Sources, the table filtered by the
+                  option (round 12, owner). */}
+              <p>
+                <Link className={PROSE_LINK_CLASS} to={`/tasks/${taskId}/sources/all?option=${item.option_id}`}>
+                  {seeInSourcesWords(documents.length)}
+                </Link>
+              </p>
             </DocumentsDisclosure>
         )}
       </CardSection>
@@ -685,12 +697,12 @@ export function OptionCard() {
           defaultOpen={false}
           info={{ label: ESTIMATE_LABEL, note: ESTIMATE_NOTE }}
           summaryNode={
-            // Shut: one sentence naming only the lines not in the middle
-            // (round 12, owner); open, the table of lines.
-            // The takeaways in Semibold Navy, the joining words regular.
-            <p className={cn("max-w-prose-measure", REPORT_BODY_CLASS)}>
-              <SentenceRuns parts={profileSentenceParts(ambitionMark, sentenceLines)} />
-            </p>
+            // Shut: an intro line and the points, the report's square
+            // bullets (round 12, owner); open, the table of lines.
+            <div className={cn("max-w-prose-measure space-y-2", REPORT_BODY_CLASS)}>
+              <p>{PROFILE_POINTS_INTRO}</p>
+              <BulletList items={profilePoints(ambitionMark, sentenceLines)} />
+            </div>
           }
         >
           <table className="w-full border-collapse text-left">

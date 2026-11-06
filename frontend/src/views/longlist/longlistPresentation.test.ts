@@ -13,7 +13,8 @@ import {
   leverLine,
   constraintNotices,
   countsLine,
-  documentFactLines,
+  documentFacts,
+  seeInSourcesWords,
   midSentence,
   outcomeCoverage,
   outcomeCoverageWords,
@@ -23,9 +24,8 @@ import {
   leverLineParts,
   actsOnParts,
   documentsToggleWords,
-  profileSentenceParts,
   exclusionLine,
-  profileSentence,
+  profilePoints,
   leverCount,
   rowMetaFields,
   countryWithArticle,
@@ -236,26 +236,6 @@ describe("longlist presentation (amendment 4)", () => {
   });
 
   // Round 12 (owner): a document's one Meta line of facts.
-  it("words a document's facts as two lines: where and how, then the outcome", () => {
-    const base = {
-      role: "evaluated" as const,
-      place: "United Kingdom",
-      evidence_type: "randomised or quasi-experimental study",
-      measured: "prevalence of obesity among children and young people",
-      records_count: 3,
-    };
-    expect(documentFactLines(base)).toEqual([
-      "Evaluated in the United Kingdom · Randomised or quasi-experimental study · also found as 2 other records",
-      "Measures prevalence of obesity among children and young people",
-    ]);
-    expect(documentFactLines({ ...base, role: "described", place: "Denmark", measured: null, records_count: 1 })).toEqual([
-      "Described in Denmark · Randomised or quasi-experimental study",
-    ]);
-    expect(documentFactLines({ ...base, place: "not stated", evidence_type: null, measured: null, records_count: 2 })).toEqual([
-      "Place not stated · also found as 1 other record",
-    ]);
-  });
-
   it("words the documents toggle", () => {
     expect(documentsToggleWords(false, 2, 4)).toBe("Show 6 documents · 2 evaluated it · 4 describe it");
     expect(documentsToggleWords(false, 1, 1)).toBe("Show 2 documents · 1 evaluated it · 1 describes it");
@@ -370,72 +350,49 @@ describe("the count line's levers", () => {
 
 // Round 12 (owner): "What it could take" shut is one sentence of the lines
 // that are not in the middle.
-describe("profileSentence", () => {
-  it("opens with the ambition and the impact, then the harder lines, then but and the easier ones", () => {
+describe("profilePoints", () => {
+  it("gives the ambition first and the impact second, then each other marked line in order", () => {
     expect(
-      profileSentence("more", [
+      profilePoints("more", [
+        { key: "cost", mark: null },
         { key: "time_to_set_up", mark: "more" },
         { key: "workforce", mark: "more" },
         { key: "delivery_complexity", mark: "less" },
-        { key: "cost", mark: null },
         { key: "potential_impact", mark: "more" },
       ]),
-    ).toBe(
-      "This is an ambitious option with high potential impact that will take longer to set up and have high workforce requirements, but delivery is simpler.",
-    );
+    ).toEqual(["More ambitious", "Higher potential impact", "Longer to set up", "Higher workforce requirements", "Simpler to deliver"]);
   });
 
-  it("says a moderate option with average impact when both are in the middle or missing", () => {
-    expect(profileSentence(null, [{ key: "cost", mark: "more" }, { key: "potential_impact", mark: null }])).toBe(
-      "This is a moderate-ambition option with average potential impact that will cost more.",
-    );
-    expect(profileSentence(undefined, [{ key: "cost", mark: "more" }])).toBe(
-      "This is a moderate-ambition option with average potential impact that will cost more.",
-    );
-    expect(profileSentence("less", [{ key: "potential_impact", mark: "less" }, { key: "cost", mark: "less" }])).toBe(
-      "This is a modest option with lower potential impact, and it costs less.",
-    );
+  it("says Average ambition and Average potential impact when both are in the middle or missing", () => {
+    expect(profilePoints(null, [{ key: "cost", mark: "more" }, { key: "potential_impact", mark: null }])).toEqual([
+      "Average ambition",
+      "Average potential impact",
+      "Costs more",
+    ]);
+    expect(profilePoints(undefined, [{ key: "time_to_effect", mark: "less" }])).toEqual([
+      "Average ambition",
+      "Average potential impact",
+      "Shows results sooner",
+    ]);
+    expect(profilePoints("less", [{ key: "potential_impact", mark: "less" }, { key: "coordination", mark: "more" }])).toEqual([
+      "Less ambitious",
+      "Lower potential impact",
+      "Needs more coordination",
+    ]);
   });
 
-  it("joins three harder lines with commas and and", () => {
-    expect(
-      profileSentence(null, [
-        { key: "cost", mark: "more" },
-        { key: "time_to_effect", mark: "more" },
-        { key: "coordination", mark: "more" },
-      ]),
-    ).toBe(
-      "This is a moderate-ambition option with average potential impact that will cost more, take longer to show results and need more coordination.",
-    );
+  it("ends with average on the rest when every other line is in the middle", () => {
+    expect(profilePoints(null, [{ key: "cost", mark: null }, { key: "workforce", mark: null }])).toEqual([
+      "Average ambition",
+      "Average potential impact",
+      "Average on cost, time, workforce, coordination and delivery",
+    ]);
   });
 
-  it("closes with average on the rest when every other line is in the middle", () => {
-    expect(profileSentence(null, [{ key: "cost", mark: null }, { key: "workforce", mark: null }])).toBe(
-      "This is a moderate-ambition option with average potential impact, and average on cost, time, workforce, coordination and delivery.",
-    );
-    expect(profileSentence("more", [{ key: "potential_impact", mark: "more" }])).toBe(
-      "This is an ambitious option with high potential impact, and average on cost, time, workforce, coordination and delivery.",
-    );
-  });
-
-  // Round 12 (owner): the ambition word and the impact phrase are strong, as each line's phrase.
-  it("marks the ambition word, the impact phrase and each line's phrase strong", () => {
-    const strong = (parts: ReturnType<typeof profileSentenceParts>) => parts.filter((part) => part.strong).map((part) => part.text);
-    expect(
-      strong(
-        profileSentenceParts("more", [
-          { key: "time_to_set_up", mark: "more" },
-          { key: "delivery_complexity", mark: "less" },
-        ]),
-      ),
-    ).toEqual(["ambitious", "average potential impact", "take longer to set up", "delivery is simpler"]);
-    expect(strong(profileSentenceParts(null, []))).toEqual(["moderate-ambition", "average potential impact"]);
-  });
-
-  it("leaves out a line it has no words for", () => {
-    expect(profileSentence(null, [{ key: "who_decides", mark: "more" }, { key: "cost", mark: "less" }])).toBe(
-      "This is a moderate-ambition option with average potential impact, and it costs less.",
-    );
+  it("leaves out a line it has no words for, and every point has no full stop", () => {
+    const points = profilePoints(null, [{ key: "who_decides", mark: "more" }, { key: "cost", mark: "less" }]);
+    expect(points).toEqual(["Average ambition", "Average potential impact", "Costs less"]);
+    for (const point of points) expect(point).not.toMatch(/\.$/);
   });
 });
 
@@ -468,23 +425,36 @@ describe("midSentence", () => {
     expect(midSentence("NEET rate at 6 months")).toBe("NEET rate at 6 months");
     expect(midSentence("prevalence of obesity")).toBe("prevalence of obesity");
     expect(midSentence("A")).toBe("A");
-    expect(documentFactLines({ role: "evaluated", place: null, evidence_type: null, measured: "Sustained employment", records_count: 1 })).toEqual([
-      "Measures sustained employment",
-    ]);
   });
 });
 
-// Round 12 (owner): only an evaluation measures its outcome.
-describe("documentFactLines' outcome verb", () => {
-  const base = { place: null, evidence_type: null, measured: "Sustained employment", records_count: 1 };
-  it("says Measures on an evaluating document", () => {
-    expect(documentFactLines({ ...base, role: "evaluated" })).toEqual(["Measures sustained employment"]);
+// Round 12 (owner): a document's facts as a small labelled list.
+describe("documentFacts", () => {
+  const base = {
+    role: "evaluated" as const,
+    place: "United Kingdom",
+    evidence_type: "randomised or quasi-experimental study",
+    measured: "NEET rate at 6 months",
+    tried_on_kind: "16-24 year-olds",
+  };
+  it("lists Where, Type, Targeted and Measures in order, the type through the shared label", () => {
+    expect(documentFacts(base)).toEqual([
+      { label: "Where", value: "United Kingdom" },
+      { label: "Type", value: "Randomised or quasi-experimental study" },
+      { label: "Targeted", value: "16-24 year-olds" },
+      { label: "Measures", value: "NEET rate at 6 months" },
+    ]);
   });
   it("says Discusses on a document that only describes, recommends or mentions it", () => {
     for (const role of ["described", "recommended", "mentioned"] as const) {
-      expect(documentFactLines({ ...base, role })).toEqual(["Discusses sustained employment"]);
+      expect(documentFacts({ ...base, role }).at(-1)).toEqual({ label: "Discusses", value: "NEET rate at 6 months" });
     }
-    expect(documentFactLines({ ...base, role: "described", measured: "NEET rate" })).toEqual(["Discusses NEET rate"]);
+  });
+  it("leaves out a row with no value, and an unstated place", () => {
+    expect(documentFacts({ ...base, place: "not stated", evidence_type: null, tried_on_kind: null, measured: null })).toEqual([]);
+    expect(documentFacts({ ...base, place: "other", evidence_type: " ", tried_on_kind: "", measured: null })).toEqual([
+      { label: "Where", value: "Other place" },
+    ]);
   });
 });
 
@@ -525,14 +495,6 @@ describe("targetCoverage", () => {
     expect(targetCoverageWords(targetCoverage("children", kinds("outlets")))).toBe("Not directly targeted");
   });
 
-  it("puts whom a document targeted on its own line, between where and how and the outcome", () => {
-    expect(
-      documentFactLines({ role: "evaluated", place: "Denmark", evidence_type: null, measured: "Wellbeing", records_count: 2, tried_on_kind: "parents" }),
-    ).toEqual(["Evaluated in Denmark · also found as 1 other record", "Targeted parents", "Measures wellbeing"]);
-    expect(
-      documentFactLines({ role: "described", place: null, evidence_type: null, measured: null, records_count: 1, tried_on_kind: "parents" }),
-    ).toEqual(["Targeted parents"]);
-  });
 });
 
 // Round 12 (owner): the takeaway words of the lever and the setting are strong.
@@ -570,5 +532,13 @@ describe("actsOnParts", () => {
       "Delivered in schools. Acts on parents. It typically involves:",
     );
     expect(text(deliveredLeadInParts([], actsOnParts(["parents"])))).toBe("Acts on parents. It typically involves:");
+  });
+});
+
+// Round 12 (owner): the link to the option's documents in Sources.
+describe("seeInSourcesWords", () => {
+  it("names the count, in the singular for one", () => {
+    expect(seeInSourcesWords(12)).toBe("See these 12 documents in Sources");
+    expect(seeInSourcesWords(1)).toBe("See this document in Sources");
   });
 });
