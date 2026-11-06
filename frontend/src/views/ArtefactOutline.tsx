@@ -4,7 +4,8 @@ import { Link } from "react-router";
 
 import { useFunnel, useLandscape } from "../api/queries";
 import { scrub } from "../lib/scrub";
-import { evidenceTypeLabel, REPORT_SECTION_HEADING_CLASS } from "./artefactPresentation";
+import { REPORT_SECTION_HEADING_CLASS } from "./artefactPresentation";
+import { evidenceTypeLabel, FULL_TEXT } from "../ui/brand/evidence";
 import { LABEL_CLASS } from "../ui/brand/label";
 import { LINK_CLASS, QUIET_CONTROL_CLASS } from "../ui/brand/inlineActions";
 import { ChevronIcon } from "../ui/brand/icons";
@@ -182,6 +183,88 @@ export function requestOpenSection(id: string): void {
   window.dispatchEvent(new CustomEvent(OPEN_SECTION_EVENT, { detail: id }));
 }
 
+/*
+ * The report's expand state, one piece per task, in memory (owner, round
+ * 12). A reader who watched the report being written finds its sections all
+ * open and the control reading "Hide all"; a reader who opens a finished
+ * report fresh finds them shut; moving between the task's tabs (Sources and
+ * back) keeps whatever the reader left. Each tab is its own route, so the
+ * state lives outside the page: `all` is what the Show all / Hide all
+ * control last said, `sections` each section's own open state by its id.
+ * The live page seeds it open (`seedReportExpanded`); leaving the task
+ * forgets it (`useForgetReportExpandOnLeave`, called by the task shell). Not
+ * localStorage: a page load is a fresh entry.
+ */
+interface ReportExpandState {
+  all: boolean;
+  sections: Record<string, boolean>;
+}
+
+const reportExpand = new Map<string, ReportExpandState>();
+const reportExpandListeners = new Set<() => void>();
+
+function notifyReportExpand(): void {
+  for (const listener of reportExpandListeners) listener();
+}
+
+function subscribeReportExpand(listener: () => void): () => void {
+  reportExpandListeners.add(listener);
+  return () => reportExpandListeners.delete(listener);
+}
+
+/** The task whose expand state the report page reads and writes, or `null`
+ *  where the page keeps its own (a page rendered on its own, as in tests). */
+const ReportExpandContext = createContext<string | null>(null);
+
+/** Scopes the report's sections to one task's remembered expand state. */
+export function ReportExpandScope({ taskId, children }: { taskId: string; children: React.ReactNode }) {
+  return <ReportExpandContext.Provider value={taskId === "" ? null : taskId}>{children}</ReportExpandContext.Provider>;
+}
+
+/** The reader is watching the report being written: when it is committed,
+ *  every section is open and the control reads "Hide all". Safe to call
+ *  during render (it is idempotent and notifies no one: the page that calls
+ *  it re-renders its sections in the same pass). */
+export function seedReportExpanded(taskId: string): void {
+  if (taskId === "") return;
+  reportExpand.set(taskId, { all: true, sections: {} });
+}
+
+/** Forget a task's expand state, so the next visit is a fresh entry. */
+export function forgetReportExpand(taskId: string): void {
+  if (reportExpand.delete(taskId)) notifyReportExpand();
+}
+
+/** For the task shell: forgets the task's report expand state when the
+ *  reader leaves the task (another task, a list page), not when they move
+ *  between its tabs. */
+export function useForgetReportExpandOnLeave(taskId: string | undefined): void {
+  useEffect(() => {
+    if (taskId === undefined || taskId === "") return undefined;
+    return () => forgetReportExpand(taskId);
+  }, [taskId]);
+}
+
+/** A collapsible part of the report's open state, remembered for the task:
+ *  a section the reader has seen keeps its state; one they have not takes
+ *  the control's (`all`); with nothing remembered, `defaultOpen`. */
+export function useRememberedOpen(
+  id: string,
+  defaultOpen: boolean,
+): [boolean, React.Dispatch<React.SetStateAction<boolean>>] {
+  const taskId = useContext(ReportExpandContext);
+  const [open, setOpen] = useState(() => {
+    const remembered = taskId === null ? undefined : reportExpand.get(taskId);
+    return remembered === undefined ? defaultOpen : (remembered.sections[id] ?? remembered.all);
+  });
+  useEffect(() => {
+    if (taskId === null) return;
+    const remembered = reportExpand.get(taskId) ?? { all: false, sections: {} };
+    reportExpand.set(taskId, { ...remembered, sections: { ...remembered.sections, [id]: open } });
+  }, [taskId, id, open]);
+  return [open, setOpen];
+}
+
 interface FullReportExpandControl {
   expanded: boolean;
   revision: number;
@@ -190,17 +273,32 @@ interface FullReportExpandControl {
 
 const FullReportExpandContext = createContext<FullReportExpandControl | null>(null);
 
-/** Syncs collapsible full-report blocks to the Expand all / Collapse all control. */
+/** Syncs collapsible full-report blocks to the Show all / Hide all control.
+ *  Inside a `ReportExpandScope` the control's state is the task's
+ *  remembered `all`; outside one it is the provider's own. */
 export function FullReportExpandProvider({ children }: { children: React.ReactNode }) {
-  const [expanded, setExpanded] = useState(false);
+  const taskId = useContext(ReportExpandContext);
+  const [ownExpanded, setOwnExpanded] = useState(false);
+  const rememberedAll = useSyncExternalStore(subscribeReportExpand, () =>
+    taskId === null ? null : (reportExpand.get(taskId)?.all ?? false),
+  );
+  const expanded = rememberedAll ?? ownExpanded;
   const [revision, setRevision] = useState(0);
-  const setAllExpanded = useCallback((next: boolean) => {
-    if (!next && window.location.hash !== "") {
-      history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-    }
-    setExpanded(next);
-    setRevision((value) => value + 1);
-  }, []);
+  const setAllExpanded = useCallback(
+    (next: boolean) => {
+      if (!next && window.location.hash !== "") {
+        history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+      }
+      setOwnExpanded(next);
+      if (taskId !== null) {
+        const remembered = reportExpand.get(taskId) ?? { all: false, sections: {} };
+        reportExpand.set(taskId, { ...remembered, all: next });
+        notifyReportExpand();
+      }
+      setRevision((value) => value + 1);
+    },
+    [taskId],
+  );
   const value = useMemo(
     () => ({ expanded, revision, setAllExpanded }),
     [expanded, revision, setAllExpanded],
@@ -530,7 +628,7 @@ export function SectionDisclosure({
   level?: SectionHeadingLevel;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, setOpen] = useRememberedOpen(id, defaultOpen);
   // A section the reader could already read (the live page's, never
   // collapsible) stays open when the committed report makes it collapsible.
   const [wasCollapsible, setWasCollapsible] = useState(collapsible);
@@ -668,15 +766,39 @@ export function gatheredCounts(
   const rows: Array<[string, number | null | undefined]> = [
     ["Found", funnel.found],
     ["Relevant", funnel.relevant],
-    ["Full text", funnel.read_in_full],
+    [FULL_TEXT, funnel.read_in_full],
     ["Shortlisted", funnel.selected],
     ["Cited", funnel.cited],
   ];
   return rows.filter((row): row is [string, number] => typeof row[1] === "number");
 }
 
+/** The geography the landscape counts sources without a country under. */
+const NOT_REPORTED_PLACE = "Not reported";
+
+/** Where a count row leads on the sources table, as the Landscape funnel's
+ *  rows do: Found to every source, Relevant to the screened-in set, Cited
+ *  to the cited sources; Full text and Shortlisted have no filter there. */
+export function gatheredCountHref(allSources: string, label: string): string | undefined {
+  if (label === "Found") return `${allSources}?status=all`;
+  if (label === "Relevant") return `${allSources}?status=Included`;
+  if (label === "Cited") return `${allSources}?cited=true`;
+  return undefined;
+}
+
+/** A row's label: a link in the Link style where the table can filter to
+ *  it, plain otherwise (the clickable-only rule). */
+function GatheredLabel({ href, children }: { href: string | undefined; children: React.ReactNode }) {
+  if (href === undefined) return <>{children}</>;
+  return (
+    <Link to={href} className={LINK_CLASS}>
+      {children}
+    </Link>
+  );
+}
+
 export function GatheredSection({ taskId, id }: { taskId: string; id: string }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useRememberedOpen(id, false);
   const headingId = useId();
   useOpenWhenNavigated(id, setOpen);
   useExpandForPrint(setOpen);
@@ -684,19 +806,35 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
   const landscape = useLandscape(taskId, "cited");
   const funnel = useFunnel(taskId);
   const cited = landscape.data;
-  const distributions = useMemo(() => {
+  // Each row leads to the sources table where the table can filter to it,
+  // with the filters the Landscape's rows use (owner, round 12): the counts
+  // to their set, a distribution's value and a theme to the cited sources
+  // with that value. A row the table cannot filter to stays plain.
+  const allSources = `/tasks/${taskId}/sources/all`;
+  const citedWith = (filter: Record<string, string>) =>
+    `${allSources}?${new URLSearchParams({ cited: "true", ...filter }).toString()}`;
+  const distributions = (() => {
     if (cited === undefined) return [];
-    const rows: Array<{ label: string; entries: Array<[string, number]> }> = [];
+    const rows: Array<{ label: string; entries: Array<{ label: string; count: number; href?: string }> }> = [];
     const types = Object.entries(cited.evidence_types ?? {})
       .sort(([, a], [, b]) => b - a)
-      .map(([type, count]): [string, number] => [evidenceTypeLabel(type), count]);
+      .map(([type, count]) => ({ label: evidenceTypeLabel(type), count, href: citedWith({ type }) }));
     if (types.length > 0) rows.push({ label: "Evidence types", entries: types });
-    const years = Object.entries(cited.years ?? {}).sort(([a], [b]) => a.localeCompare(b));
+    const years = Object.entries(cited.years ?? {})
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([year, count]) => ({ label: year, count, href: citedWith({ year_from: year, year_to: year }) }));
     if (years.length > 0) rows.push({ label: "Publication years", entries: years });
-    const places = Object.entries(cited.geographies ?? {}).sort(([, a], [, b]) => b - a);
+    const places = Object.entries(cited.geographies ?? {})
+      .sort(([, a], [, b]) => b - a)
+      .map(([country, count]) => ({
+        label: country,
+        count,
+        // "Not reported" is no country the table can filter to.
+        href: country === NOT_REPORTED_PLACE ? undefined : citedWith({ country }),
+      }));
     if (places.length > 0) rows.push({ label: "Where published", entries: places });
     return rows;
-  }, [cited]);
+  })();
 
   const funnelLine =
     funnel.data !== undefined &&
@@ -737,7 +875,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
                 {counts.map(([label, count]) => (
                   <tr key={label} className={GATHERED_ROW_CLASS}>
                     <th scope="row" className={GATHERED_LABEL_CELL_CLASS}>
-                      {label}
+                      <GatheredLabel href={gatheredCountHref(allSources, label)}>{label}</GatheredLabel>
                     </th>
                     <td className={cn(GATHERED_COUNT_CELL_CLASS, "tabular-nums")}>{count}</td>
                   </tr>
@@ -757,10 +895,10 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
               <table className={GATHERED_TABLE_CLASS}>
                 <caption className={GATHERED_CAPTION_CLASS}>{row.label}</caption>
                 <tbody>
-                  {row.entries.slice(0, 8).map(([label, count]) => (
+                  {row.entries.slice(0, 8).map(({ label, count, href }) => (
                     <tr key={label} className={GATHERED_ROW_CLASS}>
                       <th scope="row" className={GATHERED_LABEL_CELL_CLASS}>
-                        {scrub(label)}
+                        <GatheredLabel href={href}>{scrub(label)}</GatheredLabel>
                       </th>
                       <td className={cn(GATHERED_COUNT_CELL_CLASS, "text-grey")}>{countCell(count)}</td>
                     </tr>
@@ -784,19 +922,13 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
                 {(cited?.themes ?? []).map((theme) => (
                   <tr key={theme.name} className={GATHERED_ROW_CLASS}>
                     <th scope="row" className={GATHERED_LABEL_CELL_CLASS}>
-                      {scrub(theme.name)}
+                      <GatheredLabel href={theme.theme_id != null ? citedWith({ theme: theme.theme_id }) : undefined}>
+                        {scrub(theme.name)}
+                      </GatheredLabel>
                     </th>
                     {/* The counts at the list's size, one style beside the
                         distributions' (round 10, finding 11). */}
-                    <td className={GATHERED_COUNT_CELL_CLASS}>
-                      {theme.theme_id != null ? (
-                        <Link to={`/tasks/${taskId}/sources/all?theme=${theme.theme_id}`} className={LINK_CLASS}>
-                          {countCell(theme.size)} →
-                        </Link>
-                      ) : (
-                        <span className="text-grey">{countCell(theme.size)}</span>
-                      )}
-                    </td>
+                    <td className={cn(GATHERED_COUNT_CELL_CLASS, "text-grey")}>{countCell(theme.size)}</td>
                   </tr>
                 ))}
               </tbody>

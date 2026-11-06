@@ -368,7 +368,8 @@ describe("artefactMarkdown case studies", () => {
     expect(markdown).toContain("### Case studies");
     expect(markdown).toContain("**Finland — School meals**");
     expect(markdown).toContain("Universal provision since 1948.");
-    expect(markdown).toContain("high · Trial · Since 1948");
+    // The page's order: the type, then the strength (round 12).
+    expect(markdown).toContain("Trial · high · Since 1948");
     expect(markdown).toContain("**Sweden — Free lunches**");
   });
 

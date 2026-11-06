@@ -1,3 +1,5 @@
+import { evidenceTypeLabel, strengthRank } from "../ui/brand/evidence";
+
 /**
  * Structural minimums, not the generated contract types.
  *
@@ -58,21 +60,6 @@ export type TopSource = {
   note?: string | null;
 };
 
-/**
- * Appraisal labels, strongest first, for the tie-break only.
- *
- * A label outside this list sorts last rather than throwing — an
- * unclassified source is a real state, and the ranking is a convenience, not
- * a place to fail.
- */
-// The labels `appraisal_label` sends (backend `appraise.SCORE_LABELS`), lower-cased.
-const APPRAISAL_ORDER = ["very strong", "strong", "moderate", "limited", "weak", "unrated"] as const;
-
-function appraisalRank(label: string | null): number {
-  if (label === null) return APPRAISAL_ORDER.length;
-  const index = APPRAISAL_ORDER.indexOf(label.toLowerCase() as (typeof APPRAISAL_ORDER)[number]);
-  return index === -1 ? APPRAISAL_ORDER.length : index;
-}
 
 /**
  * The sources the report cites most, at most three.
@@ -139,7 +126,7 @@ export function mostRelevantSources(
     .sort(
       (left, right) =>
         right.citationCount - left.citationCount ||
-        appraisalRank(left.appraisalLabel) - appraisalRank(right.appraisalLabel) ||
+        strengthRank(left.appraisalLabel) - strengthRank(right.appraisalLabel) ||
         left.title.localeCompare(right.title),
     )
     .slice(0, limit);
@@ -288,33 +275,6 @@ export function referenceCitation(reference: ReferenceLike): string {
   return [`${lead ?? ""}${title}${afterTitle}`, venue, url].filter((part): part is string => part !== null).join(" ");
 }
 
-/**
- * An evidence type in sentence case (round 10, C6): the classifier's labels
- * are Title Case ("Systematic Review and Meta-Analysis"), the page writes
- * them as a sentence would ("Systematic review and meta-analysis").
- * Acronyms keep their capitals ("RCTs and quasi-experimental studies").
- * One formatter for every surface that names an evidence type.
- *
- * Args:
- *   type: The evidence type as the classifier labels it.
- *
- * Returns:
- *   The label in sentence case.
- */
-export function evidenceTypeLabel(type: string): string {
-  let first = true;
-  return type.trim().replace(/\p{L}[\p{L}']*/gu, (word) => {
-    const acronym = /^\p{Lu}{2,}s?$/u.test(word);
-    const out = acronym
-      ? word
-      : first
-        ? word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-        : word.toLowerCase();
-    first = false;
-    return out;
-  });
-}
-
 export type NumberedAuthorships = {
   /** Authors in wire order, each with the marker numbers of its institutions. */
   authors: Array<{ name: string; markers: number[] }>;
@@ -432,6 +392,24 @@ export function cardEvidenceMeta(card: CardEvidenceInput): {
   }
   const sinceYear = card.since_year ?? null;
   return { strength, design, sinceYear };
+}
+
+/**
+ * The cited source a case-study card's evidence type came from: the first
+ * citation of that type, in the order the card's own fields were filled
+ * (round 12). Its dossier holds the classifier's reasoning for the type,
+ * which the artefact does not carry. `null` when no citation names it.
+ */
+export function cardEvidenceSourceId(card: CardEvidenceInput, design: string | null): string | null {
+  if (design === null) return null;
+  for (const claim of card.claims ?? []) {
+    for (const citation of claim.citations ?? []) {
+      if (citation.evidence_type === design && citation.source_id != null && citation.source_id !== "") {
+        return citation.source_id;
+      }
+    }
+  }
+  return null;
 }
 
 function markdownKeyFindingsLine(line: string): string {
@@ -637,7 +615,7 @@ export function artefactMarkdown(artefact: MarkdownArtefact, question?: string |
           lines.push(markdownCaseStudyCardProse(card), "");
         }
         const { strength, design, sinceYear } = cardEvidenceMeta(card);
-        const facts = [strength, design === null ? null : evidenceTypeLabel(design), sinceYear != null ? `Since ${sinceYear}` : null].filter(
+        const facts = [design === null ? null : evidenceTypeLabel(design), strength, sinceYear != null ? `Since ${sinceYear}` : null].filter(
           (part): part is string => part != null && part !== "",
         );
         if (facts.length > 0) lines.push(`_${facts.join(" · ")}_`, "");

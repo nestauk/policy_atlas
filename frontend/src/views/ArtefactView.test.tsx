@@ -1226,7 +1226,7 @@ describe("CitationProvenanceBlock authorships (042)", () => {
     },
   };
 
-  it("renders authors with markers between the title and the year line, institutions below", () => {
+  it("sets the source line as the References read it, after the quote (round 12)", () => {
     const { container } = render(
       <CitationProvenanceBlock
         n={1}
@@ -1237,15 +1237,20 @@ describe("CitationProvenanceBlock authorships (042)", () => {
         quote="The quoted"
       />,
     );
-    expect(screen.getAllByText(/Alex Sampleton/).length).toBeGreaterThan(0);
-    expect(screen.getByText("2022 · BMJ Open")).toBeInTheDocument();
-    expect(screen.getAllByText(/University of Exampleshire/).length).toBeGreaterThan(0);
-    const markers = [...container.querySelectorAll("sup")].map((sup) => sup.textContent);
-    expect(markers).toEqual(["1", "1,2", "1", "2"]);
+    const name = screen.getByText("A study");
+    expect(name.closest("p")).toHaveTextContent("[1] Sampleton A, Mockford C (2022). A study. BMJ Open.");
+    expect(name).toHaveClass("font-bold");
+    // The quote, highlighted in its passage, comes first.
+    const quote = screen.getByText("The quoted");
+    expect(quote.tagName).toBe("MARK");
+    expect(quote.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Names only, as the References: the institutions are the dossier's.
+    expect(container.querySelector("sup")).toBeNull();
+    expect(screen.queryByText(/University of Exampleshire/)).toBeNull();
   });
 
-  it("renders no author or institution lines when the context carries none", () => {
-    const { container } = render(
+  it("starts the source line at the number and title when the context carries no authors", () => {
+    render(
       <CitationProvenanceBlock
         n={1}
         sourceTitle="A study"
@@ -1255,8 +1260,7 @@ describe("CitationProvenanceBlock authorships (042)", () => {
         quote="The quoted"
       />,
     );
-    expect(container.querySelector("sup")).toBeNull();
-    expect(screen.getByText("2022 · BMJ Open")).toBeInTheDocument();
+    expect(screen.getByText("A study").closest("p")).toHaveTextContent("[1] A study (2022). BMJ Open.");
   });
 });
 

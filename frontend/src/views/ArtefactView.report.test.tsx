@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createInitialRunStreamState } from "../store";
 import { TooltipProvider } from "../ui/radix/Tooltip";
 import { ArtefactView, reportDateLabel } from "./ArtefactView";
-import { evidenceTypeLabel } from "./artefactPresentation";
+import { forgetReportExpand } from "./ArtefactOutline";
 import * as queries from "../api/queries";
 import * as store from "../store";
 import * as conversationState from "./workspace/chat/conversationState";
@@ -202,6 +202,8 @@ describe("the committed report page (task 058, round 10)", () => {
   });
   afterEach(() => {
     vi.unstubAllGlobals();
+    // Each test opens the report fresh: the expand state is the task's.
+    forgetReportExpand(TASK_ID);
     // An in-page link records its hash; the next page opens clean.
     history.replaceState(null, "", "/");
   });
@@ -298,6 +300,45 @@ describe("the committed report page (task 058, round 10)", () => {
     expect(section).toHaveTextContent("The rest of this section covers only the cited sources; the Landscape tab shows the whole search.");
     expect(within(section).getByRole("table", { name: "Evidence types" })).toBeInTheDocument();
     expect(within(section).getAllByRole("heading")).toHaveLength(1);
+  });
+
+  it("links the method's rows to the sources table where it can filter, the label in the Link style (owner, round 12)", async () => {
+    const user = userEvent.setup();
+    renderReport({
+      funnel: { found: 312, relevant: 118, read_in_full: 64, selected: 40, cited: 12 },
+      landscape: {
+        isError: false,
+        data: {
+          years: { 2019: 1 },
+          evidence_types: { "Systematic Review and Meta-Analysis": 2 },
+          geographies: { "United Kingdom": 2, "Not reported": 1 },
+          themes: [{ theme_id: "t-1", name: "School food", size: 2 }],
+        },
+      },
+    });
+    const method = screen.getByRole("heading", { level: 2, name: "How the evidence was gathered" });
+    const section = method.closest("section") as HTMLElement;
+    await user.click(within(method).getByRole("button"));
+    const all = `/tasks/${TASK_ID}/sources/all`;
+    const href = (name: string) => within(section).getByRole("link", { name }).getAttribute("href");
+    expect(href("Found")).toBe(`${all}?status=all`);
+    expect(href("Relevant")).toBe(`${all}?status=Included`);
+    expect(href("Cited")).toBe(`${all}?cited=true`);
+    // The clickable-only rule: the table has no filter for these.
+    for (const plain of ["Full text", "Shortlisted", "Not reported"]) {
+      expect(within(section).queryByRole("link", { name: plain })).toBeNull();
+      expect(within(section).getByText(plain)).toBeInTheDocument();
+    }
+    expect(href("Systematic review and meta-analysis")).toBe(
+      `${all}?cited=true&type=Systematic+Review+and+Meta-Analysis`,
+    );
+    expect(href("2019")).toBe(`${all}?cited=true&year_from=2019&year_to=2019`);
+    expect(href("United Kingdom")).toBe(`${all}?cited=true&country=United+Kingdom`);
+    expect(href("School food")).toBe(`${all}?cited=true&theme=t-1`);
+    // The label is the link; the count stays a plain right-aligned figure.
+    const theme = within(section).getByRole("link", { name: "School food" }).closest("tr") as HTMLElement;
+    expect(within(theme).getAllByRole("link")).toHaveLength(1);
+    expect(within(theme).getByRole("cell")).toHaveClass("text-right");
   });
 
   it("outlines parts as h2 and their sections as h3, collapsible headings holding their button", () => {
@@ -399,12 +440,3 @@ describe("reportDateLabel", () => {
   });
 });
 
-describe("evidenceTypeLabel", () => {
-  it("writes the classifier's labels in sentence case, acronyms kept", () => {
-    expect(evidenceTypeLabel("Systematic Review and Meta-Analysis")).toBe("Systematic review and meta-analysis");
-    expect(evidenceTypeLabel("RCTs and Quasi-Experimental Studies")).toBe("RCTs and quasi-experimental studies");
-    expect(evidenceTypeLabel("Other (Non-evidence documents)")).toBe("Other (non-evidence documents)");
-    expect(evidenceTypeLabel("Unknown / Insufficient information")).toBe("Unknown / insufficient information");
-    expect(evidenceTypeLabel("Cohort study")).toBe("Cohort study");
-  });
-});

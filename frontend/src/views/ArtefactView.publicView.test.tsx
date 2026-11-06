@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -57,7 +57,7 @@ const FUNNEL = { found: 0, relevant: 0, cited: 0 };
 /** Render the real `ArtefactView` under `PublicViewProvider value={true}`
  *  with every actual request logged — the pin is on the requests made, not
  *  on a mocked query layer that could quietly diverge from the real hooks. */
-function renderPublicArtefact() {
+function renderPublicArtefact(project: Record<string, unknown> = PROJECT) {
   const requestedPaths: string[] = [];
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(
@@ -65,7 +65,8 @@ function renderPublicArtefact() {
       "http://localhost:3000",
     );
     requestedPaths.push(url.pathname);
-    if (url.pathname === `/api/v1/tasks/${TASK_ID}`) return jsonResponse(PROJECT);
+    if (url.pathname === `/api/v1/tasks/${TASK_ID}`) return jsonResponse(project);
+    if (url.pathname.endsWith("/longlist")) return new Response(JSON.stringify({ detail: "not found" }), { status: 404 });
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/artefact`) return jsonResponse(ARTEFACT);
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/landscape`) return jsonResponse(LANDSCAPE);
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/funnel`) return jsonResponse(FUNNEL);
@@ -114,5 +115,21 @@ describe("ArtefactView — public view issues only public-surface requests (task
 
     expect(requestedPaths.some((path) => path.includes("conversations"))).toBe(false);
     expect(screen.queryByText("Ask about this analysis")).not.toBeInTheDocument();
+  });
+});
+
+describe("ArtefactView — a shared options scoping task (owner, round 12)", () => {
+  it("shows the Baseline, Longlist and Shortlist views once the task has a longlist", async () => {
+    renderPublicArtefact({ ...PROJECT, capability: "options_scoping", has_longlist: true });
+    const views = await screen.findByRole("tablist", { name: "Result view" });
+    for (const name of ["Baseline", "Longlist", "Shortlist"]) {
+      expect(within(views).getByRole("tab", { name })).toBeInTheDocument();
+    }
+  });
+
+  it("shows the baseline alone while the task has no longlist", async () => {
+    renderPublicArtefact({ ...PROJECT, capability: "options_scoping", has_longlist: false });
+    await waitFor(() => expect(screen.getByText("Shared evidence review")).toBeInTheDocument());
+    expect(screen.queryByRole("tablist", { name: "Result view" })).toBeNull();
   });
 });

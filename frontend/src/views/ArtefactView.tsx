@@ -7,10 +7,10 @@ import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, 
 import { useQuery } from "@tanstack/react-query";
 import {
   cardEvidenceMeta,
+  cardEvidenceSourceId,
   CASE_STUDIES_INTRO,
   displayUrl,
   drawingOnLine,
-  evidenceTypeLabel,
   EXECUTIVE_SUMMARY_ANCHOR,
   fullReportIntro,
   FULL_REPORT_ANCHOR,
@@ -44,6 +44,15 @@ import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
 import type { LiveCitation, LiveClaim, LiveSection, LiveSourceNote, RunStreamState } from "../store";
 import { LiveMark } from "../ui/brand/Card";
 import { Chip, type ChipProps } from "../ui/brand/Chip";
+import { BULLET_ITEM_CLASS, BULLET_MARK_CLASS } from "../ui/brand/BulletList";
+import {
+  citationJudgement,
+  evidenceTypeLabel,
+  strengthHint,
+  TIER_LABEL,
+  type CitationJudgement,
+} from "../ui/brand/evidence";
+import { StrengthMark } from "../ui/brand/EvidenceMarks";
 import { ReauthRedirect } from "../ui/feedback";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { LIFECYCLE_PAGE_CLASS } from "./listPageChrome";
@@ -66,16 +75,19 @@ import {
   gatheredSectionShows,
   MobileDisclosureToggle,
   type OutlineSection,
+  ReportExpandScope,
   SectionDisclosure,
+  seedReportExpanded,
   type SectionHeadingLevel,
   sectionAnchor,
   useExpandAll,
   useOpenWhenNavigated,
+  useRememberedOpen,
   useScrollWhenNavigated,
   useExpandForPrint,
 } from "./ArtefactOutline";
 import { Tooltip } from "../ui/radix/Tooltip";
-import { AuthorsLine, InstitutionsLine, SourceDossierBody, useDossierRecords } from "./SourcesView";
+import { SourceDossierBody, useDossierRecords } from "./SourcesView";
 import { useActiveConversation } from "./workspace/chat/conversationState";
 import "./artefact.css";
 import { scrollPane, useEasedHeight, useFollowTail, useHoldHeightWhileShorter, useRevealedText } from "./streamPacing";
@@ -192,32 +204,6 @@ const GAP_GRADE_TEXT: Record<string, string> = {
   inferred: "Inferred by the analysis from what it read — not established by a recorded search.",
 };
 
-/** Fallback for an appraisal chip whose citation carries no classified
- *  document type (the type is the rubric's scoring input — see the dynamic
- *  tooltip in CitationCard). */
-const APPRAISAL_FALLBACK_HINT =
-  "The cited source's appraised evidence strength — five bands from Weak to Very strong, scored from its classified document type; Unrated when the type is not scored.";
-
-/** The grounding-tier vocabulary (demo ui.tsx TIER_LABEL/TIER_TEXT — locked;
- *  unknown tier → the raw value never renders, the chip omits). Exported so
- *  every surface that renders a grounding verdict (chat included) shares
- *  this one copy instead of re-typing it. */
-export const TIER_LABEL: Record<string, string> = {
-  tier_1: "Tier 1 · direct quote",
-  tier_2: "Tier 2 · grounded",
-  tier_3: "Tier 3 · supported",
-  tier_4: "Tier 4 · reasoning",
-  unsupported_mis_cited: "Unsupported",
-};
-
-export const TIER_TEXT: Record<string, string> = {
-  tier_1: "Direct quote, verified against the source",
-  tier_2: "Grounded in a specific passage",
-  tier_3: "Supported across passages",
-  tier_4: "Reasoning from the evidence, not a quote",
-  unsupported_mis_cited: "Failed verification — flagged, never hidden",
-};
-
 const TYPE_LABEL: Partial<Record<ClaimLike["claim_type"], string>> = {
   gap: "gap",
   pattern: "pattern",
@@ -305,8 +291,9 @@ export function HighlightedContext({ text, quote }: { text: string; quote: strin
 
 /** A chip whose hover reveals its rationale — the one Tooltip-wraps-a-Chip
  *  shape every grounding/verdict/appraisal indicator in the app uses (the
- *  reader's tier + appraisal chips, chat's verdict chip). Exported so no
- *  surface re-types the wrapping. */
+ *  report's classification and strength chips, chat's verdict chip).
+ *  Exported so no surface re-types the wrapping. The help cursor marks a
+ *  value with a reason behind it, as the Sources table does (round 12). */
 export function ChipWithTooltip({
   tone,
   label,
@@ -317,8 +304,11 @@ export function ChipWithTooltip({
   content: ReactNode;
 }) {
   return (
-    <Tooltip content={content}>
-      <span>
+    <Tooltip content={content} className="text-meta">
+      {/* A flex wrapper, not a line box: the chip sits on its row's line
+          whatever its first item is (the strength's empty tone square set
+          the chip's baseline and dropped it 1 px; round 12). */}
+      <span className="inline-flex cursor-help">
         <Chip tone={tone}>{label}</Chip>
       </span>
     </Tooltip>
@@ -342,24 +332,27 @@ function useChunkContext(taskId: string, citationId: string | null) {
   });
 }
 
-/** One citation's provenance block (demo CitationContext/ClaimPanel), in
- *  the order a reader checks a claim (round 10, D5): "[2] Title", the year
- *  and venue, the quote highlighted inside its surrounding source passage
- *  (or, on a lookup failure, the caller's honest fallback line instead of a
- *  broken panel), then the authors, their institutions and the grounding /
- *  appraisal chips (a caller-supplied slot: the reader's tier and appraisal
- *  pair, chat's single verdict chip). On a phone's bottom sheet the passage
- *  is the first thing under the title. Presentational: callers own the
- *  chunk-context query and the chips. */
+/** One citation's provenance block (demo CitationContext/ClaimPanel), in a
+ *  fixed order on the sheet's one type scale (owner, round 12): the quote
+ *  first, highlighted inside its surrounding source passage (or, on a lookup
+ *  failure, the quote alone with the caller's honest note); then the source
+ *  line as the References read it ("[2] Sampleton A, Mockford C (2022).
+ *  **Title**. Venue."), the source's name the only bold on the sheet and the
+ *  way into its dossier; then the evidence type and strength at Meta; then
+ *  the judge's words under their Meta label. No chips (chat moved to
+ *  `judgement` too, round 12). Presentational: callers own the chunk-context
+ *  query. */
 export function CitationProvenanceBlock({
   n,
   sourceTitle,
   sourceRef,
   onOpenDossier,
-  chips = null,
   context,
   quote,
   fallbackNote,
+  evidenceType = null,
+  strength = null,
+  judgement = null,
 }: {
   n: number | null;
   sourceTitle: string;
@@ -367,38 +360,29 @@ export function CitationProvenanceBlock({
    *  citation carries nothing dossier-linkable (renders plain text). */
   sourceRef: string | null;
   onOpenDossier: (sourceRef: string) => void;
-  chips?: ReactNode;
   context: { isPending: boolean; isError: boolean; data: components["schemas"]["ChunkContextOut"] | undefined };
   quote: string;
   /** Shown under the quote on a lookup failure, alongside it — never in
    *  place of the honest quote fallback (chat's non-verbatim-quote case). */
   fallbackNote?: string;
+  /** The cited source's classified evidence type, when it has one. */
+  evidenceType?: string | null;
+  /** The cited source's appraised strength, when it has one. */
+  strength?: string | null;
+  judgement?: CitationJudgement | null;
 }) {
-  const meta = [context.data?.year, context.data?.venue].filter(
-    (value): value is string | number => value !== null && value !== undefined && value !== "",
-  );
+  const parts = referenceParts({
+    title: sourceTitle,
+    year: typeof context.data?.year === "number" ? context.data.year : null,
+    venue: context.data?.venue ?? null,
+    authorships: context.data?.authorships,
+  });
+  const title = scrub(sourceTitle);
   return (
-    <div className="border border-line p-4">
-      <p className="text-body font-bold leading-snug text-blue">
-        [{n ?? "—"}]{" "}
-        {sourceRef !== null ? (
-          <button
-            type="button"
-            className="cursor-pointer text-left hover:underline"
-            onClick={() => onOpenDossier(sourceRef)}
-          >
-            {scrub(sourceTitle)}
-          </button>
-        ) : (
-          <span>{scrub(sourceTitle)}</span>
-        )}
-      </p>
-      {meta.length > 0 && (
-        <p className="mt-0.5 text-body text-grey">{meta.map((m) => scrub(String(m))).join(" · ")}</p>
-      )}
-      <div className="mt-3 space-y-2 text-body">
+    <div>
+      <div className="space-y-2 text-body">
         {context.isPending && (
-          <p role="status" className="anim-breathe-soft text-body text-grey">
+          <p role="status" className="anim-breathe-soft text-grey">
             Loading surrounding context…
           </p>
         )}
@@ -417,15 +401,67 @@ export function CitationProvenanceBlock({
         )}
         {context.isError && (
           <>
-            <p className="italic text-grey">“{scrub(quote)}”</p>
+            <p className="text-navy">“{scrub(quote)}”</p>
             {fallbackNote !== undefined && <p className="text-grey">{fallbackNote}</p>}
           </>
         )}
       </div>
-      <AuthorsLine authorships={context.data?.authorships} className="mt-3 text-body text-grey" />
-      <InstitutionsLine authorships={context.data?.authorships} className="mt-0.5 text-caption text-grey" />
-      <div className="mt-2 flex flex-wrap gap-1.5">{chips}</div>
+      {/* The source line, in the References' citation form. */}
+      <p className="mt-3 text-body text-ink [overflow-wrap:anywhere]">
+        <span className="tabular-nums text-grey">[{n ?? "—"}]</span>{" "}
+        {parts.lead !== null && scrub(parts.lead)}
+        {sourceRef !== null ? (
+          // A button that wraps with the line, so the full stop and the
+          // venue follow the name on a phone (a <button> breaks as a block).
+          <span
+            role="button"
+            tabIndex={0}
+            className={cn("cursor-pointer font-bold", SOURCE_TITLE_LINK_CLASS)}
+            onClick={() => onOpenDossier(sourceRef)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              onOpenDossier(sourceRef);
+            }}
+          >
+            {title}
+          </span>
+        ) : (
+          <span className="font-bold text-navy">{title}</span>
+        )}
+        {parts.afterTitle}
+        {parts.venue !== null && <span className="text-grey"> {scrub(parts.venue)}</span>}
+      </p>
+      {(evidenceType !== null || strength !== null) && (
+        <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-meta text-grey">
+          {evidenceType !== null && <span>{scrub(evidenceTypeLabel(evidenceType))}</span>}
+          {evidenceType !== null && strength !== null && <span aria-hidden="true">·</span>}
+          {strength !== null && <StrengthHint label={strength} evidenceType={evidenceType} />}
+        </p>
+      )}
+      {judgement !== null && (
+        <div className="mt-3">
+          <p className="text-meta text-grey">{judgement.label}</p>
+          <p className="mt-0.5 text-body text-navy">{scrub(judgement.words)}</p>
+        </div>
+      )}
     </div>
+  );
+}
+
+/** The strength as the Sources table sets it: the tone square, then the
+ *  word with the dotted underline and help cursor of a value with a reason
+ *  behind it; the reason on hover. */
+function StrengthHint({ label, evidenceType }: { label: string; evidenceType?: string | null }) {
+  return (
+    <Tooltip content={<p>{scrub(strengthHint(label, evidenceType))}</p>} className="text-meta">
+      <span className="inline-flex cursor-help items-center gap-1.5">
+        <StrengthMark
+          tier={label}
+          wordClassName="reason-word"
+        />
+      </span>
+    </Tooltip>
   );
 }
 
@@ -436,25 +472,43 @@ export function CitationProvenanceBlock({
  *  themselves (honest absence — no chip when the citation carries none). */
 export function AppraisalChip({ label, evidenceType }: { label: string; evidenceType?: string | null }) {
   // The soft tone (round 10, D4): blue is for capability tags and "checked".
+  // The strength's tone square before the word, the Sources table's
+  // (round 12).
   return (
     <ChipWithTooltip
       tone="soft"
-      label={scrub(label)}
-      content={
-        <span className="text-meta">
-          {typeof evidenceType === "string"
-            ? label === "Unrated"
-              ? `Unrated — the document type (${scrub(evidenceTypeLabel(evidenceType))}) is not scored; the source can be cited but counts below the evidence bar.`
-              : `${scrub(label)} evidence strength — appraised from the document type: ${scrub(evidenceTypeLabel(evidenceType))}.`
-            : APPRAISAL_FALLBACK_HINT}
-        </span>
-      }
+      label={<StrengthMark tier={label} />}
+      content={<p>{scrub(strengthHint(label, evidenceType))}</p>}
     />
   );
 }
 
-/** One citation's provenance block in the claim panel (demo CitationContext):
- *  the reader's tier + appraisal chips over the shared block. */
+/** The evidence type's chip, its hover the classifier's reasoning (owner,
+ *  round 12). The artefact carries no reasoning (`CitationOut` has no
+ *  `classification_reason`), so the hover reads the cited source's dossier
+ *  when it first opens; the read is cached for the task. Without a source
+ *  to ask, the chip is the type alone. */
+function ClassificationChip({ taskId, sourceId, type }: { taskId: string; sourceId: string | null; type: string }) {
+  const label = scrub(evidenceTypeLabel(type));
+  if (taskId === "" || sourceId === null) return <Chip tone="soft">{label}</Chip>;
+  return <ChipWithTooltip tone="soft" label={label} content={<ClassificationReason taskId={taskId} sourceId={sourceId} />} />;
+}
+
+/** The reasoning behind a source's evidence type, read on first hover. */
+function ClassificationReason({ taskId, sourceId }: { taskId: string; sourceId: string }) {
+  const dossier = useSourceDossier(taskId, sourceId);
+  if (dossier.isPending) {
+    // The words are on their way: a breathing line where they will sit.
+    return <span aria-hidden="true" className="block h-3 w-48 max-w-full bg-line anim-breathe-soft" />;
+  }
+  const reason = dossier.data?.classification_reason;
+  if (typeof reason === "string" && reason.trim() !== "") return <p>{scrub(reason)}</p>;
+  return <p>{dossier.isError ? "The reasoning could not be loaded." : "No reasoning was recorded for this type."}</p>;
+}
+
+/** One citation's provenance block in the claim panel (demo
+ *  CitationContext): the shared block, with the citation's evidence type,
+ *  strength and the judge's verdict as words, not chips (round 12). */
 function CitationContext({
   taskId,
   citation,
@@ -468,7 +522,6 @@ function CitationContext({
   live?: boolean;
 }) {
   const context = useChunkContext(taskId, citation.citation_id);
-  const tier = citation.grounding_tier ?? null;
   return (
     <CitationProvenanceBlock
       n={citation.n}
@@ -477,37 +530,25 @@ function CitationContext({
       onOpenDossier={onOpenDossier}
       context={context}
       quote={citation.quote}
-      chips={
-        <>
-          {tier !== null && TIER_LABEL[tier] !== undefined && (
-            <ChipWithTooltip
-              tone="soft"
-              label={TIER_LABEL[tier]}
-              content={
-                <div className="max-w-[280px] space-y-1 text-meta">
-                  <p>{TIER_TEXT[tier]}</p>
-                  {typeof citation.grounding_rationale === "string" &&
-                    citation.grounding_rationale !== "" && (
-                      <p className="text-grey">Judge: {scrub(citation.grounding_rationale)}</p>
-                    )}
-                </div>
-              }
-            />
-          )}
-          {citation.appraisal_label !== null && citation.appraisal_label !== undefined && (
-            <AppraisalChip label={citation.appraisal_label} evidenceType={citation.evidence_type} />
-          )}
-        </>
-      }
+      evidenceType={nonEmpty(citation.evidence_type)}
+      strength={nonEmpty(citation.appraisal_label)}
+      judgement={citationJudgement(citation.grounding_tier, citation.grounding_rationale)}
     />
   );
 }
 
+function nonEmpty(value: string | null | undefined): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
+
 /** The provenance sheet a claim (report) or a claim/citation (chat) opens:
- *  the "Where this comes from" shell, the claim text as a blockquote (one
- *  per string — chat stacks several when multiple claims cite one citation),
- *  a caller-supplied extras slot (the reader's gap/type-hint/theme/weak-
- *  grounding blocks), then the citation blocks as children. */
+ *  the "Where this comes from" shell, then its blocks in a fixed order with
+ *  one hairline rule between them and nothing else drawn (owner, round 12):
+ *  the claim's words (one line per string — chat stacks several when
+ *  multiple claims cite one citation), a caller-supplied extras slot (the
+ *  reader's gap/type-hint/theme/weak-grounding blocks, each a block of its
+ *  own), then the citation blocks as children. The Sheet keeps its close
+ *  button and focus rules. */
 export function ProvenanceSheet({
   description = "Claim provenance",
   claimTexts,
@@ -531,17 +572,18 @@ export function ProvenanceSheet({
       {/* "Claim provenance" repeats the title on screen: it stays the
           dialog's accessible description only (round 10, C3). */}
       <SheetContent title="Where this comes from" description={description} descriptionHidden>
-        <div className="space-y-5">
-          {claimTexts
-            .filter((text) => text !== "")
-            .map((text, index) => (
-              <p
-                key={index}
-                className="border-l-2 border-l-blue pl-3 text-body leading-snug text-navy"
-              >
-                {scrub(text)}
-              </p>
-            ))}
+        <div className={PROVENANCE_BLOCKS_CLASS}>
+          {claimTexts.some((text) => text !== "") && (
+            <div className="space-y-2">
+              {claimTexts
+                .filter((text) => text !== "")
+                .map((text, index) => (
+                  <p key={index} className="text-body text-navy">
+                    {scrub(text)}
+                  </p>
+                ))}
+            </div>
+          )}
           {extras}
           {children}
         </div>
@@ -549,6 +591,11 @@ export function ProvenanceSheet({
     </Sheet>
   );
 }
+
+/** The sheet's blocks: one hairline rule between each, 16 px either side of
+ *  it, none above the first or below the last. */
+const PROVENANCE_BLOCKS_CLASS =
+  "divide-y divide-line [&>*]:py-4 [&>*:first-child]:pt-0 [&>*:last-child]:pb-0";
 
 /** The provenance panel a claim span opens (demo ClaimPanel): the claim, its
  *  type explainer, and every citation's highlighted source passage — over
@@ -570,13 +617,13 @@ function ClaimPanel({
   const extras = (
     <>
       {claim.claim_type === "gap" && (
-        <div className="border-l-[3px] border-yellow bg-yellow-tint p-3 text-body text-navy">
+        <div className="text-body text-navy">
           <p>
             This is a recorded evidence gap: the analysis looked and found the base thin here.
             Gaps are part of the answer, never glossed over.
           </p>
           {gap !== null && (
-            <div className="mt-1.5 space-y-0.5 text-body text-grey">
+            <div className="mt-1 space-y-0.5 text-meta text-grey">
               {typeof gap.grade === "string" && GAP_GRADE_TEXT[gap.grade] !== undefined && (
                 <p>{GAP_GRADE_TEXT[gap.grade]}</p>
               )}
@@ -603,22 +650,22 @@ function ClaimPanel({
         claim.claim_type !== "citation" &&
         hint !== undefined && <p className="text-body text-grey">{hint}</p>}
       {(claim.theme?.items?.length ?? 0) > 0 && (
-        <div className="border-l-[3px] border-violet bg-blue-tint-2 p-3">
+        <div>
           {(claim.theme?.items ?? []).map((item, index) => (
-            <div key={index} className={index > 0 ? "mt-2.5" : undefined}>
-              <p className="text-body font-semibold text-navy">{scrub(item.name ?? "")}</p>
+            <div key={index} className={index > 0 ? "mt-3" : undefined}>
+              <p className="text-body text-navy">{scrub(item.name ?? "")}</p>
               {typeof item.description === "string" && item.description !== "" && (
-                <p className="mt-0.5 text-body text-navy">
+                <p className="mt-0.5 text-body text-grey">
                   {scrub(item.description)}
                 </p>
               )}
               {(item.sources?.length ?? 0) > 0 ? (
-                <details className="mt-0.5 text-body text-grey">
+                <details className="mt-1 text-meta text-grey">
                   <summary className="cursor-pointer hover:text-navy">
                     Identified across {item.sources?.length} source
                     {(item.sources?.length ?? 0) === 1 ? "" : "s"} — show them
                   </summary>
-                  <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                  <ul className="mt-1 list-disc space-y-0.5 pl-4 text-body">
                     {(item.sources ?? []).map((source) =>
                       typeof source.title === "string" && source.title !== "" ? (
                         <li key={source.source_id ?? source.title}>
@@ -635,12 +682,12 @@ function ClaimPanel({
                   </ul>
                 </details>
               ) : typeof item.size === "number" ? (
-                <p className="mt-0.5 text-body text-grey">
+                <p className="mt-1 text-meta text-grey">
                   Identified across {item.size} sources
                 </p>
               ) : null}
               {typeof item.facet === "string" && item.facet !== "" && item.name ? (
-                <p className="mt-0.5 text-caption">
+                <p className="mt-1 text-meta">
                   <Link
                     className={LINK_CLASS}
                     to={`/tasks/${taskId}/sources/findings?facet=${encodeURIComponent(item.facet)}&group=${encodeURIComponent(item.name)}`}
@@ -653,14 +700,14 @@ function ClaimPanel({
             </div>
           ))}
           {typeof claim.theme?.base === "string" && claim.theme.base !== "" && (
-            <p className="mt-2 border-t border-line pt-2 text-body text-grey">
+            <p className="mt-3 text-meta text-grey">
               Basis: {scrub(claim.theme.base)}
             </p>
           )}
         </div>
       )}
       {claim.weakly_grounded === true && (
-        <p className="border-l-[3px] border-orange bg-yellow-tint p-3 text-body text-navy">
+        <p className="text-body text-navy">
           The grounding review could not fully verify this claim against its source — read it
           with that in mind.
         </p>
@@ -1030,14 +1077,9 @@ function renderLeadColonBullet(
   );
 }
 
-/** A key finding: the bullet, then the text, on the first line's baseline. */
-const KEY_FINDING_ITEM_CLASS = "flex items-baseline gap-2";
-
-/** The key findings' 6 px square, its middle on the text's x-height at any
- *  size (owner, round 11: it sat high): baseline alignment puts its bottom
- *  edge on the baseline, then it rises by half an `ex` less half its
- *  height, so its centre sits half an `ex` above the baseline. */
-const KEY_FINDING_BULLET_CLASS = "relative bottom-[calc(0.5ex_-_3px)] size-1.5 shrink-0";
+/* The key findings' bullets are the shared report bullet (`BulletList`'s
+ * `BULLET_ITEM_CLASS` and `BULLET_MARK_CLASS`, ui/brand): one source for the
+ * square on the x-height; a gap's square is Yellow. */
 
 /**
  * Render a block's prose with its annotation layer IN the text: span-anchored
@@ -1095,7 +1137,7 @@ export function AnnotatedProse({
       <div className={`max-w-prose-measure ${REPORT_BODY_CLASS}`}>
         {/* The bullet is an Electric Blue square (owner, round 11, reversing
             round 10's Navy) centred on the text's x-height
-            (`KEY_FINDING_BULLET_CLASS`); the items stand apart (round 10,
+            (`BULLET_MARK_CLASS`); the items stand apart (round 10,
             finding 8). `data-bullet` prints it as a border, since print
             drops backgrounds. */}
         <ul className="list-none space-y-3">
@@ -1104,11 +1146,11 @@ export function AnnotatedProse({
               (segment) => segment.kind === "claim" && segment.claim.claim_type === "gap",
             );
             return (
-              <li key={bulletIndex} className={KEY_FINDING_ITEM_CLASS}>
+              <li key={bulletIndex} className={BULLET_ITEM_CLASS}>
                 <span
                   aria-hidden="true"
                   data-bullet={isGap ? "gap" : ""}
-                  className={`${KEY_FINDING_BULLET_CLASS} ${isGap ? "bg-yellow" : "bg-blue"}`}
+                  className={`${BULLET_MARK_CLASS} ${isGap ? "bg-yellow" : "bg-blue"}`}
                 />
                 <span>{renderLeadColonBullet(bullet, onOpenClaim, live)}</span>
               </li>
@@ -1711,8 +1753,8 @@ function DraftProse({
       <div data-testid="draft-prose" aria-hidden={ariaHidden || undefined} className={rootClass}>
         <ul className="list-none space-y-3">
           {blocks.map((runs, at) => (
-            <li key={at} className={KEY_FINDING_ITEM_CLASS}>
-              <span aria-hidden="true" data-bullet="" className={`${KEY_FINDING_BULLET_CLASS} bg-blue`} />
+            <li key={at} className={BULLET_ITEM_CLASS}>
+              <span aria-hidden="true" data-bullet="" className={`${BULLET_MARK_CLASS} bg-blue`} />
               <span>{render(runs, at)}</span>
             </li>
           ))}
@@ -2853,6 +2895,7 @@ const REPORT_CARD_CLASS = "border border-line p-4";
 function CaseStudiesSection({
   section,
   id,
+  taskId = "",
   onOpenClaim = () => undefined,
   live = false,
   busy = false,
@@ -2862,6 +2905,8 @@ function CaseStudiesSection({
 }: {
   section: SectionLike;
   id: string;
+  /** The task, for the classification chip's reasoning (committed only). */
+  taskId?: string;
   onOpenClaim?: (claim: ClaimLike) => void;
   live?: boolean;
   busy?: boolean;
@@ -2898,10 +2943,14 @@ function CaseStudiesSection({
                     report. Hidden while empty, so the card's foot is its
                     16 px padding. */}
                 <div className={`mt-2 flex flex-wrap gap-1.5 empty:hidden ${arriving}`}>
+                  {/* The classification, then the strength it was
+                      appraised from (owner, round 12). */}
+                  {design != null && (
+                    <ClassificationChip taskId={taskId} sourceId={cardEvidenceSourceId(card, design)} type={design} />
+                  )}
                   {strength != null && (
                     <AppraisalChip label={strength} evidenceType={design} />
                   )}
-                  {design != null && <Chip tone="soft">{scrub(evidenceTypeLabel(design))}</Chip>}
                   {sinceYear != null && <Chip tone="soft">Since {sinceYear}</Chip>}
                 </div>
               </li>
@@ -2922,12 +2971,15 @@ function CaseStudiesSection({
  */
 function MostRelevantSources({
   sources,
+  taskId = "",
   onOpenDossier,
   live = false,
   arrivingClass = "",
   level = 3,
 }: {
   sources: TopSource[];
+  /** The task, for the classification chip's reasoning (committed only). */
+  taskId?: string;
   /* Opens by source id: the citation-time title snapshot can drift from the
    * evidence row's title in deployed data, so a title-keyed lookup misses. */
   onOpenDossier?: (sourceId: string) => void;
@@ -2965,10 +3017,13 @@ function MostRelevantSources({
             )}
             {!live && (
               <div className={`mt-2 flex flex-wrap gap-1.5 ${arrivingClass}`}>
+                {/* The classification, then the strength (owner, round 12). */}
+                {source.evidenceType != null && (
+                  <ClassificationChip taskId={taskId} sourceId={source.sourceId} type={source.evidenceType} />
+                )}
                 {source.appraisalLabel != null && (
                   <AppraisalChip label={source.appraisalLabel} evidenceType={source.evidenceType} />
                 )}
-                {source.evidenceType != null && <Chip tone="soft">{scrub(evidenceTypeLabel(source.evidenceType))}</Chip>}
                 <Chip tone="soft">
                   {source.citationCount === 1 ? "Cited by 1 claim" : `Cited by ${source.citationCount} claims`}
                 </Chip>
@@ -2986,8 +3041,10 @@ function MostRelevantSources({
  * renders as it always has; once a scoping task has a longlist the Result
  * gains the view switch — **Baseline · Longlist · Report** — and opens on
  * the longlist (task 045, deliverable 9; ruling 50). The chosen view rides
- * `?view=` so a link or a refresh keeps it. The public view never switches:
- * a link grants no read of options.
+ * `?view=` so a link or a refresh keeps it. The public view switches too
+ * once the task has a longlist (owner, round 12: a shared scoping task shows
+ * its longlist and shortlist), never onto a longlist being built; its views
+ * are read-only there.
  */
 export function ArtefactView() {
   const { taskId = "" } = useParams();
@@ -2997,8 +3054,17 @@ export function ArtefactView() {
   // While a longlist walk runs the Result is the longlist being built
   // (task 058, N24), before and after the longlist read first answers.
   const building = !isPublicView && isLonglistBuilding(task.data, stream.stages);
-  if (isPublicView || (!hasLonglist(task.data) && !building)) return <ArtefactReport />;
-  return <ScopingResult taskId={taskId} building={building} />;
+  // The report's expand state is the task's, kept while the reader moves
+  // between its tabs (owner, round 12).
+  return (
+    <ReportExpandScope taskId={taskId}>
+      {!hasLonglist(task.data) && !building ? (
+        <ArtefactReport />
+      ) : (
+        <ScopingResult taskId={taskId} building={building} />
+      )}
+    </ReportExpandScope>
+  );
 }
 
 /** A scoping task's Result once its longlist exists or is being built: the
@@ -3194,6 +3260,10 @@ function ArtefactReport() {
     hadNotes: false,
   });
   if (renderingLive && !swap.live) {
+    // The reader is watching the report being written: the committed report
+    // opens with every section open (owner, round 12). Seeded before the
+    // sections render, in this same pass.
+    seedReportExpanded(taskId);
     setSwap({ live: true, swapped: false, arriving: false, liveNumbers: new Map(), hadIntro: false, hadNotes: false });
   } else if (!renderingLive && swap.live && artefact.data != null) {
     setSwap({
@@ -3398,7 +3468,14 @@ function ArtefactReport() {
   const renderSection = ({ section, index }: { section: SectionLike; index: number }) => {
     const id = sectionAnchor(section.title, index);
     return section.role === "case_studies" ? (
-      <CaseStudiesSection key={`section:${id}`} section={section} id={id} onOpenClaim={setDetailClaim} level={level} />
+      <CaseStudiesSection
+        key={`section:${id}`}
+        section={section}
+        id={id}
+        taskId={taskId}
+        onOpenClaim={setDetailClaim}
+        level={level}
+      />
     ) : (
       <SectionDisclosure
         key={`section:${id}`}
@@ -3488,6 +3565,7 @@ function ArtefactReport() {
             {baseline ? null : (
               <MostRelevantSources
                 sources={topSources}
+                taskId={taskId}
                 onOpenDossier={openDossier}
                 arrivingClass={swap.hadNotes ? arriving : ""}
                 level={level}
@@ -3580,7 +3658,7 @@ export function ReferencesSection({
   onOpenReference?: (title: string) => void;
   defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, setOpen] = useRememberedOpen("references", defaultOpen);
   const arriving = useArrivingClass();
   useOpenWhenNavigated("references", setOpen);
   useExpandForPrint(setOpen);

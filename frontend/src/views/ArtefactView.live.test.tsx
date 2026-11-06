@@ -10,6 +10,7 @@ import { createInitialRunStreamState } from "../store";
 import type { LiveSection, RunStatus, RunStreamState } from "../store";
 import { TooltipProvider } from "../ui/radix/Tooltip";
 import { ArtefactView } from "./ArtefactView";
+import { forgetReportExpand } from "./ArtefactOutline";
 import * as conversationState from "./workspace/chat/conversationState";
 
 /*
@@ -156,6 +157,7 @@ describe("ArtefactView around a run", () => {
   });
   afterEach(() => {
     vi.useRealTimers();
+    forgetReportExpand(TASK_ID);
   });
 
   it("before writing shows the question and one sentence, not the old card", () => {
@@ -277,6 +279,37 @@ describe("ArtefactView around a run", () => {
     // The marker is a control now, and its new number fades in.
     const marker = within(after).getByRole("button", { name: "Source 1: Smith 2023" });
     expect(marker).toHaveClass("anim-swap-in");
+  });
+
+  it("opens a report the reader watched being written with every section open and Hide all, kept across tabs (owner, round 12)", () => {
+    const view = render(page());
+    world.stream = streamOf("running", SECTIONS);
+    view.rerender(page());
+    world.stream = streamOf("succeeded", [
+      { ...SECTIONS[0], state: "filled", prose: "Headline." },
+      { ...SECTIONS[1], state: "filled", prose: "Costs prose." },
+    ]);
+    view.rerender(page());
+    world.latestRun = { capability_run_id: "run-2", status: "succeeded", started_at: "2026-11-05T09:58:00Z", ended_at: "2026-11-05T10:00:00Z" };
+    world.artefact = {
+      ...committedArtefact,
+      sections: [
+        { title: "Key findings", role: "key_findings" as const, blocks: [{ block_id: "kf", prose: "Headline.", claims: [] }] },
+        { title: "Costs and funding", role: "standard" as const, blocks: [{ block_id: "costs", prose: "Costs prose.", claims: [] }] },
+        // Not on the live page: it takes the control's state.
+        { title: "Outreach", role: "standard" as const, blocks: [{ block_id: "out", prose: "Outreach prose.", claims: [] }] },
+      ],
+    } as unknown as typeof committedArtefact;
+    view.rerender(page());
+    expect(screen.getByRole("button", { name: "Hide all" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Costs and funding/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /^Outreach/ })).toHaveAttribute("aria-expanded", "true");
+    // To Sources and back: the Result tab mounts again on the same state.
+    view.unmount();
+    render(page());
+    expect(screen.getByRole("button", { name: "Hide all" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Costs and funding/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /^Outreach/ })).toHaveAttribute("aria-expanded", "true");
   });
 
   it("swaps at a cut under reduced motion", () => {
