@@ -301,7 +301,7 @@ def _merge(
     op: dict[str, Any],
     created: dict[str, str],
 ) -> None:
-    from policy_atlas.theory_of_change.check import fold_box, fold_problem
+    from policy_atlas.theory_of_change.check.merge import fold_box, fold_problem
 
     keep_ref, fold_ref = (op.get("boxes") or [None, None])[:2]
     keep = _box_id(conn, task_id, keep_ref, created)

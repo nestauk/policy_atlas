@@ -21,14 +21,14 @@ from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import resolve_openai_client, traced_parse
 from policy_atlas.core.usage import UsageResult
 from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
-from policy_atlas.theory_of_change.choose_prompt import (
+from policy_atlas.theory_of_change.check.choose_prompt import (
     TOC_CHOOSE_MAX_OUTPUT_TOKENS,
     TOC_CHOOSE_PROMPT_VERSION,
     ChooseDecisionWire,
     ChooseResponse,
     build_choose_messages,
 )
-from policy_atlas.theory_of_change.discover_prompt import (
+from policy_atlas.theory_of_change.check.discover_prompt import (
     TOC_CONSOLIDATE_MAX_OUTPUT_TOKENS,
     TOC_CONSOLIDATE_PROMPT_VERSION,
     TOC_DISCOVER_MAX_OUTPUT_TOKENS,
@@ -41,6 +41,40 @@ from policy_atlas.theory_of_change.discover_prompt import (
     build_consolidate_messages,
     build_discover_messages,
 )
+from policy_atlas.theory_of_change.check.figures_prompt import (
+    TOC_FIGURES_MAX_OUTPUT_TOKENS,
+    TOC_FIGURES_PROMPT_VERSION,
+    FiguresResponse,
+    build_figures_messages,
+)
+from policy_atlas.theory_of_change.check.judge_prompt import (
+    TOC_JUDGE_MAX_OUTPUT_TOKENS,
+    TOC_JUDGE_PROMPT_VERSION,
+    JudgeResponse,
+    build_judge_messages,
+)
+from policy_atlas.theory_of_change.check.merge_prompt import (
+    TOC_MERGE_MAX_OUTPUT_TOKENS,
+    TOC_MERGE_PROMPT_VERSION,
+    MergeDecisionWire,
+    MergeResponse,
+    build_merge_messages,
+)
+from policy_atlas.theory_of_change.check.pick_prompt import (
+    PICK_N,
+    TOC_PICK_MAX_OUTPUT_TOKENS,
+    TOC_PICK_PROMPT_VERSION,
+    PickResponse,
+    build_pick_messages,
+)
+from policy_atlas.theory_of_change.check.summary_prompt import (
+    TOC_SUMMARY_MAX_OUTPUT_TOKENS,
+    TOC_SUMMARY_PROMPT_VERSION,
+    BoxDescriptionWire,
+    LinkSentencesWire,
+    SummaryResponse,
+    build_summary_messages,
+)
 from policy_atlas.theory_of_change.draft_prompt import (
     TOC_DRAFT_MAX_OUTPUT_TOKENS,
     TOC_DRAFT_PROMPT_VERSION,
@@ -51,25 +85,6 @@ from policy_atlas.theory_of_change.draft_prompt import (
     ResultCriteriaWire,
     build_draft_messages,
 )
-from policy_atlas.theory_of_change.evidence.figures_prompt import (
-    TOC_FIGURES_MAX_OUTPUT_TOKENS,
-    TOC_FIGURES_PROMPT_VERSION,
-    FiguresResponse,
-    build_figures_messages,
-)
-from policy_atlas.theory_of_change.evidence.judge_prompt import (
-    TOC_JUDGE_MAX_OUTPUT_TOKENS,
-    TOC_JUDGE_PROMPT_VERSION,
-    JudgeResponse,
-    build_judge_messages,
-)
-from policy_atlas.theory_of_change.evidence.pick_prompt import (
-    PICK_N,
-    TOC_PICK_MAX_OUTPUT_TOKENS,
-    TOC_PICK_PROMPT_VERSION,
-    PickResponse,
-    build_pick_messages,
-)
 from policy_atlas.theory_of_change.import_prompt import (
     TOC_IMPORT_MAX_OUTPUT_TOKENS,
     TOC_IMPORT_PROMPT_VERSION,
@@ -77,13 +92,6 @@ from policy_atlas.theory_of_change.import_prompt import (
     ImportBoxWire,
     ImportResponse,
     build_import_messages,
-)
-from policy_atlas.theory_of_change.merge_prompt import (
-    TOC_MERGE_MAX_OUTPUT_TOKENS,
-    TOC_MERGE_PROMPT_VERSION,
-    MergeDecisionWire,
-    MergeResponse,
-    build_merge_messages,
 )
 from policy_atlas.theory_of_change.plausibility_prompt import (
     PLAUSIBILITY_MAX_OUTPUT_TOKENS,
@@ -110,14 +118,6 @@ from policy_atlas.theory_of_change.review_prompt import (
     ReportFindingWire,
     ReviewResponse,
     build_review_messages,
-)
-from policy_atlas.theory_of_change.summary_prompt import (
-    TOC_SUMMARY_MAX_OUTPUT_TOKENS,
-    TOC_SUMMARY_PROMPT_VERSION,
-    BoxDescriptionWire,
-    LinkSentencesWire,
-    SummaryResponse,
-    build_summary_messages,
 )
 
 
@@ -181,7 +181,7 @@ class TocBackend(Protocol):
         """Judge one link against one document (``toc_judge_v4``).
 
         Keyword arguments are those of
-        :func:`~policy_atlas.theory_of_change.evidence.judge_prompt.build_judge_messages`.
+        :func:`~policy_atlas.theory_of_change.check.judge_prompt.build_judge_messages`.
         """
         ...
 
@@ -189,7 +189,7 @@ class TocBackend(Protocol):
         """Find the size of change behind one link in one document (``toc_figures_v1``).
 
         Keyword arguments are those of
-        :func:`~policy_atlas.theory_of_change.evidence.figures_prompt.build_figures_messages`.
+        :func:`~policy_atlas.theory_of_change.check.figures_prompt.build_figures_messages`.
         """
         ...
 

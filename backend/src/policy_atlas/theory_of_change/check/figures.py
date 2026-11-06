@@ -31,21 +31,21 @@ from policy_atlas.evidence_search.extract.quote_verify import _apply_bounds, _pa
 from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.theory_of_change import store
 from policy_atlas.theory_of_change.backend import TocBackend
-from policy_atlas.theory_of_change.check import (
+from policy_atlas.theory_of_change.check.figures_prompt import (
+    FIGURES_PER_DOCUMENT,
+    FiguresResponse,
+    FigureWire,
+)
+from policy_atlas.theory_of_change.check.judge import neighbour_lines
+from policy_atlas.theory_of_change.check.shared import (
     Document,
     _call,
     _map_traced,
     _outcome_value,
     _year,
-    neighbour_lines,
     quote_found,
 )
 from policy_atlas.theory_of_change.draft import walk_toc_plan
-from policy_atlas.theory_of_change.evidence.figures_prompt import (
-    FIGURES_PER_DOCUMENT,
-    FiguresResponse,
-    FigureWire,
-)
 from policy_atlas.theory_of_change.graph import item_hash
 
 log = structlog.get_logger()

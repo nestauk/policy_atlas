@@ -43,7 +43,16 @@ from policy_atlas.evidence_search.sourcing.acquire import normalize_doi
 from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.theory_of_change import sense_check, store
 from policy_atlas.theory_of_change.backend import TocBackend
-from policy_atlas.theory_of_change.check import (
+from policy_atlas.theory_of_change.check.grade import (
+    VERDICT_LABELS,
+    VERDICT_ORDER,
+    Judgement,
+    Verdict,
+    link_verdict,
+    lowest,
+    weight,
+)
+from policy_atlas.theory_of_change.check.shared import (
     PROGRAMME_EVENT,
     _ask,
     _year,
@@ -54,15 +63,6 @@ from policy_atlas.theory_of_change.check import (
     screened_documents,
 )
 from policy_atlas.theory_of_change.draft import walk_toc_plan
-from policy_atlas.theory_of_change.evidence.grade import (
-    VERDICT_LABELS,
-    VERDICT_ORDER,
-    Judgement,
-    Verdict,
-    link_verdict,
-    lowest,
-    weight,
-)
 from policy_atlas.theory_of_change.proposals import open_proposals
 from policy_atlas.theory_of_change.report_prompt import TOC_REPORT_PROMPT_VERSION, ReportResponse
 

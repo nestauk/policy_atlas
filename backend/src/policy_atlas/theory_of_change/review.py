@@ -26,13 +26,13 @@ from policy_atlas.runtime.capability_registry import (
 )
 from policy_atlas.theory_of_change import edits, proposals, store
 from policy_atlas.theory_of_change.backend import TocBackend
-from policy_atlas.theory_of_change.check import (
+from policy_atlas.theory_of_change.check.grade import VERDICT_LABELS
+from policy_atlas.theory_of_change.check.shared import (
     appraisals_for,
     counted_judgements,
     link_verdict_of,
 )
 from policy_atlas.theory_of_change.draft import plan_data, with_clarifications
-from policy_atlas.theory_of_change.evidence.grade import VERDICT_LABELS
 
 log = structlog.get_logger()
 
