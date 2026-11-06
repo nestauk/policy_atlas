@@ -14,17 +14,13 @@ import { cn } from "../../ui/brand/cn";
 import { QUIET_CONTROL_CLASS } from "../../ui/brand/inlineActions";
 import { useRunStream } from "../../store";
 import { REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
-import {
-  DisclosureWord,
-  sectionAnchor,
-  useExpandForPrint,
-  useOpenWhenNavigated,
-} from "../ArtefactOutline";
+import { sectionAnchor, useOpenWhenNavigated } from "../ArtefactOutline";
+import { DisclosureWord, useExpandForPrint } from "../../ui/brand/Disclosure";
 import { LABEL_CLASS } from "../../ui/brand/label";
 import { OutlineSwitch } from "../../ui/brand/OutlineSwitch";
 import { REPORT_TITLE_CLASS, ReportPage } from "../reportPage";
 import { isRunActive } from "../scopingActivity";
-import { InfoHint } from "./InfoHint";
+import { InfoHint } from "../../ui/brand/InfoHint";
 import { usePublicView } from "../publicView";
 import { LonglistGrid } from "./LonglistGrid";
 import { useRegroupTransition } from "./regroupTransition";

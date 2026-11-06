@@ -1,6 +1,6 @@
 import { LIFECYCLE_LABELS } from "../lib/vocabulary";
 import type { components } from "../api/gen/types";
-import { rememberedSourcesSubtab } from "./sourcesSubtab";
+import { rememberedChoice } from "../lib/remembered";
 
 /** The generated contract inlines the run-status union rather than naming it. */
 type RunStatus = components["schemas"]["LatestRun"]["status"];
@@ -135,6 +135,26 @@ export function sourcesLanding(
   return classified ? "/landscape" : "/all";
 }
 
+/** The subtab paths after `/sources` ("" is Themes, the index). */
+export type SourcesSubtab = "" | "/landscape" | "/all" | "/findings";
+
+const SOURCES_SUBTABS: readonly SourcesSubtab[] = ["", "/landscape", "/all", "/findings"];
+
+/**
+ * The Sources subtab a reader last chose on a task (owner, round 10), kept
+ * under `policy-atlas:sources-subtab:<taskId>` (Themes stored as "themes").
+ * Before the reader has chosen one, the Sources tab lands by stage
+ * (`sourcesLanding`); once they pick a subtab on this task, the Sources tab
+ * returns them there, live or done, until they pick another.
+ */
+export const sourcesSubtabChoice = rememberedChoice<SourcesSubtab>("sources-subtab", {
+  write: (subtab) => (subtab === "" ? "themes" : subtab),
+  read: (stored) => {
+    const subtab = stored === "themes" ? "" : stored;
+    return SOURCES_SUBTABS.find((candidate) => candidate === subtab) ?? null;
+  },
+});
+
 /** Point the Sources tab's link at the subtab the reader last chose on this
  *  task (owner, round 10: kept per task in `localStorage`), or, before they
  *  have chosen one or when the storage cannot be read, at `sourcesLanding`'s
@@ -148,7 +168,7 @@ export function withSourcesLanding<T extends { tab: string; to: string }>(
     if (item.tab !== "sources") return item;
     const [path, query] = item.to.split("?");
     const taskId = /\/tasks\/([^/]+)\/sources$/.exec(path)?.[1];
-    const chosen = taskId === undefined ? null : rememberedSourcesSubtab(decodeURIComponent(taskId));
+    const chosen = taskId === undefined ? null : sourcesSubtabChoice.read(decodeURIComponent(taskId));
     return {
       ...item,
       to: `${path}${chosen ?? landing}${query === undefined ? "" : `?${query}`}`,

@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { withSourcesLanding } from "./lifecycle";
-import { rememberedSourcesSubtab, rememberSourcesSubtab } from "./sourcesSubtab";
+import { sourcesSubtabChoice, withSourcesLanding } from "./lifecycle";
 
 // A storage of our own: the Node and jsdom storages behave differently
 // locally and on CI (docs/knowledge), so the tests never lean on either.
@@ -38,17 +37,17 @@ describe("the Sources tab remembers the reader's subtab (owner, round 10)", () =
   });
 
   it("returns to the chosen subtab, live or done, until another is chosen", () => {
-    rememberSourcesSubtab("t1", "/landscape");
+    sourcesSubtabChoice.remember("t1", "/landscape");
     // Live, the stage would say All sources; done, Themes. The choice wins.
     expect(sources("t1", "/all")).toBe("/tasks/t1/sources/landscape?chat=c1");
     expect(sources("t1", "")).toBe("/tasks/t1/sources/landscape?chat=c1");
-    rememberSourcesSubtab("t1", "");
+    sourcesSubtabChoice.remember("t1", "");
     expect(sources("t1", "/all")).toBe("/tasks/t1/sources?chat=c1");
-    expect(rememberedSourcesSubtab("t1")).toBe("");
+    expect(sourcesSubtabChoice.read("t1")).toBe("");
   });
 
   it("keeps the choice per task", () => {
-    rememberSourcesSubtab("t1", "/findings");
+    sourcesSubtabChoice.remember("t1", "/findings");
     expect(sources("t1", "/all")).toBe("/tasks/t1/sources/findings?chat=c1");
     expect(sources("t2", "/all")).toBe("/tasks/t2/sources/all?chat=c1");
   });
@@ -62,8 +61,8 @@ describe("the Sources tab remembers the reader's subtab (owner, round 10)", () =
         throw new Error("blocked");
       },
     });
-    expect(() => rememberSourcesSubtab("t1", "/all")).not.toThrow();
-    expect(rememberedSourcesSubtab("t1")).toBeNull();
+    expect(() => sourcesSubtabChoice.remember("t1", "/all")).not.toThrow();
+    expect(sourcesSubtabChoice.read("t1")).toBeNull();
     expect(sources("t1", "/landscape")).toBe("/tasks/t1/sources/landscape?chat=c1");
     const storage = fakeStorage();
     storage.setItem("policy-atlas:sources-subtab:t1", "/elsewhere");

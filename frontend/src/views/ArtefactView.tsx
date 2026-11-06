@@ -9,7 +9,6 @@ import {
   cardEvidenceMeta,
   cardEvidenceSourceId,
   CASE_STUDIES_INTRO,
-  displayUrl,
   drawingOnLine,
   EXECUTIVE_SUMMARY_ANCHOR,
   fullReportIntro,
@@ -20,11 +19,11 @@ import {
   REPORT_BODY_CLASS,
   REPORT_PART_HEADING_CLASS,
   REPORT_SECTION_HEADING_CLASS,
-  referenceParts,
   sectionNavLabel,
   splitLeadColon,
 } from "./artefactPresentation";
 import type { TopSource } from "./artefactPresentation";
+import { displayUrl, referenceParts } from "../ui/brand/reference";
 import type { SidebarEntry } from "./ArtefactOutline";
 import { ArtefactDownload } from "./ArtefactDownload";
 import { errorCode } from "../lib/errors";
@@ -84,8 +83,8 @@ import {
   useOpenWhenNavigated,
   useRememberedOpen,
   useScrollWhenNavigated,
-  useExpandForPrint,
 } from "./ArtefactOutline";
+import { useExpandForPrint } from "../ui/brand/Disclosure";
 import { Tooltip } from "../ui/radix/Tooltip";
 import { SourceDossierBody, useDossierRecords } from "./SourcesView";
 import { useActiveConversation } from "./workspace/chat/conversationState";

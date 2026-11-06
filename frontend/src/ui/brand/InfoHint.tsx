@@ -1,9 +1,9 @@
 import { Anchor as PopoverAnchor } from "@radix-ui/react-popover";
 import { useRef, useState } from "react";
 
-import { InfoIcon } from "../../ui/brand/icons";
-import { Popover, PopoverContent } from "../../ui/radix/Popover";
-import { Tooltip, TooltipProvider } from "../../ui/radix/Tooltip";
+import { InfoIcon } from "./icons";
+import { Popover, PopoverContent } from "../radix/Popover";
+import { Tooltip, TooltipProvider } from "../radix/Tooltip";
 
 /**
  * A small "i" whose words say what something is (round 12, owner): a 16 px

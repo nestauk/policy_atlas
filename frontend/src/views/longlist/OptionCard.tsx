@@ -14,7 +14,8 @@ import { ReauthRedirect } from "../../ui/feedback";
 import { SectionDisclosure, type SidebarEntry } from "../ArtefactOutline";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
 import { REPORT_TITLE_CLASS, ReportPage } from "../reportPage";
-import { REPORT_BODY_CLASS, referenceParts } from "../artefactPresentation";
+import { REPORT_BODY_CLASS } from "../artefactPresentation";
+import { referenceParts } from "../../ui/brand/reference";
 import {
   authorityWords,
   GRID_COLUMN_LINES,
@@ -50,7 +51,7 @@ import {
 import { ExcludeReasonForm, OptionActionButton, ShortlistToggle, useOptionActions } from "./optionActions";
 import { RetryCard } from "../../ui/feedback/RetryCard";
 import { LINK_CLASS, PROSE_LINK_CLASS } from "../../ui/brand/inlineActions";
-import { InfoHint } from "./InfoHint";
+import { InfoHint } from "../../ui/brand/InfoHint";
 import { BulletList } from "../../ui/brand/BulletList";
 import { ChevronIcon } from "../../ui/brand/icons";
 import { OptionDossier } from "./OptionDossier";

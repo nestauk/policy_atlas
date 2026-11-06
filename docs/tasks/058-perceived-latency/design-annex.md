@@ -1915,3 +1915,45 @@ strength filter type (`api/queries.ts`, which should not import from `ui/`); the
 "Full text" column (the `read_in_full` true/false field, an export column name); the dossier's
 "Read basis: Title only" (what screening read, a different fact); the pipeline status words
 ("Full text collected", "Included — abstract only").
+
+## Consolidation, batch A (owner, 2026-11-06, evening)
+
+Owner: shared pieces live once under `frontend/src/ui/brand/` and are imported; views never
+re-implement them. Four pure moves; nothing a reader sees changed.
+
+1. **The disclosure word.** `DisclosureWord` (the chevron, then "Show" or "Hide") and
+   `useExpandForPrint` (a disclosure opens when the browser is about to print) moved from
+   `views/ArtefactOutline.tsx` to `ui/brand/Disclosure.tsx`. Importers: the report outline
+   (`ArtefactOutline.tsx`), the report (`ArtefactView.tsx`), the longlist (`LonglistView.tsx`).
+   `useOpenWhenNavigated` stays in the outline: it answers the report's contents list and hash
+   links and scrolls the report pane, so it is the report's, not the disclosure's. Test:
+   `ui/brand/Disclosure.test.tsx`.
+2. **The reference line.** `referenceParts`, `referenceCitation`, `referenceAuthorName`,
+   `referenceAuthorsShort`, `displayUrl`, `withFullStop` and the types `ReferenceLike`,
+   `AuthorshipLike` moved from `views/artefactPresentation.ts` to `ui/brand/reference.ts`.
+   Importers: the report's References and citation sheet (`ArtefactView.tsx`), the dossier
+   (`SourcesView.tsx`), the option card (`OptionCard.tsx`), the Markdown download
+   (`artefactPresentation.ts`). No `ReferenceLine` component: the four surfaces render the parts
+   differently (the References' arriving fade and print address, the sheet's bold title button,
+   the dossier's line without its title, the card's link to the dossier). Tests moved to
+   `ui/brand/reference.test.ts`.
+3. **The info hover.** `InfoHint` and its test moved from `views/longlist/` to
+   `ui/brand/InfoHint.tsx`; the longlist and the option card import it.
+4. **Remembered choices.** One helper, `lib/remembered.ts` (`rememberedChoice`, `rememberedKey`):
+   `lib/` because it is a non-visual helper, as `lib/freshness.ts` and `lib/safeHref.ts` are. Key
+   scheme `policy-atlas:<name>:<taskId>`; read and write wrapped in try/catch; a stored string that
+   is no longer a value reads as nothing. The Sources subtab (`sourcesSubtabChoice`, in
+   `views/lifecycle.ts` beside the landing rule that reads it) and the page size
+   (`sourcesPageSizeChoice`, in `views/sourcesPresentation.ts` beside the page sizes) use it. The
+   keys are unchanged, so a reader's choices survive: `policy-atlas:sources-subtab:<taskId>`
+   ("themes", "/landscape", "/all", "/findings") and `policy-atlas:sources-page-size:<taskId>`
+   ("25", "50", "100"). `views/sourcesSubtab.ts` was deleted; its test is
+   `views/sourcesLanding.test.ts`, the helper's own `lib/remembered.test.ts`.
+
+**Left alone, on purpose** (each would change what a reader sees, so not a pure move; for the
+lead): the hand-rolled rotating chevron in the search queries' "Show" (`SearchQueries.tsx`, Body
+size, baseline-aligned), the option card's documents toggle (`OptionCard.tsx`, its own words),
+History's row chevron and "Show steps" (`HistoryView.tsx`), the trace's "Show steps"
+(`RunTrace.tsx`) and the findings table's row chevron (`FindingsView.tsx`); the plan panel's own
+`InfoHint` on the navy surface (`workspace/PlanDocument.tsx`, a hand-drawn glyph in on-navy
+tokens); the chats sidebar's open-or-shut memory (`policy-atlas:chats-sidebar`, not per task).

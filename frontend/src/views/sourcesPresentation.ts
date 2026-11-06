@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { components } from "../api/gen/types";
+import { rememberedChoice } from "../lib/remembered";
 import { useRunStream } from "../store";
 import { humanReason } from "../ui/brand/evidence";
 import { CAPTION_LABEL_CLASS } from "../ui/brand/label";
@@ -121,33 +122,15 @@ export function sourcesPageSize(value: string | number | null | undefined): Sour
   return SOURCES_PAGE_SIZES.find((candidate) => candidate === size) ?? null;
 }
 
-const pageSizeKey = (taskId: string) => `policy-atlas:sources-page-size:${taskId}`;
-
 /**
- * Remember the page size the reader chose on a task (round 12), beside the
- * subtab memory: a per-viewer convenience in `localStorage`; a storage that
- * is missing, blocked or full means the default applies.
- *
- * Args:
- *   taskId: The task.
- *   size: The chosen page size.
+ * The page size the reader last chose on a task (round 12), beside the
+ * subtab memory, kept under `policy-atlas:sources-page-size:<taskId>`;
+ * without a choice, or without storage, the default applies.
  */
-export function rememberSourcesPageSize(taskId: string, size: SourcesPageSize): void {
-  try {
-    window.localStorage.setItem(pageSizeKey(taskId), String(size));
-  } catch {
-    // Without storage the default applies.
-  }
-}
-
-/** The page size the reader last chose on a task, or `null`. */
-export function rememberedSourcesPageSize(taskId: string): SourcesPageSize | null {
-  try {
-    return sourcesPageSize(window.localStorage.getItem(pageSizeKey(taskId)));
-  } catch {
-    return null;
-  }
-}
+export const sourcesPageSizeChoice = rememberedChoice<SourcesPageSize>("sources-page-size", {
+  write: String,
+  read: sourcesPageSize,
+});
 
 /** The URL params the filter row sets, besides the screening toggles:
  *  "Clear filters" removes these and keeps the screening choice. */

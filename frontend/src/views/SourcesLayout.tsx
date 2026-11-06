@@ -5,7 +5,7 @@ import { cn } from "../ui/brand/cn";
 import { SOURCES_LABELS } from "../lib/vocabulary";
 import { WIDE_PAGE_CLASS } from "./listPageChrome";
 import { GROWING_RULE_ACTIVE_CLASS, GROWING_RULE_CLASS } from "../ui/brand/Nav";
-import { rememberSourcesSubtab, type SourcesSubtab } from "./sourcesSubtab";
+import { sourcesSubtabChoice, type SourcesSubtab } from "./lifecycle";
 
 /**
  * Sources layout: Themes, Landscape and All sources always render; Findings
@@ -48,7 +48,7 @@ export function SourcesLayout() {
               end={tab.end}
               // The reader's choice wins over the stage-driven landing from
               // now on, on this task (owner, round 10).
-              onClick={() => rememberSourcesSubtab(taskId, tab.subtab)}
+              onClick={() => sourcesSubtabChoice.remember(taskId, tab.subtab)}
               className={({ isActive }) =>
                 cn(
                   "flex-1 shrink-0 whitespace-nowrap border-b-[3px] border-transparent px-4 py-2.5 text-center text-meta no-underline max-md:px-2.5",

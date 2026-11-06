@@ -31,8 +31,7 @@ import {
   DEFAULT_SOURCES_PAGE_SIZE,
   FACET_PARAMS,
   ORIGIN_FILTER_OPTIONS,
-  rememberedSourcesPageSize,
-  rememberSourcesPageSize,
+  sourcesPageSizeChoice,
   SOURCES_PAGE_SIZES,
   sourcesPageSize,
   STATUS_COLUMN_HEADER,
@@ -60,7 +59,8 @@ import {
   type ReadDepth,
 } from "../ui/brand/evidence";
 import { DepthMark, StrengthMark, ToneSquare } from "../ui/brand/EvidenceMarks";
-import { displayUrl, numberedAuthorships, referenceParts } from "./artefactPresentation";
+import { numberedAuthorships } from "./artefactPresentation";
+import { displayUrl, referenceParts } from "../ui/brand/reference";
 import { isScoping } from "./scopingActivity";
 import { isFinished } from "./workspace/runProgress";
 import { Pagination } from "./Pagination";
@@ -119,7 +119,7 @@ export function SourcesView() {
   // 25 a page unless the reader chose more (round 12): the URL names a size
   // other than 25; otherwise the size they last chose on this task.
   const requestedPageSize =
-    sourcesPageSize(searchParams.get("page_size")) ?? rememberedSourcesPageSize(taskId) ?? DEFAULT_SOURCES_PAGE_SIZE;
+    sourcesPageSize(searchParams.get("page_size")) ?? sourcesPageSizeChoice.read(taskId) ?? DEFAULT_SOURCES_PAGE_SIZE;
   const sourceId = searchParams.get("source");
   // Task 046, amendment 3 (R67): an option card's document link adds the
   // option, so the dossier's slot reads "In this option"; a row here opens
@@ -214,7 +214,7 @@ export function SourcesView() {
   };
   const choosePageSize = (value: string) => {
     const size = sourcesPageSize(value) ?? DEFAULT_SOURCES_PAGE_SIZE;
-    rememberSourcesPageSize(taskId, size);
+    sourcesPageSizeChoice.remember(taskId, size);
     updateParams((next) => {
       if (size === DEFAULT_SOURCES_PAGE_SIZE) next.delete("page_size");
       else next.set("page_size", String(size));
