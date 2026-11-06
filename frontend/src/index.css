@@ -667,3 +667,12 @@
     animation: none;
   }
 }
+
+/* A value with a reason behind it (rounds 11 and 12): a dotted Grey
+   underline under the word, with the help cursor on its trigger, so the
+   hover is found. One class for the Sources table and the report. */
+@utility reason-word {
+  text-decoration: underline dotted var(--color-grey);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}

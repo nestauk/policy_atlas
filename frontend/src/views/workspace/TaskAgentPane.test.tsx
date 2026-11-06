@@ -790,7 +790,7 @@ describe("TaskAgentPane — the streaming planner turn", () => {
 
     expect(screen.queryByText("Drafting the plan")).toBeNull();
     expect(screen.getByTestId("part-card")).toBeInTheDocument();
-    expect(screen.getByTestId("plan-stepper")).toHaveTextContent("Plan · step 2 of 3 · Scope");
+    expect(screen.getByTestId("plan-stepper")).toHaveTextContent("Plan · decision 2 of 3 · Scope");
     expect(screen.getByRole("button", { name: "Start the search" })).not.toBeDisabled();
   });
 

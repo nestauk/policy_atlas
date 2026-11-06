@@ -112,7 +112,11 @@ export function RunStatusBar() {
   // While the Task Agent is open in the sidebar its trace says the same
   // words, so the status bar steps aside; it returns when the sidebar shuts or
   // shows another conversation (lead, round 8).
-  const agentInSidebar = wide && isTaskAgentConversation(activeConversationId, conversations.data?.data ?? []);
+  // Closed Task Agent conversations count too: the one the sidebar shows
+  // closes when a walk ends (round 12).
+  const taskAgentRows = useConversations(taskId, { kind: "task_agent" }).data?.data ?? [];
+  const agentInSidebar =
+    wide && isTaskAgentConversation(activeConversationId, [...(conversations.data?.data ?? []), ...taskAgentRows]);
   const onPage = live !== null && live.tab !== null && live.tab !== "agent";
   // A lapsed stream takes the bar's frame on every tab but Agent (owner,
   // round 11): the reconnecting line replaces the bar's words, after the

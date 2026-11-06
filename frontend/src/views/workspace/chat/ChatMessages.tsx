@@ -9,7 +9,6 @@ import { Button } from "../../../ui/brand/Button";
 import { Chip } from "../../../ui/brand/Chip";
 import { Tooltip } from "../../../ui/radix/Tooltip";
 import {
-  AppraisalChip,
   CITATION_MARKER_CLASS,
   CITATION_SPAN_CLASS,
   ChipWithTooltip,
@@ -18,9 +17,9 @@ import {
   ProvenanceSheet,
   SourceDossier,
   spanSegments,
-  TIER_LABEL,
-  TIER_TEXT,
 } from "../../ArtefactView";
+import { ABSTRACT_ONLY, citationJudgement, TIER_LABEL, TIER_TEXT, uncheckedLabel, uncheckedWords } from "../../../ui/brand/evidence";
+import { DepthMark } from "../../../ui/brand/EvidenceMarks";
 import { LABEL_CLASS } from "../../../ui/brand/label";
 import { cn } from "../../../ui/brand/cn";
 
@@ -307,8 +306,7 @@ function References({ citations, turn, onCitation, onOpenDossier }: { citations:
 function VerdictChip({ turn, citation }: { turn: ChatConversationRow; citation: ChatCitation }) {
   const { tier } = verdictInfoFor(turn, citation);
   const checkFailed = enrichmentStatusOf(turn) === "failed";
-  const uncheckedLabel = checkFailed ? "Unchecked · check unavailable" : "Unchecked · awaiting evidence check";
-  return <ChipWithTooltip tone={tier === "unsupported_mis_cited" ? "red" : tier === null ? "soft" : "blue"} label={tier === null ? uncheckedLabel : TIER_LABEL[tier]} content={verdictTooltipContent(turn, citation)} />;
+  return <ChipWithTooltip tone={tier === "unsupported_mis_cited" ? "red" : tier === null ? "soft" : "blue"} label={tier === null ? uncheckedLabel(checkFailed) : TIER_LABEL[tier]} content={verdictTooltipContent(turn, citation)} />;
 }
 
 /** The rationale/hint body shared by `VerdictChip` and the inline marker's
@@ -316,8 +314,7 @@ function VerdictChip({ turn, citation }: { turn: ChatConversationRow; citation: 
 function verdictTooltipContent(turn: ChatConversationRow, citation: ChatCitation) {
   const { tier, rationale } = verdictInfoFor(turn, citation);
   const checkFailed = enrichmentStatusOf(turn) === "failed";
-  const uncheckedHint = checkFailed ? "The evidence check could not run for this answer" : "Awaiting evidence check";
-  return <div className="max-w-[280px] space-y-1 text-caption"><p>{tier === null ? uncheckedHint : TIER_TEXT[tier]}</p>{rationale !== null && <p className="text-grey">Judge: {scrub(rationale)}</p>}</div>;
+  return <div className="max-w-[280px] space-y-1 text-meta"><p>{tier === null ? uncheckedWords(checkFailed) : TIER_TEXT[tier]}</p>{rationale !== null && <p className="text-grey">Judge: {scrub(rationale)}</p>}</div>;
 }
 
 /** The claim-span hover and the bare `[n]` marker hover's shared preview
@@ -333,12 +330,7 @@ function citationTooltipBody(turn: ChatConversationRow, citation: ChatCitation) 
   // tooltip, exactly where the report shows its own.
   const { tier } = verdictInfoFor(turn, citation);
   const checkFailed = enrichmentStatusOf(turn) === "failed";
-  const statusLine =
-    tier !== null
-      ? TIER_LABEL[tier]
-      : checkFailed
-        ? "Unchecked · check unavailable"
-        : "Unchecked · awaiting evidence check";
+  const statusLine = tier !== null ? TIER_LABEL[tier] : uncheckedLabel(checkFailed);
   return (
     <CitationTooltipBody
       sourceTitle={citation.source_title ?? citation.title ?? citationId(citation) ?? "Citation"}
@@ -408,35 +400,41 @@ function ChatProvenanceSheet({ taskId, active, onClose, onOpenDossier }: { taskI
 }
 
 /** One citation's provenance block within the sheet above — the shared
- *  `CitationProvenanceBlock`, fed this chunk's on-demand context (Fix A), the
- *  verdict chip (Fix B), and — when the field is present — the appraisal
- *  chip in exact parity with the artefact reader's `CitationContext` (030
- *  fold). Absent `appraisal_label` renders no chip (honest absence); this
- *  is the sheet's citation block only — References rows and hover tooltips
- *  don't gain it. */
+ *  `CitationProvenanceBlock`, fed this chunk's on-demand context (Fix A) and
+ *  the same blocks as the report's sheet (round 12): the evidence type and
+ *  strength at Meta, and the judge's words under their label for the
+ *  citation's best-supported claim (`verdictInfoFor`), then the text basis
+ *  ("Abstract only" with its tone square, the Sources table's) on a quiet
+ *  line. An unjudged citation says it is
+ *  unchecked, awaiting the check or with the check unavailable (lead,
+ *  round 12); the References rows keep their verdict chip. */
 function ChatCitationBlock({ taskId, turn, citation, onOpenDossier }: { taskId: string; turn: ChatConversationRow; citation: ChatCitation; onOpenDossier: (sourceRef: string) => void }) {
   const context = useChatChunkContext(taskId, citation);
   const sourceRef = citation.source_id ?? citation.source_title ?? null;
   const titleText = citation.source_title ?? citation.title ?? citationId(citation) ?? "Citation";
+  const verdict = verdictInfoFor(turn, citation);
   return (
+    <div>
     <CitationProvenanceBlock
       n={citation.n ?? null}
       sourceTitle={titleText}
       sourceRef={sourceRef}
       onOpenDossier={onOpenDossier}
-      chips={
-        <>
-          <VerdictChip turn={turn} citation={citation} />
-          {citation.appraisal_label !== null && citation.appraisal_label !== undefined && (
-            <AppraisalChip label={citation.appraisal_label} evidenceType={citation.evidence_type} />
-          )}
-          {citation.text_basis === "abstract_only" && <Chip tone="soft">abstract only</Chip>}
-        </>
-      }
+      evidenceType={nonEmptyText(citation.evidence_type)}
+      strength={nonEmptyText(citation.appraisal_label)}
+      judgement={citationJudgement(verdict.tier, verdict.rationale, enrichmentStatusOf(turn) === "failed")}
       context={context}
       quote={citation.quote ?? ""}
       fallbackNote="Exact passage not found in the source — showing the cited quote."
     />
+    {/* The text basis (task 046, AM10): the shared block has no slot for
+        it, so chat says it on a quiet line of its own, no chip (round 12). */}
+    {citation.text_basis === "abstract_only" && (
+      <p className="mt-1 flex items-center gap-1.5 text-meta text-grey">
+        <DepthMark depth={ABSTRACT_ONLY} />
+      </p>
+    )}
+    </div>
   );
 }
 
@@ -453,6 +451,10 @@ function clientTurnIdOf(row: ChatConversationRow) { return "id" in row ? row.cli
 function errorCodeOf(row: ChatConversationRow) { return "id" in row ? undefined : row.errorCode; }
 function activitySummary(labels: string[]) { return labels.length === 1 ? labels[0] : `${labels.at(-1) ?? "Checked the evidence"} — ${labels.length} searches`; }
 function citationsOf(turn: ChatConversationRow): ChatCitation[] { return "id" in turn && Array.isArray(turn.citations) ? turn.citations.filter((citation) => citation !== null && typeof citation === "object") as ChatCitation[] : []; }
+/** A string field's value, or null when it is absent or blank. */
+function nonEmptyText(value: string | null | undefined): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value : null;
+}
 function citationId(citation: ChatCitation) { return citation.id ?? citation.chunk_id ?? citation.citation_id ?? ""; }
 // Best-first tier order for the chat display choice below.
 const TIER_RANK = ["tier_1", "tier_2", "tier_3", "tier_4", "unsupported_mis_cited"];

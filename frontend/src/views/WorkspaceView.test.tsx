@@ -38,6 +38,10 @@ const activeRows = [
   { id: "p0", kind: "task_agent", status: "active", closed_at: iso(3), title: "Plan round 1", created_at: iso(3), entry_artefact_id: null, latest_turn_preview: null },
 ];
 
+/** A Task Agent conversation a finished walk closed (round 12): it is off
+ *  the active list but still the Task Agent. */
+const CLOSED_TASK_AGENT_ROW = { id: "p-closed", kind: "task_agent", status: "closed", closed_at: iso(4), title: "Planning", created_at: iso(5), entry_artefact_id: null, latest_turn_preview: null };
+
 vi.mock("../api/queries", () => ({
   useTask: () => ({
     data: {
@@ -49,8 +53,15 @@ vi.mock("../api/queries", () => ({
     isError: false,
     error: null,
   }),
-  useConversations: (_taskId: string, query: { status: string }) => ({
-    data: { data: query.status === "active" ? activeRows : [] },
+  useConversations: (_taskId: string, query: { status?: string; kind?: string }) => ({
+    data: {
+      data:
+        query.kind === "task_agent"
+          ? [...activeRows.filter((row) => row.kind === "task_agent"), CLOSED_TASK_AGENT_ROW]
+          : query.status === "active"
+            ? activeRows
+            : [],
+    },
   }),
   useArtefact: () => ({ data: { sections: [{ title: "Key findings" }] } }),
 }));
@@ -224,6 +235,12 @@ describe("WorkspaceView — the Agent tab is two columns (038 V8, owner ruling 2
     // The rail belongs to the plan, not to a chat.
     expect(screen.queryByTestId("plan-document-read-only")).not.toBeInTheDocument();
     expect(screen.getByTestId("search")).toHaveTextContent("?chat=c1");
+  });
+
+  it("shows the Task Agent when the URL names its conversation after a walk closed it (round 12)", () => {
+    renderAtAgentTab("?chat=p-closed");
+    expect(screen.getByTestId("task_agent-pane-is-owner")).toBeInTheDocument();
+    expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
   });
 
   it("opens the chat a ?chat= deep link names, the same param the other tabs' overlay uses", () => {

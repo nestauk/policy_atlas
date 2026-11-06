@@ -19,6 +19,9 @@ const state = vi.hoisted(() => ({
   navigate: vi.fn(),
   chatsResolved: true,
   rows: [] as unknown[],
+  /** The `kind: "task_agent"` read (closed ones included); null reads the
+   *  task_agent rows of `rows`. */
+  taskAgentRows: null as unknown[] | null,
   runStatus: undefined as string | undefined,
   pendingCheckIn: null as { check_in_id: string; kind: string } | null,
   openPlan: vi.fn(),
@@ -37,8 +40,13 @@ vi.mock("react-router", () => ({
   ),
 }));
 vi.mock("../../../api/queries", () => ({
-  useConversations: () => ({
-    data: { data: state.rows },
+  useConversations: (_taskId: string, query?: { kind?: string }) => ({
+    data: {
+      data:
+        query?.kind === "task_agent"
+          ? (state.taskAgentRows ?? state.rows.filter((row) => (row as { kind: string }).kind === "task_agent"))
+          : state.rows,
+    },
     isSuccess: state.chatsResolved,
   }),
   useArtefact: () => ({ data: { sections: [{ title: "Key findings" }] } }),
@@ -113,6 +121,7 @@ describe("ChatSidePanel", () => {
   beforeEach(() => {
     state.chatsResolved = true;
     state.rows = [CHAT_ROW];
+    state.taskAgentRows = null;
     state.runStatus = "succeeded";
     state.pendingCheckIn = null;
     state.draftEntryArtefactId = null;
@@ -196,6 +205,29 @@ describe("ChatSidePanel", () => {
     state.rows = [PLAN_ROW, CHAT_ROW];
     render(<ChatSidePanel taskId="p1" isOwner />);
     expect(screen.getByTestId("task_agent-pane")).toBeInTheDocument();
+    expect(screen.getByText("Task Agent")).toBeInTheDocument();
+    expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
+  });
+
+  it("keeps the Task Agent's thread after the baseline check-in is answered from the sidebar (round 12)", () => {
+    // The sidebar shows the Task Agent, parked on the scoping walk's
+    // baseline check-in.
+    state.activeConversationId = "plan-1";
+    state.rows = [PLAN_ROW, CHAT_ROW];
+    state.runStatus = "paused";
+    state.pendingCheckIn = { check_in_id: "gate-1", kind: "baseline_confirm" };
+    const view = render(<ChatSidePanel taskId="p1" isOwner />);
+    expect(screen.getByTestId("task_agent-pane")).toBeInTheDocument();
+
+    // Answered: the baseline walk ends, the server closes its Task Agent
+    // conversation (it leaves the active list) and the longlist walk runs.
+    state.pendingCheckIn = null;
+    state.runStatus = "running";
+    state.rows = [CHAT_ROW];
+    state.taskAgentRows = [{ ...PLAN_ROW, status: "closed", closed_at: new Date().toISOString() }];
+    view.rerender(<ChatSidePanel taskId="p1" isOwner />);
+
+    expect(screen.getByTestId("task_agent-pane")).toHaveAttribute("data-run-status", "running");
     expect(screen.getByText("Task Agent")).toBeInTheDocument();
     expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
   });

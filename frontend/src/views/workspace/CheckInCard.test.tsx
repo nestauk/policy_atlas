@@ -179,7 +179,9 @@ describe("CheckInCard — option parameters", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: /Change how often I check in/ }));
-    await user.selectOptions(screen.getByLabelText("New steering mode"), "minimal");
+    // Round 12: the app's dropdown, not the browser's.
+    await user.click(screen.getByRole("combobox", { name: "New steering mode" }));
+    await user.click(screen.getByRole("option", { name: "Only if it can't proceed" }));
     await user.click(screen.getByRole("button", { name: "Send" }));
 
     expect(mutate).toHaveBeenCalledOnce();
@@ -336,8 +338,9 @@ describe("CheckInCard — the baseline gate", () => {
 
   // Round 10 (finding 8, C9): the gate reads as the other check-ins: the
   // question as the title, one facts line with the way to the baseline, the
-  // key assumption as a plain sentence, no labels.
-  it("asks its question, then one facts line with Baseline →, then the key assumption", () => {
+  // key assumption as a plain sentence, no labels. Round 12 (owner): no key
+  // assumption at all.
+  it("asks its question, then one facts line with Baseline →, and shows no key assumption", () => {
     renderCard(gateCheckIn(bundle));
 
     expect(
@@ -353,9 +356,7 @@ describe("CheckInCard — the baseline gate", () => {
       "href",
       `/tasks/${TASK_ID}/result?view=baseline`,
     );
-    const assumption = screen.getByText(bundle.key_assumption);
-    expect(assumption.tagName).toBe("P");
-    expect(assumption.closest("blockquote")).toBeNull();
+    expect(screen.queryByText(bundle.key_assumption)).not.toBeInTheDocument();
     for (const label of ["Key assumption", "Settings", "Who or what should change", "Risk appetite"]) {
       expect(screen.queryByText(label)).not.toBeInTheDocument();
     }
@@ -364,7 +365,7 @@ describe("CheckInCard — the baseline gate", () => {
   it("drops the facts line in the sidebar's compact card", () => {
     renderCard(gateCheckIn(bundle), [], true, true);
     expect(screen.queryByTestId("check-in-facts")).not.toBeInTheDocument();
-    expect(screen.getByText(bundle.key_assumption)).toBeInTheDocument();
+    expect(screen.queryByText(bundle.key_assumption)).not.toBeInTheDocument();
   });
 
   it("counts one outcome in the singular and keeps settings the bundle lacks out", () => {
@@ -407,10 +408,10 @@ describe("CheckInCard — the baseline gate", () => {
     });
   });
 
-  it("states an absent key assumption rather than quoting nothing", () => {
+  it("says nothing about a key assumption when the baseline records none", () => {
     renderCard(gateCheckIn({ key_assumption: "   ", settings: {} }));
 
-    expect(screen.getByText("The baseline records no key assumption.")).toBeInTheDocument();
+    expect(screen.queryByText("The baseline records no key assumption.")).not.toBeInTheDocument();
   });
 });
 

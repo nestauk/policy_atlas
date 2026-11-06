@@ -22,6 +22,8 @@ vi.mock("../api/queries", () => ({
   useApiClient: () => ({}),
   // The run status bar opens the Task Agent, so it reads the task's conversations.
   useConversations: () => ({ isSuccess: true, data: { data: [] } }),
+  // The header's menu offers "Add to project" (round 12).
+  useProjects: () => ({ data: { data: [] } }),
 }));
 
 vi.mock("../api/mutations", () => ({

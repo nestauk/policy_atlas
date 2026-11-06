@@ -10,6 +10,14 @@ import { PrivacyView } from "./legal/PrivacyView";
 import { TermsView } from "./legal/TermsView";
 import { useDocumentTitle } from "../lib/title";
 import { TASK } from "../lib/vocabulary";
+
+// Round 12: the shell forgets a task's report expand state when the reader
+// leaves the task; the hook is watched here, its rule is ArtefactOutline's.
+const forgetOnLeave = vi.hoisted(() => vi.fn());
+vi.mock("./ArtefactOutline", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./ArtefactOutline")>()),
+  useForgetReportExpandOnLeave: forgetOnLeave,
+}));
 import type { SseFrame } from "../api/sseFrame";
 import { BETA_CHIP_HINT } from "../ui/brand/Nav";
 
@@ -38,6 +46,14 @@ const taskState = vi.hoisted(() => ({
   latestRun: null as { status: string } | null,
   activeRun: null as { status: string } | null,
   hasLonglist: false,
+  // Round 12: the header's "Add to project" reads the task's projects.
+  projectIds: [] as string[],
+}));
+
+// Round 12: the projects the header's "Add to project" offers, and its change.
+const projectsState = vi.hoisted(() => ({
+  rows: [] as { project_id: string; name: string }[],
+  update: vi.fn(),
 }));
 
 // Both mocked as spies (task 037 review fix) so a describe block below can
@@ -72,9 +88,11 @@ vi.mock("../api/queries", () => ({
           latest_run: taskState.latestRun,
           active_run: taskState.activeRun,
           has_longlist: taskState.hasLonglist,
+          project_ids: taskState.projectIds,
         }
       : undefined,
   }),
+  useProjects: () => ({ data: { data: projectsState.rows } }),
   useCheckIns: () => ({ data: { data: [{ check_in_id: "pending-1" }] } }),
   // The chat side panel (029 rev 3.4) mounts on non-workspace task routes.
   useConversations: useConversationsState.mock,
@@ -97,7 +115,7 @@ vi.mock("./workspace/PlanDocument", () => ({
 }));
 
 vi.mock("../api/mutations", () => ({
-  useUpdateTask: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateTask: () => ({ mutate: projectsState.update, isPending: false }),
   useArchiveTask: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }));
 
@@ -163,6 +181,17 @@ describe("AppShell — pending check-in nav badge (027 strand 14)", () => {
   it("hides the badge while already on the Agent tab", () => {
     renderShell(`/tasks/${TASK_ID}`);
     expect(screen.queryByText("Check-in pending")).not.toBeInTheDocument();
+  });
+});
+
+describe("AppShell — the report's expand state (round 12)", () => {
+  it("hands the route's task to the hook that forgets it on leaving, and nothing off a task", () => {
+    forgetOnLeave.mockClear();
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    expect(forgetOnLeave).toHaveBeenCalledWith(TASK_ID);
+    forgetOnLeave.mockClear();
+    renderShell("/projects");
+    expect(forgetOnLeave).toHaveBeenCalledWith(undefined);
   });
 });
 
@@ -485,6 +514,39 @@ describe("AppShell — the task-settings popover (task 033 phase 10c, contract �
     const kind = within(bar).getByText(/Evidence search|Options scoping/);
     expect(kind).toHaveClass("text-grey", "text-meta");
     expect(kind.className).not.toMatch(/border|bg-|uppercase/);
+  });
+
+  // Owner, round 12: the header's menu has the rows' "Add to project".
+  it("owner: adds the task to a project from the header's menu, as on a row", async () => {
+    taskState.isOwner = true;
+    taskState.projectIds = ["p-1"];
+    projectsState.rows = [
+      { project_id: "p-1", name: "Child health" },
+      { project_id: "p-2", name: "Net zero homes" },
+    ];
+    projectsState.update.mockReset();
+    projectsState.update.mockImplementation((_body: unknown, options: { onSuccess: () => void }) => options.onSuccess());
+    const user = await openTaskSettings();
+    await user.click(screen.getByRole("menuitem", { name: "Add to project" }));
+    await user.click(screen.getByRole("combobox", { name: "Add to a project" }));
+    // Only the projects it is not in yet.
+    expect(screen.queryByRole("option", { name: "Child health" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: "Net zero homes" }));
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    expect(projectsState.update).toHaveBeenCalledWith({ project_ids: ["p-1", "p-2"] }, expect.anything());
+    expect(screen.queryByRole("button", { name: "Add" })).not.toBeInTheDocument();
+  });
+
+  it("owner: disables Add to project, with its reason, when the task is in every project", async () => {
+    taskState.isOwner = true;
+    taskState.projectIds = ["p-1"];
+    projectsState.rows = [{ project_id: "p-1", name: "Child health" }];
+    await openTaskSettings();
+    const item = screen.getByRole("menuitem", { name: /Add to project/ });
+    expect(item).toBeDisabled();
+    expect(item).toHaveTextContent("Already in every project");
+    taskState.projectIds = [];
+    projectsState.rows = [];
   });
 
   it("non-owner: hides the settings gear itself, not just the items inside it — an empty popover is not a fix", () => {

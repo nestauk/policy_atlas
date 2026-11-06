@@ -30,14 +30,16 @@ import { ChatSidePanel } from "./workspace/chat/ChatSidePanel";
 import { PlanDocument } from "./workspace/PlanDocument";
 import { ToastProvider, useToast } from "../ui/radix/Toast";
 import { TooltipProvider } from "../ui/radix/Tooltip";
-import { NameMenu } from "./NameMenu";
+import { NameMenu, useAddToProjectStep } from "./NameMenu";
+import { useForgetReportExpandOnLeave } from "./ArtefactOutline";
 
 /**
- * The task header's left side (task 058, owner round 11): the name at the
- * Title size with the capability after it on one baseline, in plain Grey
- * ("Options scoping", "Evidence search"; task 044, X12: a colleague can tell
- * the two kinds apart without opening the plan), and the owner's menu
- * (Rename, Archive) behind the chevron. Rename and archive are owner-only
+ * The task header's left side (task 058, owner rounds 11 and 12): the name at
+ * the Heading size (Lead below `md`) with the owner's menu (Rename, Add to
+ * project, Archive; the rows' menu shares the last two)
+ * behind the chevron on its baseline, and the capability on its own short
+ * line under it in Meta Grey ("Options scoping", "Evidence search"; task 044,
+ * X12: a colleague can tell the two kinds apart without opening the plan). Rename and archive are owner-only
  * (task 033 phase 10c, contract § 11 / rubric 37), so a colleague sees no
  * chevron at all. Visibility lives on the Share page.
  */
@@ -46,24 +48,28 @@ function TaskName({
   name,
   capability,
   isOwner,
+  projectIds,
 }: {
   taskId: string;
   name: string;
+  /** The task's projects, for the menu's "Add to project" (round 12). */
+  projectIds: readonly string[] | null | undefined;
   capability: string | null | undefined;
   isOwner: boolean;
 }) {
   const update = useUpdateTask(taskId);
   const archive = useArchiveTask(taskId);
   const toast = useToast();
+  // The same "Add to project" as a task row's menu (owner, round 12).
+  const addToProject = useAddToProjectStep(projectIds, update);
   return (
     <NameMenu
+      steps={[addToProject]}
       name={name}
       label={COPY.taskSettings}
       fieldLabel={`${TASK.one} name`}
-      // On a phone the name takes its own line and the capability and the
-      // chevron follow under it, so the name keeps the width.
-      titleClassName="text-title font-bold text-navy max-md:basis-full max-md:text-heading"
-      after={<span className="shrink-0 whitespace-nowrap text-meta text-grey">{capabilityLabel(capability)}</span>}
+      titleClassName="text-heading font-bold text-navy max-md:text-lead max-md:font-bold"
+      below={<span className="block truncate text-meta leading-tight text-grey">{capabilityLabel(capability)}</span>}
       canEdit={isOwner}
       pending={update.isPending || archive.isPending}
       rename={(next, done) =>
@@ -241,6 +247,9 @@ function ShellPlanPanel({ taskId }: { taskId: string }) {
 /** App chrome: global controls always; task stages on a second bar. */
 export function AppShell() {
   const { taskId } = useParams();
+  // A reader who leaves the task and comes back gets a fresh collapsed
+  // report; moving between its tabs keeps what they opened (round 12).
+  useForgetReportExpandOnLeave(taskId);
   const location = useLocation();
   const auth = useAuth();
   // Belt-and-braces while a run is active: the shell-owned run stream
@@ -379,6 +388,7 @@ export function AppShell() {
                   name={task.data.name}
                   capability={task.data.capability}
                   isOwner={task.data.is_owner}
+                  projectIds={task.data.project_ids}
                 />
               </>
             )}

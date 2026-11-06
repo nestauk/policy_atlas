@@ -125,7 +125,13 @@ export function ChatSidePanel({
   const rows = conversations.data?.data ?? [];
   const chatRows = rows.filter((row) => row.kind === "chat");
   const taskAgentId = taskAgentConversationId(rows);
-  const taskAgentOpen = isTaskAgentConversation(activeConversationId, rows);
+  // The Task Agent's conversations, closed ones included (round 12): a walk
+  // that ends closes the open one (answering the baseline check-in ends the
+  // baseline walk), so it leaves the active list while the sidebar is still
+  // showing it. Read against the active list alone, the panel took it for a
+  // chat and showed an empty one.
+  const taskAgentRows = useConversations(taskId, { kind: "task_agent" }).data?.data ?? [];
+  const taskAgentOpen = isTaskAgentConversation(activeConversationId, [...rows, ...taskAgentRows]);
   const draftOpen = activeConversationId === DRAFT_CHAT_ID;
   const artefact = useArtefact(taskId);
   const chatsEnabled = useChatsEnabled(taskId);

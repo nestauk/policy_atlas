@@ -279,6 +279,15 @@ const EASE_OUT_STRONG = "cubic-bezier(0.23, 1, 0.32, 1)";
  * task 058 round 9: a settling card eases its own height, and two height
  * animations would chase each other).
  *
+ * Boxes nest (round 12: the thread around a streamed reply). The change is
+ * measured a microtask after the MutationObserver hears it, so an eased box
+ * inside this one that hears the same change starts its own ease first and
+ * this box eases only what that one does not absorb. A ResizeObserver only
+ * reads: it keeps the height to ease from current while the content grows
+ * without a DOM change here (the inner box opening); and a grow-only box
+ * whose ease ends short of content that grew under it carries on from
+ * there.
+ *
  * Args:
  *   active: True while the height should ease.
  *   growOnly: Ease growth only; a shrink is a cut.
@@ -299,18 +308,8 @@ export function useEasedHeight(
     if (typeof outer.animate !== "function") return undefined;
     let last = inner.offsetHeight;
     let running: Animation | null = null;
-    const observer = new MutationObserver(() => {
-      const next = inner.offsetHeight;
-      if (Math.abs(next - last) < 1) return;
-      if (growOnly && next < last) {
-        // A shrink passes through: drop any growth still running.
-        running?.cancel();
-        running = null;
-        outer.style.overflow = "";
-        last = next;
-        return;
-      }
-      const from = running !== null ? outer.getBoundingClientRect().height : last;
+    let queued = false;
+    const ease = (from: number, next: number) => {
       running?.cancel();
       last = next;
       outer.style.overflow = "clip";
@@ -322,12 +321,51 @@ export function useEasedHeight(
       animation.onfinish = () => {
         if (running !== animation) return;
         running = null;
+        // On a grow-only box (the thread), content that grew under the ease
+        // with no DOM change here (a nested box opening) carries on from
+        // where this one stopped. Only growth, and only there: a box whose
+        // content follows its own height would chase itself.
+        const now = inner.offsetHeight;
+        if (growOnly && now - next >= 1) {
+          ease(next, now);
+          return;
+        }
+        last = now;
         outer.style.overflow = "";
       };
+    };
+    const measure = () => {
+      queued = false;
+      const next = inner.offsetHeight;
+      if (Math.abs(next - last) < 1) return;
+      if (growOnly && next < last) {
+        // A shrink passes through: drop any growth still running.
+        running?.cancel();
+        running = null;
+        outer.style.overflow = "";
+        last = next;
+        return;
+      }
+      ease(running !== null ? outer.getBoundingClientRect().height : last, next);
+    };
+    const observer = new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      queueMicrotask(measure);
     });
     observer.observe(inner, { subtree: true, childList: true, characterData: true, attributes: true });
+    // Read only: it never resizes a box, so it cannot loop with the
+    // observers around it.
+    const follower =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => {
+            if (running === null && !queued) last = inner.offsetHeight;
+          });
+    follower?.observe(inner);
     return () => {
       observer.disconnect();
+      follower?.disconnect();
       running?.cancel();
       outer.style.overflow = "";
     };

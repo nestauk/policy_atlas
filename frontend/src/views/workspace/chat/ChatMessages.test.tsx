@@ -6,6 +6,7 @@ import { TooltipProvider } from "../../../ui/radix/Tooltip";
 
 import type { ChatConversationRow, ChatTurn, OptimisticChatTurn } from "../../../store";
 import { ChatMessages } from "./ChatMessages";
+import { TIER_LABEL, TIER_TEXT } from "../../../ui/brand/evidence";
 
 // The citation sheet's quote-in-context fetch is the only place this view
 // calls the API client — mock just that hook (029 Fix A/B) so a click on a
@@ -168,6 +169,35 @@ describe("ChatMessages", () => {
     expect(await screen.findByText("moderate")).toBeInTheDocument();
   });
 
+  // Round 12: the sheet's citation block takes the report's blocks: the
+  // evidence type and strength at Meta and the judge's words under their
+  // label, for the citation's best-supported claim; no chips.
+  it("shows the citation's type, strength and judgement in the sheet, without chips (round 12)", async () => {
+    mockGet.mockResolvedValueOnce({ data: { context: "context text", year: 2024 }, error: undefined });
+    renderChat([
+      turn({
+        citations: [{ id: "chunk-1", n: 1, quote: "Costs fell", state: "verdict:tier_2", appraisal_label: "moderate", evidence_type: "Cohort study" }],
+      }),
+    ]);
+    const [marker] = screen.getAllByRole("button", { name: "[1]" });
+    await userEvent.setup().click(marker);
+    const sheet = await screen.findByRole("dialog");
+    expect(within(sheet).getByText("moderate")).toBeInTheDocument();
+    expect(within(sheet).getByText(TIER_LABEL.tier_2)).toBeInTheDocument();
+    expect(within(sheet).getByText(TIER_TEXT.tier_2)).toBeInTheDocument();
+  });
+
+  // Lead, round 12: an unjudged citation says it is unchecked in the sheet.
+  it("says an unjudged citation is unchecked, awaiting the check", async () => {
+    mockGet.mockResolvedValueOnce({ data: { context: "context text", year: 2024 }, error: undefined });
+    renderChat([turn({ citations: [{ id: "chunk-1", n: 1, quote: "Costs fell" }] })]);
+    const [marker] = screen.getAllByRole("button", { name: "[1]" });
+    await userEvent.setup().click(marker);
+    const sheet = await screen.findByRole("dialog");
+    expect(within(sheet).getByText("Unchecked")).toBeInTheDocument();
+    expect(within(sheet).getByText("Awaiting evidence check")).toBeInTheDocument();
+  });
+
   it("omits the appraisal chip in the citation sheet when appraisal_label is absent", async () => {
     mockGet.mockResolvedValueOnce({ data: { context: "context text", year: 2024 }, error: undefined });
     renderChat([turn()]);
@@ -177,7 +207,7 @@ describe("ChatMessages", () => {
     expect(screen.queryByText("moderate")).not.toBeInTheDocument();
   });
 
-  // Task 046, contract item 7: the "abstract only" label in the sheet's
+  // Task 046, contract item 7: the "Abstract only" label in the sheet's
   // citation block, gated on text_basis alone (honest absence otherwise).
   it("shows the abstract-only label in the citation sheet when text_basis is abstract_only", async () => {
     mockGet.mockResolvedValueOnce({ data: { context: "context text", year: 2024 }, error: undefined });
@@ -188,7 +218,9 @@ describe("ChatMessages", () => {
     ]);
     const [marker] = screen.getAllByRole("button", { name: "[1]" });
     await userEvent.setup().click(marker);
-    expect(await screen.findByText("abstract only")).toBeInTheDocument();
+    // The Sources table's word and tone square (round 12 consolidation).
+    expect(await screen.findByText("Abstract only")).toBeInTheDocument();
+    expect(screen.getByTestId("status-mark")).toHaveAttribute("data-tone", "yellow");
   });
 
   it("omits the abstract-only label in the citation sheet when text_basis is full_text", async () => {
@@ -199,7 +231,7 @@ describe("ChatMessages", () => {
     const [marker] = screen.getAllByRole("button", { name: "[1]" });
     await userEvent.setup().click(marker);
     await screen.findByText("Where this comes from");
-    expect(screen.queryByText("abstract only")).not.toBeInTheDocument();
+    expect(screen.queryByText("Abstract only")).not.toBeInTheDocument();
   });
 
   it("keeps a cancelled turn's inline markers inert — clickable but no verdict tooltip promised", async () => {

@@ -17,6 +17,7 @@ import { AppFooter } from "./AppFooter";
 import { publicLifecycleTabs } from "./lifecycle";
 import { PublicViewProvider } from "./publicView";
 import { StashAndSplashRedirect } from "../routes/StashAndSplashRedirect";
+import { useForgetReportExpandOnLeave } from "./ArtefactOutline";
 
 /**
  * Layout for a public (link-shared) Task opened without signing in —
@@ -32,6 +33,8 @@ import { StashAndSplashRedirect } from "../routes/StashAndSplashRedirect";
  */
 export function PublicTaskShell() {
   const { taskId = "" } = useParams();
+  // Leaving the task forgets its report's expand state (round 12).
+  useForgetReportExpandOnLeave(taskId);
   const task = useTask(taskId);
   const auth = useAuth();
   const location = useLocation();

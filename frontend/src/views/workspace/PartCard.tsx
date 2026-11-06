@@ -508,7 +508,9 @@ export function planSteps(
 
 /**
  * The one small line above the active part card: the settled steps named in
- * grey, then "Plan · step n of M · <part>" (annex scene 11).
+ * grey, then "Plan · decision n of M · <part>" (annex scene 11; owner round 12:
+ * the line counts decisions, M the parts the planner asks, the question
+ * included, Who can act and Your options only once asked).
  *
  * Args:
  *   steps: `planSteps(...)`.
@@ -530,7 +532,7 @@ export function PlanStepper({ steps, activeId }: { steps: PlanStep[]; activeId: 
         </span>
       ))}
       <span className="text-navy">
-        Plan · step {index + 1} of {steps.length} · {steps[index].name}
+        Plan · decision {index + 1} of {steps.length} · {steps[index].name}
       </span>
     </p>
   );

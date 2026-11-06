@@ -305,13 +305,38 @@ function UserBubble({ text, turnId }: { text: string; turnId: string }) {
 
 /** TaskAgent replies are plain text — no box (binding record: task_agent-stage
  *  `.task_agent`); only part cards and the plan card are bordered. The reply
- *  rises in as it arrives and its words come at a steady pace (round 9). */
-function TaskAgentBubble({ text, turnId, streamed }: { text: string; turnId: string; streamed: boolean }) {
+ *  rises in as it arrives and its words come at a steady pace (round 9).
+ *
+ *  It grows smoothly (owner, round 12: "Drafting the plan" was jittery): its
+ *  own box eases to each new line's height, so what is under it (the action
+ *  line while it streams, the part card once it is stored) glides down
+ *  rather than jumping a line and being clipped by the thread's ease. A
+ *  streamed turn mounts the box before its first words (`text` empty) and
+ *  keeps the gap to the action line inside it (`gapBelow`), so the first
+ *  line opens the same way. A cut under reduced motion. */
+function TaskAgentBubble({
+  text,
+  turnId,
+  streamed,
+  gapBelow = false,
+}: {
+  text: string;
+  turnId: string;
+  streamed: boolean;
+  gapBelow?: boolean;
+}) {
+  const [box, content] = useEasedHeight(!prefersReducedMotion());
   return (
     <Arrival arrivalId={`reply:${turnId}`} className="mr-8">
-      <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">
-        <PacedReply turnId={turnId} text={text} streamed={streamed} />
-      </p>
+      <div ref={box}>
+        <div ref={content}>
+          {text !== "" && (
+            <p className={cn("max-w-prose-measure whitespace-pre-wrap text-lead text-ink", gapBelow && "pb-6")}>
+              <PacedReply turnId={turnId} text={text} streamed={streamed} />
+            </p>
+          )}
+        </div>
+      </div>
     </Arrival>
   );
 }
@@ -331,6 +356,11 @@ function PlannerActionLine({ label, live, turnId }: { label: string; live: boole
       {scrub(label)}
     </p>
   );
+}
+
+/** Whether a turn on its way shows the planner's action line. */
+function actionShown(turn: OptimisticTaskAgentTurn): boolean {
+  return turn.status !== "failed" && turn.progressLabel !== undefined;
 }
 
 /** One recorded gate decision, as a quiet line rather than a card: the
@@ -875,11 +905,21 @@ export function TaskAgentPane({
             {/* Button-confirm turns never show a bubble — durable turns hide
                 them too; the settled part card is the record. */}
             {confirmTarget(turn.userMessage) === null && <UserBubble text={turn.userMessage} turnId={turn.clientTurnId} />}
-            {turn.reply !== undefined && turn.reply !== "" && (
-              <TaskAgentBubble text={turn.reply} turnId={turn.clientTurnId} streamed />
-            )}
-            {turn.status !== "failed" && turn.progressLabel !== undefined && (
-              <PlannerActionLine label={turn.progressLabel} live={turn.status === "pending"} turnId={turn.clientTurnId} />
+            {/* The reply and the action line under it are one block, so the
+                reply's box can open the gap between them as its first line
+                lands (round 12). */}
+            {((turn.reply !== undefined && turn.reply !== "") || actionShown(turn)) && (
+              <div>
+                <TaskAgentBubble
+                  text={turn.reply ?? ""}
+                  turnId={turn.clientTurnId}
+                  streamed
+                  gapBelow={actionShown(turn)}
+                />
+                {actionShown(turn) && (
+                  <PlannerActionLine label={turn.progressLabel ?? ""} live={turn.status === "pending"} turnId={turn.clientTurnId} />
+                )}
+              </div>
             )}
             {turn.status === "failed" && (
               <Arrival arrivalId={`failed:${turn.clientTurnId}`} className="mr-8 border border-line bg-paper px-3.5 py-2.5">

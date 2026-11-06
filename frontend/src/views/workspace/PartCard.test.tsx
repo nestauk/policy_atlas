@@ -296,7 +296,7 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
 
     it("folds the stepper line away rather than dropping it", () => {
       const view = rerenderable(OPEN);
-      const stepper = screen.getByText(/Plan · step 1 of 1/).closest(".grid") as HTMLElement;
+      const stepper = screen.getByText(/Plan · decision 1 of 1/).closest(".grid") as HTMLElement;
       expect(stepper).toHaveClass("grid-rows-[1fr]");
       view.settle();
       expect(stepper).toHaveClass("grid-rows-[0fr]", "opacity-0");
@@ -319,7 +319,7 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
     it("holds still when it mounts settled (the history)", () => {
       rerenderable({ ...OPEN, confirmedOptionId: "confirm" });
       expect(screen.getByTestId("part-settled").firstElementChild).not.toHaveClass("anim-rise");
-      expect(screen.queryByText(/Plan · step/)).toBeNull();
+      expect(screen.queryByText(/Plan · decision/)).toBeNull();
     });
   });
 
@@ -387,7 +387,7 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
     const { unmount } = render(
       <PartCard part={proposal("scope")} state={OPEN} disabled={false} onSend={vi.fn()} steps={steps} />,
     );
-    expect(screen.getByTestId("plan-stepper")).toHaveTextContent(/^Question ✓, done\s*Plan · step 2 of 3 · Scope$/);
+    expect(screen.getByTestId("plan-stepper")).toHaveTextContent(/^Question ✓, done\s*Plan · decision 2 of 3 · Scope$/);
     unmount();
     render(
       <PartCard part={proposal("scope")} state={{ ...OPEN, live: false, answered: true }} disabled={false} onSend={vi.fn()} steps={steps} />,
@@ -425,6 +425,21 @@ describe("planSteps (task 058, N18)", () => {
     ]);
   });
 
+  // Owner, round 12: the line counts decisions, the question included.
+  it("counts the scoping question as the first decision", () => {
+    const turns = [turn(1, "opening", proposal("question"))];
+    render(
+      <PartCard
+        part={proposal("question")}
+        state={OPEN}
+        disabled={false}
+        onSend={vi.fn()}
+        steps={planSteps("options_scoping", turns, derivePartStates(turns))}
+      />,
+    );
+    expect(screen.getByTestId("plan-stepper")).toHaveTextContent("Plan · decision 1 of 5 · Question");
+  });
+
   it("renders the two scoping parts the planner proposes, by their names", () => {
     const turns = [turn(1, "opening", proposal("who_can_act")), turn(2, "next", proposal("your_options"))];
     const steps = planSteps("options_scoping", turns, derivePartStates(turns));
@@ -443,7 +458,7 @@ describe("planSteps (task 058, N18)", () => {
         steps={steps}
       />,
     );
-    expect(screen.getByTestId("plan-stepper")).toHaveTextContent("Plan · step 5 of 7 · Your options");
+    expect(screen.getByTestId("plan-stepper")).toHaveTextContent("Plan · decision 5 of 7 · Your options");
     expect(screen.getByRole("radio", { name: /I have some/ })).toBeInTheDocument();
   });
 

@@ -7,6 +7,7 @@ import { scrub } from "../../lib/scrub";
 import type { CheckInOut, StageEntry } from "../../store/types";
 import { Button } from "../../ui/brand/Button";
 import { Card } from "../../ui/brand/Card";
+import { Select } from "../../ui/brand/Select";
 import { cn } from "../../ui/brand/cn";
 import { LABEL_CLASS } from "../../ui/brand/label";
 import { useArrives } from "../../ui/motion/arrivals";
@@ -16,7 +17,6 @@ import { useEasedHeight } from "../streamPacing";
 import { CheckInBundle, type SectionRow, type ThemeRename } from "./CheckInBundle";
 import {
   BASELINE_GATE_KIND,
-  BASELINE_KEY_ASSUMPTION_ABSENT,
   STOP_THE_RUN,
   baselineGateCard,
   checkInHeadline,
@@ -329,15 +329,14 @@ function CheckInCardBody({
   // The options-scoping baseline gate (task 044, D12) is a decision, not a
   // steer: two server-supplied options end the walk one way or the other,
   // neither carries a delta, and there is nothing here to compile free text
-  // into. Its card is the gate's own read — the baseline's key assumption
-  // and the settings the walk ran from, risk appetite included (N19) — over
+  // into. Its card is the gate's own read — the settings the walk ran from,
+  // risk appetite included (N19) — over
   // the same `sendOption` path every other option uses. Questions about the
   // baseline go to the Task Agent composer, which stays open at this pause.
   // Since round 10 (finding 8) it reads as the other check-ins: the question
-  // as the title, the key assumption as a plain sentence, one facts line with
-  // the way to the baseline, no labels.
+  // as the title, one facts line with the way to the baseline, no labels;
+  // no key assumption (round 12, owner).
   if (checkIn.kind === BASELINE_GATE_KIND) {
-    const card = baselineGateCard(bundleRecord);
     const facts = baselineGateFacts(bundleRecord);
     return (
       <Card aria-live="polite" data-testid="check-in-card" className={cn(WAITING_CARD_CLASS, compact ? "p-4" : "p-5")}>
@@ -358,9 +357,6 @@ function CheckInCardBody({
             </Link>
           </p>
         )}
-        <p className={cn("mt-2 max-w-prose-measure text-body", card.keyAssumption === null ? "text-grey" : "text-ink")}>
-          {card.keyAssumption === null ? BASELINE_KEY_ASSUMPTION_ABSENT : scrub(card.keyAssumption)}
-        </p>
         <div role="radiogroup" aria-label={BASELINE_GATE_QUESTION} className="mt-3 flex max-w-prose-measure flex-col gap-1">
           {(checkIn.options ?? []).map((option) => (
             <ChoiceRow
@@ -478,26 +474,17 @@ function CheckInCardBody({
                     sendOption("change_mode", { new_mode: changeModeValue });
                   }}
                 >
-                  <label className="sr-only" htmlFor={`change-mode-${checkIn.check_in_id}`}>
-                    New steering mode
-                  </label>
-                  <select
+                  <Select
                     id={`change-mode-${checkIn.check_in_id}`}
+                    label="New steering mode"
                     value={changeModeValue}
-                    onChange={(event) => setChangeModeValue(event.target.value as ChangeModeValue)}
-                    className="min-w-0 flex-1 border border-line-2 bg-paper px-2.5 py-2 text-body"
-                  >
-                    {CHANGE_MODE_VALUES.flatMap((value) => {
+                    options={CHANGE_MODE_VALUES.flatMap((value) => {
                       const label = vocabLabel(STEERING_MODE_LABEL, value);
-                      return label === null
-                        ? []
-                        : [
-                            <option key={value} value={value}>
-                              {label}
-                            </option>,
-                          ];
+                      return label === null ? [] : [{ value, label }];
                     })}
-                  </select>
+                    onChange={setChangeModeValue}
+                    className="flex-1"
+                  />
                   <Button type="submit" size="sm" variant="outline" disabled={answer.isPending}>
                     Send
                   </Button>

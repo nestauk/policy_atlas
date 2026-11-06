@@ -262,6 +262,78 @@ describe("useFollowTail: the scroll rule", () => {
 // Round 9: the thread makes room by easing growth only, and it watches the
 // DOM (a MutationObserver), so it never resizes boxes inside another
 // observer's delivery.
+// Round 12: an eased box inside another (a streamed reply in the Task Agent
+// thread). The outer one measures a microtask later, so the inner one
+// absorbs the change first, and an outer ease that ends short of content
+// that grew under it carries on.
+describe("useEasedHeight — nested boxes", () => {
+  function Box({ lines }: { lines: number }) {
+    const [box, content] = useEasedHeight(true, true);
+    return (
+      <div ref={box}>
+        <div ref={content}>
+          {Array.from({ length: lines }, (_, index) => (
+            <p key={index}>line</p>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  it("carries on from where its ease stopped when the content grew under it", async () => {
+    let height = 20;
+    const made: { keyframes: unknown; animation: { cancel: () => void; onfinish: (() => void) | null } }[] = [];
+    const animate = vi.fn((keyframes: unknown) => {
+      const animation = { cancel: vi.fn(), onfinish: null as (() => void) | null };
+      made.push({ keyframes, animation });
+      return animation as unknown as Animation;
+    });
+    const restoreAnimate = HTMLElement.prototype.animate;
+    HTMLElement.prototype.animate = animate as unknown as typeof HTMLElement.prototype.animate;
+    const spy = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(() => height);
+    const view = render(<Box lines={1} />);
+    height = 40;
+    view.rerender(<Box lines={2} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(made.at(-1)?.keyframes).toEqual([{ height: "20px" }, { height: "40px" }]);
+    // A nested box opened while this one eased: no DOM change here.
+    height = 60;
+    act(() => made.at(-1)?.animation.onfinish?.());
+    expect(made.at(-1)?.keyframes).toEqual([{ height: "40px" }, { height: "60px" }]);
+    spy.mockRestore();
+    HTMLElement.prototype.animate = restoreAnimate;
+  });
+
+  it("leaves to a nested box a change it absorbed before this one measured", async () => {
+    let height = 20;
+    const animate = vi.fn(() => ({ cancel: vi.fn(), onfinish: null }) as unknown as Animation);
+    const restoreAnimate = HTMLElement.prototype.animate;
+    HTMLElement.prototype.animate = animate as unknown as typeof HTMLElement.prototype.animate;
+    const spy = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(() => height);
+    const view = render(<Box lines={1} />);
+    // A box nested inside mounts later, so its observer hears the change
+    // after this one; it starts its ease, holding the content at its old
+    // height, before this box measures.
+    const nested = new MutationObserver(() => {
+      height = 20;
+    });
+    nested.observe(view.container, { subtree: true, childList: true });
+    height = 40;
+    view.rerender(<Box lines={2} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(animate).not.toHaveBeenCalled();
+    nested.disconnect();
+    spy.mockRestore();
+    HTMLElement.prototype.animate = restoreAnimate;
+  });
+});
+
 describe("useEasedHeight — growth only", () => {
   function Box({ lines }: { lines: number }) {
     const [box, content] = useEasedHeight(true, true);

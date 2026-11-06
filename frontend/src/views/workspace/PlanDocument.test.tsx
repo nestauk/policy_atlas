@@ -868,8 +868,10 @@ describe("PlanDocument — options scoping (task 044)", () => {
     renderPlan();
     expect(screen.getByText("Risk appetite")).toBeInTheDocument();
     const select = screen.getByRole("combobox", { name: "Risk appetite" });
-    expect(select).toHaveValue("mostly_tried");
-    await userEvent.selectOptions(select, "open_to_untested");
+    expect(select).toHaveTextContent(/^Balanced:/);
+    // Round 12: the app's dropdown, not the browser's.
+    await userEvent.click(select);
+    await userEvent.click(screen.getByRole("option", { name: /^Ambitious:/ }));
     expect(patchMutate).toHaveBeenCalledWith({ scoping: { risk_appetite: "open_to_untested" } });
   });
 

@@ -28,7 +28,7 @@ function menu(overrides: Partial<Parameters<typeof NameMenu>[0]> = {}) {
         label="Task settings"
         fieldLabel="Task name"
         titleClassName="text-title"
-        after={<span>Options scoping</span>}
+        below={<span>Options scoping</span>}
         canEdit
         rename={rename}
         renameError="The task couldn't be renamed. Try again."
@@ -44,11 +44,25 @@ function menu(overrides: Partial<Parameters<typeof NameMenu>[0]> = {}) {
 
 // Owner, round 11: the header's name and its menu, shared by a task and a project.
 describe("NameMenu", () => {
-  it("shows the name, what follows it and a 40 px chevron control for the owner only", () => {
+  it("shows the name with a 40 px chevron control on its baseline, and the short line under it (round 12)", () => {
     menu();
-    expect(screen.getByText("NEET in Tower Hamlets")).toBeInTheDocument();
+    const name = screen.getByText("NEET in Tower Hamlets");
+    const chevron = screen.getByRole("button", { name: "Task settings" });
+    expect(chevron).toHaveClass("h-10", "w-10", "self-baseline");
+    // The chevron shares the name's line; the capability is on its own line under them.
+    expect(chevron.parentElement).toBe(name.parentElement);
+    expect(name.parentElement).toHaveClass("items-baseline");
+    const capability = screen.getByText("Options scoping");
+    expect(capability.parentElement).not.toBe(name.parentElement);
+    expect(name.parentElement?.nextElementSibling).toBe(capability);
+  });
+
+  it("keeps the short line under the field while renaming", async () => {
+    const { user } = menu();
+    await user.click(screen.getByRole("button", { name: "Task settings" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    expect(screen.getByRole("textbox", { name: "Task name" })).toBeInTheDocument();
     expect(screen.getByText("Options scoping")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Task settings" })).toHaveClass("h-10", "w-10");
   });
 
   it("shows a colleague the name alone", () => {

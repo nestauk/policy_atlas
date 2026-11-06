@@ -278,6 +278,10 @@ export function rowLiveness(
   return newest;
 }
 
+/** The longlist walk's steps whose done rows point at the longlist they
+ *  made (owner, round 12). */
+const LONGLIST_MADE = new Set(["suggest", "longlist", "option_profile", "constrain", "theme"]);
+
 /**
  * Where a row points (annex § The running card, kept by the trace).
  *
@@ -297,10 +301,15 @@ export function rowLiveness(
  * Evidence search's links, running and done: Searching and Screening to
  * Sources, Classifying to the landscape. Its step in progress from
  * Suggesting options on points at the longlist being built ("Longlist →",
- * the Result tab's default view); those steps' done rows point nowhere, the
- * ended card's "Read it →" being the walk's one destination. Reading the
- * linked search links nothing. The other scoping walks (an added option's
- * search, the shortlist walk) link nothing.
+ * the Result tab's default view). Done, the steps that make the longlist
+ * (Suggesting options, Clustering, Estimating, Applying your constraints,
+ * Grouping into themes) point at it too, and Shortlisting at the shortlist
+ * page ("Shortlist →"; owner, round 12, replacing round 11's done rows that
+ * pointed nowhere). Done, Searching for each option and Reading the
+ * abstracts point at the Sources table, where the option searches' results
+ * are (lead, round 12). Reading the linked search links nothing. The shortlist
+ * walk's done Shortlisting row points at the shortlist page as well; an
+ * added option's search links nothing.
  */
 export function rowLink(
   row: CardRow,
@@ -314,13 +323,23 @@ export function rowLink(
   const has = (stage: string) => row.stages.includes(stage);
   const searched = has("acquire") || has("screen");
   const classified = has("classify") || has("appraise");
-  if (kind === "longlist") {
+  if (kind === "longlist" || kind === "shortlist") {
     if (row.state !== "progress" && row.state !== "done") return null;
+    const longlist = { href: `/tasks/${taskId}/result`, label: "Longlist" };
+    if (row.state === "done" && has("shortlist")) {
+      return { href: `/tasks/${taskId}/result?view=shortlist`, label: "Shortlist" };
+    }
+    if (kind === "shortlist") return null;
     if (searched) return { href: `/tasks/${taskId}/sources/all`, label: "Sources" };
     if (classified) return { href: `/tasks/${taskId}/sources/landscape`, label: "Landscape" };
-    return row.state === "progress" && !row.stages.every((stage) => stage === "inherit")
-      ? { href: `/tasks/${taskId}/result`, label: "Longlist" }
-      : null;
+    if (row.state === "done") {
+      // The option searches' results are in the Sources table (lead, round 12).
+      if (has("option_searches") || has("extract_interventions")) {
+        return { href: `/tasks/${taskId}/sources/all`, label: "Sources" };
+      }
+      return row.stages.some((stage) => LONGLIST_MADE.has(stage)) ? longlist : null;
+    }
+    return row.stages.every((stage) => stage === "inherit") ? null : longlist;
   }
   if (kind !== "evidence_search" && kind !== "baseline") return null;
   const written =

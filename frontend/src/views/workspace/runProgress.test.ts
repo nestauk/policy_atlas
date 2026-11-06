@@ -244,16 +244,48 @@ describe("rowLink — where a done row points", () => {
     });
   });
 
-  it("links a longlist walk's other done rows nowhere: the ended card's Read it is the walk's one way on", () => {
+  // Owner, round 12: done scoping rows link where their output is.
+  it("links a longlist walk's done rows that make the longlist to it, and Shortlisting to the shortlist", () => {
     const rows = cardRows(
       [
+        entry({ stage: "inherit", label: "Reading the linked search", status: "completed" }),
         entry({ stage: "suggest", label: "Suggesting options", status: "completed" }),
+        entry({ stage: "option_searches", label: "Searching for each option", status: "completed" }),
+        entry({ stage: "extract_interventions", label: "Reading the abstracts", status: "completed" }),
+        entry({ stage: "longlist", label: "Clustering into options", status: "completed" }),
+        entry({ stage: "option_profile", label: "Estimating what each option would take", status: "completed" }),
+        entry({ stage: "constrain", label: "Applying your constraints", status: "completed" }),
         entry({ stage: "theme", label: "Grouping into themes", status: "completed" }),
+        entry({ stage: "shortlist", label: "Shortlisting", status: "completed" }),
       ],
       null,
       "succeeded",
     );
-    for (const row of rows) expect(rowLink(row, rows, "t1", "longlist", false)).toBeNull();
+    const link = (label: string) => rowLink(rows.find((row) => row.label === label)!, rows, "t1", "longlist", false);
+    for (const label of [
+      "Suggesting options",
+      "Clustering into options",
+      "Estimating what each option would take",
+      "Applying your constraints",
+      "Grouping into themes",
+    ]) {
+      expect(link(label)).toEqual({ href: "/tasks/t1/result", label: "Longlist" });
+    }
+    expect(link("Shortlisting")).toEqual({ href: "/tasks/t1/result?view=shortlist", label: "Shortlist" });
+    expect(link("Reading the linked search")).toBeNull();
+    // The option searches' results are in the Sources table (lead, round 12).
+    expect(link("Searching for each option")).toEqual({ href: "/tasks/t1/sources/all", label: "Sources" });
+    expect(link("Reading the abstracts")).toEqual({ href: "/tasks/t1/sources/all", label: "Sources" });
+  });
+
+  it("links the shortlist walk's done Shortlisting row to the shortlist, and nothing while it runs", () => {
+    const ended = cardRows([entry({ stage: "shortlist", label: "Shortlisting", status: "completed" })], null, "succeeded");
+    expect(rowLink(ended[0], ended, "t1", "shortlist", false)).toEqual({
+      href: "/tasks/t1/result?view=shortlist",
+      label: "Shortlist",
+    });
+    const running = cardRows([entry({ stage: "shortlist", label: "Shortlisting", status: "started" })], null, "running");
+    expect(rowLink(running[0], running, "t1", "shortlist", false)).toBeNull();
   });
 
   it("maps the baseline walk as an Evidence search, its Writing row to the baseline (round 10, D4)", () => {

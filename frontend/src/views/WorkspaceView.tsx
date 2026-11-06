@@ -40,7 +40,11 @@ export function WorkspaceView() {
   // A task_agent id in the URL (a deep link, or the overlay's own selection
   // carried over) reads as the Task Agent: the pane renders the Task's
   // task_agent thread, never one lineage on its own.
-  const onTaskAgent = activeConversationId === null || isTaskAgentConversation(activeConversationId, rows);
+  // Closed Task Agent conversations count too (round 12): a walk that ends
+  // closes the open one, and the URL may still name it.
+  const taskAgentRows = useConversations(taskId, { kind: "task_agent" }).data?.data ?? [];
+  const onTaskAgent =
+    activeConversationId === null || isTaskAgentConversation(activeConversationId, [...rows, ...taskAgentRows]);
   const chatId = onTaskAgent ? null : activeConversationId;
   const sectionTitles = (artefact.data?.sections ?? []).map((section) => section.title);
   const chatsEnabled = useChatsEnabled(taskId);
