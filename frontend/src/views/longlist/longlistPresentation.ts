@@ -1,6 +1,7 @@
 import type { components } from "../../api/gen/types";
 import type { LiveTheme, RunStreamState } from "../../store";
 import { countOf } from "../../lib/vocabulary";
+import { evidenceTypeLabel } from "../../ui/brand/evidence";
 import { PROFILE_LINE_LABELS } from "../workspace/planVocabulary";
 
 /**
@@ -62,6 +63,29 @@ export function constraintLabel(text: string): string {
   return text.trim().replace(/[.。]+$/, "");
 }
 
+type ExclusionOut = components["schemas"]["ExclusionOut"];
+type OptionDocumentOut = components["schemas"]["OptionDocumentOut"];
+
+/**
+ * An excluded option's one line, on the row and the card (round 12, owner:
+ * "Breaks your decision" was unclear). The user's own exclusion reads "Set
+ * aside by you", a constraint's "Breaks "<constraint>"", then " · " and the
+ * reason when there is one.
+ *
+ * Args:
+ *   exclusion: Who excluded the option, the constraint and the reason.
+ *
+ * Returns:
+ *   The line, without a full stop of its own.
+ */
+export function exclusionLine(exclusion: Pick<ExclusionOut, "by" | "constraint" | "reason">): string {
+  const reason = (exclusion.reason ?? "").trim();
+  const constraint = constraintLabel(exclusion.constraint ?? "");
+  const byYou = exclusion.by === "user" || fold(constraint) === "your decision";
+  const head = byYou ? "Set aside by you" : constraint !== "" ? `Breaks "${constraint}"` : "";
+  return [head, reason].filter((part) => part !== "").join(" · ");
+}
+
 /** "a, b and c" */
 export function joinAnd(parts: readonly string[]): string {
   if (parts.length <= 1) return parts[0] ?? "";
@@ -74,6 +98,10 @@ export const ABSTRACTS_NOTE = "read from titles and abstracts only";
 /** The words for an option with no in-scope evidence, as plain text at the
  *  end of the row's meta line (round 10: no chip for a settled state). */
 export const NO_IN_SCOPE_WORDS = "No in-scope evidence";
+
+/** Under "Where it has been evaluated" when no document evaluated the
+ *  option (round 12, owner). */
+export const NOT_EVALUATED_LINE = "Not evaluated in any of these sources.";
 
 /**
  * A list row's one meta line (round 11, review finding 4; round 10's fixed
@@ -174,11 +202,10 @@ export function themeSummary(description: string): string {
  *  secondary types, or "Lever: none fits." when no type fits. The reason is a
  *  separate sentence under it. */
 export function leverLine(primary: string | null | undefined, secondary: string[] | undefined): string {
+  // One sentence with the lever nouns (round 12, owner): "Lever: regulation."
   if (primary == null) return "Lever: none fits.";
-  const also = (secondary ?? []).map((type) => capitalise(type));
-  return also.length > 0
-    ? `Lever: ${capitalise(primary)}, with ${also.join(" and ")}.`
-    : `Lever: ${capitalise(primary)}.`;
+  const also = (secondary ?? []).map(leverNoun);
+  return also.length > 0 ? `Lever: ${leverNoun(primary)}, with ${joinAnd(also)}.` : `Lever: ${leverNoun(primary)}.`;
 }
 
 /** A lever group's definition (task 046, AM19): the definition of the
@@ -205,11 +232,27 @@ export const READ_FROM_ABSTRACTS = "Read from titles and abstracts";
 
 type LonglistCountsOut = components["schemas"]["LonglistCountsOut"];
 
+/** The distinct lever types among the included options (round 12): an
+ *  option with no lever adds none. */
+export function leverCount(
+  options: readonly Pick<OptionSummaryOut, "state" | "primary_lever_type">[] | null | undefined,
+): number {
+  const levers = new Set<string>();
+  for (const option of options ?? []) {
+    if (option.state !== "excluded" && option.primary_lever_type != null) levers.add(option.primary_lever_type);
+  }
+  return levers.size;
+}
+
 /** The counts line under the longlist title (task 046, amendment 4, R83), as parts:
- *  "40 options in 12 themes", then " · 3 excluded" only when some are (the view
- *  links it in list mode), then " · 2 with no in-scope evidence" only when some
- *  are. One source of the words. */
-export function countsParts(counts: LonglistCountsOut): {
+ *  "40 options in 12 themes and 3 levers" (round 12, owner: the levers are
+ *  counted too), then " · 3 excluded" only when some are (the view links it
+ *  in list mode), then " · 2 with no in-scope evidence" only when some are.
+ *  One source of the words. */
+export function countsParts(
+  counts: LonglistCountsOut,
+  levers = 0,
+): {
   head: string;
   excluded: string | null;
   noInScope: string | null;
@@ -217,17 +260,21 @@ export function countsParts(counts: LonglistCountsOut): {
   return {
     // No theme count before the theme step has run (or when it wrote none):
     // "in 0 themes" would read as a result (review of task 046, 2026-10-12).
-    head:
-      countOf(counts.options, "option", "options") +
-      (counts.themes > 0 ? ` in ${countOf(counts.themes, "theme", "themes")}` : ""),
+    head: (() => {
+      const spans = [
+        ...(counts.themes > 0 ? [countOf(counts.themes, "theme", "themes")] : []),
+        ...(levers > 0 ? [countOf(levers, "lever", "levers")] : []),
+      ];
+      return countOf(counts.options, "option", "options") + (spans.length > 0 ? ` in ${spans.join(" and ")}` : "");
+    })(),
     excluded: counts.excluded > 0 ? `${counts.excluded} excluded` : null,
     noInScope: counts.no_in_scope > 0 ? `${counts.no_in_scope} with no in-scope evidence` : null,
   };
 }
 
 /** The counts line as one string: the excluded part only when K > 0 (R83). */
-export function countsLine(counts: LonglistCountsOut): string {
-  const { head, excluded, noInScope } = countsParts(counts);
+export function countsLine(counts: LonglistCountsOut, levers = 0): string {
+  const { head, excluded, noInScope } = countsParts(counts, levers);
   return [head, excluded, noInScope].filter((part): part is string => part !== null).join(" · ");
 }
 
@@ -289,6 +336,306 @@ export const GRID_COLUMN_LINES: readonly (ProfileLineKey | "ambition")[] = [
   "potential_impact",
 ];
 
+/** Which way a marked line leans for the reader: "hard" asks more of
+ *  them (it costs more, takes longer), "easy" asks less or gives more. */
+type ProfileSide = "hard" | "easy";
+
+/**
+ * The words for "What it could take" when it is shut (round 12, owner): one
+ * phrase per line and marked level. A hard phrase follows "will" ("take
+ * longer to set up"); an easy one stands as its own clause after "but"
+ * ("delivery is simpler"). The lead adjusts the words here.
+ */
+export const PROFILE_SENTENCE_PHRASES: Record<
+  Exclude<ProfileLineKey, "who_decides" | "dependencies" | "potential_impact">,
+  Record<Mark, { side: ProfileSide; words: string }>
+> = {
+  cost: { more: { side: "hard", words: "cost more" }, less: { side: "easy", words: "it costs less" } },
+  time_to_set_up: {
+    more: { side: "hard", words: "take longer to set up" },
+    less: { side: "easy", words: "it is quick to set up" },
+  },
+  time_to_effect: {
+    more: { side: "hard", words: "take longer to show results" },
+    less: { side: "easy", words: "it shows results sooner" },
+  },
+  workforce: {
+    more: { side: "hard", words: "have high workforce requirements" },
+    less: { side: "easy", words: "it needs few staff" },
+  },
+  coordination: {
+    more: { side: "hard", words: "need more coordination" },
+    less: { side: "easy", words: "it needs less coordination" },
+  },
+  delivery_complexity: {
+    more: { side: "hard", words: "be complex to deliver" },
+    less: { side: "easy", words: "delivery is simpler" },
+  },
+};
+
+/** The sentence always opens with the ambition and the potential impact,
+ *  middle or not (round 12, owner): "This is a moderate option with average
+ *  potential impact". The middle is the null mark. */
+export const AMBITION_WORDS: Record<Mark | "middle", { article: string; word: string }> = {
+  more: { article: "an", word: "ambitious" },
+  middle: { article: "a", word: "moderate-ambition" },
+  less: { article: "a", word: "modest" },
+};
+export const IMPACT_PHRASES: Record<Mark | "middle", string> = {
+  more: "high potential impact",
+  middle: "average potential impact",
+  less: "lower potential impact",
+};
+
+/** The close when every other line is in the middle (round 12, owner). */
+export const OTHERS_MIDDLE_TAIL = ", and average on cost, time, workforce, coordination and delivery.";
+
+/** One run of the sentence: the takeaways are strong (round 12, owner). */
+export type SentencePart = { text: string; strong: boolean };
+
+/** Runs joined as "a", "a and b", "a, b and c", each phrase strong. */
+function joinStrong(phrases: readonly string[]): SentencePart[] {
+  const parts: SentencePart[] = [];
+  phrases.forEach((phrase, index) => {
+    if (index > 0) parts.push({ text: index === phrases.length - 1 ? " and " : ", ", strong: false });
+    parts.push({ text: phrase, strong: true });
+  });
+  return parts;
+}
+
+/**
+ * The one sentence that stands for "What it could take" while it is shut
+ * (round 12, owner), as runs, the takeaways strong. It always opens with
+ * the ambition and the potential impact ("This is an ambitious option with
+ * high potential impact"); then the other lines not in the middle: the
+ * harder ones after " that will ", joined with "and", then ", but " and the
+ * easier ones; every other line in the middle closes it with "and average on
+ * cost, time, workforce, coordination and delivery". A line the profile does
+ * not carry is left out; a missing impact reads as average.
+ *
+ * Args:
+ *   ambition: The ambition's mark; null or undefined is the middle.
+ *   lines: The profile's lines that are present, each with its mark (null is the middle).
+ *
+ * Returns:
+ *   The runs, the last ending in a full stop.
+ */
+export function profileSentenceParts(
+  ambition: Mark | null | undefined,
+  lines: readonly { key: string; mark: Mark | null }[],
+): SentencePart[] {
+  const ambitionWords = AMBITION_WORDS[ambition ?? "middle"];
+  const impact = lines.find((line) => line.key === "potential_impact")?.mark ?? null;
+  const opening: SentencePart[] = [
+    { text: `This is ${ambitionWords.article} `, strong: false },
+    { text: ambitionWords.word, strong: true },
+    { text: " option with ", strong: false },
+    { text: IMPACT_PHRASES[impact ?? "middle"], strong: true },
+  ];
+  const hard: string[] = [];
+  const easy: string[] = [];
+  for (const { key, mark } of lines) {
+    if (mark === null) continue;
+    const phrase = (PROFILE_SENTENCE_PHRASES as Record<string, Record<Mark, { side: ProfileSide; words: string }>>)[key]?.[mark];
+    if (phrase === undefined) continue;
+    (phrase.side === "hard" ? hard : easy).push(phrase.words);
+  }
+  const stop: SentencePart = { text: ".", strong: false };
+  if (hard.length > 0) {
+    return [
+      ...opening,
+      { text: " that will ", strong: false },
+      ...joinStrong(hard),
+      ...(easy.length > 0 ? [{ text: ", but ", strong: false }, ...joinStrong(easy)] : []),
+      stop,
+    ];
+  }
+  if (easy.length > 0) return [...opening, { text: ", and ", strong: false }, ...joinStrong(easy), stop];
+  return [...opening, { text: OTHERS_MIDDLE_TAIL, strong: false }];
+}
+
+/** The sentence as plain text (its runs joined). */
+export function profileSentence(
+  ambition: Mark | null | undefined,
+  lines: readonly { key: string; mark: Mark | null }[],
+): string {
+  return profileSentenceParts(ambition, lines)
+    .map((part) => part.text)
+    .join("");
+}
+
+/** A phrase as it reads after a word mid-sentence: its first letter lowered
+ *  unless it starts an acronym ("Sustained employment" → "sustained
+ *  employment", "NEET rate" stays). */
+export function midSentence(phrase: string): string {
+  const [first, second] = [phrase.charAt(0), phrase.charAt(1)];
+  return second !== "" && second === second.toLowerCase() && second !== second.toUpperCase()
+    ? first.toLowerCase() + phrase.slice(1)
+    : phrase;
+}
+
+/**
+ * A document's facts under its reference on the option card (round 12,
+ * owner): two lines at most. The first says where and how: "Evaluated in
+ * the United Kingdom · Randomised or quasi-experimental study" ("Described
+ * in …" when the document only describes the option; the place alone when
+ * none is given), then " · also found as N other records" when it was
+ * folded from others. The second, only when there is one, the outcome:
+ * "Measures <outcome>".
+ *
+ * Args:
+ *   document: The document as the option read gives it.
+ *
+ * Returns:
+ *   The lines in order; empty when it carries no fact.
+ */
+export function documentFactLines(
+  document: Pick<OptionDocumentOut, "role" | "place" | "evidence_type" | "measured" | "records_count" | "tried_on_kind">,
+): string[] {
+  const first: string[] = [];
+  const place = documentPlaceLabel(document.place);
+  if (place !== null) {
+    const realPlace = place === document.place;
+    const verb = document.role === "evaluated" ? "Evaluated" : "Described";
+    first.push(realPlace ? `${verb} in ${countryWithArticle(place)}` : capitalise(place));
+  }
+  if (document.evidence_type != null && document.evidence_type.trim() !== "") {
+    const design = evidenceTypeLabel(document.evidence_type);
+    first.push(first.length === 0 ? capitalise(design) : design);
+  }
+  const others = document.records_count - 1;
+  if (others > 0) first.push(`also found as ${countOf(others, "other record", "other records")}`);
+  const lines = first.length > 0 ? [first.join(" · ")] : [];
+  // Whom it targeted, on its own line (round 12, owner): the plan's own
+  // target-unit words when the study's subjects fold into it, else the
+  // folded kind.
+  if (document.tried_on_kind != null && document.tried_on_kind.trim() !== "") {
+    lines.push(`Targeted ${document.tried_on_kind.trim()}`);
+  }
+  // An evaluation measures its outcome; a document that only describes the
+  // option discusses it (round 12, owner).
+  if (document.measured != null && document.measured.trim() !== "") {
+    lines.push(`${document.role === "evaluated" ? "Measures" : "Discusses"} ${midSentence(document.measured.trim())}`);
+  }
+  return lines;
+}
+
+/** One plan outcome's coverage in the option's documents (round 12, owner). */
+export type OutcomeCoverage = { outcome: string; measured: number; discussed: number };
+
+/**
+ * How the option's documents cover the plan's outcomes (round 12, owner): for
+ * each outcome, in the plan's order, the evaluating documents whose outcome
+ * tag names it (measured) and the others that name it (discussed). The same
+ * data the documents' facts read (`measured` and `role`), matched with case
+ * and spacing folded.
+ *
+ * Args:
+ *   outcomes: The plan's outcomes, in order.
+ *   documents: The option's documents.
+ *
+ * Returns:
+ *   One entry per outcome.
+ */
+export function outcomeCoverage(
+  outcomes: readonly string[],
+  documents: readonly Pick<OptionDocumentOut, "role" | "measured">[],
+): OutcomeCoverage[] {
+  return outcomes.map((outcome) => {
+    const naming = documents.filter((document) => document.measured != null && fold(document.measured) === fold(outcome));
+    const measured = naming.filter((document) => document.role === "evaluated").length;
+    return { outcome, measured, discussed: naming.length - measured };
+  });
+}
+
+/** An outcome's coverage in words: "Measured in 2 · discussed in 1", a part
+ *  with none left out, or "Not covered". */
+export function outcomeCoverageWords({ measured, discussed }: Pick<OutcomeCoverage, "measured" | "discussed">): string {
+  const parts = [
+    ...(measured > 0 ? [`Measured in ${measured}`] : []),
+    ...(discussed > 0 ? [`${measured > 0 ? "discussed" : "Discussed"} in ${discussed}`] : []),
+  ];
+  return parts.length > 0 ? parts.join(" · ") : "Not covered";
+}
+
+/** The plan's target in the option's documents (round 12, owner). */
+export type TargetCoverage = {
+  unit: string;
+  /** Documents whose target is the plan's unit. */
+  targeted: number;
+  /** Documents whose target is known. */
+  known: number;
+};
+
+/**
+ * How many of the option's documents target the plan's target unit directly
+ * (round 12, owner): those whose target is the unit (the read gives the
+ * plan's own words when a study's subjects fold into it), out of those whose
+ * target is known.
+ *
+ * Args:
+ *   unit: The plan's target-unit words, as the user wrote them.
+ *   documents: The option's documents.
+ *
+ * Returns:
+ *   The unit and the two counts.
+ */
+export function targetCoverage(unit: string, documents: readonly Pick<OptionDocumentOut, "tried_on_kind">[]): TargetCoverage {
+  const known = documents.filter((document) => (document.tried_on_kind ?? "").trim() !== "");
+  const targeted = known.filter((document) => fold(document.tried_on_kind ?? "") === fold(unit)).length;
+  return { unit, targeted, known: known.length };
+}
+
+/** The target row's value (round 12, owner): "Directly targeted in 3", or
+ *  "Not directly targeted" when none is. */
+export function targetCoverageWords({ targeted }: Pick<TargetCoverage, "targeted">): string {
+  return targeted > 0 ? `Directly targeted in ${targeted}` : "Not directly targeted";
+}
+
+/** The names said before "and k more" in How it works. */
+const ACTS_ON_SHOWN = 6;
+
+/**
+ * Whom the option acts on, as runs for How it works (round 12, owner): the
+ * model's own call on the option's setting (the profile's `acts_on`), not
+ * the documents' targets. "Acts on **food outlets**, **parents** and
+ * **councils**.", the names strong as the setting's; " and k more" only
+ * beyond six; none when the profile names none.
+ *
+ * Args:
+ *   names: The profile's `acts_on`, in its order.
+ *
+ * Returns:
+ *   The runs; empty when there are no names.
+ */
+export function actsOnParts(names: readonly string[] | undefined): SentencePart[] {
+  const given = (names ?? []).map((name) => name.trim()).filter((name) => name !== "");
+  if (given.length === 0) return [];
+  const shown = given.slice(0, ACTS_ON_SHOWN);
+  const rest = given.length - shown.length;
+  const lead: SentencePart = { text: "Acts on ", strong: false };
+  const stop: SentencePart = { text: ".", strong: false };
+  if (rest === 0) return [lead, ...joinStrong(shown), stop];
+  const listed: SentencePart[] = [];
+  shown.forEach((name, index) => {
+    if (index > 0) listed.push({ text: ", ", strong: false });
+    listed.push({ text: name, strong: true });
+  });
+  return [lead, ...listed, { text: ` and ${rest} more`, strong: false }, stop];
+}
+
+/** The documents disclosure's words (round 12, owner): closed, the count
+ *  and its groups, "Show 6 documents · 2 evaluated it · 4 describe it" (a
+ *  group with none left out); open, "Hide documents". */
+export function documentsToggleWords(open: boolean, evaluated: number, describing: number): string {
+  if (open) return "Hide documents";
+  return [
+    `Show ${countOf(evaluated + describing, "document", "documents")}`,
+    ...(evaluated > 0 ? [`${evaluated} evaluated it`] : []),
+    ...(describing > 0 ? [countOf(describing, "describes it", "describe it")] : []),
+  ].join(" · ");
+}
+
 /** A marked level word (round 10, lead ruling on finding 7): one Navy look
  *  for both directions, the word itself saying which way ("Quicker",
  *  "Higher"), after a 6 px Navy square; no tint, so no colour reads as good
@@ -324,12 +671,6 @@ export const MIDDLE_WORD = "Middle";
 
 /** The ids of the three built-in checks among an option's judgements. */
 export const BUILT_IN_CHECK_IDS: readonly string[] = ["relevant", "distinct", "in_scope"];
-
-/** Whether the option's design picked this plan outcome (case and spacing folded). */
-export function servesOutcome(served: readonly string[] | undefined, outcome: string): boolean {
-  const key = outcome.trim().toLowerCase();
-  return (served ?? []).some((name) => name.trim().toLowerCase() === key);
-}
 
 type EvaluatedCountryOut = components["schemas"]["EvaluatedCountryOut"];
 type JudgementOut = components["schemas"]["JudgementOut"];
@@ -402,20 +743,6 @@ export function evidenceSignal(
   return parts.join(" · ");
 }
 
-const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
-
-/** The one line that stands for "Your outcomes" when no evaluation measured any (R79). */
-export function noOutcomeMeasuredLine(outcomes: number): string {
-  if (outcomes === 1) return "No evaluation measured any of your outcome.";
-  const count = outcomes >= 2 && outcomes <= 10 ? NUMBER_WORDS[outcomes] : String(outcomes);
-  return `No evaluation measured any of your ${count} outcomes.`;
-}
-
-/** An outcome's count on its "Your outcomes" line (R79): "11 evaluations". */
-export function outcomeCountLabel(evaluated: number): string {
-  return countOf(evaluated, "evaluation", "evaluations");
-}
-
 /** The words after "Delivered" for each setting kind (R77); other kinds read "in {plural}". */
 const SETTING_PHRASES: Record<string, string> = {
   home: "at home",
@@ -449,6 +776,40 @@ export function settingPhrase(kind: string): string {
 export function deliveredLeadIn(settings: readonly string[] | undefined): string {
   const phrases = (settings ?? []).filter((kind) => kind.trim() !== "").map(settingPhrase);
   return phrases.length === 0 ? "It typically involves:" : `Delivered ${joinAnd(phrases)}. It typically involves:`;
+}
+
+/** The lead-in as runs, the setting's words strong (round 12, owner):
+ *  "Delivered **in jobcentres and in community centres**. It typically
+ *  involves:", the groups it acts on between them when there are any. */
+export function deliveredLeadInParts(
+  settings: readonly string[] | undefined,
+  actsOn: readonly SentencePart[] = [],
+): SentencePart[] {
+  const phrases = (settings ?? []).filter((kind) => kind.trim() !== "").map(settingPhrase);
+  const delivered: SentencePart[] =
+    phrases.length === 0
+      ? []
+      : [
+          { text: "Delivered ", strong: false },
+          { text: joinAnd(phrases), strong: true },
+          { text: ". ", strong: false },
+        ];
+  // The groups it acts on follow the setting (round 12, owner).
+  const acts: SentencePart[] = actsOn.length === 0 ? [] : [...actsOn, { text: " ", strong: false }];
+  return [...delivered, ...acts, { text: "It typically involves:", strong: false }];
+}
+
+/** The lever sentence as runs, the lever nouns strong (round 12, owner):
+ *  "Lever: **regulation**, with **services**." */
+export function leverLineParts(primary: string | null | undefined, secondary: string[] | undefined): SentencePart[] {
+  if (primary == null) return [{ text: "Lever: none fits.", strong: false }];
+  const also = (secondary ?? []).map(leverNoun);
+  return [
+    { text: "Lever: ", strong: false },
+    { text: leverNoun(primary), strong: true },
+    ...(also.length > 0 ? [{ text: ", with ", strong: false }, ...joinStrong(also)] : []),
+    { text: ".", strong: false },
+  ];
 }
 
 /** One line of the notices under the description (R78; round 10: a word in
@@ -521,20 +882,6 @@ export const MATURITY_WORDS: Record<MaturityOut["rung"], string> = {
   evaluated: "Evaluated",
   reviewed: "Evaluated, including a review",
 };
-
-/** The rung line: the rung word, then ` · {design mix}` when there is one,
- *  then each modifier as ` · {modifier}`. "most recent evaluation before
- *  {year}" is the current year minus `MATURITY_RECENT_YEARS` and shows only when the newest
- *  evaluation is stale. `null` maturity (a longlist written before the rung
- *  existed) gives `null`: nothing new to show. */
-export function maturityLine(maturity: MaturityOut | null | undefined, now: Date = new Date()): string | null {
-  if (maturity == null) return null;
-  const parts: string[] = [MATURITY_WORDS[maturity.rung]];
-  if (maturity.design_mix !== "") parts.push(maturity.design_mix);
-  if (maturity.none_in_your_setting) parts.push("none in your setting");
-  if (maturity.stale) parts.push(`most recent evaluation before ${now.getFullYear() - MATURITY_RECENT_YEARS}`);
-  return parts.join(" · ");
-}
 
 /** The shortlist row's evidence footing in plain words (owner, 2026-10-27:
  *  the rung line read as jargon): the rung's words, then ", not in {Where}"
@@ -839,11 +1186,16 @@ export function buildingLayout(
   const excluded = all.filter((row) => excludedIds.has(row.id));
 
   const byLever = byLeverThenName(longlist?.lever_types ?? []);
+  // The shortlisted rows lead each group (round 12, owner), the rest after
+  // them in the list's own order.
   const sorted = (members: BuildingRow[]) =>
-    [...members].sort((a, b) =>
-      a.summary !== null && b.summary !== null
-        ? byLever(a.summary, b.summary)
-        : Number(a.summary === null) - Number(b.summary === null) || a.name.localeCompare(b.name),
+    shortlistedFirst(
+      [...members].sort((a, b) =>
+        a.summary !== null && b.summary !== null
+          ? byLever(a.summary, b.summary)
+          : Number(a.summary === null) - Number(b.summary === null) || a.name.localeCompare(b.name),
+      ),
+      (row) => row.shortlisted,
     );
   // A theme's key is its name's, so a heading the theming step named keeps
   // its place (and does not rise again) when the read brings the theme.
@@ -895,6 +1247,21 @@ export function buildingLayout(
 export function layoutSignature(layout: BuildingLayout): string {
   const groups = layout.groups.map((group) => `${group.key}:${group.rows.map((row) => row.key).join(",")}`);
   return `${groups.join("|")}#${layout.excluded.map((row) => row.key).join(",")}`;
+}
+
+/**
+ * The longlist's one order within a group or a grid cell (round 12, owner):
+ * the shortlisted first, then the rest, each keeping the order it came in.
+ *
+ * Args:
+ *   items: The group's or cell's rows in their own order.
+ *   held: Whether a row is on the shortlist.
+ *
+ * Returns:
+ *   A new array, the held rows first; the input is not changed.
+ */
+export function shortlistedFirst<T>(items: readonly T[], held: (item: T) => boolean): T[] {
+  return [...items.filter(held), ...items.filter((item) => !held(item))];
 }
 
 /** Whether the option holds a place (a pick or one added by you); a

@@ -1,10 +1,17 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mockLonglist } from "../../mock/fixtures";
 import { LonglistGrid } from "./LonglistGrid";
+import { PublicViewProvider } from "../publicView";
+
+/** Chooses a line from the Columns dropdown. */
+async function pickColumn(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(screen.getByRole("combobox", { name: "Columns" }));
+  await user.click(screen.getByRole("option", { name }));
+}
 import * as queries from "../../api/queries";
 import * as mutations from "../../api/mutations";
 
@@ -61,12 +68,17 @@ describe("LonglistGrid", () => {
     ]);
   });
 
-  // R41: a labelled native select with the eight lines that carry a mark.
-  it("offers a labelled Columns chooser with the eight lines, Ambition by default", () => {
+  // R41: a labelled chooser with the eight lines that carry a mark; round 12:
+  // the app's dropdown, not the browser's.
+  it("offers a labelled Columns chooser with the eight lines, Ambition by default", async () => {
+    const user = userEvent.setup();
     renderGrid();
     const chooser = screen.getByRole("combobox", { name: "Columns" });
-    expect(chooser).toHaveValue("ambition");
-    expect(within(chooser).getAllByRole("option").map((option) => option.textContent)).toEqual([
+    expect(chooser.tagName).toBe("BUTTON");
+    expect(chooser).toHaveTextContent("Ambition");
+    await user.click(chooser);
+    const list = screen.getByRole("listbox", { name: "Columns" });
+    expect(within(list).getAllByRole("option").map((option) => option.textContent)).toEqual([
       "Ambition",
       "Cost",
       "Time to set up",
@@ -81,7 +93,7 @@ describe("LonglistGrid", () => {
   it("re-columns the grid on the chosen line and places options by their mark", async () => {
     const user = userEvent.setup();
     renderGrid(true);
-    await user.selectOptions(screen.getByRole("combobox", { name: "Columns" }), "cost");
+    await pickColumn(user, "Cost");
     const heads = screen.getAllByRole("columnheader").map((header) => header.textContent);
     expect(heads).toEqual(["Lever type", "Cheaper", "Middle", "Costlier", "Untagged"]);
     // The sanctions regime is marked cheaper; mentoring has no cost mark, so Middle.
@@ -92,7 +104,7 @@ describe("LonglistGrid", () => {
     expect(cellIndex("National sanctions regime")).toBe(heads.indexOf("Cheaper"));
     expect(cellIndex("School-based mentoring")).toBe(heads.indexOf("Middle"));
     expect(cellIndex("Youth guarantee")).toBe(heads.indexOf("Untagged"));
-    await user.selectOptions(screen.getByRole("combobox", { name: "Columns" }), "delivery_complexity");
+    await pickColumn(user, "Delivery complexity");
     expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toContain("More complex");
   });
 
@@ -100,7 +112,7 @@ describe("LonglistGrid", () => {
   it("columns the grid on Potential impact and places options by its mark", async () => {
     const user = userEvent.setup();
     renderGrid(true);
-    await user.selectOptions(screen.getByRole("combobox", { name: "Columns" }), "potential_impact");
+    await pickColumn(user, "Potential impact");
     const heads = screen.getAllByRole("columnheader").map((header) => header.textContent);
     expect(heads).toEqual(["Lever type", "Lower", "Middle", "Higher", "Untagged"]);
     const cellIndex = (name: string) => {
@@ -165,7 +177,8 @@ describe("LonglistGrid", () => {
     const excludedLink = screen.getByRole("link", { name: "National sanctions regime" });
     expect(excludedLink).toHaveClass("text-grey");
     const excludedCell = excludedLink.closest("td") as HTMLElement;
-    expect(within(excludedCell).getByText("Excluded")).toHaveClass("text-red");
+    // Round 12 (owner): the grey alone marks an excluded option, no red word.
+    expect(within(excludedCell).getByText("Excluded")).toHaveClass("text-grey");
 
     const noInScopeLink = screen.getByRole("link", { name: "School-based mentoring" });
     const noInScopeCell = noInScopeLink.closest("td") as HTMLElement;
@@ -196,6 +209,66 @@ describe("LonglistGrid", () => {
     expect(screen.getAllByRole("link", { name: /Crowd option/ })).toHaveLength(9);
     await user.click(screen.getByRole("button", { name: "Show fewer −" }));
     expect(screen.getAllByRole("link", { name: /Crowd option/ })).toHaveLength(4);
+  });
+
+  // Round 12 (owner): the shortlisted lead each cell, the rest after them in
+  // their own order; a toggle moves the tile with the regroup's View Transition.
+  it("puts the shortlisted first in a cell and moves a tile there when it is shortlisted", () => {
+    const start = vi.fn((update: () => void) => {
+      update();
+      return { finished: Promise.resolve() };
+    });
+    Object.defineProperty(document, "startViewTransition", { value: start, configurable: true, writable: true });
+    try {
+      const make = (held: number[]) => {
+        const longlist = mockLonglist();
+        const base = longlist.options![0];
+        longlist.options = Array.from({ length: 4 }, (_, i) => ({
+          ...base,
+          option_id: `cell-${i}`,
+          name: `Cell option ${i}`,
+          state: "included" as const,
+          primary_lever_type: "regulate",
+          ambition: "less" as const,
+          profile: { lines: [], settings: [] },
+          shortlist: held.includes(i) ? { state: "proposed" as const, reason: "Because." } : null,
+        }));
+        return longlist;
+      };
+      const tree = (longlist: ReturnType<typeof mockLonglist>) => (
+        <MemoryRouter>
+          <LonglistGrid taskId={TASK_ID} longlist={longlist} showExcluded={false} />
+        </MemoryRouter>
+      );
+      renderGrid();
+      cleanup();
+      const { rerender } = render(tree(make([2])));
+      const names = () => screen.getAllByRole("link", { name: /Cell option/ }).map((link) => link.textContent);
+      expect(names()).toEqual(["Cell option 2", "Cell option 0", "Cell option 1", "Cell option 3"]);
+      expect(start).not.toHaveBeenCalled();
+      rerender(tree(make([2, 3])));
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(names()).toEqual(["Cell option 2", "Cell option 3", "Cell option 0", "Cell option 1"]);
+    } finally {
+      Reflect.deleteProperty(document, "startViewTransition");
+    }
+  });
+
+  // Round 12 (owner): the public link reads the grid; a held tile says
+  // "Shortlisted" in words and no tile carries a toggle; Columns stays.
+  it("is read-only on the public link: no shortlist toggle on a tile, the held word kept", () => {
+    renderGrid();
+    cleanup();
+    render(
+      <PublicViewProvider value>
+        <MemoryRouter>
+          <LonglistGrid taskId={TASK_ID} longlist={mockLonglist()} showExcluded={false} />
+        </MemoryRouter>
+      </PublicViewProvider>,
+    );
+    expect(screen.queryByRole("button", { name: /shortlist/i })).not.toBeInTheDocument();
+    expect(screen.getAllByText("Shortlisted").length).toBeGreaterThan(0);
+    expect(screen.getByRole("combobox", { name: "Columns" })).toBeInTheDocument();
   });
 
   it("folds a cell of five options to four, with +1 more", () => {

@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MOCK_OPTION_ID_NO_IN_SCOPE, mockLonglist } from "../../mock/fixtures";
 import { ShortlistView } from "./ShortlistView";
+import { PublicViewProvider } from "../publicView";
+import { RISK_APPETITE_LABELS } from "../workspace/planVocabulary";
 import {
   MOCK_OPTION_ID_ADDED_BY_YOU,
   MOCK_OPTION_ID_PACKAGE,
@@ -84,15 +86,21 @@ function renderShortlist(
   const longlist = mockLonglist();
   adjust?.(longlist);
   return render(
-    <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/result`]}>
-      <Routes>
-        <Route path="/tasks/:taskId/result" element={<ShortlistView taskId={TASK_ID} longlist={longlist} />} />
-      </Routes>
-    </MemoryRouter>,
+    <PublicViewProvider value={publicLink}>
+      <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/result`]}>
+        <Routes>
+          <Route path="/tasks/:taskId/result" element={<ShortlistView taskId={TASK_ID} longlist={longlist} />} />
+        </Routes>
+      </MemoryRouter>
+    </PublicViewProvider>,
   );
 }
 
+/** Whether the next render sits in the public link's view (round 12). */
+let publicLink = false;
+
 beforeEach(() => {
+  publicLink = false;
   shortlistMutate.mockClear();
   unshortlistMutate.mockClear();
   suggestMutate.mockClear();
@@ -125,7 +133,7 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     // The longlist's header (round 10): "Shortlist", the question under it.
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Shortlist$/);
     expect(screen.getByText("How can we cut the NEET rate?")).toHaveClass("text-grey");
-    expect(screen.getByRole("combobox", { name: "Risk appetite" })).toHaveValue("mostly_tried");
+    expect(screen.getByRole("combobox", { name: "Risk appetite" })).toHaveTextContent(RISK_APPETITE_LABELS.mostly_tried);
     // No baseline line and no facts strip (owner, 2026-10-27).
     expect(screen.queryByText(/situation today/)).not.toBeInTheDocument();
     const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
@@ -165,9 +173,24 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     expect(unshortlistMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_PACKAGE }, expect.anything());
   });
 
+  // Round 12 (owner): the public link reads the shortlist and changes nothing.
+  it("is read-only on the public link: the appetite as words, no toggle, Suggest more, Add more or Assess", async () => {
+    publicLink = true;
+    await openShortlist();
+    expect(screen.queryByRole("combobox", { name: "Risk appetite" })).not.toBeInTheDocument();
+    expect(screen.getByText(RISK_APPETITE_LABELS.mostly_tried)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /shortlist/i })).not.toBeInTheDocument();
+    expect(screen.getAllByText("Shortlisted").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Suggest more" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Add more from the longlist" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Assess/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Suggest more asks/)).not.toBeInTheDocument();
+  });
+
   it("patches the plan with the appetite only when the select changes", async () => {
     const user = await openShortlist();
-    await user.selectOptions(screen.getByRole("combobox", { name: "Risk appetite" }), "tried_only");
+    await user.click(screen.getByRole("combobox", { name: "Risk appetite" }));
+    await user.click(screen.getByRole("option", { name: RISK_APPETITE_LABELS.tried_only }));
     expect(patchMutate).toHaveBeenCalledWith({ scoping: { risk_appetite: "tried_only" } });
   });
 

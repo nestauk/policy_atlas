@@ -7,6 +7,7 @@ import { BanIcon, UndoIcon, iconButtonClass } from "../../ui/brand/icons";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { Tooltip, TooltipProvider } from "../../ui/radix/Tooltip";
+import { usePublicView } from "../publicView";
 import { ADD_TO_SHORTLIST_WORDS, REMOVE_FROM_SHORTLIST_WORDS, SHORTLISTED_WORD } from "./longlistPresentation";
 
 /** The reason and add-option inputs share one look. */
@@ -236,8 +237,19 @@ export function ShortlistToggle({
   className?: string;
 }) {
   const [swapped, setSwapped] = useState(false);
+  const publicView = usePublicView();
   const holds = holdsPlace(shortlistState);
   if (!holds && excluded) return null;
+  // The public link is read-only (round 12): the held place as a plain
+  // word after its check, nothing for an option that holds none.
+  if (publicView) {
+    return holds ? (
+      <span className={cn(TOGGLE_LAYER_CLASS, "text-meta text-navy", className)}>
+        <CheckMark />
+        {SHORTLISTED_WORD}
+      </span>
+    ) : null;
+  }
   const disabled = (holds ? actions.unshortlistPending : actions.shortlistPending) || actions.walkActive;
   const removing = holds && swapped && !disabled;
   return (
@@ -284,6 +296,9 @@ export function OptionActionButton({
   excluded: boolean;
   className?: string;
 }) {
+  // Read-only on the public link (round 12): no Exclude, no Include again.
+  const publicView = usePublicView();
+  if (publicView) return null;
   if (excluded) {
     return (
       <IconAction

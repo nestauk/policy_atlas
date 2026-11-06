@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { Link } from "react-router";
 
 import type { components } from "../../api/gen/types";
@@ -7,7 +7,7 @@ import { scrub } from "../../lib/scrub";
 import { useTask } from "../../api/queries";
 import { SECTION_EXPAND_LINK_CLASS } from "../ArtefactOutline";
 import { isRunActive } from "../scopingActivity";
-import { FieldSelect } from "./FieldSelect";
+import { Select } from "../../ui/brand/Select";
 import { ShortlistToggle, useOptionActions } from "./optionActions";
 import {
   GRID_COLUMN_LINES,
@@ -16,8 +16,11 @@ import {
   MIDDLE_WORD,
   NO_IN_SCOPE_WORDS,
   capitalise,
+  holdsPlace,
   joinAnd,
+  shortlistedFirst,
 } from "./longlistPresentation";
+import { useRegroupTransition } from "./regroupTransition";
 
 type LonglistOut = components["schemas"]["LonglistOut"];
 type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
@@ -57,8 +60,15 @@ export function LonglistGrid({
 }) {
   const task = useTask(taskId);
   const actions = useOptionActions(taskId, isRunActive(task.data));
-  const options = (longlist.options ?? []).filter(
-    (option) => showExcluded || option.state !== "excluded",
+  const listed = useMemo(
+    () => (longlist.options ?? []).filter((option) => showExcluded || option.state !== "excluded"),
+    [longlist.options, showExcluded],
+  );
+  // A toggle that moves a tile to the head of its cell moves it (round 12):
+  // the signature is each option's place on the shortlist and its state.
+  const options = useRegroupTransition(
+    listed,
+    listed.map((option) => `${option.option_id}:${holdsPlace(option) ? 1 : 0}:${option.state}`).join(","),
   );
   const [openCells, setOpenCells] = useState<Set<string>>(new Set());
   const toggleCell = (key: string) =>
@@ -104,13 +114,17 @@ export function LonglistGrid({
     leverKey: string,
     columnKey: string,
   ): OptionSummaryOut[] =>
-    options.filter((option) => {
-      const matchesLever =
-        leverKey === NONE_FITS_KEY
-          ? option.primary_lever_type == null
-          : option.primary_lever_type === leverKey;
-      return matchesLever && columnOf(option) === columnKey;
-    });
+    // The shortlisted lead each cell (round 12, owner), as on the list.
+    shortlistedFirst(
+      options.filter((option) => {
+        const matchesLever =
+          leverKey === NONE_FITS_KEY
+            ? option.primary_lever_type == null
+            : option.primary_lever_type === leverKey;
+        return matchesLever && columnOf(option) === columnKey;
+      }),
+      holdsPlace,
+    );
 
   return (
     <div>
@@ -121,18 +135,14 @@ export function LonglistGrid({
         >
           Columns
         </label>
-        <FieldSelect
+        <Select
           id="longlist-grid-columns"
+          label="Columns"
           value={line}
-          onChange={(event) => setLine(event.target.value as GridLine)}
+          options={GRID_COLUMN_LINES.map((key) => ({ value: key, label: LINE_NAMES[key] }))}
+          onChange={setLine}
           className="w-64"
-        >
-          {GRID_COLUMN_LINES.map((key) => (
-            <option key={key} value={key}>
-              {LINE_NAMES[key]}
-            </option>
-          ))}
-        </FieldSelect>
+        />
       </div>
       <div className="-mx-6 overflow-x-auto px-6">
         <table className="w-full min-w-[640px] table-fixed border-collapse text-left">
@@ -173,7 +183,12 @@ export function LonglistGrid({
                       <td key={columnKey} className="px-3 py-3 text-body">
                         <ul className="space-y-2">
                           {shown.map((option) => (
-                            <li key={option.option_id} className="leading-snug">
+                            <li
+                              key={option.option_id}
+                              // Named for the move when a toggle reorders the cell (`longlist.css`).
+                              className="longlist-row leading-snug"
+                              style={{ "--longlist-row": `opt-${option.option_id}` } as CSSProperties}
+                            >
                               <Link
                                 to={`/tasks/${taskId}/options/${option.option_id}`}
                                 className={cn(
@@ -186,7 +201,7 @@ export function LonglistGrid({
                               {(option.state === "excluded" || option.no_in_scope_evidence) && (
                                 <span className="mt-0.5 block text-meta">
                                   {option.state === "excluded" ? (
-                                    <span className="font-semibold text-red">Excluded</span>
+                                    <span className="text-grey">Excluded</span>
                                   ) : (
                                     <span className="text-grey">{NO_IN_SCOPE_WORDS}</span>
                                   )}

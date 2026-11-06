@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type ReactNode } from "react";
-import { flushSync } from "react-dom";
+import { useMemo, useState, useSyncExternalStore, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
 
 import type { components } from "../../api/gen/types";
@@ -13,7 +12,6 @@ import { Button } from "../../ui/brand/Button";
 import { StatusMark } from "../../ui/brand/Card";
 import { cn } from "../../ui/brand/cn";
 import { QUIET_CONTROL_CLASS } from "../../ui/brand/inlineActions";
-import { prefersReducedMotion } from "../../ui/motion/motion";
 import { useRunStream } from "../../store";
 import { REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
 import {
@@ -21,21 +19,25 @@ import {
   sectionAnchor,
   useExpandForPrint,
   useOpenWhenNavigated,
-  type SidebarEntry,
 } from "../ArtefactOutline";
 import { LABEL_CLASS } from "../../ui/brand/label";
 import { OutlineSwitch } from "../../ui/brand/OutlineSwitch";
 import { REPORT_TITLE_CLASS, ReportPage } from "../reportPage";
 import { isRunActive } from "../scopingActivity";
+import { InfoHint } from "./InfoHint";
+import { usePublicView } from "../publicView";
 import { LonglistGrid } from "./LonglistGrid";
+import { useRegroupTransition } from "./regroupTransition";
 import {
   READ_FROM_ABSTRACTS,
   buildingLayout,
   capitalise,
-  constraintLabel,
   countsParts,
+  exclusionLine,
+  leverCount,
   definitionSentence,
   layoutSignature,
+  shortlistedFirst,
   leverDefinitionFor,
   liveNamesOf,
   longlistTitle,
@@ -59,19 +61,18 @@ type GroupBy = "theme" | "lever";
 type Mode = "list" | "grid";
 type OptionActions = ReturnType<typeof useOptionActions>;
 
-/**
- * The finished longlist opens with its theme sections open (round 10, lead
- * ruling D1, reversing the owner's 2026-09-23 "open collapsed" for themes),
- * so its first screen shows options, not a wall of headings. One switch for
- * the owner to decide: `false` restores the collapsed themes. Excluded
- * options stay collapsed either way.
- */
-export const THEMES_OPEN_BY_DEFAULT = true;
-
 const GROUP_BY: { key: GroupBy; label: string }[] = [
   { key: "theme", label: "Theme" },
   { key: "lever", label: "Lever type" },
 ];
+
+/** The "i" beside Group by (round 12, owner): the two definitions, one line
+ *  each, nothing else. */
+export const GROUP_BY_INFO_LABEL = "What a theme and a lever are";
+export const GROUP_BY_INFO = [
+  "Theme: a group of options that work in a similar way.",
+  "Lever: the kind of action government takes.",
+] as const;
 
 const MODES: { key: Mode; label: string }[] = [
   { key: "list", label: "List" },
@@ -91,54 +92,6 @@ const RISE_DELAY_CLASSES = [
   "motion-safe:[animation-delay:180ms]",
   "motion-safe:[animation-delay:240ms]",
 ];
-
-/** The class `longlist.css` keys the regrouping's names on, set on the
- *  document only while a regrouping transition runs. */
-const REGROUPING_CLASS = "longlist-regrouping";
-
-type ViewTransitionStart = (update: () => void) => { finished: Promise<void> };
-
-/** The browser's View Transition, when it has one (not jsdom, not every browser). */
-function viewTransitionStart(): ViewTransitionStart | null {
-  const start = (document as Document & { startViewTransition?: ViewTransitionStart }).startViewTransition;
-  return typeof start === "function" ? start.bind(document) : null;
-}
-
-/**
- * The layout on screen, moving its rows when the grouping changes (round
- * 10, finding 2): rows that are already on screen keep their opacity and
- * travel to their new place over 300 ms on the strong ease-out (a View
- * Transition, each row named by its option), so a theme wave or an exclusion
- * never blanks the list. Any other change (a value landing) shows at once.
- * Without View Transitions, or under reduced motion, the list cuts to its
- * new order.
- *
- * Args:
- *   layout: The layout the reads give now (memoised on the reads).
- *
- * Returns:
- *   The layout to render.
- */
-function useRegroupTransition(layout: BuildingLayout): BuildingLayout {
-  const signature = layoutSignature(layout);
-  const [shown, setShown] = useState({ signature, layout });
-  // A value landing within the same grouping updates in place.
-  if (shown.signature === signature && shown.layout !== layout) setShown({ signature, layout });
-  useEffect(() => {
-    if (shown.signature === signature) return;
-    const commit = () => setShown({ signature, layout });
-    const start = viewTransitionStart();
-    if (start === null || prefersReducedMotion()) {
-      commit();
-      return;
-    }
-    const root = document.documentElement;
-    root.classList.add(REGROUPING_CLASS);
-    const transition = start(() => flushSync(commit));
-    void transition.finished.finally(() => root.classList.remove(REGROUPING_CLASS));
-  }, [signature, layout, shown.signature]);
-  return shown.signature === signature ? layout : shown.layout;
-}
 
 const WIDE_QUERY = "(min-width: 48rem)";
 
@@ -180,9 +133,10 @@ function arrivalKeys(layout: BuildingLayout): Set<string> {
 /**
  * A group of options on the list (round 11, review findings 3, 11 and 13): a
  * theme, a lever type or the excluded options. Its heading is the Label
- * style (uppercase, tracked, Grey) with the count beside it, holding the
- * disclosure button (the report's pattern, so it stays in the outline) and
- * the chevron with "Show" or "Hide" at every width; under it one Body Grey
+ * style (uppercase, tracked, Grey) holding the disclosure button (the
+ * report's pattern, so it stays in the outline): the name on the left, and
+ * at the line's right the count in Meta Grey, then the chevron with "Show"
+ * or "Hide" on the page's one right edge (round 12) at every width; under it one Body Grey
  * line, the group's description, open or shut (ruling 1: a collapsed header
  * carries its one-line takeaway); then the rows, 16 px apart. Opens when the
  * contents or a link points at it, and for print.
@@ -215,19 +169,22 @@ function GroupSection({
           type="button"
           aria-expanded={open}
           onClick={() => setOpen((value) => !value)}
-          className="group flex min-h-10 w-full cursor-pointer items-center gap-3 text-left"
+          className="group flex min-h-10 w-full cursor-pointer items-baseline gap-4 py-2 text-left"
         >
-          {/* The button resets text-transform (Tailwind's preflight), so the
-              title carries the Label's uppercase itself. */}
-          <span className="min-w-0 flex-1 uppercase">
-            {scrub(title)}
-            {count !== "" && (
-              <>
-                {" "}
-                <span className="ml-1 font-normal tabular-nums tracking-normal normal-case">{count}</span>
-              </>
-            )}
-          </span>
+          {/* The name on the left; the count, then the chevron with Show or
+              Hide, at the line's right (round 12, owner: every count and
+              control on the page on one right edge), so a shut group reads
+              as one line at every width. The button resets text-transform
+              (Tailwind's preflight), so the title carries the Label's
+              uppercase itself. */}
+          {/* The name in Navy, so a shut list reads (round 12, owner). */}
+          <span className="min-w-0 flex-1 uppercase text-navy">{scrub(title)}</span>
+          {count !== "" && " "}
+          {count !== "" && (
+            <span className="shrink-0 text-right text-meta font-normal tracking-normal normal-case text-grey">
+              {count}
+            </span>
+          )}
           <DisclosureWord open={open} className="normal-case tracking-normal" />
         </button>
       </h2>
@@ -325,14 +282,10 @@ function OptionRow({
               ))}
             </p>
           )}
-          {exclusion !== null && (
-            <p className="mt-0.5 max-w-[44em] text-meta text-ink">
-              <span className="font-semibold text-red">Excluded:</span>{" "}
-              {constraintLabel(exclusion.constraint ?? "") !== "" && (
-                <>breaks "{constraintLabel(scrub(exclusion.constraint ?? ""))}". </>
-              )}
-              {scrub(exclusion.reason ?? "")}
-            </p>
+          {/* Why it is excluded, at the meta line's size and colour: the
+              grey alone marks an excluded row (round 12, owner). */}
+          {exclusion !== null && exclusionLine(exclusion) !== "" && (
+            <p className="mt-0.5 max-w-[44em] text-meta text-grey">{scrub(exclusionLine(exclusion))}</p>
           )}
         </div>
         <div className="flex flex-none items-center gap-x-4 text-meta text-grey sm:-mt-1">
@@ -414,13 +367,19 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
   const stream = useRunStream(taskId);
   const addOption = useAddOption(taskId);
   const wide = useWideScreen();
+  // The public link reads the list; it adds nothing (round 12).
+  const publicView = usePublicView();
 
   const [chosenMode, setMode] = useState<Mode>("list");
   const [chosenGroupBy, setGroupBy] = useState<GroupBy>("theme");
   const [showExcludedInGrid, setShowExcludedInGrid] = useState(false);
   // "Show all" / "Hide all" (the report's words, round 10): the sections
-  // start as the switch above says and remount open or shut on a press.
-  const [allOpen, setAllOpen] = useState({ open: THEMES_OPEN_BY_DEFAULT, revision: 0 });
+  // remount open or shut on a press. The finished list opens with its
+  // groups shut, each heading with its count (round 12, owner, D1: "the
+  // groups should be collapsed by default"); while the walk builds it the
+  // groups stay open, since rows moving into their themes are the news, and
+  // the walk's end leaves them as the reader has them.
+  const [allOpen, setAllOpen] = useState({ open: building, revision: 0 });
   const [addText, setAddText] = useState("");
   // The grid is not offered on a phone, nor while the list is being built.
   const mode: Mode = building || !wide ? "list" : chosenMode;
@@ -447,7 +406,7 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
       excluded: listed(layout.excluded),
     };
   }, [optionRows, longlist, building, live]);
-  const layout = useRegroupTransition(computed);
+  const layout = useRegroupTransition(computed, layoutSignature(computed));
   // Only a list being built has arrivals; a finished list opens still.
   const [initialKeys] = useState(() => arrivalKeys(layout));
   const arrives = (key: string) => building && !initialKeys.has(key);
@@ -487,7 +446,10 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
   const byName = (a: BuildingRow, b: BuildingRow) => a.name.localeCompare(b.name);
   const byLever: Section[] = [
     ...leverTypes.map((lever) => {
-      const rows = includedRows.filter((row) => row.summary?.primary_lever_type === lever).sort(byName);
+      const rows = shortlistedFirst(
+        includedRows.filter((row) => row.summary?.primary_lever_type === lever).sort(byName),
+        (row) => row.shortlisted,
+      );
       return {
         key: lever,
         title: capitalise(lever),
@@ -504,7 +466,10 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
       key: "none-fits",
       title: "No lever fits",
       description: "Options that no lever type on the list names; each says what it does instead.",
-      rows: includedRows.filter((row) => row.summary?.primary_lever_type == null).sort(byName),
+      rows: shortlistedFirst(
+        includedRows.filter((row) => row.summary?.primary_lever_type == null).sort(byName),
+        (row) => row.shortlisted,
+      ),
     },
   ];
   // A theme the theming step has named shows its heading before any option
@@ -514,15 +479,6 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
     .map((group, index) => ({ ...group, id: group.title === null ? "options" : sectionAnchor(group.title, index) }));
   const titled = sections.some((section) => section.title !== null);
   const excludedRows = layout.excluded;
-
-  const entries: SidebarEntry[] =
-    mode !== "list" || !titled
-      ? []
-      : [
-          ...sections.flatMap((section) => (section.title === null ? [] : [{ id: section.id, title: section.title }])),
-          ...(excludedRows.length > 0 ? [{ id: EXCLUDED_ANCHOR, title: "Excluded" }] : []),
-          ...(building ? [] : [{ id: ADD_OPTION_ANCHOR, title: "Add an option" }]),
-        ];
 
   // A new grouping, or Show all / Hide all, remounts the sections.
   const sectionKey = (key: string) => `${groupBy}-${allOpen.revision}-${key}`;
@@ -543,7 +499,7 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
   );
 
   const question = scrub(longlistTitle(plan.data?.scoping, task.data?.name));
-  const counts = longlist === null ? null : countsParts(longlist.counts);
+  const counts = longlist === null ? null : countsParts(longlist.counts, leverCount(longlist.options));
   // The shortlist the reader is assembling, said in the count line (round
   // 11, review finding 2).
   const shortlisted = includedRows.filter((row) => row.shortlisted).length;
@@ -558,7 +514,10 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
   );
 
   return (
-    <ReportPage entries={entries} className={cn("longlist-paper", mode === "grid" && "md:max-w-[1180px]")}>
+    // No contents sidebar (round 12, owner): the list and the grid take the
+    // page's full content column, not the report's reading measure; a link
+    // to a group still opens it (`useOpenWhenNavigated`).
+    <ReportPage className="longlist-paper md:max-w-[1180px]">
       {/* The first screen is the title, the question, one count line and the
           options (round 11, review finding 1). */}
       <header className="mb-4">
@@ -588,13 +547,22 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
       </header>
 
       {/* One row of view controls (round 11, review finding 10): Group by on
-          the left; Show all and the list or grid switch on the right. */}
+          the left; the list or grid switch and Show all on the right; a Line
+          hairline above and below it, 12 px inside each (round 12, owner). */}
       {!building && (
-        <div className="print-hide mb-6 flex min-h-10 flex-wrap items-center justify-between gap-x-6 gap-y-2">
+        <div
+          data-testid="longlist-controls"
+          className="print-hide mb-6 flex min-h-10 flex-wrap items-center justify-between gap-x-6 gap-y-2 border-y border-line py-3"
+        >
           {mode === "list" ? (
             <div className="flex items-center gap-4">
               <span className="text-meta font-semibold text-grey">Group by</span>
               <OutlineSwitch label="Group by" choices={GROUP_BY} value={groupBy} onChange={setGroupBy} />
+              {/* What a theme and a lever are (round 12, owner); no intro
+                  sentence on the page. */}
+              <span className="-ml-2">
+                <InfoHint label={GROUP_BY_INFO_LABEL} note={GROUP_BY_INFO} />
+              </span>
             </div>
           ) : longlist !== null && longlist.counts.excluded > 0 ? (
             <button
@@ -608,9 +576,11 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
           ) : (
             <span />
           )}
-          <div className="flex items-center gap-6">
-            {mode === "list" && titled && showAll}
+          {/* Show all ends the row, on the right edge the group counts and
+              their Show / Hide share (round 12, owner). */}
+          <div className="ml-auto flex items-center gap-6">
             {wide && <OutlineSwitch label="View" choices={MODES} value={mode} onChange={setMode} />}
+            {mode === "list" && titled && showAll}
           </div>
         </div>
       )}
@@ -668,7 +638,7 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
           review finding 22). */}
       {counts !== null && <p className="mt-6 text-meta text-grey">{READ_FROM_ABSTRACTS}</p>}
 
-      {!building && (
+      {!building && !publicView && (
         <form id={ADD_OPTION_ANCHOR} onSubmit={handleAddOption} className="print-hide mt-8 border-t border-line pt-6">
           <label htmlFor="longlist-add-option" className={`block ${REPORT_SECTION_HEADING_CLASS}`}>
             Add an option

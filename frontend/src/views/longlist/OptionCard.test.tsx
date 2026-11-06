@@ -1,6 +1,6 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -11,6 +11,7 @@ import {
 } from "../../mock/fixtures";
 import { TooltipProvider } from "../../ui/radix/Tooltip";
 import { OptionCard } from "./OptionCard";
+import { PublicViewProvider } from "../publicView";
 import * as presentation from "./longlistPresentation";
 import * as queries from "../../api/queries";
 import * as mutations from "../../api/mutations";
@@ -18,6 +19,7 @@ import * as mutations from "../../api/mutations";
 vi.mock("../../api/queries", () => ({
   useTask: vi.fn(),
   useOption: vi.fn(),
+  usePlan: vi.fn(() => ({ data: undefined })),
 }));
 
 const excludeMutate = vi.fn();
@@ -26,12 +28,30 @@ const includeMutate = vi.fn();
 const shortlistMutate = vi.fn();
 const unshortlistMutate = vi.fn();
 
+// The dossier sheet is the report's; here a stand-in shows where it opens.
+vi.mock("./OptionDossier", () => ({
+  OptionDossier: ({ sourceId, optionId, onClose }: { sourceId: string; optionId: string; onClose: () => void }) => (
+    <div role="dialog" aria-label="Source dossier">
+      {sourceId} for {optionId}
+      <button type="button" onClick={onClose}>
+        Close the dossier
+      </button>
+    </div>
+  ),
+}));
+
 vi.mock("../../api/mutations", () => ({
   useOptionVerb: vi.fn(),
   useShortlistVerb: vi.fn(),
 }));
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
+
+/** Where the router is, for the dossier's in-place test. */
+function LocationProbe() {
+  const location = useLocation();
+  return <p data-testid="location">{`${location.pathname}${location.search}`}</p>;
+}
 
 function renderCard(optionId: string, overrides: Record<string, unknown> = {}) {
   vi.mocked(queries.useTask).mockReturnValue(
@@ -58,16 +78,34 @@ function renderCard(optionId: string, overrides: Record<string, unknown> = {}) {
   );
   return render(
     <TooltipProvider>
+      <PublicViewProvider value={publicLink}>
       <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/options/${optionId}`]}>
         <Routes>
-          <Route path="/tasks/:taskId/options/:optionId" element={<OptionCard />} />
+          <Route
+            path="/tasks/:taskId/options/:optionId"
+            element={
+              <>
+                <OptionCard />
+                <LocationProbe />
+              </>
+            }
+          />
         </Routes>
       </MemoryRouter>
+      </PublicViewProvider>
     </TooltipProvider>,
   );
 }
 
+/** Whether the next render sits in the public link's view (round 12). */
+let publicLink = false;
+
+/** A paragraph by its whole text, though bold runs split it (round 12). */
+const paragraph = (text: string) =>
+  screen.getByText((_, element) => element?.tagName === "P" && element.textContent === text);
+
 beforeEach(() => {
+  publicLink = false;
   excludeMutate.mockClear();
   includeMutate.mockClear();
   shortlistMutate.mockClear();
@@ -75,24 +113,13 @@ beforeEach(() => {
 });
 
 describe("OptionCard — shortlist (task 055)", () => {
-  it("shows the maturity rung line above the Evidence opener", () => {
+  // Round 12 (owner): the Sources subsection went, the standing with it.
+  it("shows no rung line on the card", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
-    expect(screen.getByText("Evaluated · 1 RCT, 2 observational")).toBeInTheDocument();
+    expect(screen.queryByText("Evaluated · 1 RCT, 2 observational")).not.toBeInTheDocument();
   });
 
-  it("shows both modifiers on the rung line", () => {
-    renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
-    expect(
-      screen.getByText(
-        `Evaluated · 2 observational · none in your setting · most recent evaluation before ${new Date().getFullYear() - 5}`,
-      ),
-    ).toBeInTheDocument();
-  });
 
-  it("shows no rung line for a card written before the rung existed", () => {
-    renderCard(MOCK_OPTION_ID_EXCLUDED, { maturity: null });
-    expect(screen.queryByText(/^Evaluated · /)).not.toBeInTheDocument();
-  });
 
   // Round 10 (finding 6): the state is a toggle in words, pressed on a place.
   it("shows Shortlisted, pressed, on a place, and pressing it gives the place up", async () => {
@@ -184,39 +211,81 @@ describe("OptionCard", () => {
   // Task 046, amendment 3 (§ 2.5): "Lever: <primary>, with <secondary>." and the reason under it.
   it("shows the lever line with its secondary types, the reason under it, and no 'also touches'", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
-    // Round 11 (item 4): the field's label in the one label style over its value.
-    const line = screen.getByText("Enforce existing powers, with Regulate.");
-    expect(line.previousElementSibling).toHaveTextContent(/^Lever$/);
-    expect(line.previousElementSibling).toHaveClass("text-meta", "text-grey");
-    expect(line.querySelector("strong")).toBeNull();
+    // Round 12 (owner): one sentence, no "Lever" eyebrow over it.
+    const line = paragraph("Lever: enforcement, with regulation.");
+    expect(line.previousElementSibling).toBeNull();
+    expect(screen.queryByText(/^Lever$/)).not.toBeInTheDocument();
+    // Only the lever nouns are strong (round 12, owner).
+    expect(Array.from(line.querySelectorAll("strong")).map((node) => node.textContent)).toEqual(["enforcement", "regulation"]);
     const reason = screen.getByText("The council withholds a benefit payment when a young person refuses an offer.");
     expect(line.compareDocumentPosition(reason) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByText(/also touches/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Primary lever type/)).not.toBeInTheDocument();
   });
 
+  // Round 12 (owner): the lever nouns and the delivery setting in Semibold
+  // Navy, the rest of each sentence regular.
+  it("bolds the lever nouns and the delivery setting's words", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED);
+    const lever = screen.getByText(/^Lever: /);
+    expect(Array.from(lever.querySelectorAll("strong")).map((node) => node.textContent)).toEqual(["enforcement", "regulation"]);
+    expect(lever.querySelector("strong")).toHaveClass("font-semibold", "text-navy");
+    const leadIn = screen.getByText(/^Delivered /);
+    // The mock profile names whom it acts on (round 12, the setting call).
+    expect(Array.from(leadIn.querySelectorAll("strong")).map((node) => node.textContent)).toEqual([
+      "in jobcentres and in secondary schools",
+      "young jobseekers",
+      "work coaches",
+      "councils",
+    ]);
+    expect(leadIn).toHaveTextContent(/It typically involves:$/);
+  });
+
+  // Round 12 (owner): whom it acts on is the model's call, in How it works.
+  it("says whom the option acts on from the profile, after the setting, the names strong", () => {
+    const profile = mockLonglistOptionCards[MOCK_OPTION_ID_EXCLUDED].profile;
+    renderCard(MOCK_OPTION_ID_EXCLUDED, { profile: { ...profile, acts_on: ["food outlets", "parents", "councils"] } });
+    const leadIn = paragraph("Delivered in jobcentres and in secondary schools. Acts on food outlets, parents and councils. It typically involves:");
+    expect(Array.from(leadIn.querySelectorAll("strong")).map((node) => node.textContent)).toEqual([
+      "in jobcentres and in secondary schools",
+      "food outlets",
+      "parents",
+      "councils",
+    ]);
+  });
+
+  it("says nothing about whom it acts on when the profile names none", () => {
+    const profile = mockLonglistOptionCards[MOCK_OPTION_ID_EXCLUDED].profile;
+    renderCard(MOCK_OPTION_ID_EXCLUDED, { profile: { ...profile, acts_on: [] } });
+    expect(screen.queryByText(/Acts on/)).not.toBeInTheDocument();
+  });
+
   it("shows the lever line with no 'with' part when there are no secondary types", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, { secondary_lever_types: [], lever_reason: null });
-    expect(screen.getByText("Enforce existing powers.")).toBeInTheDocument();
+    expect(paragraph("Lever: enforcement.")).toBeInTheDocument();
     expect(screen.queryByText(/, with /)).not.toBeInTheDocument();
   });
 
   it("joins two secondary types with 'and'", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, { secondary_lever_types: ["regulate", "provide a service"] });
-    expect(screen.getByText(/with Regulate and Provide a service\./)).toBeInTheDocument();
+    expect(screen.getByText((_, element) => element?.tagName === "P" && /with regulation and services\.$/.test(element.textContent ?? ""))).toBeInTheDocument();
   });
 
   // Round 11 (item 4): every sentence at Body, every label and secondary
   // line at Meta; no Lead on the card.
-  it("puts the card's sentences at Body and its secondary lines at Meta", () => {
+  // Round 12 (owner, item 28): the card reads at the report's scale: its
+  // sentences at the report's body (Lead from md, Body on a phone), its
+  // facts lines and labels at Meta, nothing smaller.
+  it("sets the card's sentences at the report's body and its secondary lines at Meta", () => {
     const { container } = renderCard(MOCK_OPTION_ID_EXCLUDED);
     const reason = screen.getByText("The council withholds a benefit payment when a young person refuses an offer.");
-    expect(reason.closest(".text-body")).not.toBeNull();
+    expect(reason.closest(".text-lead.max-md\\:text-body")).not.toBeNull();
     expect(reason).not.toHaveClass("text-meta");
-    expect(screen.getByText("A duty to withdraw benefits on refusal of an offer").closest(".text-body")).not.toBeNull();
+    expect(screen.getByText("A duty to withdraw benefits on refusal of an offer").closest(".text-lead")).not.toBeNull();
+    expect(screen.getByText(/^A statutory duty/)).toHaveClass("text-lead", "max-md:text-body");
     const header = screen.getByText(/^found in the evidence · part of/);
     expect(header).toHaveClass("text-meta");
-    expect(container.querySelector(".text-lead, .md\\:text-lead")).toBeNull();
+    expect(container.querySelector(".text-caption")).toBeNull();
   });
 
   // Task 046, amendment 3 (B13): no runner-up line (the field left the read model).
@@ -262,48 +331,47 @@ describe("OptionCard", () => {
 
   // The profile section: collapsed = the marked cells, then "Middle" said
   // once for the rest (round 10, lead ruling on finding 7).
-  it("opens 'What it would take' collapsed: the marked cells in order, then Middle once", () => {
+  // Round 12 (owner): shut, the profile is one sentence of the lines not in
+  // the middle; Evidence comes before it.
+  // Round 12 (owner): shut, the profile is one sentence of the lines not in
+  // the middle, the takeaways in Semibold Navy; Evidence comes before it.
+  it("opens 'What it could take' shut, as one sentence of the marked lines", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
     const at = (title: string) => headings.findIndex((text) => text?.startsWith(title));
-    expect(at("How it works")).toBeLessThan(at("What it would take"));
-    expect(at("What it would take")).toBeLessThan(at("Where it stands"));
-    const toggle = screen.getByRole("button", { name: /What it would take/ });
+    expect(at("How it works")).toBeLessThan(at("Evidence"));
+    expect(at("Evidence")).toBeLessThan(at("What it could take"));
+    const toggle = screen.getByRole("button", { name: /What it could take/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(toggle).toHaveTextContent("Policy Atlas's estimate");
+    expect(toggle).not.toHaveTextContent("Policy Atlas's estimate");
     const section = document.getElementById("what-it-would-take") as HTMLElement;
-    const cells = within(section).getAllByRole("listitem");
-    expect(cells.map((cell) => cell.textContent)).toEqual([
-      "AmbitionBigger",
-      "CostCheaper",
-      "Time to effectSlower",
-      "Coordination requirementsHigher",
-      "Potential impactHigher",
+    const sentence = within(section).getByText(/^This is an/);
+    expect(sentence).toHaveTextContent(
+      "This is an ambitious option with high potential impact that will take longer to show results and need more coordination, but it costs less.",
+    );
+    expect(Array.from(sentence.querySelectorAll("strong")).map((node) => node.textContent)).toEqual([
+      "ambitious",
+      "high potential impact",
+      "take longer to show results",
+      "need more coordination",
+      "it costs less",
     ]);
-    expect(within(section).getByText("Middle on 3 of 8")).toBeInTheDocument();
-    // One Navy look for both directions, the word saying which way; no tint.
-    const bigger = within(section).getByText("Bigger");
-    expect(bigger).toHaveClass("text-navy");
-    expect(bigger.className).not.toMatch(/aqua|violet/);
-    expect(within(cells[1]).getByText("Cheaper").className).toBe(bigger.className);
-    expect(within(section).queryByText("Who decides")).not.toBeInTheDocument();
-    expect(within(section).queryByText("Dependencies")).not.toBeInTheDocument();
-    expect(within(section).queryByRole("link")).not.toBeInTheDocument();
-    expect(within(section).queryByText(/Costs are mostly staff time/)).not.toBeInTheDocument();
+    expect(sentence.querySelector("strong")).toHaveClass("font-semibold", "text-navy");
+    expect(within(section).queryByText(/^Middle on /)).not.toBeInTheDocument();
+    expect(within(section).queryByRole("table")).not.toBeInTheDocument();
   });
 
-  it("counts an ambition with no mark in the Middle summary rather than a cell of its own", () => {
+  it("calls an unmarked ambition moderate-ambition", () => {
     renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
     const section = document.getElementById("what-it-would-take") as HTMLElement;
-    const cells = within(section).queryAllByRole("listitem").map((cell) => cell.textContent ?? "");
-    expect(cells.some((text) => text.startsWith("Ambition"))).toBe(false);
-    expect(within(section).getByText(/^Middle on \d of 8$|^No line stands out$/)).toBeInTheDocument();
+    expect(section).toHaveTextContent(/This is a moderate-ambition option with /);
+    expect(within(section).getByText(/\.$/)).toHaveClass("text-lead", "max-md:text-body");
   });
 
   it("shows a table after a click on the heading, Ambition first, then the nine lines", async () => {
     const user = userEvent.setup();
     renderCard(MOCK_OPTION_ID_EXCLUDED);
-    await user.click(screen.getByRole("button", { name: /What it would take/ }));
+    await user.click(screen.getByRole("button", { name: /What it could take/ }));
     const section = document.getElementById("what-it-would-take") as HTMLElement;
     const rows = within(section).getAllByRole("row");
     expect(rows).toHaveLength(10);
@@ -326,7 +394,25 @@ describe("OptionCard", () => {
     expect(rows[1]).toHaveTextContent("Cheaper");
     expect(rows[2]).toHaveTextContent("Middle");
     expect(within(section).getByText("Costs are mostly staff time; no capital spend is reported.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /What it would take/ })).toHaveTextContent("Policy Atlas's estimate");
+    expect(screen.getByRole("button", { name: /What it could take/ })).not.toHaveTextContent("Policy Atlas's estimate");
+  });
+
+  // Round 12 (owner): "Policy Atlas's estimate" is an info hover after the
+  // heading, a focusable glyph outside the heading's button, whose tooltip
+  // says what the block is.
+  it("puts the estimate behind a focusable i after the heading, its tooltip saying what it is", async () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED);
+    const info = screen.getByRole("button", { name: "Policy Atlas's estimate" });
+    const heading = screen.getByRole("button", { name: /What it could take/ });
+    expect(heading.contains(info)).toBe(false);
+    expect(info.closest("h2")).toBeNull();
+    expect(info.querySelector("svg")).not.toBeNull();
+    expect(info).toHaveClass("size-6");
+    act(() => info.focus());
+    expect(info).toHaveFocus();
+    expect(
+      (await screen.findAllByText("Policy Atlas's estimate from the abstracts. Not an assessment.")).length,
+    ).toBeGreaterThan(0);
   });
 
   it("shows eight lines for a profile written before Potential impact existed", async () => {
@@ -335,7 +421,7 @@ describe("OptionCard", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
       profile: { ...profile, lines: profile!.lines.filter((line) => line.key !== "potential_impact") },
     });
-    await user.click(screen.getByRole("button", { name: /What it would take/ }));
+    await user.click(screen.getByRole("button", { name: /What it could take/ }));
     const section = document.getElementById("what-it-would-take") as HTMLElement;
     expect(within(section).getAllByRole("row")).toHaveLength(9);
     expect(within(section).queryByRole("rowheader", { name: "Potential impact" })).not.toBeInTheDocument();
@@ -346,12 +432,12 @@ describe("OptionCard", () => {
   it("words the Potential impact mark: Higher for more, Middle for none", async () => {
     const user = userEvent.setup();
     renderCard(MOCK_OPTION_ID_EXCLUDED);
-    await user.click(screen.getByRole("button", { name: /What it would take/ }));
+    await user.click(screen.getByRole("button", { name: /What it could take/ }));
     const marked = screen.getByRole("rowheader", { name: "Potential impact" }).closest("tr") as HTMLElement;
     expect(within(marked).getByText("Higher")).toBeInTheDocument();
     cleanup();
     renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
-    await user.click(screen.getByRole("button", { name: /What it would take/ }));
+    await user.click(screen.getByRole("button", { name: /What it could take/ }));
     const unmarked = screen.getByRole("rowheader", { name: "Potential impact" }).closest("tr") as HTMLElement;
     expect(within(unmarked).getByText("Middle")).toBeInTheDocument();
   });
@@ -360,7 +446,7 @@ describe("OptionCard", () => {
   it("puts the authority word and sentence on the Who decides row", async () => {
     const user = userEvent.setup();
     renderCard(MOCK_OPTION_ID_EXCLUDED);
-    await user.click(screen.getByRole("button", { name: /What it would take/ }));
+    await user.click(screen.getByRole("button", { name: /What it could take/ }));
     const who = screen.getByRole("rowheader", { name: "Who decides" }).closest("tr") as HTMLElement;
     expect(within(who).getByText("Needs action by the Department for Work and Pensions")).toBeInTheDocument();
     // The line's own sentence follows the word; the constrain reason stays off the card (22b).
@@ -377,20 +463,20 @@ describe("OptionCard", () => {
     const first = renderCard(MOCK_OPTION_ID_EXCLUDED, {
       authority: { label: "needs_action_by", body: null, reason: "It is national." },
     });
-    await user.click(screen.getByRole("button", { name: /What it would take/ }));
+    await user.click(screen.getByRole("button", { name: /What it could take/ }));
     expect(screen.getByText("Needs action by another body")).toBeInTheDocument();
     // The row keeps the line's own sentence; the constrain reason stays off the card (22b).
     expect(screen.queryByText("It is national.")).not.toBeInTheDocument();
     first.unmount();
     renderCard(MOCK_OPTION_ID_EXCLUDED, { authority: null });
-    await user.click(screen.getByRole("button", { name: /What it would take/ }));
+    await user.click(screen.getByRole("button", { name: /What it could take/ }));
     const who = screen.getByRole("rowheader", { name: "Who decides" }).closest("tr") as HTMLElement;
     expect(who).not.toHaveTextContent(/Needs action by|Within your power|Unclear who can act/);
   });
 
-  it("has no 'What it would take' section for an option with no profile", () => {
+  it("has no 'What it could take' section for an option with no profile", () => {
     renderCard(MOCK_OPTION_ID_ADDED_BY_YOU);
-    expect(screen.queryByRole("button", { name: /What it would take/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /What it could take/ })).not.toBeInTheDocument();
     expect(document.getElementById("what-it-would-take")).toBeNull();
   });
 
@@ -412,44 +498,147 @@ describe("OptionCard", () => {
     records_count: 1,
     ...extra,
   });
-  const evidenceOf = (id: string) => mockLonglistOptionCards[id].evidence;
   const evidenceSection = () => document.getElementById("evidence-base") as HTMLElement;
 
-  it("shows the evidence signal under the grey line, in the rich form", () => {
+  // Round 12 (owner: the one-line signal "looks messy and doesn't read
+  // well"): one short sentence per fact, in a fixed order, nothing bold.
+  it("has no Sources lines: the places, then the documents' disclosure, and no outcomes line", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
-    const signal = screen.getByText(
-      "3 documents evaluated it · 3 more describe it · Evaluated in the United Kingdom · Measures 1 of your 2 outcomes",
-    );
-    const grey = screen.getByText(/^found in the evidence · part of/);
-    expect(grey.compareDocumentPosition(signal) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // The counts are said once: no opener repeats them in the Evidence section (C7).
-    expect(within(evidenceSection()).queryByText(/^Evaluated in \d+ documents\./)).not.toBeInTheDocument();
+    const section = evidenceSection();
+    expect(within(section).queryByText("Sources")).not.toBeInTheDocument();
+    expect(within(section).queryByText(/^Measures/)).not.toBeInTheDocument();
+    const places = within(section).getByText("Where it has been evaluated");
+    const toggle = within(section).getByRole("button", { name: /^Show \d+ documents?( · |$)/ });
+    expect(places.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("shows the evidence signal in its no-evaluation, no-place and no-document forms", () => {
-    const first = renderCard(MOCK_OPTION_ID_EXCLUDED, { evaluated_count: 0, document_count: 3 });
-    expect(screen.getByText("No evaluations, 3 documents describe it")).toBeInTheDocument();
-    first.unmount();
-    const second = renderCard(MOCK_OPTION_ID_EXCLUDED, { evaluated_countries: [], outcomes_evaluated: 0 });
-    expect(
-      screen.getByText(
-        "3 documents evaluated it · 3 more describe it · No evaluation gives a place · Measures none of your outcomes",
-      ),
-    ).toBeInTheDocument();
-    second.unmount();
+  // Round 12 (owner): the short blocks are always open; only What it could
+  // take and the documents fold.
+  it("has no Show / Hide on How it works or Evidence, only on What it could take and the documents", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED);
+    for (const name of ["How it works", "Evidence"]) {
+      const heading = screen.getByRole("heading", { level: 2, name });
+      expect(within(heading).queryByRole("button")).toBeNull();
+    }
+    expect(screen.queryByRole("button", { name: /^How it works/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Evidence/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /What it could take/ })).toHaveAttribute("aria-expanded", "false");
+    expect(within(evidenceSection()).getByRole("button", { name: /^Show \d+ documents/ })).toBeInTheDocument();
+  });
+
+  // Round 12 (owner): Your outcomes, one ruled row per plan outcome, between
+  // the places and the documents; absent when the plan has none.
+  it("shows Your target and outcomes as a ruled table, measured and discussed, or Not covered in grey", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, {
+      documents: [
+        doc(1, "evaluated", { measured: "NEET rate at 6 months" }),
+        doc(2, "evaluated", { measured: "NEET rate at 6 months" }),
+        doc(3, "described", { measured: "NEET rate at 6 months" }),
+      ],
+      evidence: {
+        outcome_counts: {
+          evaluating_documents: 2,
+          by_outcome: [
+            { outcome: "NEET rate at 6 months", documents: 3, evaluated: 2 },
+            { outcome: "Wellbeing", documents: 0, evaluated: 0 },
+          ],
+        },
+      },
+    });
+    const section = evidenceSection();
+    const heading = within(section).getByRole("heading", { level: 3, name: "Your target and outcomes" });
+    const table = within(section).getByRole("table", { name: "Your target and outcomes" });
+    const rows = within(table).getAllByRole("row");
+    expect(rows.map((row) => row.textContent)).toEqual([
+      "NEET rate at 6 monthsMeasured in 2 · discussed in 1",
+      "WellbeingNot covered",
+    ]);
+    expect(within(rows[1]).getByText("Not covered")).toHaveClass("text-grey");
+    expect(within(rows[0]).getByText("Measured in 2 · discussed in 1")).toHaveClass("text-right");
+    const places = within(section).getByRole("heading", { level: 3, name: "Where it has been evaluated" });
+    const toggle = within(section).getByRole("button", { name: /^Show \d+ documents/ });
+    expect(places.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(heading.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  // Round 12 (owner): the plan's target is the table's first row.
+  it("puts the plan's target first: directly targeted in N, or not directly targeted", () => {
+    vi.mocked(queries.usePlan).mockReturnValue({
+      data: { scoping: { target_unit: { text: "16-24 year-olds", origin: "from_your_question" } } },
+    } as unknown as ReturnType<typeof queries.usePlan>);
+    try {
+      const first = renderCard(MOCK_OPTION_ID_EXCLUDED, {
+        documents: [
+          doc(1, "evaluated", { tried_on_kind: "16-24 year-olds" }),
+          doc(2, "evaluated", { tried_on_kind: "16-24 year-olds" }),
+          doc(3, "described", { tried_on_kind: "parents" }),
+          doc(4, "described", { tried_on_kind: "employers" }),
+          doc(5, "described", { tried_on_kind: "employers" }),
+        ],
+        evidence: { outcome_counts: { evaluating_documents: 0, by_outcome: [] } },
+      });
+      const rows = within(screen.getByRole("table", { name: "Your target and outcomes" })).getAllByRole("row");
+      expect(rows[0]).toHaveTextContent(/^16-24 year-oldsDirectly targeted in 2$/);
+      first.unmount();
+      renderCard(MOCK_OPTION_ID_EXCLUDED, {
+        documents: [doc(1, "evaluated", { tried_on_kind: "adults" })],
+        evidence: { outcome_counts: { evaluating_documents: 0, by_outcome: [] } },
+      });
+      const value = within(screen.getByRole("table", { name: "Your target and outcomes" })).getByText("Not directly targeted");
+      expect(value).toHaveClass("text-grey");
+      // No document's target known: the target row is left out.
+      cleanup();
+      renderCard(MOCK_OPTION_ID_EXCLUDED, {
+        documents: [doc(1, "evaluated", { tried_on_kind: null, measured: "NEET rate at 6 months" })],
+      });
+      const table = screen.getByRole("table", { name: "Your target and outcomes" });
+      expect(within(table).queryByText("16-24 year-olds")).not.toBeInTheDocument();
+      expect(within(table).queryByText(/directly targeted/i)).not.toBeInTheDocument();
+    } finally {
+      vi.mocked(queries.usePlan).mockReturnValue({ data: undefined } as unknown as ReturnType<typeof queries.usePlan>);
+    }
+  });
+
+  it("has no table when the plan has no target unit and no outcomes", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, { evidence: { outcome_counts: { evaluating_documents: 0, by_outcome: [] } } });
+    expect(within(evidenceSection()).queryByRole("heading", { name: "Your target and outcomes" })).not.toBeInTheDocument();
+  });
+
+  // Round 12 (owner): with no evaluation the section keeps its subheading
+  // and says so, then the documents.
+  it("keeps Where it has been evaluated with one grey line when nothing evaluated the option", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, {
+      evaluated_count: 0,
+      document_count: 2,
+      documents: [doc(1, "described"), doc(2, "recommended")],
+    });
+    const section = evidenceSection();
+    const heading = within(section).getByRole("heading", { level: 3, name: "Where it has been evaluated" });
+    const line = within(section).getByText("Not evaluated in any of these sources.");
+    expect(line).toHaveClass("text-grey");
+    expect(heading.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(section).queryByRole("list", { name: "Where it has been evaluated" })).not.toBeInTheDocument();
+    expect(within(section).queryByLabelText("Where it has been evaluated")).not.toBeInTheDocument();
+    const toggle = within(section).getByRole("button", { name: /^Show 2 documents/ });
+    expect(line.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("says the empty card's one line and offers no documents", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, { document_count: 0, evaluated_count: 0, documents: [] });
-    expect(screen.getByText("No documents yet")).toBeInTheDocument();
+    expect(within(evidenceSection()).getByText("No document names this option yet.")).toBeInTheDocument();
+    expect(within(evidenceSection()).queryByRole("button", { name: /documents/ })).not.toBeInTheDocument();
   });
 
-  // Round 11 (item 4): three blocks, the third "Where it stands".
-  it("orders the sections How it works, What it would take, Where it stands, with no Checks", () => {
+  // Round 11 (item 4): three blocks; round 12 (owner): the third is "Evidence" again.
+  it("orders the sections How it works, Evidence, What it could take, with no Checks", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent ?? "");
-    expect(headings.map((text) => ["How it works", "What it would take", "Where it stands"].find((name) => text.startsWith(name)))).toEqual([
+    expect(headings.map((text) => ["How it works", "What it could take", "Evidence"].find((name) => text.startsWith(name)))).toEqual([
       "How it works",
-      "What it would take",
-      "Where it stands",
+      "Evidence",
+      "What it could take",
     ]);
+    expect(screen.queryByText("Where it stands")).not.toBeInTheDocument();
     expect(document.getElementById("constraints")).toBeNull();
     expect(screen.queryByText(/Built-in checks/)).not.toBeInTheDocument();
     expect(document.getElementById("how-it-works")).not.toBeNull();
@@ -463,7 +652,9 @@ describe("OptionCard", () => {
 
   it("introduces the features with the lead-in, and has no Delivered through line or Examples block", () => {
     const first = renderCard(MOCK_OPTION_ID_EXCLUDED);
-    expect(screen.getByText("Delivered in jobcentres and in secondary schools. It typically involves:")).toBeInTheDocument();
+    expect(paragraph(
+      "Delivered in jobcentres and in secondary schools. Acts on young jobseekers, work coaches and councils. It typically involves:",
+    )).toBeInTheDocument();
     expect(screen.queryByText(/Delivered through/)).not.toBeInTheDocument();
     expect(screen.queryByText("Examples")).not.toBeInTheDocument();
     first.unmount();
@@ -471,9 +662,17 @@ describe("OptionCard", () => {
     expect(screen.getByText("It typically involves:")).toBeInTheDocument();
     second.unmount();
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
-      profile: { ...mockLonglistOptionCards[MOCK_OPTION_ID_EXCLUDED].profile, settings: ["school", "home"] },
+      profile: { ...mockLonglistOptionCards[MOCK_OPTION_ID_EXCLUDED].profile, settings: ["school", "home"], acts_on: [] },
     });
-    expect(screen.getByText("Delivered in schools and at home. It typically involves:")).toBeInTheDocument();
+    expect(paragraph("Delivered in schools and at home. It typically involves:")).toBeInTheDocument();
+  });
+
+  // Round 12 (owner): the report's Electric Blue square bullets.
+  it("lists the design features with the report's square bullets", () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED);
+    const item = screen.getByText("A duty to withdraw benefits on refusal of an offer").closest("li") as HTMLElement;
+    expect(item.querySelector("[data-bullet]")).toHaveClass("bg-blue", "size-1.5");
+    expect(item.closest("ul")).toHaveClass("list-none");
   });
 
   it("shows at most six design features", () => {
@@ -489,64 +688,12 @@ describe("OptionCard", () => {
 
   // Round 10, C7: the header's evidence line says the counts; the section
   // opens with the maturity line, and only an option with no document says so.
-  it("opens the Evidence section with the maturity line, not the counts again", () => {
-    const first = renderCard(MOCK_OPTION_ID_EXCLUDED);
-    // Round 11 (item 4): the standing is a value, regular weight.
-    const opening = within(evidenceSection()).getAllByText("Evaluated · 1 RCT, 2 observational")[0];
-    expect(opening).not.toHaveClass("font-semibold");
-    expect(within(evidenceSection()).queryByText(/describe or recommend it\.$/)).not.toBeInTheDocument();
-    first.unmount();
-    renderCard(MOCK_OPTION_ID_EXCLUDED, { evaluated_count: 0, document_count: 0, documents: [] });
-    expect(within(evidenceSection()).getAllByText("No document names this option yet.").length).toBeGreaterThan(0);
-  });
-
-  it("lists your outcomes with counts, 'none' and 'not a target of this option'", () => {
-    renderCard(MOCK_OPTION_ID_EXCLUDED, {
-      evidence: {
-        ...evidenceOf(MOCK_OPTION_ID_EXCLUDED),
-        outcome_counts: {
-          evaluating_documents: 3,
-          by_outcome: [
-            { outcome: "NEET rate at 6 months", documents: 3, evaluated: 3 },
-            { outcome: "Attendance", documents: 0, evaluated: 0 },
-            { outcome: "Wellbeing", documents: 1, evaluated: 1 },
-          ],
-        },
-      },
-    });
-    const section = evidenceSection();
-    expect(within(section).getByText("Your outcomes")).toBeInTheDocument();
-    const rows = within(within(section).getByRole("list", { name: "Your outcomes" })).getAllByRole("listitem");
-    expect(rows.map((row) => row.textContent)).toEqual([
-      "NEET rate at 6 months3 evaluations",
-      "Attendancenonenot a target of this option",
-      "Wellbeing1 evaluationnot a target of this option",
-    ]);
-    expect(within(rows[1]).getByText("none")).toHaveClass("text-grey");
-    expect(within(section).queryByRole("table")).not.toBeInTheDocument();
-    expect(within(section).queryByText(/serves/i)).not.toBeInTheDocument();
-  });
-
-  it("says in one line when no evaluation measured any outcome, and shows no line when the plan has none", () => {
-    const outcome = (name: string) => ({ outcome: name, documents: 1, evaluated: 0 });
-    const first = renderCard(MOCK_OPTION_ID_EXCLUDED, {
-      evidence: {
-        ...evidenceOf(MOCK_OPTION_ID_EXCLUDED),
-        outcome_counts: { evaluating_documents: 0, by_outcome: [outcome("A"), outcome("B"), outcome("C")] },
-      },
-    });
-    expect(screen.getByText("No evaluation measured any of your three outcomes.")).toBeInTheDocument();
-    expect(screen.queryByRole("list", { name: "Your outcomes" })).not.toBeInTheDocument();
-    first.unmount();
-    renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
-    expect(screen.queryByText("Your outcomes")).not.toBeInTheDocument();
-  });
 
   it("shows the place sentences in served order, the Where country marked in Navy, no tint", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     const block = evidenceSection();
     const places = within(block).getAllByRole("term").map((term) => term.textContent);
-    expect(places).toEqual(["United Kingdom", "No single place"]);
+    expect(places).toEqual(["United Kingdom", "Several countries"]);
     const terms = within(block).getAllByRole("term");
     expect(terms[0].querySelector(".bg-navy")).not.toBeNull();
     expect(terms[1].querySelector(".bg-navy")).toBeNull();
@@ -560,25 +707,25 @@ describe("OptionCard", () => {
   });
 
   /** Open the documents disclosure (round 10: the chevron with Show / Hide). */
+  // Round 12 (owner): the documents are a disclosure, closed by default.
   const openDocuments = async () => {
-    const toggle = within(evidenceSection()).getByRole("button", { name: /^Documents · / });
+    const toggle = within(evidenceSection()).getByRole("button", { name: /^Show \d+ documents?( · |$)/ });
     await userEvent.click(toggle);
     return toggle;
   };
 
-  it("puts the documents behind a closed disclosure with the note, in two groups", async () => {
+  it("folds the documents behind Show N documents, closed, then lists them in two groups", async () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
       documents: [doc(1, "evaluated"), doc(2, "evaluated"), doc(3, "described"), doc(4, "mentioned"), doc(5, "recommended")],
     });
     const section = evidenceSection();
-    expect(section.querySelector("details")).toBeNull();
-    const toggle = within(section).getByRole("button", { name: /^Documents · 5 · read from titles and abstracts only/ });
+    const toggle = within(section).getByRole("button", { name: "Show 5 documents · 2 evaluated it · 3 describe it" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(within(toggle).getByText("Show")).toBeInTheDocument();
-    expect(within(section).queryByText("Paper 1")).not.toBeInTheDocument();
+    expect(within(section).queryByText(/^Paper 1/)).not.toBeInTheDocument();
     await openDocuments();
     expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(within(toggle).getByText("Hide")).toBeInTheDocument();
+    expect(toggle).toHaveTextContent("Hide documents");
+    expect(within(section).getByText("Read from titles and abstracts only.")).toBeInTheDocument();
     expect(within(section).getByText("Evaluated it · 2")).toBeInTheDocument();
     expect(within(section).getByText("Describe or recommend it · 3")).toBeInTheDocument();
     const titles = within(section)
@@ -595,28 +742,33 @@ describe("OptionCard", () => {
     expect(screen.getByText("Describe or recommend it · 1")).toBeInTheDocument();
   });
 
-  it("shows a document in three lines: title, record parts, quality parts", async () => {
+  // Round 12 (owner): the reference, then its facts at Body in Grey: where
+  // and how, then the outcome on its own line; the group is a subheading.
+  it("shows a document as its reference, then where and how, then the outcome", async () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
       documents: [
         doc(1, "evaluated", {
           programme_name: "Youth Guarantee",
-          place: "United Kingdom",
           place_detail: "south-west England",
           tried_on_kind: "16-24 year-olds",
           measured: "NEET rate at 6 months",
+          records_count: 3,
         }),
       ],
     });
     await openDocuments();
     const title = screen.getByRole("link", { name: "Paper 1" });
-    const recordLine = title.closest("li")?.querySelectorAll("p")[1] as HTMLElement;
-    expect(recordLine).toHaveTextContent(
-      "Youth Guarantee · United Kingdom (south-west England) · 16-24 year-olds · NEET rate at 6 months",
-    );
-    expect(recordLine).toHaveClass("text-grey");
-    // Round 11 (item 4): nothing bold inside a value line.
-    expect(within(recordLine).getByText("Youth Guarantee").tagName).toBe("SPAN");
-    expect(screen.getByText("Strong · Systematic review · 2021")).toHaveClass("text-grey");
+    const lines = title.closest("li")?.querySelectorAll("p") as NodeListOf<HTMLElement>;
+    expect(lines).toHaveLength(4);
+    // No authors and no venue: the title and its year still read.
+    expect(lines[0]).toHaveTextContent(/^Paper 1 \(2021\)\.$/);
+    expect(lines[1]).toHaveTextContent("Evaluated in the United Kingdom · Systematic review · also found as 2 other records");
+    expect(lines[2]).toHaveTextContent("Targeted 16-24 year-olds");
+    expect(lines[3]).toHaveTextContent("Measures NEET rate at 6 months");
+    for (const line of [lines[1], lines[2], lines[3]]) expect(line).toHaveClass("text-body", "text-grey");
+    expect(screen.getByRole("heading", { level: 3, name: "Evaluated it · 1" })).toHaveClass("text-body", "font-semibold", "text-navy");
+    expect(screen.getByRole("heading", { level: 3, name: "Where it has been evaluated" })).toHaveClass("text-lead", "font-bold");
+    expect(screen.queryByText(/Youth Guarantee|Strong · /)).not.toBeInTheDocument();
   });
 
   it("shows five lines a group, then all on request", async () => {
@@ -631,19 +783,104 @@ describe("OptionCard", () => {
     expect(screen.queryByRole("button", { name: /Show all/ })).not.toBeInTheDocument();
   });
 
-  it("links '+N more' to the dossier with the option, only when several records name the option", async () => {
+  // Round 12: the reference in the References form, as the report's list.
+  it("reads a document's reference as authors, year, the title as the link, then the venue", async () => {
+    renderCard(MOCK_OPTION_ID_EXCLUDED, {
+      documents: [doc(1, "evaluated", { authors: ["Sampleton, A.", "Mockford, C."], venue: "Journal of Youth Policy" })],
+    });
+    await openDocuments();
+    const title = screen.getByRole("link", { name: "Paper 1" });
+    const reference = title.closest("p") as HTMLElement;
+    expect(reference.textContent).toMatch(/^.+\(2021\)\. Paper 1\. Journal of Youth Policy\.$/);
+    expect(reference.textContent?.indexOf("(2021)")).toBeLessThan(reference.textContent?.indexOf("Paper 1") ?? 0);
+    expect(within(reference).getByText("Journal of Youth Policy.")).toHaveClass("text-grey");
+  });
+
+  // Round 12 (owner): "+N more" was unclear: the other records are words on
+  // the facts line, and only the title opens the dossier.
+  it("says the other records in words, with no '+N more' link; the title opens the dossier", async () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
       documents: [doc(1, "evaluated", { records_count: 3 }), doc(2, "evaluated", { records_count: 1 })],
     });
     await openDocuments();
-    expect(screen.getByRole("link", { name: "+2 more" })).toHaveAttribute(
+    expect(screen.queryByRole("link", { name: /more$/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/also found as 2 other records/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Paper 1" })).toHaveAttribute(
       "href",
-      `/tasks/${TASK_ID}/sources/all?source=doc-1&option=${MOCK_OPTION_ID_EXCLUDED}`,
+      `/tasks/${TASK_ID}/options/${MOCK_OPTION_ID_EXCLUDED}?source=doc-1&option=${MOCK_OPTION_ID_EXCLUDED}`,
     );
-    expect(screen.getAllByRole("link", { name: /more$/ })).toHaveLength(1);
   });
 
-  it("shows a linked-task document with its title and quality line only", async () => {
+  // Round 12 (owner bug): an option opened from a scrolled longlist opened
+  // at the foot of the page; it opens at its top, focus on its title.
+  it("opens at the top of the scrolling pane with focus on the title", () => {
+    vi.mocked(queries.useOption).mockReturnValue(
+      { data: undefined, isPending: true, isError: false } as unknown as ReturnType<typeof queries.useOption>,
+    );
+    vi.mocked(queries.useTask).mockReturnValue({ data: { name: "NEET task" } } as unknown as ReturnType<typeof queries.useTask>);
+    vi.mocked(mutations.useOptionVerb).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useOptionVerb>);
+    vi.mocked(mutations.useShortlistVerb).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useShortlistVerb>);
+    const tree = () => (
+      <TooltipProvider>
+        <div data-testid="pane" style={{ overflowY: "auto" }}>
+          <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/options/${MOCK_OPTION_ID_EXCLUDED}`]}>
+            <Routes>
+              <Route path="/tasks/:taskId/options/:optionId" element={<OptionCard />} />
+            </Routes>
+          </MemoryRouter>
+        </div>
+      </TooltipProvider>
+    );
+    const { rerender } = render(tree());
+    const pane = screen.getByTestId("pane");
+    pane.scrollTop = 900;
+    vi.mocked(queries.useOption).mockReturnValue(
+      { data: mockLonglistOptionCards[MOCK_OPTION_ID_EXCLUDED], isPending: false, isError: false } as unknown as ReturnType<
+        typeof queries.useOption
+      >,
+    );
+    rerender(tree());
+    expect(pane.scrollTop).toBe(0);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveFocus();
+    // Once per option: a later render leaves the reader where they are.
+    pane.scrollTop = 300;
+    rerender(tree());
+    expect(pane.scrollTop).toBe(300);
+  });
+
+  // Round 12 (owner): the public link reads the card and changes nothing;
+  // the documents and their dossier stay.
+  it("is read-only on the public link: the held word, no toggle, no Exclude, the dossier kept", async () => {
+    publicLink = true;
+    const user = userEvent.setup();
+    renderCard(MOCK_OPTION_ID_ADDED_BY_YOU, { document_count: 1, evaluated_count: 1, documents: [doc(1, "evaluated")] });
+    expect(screen.queryByRole("button", { name: /shortlist/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Exclude" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Include again" })).not.toBeInTheDocument();
+    await openDocuments();
+    await user.click(screen.getByRole("link", { name: "Paper 1" }));
+    expect(screen.getByRole("dialog", { name: "Source dossier" })).toBeInTheDocument();
+  });
+
+    // Round 12 (owner bug): a document opens its dossier over the card; the
+  // reader stays on the option card, not the Sources tab, and Close returns.
+  it("opens a document's dossier over the card, staying on the card's URL, and closes back to it", async () => {
+    const user = userEvent.setup();
+    renderCard(MOCK_OPTION_ID_EXCLUDED, { documents: [doc(1, "evaluated")] });
+    await openDocuments();
+    await user.click(screen.getByRole("link", { name: "Paper 1" }));
+    const sheet = screen.getByRole("dialog", { name: "Source dossier" });
+    expect(sheet).toHaveTextContent(`doc-1 for ${MOCK_OPTION_ID_EXCLUDED}`);
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      `/tasks/${TASK_ID}/options/${MOCK_OPTION_ID_EXCLUDED}?source=doc-1&option=${MOCK_OPTION_ID_EXCLUDED}`,
+    );
+    expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Close the dossier" }));
+    expect(screen.queryByRole("dialog", { name: "Source dossier" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("location")).toHaveTextContent(new RegExp(`^/tasks/${TASK_ID}/options/${MOCK_OPTION_ID_EXCLUDED}$`));
+  });
+
+  it("shows a linked-task document's title unlinked, with its facts", async () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
       documents: [
         doc(1, "mentioned", {
@@ -657,26 +894,26 @@ describe("OptionCard", () => {
     await openDocuments();
     expect(screen.getByText("Paper 1")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Paper 1" })).not.toBeInTheDocument();
-    expect(screen.queryByText(/Ignored/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/more$/)).not.toBeInTheDocument();
-    expect(screen.getByText("Strong · Systematic review · 2021")).toBeInTheDocument();
+    const lines = screen.getByText("Paper 1").closest("li")?.querySelectorAll("p") as NodeListOf<HTMLElement>;
+    // The programme stays off; whom it targeted shows (round 12, owner).
+    expect(lines[1]).toHaveTextContent(/^Described in the United Kingdom · Systematic review$/);
+    expect(lines[2]).toHaveTextContent(/^Targeted Ignored kind$/);
   });
 
-  it("shows the thin card: one outcomes line and no place block, the counts in the header", () => {
+  it("shows the thin card: the not-evaluated line, no place list and no outcomes line", async () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
       evaluated_count: 0,
       document_count: 2,
       place_sentences: [],
       documents: [doc(1, "described"), doc(2, "recommended")],
-      evidence: {
-        ...evidenceOf(MOCK_OPTION_ID_EXCLUDED),
-        outcome_counts: { evaluating_documents: 0, by_outcome: [{ outcome: "A", documents: 2, evaluated: 0 }] },
-      },
     });
     const section = evidenceSection();
-    expect(screen.getByText("No evaluations, 2 documents describe it")).toBeInTheDocument();
-    expect(within(section).getByText("No evaluation measured any of your outcome.")).toBeInTheDocument();
-    expect(within(section).queryByText("Where it has been evaluated")).not.toBeInTheDocument();
+    // Round 12 (owner): the subheading stays and says nothing evaluated it.
+    expect(within(section).getByText("Not evaluated in any of these sources.")).toBeInTheDocument();
+    expect(within(section).queryByLabelText("Where it has been evaluated")).not.toBeInTheDocument();
+    expect(within(section).queryByText(/^Measures/)).not.toBeInTheDocument();
+    await openDocuments();
+    expect(within(section).getByText("Describe or recommend it · 2")).toBeInTheDocument();
   });
 
   it("shows the empty card: one line, no list, no note", () => {
@@ -786,7 +1023,7 @@ describe("OptionCard", () => {
         outcomes_total: 2,
       }),
       presentation.deliveredLeadIn(["school"]),
-      presentation.noOutcomeMeasuredLine(3),
+      presentation.documentsToggleWords(false, 2, 2),
       presentation.documentsSummary(4),
     ];
     expect(samples.join(" ")).not.toMatch(/\bstud(y|ies)\b|\bserves?\b|aimed at/i);

@@ -180,6 +180,26 @@ describe("ShareView — projects (round 10, S5, S8)", () => {
     expect(screen.getByRole("combobox", { name: SHARE_COPY.addToProject })).toBeInTheDocument();
   });
 
+  // Round 12: the app's dropdown; a pick adds the project and the control
+  // goes back to its placeholder.
+  it("adds the project picked from the app's dropdown and offers only the others", async () => {
+    const { user, mutate: updateMutate } = setup({
+      task: { project_ids: [PROJECT_A] },
+      projects: [
+        { project_id: PROJECT_A, name: "Net zero homes" },
+        { project_id: PROJECT_B, name: "School food" },
+      ],
+    });
+    const add = screen.getByRole("combobox", { name: SHARE_COPY.addToProject });
+    expect(add.tagName).toBe("BUTTON");
+    expect(add).toHaveTextContent(SHARE_COPY.selectProject);
+    await user.click(add);
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["School food"]);
+    await user.click(screen.getByRole("option", { name: "School food" }));
+    expect(updateMutate).toHaveBeenCalled();
+    expect(JSON.stringify(updateMutate.mock.calls.at(-1)?.[0])).toContain(PROJECT_B);
+  });
+
   it("does not show Remove or Add to a colleague, only the project links", () => {
     setup({
       task: { is_owner: false, project_ids: [PROJECT_A] },

@@ -1,10 +1,11 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MOCK_OPTION_ID_EXCLUDED, MOCK_OPTION_ID_NO_IN_SCOPE, mockLonglist } from "../../mock/fixtures";
-import { LonglistView, THEMES_OPEN_BY_DEFAULT } from "./LonglistView";
+import { GROUP_BY_INFO, LonglistView } from "./LonglistView";
+import { PublicViewProvider } from "../publicView";
 import {
   MOCK_OPTION_ID_PACKAGE,
 } from "../../mock/fixtures";
@@ -44,7 +45,8 @@ vi.mock("../../api/mutations", () => ({
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
-function renderLonglist(
+/** The finished list as it opens (round 12, D1: its groups shut). */
+function renderClosedLonglist(
   taskOverrides: Partial<{ active_run: unknown }> = {},
   adjust?: (longlist: ReturnType<typeof mockLonglist>) => void,
   runs: { purpose?: string | null; status: string; capability_run_id: string }[] = [],
@@ -87,15 +89,30 @@ function renderLonglist(
   adjust?.(longlist);
   vi.mocked(queries.useLonglist).mockReturnValue({ data: longlist } as unknown as ReturnType<typeof queries.useLonglist>);
   return render(
-    <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/result`]}>
-      <Routes>
-        <Route path="/tasks/:taskId/result" element={<LonglistView taskId={TASK_ID} longlist={longlist} />} />
-      </Routes>
-    </MemoryRouter>,
+    <PublicViewProvider value={publicLink}>
+      <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/result`]}>
+        <Routes>
+          <Route path="/tasks/:taskId/result" element={<LonglistView taskId={TASK_ID} longlist={longlist} />} />
+        </Routes>
+      </MemoryRouter>
+    </PublicViewProvider>,
   );
 }
 
+/** Whether the next render sits in the public link's view (round 12). */
+let publicLink = false;
+
+/** The finished list with its groups opened by "Show all", for the tests
+ *  that read rows. */
+function renderLonglist(...args: Parameters<typeof renderClosedLonglist>) {
+  const rendered = renderClosedLonglist(...args);
+  const showAll = screen.queryByRole("button", { name: "Show all" });
+  if (showAll !== null) fireEvent.click(showAll);
+  return rendered;
+}
+
 beforeEach(() => {
+  publicLink = false;
   shortlistMutate.mockClear();
   unshortlistMutate.mockClear();
   suggestMutate.mockClear();
@@ -115,7 +132,7 @@ describe("LonglistView", () => {
     expect(screen.getByRole("link", { name: "1 excluded" })).toHaveAttribute("href", "#excluded-options");
     // Round 11 (review finding 2): the shortlist the reader assembles is counted.
     expect(screen.getByText(/^4 options in 2 themes/)).toHaveTextContent(
-      "4 options in 2 themes · 2 shortlisted · 1 excluded · 1 with no in-scope evidence",
+      "4 options in 2 themes and 2 levers · 2 shortlisted · 1 excluded · 1 with no in-scope evidence",
     );
     // At the list's foot, not over it (review finding 22).
     expect(screen.getByText("Read from titles and abstracts")).toBeInTheDocument();
@@ -129,7 +146,7 @@ describe("LonglistView", () => {
       longlist.counts.excluded = 0;
     });
     expect(screen.getByText(/^4 options in 2 themes/)).toHaveTextContent(
-      "4 options in 2 themes · 2 shortlisted · 1 with no in-scope evidence",
+      "4 options in 2 themes and 2 levers · 2 shortlisted · 1 with no in-scope evidence",
     );
     expect(screen.queryByText(/excluded/)).not.toBeInTheDocument();
   });
@@ -142,24 +159,66 @@ describe("LonglistView", () => {
     expect(screen.getByText(/^4 options in 2 themes/)).toHaveTextContent("· 1 excluded ·");
   });
 
-  // Round 10, D1 (for the owner): the themes open by default behind one
-  // switch, so the first screen shows options; Hide all folds them.
-  it("opens with every theme open behind the one switch, and Hide all folds them", async () => {
-    expect(THEMES_OPEN_BY_DEFAULT).toBe(true);
+  // Round 12, D1 (owner: "the groups should be collapsed by default"): the
+  // finished list opens on the count line and every group heading shut with
+  // its count; Show all in the controls row opens them, Hide all folds them.
+  it("opens with every group shut, each heading with its count, and Show all opens them", async () => {
     const user = userEvent.setup();
-    renderLonglist();
+    renderClosedLonglist();
+    expect(screen.queryByText("School-based mentoring")).not.toBeInTheDocument();
+    const theme = screen.getByRole("button", { name: /^Conditionality and support \d+ options?$/ });
+    expect(theme).toHaveAttribute("aria-expanded", "false");
+    await user.click(screen.getByRole("button", { name: "Show all" }));
     expect(screen.getByText("School-based mentoring")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Conditionality and support/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /^Conditionality and support/ })).toHaveAttribute("aria-expanded", "true");
     await user.click(screen.getByRole("button", { name: "Hide all" }));
     expect(screen.queryByText("School-based mentoring")).not.toBeInTheDocument();
+  });
+
+  // Round 12 (owner): a group's count and its Show / Hide stand at the right
+  // of the heading's line, the count in Meta Grey, the control on the edge;
+  // Show all ends the controls row on the same edge.
+  it("puts the count and then Show / Hide at the heading line's right, and Show all last in the controls row", () => {
+    renderClosedLonglist();
+    const heading = screen.getByRole("button", { name: /^A universal offer 1 option$/ });
+    const parts = Array.from(heading.children);
+    expect(parts).toHaveLength(3);
+    expect(parts[0]).toHaveTextContent(/^A universal offer$/);
+    expect(parts[0]).toHaveClass("flex-1");
+    expect(parts[1]).toHaveTextContent(/^1 option$/);
+    expect(parts[1]).toHaveClass("text-meta", "text-grey", "text-right");
+    expect(parts[2]).toHaveTextContent(/^Show$/);
+    const showAll = screen.getByRole("button", { name: "Show all" });
+    expect(showAll.nextElementSibling).toBeNull();
+    // Round 12 (owner): the name in Navy, the count Grey; no contents
+    // sidebar, the list on the page's full column.
+    expect(parts[0]).toHaveClass("text-navy");
+    expect(screen.queryByRole("navigation", { name: /contents/i })).toBeNull();
+    expect(document.querySelector(".longlist-paper")).toHaveClass("md:max-w-[1180px]");
+    // Round 12 (owner): a Line hairline above and below the controls row.
+    expect(screen.getByTestId("longlist-controls")).toHaveClass("border-y", "border-line", "py-3");
+  });
+
+  // Round 12 (owner): what a theme and a lever are, in an "i" beside Group
+  // by; no intro sentence on the page.
+  it("says what a theme and a lever are in the i beside Group by", async () => {
+    renderClosedLonglist();
+    const info = screen.getByRole("button", { name: "What a theme and a lever are" });
+    expect(info).toHaveClass("size-6");
+    expect(GROUP_BY_INFO).toEqual([
+      "Theme: a group of options that work in a similar way.",
+      "Lever: the kind of action government takes.",
+    ]);
+    act(() => info.focus());
+    for (const line of GROUP_BY_INFO) expect((await screen.findAllByText(line)).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/^Theme: a group/, { selector: "main p" })).toBeNull();
   });
 
   it("gathers excluded options in one collapsed section at the end, headed Excluded with its count", async () => {
     const user = userEvent.setup();
     renderLonglist();
     expect(screen.queryByText("National sanctions regime")).not.toBeInTheDocument();
-    const heading = screen.getByRole("button", { name: /^Excluded/ });
-    expect(heading).toHaveTextContent(/^Excluded 1 option/);
+    const heading = screen.getByRole("button", { name: /^Excluded 1 option$/ });
     await user.click(heading);
     expect(screen.getByText("National sanctions regime")).toBeInTheDocument();
   });
@@ -250,12 +309,12 @@ describe("LonglistView", () => {
     const scoped = within(row as HTMLElement);
     expect(scoped.getByText("3 documents evaluated it")).toBeInTheDocument();
     expect(scoped.queryByText("6 documents")).not.toBeInTheDocument();
-    // Round 10 (finding 6): the exclusion in words, the failure word in red, no chip.
-    const exclusion = scoped.getByText("Excluded:");
-    expect(exclusion).toHaveClass("text-red");
-    expect(exclusion.parentElement).toHaveTextContent(
-      /^Excluded: breaks "Only include options a local authority can fund directly"\./,
-    );
+    // Round 12 (owner): the exclusion in the meta line's grey, who set it
+    // aside first, no red word; the row keeps every other row's sizes.
+    expect(scoped.queryByText("Excluded:")).not.toBeInTheDocument();
+    const exclusion = scoped.getByText(/^Breaks "Only include options a local authority can fund directly" · /);
+    expect(exclusion).toHaveClass("text-meta", "text-grey");
+    expect(within(row as HTMLElement).getByRole("link", { name: "National sanctions regime" }).closest("p")).toHaveClass("text-body");
     expect(scoped.queryByText("part of Universal youth offer bundle")).toBeNull();
   });
 
@@ -421,6 +480,82 @@ describe("LonglistView — the shortlist toggle on rows (task 055; round 10, fin
     expect(shortlistMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_NO_IN_SCOPE }, expect.anything());
     // The place word left the meta line: the toggle says it.
     expect(screen.queryByText("Policy Atlas's pick")).not.toBeInTheDocument();
+  });
+
+  // Round 12 (owner): the shortlisted lead each group, the rest after them
+  // in their own order; a toggle moves the row there with the regroup's
+  // View Transition, never a blank.
+  it("puts the shortlisted first in every group", () => {
+    renderLonglist();
+    const groups = screen.getAllByRole("list").filter((list) => list.closest("section") !== null);
+    expect(groups.length).toBeGreaterThan(0);
+    for (const group of groups) {
+      const held = Array.from(group.children).map(
+        (row) => within(row as HTMLElement).queryByRole("button", { name: "Shortlisted" }) !== null,
+      );
+      expect(held).toEqual([...held].sort((a, b) => Number(b) - Number(a)));
+    }
+  });
+
+  it("moves a row to the head of its group when it is shortlisted, through the regroup's View Transition", () => {
+    const start = vi.fn((update: () => void) => {
+      update();
+      return { finished: Promise.resolve() };
+    });
+    Object.defineProperty(document, "startViewTransition", { value: start, configurable: true, writable: true });
+    try {
+      // Two options in one theme, none on the shortlist.
+      const twoInATheme = (longlist: ReturnType<typeof mockLonglist>) => {
+        const theme = (longlist.themes ?? [])[0];
+        theme.option_ids = [...(theme.option_ids ?? []), MOCK_OPTION_ID_PACKAGE];
+        longlist.themes = [theme, ...(longlist.themes ?? []).slice(1)];
+      };
+      const { rerender } = renderLonglist({}, (longlist) => {
+        twoInATheme(longlist);
+        for (const option of longlist.options ?? []) option.shortlist = null;
+      });
+      const group = screen
+        .getAllByRole("list")
+        .find((list) => list.closest("section") !== null && list.children.length >= 2) as HTMLElement;
+      const names = () => Array.from(group.children).map((row) => within(row as HTMLElement).getAllByRole("link")[0].textContent);
+      const before = names();
+      const last = before[before.length - 1] as string;
+      const next = mockLonglist();
+      twoInATheme(next);
+      for (const option of next.options ?? []) {
+        option.shortlist = option.name === last ? { state: "added_by_you", reason: null } : null;
+      }
+      vi.mocked(queries.useLonglist).mockReturnValue({ data: next } as unknown as ReturnType<typeof queries.useLonglist>);
+      rerender(
+        <PublicViewProvider value={false}>
+          <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/result`]}>
+            <Routes>
+              <Route path="/tasks/:taskId/result" element={<LonglistView taskId={TASK_ID} longlist={next} />} />
+            </Routes>
+          </MemoryRouter>
+        </PublicViewProvider>,
+      );
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(names()).toEqual([last, ...before.slice(0, -1)]);
+    } finally {
+      Reflect.deleteProperty(document, "startViewTransition");
+    }
+  });
+
+  // Round 12 (owner): the public link reads the list and changes nothing;
+  // the group controls stay.
+  it("is read-only on the public link: the held word, no toggle, Exclude, Include again or Add an option", async () => {
+    publicLink = true;
+    const user = userEvent.setup();
+    renderLonglist();
+    await user.click(screen.getByRole("button", { name: /^Excluded/ }));
+    expect(screen.queryByRole("button", { name: /shortlist/i })).not.toBeInTheDocument();
+    expect(screen.getAllByText("Shortlisted").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Exclude" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Include again" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Add an option")).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Group by" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide all" })).toBeInTheDocument();
   });
 
   it("disables every toggle while a walk runs", () => {

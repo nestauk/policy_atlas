@@ -20,16 +20,14 @@ import {
   longlistTitle,
   maturityPhrase,
 } from "./longlistPresentation";
-import { FieldSelect } from "./FieldSelect";
+import { Select } from "../../ui/brand/Select";
 import { ShortlistToggle, useOptionActions } from "./optionActions";
+import { usePublicView } from "../publicView";
 
 type LonglistOut = components["schemas"]["LonglistOut"];
 type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
 
-const SELECT_CLASS =
-  "max-w-full border border-line-2 bg-paper px-2 py-1 text-meta font-semibold text-navy disabled:bg-paper-2 disabled:text-grey";
-
-/** The risk appetite as a `<select>` over the three approved answers. It
+/** The risk appetite as the app's dropdown over the three approved answers. It
  *  patches the plan directly (no chat seeding); the server re-proposes when
  *  a longlist exists. Shared by the shortlist page (in the field's skin, full
  *  width up to 32rem, the longest answer whole on a desktop, so it fits a phone: round 10, finding 4) and the plan
@@ -47,26 +45,22 @@ export function RiskAppetiteSelect({
   id?: string;
   field?: boolean;
 }) {
-  const choices = (Object.keys(RISK_APPETITE_LABELS) as RiskAppetite[]).map((key) => (
-    <option key={key} value={key}>
-      {RISK_APPETITE_LABELS[key]}
-    </option>
-  ));
-  const props = {
-    id,
-    "aria-label": "Risk appetite",
-    value,
-    disabled,
-    onChange: (event: { target: { value: string } }) => onChange(event.target.value as RiskAppetite),
-  };
-  return field ? (
-    <FieldSelect {...props} className="w-full max-w-[32rem]">
-      {choices}
-    </FieldSelect>
-  ) : (
-    <select {...props} className={SELECT_CLASS}>
-      {choices}
-    </select>
+  const options = (Object.keys(RISK_APPETITE_LABELS) as RiskAppetite[]).map((key) => ({
+    value: key,
+    label: RISK_APPETITE_LABELS[key],
+  }));
+  // The shortlist page's field is 40 px; the plan document's compact one 32 px (round 12).
+  return (
+    <Select
+      id={id}
+      label="Risk appetite"
+      value={value}
+      options={options}
+      disabled={disabled}
+      onChange={onChange}
+      size={field ? 40 : 32}
+      className={field ? "w-full max-w-[32rem]" : undefined}
+    />
   );
 }
 
@@ -103,6 +97,8 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
   const suggest = useSuggestMore(taskId);
   const walkActive = isRunActive(task.data);
   const actions = useOptionActions(taskId, walkActive);
+  // The public link reads the shortlist; it changes nothing (round 12).
+  const publicView = usePublicView();
 
   const options = longlist.options ?? [];
   const placed = options.filter(holdsPlace);
@@ -242,7 +238,9 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
               ? "Policy Atlas is proposing a shortlist…"
               : noPlaces
                 ? "No places yet."
-                : "No picks beside your places. Suggest more asks Policy Atlas for some."}
+                : publicView
+                  ? "No picks beside your places."
+                  : "No picks beside your places. Suggest more asks Policy Atlas for some."}
           </p>
         )}
         {hasNote && (
@@ -263,6 +261,12 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
           risk appetite over Suggest more (a secondary: the page's one primary
           is Assess), the way back to the longlist beside it (round 10,
           finding 4). Stacked, it fits a 400 px screen. */}
+      {publicView ? (
+        <div className="mt-8">
+          <p className="text-meta font-semibold text-grey">Risk appetite</p>
+          <p className="mt-1.5 text-body text-ink">{RISK_APPETITE_LABELS[appetite]}</p>
+        </div>
+      ) : (
       <div className="print-hide mt-8">
         <label htmlFor="shortlist-risk-appetite" className="block text-meta font-semibold text-grey">
           Risk appetite
@@ -299,6 +303,7 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
           <p className="mt-2 text-meta text-grey">The plan has changed. Suggest more to update the picks.</p>
         )}
       </div>
+      )}
       {patchPlan.isError && (
         <p role="alert" className="mt-2 text-body text-red">
           {actionFailedNotice(patchPlan.error, "The appetite couldn't be changed. Try again.")}
@@ -312,14 +317,16 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
 
       {/* The page's one primary; while it is off its reason is a line of
           words under it, not a tooltip (round 10, finding 4). */}
-      <div className="mt-10 border-t border-line pt-6">
-        <Button variant="primary" disabled aria-describedby="shortlist-assess-off">
-          Assess these {placed.length}
-        </Button>
-        <p id="shortlist-assess-off" className="mt-2 text-meta text-grey">
-          Assessment is not yet available.
-        </p>
-      </div>
+      {!publicView && (
+        <div className="mt-10 border-t border-line pt-6">
+          <Button variant="primary" disabled aria-describedby="shortlist-assess-off">
+            Assess these {placed.length}
+          </Button>
+          <p id="shortlist-assess-off" className="mt-2 text-meta text-grey">
+            Assessment is not yet available.
+          </p>
+        </div>
+      )}
     </ReportPage>
   );
 }

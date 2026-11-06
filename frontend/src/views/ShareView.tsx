@@ -8,6 +8,7 @@ import { useDocumentTitle } from "../lib/title";
 import { LIFECYCLE_LABELS } from "../lib/vocabulary";
 import { Button, buttonVariants } from "../ui/brand/Button";
 import { Card } from "../ui/brand/Card";
+import { Select } from "../ui/brand/Select";
 import { PROSE_LINK_CLASS } from "../ui/brand/inlineActions";
 import { cn } from "../ui/brand/cn";
 import { useToast } from "../ui/radix/Toast";
@@ -396,27 +397,23 @@ export function ShareView() {
             </ul>
           )}
           {isOwner && available.length > 0 && (
-            <label className="mt-6 block max-w-md">
-              <span className="mb-2 block text-body font-semibold text-navy">{SHARE_COPY.addToProject}</span>
-              <select
-                className="h-10 w-full border border-line-2 bg-paper px-3 py-0 text-body text-navy"
-                defaultValue=""
+            <div className="mt-6 max-w-md">
+              <label htmlFor="share-add-to-project" className="mb-2 block text-body font-semibold text-navy">
+                {SHARE_COPY.addToProject}
+              </label>
+              {/* The app's dropdown (round 12): picking a project adds it,
+                  and the control goes back to its placeholder. */}
+              <Select
+                id="share-add-to-project"
+                label={SHARE_COPY.addToProject}
+                value=""
+                placeholder={SHARE_COPY.selectProject}
+                options={available.map((project) => ({ value: project.project_id, label: project.name }))}
                 disabled={update.isPending}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  if (value === "") return;
-                  setMembership([...memberIds, value]);
-                  event.target.value = "";
-                }}
-              >
-                <option value="">{SHARE_COPY.selectProject}</option>
-                {available.map((project) => (
-                  <option key={project.project_id} value={project.project_id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                onChange={(value) => setMembership([...memberIds, value])}
+                className="w-full"
+              />
+            </div>
           )}
           <SectionError text={errorFor("projects")} />
         </SettingsRow>
