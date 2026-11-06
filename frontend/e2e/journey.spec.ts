@@ -73,6 +73,10 @@ function runCompletionLink(page: Page) {
   return runTrace(page).getByRole("link", { name: "Read it →" });
 }
 
+/** How long a run may take to finish after its check-in is answered: the
+ *  mock run takes 12 to 13 s and the machine may be loaded (lead, round 12). */
+const RUN_FINISH_MS = 40_000;
+
 /** (a) Tasks list renders the mock task's row, then (b) navigating into it
  *  opens the workspace (Plan). */
 async function openWorkspaceFromLanding(page: Page): Promise<void> {
@@ -94,7 +98,9 @@ async function driveRunToSuccess(page: Page): Promise<void> {
   await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
   await page.getByRole("radio", { name: new RegExp(`^${SUGGESTED_OPTION_LABEL}`) }).click();
   await expect(page.getByText(CHECK_IN_QUESTION)).toHaveCount(0);
-  await expect(runCompletionLink(page)).toBeVisible({ timeout: 15_000 });
+  // The mock run takes 12 to 13 s after the check-in; the machine may be loaded (lead, round 12).
+  test.info().setTimeout(test.info().timeout + RUN_FINISH_MS - 15_000);
+  await expect(runCompletionLink(page)).toBeVisible({ timeout: RUN_FINISH_MS });
 }
 
 test.describe("mock task-lifecycle journey", () => {
@@ -233,7 +239,9 @@ test.describe("mock task-lifecycle journey", () => {
     // (i) The run has now reached "succeeded" — all five stages open. The
     // trace has folded to "Report ready · … · Read it →", pointing at
     // `/result`, and no separate finished notice sits under it.
-    await expect(runCompletionLink(page)).toBeVisible({ timeout: 15_000 });
+    // The mock run takes 12 to 13 s after the check-in; the machine may be loaded (lead, round 12).
+    test.info().setTimeout(test.info().timeout + RUN_FINISH_MS - 15_000);
+    await expect(runCompletionLink(page)).toBeVisible({ timeout: RUN_FINISH_MS });
     await expect(runCompletionLink(page)).toHaveAttribute("href", `/tasks/${MOCK_TASK_ID}/result`);
     await expect(traceHeader(page)).toContainText("Report ready");
     await expect(page.getByText(/Evidence search is finished/)).toHaveCount(0);
@@ -1025,6 +1033,16 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await expect(page.getByText(/^Last updated \d{1,2} \w+ \d{4}$/)).toBeVisible();
     await expect(page.getByRole("button", { name: "Read the full report" })).toHaveCount(0);
     await neverSeen(page, /attaching citations/);
+    // Watched while it was written, the finished report has every section
+    // open and the control reads "Hide all"; moving to Sources and back keeps
+    // it (owner, round 12).
+    await expect(page.getByRole("button", { name: "Hide all" })).toBeVisible();
+    const conclusions = page.getByRole("button", { name: /^Implications for local action/ });
+    await expect(conclusions).toHaveAttribute("aria-expanded", "true");
+    await taskNav(page).getByRole("link", { name: /^Sources/ }).click();
+    await taskNav(page).getByRole("link", { name: /^Result/ }).click();
+    await expect(page.getByRole("button", { name: "Hide all" })).toBeVisible({ timeout: 20_000 });
+    await expect(conclusions).toHaveAttribute("aria-expanded", "true");
   });
 
   test("scene 7: on Sources the status bar and the sidebar's trace show the run: it runs, pauses and folds to Report ready", async ({
@@ -1098,7 +1116,9 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await nav.getByRole("link", { name: /^Result/ }).click();
     await expect(nav.getByRole("link", { name: "Result", exact: true })).toBeVisible();
     await nav.getByRole("link", { name: /^Sources/ }).click();
-    await expect(page).toHaveTitle(/^● Report ready/, { timeout: 30_000 });
+    // The mock run takes 12 to 13 s on a quiet machine and longer under load.
+    test.info().setTimeout(test.info().timeout + RUN_FINISH_MS - 15_000);
+    await expect(page).toHaveTitle(/^● Report ready/, { timeout: RUN_FINISH_MS });
   });
 
   test("scene 13: the sidebar is the same agent, with the check-in answerable in it", async ({ page }) => {
@@ -1137,7 +1157,7 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     const growing = (await seenLines(page)).filter((line) => "I can search for this. First, is the question as you want it, or do you want to narrow it?".startsWith(line) && line.length > 5);
     expect(growing.length).toBeGreaterThan(2);
 
-    await expect(page.getByText("Plan · step 1 of 3 · Question")).toBeVisible();
+    await expect(page.getByText("Plan · decision 1 of 3 · Question")).toBeVisible();
     await expect(page.getByRole("radio", { name: /^That's my question/ })).toBeVisible();
     await expect(page.getByText("Recommended")).toHaveCount(0);
     await expect(page.getByText("Drafting the plan")).toHaveCount(0, { timeout: 15_000 });
@@ -1146,7 +1166,7 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await page.getByRole("radio", { name: /^That's my question/ }).click();
     await expect(page.getByTestId("part-settled").filter({ hasText: /^Question/ }).first()).toBeVisible();
     await expect(page.getByRole("radio", { name: /^That's my question/ })).toHaveCount(0);
-    await expect(page.getByText("Plan · step 2 of 3 · Scope")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("Plan · decision 2 of 3 · Scope")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole("button", { name: "Start the search" })).toBeVisible();
   });
 

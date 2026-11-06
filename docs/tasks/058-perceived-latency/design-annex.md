@@ -1143,6 +1143,206 @@ Rulings on the build (agent, for the lead):
   the assignment runs over all of them; a row's own search line ("Searched · 312 found") gives
   way to it.
 
+## Round 12, Options scoping (owner, 2026-11-06, evening)
+
+Brief: `research/briefs/round-12-scoping.md`. DESIGN.md § The longlist carries each rule.
+Screenshots: `research/screenshots/round12-scoping/` (`before-*` and `after-*`).
+
+1. **D1 is closed: the groups are collapsed by default** (owner: "the groups should be
+   collapsed by default"). `THEMES_OPEN_BY_DEFAULT` is gone. A finished list opens on the count
+   line and every group heading shut with its count; "Show all" in the controls row opens them.
+   While the walk builds the list its groups stay open (the rows moving into their themes are
+   the news), and the walk's end leaves them as the reader has them; only an arrival on a
+   finished list starts shut (`after-list-arrival-*`, `after-list-shown-*`).
+2. **"Where it stands" is "Evidence" again.** Its "Sources" lines are one short sentence per
+   fact at Body, nothing bold, in the owner's order: the documents that describe it (those that
+   do not evaluate it, as the document groups below split them), the documents that evaluated
+   it, where it was evaluated, how many of the user's outcomes it measures; the last two only
+   once something evaluated it; the standing after them as its own line. Your outcomes, the
+   places and the documents (prose links) stay under them. The collapsed section keeps the
+   one-line signal as its summary (`before-card-*-evidence-*`, `after-card-*-evidence-*`).
+3. **"Policy Atlas's estimate" is an info hover**: the heading loses the words; a 16 px "i"
+   (`InfoIcon`, added to `ui/brand/icons.tsx`) in a 24 px target sits just after "What it would
+   take", focusable, named "Policy Atlas's estimate", its tooltip "Policy Atlas's estimate from
+   the sources." (owner correction: nothing about costing) The heading is a disclosure button and a button cannot hold
+   another, so the glyph's button sits beside it, placed after the title's last word by
+   measuring the title's text (kept there on reflow and font load); a press on it does not fold
+   the section (`after-card-*-info-hover-*`, `after-card-*-info-focus-*`).
+4. **The check-in card's words option**: `CheckInCard` renders no planner decision part (the
+   scoping planner's `my_own_words` reaches only `PartCard`); a check-in option asks for words
+   by the server's `requires_user_input`. No change.
+5. **The count on the group's line** (owner: "the 'N options' next to the groups should be
+   under it instead, or right aligned on the same line?"; lead: right-aligned on the heading's
+   line). "6 options" sits at the line's right in Meta Grey, regular case, on one line at every
+   width; the count lost its tabular figures, which opened a gap after a single digit.
+6. **One dropdown** (owner: "When there are dropdowns in the app, make sure we use the custom
+   styling and not the browser default"). `ui/brand/Select.tsx` is the Sources filter bar's
+   popover listbox made shared: the field as the trigger (40 px Body or 32 px Meta, the 12 px
+   chevron, Navy border while open), a select-only combobox; the list in the popover's tokens,
+   as wide as the trigger; arrows, Home, End, first-letter type-ahead, Enter, Escape. On a phone
+   the list opens as the popover does, never the platform's picker. `longlist/FieldSelect.tsx`
+   is gone; the grid's Columns, the risk appetite (shortlist 40 px, plan document 32 px), the
+   check-in's steering mode and Share's add to a project use it (`after-select-*`). DESIGN.md
+   § Inputs carries the one-select rule.
+7. **One right edge** (owner): a group heading's "Show" / "Hide" moves to the line's right,
+   after the count, and "Show all" ends the controls row after List · Grid, so every count and
+   control on the longlist sits on one right edge (`after-list-*`, `after-list-heading-hover-*`).
+   This replaces item 5's "the chevron with the name".
+8. **The controls row's rules come back** (owner): a Line hairline above and below Group by,
+   List / Grid and Show all, 12 px inside each, as before round 11's density pass
+   (`after-list-*`).
+9. **No contents sidebar on the longlist** (owner): the list and the grid take the page's full
+   content column (1180 px) rather than the report's reading measure; the Shortlist page has no
+   nav and gets none; the baseline report keeps its contents. A link to a group still opens it
+   (`useOpenWhenNavigated`).
+10. **Group names in Navy** (owner: "not a massive fan of the grey text for the groups … hard
+    to read in the collapsed view"): the heading's name is Navy at the Label style; the
+    description stays Body Grey and the count Meta Grey, shut and open alike.
+11. **The baseline gate shows no key assumption** (owner): the card loses the line; its settled
+    form never had it. Everything else stays.
+12. **Shortlisted first** (owner): within each group and each grid cell the shortlisted rows
+    come first, the rest after them in their existing order (`shortlistedFirst`, one function
+    for the list and the grid); a toggle moves the row in the regrouping's View Transition
+    (`regroupTransition.ts`, now shared by the list and the grid), never a blank.
+13. **The dossier opens over the option card** (owner bug: a document jumped to the Sources
+    tab). A document's link (and its "+N more") is now the card's own path with `?source=` and
+    `option=`; the card reads them and opens the Sources tab's dossier sheet over itself
+    (`longlist/OptionDossier.tsx`: `SourceDossierBody` and `useDossierRecords` from `SourcesView`,
+    read by the document's id), its slot reading "In this option". Close or Back returns to the card; the URL never leaves it
+    (`after-card-*-dossier-*`).
+14. **An option opens at its top** (owner bug: it opened at the foot, the app's scrolling pane
+    keeping the longlist's offset). Once per option the card sets its scrolling ancestors to the
+    top and focuses its title (`tabIndex=-1`, no ring); a link with a hash keeps its scroll, and a
+    dossier or a notice never moves the reader.
+15. **What a theme and a lever are** (owner, with the owner's corrections): an "i" beside Group
+    by (`longlist/InfoHint.tsx`, the estimate's device, now shared), its tooltip two lines and
+    nothing else: "Theme: a group of options that work in a similar way." / "Lever: the kind of
+    action government takes." No intro sentence on the page.
+16. **The count line counts levers** (owner): "24 options in 5 themes and 3 levers · 5
+    shortlisted", the levers the distinct lever types of the included options (`leverCount`),
+    singular "1 theme", "1 lever"; one formatter (`countsParts`).
+17. **Read-only on the public link** (owner): under `usePublicView()` the longlist, the grid,
+    the option card and the Shortlist page change nothing: a held place reads "Shortlisted"
+    after its check as plain words (no toggle), no Exclude or Include again, no Add an option,
+    no Suggest more or "Add more from the longlist", no Assess, the risk appetite as its words;
+    the group controls, Columns and the dossier stay. With no picks the line drops its second
+    sentence ("No picks beside your places."), since Suggest more is not there.
+18. **"What it could take"** (owner): the heading's words, on the card and in DESIGN.md (the
+    section's anchor id stays `what-it-would-take`; the backend's card export still says
+    "What it would take", outside this brief).
+19. **The profile's shut sentence** (owner): one Body sentence built from the marked lines
+    (`profileSentence`, phrase table `PROFILE_SENTENCE_PHRASES` and `AMBITION_OPENINGS` in
+    `longlistPresentation.ts`) replaces the marked cells and "Middle on N of M"; the ambition
+    opens it, the harder lines follow "that will" joined with "and", then "but" and the easier
+    ones; all in the middle, "A middle option on every count."; a line the profile lacks is left
+    out; open, the table.
+20. **Block order** (owner): what it is, then Evidence, then What it could take.
+2. (changed by the owner) **Evidence** is no longer the Sources lines: the subsection, its
+    standing line and Your outcomes went. Evidence is "Where it has been evaluated" (item 23:
+    first), the notices, then the documents listed open (no disclosure) with each group's
+    "Show all N", and one Meta Grey outcomes line at their foot ("Measures 2 of your 2
+    outcomes."), the one fact that lived only in the Sources lines.
+21. **Excluded rows** (owner): the row keeps every other row's sizes; the exclusion line is the
+    meta line's Meta Grey, no red word, so the grey alone marks an excluded row; the grid's
+    excluded tile says "Excluded" in Grey, not Red.
+22. **The exclusion line** (owner: "Breaks your decision" was unclear): `exclusionLine`, one
+    formatter for the row and the card's notice: "Set aside by you · <reason>" (reason left out
+    when empty) for the reader's own, "Breaks "<constraint>" · <reason>" for a constraint's.
+23. **Where it has been evaluated first** in Evidence (owner), the notices and the documents
+    after it.
+
+Lead's rulings on the report (2026-11-06): 1, 3, 4, 7 and 8 accepted as built. 2: the four
+helpers left unused (`servesOutcome`, `noOutcomeMeasuredLine`, `outcomeCountLabel`,
+`maturityLine`) and their tests are deleted. 5: the "i" works on touch: `InfoHint` opens its
+words as a small popover (the popover's tokens) on a tap and as the tooltip on hover and focus,
+one component. The phrase table is accepted with "need more coordination" / "it needs less
+coordination". 6 (the mock's dossier for the card's document ids) goes to the backend builder.
+
+24. **The sentence's takeaways** (owner): the ambition word and each line's phrase in Semibold
+    Navy, the joining words regular (`profileSentenceParts`). Every line in the middle reads
+    "**Average** on cost, time, workforce, coordination, delivery and impact." (owner: "A middle
+    option on every count." was ambiguous).
+25. **The documents are a disclosure**, closed: "Show 6 documents" / "Hide documents" after the
+    12 px chevron, the quiet control's look; open, "Read from titles and abstracts only." then
+    the two groups with their "Show all N".
+26. **No "+N more"** (owner): the other records a document was folded from are words on its
+    facts line ("also found as 2 other records"), not a link; only the title opens the dossier.
+27. **A document is two lines** (owner): the reference in the References form (`referenceParts`:
+    authors, year, the title as the link, the venue in Grey as the report's list; the backend
+    builder added `authors` and `venue` to `OptionDocumentOut`; a part the read lacks is left out), then one Meta Grey line of facts joined by the middot (`documentFacts`: "evaluated in
+    <place>" or the place, the design, "measures <outcome>", "also found as N other records");
+    the programme, the folded kind and the tier went, and the standalone outcomes line went.
+28. **The card at the report's scale** (owner: "a bit hard to read compared to the evidence
+    search reports"). Changed: the description under the title, every section's sentences (the
+    lever, the lead-in, the features, the places, the notices, the profile table's sentences)
+    and the profile's shut sentence from Body to `REPORT_BODY_CLASS` (Lead 19 px from `md`,
+    Body on a phone); the features list's gap from 4 px to 8 px (the report's list rhythm); a
+    document's title link from the prose link (always underlined, blue on hover) to the
+    References' title (Navy over a Line 2 underline, Navy on hover), its reference line breaking
+    anywhere as the References do; its facts line 4 px under the reference (was 0); documents
+    12 px apart (was a 12 px grid gap; the References' 8 px is for one-line entries, a document
+    is two). Kept: the title and section headings (already the report's components), Meta for
+    the field labels, the documents' note and group labels and the facts lines; nothing is
+    smaller than Meta. Before and after: `r28-{before,after}-card-{rich,excluded}-whole-{1280,400}.png`.
+29. **No eyebrow over the lever** (owner): How it works opens with one sentence, "Lever:
+    regulation." (`leverLine` now uses the lever nouns: "Lever: enforcement, with regulation.").
+30. **"Where it has been evaluated" is a subheading** (`h3`, the report's case-study title
+    style: Lead Bold Navy, Body below `md`).
+31. **The document groups are subheadings** (`h3`, Body Semibold Navy): "Evaluated it · 2".
+32. **A document's facts** are Body Grey lines under its reference (`documentFactLines`): "Evaluated
+    in the United Kingdom · Randomised or quasi-experimental study · also found as 2 other
+    records" ("Described in …" for a document that only describes; the design through
+    `evidenceTypeLabel`), then "Measures <outcome>" on its own line when there is one.
+33. **The report's square bullets** (owner): the design features use `ui/brand/BulletList.tsx`,
+    the report's 6 px Electric Blue square on the x-height, items 12 px apart. The report keeps its
+    own class constants in `ArtefactView.tsx`; the report builder can swap them for
+    `BULLET_ITEM_CLASS` / `BULLET_MARK_CLASS` from that module so there is one source. Shots:
+    `r29-after-card-{rich,excluded}-whole-{1280,400}.png`.
+34. **The estimate's words** (owner): "Policy Atlas's estimate from the abstracts. Not an
+    assessment."
+35. **The profile sentence always opens with the ambition and the potential impact** (owner),
+    middle or not: "This is a[n] <ambitious | moderate-ambition | modest> option with <high |
+    average | lower> potential impact" (owner: the middle says "ambition") (`AMBITION_WORDS`, `IMPACT_PHRASES`; the ambition word and the
+    impact phrase strong), then " that will <harder lines>, but <easier lines>." as before; with
+    only easier lines ", and <easier lines>."; with every other line in the middle ", and average
+    on cost, time, workforce, coordination and delivery." (`OTHERS_MIDDLE_TAIL`). Potential
+    impact left the phrase table; the old all-middle sentence went.
+36. **The documents toggle carries the groups** (owner): "Show 6 documents · 2 evaluated it · 4
+    describe it" (a group with none left out; "1 describes it"), "Hide documents" when open.
+37. **No evaluation, said** (owner): with no document evaluating the option, "Where it has been
+    evaluated" stays with one Body Grey line, "Not evaluated in any of these sources."
+    (`NOT_EVALUATED_LINE`), then the documents disclosure.
+38. **Only What it could take folds** (owner): How it works and Evidence are always open with no
+    Show / Hide (`CardSection` is not collapsible unless asked); What it could take (shut, the
+    sentence; open, the lines) and the documents list keep theirs.
+39. **Discusses, not Measures, for a describing document** (owner): the outcome line reads
+    "Measures <outcome>" on an evaluation and "Discusses <outcome>" on a document that only
+    describes, recommends or mentions the option (`documentFactLines`).
+40. **Your outcomes** (owner): a subheading in the Evidence block's subheading style after
+    "Where it has been evaluated" and before the notices and the documents, then a ruled table in
+    the report's method-table pattern (Line hairlines, Body, the label left, the value right in
+    tabular figures): one row per plan outcome in the plan's order, "Measured in 2 · discussed in
+    1" in Navy (a part with none left out), or "Not covered" in Grey (`outcomeCoverage`,
+    `outcomeCoverageWords`: an evaluating document whose outcome tag names it measures it, any
+    other discusses it). Absent when the plan has no outcomes.
+41. **The plan's target first** (owner; corrected twice: the target is not always people, so no
+    "population" anywhere, and the word is "targeted"): the table is "Your target and outcomes";
+    its first row's label is the plan's target-unit words as the user wrote them, its value
+    "Directly targeted in N" in Navy, or "Not directly targeted" in Grey (owner: no "of M
+    documents"), and nothing else (`targetCoverage`, `targetCoverageWords`); the row is left out
+    when no document's target is known. Whom the option acts on is not counted from the
+    documents: it is the model's setting call, the profile's `acts_on`, said in How it works as
+    "Acts on **food outlets**, **parents** and **councils**." after the setting (`actsOnParts`;
+    " and k more" beyond six; omitted when empty). The table is absent when the plan has no
+    target unit and no outcomes. Under each document the facts are three lines: the place and design (and "also
+    found as N other records"), "Targeted <kind>" when known, then "Measures / Discusses
+    <outcome>". The coverage cells take no tabular figures: under them the fallback face widens
+    the spaces between words.
+42. **The takeaway words in How it works** (owner): the lever nouns ("Lever: **regulation**.")
+    and the delivery setting ("Delivered **in jobcentres and in community centres**. It
+    typically involves:") in Semibold Navy, the rest regular (`leverLineParts`,
+    `deliveredLeadInParts`, rendered by the card's `SentenceRuns` as the profile sentence is).
+
 ## Round 11, Sources (owner, 2026-11-06)
 
 Brief: `research/briefs/round-11-sources.md`; screenshots in `research/screenshots/round11-sources/`
@@ -1184,6 +1384,106 @@ Brief: `research/briefs/round-11-sources.md`; screenshots in `research/screensho
    23" with the country Electric Blue, a press to the filtered table, "Not on the map: …" for
    names the atlas cannot place. No globe outline (the 1:110m frame without Antarctica clipped
    it). The list is the keyboard's path.
+
+## Round 12, Sources (owner, 2026-11-06, evening)
+
+Brief: `research/briefs/round-12-sources.md`, with the owner's changes sent during the build
+(item 4: Limited is yellow; item 7 withdrawn and re-ruled; items 10 and 11 added); screenshots
+in `research/screenshots/round12-sources/` (`before-*` and `after-*`, 1280 and 400, light and
+dark). DESIGN.md § The search queries and § The sources table carry each rule.
+
+Lead rulings on the report: "Title only" and its hovers, the link's name and the dossier's labels
+accepted.
+
+1. **Full text links to the document.** When the row carries `full_text_url` (the backend's
+   round-12 field on `EvidenceItemOut`), "Full text" is a link to it, opening in a new tab
+   (`target="_blank" rel="noopener noreferrer"`, the report's address rule): Navy over a Line 2
+   underline turning Navy on hover, named "Full text (opens the document in a new tab)". It is
+   the row's second tab stop after the title. Without the address the word stays plain.
+2. **Status tones.** The 6 px square before the depth: Green "Full text", Yellow "Abstract
+   only", Red "Title only". Red needs a word beside it (the Word Beside the Colour Rule), so the
+   third state is "Title only": a relevant source with no full text and no abstract (a proposal
+   for the lead, see the report). Its hover says why ("…only the title was read.").
+3. **Cited in the Status column.** No chip: a 12 px Green tick (the Relevant column's glyph)
+   and "Cited" in Ink on the line under the depth; on a stacked row it follows the depth on the
+   same line. The table now carries no chips at all.
+4. **Strength tones for every level.** Green Very strong and Strong, Yellow Moderate and
+   Limited (owner change), Red Weak and Unrated. `strengthTone` keeps its three values
+   (`strong`, `moderate`, `weak`); `strengthColour(tone)` names the palette colour and
+   `toneSquareClass(colour)` draws the square in Tailwind classes for the report's badges.
+   The legend is the strength header's tooltip (on hover and focus of its sort button): each
+   square beside its tiers ("Very strong, Strong", "Moderate, Limited", "Weak, Unrated").
+5. **The filter bar.** Filters only, 12 px between controls. Download CSV is the quiet control
+   with the download glyph (`DownloadIcon` in the icon module; Grey Semibold over the Line 2
+   underline). Built first at the bar's right end, it wrapped onto its own row at 1280; the lead
+   ruled it onto the line under the table, at the right end after the page controls with 24 px
+   before it. Phones keep the filters' four rows at 400 px. Each facet is the shared `Select`
+   (`ui/brand/Select.tsx`) with the bar's own trigger through the `renderTrigger` seam added this
+   round (default unchanged); the local listbox is gone.
+6. **Filters wait with the table.** While the search runs and the table waits for its first
+   results, the filter bar is hidden too; a filter or screening choice the reader set keeps it,
+   so it can always be cleared.
+7. **The finished search's line** (owner, re-ruled: no sheet; "Show" stays; the round-11 line
+   "looks a bit like eyebrow text"). A Body sentence in Ink, "Found with 12 queries and 3
+   citation passes · Show", "Show" the quiet control with the disclosure chevron; it stands
+   alone above the table, under the filter bar (`QueriesSummary`). Open, the round-11 ruled
+   rows. The live list while searching is unchanged and still folds over 200 ms.
+8. **Widths with the sidebar open.** The view's `main` is a container (`@container/sources`)
+   and the table's widths follow it, not the window: from 72 rem the evidence type is 17.25
+   rem on one line; below, 12.5 rem then 9.75 rem (below 62 rem), wrapping to two lines with
+   an ellipsis after the second; below 54 rem of column the row stacks (the phone row), with
+   the Sort control in the filter bar. With the sidebar open at 1280 the column is about 47
+   rem, so the rows stack there: no fixed-column layout leaves the source readable at that
+   width (the four value columns' headers alone take 28 rem). The Status column widened to 8 rem
+   for the square and "Abstract only".
+9. **The dossier.** One type scale: the sheet's title, Body for the reference line and every
+   sentence, Meta for labels and facts; no chips; no bold below the title. The reference line as
+   the report's (`referenceParts`, the address a Grey link without its scheme); the facts as a
+   ruled list (Evidence type, Why this type, Strength with its square, Status with its square
+   and Cited, Year, Origin); then About (the AI-description chip became the label "About · AI
+   description"), What happened to it, Details (the full authors with affiliation markers moved
+   here), Tags, Cited in the report and Findings or Records, each under a Meta Grey label and
+   ruled (the blue and grey left borders are gone); "Open original" as the small outline button
+   at the foot.
+10. **A query's results** (owner go). Each query and pass is a prose link to All sources with
+    `?query=<query_id>` and `status=all`; applied, the bar shows the Navy chip "Query: <first 40
+    characters…>" with its ×, and the count reads for the filtered set. The coverage read's rows
+    carry `query_id` (a number); the stream's live rows do not yet, so a live row reads as plain
+    words until it does. The server keeps no records for a search run before the ids were
+    kept, so the page says "This search ran before queries were linked to their results." when a
+    query that returned some comes back empty with no other filter and every screening choice.
+11. **The count under the table** (owner). "52 sources" / "1–50 of 207 sources" at Meta Grey on
+    the line under the table, the range at the left; at the right the page controls, then
+    Download CSV (lead); the finished search's line stands alone above the table.
+
+12. **The line under the table** (owner, replacing the lead's placement in item 5): Download CSV
+    at the left; at the right the page size, the range, then the page controls.
+13. **25 a page** (owner): the client asks for `page_size` 25 by default (the server's default
+    stays); the shared `Select` at 32 px offers 25, 50 and 100 ("25 per page" …) at the right of
+    the line under the table, before the range, once there are more than 25 sources. The choice
+    is kept per task in `localStorage` (`policy-atlas:sources-page-size:<task>`, beside the
+    subtab memory) and the URL carries `page_size` only when it is not 25; a choice drops `page`.
+14. **The filter bar on two rows** (owner): the screening switch alone on the first row; the
+    facet filters, Cited and Sort on the second with 12 px gaps, wrapping as they must; 8 px
+    between the rows; no control is squeezed.
+15. **The finished search, a section** (owner): the Landscape's section pattern
+    (`LandscapeSection`), the heading "How the sources were found" over its hairline, then the
+    Body sentence in Ink "Found with 12 queries and 3 citation passes · Show"; open, the ruled
+    rows inside the section. It sits between the filter bar and the table, 24 px above and below,
+    and is hidden while the live list shows (the live list keeps its place and look). This
+    replaces item 7's placement.
+
+16. **The section on one line, above the filter bar** (owner, replacing item 15's placement):
+    the heading at the left and the sentence right-aligned on the same line (on phones the
+    sentence wraps under it), the hairline under that line, the ruled rows under the hairline
+    when open. It sits above the filter bar, 24 px clear of it, so the bar reads as the table's
+    own head; the table has no heading. It reuses the Landscape section's heading row (its
+    classes and `PANE_LABEL_CLASS`) rather than `LandscapeSection` itself, whose content padding
+    would leave 16 px under the hairline when the section is shut. Hidden while the live list
+    shows.
+17. **The section's heading is "Search queries"** (owner: "How the sources were found" was not
+    plain enough), the live list's own heading, one constant (`SEARCH_QUERIES_TITLE` in
+    `SearchQueries.tsx`).
 
 ## Round 11, the workspace (owner, 2026-11-06)
 
@@ -1242,6 +1542,64 @@ tasks stay as they are."; the breathing "Loading…" lines of words take `anim-b
 (skeleton bars stay on `breathe`); the tick frames' run id and the mock's repeated
 "Classifying" go to the backend builder.
 
+## Round 12, the workspace (owner, 2026-11-06, evening)
+
+Brief: `research/briefs/round-12-workspace.md`, with the owner's change to item 5 relayed by
+the lead during the build. DESIGN.md carries each rule (§ The name and its menu, § The run
+trace, § Plan card and check-ins, § Motion). Screenshots: `research/screenshots/round12-workspace/`.
+
+1. **The task header.** The name at Heading (Lead below `md`), Bold Navy, truncating on one line;
+   the 40 px chevron control on the name's baseline (the button's baseline is its glyph box's
+   foot, the glyph dropped 3 px so the chevron's foot rests on the line; negative margins keep
+   the box from growing the line); the capability on its own short line under the name in Meta
+   Grey, at every width, kept under the field while renaming. The project page's title takes the
+   chevron on its baseline, no line under it, and keeps the page title's size (see the lead's
+   question below).
+2. **"Drafting the plan" was jittery.** Measured frame by frame in the mock (the probe's numbers):
+   when the reply's first line landed, the action line under it dropped 52 px under the thread's
+   clip and slid back; once the turn was stored, each new reply line pushed the part card down
+   28.5 px at once before the thread glided. Cause: the thread's eased box (round 9) heard every
+   reply line first and eased with its bottom clipped, so whatever sat under the reply jumped and
+   was hidden. Fix: the reply has its own eased box (`useEasedHeight`), mounted before its first
+   words with the gap to the action line inside it, and `useEasedHeight` nests: it measures a
+   microtask after the change, so the inner box eases first and the thread takes only what the
+   inner box does not; a read-only ResizeObserver keeps the height it eases from current; an
+   ease that ends short of content that grew under it carries on. After: the action line moves
+   at most 1.9 px per frame (the user bubble's own rise), and a wrapping line moves the card at
+   most 0.8 px per frame. The reveal pace (0.15 chars/ms, the 800 ms catch-up) is unchanged.
+   Strip: `r2-05-streaming-strip-*`.
+3. **The chat went empty after answering the baseline check-in in the sidebar.** Cause:
+   "Confirm plan and build longlist" ends the baseline walk, and the server closes the Task
+   Agent conversation in the same write (`api/continuation.py`, `close_task_agent_conversation`).
+   The sidebar read only active conversations, so the id it was showing left the list, the
+   panel took it for a chat and showed an empty one. The mock never closes the conversation, so
+   it does not reproduce there. Fix: the sidebar and the run status bar also read the Task
+   Agent's conversations of every status (`kind: "task_agent"`) when deciding whether the
+   Task Agent is open. Test: `ChatSidePanel.test.tsx`, the gate answered, the conversation
+   closed, the thread still shown.
+4. **Done scoping rows link.** On a longlist walk a done Suggesting options, Clustering,
+   Estimating, Applying your constraints or Grouping into themes row links "Longlist →", a done
+   Shortlisting row "Shortlist →" (`?view=shortlist`), in the longlist walk and in the shortlist
+   walk; the running rows keep round 11's rule; the baseline walk's Writing keeps "Baseline →".
+5. **The stepper counts decisions** (owner change during the build): "Plan · decision n of M ·
+   <part>", M the parts the planner asks, the question included, Who can act and Your options
+   only once asked, both capabilities; the settled names before it stay. No case was found where
+   the part after "·" reads "Question" once the user is past it: the name comes from the open
+   card's own part id.
+
+Lead rulings on the build (2026-11-06):
+- The project page's title keeps its page title size (Display, Title below `md`).
+- Chat's sheet keeps *abstract only* (task 046, AM10) on a quiet Meta Grey line of its own.
+- An unjudged citation says it is unchecked: `citationJudgement` with no tier gives "Unchecked"
+  over "Awaiting evidence check" (or "The evidence check could not run for this answer" when
+  chat's check failed), in chat's sheet and the report's.
+- The Agent tab (`WorkspaceView.tsx`) takes the sidebar's fix: a `?chat=` naming a closed Task
+  Agent conversation still shows the Task Agent.
+- Done, Searching for each option and Reading the abstracts link "Sources →" (the option
+  searches' results are in the table).
+- The longlist walk's own Searching, Screening and Classifying rows are the walk's (the mock now
+  runs them beside the option searches, as the server does); no change.
+
 ## Polish log
 
 | Round | Phase | Date | Notes applied | Sign-off |
@@ -1258,6 +1616,7 @@ tasks stay as they are."; the breathing "Loading…" lines of words take `anim-b
 | 9b | build, consistency pass | 2026-11-05 | the sweep's entries 1 to 8 and § 3, the lead's rulings on § 4 and the owner's additions (above): one focus rule and the inset ring on the cut corner; the outline variant, the entry size, Retry as a button; three inline-action styles; one close button and one icon module; the report part heading at Heading; the radio as the one radius exception; splash tokens; `py-8` on every tab; the nav and subtab rule from the left edge; Find a project and the Find popover; header controls at Body; the account menu; no New page eyebrow; Landscape rows as links with one hover and one count line; one header rule on the Sources table | lead |
 | 9c | build, round 10 (five read-only reviews, then six builders) | 2026-11-06 | the report page (the question as title, the facts line, references with addresses, markers as the one control, a heading outline, ruled lists, print); the Sources table (visible filters with Country and a year range, fixed columns, a stacked phone row) and the years drag range; the list rows (the accessible name with status, the name cell widened, dates, Show more, Archived); Share and History (reordered Share with a two-step public confirm; History by day with sentences naming the step and the actor); the longlist as one component with rows moving into themes, one primary on the shortlist page, the gate card in the settled language; the backend's sentences, paging, country filter and refusal message | lead |
 | 9d | build, round 11 (owner live-run notes) | 2026-11-06 | the square's pulse deeper with a scale, the citation wave as a visible sequence; scoping rows linking to Sources and Landscape, the baseline card keeping its link and its steps once the longlist starts, ticks and the option-search stage naming their walk; option and theme names appearing while clustering runs, the shortlist toggle saying Remove on hover, the option card in three blocks, the longlist row cut to its name, description and one grey line after a UX audit; most relevant sources and case studies back in cards above the Full report, the date on its own line, the sources count linking to References, the method as a ruled table, blue x-height bullets; the hover affordance and strength tone in the Sources table, the filter bar, the finished queries as one line with saved citation passes, greyed inactive subtabs, clickable funnel rows, the population line removed, a List / Map switch with a choropleth; Archived as a quiet foot link in the open scope, Find as a magnifier in the filters row; the name-and-menu header for tasks and projects with rename inline and a two-step archive, projects archivable, the reconnecting line in the run status bar's frame; the shortlist count fixed | lead |
+| 9e | build, round 12 (owner live-run notes, evening) | 2026-11-06 | the scoping planner's Something else option and its question decision (lead prompt change, v7); the header name at Heading with the capability under it; the planner's reply in its own eased box; the sidebar and Agent tab reading a closed Task Agent conversation; done scoping rows linking; the stepper counting decisions; groups closed by default with Navy names, the count right-aligned, Show/Hide on the right edge, rules around the controls row, no contents nav, shortlisted first, the theme-and-lever hover, levers counted; the option card as what it is, Evidence (places first) and What it could take with a code-built sentence, the estimate behind an i, the dossier over the card, the card opening at its top, Set aside by you; the shared Select for every dropdown; the gate card without the key assumption; the public link reaching the longlist and shortlist read-only; the report's expand state (watched, fresh, kept across tabs), badges reordered with the table's strength tone and a working classification hover, the citation sheet on one scale; Sources tones (green, yellow, red), Full text linking to the document, Cited under the status, the two-row filter bar, Download CSV and the page size on the foot line, 25 a page, How the sources were found as a section, queries filtering the table; the list gap fixed by a subgrid, the Projects list paged and ordered by the server, row menus for rename and archive; the backend's option-search count from dispatch, combined and Estimating, places split into Several countries / Place not stated / Other, full_text_url, query_id and record ids, projects by last activity, the card export | lead |
 | 10 | review, agent pass | | | lead |
 | 11 | review, owner pass | | | owner |
 
@@ -1307,3 +1666,218 @@ Rulings on the build (agent, for the lead to confirm):
   stop: "This section covers only the cited sources — the Landscape tab shows the whole search."
 - The date line arrives with the committed report, so the action line moves down one line at the
   swap (it fades in with the facts; the reading place is kept).
+
+## Round 12, lists (owner, 2026-11-06, evening)
+
+The owner's note: "In the organisation view of the tasks list, why is the gap between the task
+status (completed / not started / …) and the owner name so big? It's making the task names
+cramped."
+
+- **Cause:** the row's grid gave the status column a fixed 11.5rem, sized for its widest form
+  ("Paused · waiting on <first name>"), and the owner a fixed 8rem with the name right-aligned in
+  it. On a "Complete" row by "You" that left about 230 px of white between the two words (about
+  110 px of unused status column, the 16 px gap, about 100 px in front of the right-aligned
+  "You"), while the name cell kept only what the fixed columns left (410 px at 1280).
+- **Rule:** the task list is one grid and every row a subgrid of it (`taskListGridClass` on the
+  list, `taskListItemClass` on the item, the row's `md:grid-cols-subgrid`), so the capability,
+  status and owner columns are `auto`: as wide as the widest value this list holds. The status
+  column is at most 11.5rem and keeps 8 px of its own on the 16 px gap, so the widest status word
+  stands 24 px from the owner (or the count on Mine). The owner is capped at 8rem, ellipsed beyond
+  it, the full name as hover text, and left-aligned so every owner starts 24 px after the widest
+  status word. Only the name track is flexible: every remaining pixel goes to the name. The count
+  and date tail stays fixed (5.5rem each; the date track is 6.5rem because the row's 16 px right
+  padding sits in a subgrid's edge track), so a project row's count and date still end under a
+  task row's. Phones are unchanged (the list is not a grid below `md`).
+- **Measured** (1280, Organisation, the same eight long-named rows): with no colleague's paused
+  task and short owners, the name cell grows from 410 to 488 px (239 to 317 at 1024) and the gap
+  from "Complete · with gaps" to "Grace Hopper" is 24 px. With the worst case (a colleague's
+  "Paused · waiting on Bartholomew" and two owners past 8rem) both caps hold and the name gains
+  only the capability's slack (410 to 417 px); the remaining white then sits after a short owner.
+- **The Projects page** (lead ruling): its project rows keep their fixed 8rem owner column, but the
+  owner cell takes the same `rowOwnerCellClass` (left-aligned, ellipsed at 8rem), so the two lists'
+  owners read alike. The owner column shows the full display name (lead ruling: not first names).
+- **The Projects list pages** (lead): it reads `useProjectsPaged` (the server's page, `has_more`)
+  and ends in the Tasks list's foot row: the shared "Show more" (`ShowMore`, now exported from
+  `TaskListPanel`) at the left while the server holds more, the archived toggle at the right, the
+  toggle still passing `status`. A project listed twice across two pages is dropped; focus moves to
+  the first project that arrived (found by id); a later page
+  that fails keeps the rows and offers Retry under them. The project pickers stay on `useProjects`.
+  The server orders projects by their last activity and sends it on every row
+  (`ProjectOut.last_activity_at`), so the page keeps the server's order (a page that arrives with
+  "Show more" lands below the rows shown) and dates each row by it; the client's own re-sort over a
+  200-task scan (`newestTaskUpdateByProject`, `projectLastUpdated`, `sortProjectsByLastUpdated`)
+  is deleted.
+- **The row's menu** (owner: "There should be a way to delete or archive and rename tasks and
+  projects on the tasks/project lists"; the lead's rule): every task and project row its owner
+  owns ends in the headers' quiet chevron control (40 px, Grey), a sibling of the row's link in the
+  row's right padding (48 px on every row, so the columns line up whether or not a row has it; the
+  task list's date track is 8.5rem to hold that padding). From `md` up it shows on hover, focus and
+  while open; on phones always. `NameMenu.tsx` is split into `NameActionsMenu` (the menu with the
+  Archive confirm) and `NameRenameField` (the field with Save name and Cancel); the headers'
+  `NameMenu` composes the two, and the rows (`ListRowMenu.tsx`) open the same menu. Rename puts
+  the field in the row's place on the Blue Wash; Archive, once confirmed, folds the row by its
+  height and opacity over 200 ms where it stood and then leaves it out, even if the list's refetch
+  is slower (`useDepartingRows`). An archived task or project offers Rename only. The control's
+  accessible name is "Task settings: <name>" / "Project settings: <name>" so each row's is its
+  own; its tooltip is the headers' "Task settings" / "Project settings".
+- **The dots and Add to project** (owner, round 12): the rows' control is the three dots
+  (`MoreIcon`, new in the icon module: three round dots across the 16-unit grid's middle); the
+  headers keep the chevron. A task's menu, on its row and on the task header alike, has "Add to
+  project" between Rename and Archive (`useAddToProjectStep` in `NameMenu.tsx`, one build for
+  both; `NameActionsMenu` takes further steps as `steps`). The step is the Share page's control:
+  "Add to a project" over the app's `Select` ("Select a project") listing the projects the Share
+  page offers less those the task is in, then "Add" (outline, off until a project is chosen) and
+  "Cancel"; it runs `useUpdateTask` with the task's `project_ids` plus the chosen one, and the
+  list's refetch updates the row's project. A refusal reads the Share page's "The projects
+  couldn't be changed. Try again." in the step. With no project left the item is disabled, its
+  grey reason line "Already in every project" (lead ruling: the list is the Share page's, every
+  project it offers, so the reason does not say "your"). Project rows and the project page's menu have no such
+  item.
+
+## Round 12, the report page (owner, 2026-11-06, evening)
+
+Brief: `research/briefs/round-12-report.md`. Built as below; DESIGN.md § Report and citations and
+§ Overlays carry each rule. Screenshots: `research/screenshots/round12-report/` (`before-*` and
+`after-*`, 1280 and 400; the app has no dark theme, so `-dark` matches `-light`).
+
+1. **The expand state** is one piece of state per task, in memory (a module store in
+   `ArtefactOutline.tsx`, not localStorage): `all` (what Show all / Hide all last said) and each
+   collapsible part's own open state by its id. The live page seeds it open
+   (`seedReportExpanded`, in the render that first shows the live page, before its sections
+   render), so a reader who watched the writing finds every section open, the References and the
+   method included, and "Hide all". A reader who opens a finished report fresh finds the sections
+   shut and "Show all". Moving between the task's tabs keeps each section and the control's word
+   (the Result route mounts again and reads the store). Leaving the task forgets it:
+   `useForgetReportExpandOnLeave(taskId)` is for the task shell to call (see the shapes below);
+   a page load starts empty. Tests: the watched path in `ArtefactView.live.test.tsx`, the tab and
+   fresh paths and the forget in `ArtefactView.expand.test.tsx`, the watched path and a tab
+   switch in e2e scene 6.
+2. **The chips on case studies and most relevant sources** read classification, then strength,
+   then "Since 2019" / "Cited by 3 claims". The strength chip carries the Sources table's 6 px tone
+   square before its word (`strengthTone`, `strengthColour`, `toneSquareClass`, imported: Green,
+   Yellow, Red, the table's round 12 colours; the sheet's strength the same). Both hovers are Meta,
+   set once on the Tooltip (`className="text-meta"`), not inside each hover's content. Both show the help
+   cursor (on the shared `ChipWithTooltip`, so chat's verdict chip takes it too). The
+   classification's hover did not exist: the artefact carries no reasoning for a type
+   (`CitationOut` and `CaseStudyCardOut` have no `classification_reason`). The chip now reads it
+   from the cited source's dossier (`useSourceDossier`, `SourceDossierOut.classification_reason`)
+   when the hover first opens, cached for the task; a case-study card's source is its first
+   citation of the card's type (`cardEvidenceSourceId`). A breathing line stands while it
+   arrives.
+3. **The claim provenance sheet**: one type scale (the title, Body, Meta; no Caption, no chips, no
+   bold but the source's name); its blocks in a fixed order with one Line hairline between them
+   and no boxes, coloured left borders or tinted callouts: the claim's words; any explainer (gap,
+   pattern, theme, weak grounding) at Body with its details at Meta Grey; then each citation: the
+   quote first, highlighted in its passage; the source line as the References read it ("[1]
+   Sampleton A, Mockford C (2022). **Universal breakfast clubs and diet quality**. BMJ Open."), the
+   name the way into the dossier; the evidence type and strength at Meta Grey (the strength's tone
+   square and dotted word, its reason on hover); the judge's verdict as a Meta Grey label ("Tier 2
+   · grounded") over its words at Body Navy. The Sheet's close button and focus rules are
+   unchanged.
+
+4. **A shared options scoping task** (owner addition): the public view renders the Result's view
+   switch (Baseline, Longlist, Shortlist) whenever the task has a longlist, never a longlist being
+   built; a task with no longlist keeps the baseline alone. Routing only, in `ArtefactView`; the
+   scoping builder makes the longlist, grid, option card and shortlist read-only under
+   `usePublicView()`. Test: `ArtefactView.publicView.test.tsx`.
+
+5. **"How the evidence was gathered" links** (owner, item 7): each row's label is a link in the
+   Link style where the sources table can filter to it, with the Landscape's filters: Found
+   `?status=all`, Relevant `?status=Included`, Cited `?cited=true` (Full text and Shortlisted
+   plain); an evidence type `?cited=true&type=…`, a year `?cited=true&year_from=Y&year_to=Y`, a
+   country `?cited=true&country=…` ("Not reported" plain), a theme `?cited=true&theme=…`. The
+   counts stay plain, right-aligned (a theme's count lost its "→" link). The method has no
+   strength distribution, so no strength row. Screenshot: `after-method-open-1280-light*.png`.
+6. **Fixes**: the Markdown download writes a case study's facts type, then strength; the dotted
+   underline of a value with a reason is one utility, `reason-word` (`index.css`), used by the
+   Sources table and the sheet (`.sources-hint-word` is gone); the hover chips sit on an
+   `inline-flex` wrapper, so the strength chip (whose first item is the empty tone square, which
+   set its baseline) no longer sits 1 px low; the key findings use the shared
+   `BULLET_ITEM_CLASS` / `BULLET_MARK_CLASS` (`ui/brand/BulletList.tsx`), the gap's square still
+   Yellow.
+
+Rulings on the build (agent, for the lead to confirm):
+- "Hide all" after a watched run opens "How the evidence was gathered" too, which round 11 keeps
+  folded on a fresh report: the control would otherwise say "Hide all" over a shut section.
+- The sheet's judge label is the tier's own label ("Tier 2 · grounded"), and the words are the
+  judge's rationale, or the tier's meaning ("Grounded in a specific passage") when there is none;
+  no new words.
+- The institutions line left the sheet: the References' form names authors only, and the
+  institutions stay in the dossier one click away.
+- A failed passage lookup shows the quote alone in quotation marks at Body Navy (it was italic
+  Grey), the honest fallback chat also uses.
+- The sheet's number "[1]" is Regular Grey, not the References' Semibold, to keep the name the
+  one bold.
+- The sheet's source name is a `role="button"` span (Enter and Space open the dossier, the house
+  focus ring), not a `<button>`: a button breaks as a block, which left ". BMJ Open." alone on a
+  phone's line. It stays a button to chat's and the journey's tests, and is not a link because
+  chat's dossier is not on a `?source=` address.
+
+Proposals for the lead (copy):
+- The classification hover when the dossier has no reasoning: "No reasoning was recorded for
+  this type." (built; the table's pattern is "No screening reasoning was recorded.").
+- The classification hover when the dossier read fails: "The reasoning could not be loaded."
+  (built).
+
+Shapes other builders must wire:
+- The task shell (`AppShell.tsx`, the workspace builder; and `PublicTaskShell.tsx` for the public
+  view) calls `useForgetReportExpandOnLeave(taskId)` from `./ArtefactOutline` with the route's
+  `taskId` (`string | undefined`), once, in the component that stays mounted across a task's tabs.
+  Without it a reader who leaves a task and comes back in the same page session finds the state
+  they left (a page load is still fresh).
+- Chat's provenance sheet (`ChatMessages.tsx`, `ChatCitationBlock`) still passes its verdict and
+  appraisal as `chips`; the shared block now takes `judgement={citationJudgement(tier,
+  rationale)}` (exported), `evidenceType` and `strength` instead, and `chips` should go once chat
+  moves.
+
+## Round 12, consolidation (owner, 2026-11-06, evening)
+
+Owner: "We should have a central place for things like strength tones and stuff like that instead
+of re-implementing it everywhere it's used, or it will lead to drift." DESIGN.md § Components
+carries the rule (the Defined-Once Rule): shared vocabulary is defined once under
+`frontend/src/ui/brand/` and imported; a view-level copy of a shared rule is a defect.
+
+**The move.** `ui/brand/evidence.ts` holds the evidence vocabulary and nothing else: the strength
+tiers in the sort's order (`STRENGTH_TIERS`, `strengthRank`), their tones and colours
+(`strengthTone`, `strengthColour`, `strengthTierColour`, `toneSquareClass`), the legend
+(`STRENGTH_LEGEND`, read from the tones) and the hover (`strengthHint`, `STRENGTH_FALLBACK_HINT`);
+the read depth's words (`FULL_TEXT`, `ABSTRACT_ONLY`, `TITLE_ONLY`), tones and hovers
+(`readDepthLabel`, `readDepthColour`, `readDepthHint`, `humanReason`); the evidence-type formatter
+(`evidenceTypeLabel`); the judge's labels (`TIER_LABEL`, `TIER_TEXT`, `citationJudgement`,
+`UNCHECKED`, `uncheckedLabel`, `uncheckedWords`). `ui/brand/EvidenceMarks.tsx` holds the marks:
+`ToneSquare` (the 6 px square, `data-tone` its colour), `StrengthMark` (square then word) and
+`DepthMark` (square then word). The originals were deleted from `sourcesPresentation.ts`,
+`artefactPresentation.ts`, `ArtefactView.tsx` and `ChatMessages.tsx`, and the colour rules from
+`sources.css` (its `.sources-tone` keeps only the table's 7 px gap and seat on the line). The
+Sources table, its legend and dossier, the report's chips and citation sheet, chat's sheet and
+verdict chip, the Landscape charts, the report's method table and the longlist's document line
+import them. Tests: `ui/brand/evidence.test.tsx`; the views' tests keep what is theirs.
+
+**Where two copies differed** (the table's rule kept, except where noted):
+1. The report's square named its tone in `data-tone` ("strong"); the table's named its colour
+   ("green"). Colour everywhere now. The colours themselves already agreed (Green, Yellow, Red).
+2. The strength hover without a type: the report said "The cited source's appraised evidence
+   strength — …", the table "The source's appraised evidence strength — …". The table's words
+   everywhere.
+3. The strength hover with a type: the table wrote the classifier's Title Case type into the
+   sentence ("appraised from the document type: Systematic Review"), the report the formatter's
+   sentence case. Kept the formatter (not the table) because DESIGN.md's rule is "evidence types
+   read in sentence case everywhere, from one formatter", which the table's own type cell follows.
+4. Chat's text-basis line read "abstract only" in lowercase Grey with no mark; it now reads the
+   table's "Abstract only" after its Yellow square (`DepthMark`). A copy change on task 046's
+   contract item 7, made because the brief asks every "Abstract only" to come from the module;
+   the lead may revert it to the old words by passing them, but then it is a second copy.
+5. The longlist's document line printed the evidence type as the server sent it; it now goes
+   through `evidenceTypeLabel` like every other surface.
+6. The tone square's spacing stays the surface's: the table's 7 px inline margin and 2 px seat, the
+   report's and chat's 6 px flex gap, the legend's 8 px. Not merged: spacing is layout, not
+   vocabulary.
+
+**Left alone, on purpose**: the run status mark (`ui/brand/Card.tsx` `StatusMark`, already shared,
+a different vocabulary: blue, green, orange, red, navy, breathing), the Navy 6 px squares of the
+longlist's levels and the new-content mark and the Blue key-finding bullet (not evidence tones);
+the mock server's strength sort rank (`mock/api.ts`, it mirrors the backend); the API layer's
+strength filter type (`api/queries.ts`, which should not import from `ui/`); the CSV export's
+"Full text" column (the `read_in_full` true/false field, an export column name); the dossier's
+"Read basis: Title only" (what screening read, a different fact); the pipeline status words
+("Full text collected", "Included — abstract only").

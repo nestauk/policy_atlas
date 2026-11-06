@@ -117,9 +117,8 @@ test.describe("mock options-scoping baseline gate", () => {
     await expect(
       thread.getByRole("heading", { name: "Does the plan still look right now you have the baseline?" }),
     ).toBeVisible();
-    await expect(
-      thread.getByText("Careers advice reaches the young people already in school"),
-    ).toBeVisible();
+    // Round 12 (owner): the gate card shows no key assumption.
+    await expect(thread.getByText("Careers advice reaches the young people already in school")).toHaveCount(0);
     await expect(thread.getByRole("radio", { name: /^Confirm plan and build longlist/ })).toBeVisible();
     await expect(thread.getByRole("radio", { name: /^Change the plan/ })).toBeVisible();
 
@@ -348,7 +347,7 @@ test.describe("task 058 options scoping: the gate and the longlist build", () =>
       .getByRole("region", { name: "Task Agent conversation" })
       .getByRole("radio", { name: /^Confirm plan and build longlist/ })
       .click();
-    await seen(page, /^Searching for each option · \d+ of 12 searches done · [\d,]+ sources so far/);
+    await seen(page, /^Searching for each option · \d+ of 12 searches done · [\d,]+ sources/);
     // The step in progress links to the longlist being built (round 10, D4).
     await seen(page, /Longlist →$/);
   });
@@ -365,10 +364,10 @@ test.describe("task 058 options scoping: the gate and the longlist build", () =>
 
     // The run status bar walks the build, with the server's words after the
     // label; the page itself carries no stage line (round 10, D3).
-    await seen(page, /^Searching for each option · \d+ of 12 searches done · [\d,]+ sources so far$/);
+    await seen(page, /^Searching for each option · \d+ of 12 searches done · [\d,]+ sources$/);
     await seen(page, /^Reading the abstracts · [\d,]+ of [\d,]+ abstracts read$/);
     await seen(page, /^Clustering into options/);
-    await seen(page, /^Writing what each option would take/);
+    await seen(page, /^Estimating what each option would take/);
     await seen(page, /^Applying your constraints/);
     await seen(page, /^Grouping into themes/);
     await seen(page, /^Shortlisting/);
@@ -381,7 +380,10 @@ test.describe("task 058 options scoping: the gate and the longlist build", () =>
     // 11); a folded suggestion leaves the list for its option card.
     await seen(page, "Assigning sources");
     await seen(page, "Benefit run-ons when a young person starts work");
-    await seen(page, /^Excluded 2 options$/i);
+    // The heading is a flex line (round 12): the name, the count and the Show
+    // word are separate boxes, so innerText records them as separate lines.
+    await seen(page, /^Excluded$/i);
+    await seen(page, "2 options");
 
     // The list carries no qualifier word; the shortlist wave marks its rows
     // in words, and the finished list then gains its controls in place.
