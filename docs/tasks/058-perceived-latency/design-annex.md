@@ -444,7 +444,8 @@ stream, so the counts, the links and the paused state stay. Every label is the s
   or "Failed · 14 min" with no link. A chevron before the words opens the steps. The folded
   line is the run's one destination, so the separate run-finished notice goes.
 - **A past run** (not in the stream) folds to its status word and its wall time, with no step
-  list; the chevron is absent.
+  list; the chevron is absent. *Round 11 (owner): it is the ended card, with its walk's link
+  and, when the run read carries its steps, "Show steps"; see § Round 11, the workspace.*
 - **Elsewhere.** Nothing else shows the run: the lifecycle tab dots, the browser title marker
   and the reconnecting banner stay. "See the plan" under the Result tab's title stays.
 - **Motion.** The header's words re-mount with the 300 ms rise when the row changes; the last
@@ -997,7 +998,8 @@ each rule. Screenshots: `research/screenshots/round10-scoping/`.
    (`SettledGateCard`) for `TaskAgentPane` to use in place of the user bubble and the recorded
    line.
 9. **Links** (D4): `rowLink` covers the longlist walk ("Longlist →" on the step in progress, from
-   Suggesting options on) and the baseline walk (as an Evidence search, Writing → "Baseline →").
+   Suggesting options on; round 11: its Searching, Screening and Classifying rows take the
+   Evidence search's links) and the baseline walk (as an Evidence search, Writing → "Baseline →").
 10. **The plan card** shows "Scoping plan · <time band>" as the annex has said since the build
     (the annex winning over the build).
 11. **Copy accepted from the review**: C1 (one origin vocabulary), C4 (no kind labels, "Read
@@ -1023,6 +1025,223 @@ Rulings on the build (agent, confirmed by the lead):
 - "Show all" / "Hide all" on the longlist is the page's own control (it starts as the D1 switch
   says), since the report's shared control always starts on "Show all".
 
+## Round 11, lists (owner, 2026-11-06)
+
+The owner's note: the third switcher entry, "Archived", listed only the reader's own archived
+tasks whatever the scope, and the page never said so ("not clear"). Rule: Archived is not a scope.
+This replaces round 10's "Archived" entry above. The owner then made three changes during the
+round, relayed by the lead; the bullets give the final shape.
+
+- **The switcher** keeps Mine and Organisation only.
+- **The archived toggle** lists the archived tasks of the open scope: the reader's on Mine
+  (`scope=mine&status=archived`), the organisation's on Organisation (`scope=all&status=archived`,
+  asked for only once open), unscoped for a reader with no organisation. Off, the list is the
+  active tasks as before. The scope holds across the toggle and the toggle across the scope.
+- **Where and how it looks** (owner: the first build's outline button "doesn't need to be as
+  prominent"; then the quiet control in the filters row "takes up a bit too much space for a
+  button that people will hardly ever use"): at the list's foot, right-aligned in the row where
+  "Show more" sits (alone when there is no more), under every state of the list. The quiet control
+  of "See the plan" and "Show steps" (`QUIET_CONTROL_CLASS`) at Caption: "Show archived" off, "Hide
+  archived" on; the changing label carries the state, with no `aria-pressed` (lead ruling: it
+  would say the state twice). Its box is the foot row's 40 px and holds the wider label's width,
+  so the words never move its edge.
+- **On:** the list carries the heading "Archived" (an h2, Meta Semibold Navy, 8 px over the frame).
+- **Source count:** a failed run shows the dash whether or not the task is archived (lead ruling;
+  round 10 had kept the count on archived rows).
+- **Owner column:** off on Mine, archived or not; on Organisation, archived or not, the reader's own
+  rows "You".
+- **Empty:** "No archived tasks" in the list's frame, no sentence under it; "Hide archived" stays
+  under it as the way back.
+- **Shown always** (build's reading; no note says otherwise): the toggle is there whether or not the
+  open scope has archived tasks, so it never appears or leaves under the reader. Round 10 showed
+  the entry only while the reader had archived tasks; the lead may restore a condition.
+- **Find** (owner, the lead's recommendation accepted): "Find a task" / "Find a project" leave the
+  header, which keeps only the primary. A magnifier (the icon module's new `SearchIcon`, 16 px in a
+  40 px target, the quiet control's Grey and Navy hover, the house focus ring, `aria-label` and a
+  tooltip below it naming it) ends the filters row on Tasks and Projects, after the admin's note;
+  its glyph sits on the column's right edge (`-mr-3`). The same popover opens from it. On a
+  project's page the magnifier sits before Make private in the filters row (build's reading of
+  "the header keeps only the primary"). The filters row holds only the switcher and the magnifier.
+- **Projects** (owner addition: projects can now be archived): the Projects page takes the same
+  toggle, heading and foot row, listing the archived projects of the open scope through the
+  projects list's `status` parameter (`scope=mine|all&status=archived`, or `status=archived` alone
+  with no organisation), "No archived projects" when there are none. `ProjectsQuery.status` in
+  `api/queries.ts` matches the generated types. The project row has no status word (name,
+  owner, task count, date), so an archived project's row is left as it is. The menu that archives a
+  project is the workspace builder's.
+
+## Round 11, Options scoping (owner, 2026-11-06)
+
+Brief: `research/briefs/round-11-scoping.md`. DESIGN.md § The longlist carries each rule.
+Screenshots: `research/screenshots/round11-scoping/`.
+
+1. **Names while clustering.** While "Clustering into options" runs, the option names the step
+   publishes (the Themes frame with `stage: "longlist"`, the backend builder's this round) join
+   the page as rows the moment they are named: a name no read has yet joins at the end, and
+   every row not yet on the longlist reads "Assigning sources" after the
+   breathing 6 px blue square. When the step commits, the longlist read brings each row's
+   evidence line, which says the count; the row a published name drew keeps its place and key
+   (its View Transition name is its name's), so it neither remounts nor rises again. During
+   "Grouping into themes" (`stage: "theme"`) the theme names stand as headings under the rows,
+   rising 60 ms apart, before any option is in them (no count beside a heading with no options);
+   when the step commits the rows move under their themes in round 10's View Transition, and a
+   heading the step named keeps its key, so it stays where it is. The page never blanks: the
+   rows stay through both steps and the handover.
+2. **The shortlist toggle** says what pressing it does: pressed, "Shortlisted" after a 12 px
+   check (the Sources table's tick stroke, in Navy); on hover and keyboard focus its words become
+   "Remove from shortlist"; unpressed, "Add to shortlist". All labels share one grid cell, so the
+   button is always as wide as "Remove from shortlist" and neither the swap nor a press shifts
+   the row; the words sit at the cell's end where the toggle closes a row (the longlist row from
+   `sm` up, the option card, the Shortlist page) and at its start on a grid tile and a phone's
+   row. The swap is a cut, never on touch, and not shown to the pointer that just pressed until
+   it leaves and comes back, so the words that answer a press are the new state's. `aria-pressed`
+   is kept and the accessible name stays the resting words ("Shortlisted", "Add to shortlist").
+   The same component serves the longlist, the grid, the option card and the Shortlist page; the
+   building list's "Shortlisted" words take the same check.
+3. `THEMES_OPEN_BY_DEFAULT` is unchanged (the owner's decision is pending).
+4. **The option card** (owner: "inconsistent text sizes, random bolding, not well organised
+   information"). Before: `screenshots/longlist-ux-review/before-{rich,excluded}-{opened,expanded}-{1280,400}.png`;
+   after: the same names with `after-`. Three blocks under the one rule: what it is (title,
+   description, the origin line, How it works), What it would take, Where it stands (the notices,
+   "Sources" with the evidence signal on one line and the standing, your outcomes, places,
+   documents). Sizes and weights changed: the description and every section's prose from Lead
+   (`REPORT_BODY_CLASS`, 19 px from `md`) to Body; the header's origin line from Body to Meta;
+   the evidence signal from the header's Body Navy line into Where it stands at Body Ink; the
+   profile's line names from Body Semibold Navy to Meta Grey regular, its sentences from Lead to
+   Body; "Lever:" from Bold Navy inline to the field label (Meta Grey) over a regular value;
+   "Your outcomes", "Where it has been evaluated", "Documents · N · …" and the document groups
+   from Body Bold Navy to the field label; the place names from Bold Navy to regular Navy; the
+   maturity line from Semibold Navy to regular Ink; document titles from Bold underlined to the
+   prose link at Body; programme names from Bold to regular inside their Meta line; the
+   outcome counts from Body to Meta Grey. The third section's title is "Where it stands" (the
+   lead's word in the brief; it was "Evidence").
+5. **The longlist** (owner: "very dense … overwhelming when a user first lands on it"; "general
+   UX/UI principles"). The review is `research/longlist-ux-review.md` (24 findings, before
+   screenshots `before-list-*`, `before-grid-1280`); after: `after-list-*`, `after-grid-1280`,
+   `after-list-closed-*`. Fields moved: the origin words, relations, the evidence signal's later
+   parts ("4 more describe it", "Evaluated in …", "Measures N of your M outcomes") and the folded
+   suggestions ("Folded into …") left the row for the option card (its origin line, "also found
+   as" and Where it stands); "Read from titles and abstracts" moved from the header to the
+   list's foot; the theme heading's instrument nouns went (the lever is on every row and Group
+   by Lever type answers it). The count line gains "N shortlisted". Theme, lever and Excluded
+   headings are the Label style with the count beside them and one Body Grey description line;
+   rows 16 px apart without rules, groups 32 px apart; the toggle is regular weight on the list;
+   on a phone the controls close the row. Show all moves into the controls row.
+6. **One switch** (lead): `ui/brand/OutlineSwitch.tsx`, 40 px on the longlist, 32 px for the
+   Landscape's List · Map (its twin `ViewSwitch` removed).
+
+Rulings on the build (agent, for the lead):
+- The frame carries names and descriptions only, so a row's count arrives with the committed
+  longlist (its evidence line), not batch by batch, and the options move under their themes when
+  the theme step commits, not as each is assigned. Per-batch counts and per-theme membership
+  would need the frame to carry them (see the report).
+- Review findings not built, for the lead: 10 (the growing rule for the switches; DESIGN.md
+  and round 10 say the outline switch, and the lead asked for it as a shared component), 18
+  ("Show all N" stays a button), 24 (the row's profile summary: copy for the lead, see the
+  report), and the ruling conflicts listed at the end of the review.
+- "Assigning sources" goes on every row not yet on the longlist, the suggestions included, since
+  the assignment runs over all of them; a row's own search line ("Searched · 312 found") gives
+  way to it.
+
+## Round 11, Sources (owner, 2026-11-06)
+
+Brief: `research/briefs/round-11-sources.md`; screenshots in `research/screenshots/round11-sources/`
+(`before/` and `after/`). Built as below (DESIGN.md § The search queries, § The sources table,
+§ Charts and § Navigation carry each rule).
+
+1. **Hover affordance.** The evidence type, the strength, the Relevant figure (and "retracted")
+   and "Abstract only" carry their word under a dotted Grey underline 3 px below with the help
+   cursor (`sources-hint-word`); the title stays the row's one tab stop.
+2. **Strength's tone.** The 6 px square before the word: Green for Very strong and Strong, Navy
+   for Moderate, Grey for Limited, Weak and Unrated (`strengthTone`). Limited sits with Weak (the
+   brief names strong, moderate, weak and not assessed); a tier outside the vocabulary has no
+   square.
+3. **The filter bar.** One row of 32 px outline controls at Meta on one baseline, 8 px apart on
+   every wrapped line: the screening choice as the outline switch, Cited, the facets idle as the
+   outline button naming the facet, an applied filter a filled Navy chip ("Strength: Moderate ×";
+   the words reopen the choices, the × clears it), Clear filters, and Download CSV at the right
+   end. The labels left of the controls are gone (the control names its facet); the Year
+   popover's "Clear" link is gone (the chip's × does it). It fits one row at 1280 with the
+   fallback face; with a long applied value it wraps.
+4. **Search queries, completed.** No card: one Meta Grey line above the filter bar, "Found with 5
+   queries and 1 citation pass · Show", with the one disclosure. Open, ruled rows at Meta and the
+   table's width: the query in Navy, the database in Grey, the count right-aligned; a citation
+   pass its own Grey row in the past tense ("Followed citations from 50 sources"). The saved
+   coverage now carries the passes (`CoverageBackendDetailOut.passes`, worded for a finished
+   search, in the order run), so the line and the rows hold after a reload; the browser rewords
+   only the stream's present tense until the saved coverage lands. The live list is unchanged and still folds over
+   200 ms when the search ends. Reading taken: "the pass name in Grey" is the database each
+   query went to, one Grey column, in place of the round-9 group labels.
+5. **Inactive subtabs** `font-medium text-grey`, hover Navy; active `font-extrabold text-navy`.
+6. **Funnel links.** Found → `?status=all` (the brief's "none for Found" would land on the
+   Included default once screening is done, so the link names All), Relevant → `?status=Included`,
+   Cited → `?cited=true`. Quality-checked, Full text and Shortlisted have no filter on the table
+   and take no link.
+7. **No population figure** at the top of the Landscape; "Classified so far" stays.
+8. **The map.** A List / Map switch (outline switch, 32 px) at the heading's right, the list the
+   default; the map (`LandscapeViewMap.tsx`, `React.lazy`) a choropleth on Natural Earth, five
+   Navy steps on a log scale, none in Line 2, the legend "1 ▮▮▮▮▮ 30", hover "United Kingdom ·
+   23" with the country Electric Blue, a press to the filtered table, "Not on the map: …" for
+   names the atlas cannot place. No globe outline (the 1:110m frame without Antarctica clipped
+   it). The list is the keyboard's path.
+
+## Round 11, the workspace (owner, 2026-11-06)
+
+Brief: `research/briefs/round-11-workspace.md`, with the owner's items 5 to 7 added during the
+build (relayed by the lead). DESIGN.md carries each rule (§ Status mark, § The run trace, the
+run status bar in § Layout, § The name and its menu, § Motion). Screenshots:
+`research/screenshots/round11-workspace/`.
+
+1. **The square's pulse.** `breathe` troughs at 0.25 (was 0.5); the 6 px mark alone adds scale 1
+   to 0.8 (`anim-breathe-mark`, through `StatusMark`, so the trace rows, the task list rows and
+   the longlist's searching rows all take it); the words beside it keep `breathe-soft`; the
+   placeholder bars and skeletons keep `breathe` (now to 0.25) without the scale. Reduced motion
+   unchanged. Six frames over one cycle: `r2-05-pulse-strip-1280-light.png`.
+2. **Scoping row links.** On a longlist walk Searching and Screening link to Sources and
+   Classifying to the Landscape, running and done (the Evidence search's rules); from Suggesting
+   options on the step in progress links to the longlist; Reading the linked search links
+   nothing; the baseline walk's Writing links to the baseline, as before.
+3. **The baseline card after the longlist starts.** `PastRunLine` draws the ended card through
+   the same component as `RunTrace` (no copy): the finish words, the wall time, "Read it →" to
+   what the walk made (`resultHref`: the report, `?view=baseline`, `?view=longlist`), and the
+   steps from the thread run's `stages` (`RunOut.stages`, the backend's shape:
+   `{stage, label, status, started_at, ended_at, seconds, summary, counts}`) folded behind "Show
+   steps", through `cardRows`. No steps in the read, no control. Not a landmark, no live region.
+4. **The run status bar on a scoping walk** says the longlist walk's step: the store keeps a
+   child search's stage frames off the tracked walk (confirmed with the mock's walk and a test
+   that feeds a child's `stage.started`). Activity ticks carry no run id, so a child's tick on a
+   stage key the walk shares (`acquire`) would still reach the walk's row (reported to the lead).
+5. **The task header** (owner): the name at Title on one baseline with the capability in plain
+   Grey (no chip), the 40 px chevron control, the menu in the popover's tokens with menu rows,
+   Rename in place with "Save name" and "Cancel", Archive as the two-step confirm in words, focus
+   back on the chevron. Below `md` the name has its own line.
+6. **Projects get the same menu** (owner): `ProjectName` on the project page's title, Rename and
+   Archive (`useArchiveProject`); archiving goes to the Projects list; an archived project offers
+   Rename only.
+7. **The reconnecting line** (owner) takes the run status bar's frame on every tab but Agent:
+   the bar's padding and type size, its words where the bar's words start, the Yellow Tint kept,
+   after the rail, in place of the bar's words until the stream returns. On the Agent tab it sits
+   at the top of the Task Agent's column (after the workspace rail); the sidebar's compact pane
+   leaves it to the page's bar.
+
+Rulings on the build (agent, for the lead to confirm):
+- A past baseline card's link reads "Read it →" (the ended card's one destination), not
+  "Baseline →": sharing the ended card's code gives its words. The steps' Writing row inside it
+  still reads "Baseline →".
+- A longlist walk's done Searching, Screening and Classifying rows link (the Evidence search's
+  rules say done rows link); its other done rows still point nowhere, as round 10 had it.
+- A run the thread lists that has not ended (a stale `running` row) keeps its status word and no
+  link: there is no ended card to draw.
+- The project's archive sentence follows the task's: "Archiving removes this project from your
+  active projects."
+
+Lead rulings on the build (2026-11-06): the past card keeps "Read it →" (one language); the
+longlist walk's done Searching, Screening and Classifying rows link, confirmed; the archive
+confirm reads "Archive" / "Keep it" for tasks and projects, and a project's sentence adds "Its
+tasks stay as they are."; the breathing "Loading…" lines of words take `anim-breathe-soft`
+(skeleton bars stay on `breathe`); the tick frames' run id and the mock's repeated
+"Classifying" go to the backend builder.
+
 ## Polish log
 
 | Round | Phase | Date | Notes applied | Sign-off |
@@ -1037,6 +1256,8 @@ Rulings on the build (agent, confirmed by the lead):
 | 8 | build, owner round 8 (live-run notes) | 2026-11-05 | the ended trace is the same card (finish on the top line, rows behind "Show steps"); the card reads as a table with right-aligned counts, times and links; the running step links to its page and its activity line breathes; Searching and Screening as two rows; "Change" on its own line; one container for the decision card's settle; the status bar starts after the rail and opens the Task Agent; the rail's mark static with no status or timer; one mark size in the task list; no Sources tab mark; pulsing placeholders on the Sources tab keyed to the live stage, with a 5 s refetch | owner |
 | 9 | build, owner round 9 (live-run notes) | 2026-11-05 | the search queries at the top of All sources, live as they go out and folded once the search ends, the sources table waiting for the first results; the activity line names the query that is out; the run status bar (renamed from the run strip) links to the running step's view; the checking chips run a blue wave; the found themes show while their documents are assigned; the nav and lifecycle tabs grow their blue rule on hover; arrivals: only what arrives after a view's first paint rises, the thread makes room for it, a decision card lays itself out, the reply comes at a steady pace, values land with a fade, the check-in settles on the choice, the trace eases its steps and its fold, the plan card leaves as the trace arrives, sheets leave the way they came, the plan document arrives from its edge; "Read in full" becomes "Full text" | owner |
 | 9b | build, consistency pass | 2026-11-05 | the sweep's entries 1 to 8 and § 3, the lead's rulings on § 4 and the owner's additions (above): one focus rule and the inset ring on the cut corner; the outline variant, the entry size, Retry as a button; three inline-action styles; one close button and one icon module; the report part heading at Heading; the radio as the one radius exception; splash tokens; `py-8` on every tab; the nav and subtab rule from the left edge; Find a project and the Find popover; header controls at Body; the account menu; no New page eyebrow; Landscape rows as links with one hover and one count line; one header rule on the Sources table | lead |
+| 9c | build, round 10 (five read-only reviews, then six builders) | 2026-11-06 | the report page (the question as title, the facts line, references with addresses, markers as the one control, a heading outline, ruled lists, print); the Sources table (visible filters with Country and a year range, fixed columns, a stacked phone row) and the years drag range; the list rows (the accessible name with status, the name cell widened, dates, Show more, Archived); Share and History (reordered Share with a two-step public confirm; History by day with sentences naming the step and the actor); the longlist as one component with rows moving into themes, one primary on the shortlist page, the gate card in the settled language; the backend's sentences, paging, country filter and refusal message | lead |
+| 9d | build, round 11 (owner live-run notes) | 2026-11-06 | the square's pulse deeper with a scale, the citation wave as a visible sequence; scoping rows linking to Sources and Landscape, the baseline card keeping its link and its steps once the longlist starts, ticks and the option-search stage naming their walk; option and theme names appearing while clustering runs, the shortlist toggle saying Remove on hover, the option card in three blocks, the longlist row cut to its name, description and one grey line after a UX audit; most relevant sources and case studies back in cards above the Full report, the date on its own line, the sources count linking to References, the method as a ruled table, blue x-height bullets; the hover affordance and strength tone in the Sources table, the filter bar, the finished queries as one line with saved citation passes, greyed inactive subtabs, clickable funnel rows, the population line removed, a List / Map switch with a choropleth; Archived as a quiet foot link in the open scope, Find as a magnifier in the filters row; the name-and-menu header for tasks and projects with rename inline and a two-step archive, projects archivable, the reconnecting line in the run status bar's frame; the shortlist count fixed | lead |
 | 10 | review, agent pass | | | lead |
 | 11 | review, owner pass | | | owner |
 
@@ -1044,3 +1265,45 @@ Rulings on the build (agent, confirmed by the lead):
 
 Notes the owner gave that this slice does not take, with where they go (`docs/deferred.md`).
 None yet; the owner will add them on the live app.
+
+## Round 11, the report page (owner, 2026-11-06)
+
+Brief: `research/briefs/round-11-report.md`. Built as below; DESIGN.md § Report and citations
+carries each rule. Screenshots: `research/screenshots/round11-report/`.
+
+1. **Most relevant sources** are back where they stood before round 10: the executive summary's
+   last part, after the case studies and above the Full report (an `h3`, its contents entry
+   between "Case studies" and "Full report"), live and committed; the download follows. This
+   reverses round 10's D2.
+2. **Case studies and most relevant sources are ruled cards again**, the case studies' card from
+   before round 10: a Line hairline box, 16 px inside, 12 px apart, no shadow. A card's chip row
+   takes no room while it is empty, so the foot is the padding.
+3. **The date has its own line** under the title: "Last updated 5 November 2026" at Meta Grey,
+   committed only. The facts line keeps "Sources 12 cited out of 118 included · Published
+   2019–2024"; the sources count links to `#references` and opens the References as the
+   contents do (it no longer leads to the Sources tab's cited filter).
+4. **"How the evidence was gathered"**: shut, its one line at the References' size; open, the
+   counts first as a ruled table, one stage a row in the Landscape funnel's names (Found,
+   Relevant, Full text, Shortlisted, Cited), the figures right-aligned in one column of tabular
+   figures; then the plain sentence, kept; then the distributions and key themes as tables of the
+   same width under Body Semibold captions, not headings, so the section is one heading in the
+   outline. Body at every width, as the References. It stays folded (see the report's answer).
+5. **Key findings**: the Electric Blue square comes back (reversing round 10's Navy) and sits on
+   the middle of the x-height: the item aligns the square to the first line's baseline and raises
+   it by half an `ex` less half its height. Measured at 1280 (19 px) and 400 (16 px): on the
+   x-height to the pixel (`round11-report/r2-*-bullets-crop.png`).
+6. **The citation-checking wave** reads as a sequence: a 2 s cycle; each chip muted until 25 %,
+   in to the checked look with a 1 px blue halo by 40 %, held to 50 %, out by 65 %; 350 ms
+   between chips, counted across the section (`run.markAt` already carried the paragraph's offset:
+   `draftBlocks` numbers the marks over every block of the section, and a test pins marks in two
+   paragraphs at 0 and 1). Reduced motion unchanged. Eight frames over one cycle:
+   `round11-report/r2-checking-strip.png`.
+
+Rulings on the build (agent, for the lead to confirm):
+- The counts use the Landscape funnel's stage names rather than new words, so the product has
+  one vocabulary for the funnel; "Relevant" there sits beside "included" in the shut line and the
+  facts line. Say if the method should read "Included" instead.
+- The plain sentence now stands alone after the counts table, so it takes a capital and a full
+  stop: "This section covers only the cited sources — the Landscape tab shows the whole search."
+- The date line arrives with the committed report, so the action line moves down one line at the
+  swap (it fades in with the facts; the reading place is kept).

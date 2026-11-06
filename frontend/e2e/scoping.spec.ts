@@ -377,10 +377,11 @@ test.describe("task 058 options scoping: the gate and the longlist build", () =>
     await seen(page, "Queued");
     await seen(page, "Searching");
     await seen(page, /^Searched · \d+ found$/);
-    // Clustering folds one row under another and adds two from the evidence.
-    await seen(page, /^Folded into Youth hubs co-located with Jobcentre Plus$/);
-    await seen(page, /found in the evidence$/);
-    await seen(page, /^Excluded\s*2$/);
+    // Clustering names its options as rows, assigning their sources (round
+    // 11); a folded suggestion leaves the list for its option card.
+    await seen(page, "Assigning sources");
+    await seen(page, "Benefit run-ons when a young person starts work");
+    await seen(page, /^Excluded 2 options$/i);
 
     // The list carries no qualifier word; the shortlist wave marks its rows
     // in words, and the finished list then gains its controls in place.

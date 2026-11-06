@@ -121,31 +121,34 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(chats.getByRole("button").nth(2)).toHaveAccessibleName("Task Agent");
     await expect(page.getByRole("region", { name: "Task Agent conversation" })).toHaveCount(1);
 
-    // (c) Rename/archive now lives in the header's "Task settings"
-    // popover: inline rename (cancel restores the original, then a real
-    // save) and the two-step archive confirm (exercised, then cancelled —
-    // the task carries on into the rest of the journey below).
+    // (c) Rename/archive live in the header's "Task settings" menu (owner,
+    // round 11): rename in place (cancel restores the original, then a real
+    // save, focus back on the chevron) and the two-step archive confirm
+    // (exercised, then cancelled — the task carries on into the rest of the
+    // journey below).
     const settings = page.getByRole("button", { name: "Task settings" });
     await settings.click();
 
-    await page.getByRole("button", { name: "Rename" }).click();
+    await page.getByRole("menuitem", { name: "Rename" }).click();
     await page.getByLabel("Task name").fill("A name that gets cancelled");
     await page.getByRole("button", { name: "Cancel" }).click();
     await expect(page.getByLabel("Task name")).toHaveCount(0);
     await expect(page.getByText(mockTask.name)).toBeVisible();
+    await expect(settings).toBeFocused();
 
     const renamedName = "Healthier childhoods in Tower Hamlets (2026 pass)";
-    await page.getByRole("button", { name: "Rename" }).click();
+    await settings.click();
+    await page.getByRole("menuitem", { name: "Rename" }).click();
     await page.getByLabel("Task name").fill(renamedName);
     await page.getByRole("button", { name: "Save name" }).click();
     await expect(page.getByText(renamedName)).toBeVisible();
 
-    await page.getByRole("button", { name: "Archive" }).click();
-    await expect(page.getByRole("button", { name: "Confirm archive" })).toBeVisible();
+    await settings.click();
+    await page.getByRole("menuitem", { name: "Archive" }).click();
+    await expect(page.getByRole("button", { name: "Archive", exact: true })).toBeVisible();
     await expect(page.getByText("Archiving removes this task")).toBeVisible();
-    await page.getByRole("button", { name: "Cancel" }).click();
-    await expect(page.getByRole("button", { name: "Archive" })).toBeVisible();
-    await settings.click(); // close the popover
+    await page.getByRole("button", { name: "Keep it" }).click();
+    await expect(page.getByRole("button", { name: "Keep it" })).toHaveCount(0);
 
     // No result yet, so there is nothing to ask about: New chat is offered
     // but disabled, with the reason (038 V8, owner 2026-09-05). The chat
@@ -356,7 +359,9 @@ test.describe("mock task-lifecycle journey", () => {
       (item) => item.status !== "found" && item.status !== "screened_out",
     ).length;
     await expect(sourceRows).toHaveCount(includedCount + 1);
-    const queriesToggle = page.getByRole("button", { name: /^\d+ search queries · [\d,]+ results · Show$/ });
+    // Round 11: the folded queries are one line, "Found with N queries and
+    // M citation passes · Show".
+    const queriesToggle = page.getByRole("button", { name: /^Found with \d+ quer(y|ies)( and \d+ citation pass(es)?)? · Show$/ });
     await expect(queriesToggle).toBeVisible();
 
     // "All" is one click away and shows the whole collection.
@@ -398,7 +403,9 @@ test.describe("mock task-lifecycle journey", () => {
       .getByRole("link", { name: "United Kingdom" })
       .click();
     await expect(page).toHaveURL(/\/sources\/all\?country=United\+Kingdom$/);
-    await expect(sourceFilters.getByRole("button", { name: /^Country United Kingdom/ })).toBeVisible();
+    // An applied filter is the filled Navy chip, its × beside it (round 11).
+    await expect(sourceFilters.getByRole("button", { name: "Country: United Kingdom" })).toBeVisible();
+    await expect(sourceFilters.getByRole("button", { name: "Clear the country filter" })).toBeVisible();
     const ukIncluded = mockEvidence.filter(
       (item) => item.status !== "found" && item.status !== "screened_out" && item.country === "United Kingdom",
     ).length;
@@ -871,8 +878,9 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     ]) {
       await seen(page, query);
     }
-    // Once the search has ended the block folds to one line.
-    await expect(page.getByRole("button", { name: /^\d+ search queries · [\d,]+ results · Show$/ })).toBeVisible({
+    // Once the search has ended the block folds to one line (round 11:
+    // "Found with N queries and M citation passes · Show").
+    await expect(page.getByRole("button", { name: /^Found with \d+ quer(y|ies)( and \d+ citation pass(es)?)? · Show$/ })).toBeVisible({
       timeout: 20_000,
     });
 
@@ -1009,6 +1017,12 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     });
     await expect(page.getByRole("heading", { level: 1, name: mockTask.question ?? "" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Policy options for healthier childhoods" })).toHaveCount(0);
+    // The most relevant sources end the executive summary, above the Full
+    // report, and the date has its own line under the title (owner, round 11).
+    const relevantBox = await page.getByRole("heading", { name: "Most relevant sources" }).boundingBox();
+    const fullReportBox = await page.getByRole("heading", { name: "Full report" }).boundingBox();
+    expect(relevantBox?.y ?? Infinity).toBeLessThan(fullReportBox?.y ?? -Infinity);
+    await expect(page.getByText(/^Last updated \d{1,2} \w+ \d{4}$/)).toBeVisible();
     await expect(page.getByRole("button", { name: "Read the full report" })).toHaveCount(0);
     await neverSeen(page, /attaching citations/);
   });
