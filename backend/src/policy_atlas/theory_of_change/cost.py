@@ -31,7 +31,13 @@ PRICES: dict[str, tuple[float, float, float]] = {
 }
 
 #: A walk component whose route step has another name.
-_STEP_OF: dict[str, str] = {"toc_select": "toc_pick", "toc_search_new": "toc_pick"}
+#: ``toc_search_again`` makes pick and judge calls; the judge calls are nearly all
+#: of its tokens, so it is priced at the judge's rate.
+_STEP_OF: dict[str, str] = {
+    "toc_select": "toc_pick",
+    "toc_search_new": "toc_pick",
+    "toc_search_again": "toc_judge",
+}
 
 
 def usd(model: str, usage: dict[str, int]) -> float | None:

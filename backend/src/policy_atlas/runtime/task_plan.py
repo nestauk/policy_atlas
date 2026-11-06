@@ -135,6 +135,7 @@ TOC_STEPS: tuple[str, ...] = (
     "toc_discover",
     "toc_merge",
     "toc_judge",
+    "toc_search_again",
     "toc_figures",
     "toc_choose",
     "toc_summarise",

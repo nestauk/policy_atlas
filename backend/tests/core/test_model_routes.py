@@ -84,7 +84,7 @@ STEP_TIER_AND_EFFORT: dict[str, tuple[str, str]] = {
     "option_profile_setting": ("standard", "high"),
     # Theory of change (task 054): the tiers the branch ran, Terra at "none".
     "task_agent_toc": ("standard", "none"),
-    "toc_draft": ("standard", "none"),
+    "toc_draft": ("frontier", "medium"),  # Sol since 2026-11-06 (owner, after the Terra comparison)
     "toc_merge": ("frontier", "medium"),
     "toc_choose": ("frontier", "medium"),
     "toc_discover": ("standard", "none"),

@@ -168,6 +168,7 @@ from policy_atlas.runtime.toc_plan import (
     TOC_STUDIES_KEY,
     TOC_WALK_CHECK,
     TOC_WALK_KEY,
+    link_scale_for,
     toc_stop_requested,
 )
 from policy_atlas.theory_of_change.backend import TocBackend
@@ -1035,6 +1036,7 @@ def _run_plan_impl(
     toc_children: list[uuid.UUID] | None = None
     toc_joined = False
     toc_new_joined = False
+    toc_retry_joined = False
 
     def toc_plan_row() -> dict[str, Any]:
         return {
@@ -1205,6 +1207,9 @@ def _run_plan_impl(
                     session_id=session_id,
                     links=scope_context.get(TOC_LINKS_KEY),
                     dois=scope_context.get(TOC_STUDIES_KEY),
+                    scale=link_scale_for(scope_context),
+                    # Find more evidence searches in new words (C44).
+                    reformulate=scope_context.get(TOC_CHECK_MODE_KEY) == "find_more",
                 )
             if step.component == "toc_select" and not toc_joined:
                 toc_joined = True
@@ -1258,6 +1263,44 @@ def _run_plan_impl(
                         toc_searches_failed(
                             stage,
                             f"{joined.failed} of {joined.total} new-link searches did not finish",
+                        )
+            # The third fan-out (C44): after the judge, a link left with too
+            # little evidence gets one reformulated search, dispatched and joined
+            # before ``toc_search_again`` picks and judges its new documents.
+            if step.component == "toc_search_again" and not toc_retry_joined:
+                toc_retry_joined = True
+                from policy_atlas.theory_of_change.check.selecting import links_without_evidence
+
+                with engine.connect() as conn:
+                    thin_links = links_without_evidence(
+                        conn, task_id=task_id, walk_id=capability_run_id
+                    )
+                if thin_links:
+                    stage = option_search.TOC_RETRY_SEARCHES_STAGE
+                    retry_children = option_search.dispatch_toc_item_searches(
+                        engine,
+                        task_id=task_id,
+                        parent_id=capability_run_id,
+                        plan_row=toc_plan_row(),
+                        backends=backend_bundle,
+                        session_id=session_id,
+                        links=thin_links,
+                        stage=stage,
+                        reformulate=True,
+                    )
+                    joined = option_search.join_option_searches(
+                        engine,
+                        task_id=task_id,
+                        parent_id=capability_run_id,
+                        child_ids=retry_children,
+                        stage=stage,
+                        timeout=option_search.toc_join_timeout(len(retry_children)),
+                    )
+                    # A failed search leaves its link as the judge left it.
+                    if joined.failed:
+                        toc_searches_failed(
+                            stage,
+                            f"{joined.failed} of {joined.total} second searches did not finish",
                         )
         if purpose == LONGLIST_PURPOSE:
             # The fan-out: the first step after ``suggest`` (whether it

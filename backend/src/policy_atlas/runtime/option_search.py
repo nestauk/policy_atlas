@@ -69,6 +69,7 @@ from policy_atlas.runtime.scoping_plan import (
     TARGETED_PURPOSE,
     ScopingPlan,
 )
+from policy_atlas.runtime.toc_plan import TOC_LINK_SCALE_KEY, TOC_REFORMULATE_KEY
 from policy_atlas.runtime.walk_pool import TOC_ITEM_WIDTH, option_search_pool, toc_item_pool
 
 if TYPE_CHECKING:
@@ -85,6 +86,10 @@ TOC_ITEM_SEARCHES_STAGE = "toc_item_searches"
 #: The stage of the second fan-out: item searches for the kept links discovery
 #: added, which had no search of their own (task 054, C32).
 TOC_NEW_LINK_SEARCHES_STAGE = "toc_new_link_searches"
+
+#: The stage of the third fan-out: one reformulated search per link the judge
+#: left with too little evidence (task 054, C44).
+TOC_RETRY_SEARCHES_STAGE = "toc_retry_searches"
 
 #: How long the longlist walk waits for its option searches, counted from the
 #: join (the parent's own broad chain has already run by then). Fifteen
@@ -725,6 +730,8 @@ def dispatch_toc_item_searches(
     links: list[str] | None = None,
     stage: str = TOC_ITEM_SEARCHES_STAGE,
     dois: Mapping[str, list[str]] | None = None,
+    scale: int = 1,
+    reformulate: bool = False,
 ) -> list[uuid.UUID]:
     """A check walk's fan-out: one acquire-only item search per link (task 054, S3).
 
@@ -743,12 +750,17 @@ def dispatch_toc_item_searches(
         stage: The fan-out's stage: the first, or the new links' (C32).
         dois: Link id → the DOIs the user added to it (C42): that link's search
             only looks them up.
+        scale: The result multiplier every item search runs with (C44, Find
+            more evidence); 1 is the ordinary link search.
+        reformulate: Search in the words of the research that would test each
+            step, with the link's earlier queries ruled out (C44).
 
     Returns:
         The child walks' ids, in dispatch order.
     """
     # Imported here: the ToC steps import the registry, which this module's
     # importers (the runner) must load first.
+    from policy_atlas.theory_of_change.check.selecting import previous_queries
     from policy_atlas.theory_of_change.check.shared import item_search_intents
 
     with engine.connect() as conn:
@@ -759,6 +771,11 @@ def dispatch_toc_item_searches(
             return already
         intents, left_out = item_search_intents(
             conn, task_id=task_id, payload=plan_row["payload"], links=links
+        )
+        earlier = (
+            {link: previous_queries(conn, task_id=task_id, link_id=link) for link, _ in intents}
+            if reformulate
+            else {}
         )
     plan = validate_plan(THEORY_OF_CHANGE, plan_row["payload"])
 
@@ -773,6 +790,8 @@ def dispatch_toc_item_searches(
                     "capability": THEORY_OF_CHANGE,
                     "link_id": link_id,
                     ACQUIRE_ONLY_KEY: True,
+                    **({TOC_LINK_SCALE_KEY: scale} if scale > 1 else {}),
+                    **({TOC_REFORMULATE_KEY: earlier.get(link_id, [])} if reformulate else {}),
                     **({"lookup_dois": list(dois[link_id])} if dois and link_id in dois else {}),
                 },
                 plan=plan,
@@ -936,6 +955,7 @@ def abandon_children(
                 OPTION_SEARCHES_STAGE,
                 TOC_ITEM_SEARCHES_STAGE,
                 TOC_NEW_LINK_SEARCHES_STAGE,
+                TOC_RETRY_SEARCHES_STAGE,
             )
             for child in dispatched_children(
                 conn, task_id=task_id, parent_id=parent_id, stage=stage

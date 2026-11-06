@@ -20,6 +20,8 @@ from policy_atlas.core.embeddings import (
     EmbeddingBackend,
 )
 from policy_atlas.core.schema import (
+    capability_run,
+    evidence_scope,
     toc_item_evidence,
     toc_link,
 )
@@ -33,6 +35,7 @@ from policy_atlas.options_scoping.model_calls import CallOutcome
 from policy_atlas.runtime.toc_plan import (
     TOC_CHECK_MODE_KEY,
     TOC_LINKS_KEY,
+    TOC_REFORMULATE_KEY,
     TOC_STARTED_BY_KEY,
     TOC_STUDIES_KEY,
 )
@@ -45,8 +48,10 @@ from policy_atlas.theory_of_change.check.selecting import (
     _link_candidates,
     _user_decisions,
     _walk_picks,
+    documents_per_link,
     nearest,
     rerank,
+    toc_select_scope,
 )
 from policy_atlas.theory_of_change.check.shared import (
     PROGRAMME_EVENT,
@@ -140,6 +145,7 @@ def toc_judge_scope(
     backend: TocBackend,
     ranker: RankingBackend | None = None,
     embedder: EmbeddingBackend | None = None,
+    only: set[str] | None = None,
 ) -> dict[str, Any]:
     """Judge each link against its top documents, both questions at once (C5).
 
@@ -161,10 +167,15 @@ def toc_judge_scope(
     graph, rows = store.load_graph(conn, task_id)
     named = context.context.get(TOC_LINKS_KEY)
     link_keys, left_out = links_to_check(graph, list(named) if named else None)
+    if only is not None:
+        # The second search (C44): these links only, no programme judgements.
+        link_keys, named = [key for key in link_keys if key in only], list(only)
     pool = screened_documents(conn, task_id=task_id, scope_id=context.scope_id)
     pool_by_id = {doc.tss_id: doc for doc in pool}
     # Each link reads what toc_select picked for it (C31). When no link's search
     # found anything, a link with a search of its own judges nothing.
+    # Find more evidence (C44) reads more documents per link.
+    top_k = documents_per_link(context.context)
     own = _walk_picks(conn, task_id=task_id, walk_id=walk_id) or {
         key: set() for key in _child_links(conn, task_id=task_id, walk_id=walk_id).values()
     }
@@ -192,13 +203,13 @@ def toc_judge_scope(
                 for tss in sorted(own[key], key=str)
                 if tss in pool_by_id and tss not in judged
             ]
-            chosen = rerank(ranker, candidates, intent=text, usage=usage)[:JUDGE_TOP_K]
+            chosen = rerank(ranker, candidates, intent=text, usage=usage)[:top_k]
         else:
             # Added by discovery after the fan-out: the closest pool documents.
             if vectors is None:
                 vectors = _document_vectors(conn, pool_by_id)
             candidates = [doc for doc in pool if doc.tss_id not in judged]
-            chosen = nearest(embedder, candidates, vectors, text=text)
+            chosen = nearest(embedder, candidates, vectors, text=text, k=top_k)
         for document in chosen:
             jobs.append(
                 _JudgeJob(
@@ -391,3 +402,88 @@ def toc_judge_scope(
     }
     log.info("toc_judge.done", **{k: v for k, v in summary.items() if k != "usage_totals"})
     return summary
+
+
+def toc_search_again_scope(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    context: ScopeContext,
+    backend: TocBackend,
+    ranker: RankingBackend | None = None,
+    embedder: EmbeddingBackend | None = None,
+) -> dict[str, Any]:
+    """One more search for the links the judge left thin, then judge what it found (C44).
+
+    The runner has already dispatched and joined one reformulated item search
+    per link whose verdict was *Not enough evidence* after the judge (stage
+    ``toc_retry_searches``): the same five calls, in the words of the research
+    that would test the step, with the link's earlier queries ruled out. This
+    step picks each such link's new documents, leaving out those already
+    judged, and judges them; their judgements count like the first round's.
+
+    Args:
+        conn: Open connection inside the component transaction.
+        task_id: The task.
+        run_id: This run.
+        context: The check walk's intent record.
+        backend: The ToC model seam.
+        ranker: The rerank backend, or ``None`` to keep order.
+        embedder: The embedding backend for the shared pool, or ``None``.
+
+    Returns:
+        The links searched again, the select counts and the judge counts.
+    """
+    walk_id = walk_of_run(conn, task_id=task_id, run_id=run_id)
+    retried = {
+        link
+        for child, link in _child_links(conn, task_id=task_id, walk_id=walk_id).items()
+        if child in _retry_children(conn, task_id=task_id, walk_id=walk_id)
+    }
+    if not retried:
+        return {"links": 0, "backend_mode": backend.mode}
+    picked = toc_select_scope(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=context,
+        backend=backend,
+        embedder=embedder,
+        only=retried,
+        exclude_judged=True,
+    )
+    judged = toc_judge_scope(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=context,
+        backend=backend,
+        ranker=ranker,
+        embedder=embedder,
+        only=retried,
+    )
+    return {
+        "links": len(retried),
+        "backend_mode": backend.mode,
+        **{f"select_{k}": v for k, v in picked.items() if k != "usage_totals"},
+        **{k: v for k, v in judged.items() if k != "links"},
+    }
+
+
+def _retry_children(conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID) -> set[uuid.UUID]:
+    """The walk's reformulated item-search children (their context carries the earlier queries)."""
+    rows = conn.execute(
+        select(capability_run.c.capability_run_id)
+        .select_from(
+            capability_run.join(
+                evidence_scope,
+                (evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
+                & (evidence_scope.c.task_id == capability_run.c.task_id),
+            )
+        )
+        .where(capability_run.c.task_id == task_id)
+        .where(capability_run.c.parent_capability_run_id == walk_id)
+        .where(evidence_scope.c.context.has_key(TOC_REFORMULATE_KEY))
+    ).scalars()
+    return set(rows)

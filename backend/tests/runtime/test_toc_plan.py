@@ -11,11 +11,16 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.core.schema import evidence_scope
-from policy_atlas.evidence_search.sourcing.search_loop import parse_search_directive
+from policy_atlas.evidence_search.sourcing.search_loop import (
+    SearchDirectiveError,
+    parse_link_scale,
+    parse_search_directive,
+)
 from policy_atlas.runtime import option_search, runner
 from policy_atlas.runtime.agent import persist_approved_plan
 from policy_atlas.runtime.toc_plan import (
     DEFAULT_PUBLISHED_AFTER,
+    TOC_FIND_MORE_SCALE,
     TOC_ITEM_RECORD_CAP,
     TocPlan,
     compose_toc,
@@ -51,6 +56,7 @@ def test_the_check_walk_classifies_only_after_the_judge() -> None:
         ("toc_merge", True),
         ("toc_search_new", False),
         ("toc_judge", True),
+        ("toc_search_again", False),
         ("toc_figures", False),
         ("classify", True),
         ("appraise", True),
@@ -63,6 +69,7 @@ def test_the_check_walk_classifies_only_after_the_judge() -> None:
     assert named.components == [
         "toc_select",
         "toc_judge",
+        "toc_search_again",
         "toc_figures",
         "classify",
         "appraise",
@@ -88,6 +95,55 @@ def test_an_item_search_only_acquires_under_the_plan_s_restriction() -> None:
     depth, filters, guidance = parse_search_directive(directive)
     assert (depth, filters) == ("link", {"shared": {"published_after": "2015-01-01"}})
     assert guidance == list(ITEM_SEARCH_GUIDANCE)
+
+
+def test_find_more_evidence_doubles_the_item_search() -> None:
+    """C44: the child context's ``link_scale`` doubles the cap and travels in the directive."""
+    directive = compose_toc(
+        _plan(), "targeted", {"acquire_only": True, "link_scale": TOC_FIND_MORE_SCALE}
+    ).steps[0].directive_delta
+    assert directive["search"]["record_cap"] == 2 * TOC_ITEM_RECORD_CAP == 120
+    assert directive["search"]["link_scale"] == 2
+    parse_search_directive(directive)  # the search loop's parser admits it
+    assert parse_link_scale(directive) == 2
+    plain = compose_toc(_plan(), "targeted", {"acquire_only": True}).steps[0].directive_delta
+    assert "link_scale" not in plain["search"] and parse_link_scale(plain) == 1
+    with pytest.raises(SearchDirectiveError):
+        parse_link_scale({"search": {"depth": "link", "link_scale": 9}})
+
+
+def test_a_reformulated_item_search_carries_the_earlier_queries() -> None:
+    """C44: ``reformulate`` in the child context swaps the guidance and flags the directive."""
+    from policy_atlas.theory_of_change.check.item_search_prompt import (
+        REFORMULATE_GUIDANCE,
+        reformulate_guidance,
+    )
+
+    earlier = ["advertising AND snacking", "Fewer ads lead to less snacking"]
+    directive = compose_toc(
+        _plan(), "targeted", {"acquire_only": True, "reformulate": earlier}
+    ).steps[0].directive_delta
+    assert directive["search"]["reformulate"] is True
+    assert directive["search"]["guidance"] == reformulate_guidance(earlier)
+    assert directive["search"]["guidance"][:3] == list(REFORMULATE_GUIDANCE)
+    shown = directive["search"]["guidance"][3]
+    assert shown.startswith("Earlier queries: advertising AND snacking; ")
+    assert all(len(line) <= 200 for line in directive["search"]["guidance"])
+    parse_search_directive(directive)  # the search loop's parser admits it
+    plain = compose_toc(_plan(), "targeted", {"acquire_only": True}).steps[0].directive_delta
+    assert "reformulate" not in plain["search"]
+    assert plain["search"]["guidance"] == list(ITEM_SEARCH_GUIDANCE)
+
+
+def test_check_again_and_find_more_skip_the_second_search() -> None:
+    """The user is steering those checks (owner, 2026-11-06); a full check and new items run it."""
+    link = {"toc_walk": "check", "links": ["l1"]}
+    assert "toc_search_again" in compose_toc(_plan(), "toc", {"toc_walk": "check"}).components
+    new_items = compose_toc(_plan(), "toc", {**link, "mode": "new_items"}).components
+    assert "toc_search_again" in new_items
+    for mode in ("check_again", "find_more"):
+        steered = compose_toc(_plan(), "toc", {**link, "mode": mode}).components
+        assert "toc_search_again" not in steered
 
 
 def test_an_item_search_defaults_to_evidence_from_2000() -> None:

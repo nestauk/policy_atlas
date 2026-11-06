@@ -70,6 +70,20 @@ const STEPS = new Map<string, Step>([
       },
     },
   ],
+  ["toc_retry_searches", searching],
+  [
+    "toc_search_again",
+    {
+      done: (detail) => {
+        const links = num(detail, "links");
+        if (links === 0) return "Every connection had enough evidence: no second search.";
+        const judged = num(detail, "judgements");
+        const off = num(detail, "screened_out_not_about");
+        return `Searched again, in the words of the research, for ${plural(links, "connection")} with too little evidence: judged ${plural(judged, "document")}, ${judged - off} test them.`;
+      },
+      now: () => "Judging what the second search found",
+    },
+  ],
   [
     "toc_figures",
     {

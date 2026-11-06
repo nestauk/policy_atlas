@@ -47,12 +47,15 @@ from policy_atlas.evidence_search.corpus.ranking import (
 )
 from policy_atlas.evidence_search.sourcing.acquire import normalize_doi
 from policy_atlas.evidence_search.sourcing.search_live import crossref_abstracts
+from policy_atlas.evidence_search.sourcing.search_loop import RCT_CLAUSE, SR_CLAUSE
 from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.model_calls import CallOutcome
 from policy_atlas.runtime.toc_plan import (
     TOC_CHECK_MODE_KEY,
+    TOC_FIND_MORE_PER_LINK,
     TOC_LINKS_KEY,
     TOC_STUDIES_KEY,
+    link_scale_for,
 )
 from policy_atlas.theory_of_change import store
 from policy_atlas.theory_of_change.backend import TocBackend
@@ -64,6 +67,9 @@ from policy_atlas.theory_of_change.check.shared import (
     _link_item_text,
     _map_traced,
     _outcome_value,
+    appraisals_for,
+    counted_judgements,
+    link_verdict_of,
     links_to_check,
     walk_of_run,
 )
@@ -130,15 +136,29 @@ class LinkCandidate:
         return bool(self.abstract.strip())
 
 
-def select_for_link(candidates: list[LinkCandidate]) -> list[uuid.UUID]:
+def documents_per_link(context: Mapping[str, Any] | None) -> int:
+    """How many documents a check walk picks and judges per link (C27, C44).
+
+    Args:
+        context: The check walk's intent-record context.
+
+    Returns:
+        :data:`TOC_FIND_MORE_PER_LINK` for a Find more evidence walk, else
+        :data:`PICK_N`.
+    """
+    return TOC_FIND_MORE_PER_LINK if link_scale_for(context) > 1 else PICK_N
+
+
+def select_for_link(candidates: list[LinkCandidate], n: int = PICK_N) -> list[uuid.UUID]:
     """The round-robin rule: the pick call's top-up and its fallback (C27, C28).
 
     In turn from the result lists (:data:`LINK_LISTS` order) in rank order,
-    :data:`PICK_N` documents. A document with no abstract is taken only when
-    fewer than :data:`PICK_N` have one.
+    ``n`` documents. A document with no abstract is taken only when fewer than
+    ``n`` have one.
 
     Args:
         candidates: The link's documents.
+        n: How many to pick (:data:`PICK_N`, or twice that for Find more evidence).
 
     Returns:
         The picked documents, in pick order.
@@ -155,10 +175,10 @@ def select_for_link(candidates: list[LinkCandidate]) -> list[uuid.UUID]:
 
     with_abstract = in_turn([c for c in candidates if c.has_abstract])
     without = in_turn([c for c in candidates if not c.has_abstract])
-    return (with_abstract + without)[:PICK_N]
+    return (with_abstract + without)[:n]
 
 
-def picked_ids(ids: list[str], candidates: list[LinkCandidate]) -> list[uuid.UUID]:
+def picked_ids(ids: list[str], candidates: list[LinkCandidate], n: int = PICK_N) -> list[uuid.UUID]:
     """Map a pick answer's short ids (``d1``...) back, topped up by round-robin (C28).
 
     Unknown and repeated ids are dropped; a short answer is filled from
@@ -167,16 +187,17 @@ def picked_ids(ids: list[str], candidates: list[LinkCandidate]) -> list[uuid.UUI
     Args:
         ids: The ids the pick call returned, most likely first.
         candidates: The link's documents; ``d1`` is the first.
+        n: How many to keep.
 
     Returns:
-        At most :data:`PICK_N` documents.
+        At most ``n`` documents.
     """
     short = {f"d{i}": c.tss_id for i, c in enumerate(candidates, start=1)}
     chosen: list[uuid.UUID] = []
-    for tss in [*(short[i] for i in ids if i in short), *select_for_link(candidates)]:
+    for tss in [*(short[i] for i in ids if i in short), *select_for_link(candidates, n)]:
         if tss not in chosen:
             chosen.append(tss)
-    return chosen[:PICK_N]
+    return chosen[:n]
 
 
 def _link_candidates(
@@ -304,6 +325,7 @@ def toc_select_scope(
     embedder: EmbeddingBackend | None = None,
     searchers: list[Any] | None = None,
     only: set[str] | None = None,
+    exclude_judged: bool = False,
 ) -> dict[str, Any]:
     """Pick each link's documents and write the screen's rows (C27, C28, C31, C32).
 
@@ -340,6 +362,8 @@ def toc_select_scope(
         embedder: The embedding backend for the shared pool, or ``None``.
         searchers: The walk's search backends, for the seminal works lookup.
         only: The links to pick for, or ``None`` for every link with a search.
+        exclude_judged: Leave out the documents already judged for a link, so
+            the pick is of new ones (Find more evidence does this by itself).
 
     Returns:
         Screen counts, pick call counts, the pick usage and the seminal works
@@ -381,7 +405,10 @@ def toc_select_scope(
         candidates.setdefault(key, [])
         targets.add(key)
     # Find more evidence (C44): the documents already judged for a link make way for new ones.
-    if only is None and context.context.get(TOC_CHECK_MODE_KEY) == "find_more":
+    exclude_judged = exclude_judged or (
+        only is None and context.context.get(TOC_CHECK_MODE_KEY) == "find_more"
+    )
+    if exclude_judged:
         judged = _judged_documents(conn, task_id, sorted(targets))
         for key in targets:
             seen = set(judged.get(key, []))
@@ -393,7 +420,7 @@ def toc_select_scope(
     texts = {key: _link_item_text(graph, key, plan) for key in targets if key in graph.links}
     already: dict[str, set[uuid.UUID]] = (
         {k: set(v) for k, v in _judged_documents(conn, task_id, sorted(texts)).items()}
-        if only is None and context.context.get(TOC_CHECK_MODE_KEY) == "find_more"
+        if exclude_judged
         else {}
     )
     # The shared pool (C31): the walk's other documents closest to each link.
@@ -401,13 +428,15 @@ def toc_select_scope(
     vectors = _document_vectors(conn, [c.tss_id for c in walk_pool]) if texts else {}
     shared = 0
     seminal_offered = 0
+    # Find more evidence (C44) picks, and so judges, more documents per link.
+    n = documents_per_link(context.context)
     for key in list(texts):
         own = candidates[key]
         mine = {c.tss_id for c in own}
         others = [c for c in walk_pool if c.tss_id not in mine]
         extra = [
             c
-            for c in nearest(embedder, others, vectors, text=texts[key])
+            for c in nearest(embedder, others, vectors, text=texts[key], k=n)
             if c.tss_id not in already.get(key, set())
         ]
         shared += len(extra)
@@ -416,7 +445,7 @@ def toc_select_scope(
         cited = [c for c in seminal if c.tss_id not in offered]
         seminal_offered += len(cited)
         candidates[key] = [*own, *extra, *cited]
-    called = [k for k in texts if len(candidates[k]) > PICK_N]
+    called = [k for k in texts if len(candidates[k]) > n]
 
     def run_pick(key: str) -> CallOutcome[Any]:
         shown: list[dict[str, object]] = [
@@ -425,7 +454,7 @@ def toc_select_scope(
         ]
         return _call(
             "toc_pick",
-            lambda: backend.pick(item_text=texts[key], candidates=shown),
+            lambda: backend.pick(item_text=texts[key], candidates=shown, n=n),
         )
 
     outcomes = dict(zip(called, _map_traced(run_pick, called, PICK_WORKERS), strict=True))
@@ -438,7 +467,7 @@ def toc_select_scope(
         if key in outcomes and response is None:
             failed += 1
         per_link[key] = (
-            picked_ids(response.ids, docs) if response is not None else select_for_link(docs)
+            picked_ids(response.ids, docs, n) if response is not None else select_for_link(docs, n)
         )
         if key in studies:
             per_link[key] = studies[key]
@@ -572,6 +601,96 @@ def _judged_documents(
         if tss_id not in chosen:
             chosen.append(tss_id)
     return out
+
+
+def previous_queries(conn: Connection, *, task_id: uuid.UUID, link_id: str) -> list[str]:
+    """The queries a link's earlier item searches ran, newest first (C44).
+
+    Read from the ``search.executed`` events of every item-search child walk
+    for the link in this task, with the review and trial clauses stripped from
+    the keyword queries and the OpenAlex id lookups left out.
+
+    Args:
+        conn: Open connection.
+        task_id: The task.
+        link_id: The link.
+
+    Returns:
+        Distinct query texts, at most :data:`PREVIOUS_QUERIES_MAX`.
+    """
+    children = conn.execute(
+        select(capability_run.c.capability_run_id)
+        .select_from(
+            capability_run.join(
+                evidence_scope,
+                (evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
+                & (evidence_scope.c.task_id == capability_run.c.task_id),
+            )
+        )
+        .where(capability_run.c.task_id == task_id)
+        .where(evidence_scope.c.context["link_id"].astext == link_id)
+    ).scalars()
+    rows = conn.execute(
+        select(event_log.c.payload)
+        .select_from(
+            event_log.join(
+                runs,
+                (runs.c.run_id == event_log.c.run_id) & (runs.c.task_id == event_log.c.task_id),
+            )
+        )
+        .where(event_log.c.task_id == task_id)
+        .where(runs.c.capability_run_id.in_(list(children)))
+        .where(event_log.c.event_type == "search.executed")
+        .order_by(event_log.c.sequence.desc())
+    ).scalars()
+    seen: list[str] = []
+    for payload in rows:
+        if payload.get("verb") == "fetch_references":
+            continue
+        query = str(payload.get("query") or "")
+        for clause in (SR_CLAUSE, RCT_CLAUSE):
+            query = query.removesuffix(f" AND {clause}")
+        query = query.removeprefix("(").removesuffix(")") if query.endswith(")") else query
+        if query and query not in seen:
+            seen.append(query)
+        if len(seen) == PREVIOUS_QUERIES_MAX:
+            break
+    return seen
+
+
+def links_without_evidence(
+    conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID
+) -> list[str]:
+    """The links this walk searched and judged that still have too little evidence (C44).
+
+    Read after the judge: a link whose verdict is *Not enough evidence* gets
+    one more search, in the words of the research that would test it.
+
+    Args:
+        conn: Open connection.
+        task_id: The task.
+        walk_id: The check walk.
+
+    Returns:
+        Link ids, in :func:`links_to_check` order.
+    """
+    graph, _ = store.load_graph(conn, task_id)
+    searched = set(_child_links(conn, task_id=task_id, walk_id=walk_id).values())
+    counted = counted_judgements(conn, task_id=task_id)
+    appraisals = appraisals_for(
+        conn, task_id=task_id, evidence_rows=[r for rows in counted.values() for r in rows]
+    )
+    keys, _ = links_to_check(graph)
+    return [
+        key
+        for key in keys
+        if key in searched
+        and link_verdict_of(counted.get(key, []), appraisals).verdict == "not_sure_insufficient"
+    ]
+
+
+#: Earlier queries shown to the query writer of a reformulated search.
+PREVIOUS_QUERIES_MAX = 4
 
 
 def links_without_search(conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID) -> list[str]:
@@ -765,8 +884,9 @@ def nearest[D: _HasId](
     vectors: Mapping[uuid.UUID, list[list[float]]],
     *,
     text: str,
+    k: int = JUDGE_TOP_K,
 ) -> list[D]:
-    """The :data:`JUDGE_TOP_K` candidates closest by meaning to the item text (C27).
+    """The ``k`` candidates closest by meaning to the item text (C27).
 
     For a link with no search of its own. A document's closeness is its
     best-matching stored embedding unit; a document with no embedding ranks
@@ -778,19 +898,20 @@ def nearest[D: _HasId](
         candidates: The pool documents not yet judged for this link.
         vectors: Stored vectors by document (:func:`_document_vectors`).
         text: The link's item text.
+        k: How many to return (:data:`JUDGE_TOP_K` by default).
 
     Returns:
-        At most :data:`JUDGE_TOP_K` documents, closest first.
+        At most ``k`` documents, closest first.
     """
-    if embedder is None or len(candidates) <= JUDGE_TOP_K:
-        return candidates[:JUDGE_TOP_K]
+    if embedder is None or len(candidates) <= k:
+        return candidates[:k]
     try:
         query = validate_vector(embedder.embed_texts([text], kind="query")[0])
     except Exception as exc:  # noqa: BLE001 - a failed embedding keeps the order
         log.warning("toc_judge.embed_failed", error_type=type(exc).__name__)
-        return candidates[:JUDGE_TOP_K]
+        return candidates[:k]
 
     def closeness(doc: D) -> float:
         return max((_cosine(query, v) for v in vectors.get(doc.tss_id, [])), default=-2.0)
 
-    return sorted(candidates, key=closeness, reverse=True)[:JUDGE_TOP_K]
+    return sorted(candidates, key=closeness, reverse=True)[:k]

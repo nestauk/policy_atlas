@@ -276,7 +276,11 @@ def test_an_unverified_quote_is_dropped_and_counted(
     backend = _Unverifiable()
     task_id = _run(engine, cleanup, backend)
     judge = _summary(engine, task_id, "toc_judge")
-    assert judge["unverified_dropped"] == judge["calls"] == backend.calls["judge"] > 0
+    # Every link is left thin, so the second search (C44) judges once more.
+    again = _summary(engine, task_id, "toc_search_again")
+    assert judge["unverified_dropped"] == judge["calls"] > 0
+    assert again["unverified_dropped"] == again["calls"] > 0
+    assert judge["calls"] + again["calls"] == backend.calls["judge"]
     with engine.connect() as conn:
         stored = conn.execute(
             select(
@@ -862,6 +866,37 @@ def test_select_for_link_takes_the_lists_in_turn_with_abstracts_first() -> None:
     # Fewer than PICK_N with an abstract: the rest are filled from those without.
     few = [cand(1, q1, 1), cand(2, q1, 2, abstract=False), cand(3, ov, 1)]
     assert [tss.int for tss in select_for_link(few)] == [1, 3, 2]
+
+
+def test_find_more_evidence_picks_and_asks_for_twice_the_documents() -> None:
+    """C44: the pick size follows the walk's scale, in the rule and in the prompt."""
+    from policy_atlas.runtime.toc_plan import (
+        TOC_FIND_MORE_PER_LINK,
+        TOC_FIND_MORE_SCALE,
+        link_scale_for,
+    )
+    from policy_atlas.theory_of_change.check.pick_prompt import build_pick_messages
+    from policy_atlas.theory_of_change.check.selecting import (
+        documents_per_link,
+        picked_ids,
+        select_for_link,
+    )
+
+    assert link_scale_for({"mode": "find_more"}) == TOC_FIND_MORE_SCALE == 2
+    assert link_scale_for({"mode": "check_again"}) == link_scale_for(None) == 1
+    assert documents_per_link({"mode": "find_more"}) == TOC_FIND_MORE_PER_LINK == 40
+    assert documents_per_link({"mode": "new_items"}) == documents_per_link(None) == PICK_N == 10
+    q1 = ("openalex", "semantic")
+    candidates = [LinkCandidate(uuid.UUID(int=i), q1, i, abstract="a") for i in range(45)]
+    assert len(select_for_link(candidates)) == PICK_N
+    assert len(select_for_link(candidates, TOC_FIND_MORE_PER_LINK)) == 40
+    assert len(picked_ids(["d3", "d1"], candidates, TOC_FIND_MORE_PER_LINK)) == 40
+
+    def system(n: int) -> str:
+        return str(build_pick_messages(item_text="s", candidates=[], n=n)[0]["content"])
+
+    assert f"the\n{PICK_N} documents" in system(PICK_N) and "{n}" not in system(PICK_N)
+    assert f"exactly {TOC_FIND_MORE_PER_LINK} of them" in system(TOC_FIND_MORE_PER_LINK)
 
 
 def test_ten_candidates_skip_the_rerank() -> None:

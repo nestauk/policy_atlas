@@ -43,7 +43,10 @@ from policy_atlas.runtime.task_plan import (
     ComposedChain,
     ScopeConstraints,
 )
-from policy_atlas.theory_of_change.check.item_search_prompt import ITEM_SEARCH_GUIDANCE
+from policy_atlas.theory_of_change.check.item_search_prompt import (
+    ITEM_SEARCH_GUIDANCE,
+    reformulate_guidance,
+)
 
 #: The intent-record purpose of every main theory-of-change walk.
 TOC_PURPOSE = "toc"
@@ -94,6 +97,33 @@ def toc_stop_requested(engine: Any, *, task_id: Any, capability_run_id: Any) -> 
 #: Records each item search may keep per backend: every distinct result of
 #: its five calls (C27, C31). ``toc_select`` then picks the documents judged.
 TOC_ITEM_RECORD_CAP = 60
+#: An item search's context key for the result multiplier (C44): Find more
+#: evidence runs every call with this many times the results, and the cap.
+TOC_LINK_SCALE_KEY = "link_scale"
+#: The multiplier Find more evidence uses (owner, 2026-11-06): twice the results,
+#: so the search reaches past what the first check found.
+TOC_FIND_MORE_SCALE = 2
+#: Documents a Find more evidence walk picks and judges per link (owner,
+#: 2026-11-06), in place of the ordinary ten.
+TOC_FIND_MORE_PER_LINK = 40
+#: An item search's context key for a reformulated search (C44): the queries the
+#: link's earlier searches ran, which the query writer is told not to repeat.
+TOC_REFORMULATE_KEY = "reformulate"
+
+
+def link_scale_for(context: Mapping[str, Any] | None) -> int:
+    """The result multiplier a check walk runs with (C44).
+
+    Args:
+        context: The check walk's intent-record context.
+
+    Returns:
+        :data:`TOC_FIND_MORE_SCALE` for a Find more evidence walk, else 1. It
+        scales each item search; ``selecting.documents_per_link`` gives the
+        documents picked and judged.
+    """
+    return TOC_FIND_MORE_SCALE if (context or {}).get(TOC_CHECK_MODE_KEY) == "find_more" else 1
+
 
 #: Links judged per check walk at most (C5).
 TOC_LINK_CAP = 80
@@ -107,6 +137,9 @@ TOC_CHECK_CHAIN: tuple[tuple[str, bool], ...] = (
     # The links discovery added get their own search and pick (C32).
     ("toc_search_new", False),
     ("toc_judge", True),
+    # A link the judge left with too little evidence gets one more search, in the
+    # words of the research that would test it, and its new documents judged (C44).
+    ("toc_search_again", False),
     # The size of change behind each judged link (C37); a failure degrades the walk.
     ("toc_figures", False),
     # Classify and appraise read only what the judge found on topic (C31).
@@ -245,23 +278,44 @@ def toc_scope_constraints(plan: TocPlan) -> ScopeConstraints:
     return ScopeConstraints.model_validate(restriction.model_dump(exclude_none=True))
 
 
-def _item_search_directive(plan: TocPlan) -> dict[str, Any]:
-    """One item search's acquire directive (``depth · filters · guidance · record_cap``)."""
+def _item_search_directive(
+    plan: TocPlan, scale: int = 1, previous: list[str] | None = None
+) -> dict[str, Any]:
+    """One item search's acquire directive (``depth · filters · guidance · record_cap``).
+
+    Args:
+        plan: The validated plan.
+        scale: The result multiplier (C44): every call keeps ``scale`` times its
+            results and the cap grows with it; 1 is the ordinary link search.
+        previous: For a reformulated search (C44), the queries the link's
+            earlier searches ran; ``None`` is the ordinary search.
+    """
     search: dict[str, Any] = {
         "depth": "link",
-        "record_cap": TOC_ITEM_RECORD_CAP,
-        "guidance": list(ITEM_SEARCH_GUIDANCE),
+        "record_cap": TOC_ITEM_RECORD_CAP * scale,
+        "guidance": (
+            list(ITEM_SEARCH_GUIDANCE) if previous is None else reformulate_guidance(previous)
+        ),
     }
+    if scale > 1:
+        search["link_scale"] = scale
+    if previous is not None:
+        search["reformulate"] = True
     filters = toc_scope_constraints(plan).to_filters()
     if filters:
         search["filters"] = filters
     return search
 
 
-def _chain(steps: list[tuple[str, bool]], plan: TocPlan) -> ComposedChain:
+def _chain(
+    steps: list[tuple[str, bool]],
+    plan: TocPlan,
+    scale: int = 1,
+    previous: list[str] | None = None,
+) -> ComposedChain:
     def delta(component: str) -> dict[str, Any]:
         if component == "acquire":
-            return {"search": _item_search_directive(plan)}
+            return {"search": _item_search_directive(plan, scale, previous)}
         return {}
 
     return ComposedChain(
@@ -284,7 +338,8 @@ def compose_toc(
         purpose: The intent record's ``purpose``: ``toc`` for a main walk,
             ``targeted`` for an item search.
         context: The intent record's ``context``: ``toc_walk`` (and ``links``)
-            for a main walk, ``acquire_only`` for an item search.
+            for a main walk, ``acquire_only`` (and ``link_scale``, C44) for an
+            item search.
 
     Returns:
         The composed chain, every step with its spine flag.
@@ -303,11 +358,22 @@ def compose_toc(
             if context.get(TOC_CHECK_MODE_KEY) == "report":
                 return _chain([("toc_summarise", True), ("toc_report", True)], plan)
             if context.get(TOC_LINKS_KEY):
-                return _chain(
-                    [step for step in TOC_CHECK_CHAIN if step[0] not in _NAMED_LINK_SKIPS], plan
+                # Check again and Find more evidence are the user steering one link:
+                # no second search behind their back (owner, 2026-11-06).
+                skips = _NAMED_LINK_SKIPS | (
+                    {"toc_search_again"}
+                    if context.get(TOC_CHECK_MODE_KEY) in ("check_again", "find_more")
+                    else set()
                 )
+                return _chain([step for step in TOC_CHECK_CHAIN if step[0] not in skips], plan)
             return _chain(list(TOC_CHECK_CHAIN), plan)
         raise ValueError(f"no theory-of-change walk {walk!r}")
     if purpose == TARGETED_PURPOSE and context.get(ACQUIRE_ONLY_KEY) is True:
-        return _chain([("acquire", True)], plan)
+        previous = context.get(TOC_REFORMULATE_KEY)
+        return _chain(
+            [("acquire", True)],
+            plan,
+            int(context.get(TOC_LINK_SCALE_KEY) or 1),
+            [str(q) for q in previous] if isinstance(previous, list) else None,
+        )
     raise ValueError(f"no theory-of-change chain for intent-record purpose {purpose!r}")

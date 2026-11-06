@@ -117,7 +117,7 @@ option_profile_place_sentences = { tier = "fast", reasoning_effort = "medium", t
 # the branch's client timeout (the planner: 180 s, as before): the draft, the report and
 # the vision import take minutes.
 task_agent_toc = { tier = "standard", reasoning_effort = "none", timeout_s = 180 }
-toc_draft = { tier = "standard", reasoning_effort = "none", timeout_s = 300 }
+toc_draft = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }   # Sol, for the owner's latency and quality comparison with Terra (2026-11-06)
 toc_merge = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }
 toc_choose = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }
 toc_discover = { tier = "standard", reasoning_effort = "none", timeout_s = 300 }

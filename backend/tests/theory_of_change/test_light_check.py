@@ -352,11 +352,11 @@ def _picks(engine: Engine, task_id: uuid.UUID) -> dict[str, list[str]]:
 class _PicksTheShared(StubTocBackend):
     """Picks the last 10 candidates: the shared ones from other links' searches."""
 
-    def pick(self, *, item_text: str, candidates: list[dict[str, object]]) -> Any:
+    def pick(self, *, item_text: str, candidates: list[dict[str, object]], n: int = PICK_N) -> Any:
         from policy_atlas.theory_of_change.check.pick_prompt import PickResponse
 
         self._next("pick", {"candidates": candidates})
-        return PickResponse(ids=[str(c["id"]) for c in candidates[-PICK_N:]]), None
+        return PickResponse(ids=[str(c["id"]) for c in candidates[-n:]]), None
 
 
 def test_a_link_can_pick_and_judge_a_study_another_link_found(

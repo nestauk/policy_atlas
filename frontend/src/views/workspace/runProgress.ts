@@ -179,6 +179,8 @@ const TOC_STEPS: readonly PlanStepPreview[] = [
   { stage: "toc_merge", label: "Merging similar steps", blurb: "Folding boxes and pathways that say the same thing." },
   { stage: "toc_search_new", label: "Searching for the new connections", blurb: "Searching for the connections discovery added." },
   { stage: "toc_judge", label: "Judging the evidence", blurb: "Reading each document against its connection." },
+  { stage: "toc_retry_searches", label: "Searching again for thin connections", blurb: "A second search, in the words of the research, for connections with too little evidence." },
+  { stage: "toc_search_again", label: "Judging the second search", blurb: "Reading what the second search found." },
   { stage: "toc_figures", label: "Finding the size of change", blurb: "Taking the numbers each document reports." },
   { stage: "toc_choose", label: "Choosing pathways", blurb: "Keeping the best-evidenced routes." },
   { stage: "toc_summarise", label: "Writing titles and evidence sentences", blurb: "Plain titles and one sentence per connection." },

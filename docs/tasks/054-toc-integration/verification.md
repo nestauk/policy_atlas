@@ -673,3 +673,112 @@ documents view, draw.io export styles, fixture and one test. CSS colour variable
 stay. No prompt carries the values: `make prompt-guard` unchanged. `openapi-sync` and
 `drift-check` OK; lint and mypy clean; 203 backend ToC tests and the full frontend suite (1,033)
 pass.
+
+### Find more evidence: twice the results, and a busy button (2026-11-06, owner request)
+
+- **Search.** A find-more check now dispatches its item searches with `link_scale: 2` in the
+  child context (`TOC_FIND_MORE_SCALE`). The compose seam puts it in the acquire directive, the
+  search loop's parser admits it (1 to 4, link depth only), and the five link calls ask for twice
+  their results (40 / 20 / 20 / 20 on OpenAlex, 20 on Overton) under twice the cap (120). The
+  select step already drops the documents judged before, so the extra results are new candidates.
+  Tests: `test_toc_plan.py::test_find_more_evidence_doubles_the_item_search`,
+  `test_search_link_depth.py::test_find_more_evidence_asks_every_call_for_twice_the_results`.
+- **Button.** `CheckButton` reads "Finding evidence…" and is inactive while every link it names is
+  in the `checking` state (the running walk names them); test in `TocResult.test.tsx`.
+- Checks: ruff, mypy, frontend typecheck and lint clean; 61 backend tests on the plan, link
+  depth, acquire-only walk, option search and light check; 71 frontend ToC tests.
+- Not tried live: a find-more run on a checked theory. The sizes are unit-tested; the live cost
+  of one find-more check is about twice a link search's share of the $0.53 runs above.
+- **Picked and judged documents (owner, same day).** Doubling the search alone still judged ten
+  new documents per link, because `toc_select` picks `PICK_N` (10) and `toc_judge` reads
+  `JUDGE_TOP_K` (10). Both now come from one rule (`selecting.documents_per_link`): a find-more walk picks
+  and judges up to `TOC_FIND_MORE_PER_LINK` = 40 per link (owner, 2026-11-06), and the
+  shared-pool and seminal candidates offered to the pick call grow with it. The pick prompt's size is filled at call time; for the ordinary 10 the
+  rendered prompt is byte-identical. `pick_prompt.py` re-pinned: the diff is the `n` parameter,
+  one comment line and the `{n}` fill moving from import time to call time; no prompt wording
+  changed. Test: `test_check_steps.py::test_find_more_evidence_picks_and_asks_for_twice_the_documents`.
+  Checks after this: ruff and mypy clean; 213 backend tests across the ToC suites, the plan,
+  link depth, acquire-only walk and option search.
+
+### A smarter second search (2026-11-06, owner request)
+
+The find-more live run on task `bca650b2` showed why doubling the page found nothing: the same
+five queries returned 62 of 83 documents the task already held, and the judge read handouts from
+the shared pool. Two changes, both ruled by the owner on the day:
+
+- **Reformulated search.** A find-more item search carries the link's earlier queries (read from
+  its earlier child walks' `search.executed` events, clauses stripped, four at most) in the
+  guidance channel, with a brief to write in the vocabulary of the research that would test the
+  step. The searches by meaning and the Overton call run on the writer's research-style paraphrase
+  instead of the step's sentence (`search.reformulate` in the directive; `REFORMULATE_GUIDANCE` in
+  `item_search_prompt.py`, re-pinned: new text added, the first-search guidance untouched).
+- **One automatic second round.** A new check step, `toc_search_again`, after the judge and
+  before figures: the runner dispatches one reformulated search per link whose verdict is *Not
+  enough evidence* (`selecting.links_without_evidence`, stage `toc_retry_searches`), the step picks
+  each link's new documents (already-judged ones left out) and judges them; they count. Full
+  checks and new-items checks run it; Check again and Find more skip it (the user is steering).
+  The judge gained an `only` subset; the whole-programme judgements are not repeated. Priced at
+  the judge's rate in `cost.py`. The running card and the trace name both stages.
+- Tests: compose (`test_a_reformulated_item_search_carries_the_earlier_queries`,
+  `test_check_again_and_find_more_skip_the_second_search`), the link depth
+  (`test_a_reformulated_search_searches_by_meaning_on_the_paraphrase`), the chain and walk order,
+  and the unverified-quote test now counts both rounds. Checks: ruff and mypy clean; the ToC,
+  plan, link-depth, acquire-only, option-search, run-spec, task-plan, branch-sites and harness
+  suites pass; frontend typecheck, lint and workspace tests pass.
+- Prior evidence (2026-10-27) found a second round with the *same* queries added nothing; this
+  one changes the words, and the live run below is its first measurement.
+
+**Live run C** (2026-11-06 15:05, task `731ddd03`, the usual advertising message, port-8002 server on
+this checkout, `openai-direct`): draft and full check in 7 min 24 s, $0.67 (run A, before the second
+round: 4 min 50 s, $0.53). After the judge, 11 of 22 links had *Not enough evidence*; each got one
+reformulated search (stage `toc_retry_searches`, 11 children, all `reformulated`), and
+`toc_search_again` picked and judged 110 new documents, 48 on topic.
+
+| | Searches | Results | New to the task | Already held |
+|---|---|---|---|---|
+| First round | 23 | 983 | 424 | 395 |
+| Second round (reformulated) | 11 | 472 | 96 | 263 |
+
+The earlier same-words find-more on task `bca650b2` returned 1 new document in 83. After the second
+round, 6 of the 11 thin links moved up (#2, #3, #7, #9, #22 to *Leaning supports*; #12 to
+*Supported*) and 5 stay thin (#5, #8, #14, #17, #19); the theory ends with 9 supported, 7 leaning
+supports, 5 not enough evidence, 1 against. The new queries are research questions ("Do
+restrictions on paid online advertising of less healthy foods reduce children's exposure to that
+marketing in practice…") and new keyword queries ("children digital food marketing exposure
+restriction evaluation"); for #9 the keyword query was close to the first round's with two words
+dropped, so the writer does not always move far. One topic, one run: a measurement, not a result.
+- **Adversarial review (Codex, read-only, same day).** One finding: the walk clean-up that ends a
+  parent's children on abort (`option_search.abandon_children`) listed the first two item-search
+  stages only, so retry children of an aborted walk would have kept acquiring. Fixed by adding
+  `TOC_RETRY_SEARCHES_STAGE` to that list. Nothing found on double judging, the judge's `only`
+  subset, the empty-retry fallback (an empty pick stays an explicit empty set, so the judge does
+  not fall back to the pool), earlier-query leakage across links or tasks, directive parsing,
+  duplicate dispatch on resume, or the frontend stage names and counts.
+
+### Draft on Sol against Terra (2026-11-06, owner request)
+
+`toc_draft` moved from `standard` / effort `none` (gpt-6.1-terra) to `frontier` / `medium`
+(gpt-6.1-sol) in `model_routes.toml`, and the usual advertising message ran again (run D, task
+`ee2a6abb`) against run C (task `731ddd03`, same message, Terra draft, 11 minutes earlier).
+
+| | Run C, Terra | Run D, Sol |
+|---|---|---|
+| Draft latency | 54 s | 87 s |
+| Draft tokens | 14,237 | 8,789 |
+| Drafted boxes / links / pathways | 15 / 15 / 5 | 15 / 17 / 6 |
+| Boxes marked as the user's words | 0 | 3 (the two interventions, the impact) |
+| Whole run | 7 min 24 s, $0.67 | 7 min 53 s, $0.66 |
+| Judge: documents, not about | 220, 77 | 220, 89 |
+| Second round: links, judged, not about | 11, 110, 62 | 10, 100, 69 |
+| End verdicts | 9 supported, 7 leaning supports, 5 not enough, 1 against | 7 supported, 8 leaning supports, 5 not enough, 2 mixed |
+| Report headline | Evidence supports it | Evidence supports it |
+
+Quality, by reading the two drafts: Sol's draft has three mechanisms Terra's lacks (suppliers
+reformulating and advertising healthier replacements; children buying less themselves; the
+compensation failure route "other foods replace the calories"), its failure outcomes are more
+specific (older children's exposure unchanged; unpaid promotion replacing paid adverts), and it
+tags the user's own interventions as theirs. Terra's draft is plainer and closer to the owner's
+wording ("Children ask less often for advertised less healthy foods"). Both reports reach the same
+verdict with the same caveats (online exposure uncertain, obesity reductions modelled, not
+measured). One topic, one run each. The route file keeps Sol until the owner rules; the
+2026-11-04 ruling put the draft on the middle tier.

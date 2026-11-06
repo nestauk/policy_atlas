@@ -67,9 +67,15 @@ function isQueued(graph: TocGraph, linkIds: string[]): boolean {
   return linkIds.length > 0 && linkIds.every((id) => queued.has(id));
 }
 
+/** Whether the running check names every one of these links (their state is `checking`). */
+function isChecking(graph: TocGraph, linkIds: string[]): boolean {
+  const checking = new Set(graph.links.filter((link) => link.state === "checking").map((link) => link.link_id));
+  return linkIds.length > 0 && linkIds.every((id) => checking.has(id));
+}
+
 type CheckMode = Extract<TocEdit, { kind: "check" }>["body"]["mode"];
 
-/** A button that checks these links: its own words, then "Added to the queue" once it waits for the running check. */
+/** A button that checks these links: its own words; "Finding evidence…" and inactive while the check runs on them; "Added to the queue" once it waits for the running check. */
 export function CheckButton({
   graph,
   editor,
@@ -80,9 +86,10 @@ export function CheckButton({
   ...props
 }: { graph: TocGraph; editor: Editor; ids: string[]; mode: CheckMode; label: string } & Omit<ComponentProps<typeof Button>, "onClick" | "children">) {
   const queued = isQueued(graph, ids);
+  const checking = isChecking(graph, ids);
   return (
-    <Button size="sm" {...props} disabled={editor.busy || disabled || queued} onClick={() => editor.run({ kind: "check", body: { link_ids: ids, mode } })}>
-      {queued ? "Added to the queue" : label}
+    <Button size="sm" {...props} disabled={editor.busy || disabled || queued || checking} onClick={() => editor.run({ kind: "check", body: { link_ids: ids, mode } })}>
+      {queued ? "Added to the queue" : checking ? "Finding evidence…" : label}
     </Button>
   );
 }

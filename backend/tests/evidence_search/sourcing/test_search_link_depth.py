@@ -110,6 +110,51 @@ def test_link_depth_runs_five_calls_and_keeps_every_distinct_result(
     assert [r.rsplit("W", 1)[-1] for r in by_origin["variant_rct"]] == [f"r{i}" for i in range(10)]
 
 
+def test_find_more_evidence_asks_every_call_for_twice_the_results(conn: Connection) -> None:
+    """C44: ``link_scale: 2`` doubles each of the five calls' results."""
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    openalex = ScriptedBackend(keyed={"search_semantic": {}, "search": {}})
+    overton = ScriptedBackend(name="overton", keyed={"search": {}})
+    run_search(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=AcquireContext(
+            scope_id=scope_id,
+            intent=SENTENCE,
+            context={"search": {"depth": "link", "record_cap": 120, "link_scale": 2}},
+        ),
+        backends=[openalex, overton],
+        generation_backend=_generation(),
+    )
+    assert [c.max_results for c in openalex.calls] == [40, 20, 20, 20]
+    assert [c.max_results for c in overton.calls] == [20]
+
+
+def test_a_reformulated_search_searches_by_meaning_on_the_paraphrase(conn: Connection) -> None:
+    """C44: with ``reformulate``, the searches by meaning and Overton use the writer's sentence."""
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    openalex = ScriptedBackend(keyed={"search_semantic": {}, "search": {}})
+    overton = ScriptedBackend(name="overton", keyed={"search": {}})
+    counts = run_search(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=AcquireContext(
+            scope_id=scope_id,
+            intent=SENTENCE,
+            context={"search": {"depth": "link", "reformulate": True}},
+        ),
+        backends=[openalex, overton],
+        generation_backend=_generation(),
+    )
+    assert [c.query for c in openalex.calls][:2] == ["p", "p" + LINK_PLACE_SUFFIX]
+    assert [c.query for c in overton.calls] == ["p"]
+    assert counts["search"]["reformulated"] is True
+
+
 def test_link_depth_without_a_keyword_query_still_searches_by_meaning(conn: Connection) -> None:
     task_id, run_id = seed_task_and_run(conn)
     scope_id = seed_scope(conn, task_id)

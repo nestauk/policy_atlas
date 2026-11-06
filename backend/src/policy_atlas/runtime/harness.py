@@ -488,6 +488,7 @@ _TOC_STEPS: dict[str, Callable[..., dict[str, Any]]] = {
     "toc_discover": discover.toc_discover_scope,
     "toc_merge": merge.toc_merge_scope,
     "toc_judge": judge.toc_judge_scope,
+    "toc_search_again": judge.toc_search_again_scope,
     "toc_figures": toc_figures.toc_figures_scope,
     "toc_choose": choose.toc_choose_scope,
     "toc_summarise": summarise.toc_summarise_scope,
@@ -505,7 +506,7 @@ def _toc_node(name: str) -> Any:
         if name == "toc_select":
             # The seminal works lookup reuses the item searches' OpenAlex backend.
             kwargs["searchers"] = state["search_backends"]
-        if name == "toc_judge":
+        if name in ("toc_judge", "toc_search_again"):
             # Judge reranks each link's candidates with select's rerank backend
             # (C5), and picks a searchless link's documents by embedding (C27).
             kwargs["ranker"] = state["ranking_backend"]

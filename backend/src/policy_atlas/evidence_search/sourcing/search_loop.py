@@ -543,13 +543,15 @@ def parse_search_directive(
         return "rapid", None, None
     if not isinstance(raw, dict):
         raise SearchDirectiveError("search directive must be an object")
-    unknown = set(raw) - {"depth", "filters", "guidance", "record_cap"}
+    unknown = set(raw) - {"depth", "filters", "guidance", "record_cap", "link_scale", "reformulate"}
     if unknown:
         raise SearchDirectiveError("search directive contains unknown keys")
     # Validated here (this is the fail-closed gate for the whole directive) and
-    # read back by `parse_record_cap`, so the 3-tuple this function has always
-    # returned is unchanged for its existing callers.
+    # read back by `parse_record_cap` and `parse_link_scale`, so the 3-tuple this
+    # function has always returned is unchanged for its existing callers.
     parse_record_cap(context)
+    parse_link_scale(context)
+    parse_reformulate(context)
     depth: SearchDepth = "rapid"
     if "depth" in raw:
         raw_depth = raw["depth"]
@@ -566,6 +568,56 @@ def parse_search_directive(
             raw["guidance"], error=SearchDirectiveError, max_chars=DIRECTIVE_STRING_MAX
         )
     return depth, raw.get("filters"), guidance
+
+
+def parse_reformulate(context: dict[str, Any]) -> bool:
+    """Whether the link depth searches by meaning on the generated paraphrase (C44).
+
+    Returns:
+        ``search.reformulate`` when the directive carries it, else ``False``.
+
+    Raises:
+        SearchDirectiveError: If it is not a boolean, or the depth is not ``link``.
+    """
+    raw = context.get("search")
+    if not isinstance(raw, dict) or "reformulate" not in raw:
+        return False
+    value = raw["reformulate"]
+    if not isinstance(value, bool):
+        raise SearchDirectiveError("search directive reformulate must be a boolean")
+    if value and raw.get("depth") != "link":
+        raise SearchDirectiveError("search directive reformulate needs depth 'link'")
+    return value
+
+
+#: Ceiling on the link depth's result multiplier (C44): the five calls never
+#: ask for more than four times their usual results.
+LINK_SCALE_MAX = 4
+
+
+def parse_link_scale(context: dict[str, Any]) -> int:
+    """The link depth's result multiplier from the search directive (C44).
+
+    Returns:
+        ``search.link_scale`` when the directive carries it, else 1.
+
+    Raises:
+        SearchDirectiveError: If it is not an integer in ``1..LINK_SCALE_MAX``,
+            or the depth is not ``link``.
+    """
+    raw = context.get("search")
+    if not isinstance(raw, dict) or "link_scale" not in raw:
+        return 1
+    value = raw["link_scale"]
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise SearchDirectiveError("search directive link_scale must be an integer")
+    if not 1 <= value <= LINK_SCALE_MAX:
+        raise SearchDirectiveError(
+            f"search directive link_scale must be between 1 and {LINK_SCALE_MAX}"
+        )
+    if raw.get("depth") != "link":
+        raise SearchDirectiveError("search directive link_scale needs depth 'link'")
+    return value
 
 
 #: Ceiling on a directive-supplied per-backend record cap: the deepest rung's
@@ -1437,11 +1489,14 @@ def _link_pools(
     text: str,
     keyword: str | None,
     cap: int,
+    scale: int = 1,
     variants: dict[str, list[dict[str, Any]]],
     validated: dict[str, dict[str, Any]],
     wires: dict[str, list[dict[str, str]]],
 ) -> tuple[dict[str, list[PoolEntry]], list[str]]:
     """The link depth's search: five calls for one link, ``cap`` records at most (C27, C31).
+
+    ``scale`` multiplies every call's results (C44, Find more evidence).
 
     OpenAlex semantic search on the sentence (origin ``semantic``) and on the
     sentence with :data:`LINK_PLACE_SUFFIX` (``semantic_place``); the one
@@ -1470,8 +1525,8 @@ def _link_pools(
             wire, local_filters, keep, _ = _semantic_scope(variants["openalex"])
             # The results each call keeps (C27): 20 by meaning, 10 by meaning and place.
             semantic_calls: list[tuple[str, int, QueryOrigin]] = [
-                (text, 20, "semantic"),
-                (text + LINK_PLACE_SUFFIX, 10, "semantic_place"),
+                (text, 20 * scale, "semantic"),
+                (text + LINK_PLACE_SUFFIX, 10 * scale, "semantic_place"),
             ]
             keyword_calls: list[tuple[str, QueryOrigin, dict[str, str]]] = [
                 (_compose_variant(keyword, clause), origin, keyword_wire)
@@ -1500,7 +1555,7 @@ def _link_pools(
                             query=query,
                             origin=origin,
                             wire_params=keyword_wire,
-                            max_records=10,
+                            max_records=10 * scale,
                             fetch=_search_fetch(backend, query, keyword_wire),
                         )
                         for query, origin, keyword_wire in keyword_calls
@@ -1517,7 +1572,7 @@ def _link_pools(
                         query=text,
                         origin="verbatim",
                         wire_params=wire,
-                        max_records=10,
+                        max_records=10 * scale,
                         fetch=_overton_fetch(backend, validated["overton"], wire)(text),
                     ),
                 )
@@ -1731,6 +1786,8 @@ def run_search(
     scope_wire_params = _scope_wire_params_payload(wires) if raw_filters is not None else None
     round_index = count_search_runs(conn, task_id=task_id, scope_id=context.scope_id) + 1
     record_cap = parse_record_cap(context.context)
+    link_scale = parse_link_scale(context.context)
+    reformulate = parse_reformulate(context.context)
     started = time.monotonic()
 
     usage_totals = UsageAccumulator()
@@ -1794,13 +1851,18 @@ def run_search(
             else:
                 pools[name], summaries[name] = outcome
     if depth == "link":
-        # The link sentence is the intent's first line (``item_text``).
+        # The link sentence is the intent's first line (``item_text``). A
+        # reformulated search (C44) searches by meaning on the generated
+        # research-style paraphrase instead, when the writer gave one.
+        sentence = context.intent.strip().splitlines()[0]
+        reformulated = reformulate and bool(paraphrases)
         pools, local_filters = _link_pools(
             passes,
             backends,
-            text=context.intent.strip().splitlines()[0],
+            text=paraphrases[0] if reformulated else sentence,
             keyword=queries[0] if queries else None,
             cap=record_cap or constants["papers_cap"],
+            scale=link_scale,
             variants=variants,
             validated=validated,
             wires=wires,
@@ -1839,6 +1901,7 @@ def run_search(
         "queries_zero_result": {name: legs[name].zero_result_queries for name in names},
         "queries_dropped": queries_dropped,
         "fallback_to_verbatim": {name: legs[name].fallback_to_verbatim for name in names},
+        "reformulated": depth == "link" and reformulate and bool(paraphrases),
         "wall_clock_s": time.monotonic() - started,
         "generation_calls": 1,
         "semantic_local_filters": local_filters,

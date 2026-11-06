@@ -172,9 +172,9 @@ class TocBackend(Protocol):
         ...
 
     def pick(
-        self, *, item_text: str, candidates: list[dict[str, object]]
+        self, *, item_text: str, candidates: list[dict[str, object]], n: int = PICK_N
     ) -> UsageResult[PickResponse]:
-        """Pick the documents the judge reads for one link (``toc_pick_v1``)."""
+        """Pick the ``n`` documents the judge reads for one link (``toc_pick_v1``)."""
         ...
 
     def judge(self, **kwargs: Any) -> UsageResult[JudgeResponse]:
@@ -377,11 +377,11 @@ class OpenAITocBackend:
         )
 
     def pick(
-        self, *, item_text: str, candidates: list[dict[str, object]]
+        self, *, item_text: str, candidates: list[dict[str, object]], n: int = PICK_N
     ) -> UsageResult[PickResponse]:
         """See :class:`TocBackend`."""
         return self._call(
-            build_pick_messages(item_text=item_text, candidates=candidates),
+            build_pick_messages(item_text=item_text, candidates=candidates, n=n),
             response_format=PickResponse,
             step="toc_pick",
             max_output_tokens=TOC_PICK_MAX_OUTPUT_TOKENS,
@@ -707,11 +707,11 @@ class StubTocBackend:
         return (queued or default), None
 
     def pick(
-        self, *, item_text: str, candidates: list[dict[str, object]]
+        self, *, item_text: str, candidates: list[dict[str, object]], n: int = PICK_N
     ) -> UsageResult[PickResponse]:
-        """See :class:`StubTocBackend`: by default, the first :data:`PICK_N` ids."""
+        """See :class:`StubTocBackend`: by default, the first ``n`` ids."""
         queued = self._next("pick", {"item_text": item_text, "candidates": candidates})
-        default = PickResponse(ids=[str(c["id"]) for c in candidates[:PICK_N]])
+        default = PickResponse(ids=[str(c["id"]) for c in candidates[:n]])
         return (queued or default), None
 
     def judge(self, **kwargs: Any) -> UsageResult[JudgeResponse]:

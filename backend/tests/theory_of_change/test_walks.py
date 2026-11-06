@@ -333,6 +333,7 @@ def test_start_drafts_then_checks_and_the_thread_stays_open(
         "toc_merge",
         "toc_search_new",
         "toc_judge",
+        "toc_search_again",
         "toc_figures",
         "toc_choose",
         "toc_summarise",

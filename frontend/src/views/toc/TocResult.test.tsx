@@ -614,6 +614,14 @@ describe("finding more and stopping (C44, C48)", () => {
     expect((lastEdit() as { body: { link_ids: string[] } }).body.link_ids.length).toBeGreaterThan(1);
   });
 
+  it("says it is finding evidence, and is inactive, while the check runs on that connection", () => {
+    const links = tocGraphFixture().links.map((link) => (link.link_id === linkId(3) ? { ...link, state: "checking" as const } : link));
+    renderResult(editable({ check_status: "checking", links }));
+    openLink(3);
+    expect(within(panel()).getByRole("button", { name: "Finding evidence…" })).toBeDisabled();
+    expect(within(panel()).queryByRole("button", { name: "Find more evidence" })).toBeNull();
+  });
+
   it("stops a running check, and says when one was stopped", async () => {
     const user = userEvent.setup();
     const { unmount } = renderResult(editable({ check_status: "checking" }));

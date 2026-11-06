@@ -601,7 +601,20 @@ C10 (revisions and 409) stands as written.
   (`toc_same_meaning`) is dropped: Keep and Check again cover it.
 - **C44. Find more evidence; pending results (slice C).** A **Find more evidence** button at the
   bottom of the link and box sidebars (for a box: its incoming and outgoing links) runs C40 with
-  a wider search (both study-design clauses, an analogue query, and the plan's place). New
+  a wider search: every item-search call keeps **twice** the results, and the cap doubles
+  (`TOC_FIND_MORE_SCALE`, owner 2026-11-06), and up to 40 documents are picked and judged per
+  connection instead of 10 (`TOC_FIND_MORE_PER_LINK`), so the search reaches past what the first
+  check found; the documents
+  already judged for the link make way for new ones. The search is **reformulated** (owner,
+  2026-11-06): the query writer is told the link's earlier queries and asked to write in the
+  vocabulary of the research that would test the step (constructs, outcomes, mechanisms), and the
+  searches by meaning run on its research-style paraphrase instead of the step's own sentence.
+  The same reformulated search runs **once, automatically**, in every full check and new-items
+  check (not Check again or Find more): after the judge, each link whose verdict is *Not enough
+  evidence* gets one more search, its new documents are picked (10) and judged, and the
+  judgements count like the first round's (`toc_search_again`, stage `toc_retry_searches`).
+  While that check runs,
+  the button reads **Finding evidence…** and is inactive for those connections. New
   judgements arrive **pending**: they do not count until accepted. The link's sidebar shows a
   *New evidence found* block at the top: each new document with its support and relevance, the
   verdict now and the verdict if accepted ("Not enough evidence → Leaning supports"), and
