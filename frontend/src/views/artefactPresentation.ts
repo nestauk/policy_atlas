@@ -12,6 +12,8 @@ export const REPORT_PART_HEADING_CLASS =
   "text-[28px] font-extrabold uppercase tracking-[0.06em] leading-[1.2] text-navy max-md:text-[22px]";
 export const REPORT_SECTION_HEADING_CLASS = "text-heading font-bold text-navy max-md:text-[20px]";
 export const REPORT_BODY_CLASS = "text-lead text-ink max-md:text-body";
+/** A short label above content ("REPORT", "SOURCES", "INPUT"): never a sentence. */
+export const REPORT_LABEL_CLASS = "text-meta font-bold uppercase tracking-[0.06em] text-grey";
 
 /** Contents-sidebar anchors for report part headings. */
 export const EXECUTIVE_SUMMARY_ANCHOR = "executive-summary";
@@ -546,15 +548,28 @@ export function downloadFilename(title: string, extension: string): string {
   return `${slug || "report"}.${extension}`;
 }
 
-/** Trigger a client-side file download of UTF-8 text. */
-export function triggerTextDownload(filename: string, body: string, mime: string): void {
-  const blob = new Blob([body], { type: `${mime};charset=utf-8` });
-  const url = URL.createObjectURL(blob);
+/** Trigger a client-side download of a URL (an object or data URL) as `filename`. */
+export function triggerUrlDownload(url: string, filename: string): void {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
+}
+
+/** Trigger a client-side file download of UTF-8 text. */
+export function triggerTextDownload(filename: string, body: string, mime: string): void {
+  const url = URL.createObjectURL(new Blob([body], { type: `${mime};charset=utf-8` }));
+  triggerUrlDownload(url, filename);
   URL.revokeObjectURL(url);
+}
+
+/** A CSV cell: quoted/escaped, and defused against spreadsheet formula
+ *  injection — titles and venues arrive from external sources. */
+export function csvCell(value: string | number | boolean | null | undefined): string {
+  let text = value === null || value === undefined ? "" : String(value);
+  // Also defuse markers behind leading whitespace ("\t=SUM…").
+  if (/^\s*[=+\-@]/.test(text)) text = `'${text}`;
+  return `"${text.replaceAll('"', '""')}"`;
 }

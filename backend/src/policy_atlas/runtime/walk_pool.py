@@ -38,6 +38,7 @@ from policy_atlas.runtime.scoping_plan import OPTION_SEARCH_WIDTH
 CLASSIFY_SLOTS = threading.BoundedSemaphore(MAX_CONCURRENT_CLASSIFY)
 
 
+
 @functools.cache
 def option_search_pool() -> ThreadPoolExecutor:
     """Return the process-wide option-search pool, creating it on first use.
@@ -51,4 +52,23 @@ def option_search_pool() -> ThreadPoolExecutor:
     # ponytail: two racing first calls could each build a pool; the spare one starts no thread.
     return ThreadPoolExecutor(
         max_workers=OPTION_SEARCH_WIDTH, thread_name_prefix="policy-atlas-option-search"
+    )
+
+
+#: Item searches in flight at once across a theory-of-change check walk (🟡, C2).
+TOC_ITEM_WIDTH = 8
+
+
+@functools.cache
+def toc_item_pool() -> ThreadPoolExecutor:
+    """Return the process-wide pool for theory-of-change item searches (task 054, C2).
+
+    Separate from the option-search pool, so a check walk's searches never
+    queue behind a longlist's (or the reverse).
+
+    Returns:
+        The pool, ``max_workers=TOC_ITEM_WIDTH``.
+    """
+    return ThreadPoolExecutor(
+        max_workers=TOC_ITEM_WIDTH, thread_name_prefix="policy-atlas-toc-item"
     )

@@ -1,0 +1,193 @@
+# ADR 0042 — A third task kind: theory of change
+
+- **Status:** Accepted — 2026-10-26 (Karlis Kanders, owner, task 054 plan gate: "Approve!").
+- **Date:** 2026-10-26
+- **Task:** [054-toc-integration](../tasks/054-toc-integration/contract.md)
+- **Builds on:** [ADR 0037](0037-options-scoping-task-kind-links-and-baseline-gate.md) (a task
+  kind, its links and the capability registry) ·
+  [ADR 0039](0039-options-scoping-longlist-option-searches-and-option-records.md) (searches as
+  child walks) · [ADR 0041](0041-bedrock-inference-route-and-model-route-file.md) (the model
+  route file).
+
+## Context
+
+Policy teams use theories of change to say how an intervention is meant to bring about a change
+and what that depends on. HM Treasury's Magenta Book treats one as the first step of any
+evaluation. Building one by hand is slow, and users asked for two things a tool could give them:
+evidence they can audit, and a clear difference between a step with no evidence and a step with
+evidence against it.
+
+Policy Atlas already has most of what such a tool needs: a Task Agent, the Evidence search
+spine (search, screen, classify, appraise), the option-search child walks of Options scoping,
+a quote verifier and a rerank backend. It has nothing that drafts a causal graph, judges a
+document against one causal step, or chooses between pathways. The capability spec
+(`docs/specs/capabilities/theory-of-change/`) holds the product design and every owner ruling;
+the task 054 contract fixes the build. This record keeps the consequential decisions.
+
+## Decisions
+
+1. **A third task kind, `theory_of_change`, through the capability registry** (contract C1, C3,
+   C12). One theory per task, edited in place; every change is a History event. Two walks: a
+   draft walk (draft or import) and a check walk (item searches, then screen, classify,
+   appraise, discover, merge, judge, choose, summarise). The check starts when the draft lands.
+   The steering lattice is empty. A new scope purpose `toc` marks the main walk; item searches
+   reuse the `targeted` scope with `acquire_only`, on their own pool, through a
+   capability-neutral child search kept inside `runtime/option_search.py` (C2).
+2. **Links carry the evidence; boxes are described** (C4, C5, W4, W14). Only links are searched
+   and graded. Each link answers two questions, *did it work where it was tried* and *will it
+   hold here*, each with its own grade; its conditions hold the Magenta Book's assumptions.
+   Boxes show a description, result criteria, case studies and indicators. This follows
+   theory-based evaluation (White 2009; Mayne 2015, 2017) and the distinction between "it
+   worked there" and "it will work here" (Cartwright and Hardie 2012).
+3. **The grade is a banding, on purpose** (C4). Strong, medium, weak or no evidence found, from
+   one pure function over appraisal scores, computed on read and never stored. Options scoping
+   does not band evidence in v1 without its own eval; theory of change does, because users need
+   a per-step reading, and tunes the rule with evals E2, E2b and E7. Web pages never raise a
+   grade above weak. A modelling study the judge marks robust counts as score 3, enough for
+   medium, never strong; the shared appraisal rubric is unchanged.
+4. **Generated sentences are checked** (C20). Evidence sentences and box descriptions may cite
+   only their own item's judged documents with verified quotes, or a box's case studies. Code
+   replaces any sentence that fails.
+5. **Web search opens the open-web seam, for this capability only** (C7). OpenAI's hosted web
+   search tool, through a typed `web_search` table per route with an address allow-list and no
+   fallback. On the Bedrock route, Bedrock's `bedrock-runtime` endpoint does not offer hosted
+   tools, so **only the web search calls** go to Bedrock's `bedrock-mantle` endpoint in
+   us-east-1; every other call stays in London. Cited pages are fetched with the hardened live
+   fetcher, frozen as untrusted text, capped in number per call and per walk, and reach prompts
+   only through the field sanitiser and a fence. The seam stays deferred for every other
+   capability.
+6. **A private uploads bucket** (C8). Imported theory files go to a new private, encrypted,
+   TLS-only S3 bucket, retained by policy, readable only through the task's own authenticated
+   routes. Objects are removed only by the operator script that hard-deletes tasks; a retention
+   rule is a deferred seam.
+7. **Policy Atlas may change user work, but flags it, and edits never trigger checks** (T1, C6,
+   C9, C19). Merge and choose may merge, reword or set aside user work; each change keeps the
+   user's prior version, and the Task Agent offers Undo per change and Undo all. A user edit
+   only marks a link *check pending*; the user keeps the evidence or asks for a minimal check
+   (a same-meaning call, then a re-judge of the documents already found). Every writer uses row
+   revisions and compare-and-apply, so a background step never overwrites a newer user edit.
+8. **A link from an option to a theory** (C13, C14). `task_link.source_option_id`, with a
+   composite foreign key to the source task's option, accepted only when the target is a theory
+   of change. The option's documents are shared, not copied.
+9. **A server setting guards creation** (C15). `POLICY_ATLAS_THEORY_OF_CHANGE=1` must be on for
+   the backend to create the task kind, so a merge to `dev` exposes nothing by API alone. It is
+   off in both environments. `DELETE` joins the API's allowed CORS methods for the graph edit
+   routes.
+10. **An iterative build with a lighter review stack** (C18; owner: "implement a simple version
+    … then iterate a bit, and then build from there"). A simple core first, tried and tuned on
+    real topics, then six increments. Fast checks on every commit; the full suite at build open,
+    at each migration and at each increment's end; `/code-review` and the security lane on each
+    increment; the contract verifier, a Codex adversarial pass and `/simplify` once before the
+    merge to `dev`. Three schema revisions, one per increment that needs one.
+
+## Amendment, 2026-10-27: web pages by publisher
+
+Decision 3's blanket rule ("web pages never raise a grade above weak") is replaced (owner: "If it
+comes from Eval Task Force, for example, it could be quite strong"). Every web page is classified
+and appraised like any document. A page from a trusted publisher (a configured list: government,
+the Evaluation Task Force, regulators, statistics and audit bodies, What Works Centres,
+universities, journals) counts by its appraisal score; any other page keeps the old cap. Task 054
+contract C23.
+
+## Amendment, 2026-10-28: one evidence verdict per link (simplified BEAM)
+
+Decisions 2 and 3 change. A link no longer answers two questions with two grades (*worked
+elsewhere*, *holds here*); it has **one evidence verdict**, computed by code on read (owner: "let's
+have one verdict"). Task 054 contract C36; the scheme is the ground-truth pack's simplified BEAM
+(`03_beam_evidence_scheme.md` §3).
+
+- **What the judge says.** Per document, its *support* for the step (strong, weak, mixed,
+  refutes, or not about it), one verified quote, and its *relevance* R, 0 to 3: how many extra
+  assumptions it takes to carry the finding to this population and place. "Will it hold here"
+  now lives in relevance and in the link's one evidence sentence, not in a second grade.
+- **How code weighs it.** Quality Q, 1 to 3, comes from the appraisal score (5 or 4 → 3, 3 → 2,
+  lower or unscored → 1); a web page off the trusted list counts 1, a robust model 2, any other
+  model 1. Weight = Q × R ÷ 9. Support counts +2, +1, 0, −2.
+- **The verdict.** From the total weight W, the weight-averaged support S̄ and the share of the
+  weight that refutes: *Not sure: too little evidence* when W < 1; *Confident* when S̄ ≥ 1 and
+  under 15% refutes; *Not confident: evidence against* when S̄ ≤ −0.5; otherwise *Not sure:
+  mixed*. A link within 0.2 of a support threshold, or 0.25 of W = 1, is flagged as close to the
+  threshold. The thresholds are named constants in `evidence/grade.py`, to calibrate from the
+  evals. The theory's confidence is the lowest verdict among its critical links.
+  **Amended 2026-10-30 (owner):** six verdicts, without "Not sure": *Not enough evidence*
+  when W < 4/9; with 4/9 ≤ W < 1, *Leaning supports* (S̄ ≥ 0.5) or *Leaning against*
+  (S̄ ≤ −0.5), else Not enough evidence; with W ≥ 1, *Confident* (S̄ ≥ 1, under 25%
+  refutes), *Leaning supports* (S̄ ≥ 0.5), *Not confident: evidence against* (S̄ ≤ −1),
+  *Leaning against* (S̄ ≤ −0.5), else *Mixed*. Calibrated over six runs, 123 links.
+- **The critical connection (C6)** keeps its intent, the weakest important step: the lowest
+  verdict on a kept success pathway, ties to the link on most pathways.
+- **The canvas** shows the verdict by line style only (solid, two-tone, dashed, dotted red);
+  the critical link carries a warning triangle (thicker lines until 2026-10-29).
+
+Why: two grades per link were hard to read ("medium elsewhere, weak here" did not tell a user
+what to do), and the banding ignored how relevant each study was. BEAM's weighting by quality and
+relevance, with four verdicts that say what to do next, is the scheme the ground-truth pack
+measures against. Old judgements were mapped once in migration `7fbb8bf487f2` (supports → weak,
+challenges → refutes; relevance 3 where *holds here* supported, else 1); the old columns are kept,
+no longer written. A systematic review replacing its own included studies (deduplication) is
+deferred.
+
+## Amendment, 2026-11-05: as built at the merge to `dev`
+
+Recorded by the review stack (task-cycle step 7) against `task/054-1-core`, before PR #114.
+
+- **Schema: ten revisions, not three.** `9127f849697f` (core) → `80f4e6c430b0` (six layers,
+  codes) → `7fbb8bf487f2` (one verdict per link) → `72c3174734ea` (figures) → `3c2752811cce`
+  (titles, cited sentences) → `9d1e4c7a2b10` (editing) → `b4e8a1f63c25` (proposals) →
+  `c7f2a9d41e08` (`task_upload`) → `e3b9d27c5a14` → `f5a1c8e93b27` (proposal sources), after
+  dev's `0914321f8de4`. The owner's iterative build (decision 10) produced one revision per
+  presentation or editing round; contract C51 asked for one per slice. **Every downgrade that drops data refuses
+  while its own data exists** (`72c3`, `3c27`, `9d1e` and `b4e8` were guarded at the review: with
+  `transaction_per_migration` each step commits, so an unguarded step would have dropped columns
+  before the core revision refused; `7fbb` and `80f4` fold values with a tested round-trip mapping
+  and keep every row). The widened constraints are three, not four: the
+  `stress_test` conversation kind was never added.
+- **Two steps the contract did not name**, owner rulings of 2026-11-03 after red-team runs:
+  `toc_sense_check` at the plan stage (two OpenAlex queries and one call; warns, never blocks)
+  and `toc_verdict`, which leads the report with two axes, mechanism (plausible or implausible)
+  and evidence (supports, mixed, too little, against). The theory-level label is the verdict
+  call's reading of the per-link grades; each link's grade and the whole-programme judgement
+  still come only from `evidence/grade.py` and `report.link_verdict` (decision 3 holds per link).
+- **Not built at this merge**, by the owner's steering: web search (decision 5; no
+  `WebSearchRoute` exists, the report's method line names OpenAlex and Overton only); the
+  stress-test conversation kind (the Task Agent chat discusses the theory instead); the option
+  link (decision 8; `from_option` was removed from the code); PowerPoint (owner, 2026-11-04:
+  parked; exports are made in the browser: PDF print, PNG, SVG, CSV, JSON, draw.io). Decision 7
+  in part: changes to user work are flagged and keep the prior version (`pa_changed`,
+  `prior_version`), but Undo per automatic change, Undo all and Keep mine are not surfaced yet;
+  Undo covers user edits and accepted suggestions. The same-meaning call was dropped (C43):
+  Check again re-judges the documents already found.
+- **Uploads** (decision 6): the `task_upload` table and the bucket serve every capability
+  (a `purpose` column), not only imported theories. Reads are for the owner and colleagues,
+  never the public leg. The public reads of the theory carry no person's name (task 037 D5;
+  fixed at the review).
+- **Staging on** (owner, 2026-11-05): the server setting and the SPA's build flag are on in
+  staging and off in production (`theory_of_change` in `infra/pa_config.json`;
+  `scripts/deploy.sh`). Decision 9's "off in both environments" holds for production only.
+- **Rollback as built:** `python scripts/ops_remove_toc_tasks.py --apply` deletes the named
+  tasks' rows and their uploaded files (the store's `delete` was restored at the review), then
+  `alembic downgrade 0914321f8de4` steps down the ten revisions. ADR § Rollback above reads
+  "each revision refuses only while its own data exists": as built, the two value-mapping
+  revisions keep every row instead of refusing.
+
+## Consequences
+
+- Positive: a policy team gets a Magenta Book theory of change whose every step shows, in
+  plain sentences with sources, whether it worked elsewhere and whether it is likely to hold
+  here. Most of the machinery is reused, and Evidence search and Options scoping behaviour is
+  unchanged.
+- Cost: web search is billed per call and needs a long-term Bedrock key valid in us-east-1 on
+  the Bedrock route. The banding rule is a judgement that the evals must keep testing.
+- Risk: a US endpoint for web search calls on the Bedrock route; untrusted page text in prompts
+  (fenced and sanitised); user files in a new bucket (private, access-checked); a lighter review
+  stack (offset by a full review before the merge to `dev`).
+
+## Rollback
+
+Turn the server setting off, so no new theories can be created. Each schema revision's
+downgrade refuses only while its own data exists: the option link column while any link uses
+it, the uploads table while any upload exists, and the core tables while any theory-of-change
+task or run exists. The remedy is the operator script that hard-deletes those tasks, their walks
+and their bucket objects; the downgrades then drop what they added and narrow the four widened
+constraints. The bucket is retained by policy and emptied by the same script; deleting it is a
+separate infrastructure change. Deploy the previous image.

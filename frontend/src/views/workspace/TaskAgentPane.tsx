@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { components } from "../../api/gen/types";
+import { Link, useLocation, useNavigate } from "react-router";
 
-import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns, useTask } from "../../api/queries";
+import { UPLOAD_MESSAGE, uploadMessage, useTocUpload, useTocUploading } from "../../api/mutations";
+import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns, useTask, useToc, useTocUploadFile, useTocUploads } from "../../api/queries";
 import { useComposerSeed } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
 import { COPY, TASK } from "../../lib/vocabulary";
@@ -45,6 +47,10 @@ import { PlanCard } from "./PlanCard";
 import type { PlanOverlay } from "./planOverlay";
 import { COMPONENT_LABEL, RUN_BLOCK_STATUS } from "./planVocabulary";
 import { RunningCard, RunningCardDock } from "./RunningCard";
+import { TocTrace } from "./TocTrace";
+import { TocCodeText } from "../toc/codeLinks";
+import { CitationMarker } from "../toc/Documents";
+import { AttachFileButton, UploadPreview } from "../toc/uploads";
 import {
   completedSignposts,
   elapsedSeconds,
@@ -69,6 +75,8 @@ export function threadInputs(
   turns: TaskAgentThreadTurn[],
   runs: TaskAgentThreadRun[],
   decisions: TaskAgentThreadDecision[],
+  /** Theory of change (round 5): a child walk's lines go to its parent's block, for the trace. */
+  foldChildren = false,
 ): { boundaries: RunThreadBoundary[]; runDecisions: RunThreadDecision[] } {
   // Task 045 (S12): a child walk (a longlist walk's option search) gets no
   // block of its own; the decisions that name it go nowhere.
@@ -93,9 +101,13 @@ export function threadInputs(
   const orderedRuns = runs
     .filter((run) => !childIds.has(run.capability_run_id))
     .sort((left, right) => left.started_at.localeCompare(right.started_at));
+  const parentOf = new Map(
+    runs.flatMap((run) => (run.parent_capability_run_id != null ? [[run.capability_run_id, run.parent_capability_run_id] as const] : [])),
+  );
   const runDecisions: RunThreadDecision[] = [];
   for (const decision of decisions) {
-    const walkId = decision.capability_run_id;
+    const own = decision.capability_run_id;
+    const walkId = foldChildren && own != null ? (parentOf.get(own) ?? own) : own;
     const tagged = decision.detail?.["capability_run_id"];
     const ownerId =
       walkId != null
@@ -186,6 +198,7 @@ export function taskAgentComposerPlaceholder(
   isOwner = true,
   atScopingGate = false,
   hasLonglist = false,
+  isToc = false,
 ): string {
   if (!isOwner) {
     return `Steering is limited to the ${TASK.lower} owner.`;
@@ -213,7 +226,8 @@ export function taskAgentComposerPlaceholder(
   if (planReady) {
     return "Suggest changes here, or edit directly in the plan.";
   }
-  return "Describe the policy question you need evidence for.";
+  // A theory of change asks about the change, not a question for evidence (task 054).
+  return isToc ? "Describe the change you want, or ask about your theory." : "Describe the policy question you need evidence for.";
 }
 
 /**
@@ -231,6 +245,7 @@ export function Composer({
   sendDisabled,
   id = "task_agent-message",
   label = COPY.messageTaskAgent,
+  onAttach,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -247,6 +262,8 @@ export function Composer({
    *  whichever came first in the document. */
   id?: string;
   label?: string;
+  /** A theory of change before its draft (task 054, increment 5): attach the user's own diagram. */
+  onAttach?: (file: File) => void;
 }) {
   return (
     <div>
@@ -274,6 +291,20 @@ export function Composer({
           disabled={disabled}
           className="max-h-60 min-h-14 flex-1 resize-y overflow-y-auto border border-line-2 bg-paper px-3 py-2.5 text-lead [field-sizing:content] focus-visible:outline-2 focus-visible:outline-blue disabled:bg-ground disabled:text-grey"
         />
+        {onAttach !== undefined && (
+          <AttachFileButton
+            onFile={onAttach}
+            disabled={disabled}
+            title="Upload your own theory of change (PNG, JPEG or PDF)"
+            className={cn(
+              "inline-flex h-10 w-10 shrink-0 items-center justify-center border border-line-2 text-navy",
+              disabled ? "cursor-default text-line-2" : "cursor-pointer hover:border-navy focus-within:outline-2 focus-within:outline-blue",
+            )}
+            iconClassName="h-5 w-5"
+          >
+            <span className="sr-only">Upload your own theory of change</span>
+          </AttachFileButton>
+        )}
         <Button
           type="submit"
           aria-label="Send"
@@ -300,9 +331,45 @@ export function Composer({
   );
 }
 
+/** A theory of change the user brought from the new-task page, uploaded once the task opens. */
+export interface TocUploadHandOff {
+  tocFile: File;
+  note: string;
+}
+
+/** The task's uploaded diagrams, for the bubbles that sent them: the one still uploading, and those read. */
+const UploadFiles = createContext<{ taskId: string; picked: File | null; uploads: { upload_id: string; file_name: string }[] } | null>(null);
+
+/** The diagram an upload bubble names: "I've uploaded my own theory of change (name)." */
+function UploadThumb({ text }: { text: string }) {
+  const files = useContext(UploadFiles);
+  const name = text.slice(UPLOAD_MESSAGE.length).match(/^ \((.+?)\)\./)?.[1] ?? null;
+  const picked = files?.picked != null && files.picked.name === name ? files.picked : null;
+  const uploadId = picked === null ? files?.uploads.findLast((upload) => upload.file_name === name)?.upload_id : undefined;
+  const stored = useTocUploadFile(files?.taskId ?? "", uploadId);
+  const blob = picked ?? stored.data ?? null;
+  if (blob === null || name === null) return null;
+  return (
+    <UploadPreview
+      blob={blob}
+      className="mb-2 block w-fit"
+      imageClassName="max-h-40 max-w-[16rem] border border-line bg-paper object-contain"
+      pdf={(url) => (
+        <a href={url} target="_blank" rel="noreferrer" className="mb-2 inline-flex items-center gap-2 border border-line bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy">
+          <span aria-hidden="true">📄</span>
+          {name}
+        </a>
+      )}
+    />
+  );
+}
+
 function UserBubble({ text }: { text: string }) {
+  // A code-authored Task Agent line (task 054, J3) has no user message.
+  if (text === "") return null;
   return (
     <div className="anim-rise ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5">
+      {text.startsWith(UPLOAD_MESSAGE) && <UploadThumb text={text} />}
       <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{scrub(text)}</p>
     </div>
   );
@@ -310,12 +377,80 @@ function UserBubble({ text }: { text: string }) {
 
 /** TaskAgent replies are plain text — no box (binding record: task_agent-stage
  *  `.task_agent`); only part cards and the plan card are bordered. */
-function TaskAgentBubble({ text }: { text: string }) {
+type CitedSource = components["schemas"]["CitedSourceOut"];
+
+/** "[1]" or "[1,2]" in a reply that cites its sources (task 054: the sense check). */
+const SOURCE_MARKER = /\[(\d+(?:,\d+)*)\]/g;
+
+function TaskAgentBubble({
+  text,
+  taskId,
+  tocCodes,
+  sources = [],
+}: {
+  text: string;
+  taskId?: string;
+  tocCodes?: ReadonlySet<string>;
+  sources?: CitedSource[];
+}) {
+  const plain = (piece: string) =>
+    tocCodes !== undefined && taskId !== undefined ? <TocCodeText text={piece} taskId={taskId} codes={tocCodes} /> : scrub(piece);
+  const cited = sources.length > 0 && taskId !== undefined;
   return (
     <div className="anim-rise mr-8">
-      <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{scrub(text)}</p>
+      <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">
+        {cited ? <CitedText text={text} taskId={taskId} sources={sources} plain={plain} /> : plain(text)}
+      </p>
+      {cited && (
+        <ol className="mt-3 max-w-prose-measure space-y-1 text-body text-ink-2">
+          {sources.map((source) => (
+            <li key={source.n}>
+              <span className="mr-1 text-grey">[{source.n}]</span>
+              {source.url ? (
+                <a href={source.url} target="_blank" rel="noreferrer" className="text-blue hover:underline">
+                  {scrub(source.title)}
+                </a>
+              ) : (
+                scrub(source.title)
+              )}
+              {source.year && <span className="text-grey"> ({source.year})</span>}
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
+}
+
+/** The reply with each "[n]" marker as a button that opens the citation sidebar. */
+function CitedText({
+  text,
+  taskId,
+  sources,
+  plain,
+}: {
+  text: string;
+  taskId: string;
+  sources: CitedSource[];
+  plain: (piece: string) => ReactNode;
+}) {
+  const byNumber = new Map(sources.map((source) => [source.n, source]));
+  const pieces: ReactNode[] = [];
+  let last = 0;
+  for (const match of text.matchAll(SOURCE_MARKER)) {
+    const index = match.index ?? 0;
+    const sentenceStart = Math.max(text.lastIndexOf(". ", index) + 2, text.lastIndexOf("\n", index) + 1, 0);
+    const citations = match[1]
+      .split(",")
+      .map((n) => byNumber.get(Number(n)))
+      .filter((source): source is CitedSource => source !== undefined)
+      .map((source) => ({ n: source.n, evidenceId: null, title: source.title, url: source.url ?? null, quote: source.quote, fallbackQuote: source.quote }));
+    pieces.push(<Fragment key={`t${last}`}>{plain(text.slice(last, index))}</Fragment>);
+    pieces.push(<CitationMarker key={`c${index}`} taskId={taskId} claim={text.slice(sentenceStart, index).trim() || null} citations={citations} />);
+    last = index + match[0].length;
+  }
+  pieces.push(<Fragment key={`t${last}`}>{plain(text.slice(last))}</Fragment>);
+  return <>{pieces}</>;
 }
 
 /** One recorded gate decision, as a quiet line rather than a card: the
@@ -372,9 +507,12 @@ function DurableTurn({
   partState,
   onSend,
   onPrefill,
+  tocCodes,
 }: {
   taskId: string;
   turn: TaskAgentThreadTurn;
+  /** A theory of change's box and connection codes, linked in the reply. */
+  tocCodes?: ReadonlySet<string>;
   isLatest: boolean;
   onRetry: (input: { message: string; clientTurnId: string }) => void;
   retryDisabled: boolean;
@@ -420,7 +558,7 @@ function DurableTurn({
     return (
       <div className="space-y-6">
         <UserBubble text={turn.user_message} />
-        {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} />}
+        {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} taskId={taskId} tocCodes={tocCodes} sources={turn.sources} />}
         <DecisionLine label={actionLine(turn.action)} planVersion={null} />
       </div>
     );
@@ -428,7 +566,7 @@ function DurableTurn({
   return (
     <div className="space-y-6">
       {!isConfirmTurn && <UserBubble text={turn.user_message} />}
-      {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} />}
+      {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} taskId={taskId} tocCodes={tocCodes} sources={turn.sources} />}
       {turn.part != null && partState !== undefined && (
         <PartCard
           part={turn.part}
@@ -670,8 +808,47 @@ export function TaskAgentPane({
   const planReady =
     planQuery.data?.status === "approved" &&
     (planQuery.data.plan?.ready === true || planQuery.data.scoping?.ready === true);
-  const runsQuery = useRuns(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
-  const decisionsQuery = useDecisions(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
+  // A new task has no plan until its first turn: the task itself says what kind it is.
+  const isToc = (planQuery.data?.capability ?? taskQuery.data?.capability) === "theory_of_change";
+  // A theory-of-change walk shows its steps as they happen (rounds 5, 6). Whether one runs
+  // comes from the theory itself, not the live stream, so the chat sidebar on any tab
+  // (which has no stream) shows the same as the Agent tab.
+  const tocGraph = useToc(isToc ? taskId : "");
+  const upload = useTocUpload(taskId);
+  // An upload still running for this task, even one started before a tab switch.
+  const uploading = useTocUploading(taskId);
+  const picked = uploading?.file ?? null;
+  const pickedNote = uploading?.note ?? "";
+  const uploads = useTocUploads(taskId, isToc);
+  const uploadFiles = useMemo(() => ({ taskId, picked, uploads: uploads.data ?? [] }), [taskId, picked, uploads.data]);
+  const tocLive = isToc && (tocGraph.data?.check_status === "drafting" || tocGraph.data?.check_status === "checking");
+  // The live walk's kind, from the theory's own status: never guessed from steps not yet loaded.
+  const tocLiveKind = tocGraph.data?.check_status === "drafting" ? "draft" : "check";
+  const tocReviewing = isToc && tocGraph.data?.reviewing === true;
+  const tocCodes = useMemo(
+    () =>
+      tocGraph.data == null
+        ? undefined
+        : new Set([...tocGraph.data.boxes, ...tocGraph.data.links].flatMap((item) => (item.code != null ? [item.code] : []))),
+    [tocGraph.data],
+  );
+  const decisionsQuery = useDecisions(taskId, { page_size: TRANSCRIPT_PAGE_SIZE }, tocLive ? 3000 : undefined);
+  const runsQuery = useRuns(taskId, { page_size: TRANSCRIPT_PAGE_SIZE }, tocLive ? 3000 : undefined);
+  // When a walk ends, fetch its last steps and the Task Agent's message about it at once.
+  const wasLive = useRef(false);
+  const { refetch: refetchDecisions } = decisionsQuery;
+  const { refetch: refetchRuns } = runsQuery;
+  const { refetch: refetchTranscript } = transcript;
+  useEffect(() => {
+    // A review ending posts the Task Agent's message too.
+    const busy = tocLive || tocReviewing;
+    if (wasLive.current && !busy) {
+      void refetchDecisions();
+      void refetchRuns();
+      void refetchTranscript();
+    }
+    wasLive.current = busy;
+  }, [tocLive, tocReviewing, refetchDecisions, refetchRuns, refetchTranscript]);
   const checkInsQuery = useCheckIns(taskId, "all");
   const funnel = useFunnel(taskId);
   const [message, setMessage] = useState("");
@@ -686,6 +863,7 @@ export function TaskAgentPane({
     durableTurns,
     runsQuery.data?.data ?? [],
     decisionsQuery.data?.data ?? [],
+    isToc,
   );
   // Task 044 Phase 5.5: the options-scoping baseline gate is the one check-in
   // that sits INSIDE the thread, in chronological order with the turns it
@@ -742,8 +920,29 @@ export function TaskAgentPane({
   // task_agent turn (approval always comes from a turn; turns are 409-fenced
   // during runs), so a started run's block renders BELOW it, not above.
   const lastTurnAt = thread.findLastIndex((item) => item.type === "task_agent_turn");
-  const planCardAt = lastTurnAt === -1 ? thread.length : lastTurnAt + 1;
-  const planStarted = thread.slice(planCardAt).some((item) => item.type === "run_block");
+  // A theory of change pins its plan card where the plan was agreed: just before its first walk (round 7).
+  const firstRunAt = isToc ? thread.findIndex((item) => item.type === "run_block") : -1;
+  const planCardAt = firstRunAt > 0 ? firstRunAt : lastTurnAt === -1 ? thread.length : lastTurnAt + 1;
+  // A theory of change has started once its theory exists or a walk runs: after a failed
+  // draft the plan card offers "Draft the theory" again (owner, 2026-11-04).
+  const planStarted = isToc
+    ? tocGraph.data === undefined
+      ? thread.some((item) => item.type === "run_block")
+      : (tocGraph.data?.check_status ?? "none") !== "none"
+    : thread.slice(planCardAt).some((item) => item.type === "run_block");
+  // The first walk drafts the theory; every later one checks it.
+  const firstTocRunId = isToc ? (thread.find((item) => item.type === "run_block")?.run.capability_run_id ?? null) : null;
+  // The walk running now: the newest one still open.
+  // While the list still shows the finished draft as running, its check has not appeared yet.
+  const tocLiveRunId = tocLive
+    ? (thread
+        .filter((item) => item.type === "run_block")
+        .findLast(
+          (item) =>
+            (item.run.status === "running" || item.run.status === "paused") &&
+            !(tocLiveKind === "check" && item.decisions.some((decision) => (decision.detail as { component?: unknown } | null)?.component === "toc_draft")),
+        )?.run.capability_run_id ?? null)
+    : null;
   const liveRunId = stream.run?.id;
   // Task 045 (A7): the live walk's own purpose, once the walk list has it —
   // an added option's search is not the baseline.
@@ -823,12 +1022,29 @@ export function TaskAgentPane({
       .catch(() => setSuggestions([]));
   };
 
+  // An uploaded diagram: its bubble and "Reading…" show in the chat while it is read, then
+  // the message it sends becomes the plan's starting point (task 054, increment 5).
+  // The upload sends its own message once read, so it completes even if this chat closes.
+  const attach = (file: File, note = "") => upload.mutate({ file, note });
+  // A file picked on the new-task page arrives in the route state; upload it once.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const handOff = (location.state as Partial<TocUploadHandOff> | null)?.tocFile instanceof File ? (location.state as TocUploadHandOff) : null;
+  const handedOff = useRef(false);
+  useEffect(() => {
+    if (handOff === null || handedOff.current || !isToc || transcript.data === undefined) return;
+    handedOff.current = true;
+    void navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+    attach(handOff.tocFile, handOff.note);
+  });
+
   // The landing (no conversation yet) is a bare centred prompt — no pane
   // heading, no helper copy (Claude design concept; owner, 2026-08-05).
   const landing =
-    transcript.data !== undefined && thread.length === 0 && transcript.optimisticTurns.length === 0;
+    transcript.data !== undefined && thread.length === 0 && transcript.optimisticTurns.length === 0 && picked === null && handOff === null;
 
   return (
+    <UploadFiles.Provider value={uploadFiles}>
     <section aria-label="Task Agent conversation" className="flex h-full min-h-0 flex-col">
       {/* The scroll region spans the whole pane so its scrollbar sits at the
           pane's edge like every other tab's; the reading column is inside. */}
@@ -873,7 +1089,7 @@ export function TaskAgentPane({
           ))}
         {landing && (
           <h2 className="text-center font-display text-title font-bold text-navy">
-            What do you need evidence on?
+            {isToc ? "What change do you want to explain?" : "What do you need evidence on?"}
           </h2>
         )}
 
@@ -904,6 +1120,25 @@ export function TaskAgentPane({
                 partState={partStates.get(item.turn.turn_index)}
                 onSend={(text) => send({ message: text, clientTurnId: crypto.randomUUID() })}
                 onPrefill={setMessage}
+                tocCodes={tocCodes}
+              />
+            ) : isToc ? (
+              <TocTrace
+                key={`run-${item.run.capability_run_id}`}
+                walkId={item.run.capability_run_id}
+                decisions={item.decisions}
+                live={tocLive && item.run.capability_run_id === tocLiveRunId}
+                // Live: the theory's status says; ended: its own steps, or its order before they load.
+                kind={
+                  tocLive && item.run.capability_run_id === tocLiveRunId
+                    ? tocLiveKind
+                    : item.decisions.length > 0
+                      ? undefined
+                      : item.run.capability_run_id === firstTocRunId
+                        ? "draft"
+                        : "check"
+                }
+                status={item.run.status}
               />
             ) : item.run.capability_run_id === liveRunId && liveCard !== null ? (
               <div key="live-run-block" className="space-y-6">
@@ -973,6 +1208,21 @@ export function TaskAgentPane({
           </div>
         ))}
 
+        {picked !== null && (
+          <>
+            <UserBubble text={uploadMessage(picked.name, pickedNote)} />
+            <div role="status" className="anim-breathe mr-8 flex items-center gap-2 px-3.5 text-body text-grey">
+              <span aria-hidden="true" className="h-2 w-2 bg-blue" />
+              Reading your diagram… this takes about half a minute.
+            </div>
+          </>
+        )}
+        {upload.isError && (
+          <p role="alert" className="mr-8 text-lead text-red">
+            {(upload.error as Error | null)?.message ?? "The file couldn't be read. Try again."}
+          </p>
+        )}
+
         {transcript.isSubmitting && (
           <div role="status" className="anim-breathe mr-8 flex items-center gap-2 px-3.5 text-body text-grey">
             <span aria-hidden="true" className="h-2 w-2 bg-blue" />
@@ -1007,7 +1257,15 @@ export function TaskAgentPane({
             isOwner={isOwner}
           />
         )}
-        {liveCard !== null && !threadHasLiveRun && (
+        {/* The walk started but the run list has not caught up yet. */}
+        {tocLive && tocLiveRunId === null && <TocTrace walkId="" decisions={[]} live kind={tocLiveKind} />}
+        {tocReviewing && (
+          <p role="status" className="mr-8 flex items-center gap-2 text-body font-semibold text-grey">
+            <span aria-hidden="true" className="anim-breathe h-1.5 w-1.5 shrink-0 bg-blue" />
+            Reviewing the theory…
+          </p>
+        )}
+        {!isToc && liveCard !== null && !threadHasLiveRun && (
           <div key="live-run-fallback" className="space-y-6">
             {liveCard}
             <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} />
@@ -1022,7 +1280,7 @@ export function TaskAgentPane({
       </div>
 
       <div className="shrink-0 border-t border-line">
-        {stream.run !== null && cardOffscreen && (
+        {!isToc && stream.run !== null && cardOffscreen && (
           <RunningCardDock
             status={stream.run.status}
             stages={stream.stages}
@@ -1040,13 +1298,18 @@ export function TaskAgentPane({
           value={message}
           onChange={setMessage}
           onSubmit={() => send({ message, clientTurnId: crypto.randomUUID() })}
-          placeholder={taskAgentComposerPlaceholder(runStatus, planReady, isOwner, atScopingGate, hasLonglist(taskQuery.data))}
-          disabled={composerFenced || !isOwner}
-          sendDisabled={composerDisabled}
+          placeholder={taskAgentComposerPlaceholder(runStatus, planReady || planQuery.data?.toc?.ready === true, isOwner, atScopingGate, hasLonglist(taskQuery.data), isToc)}
+          disabled={composerFenced || !isOwner || upload.isPending}
+          sendDisabled={composerDisabled || upload.isPending}
+          onAttach={
+            // Before the draft the user's own diagram becomes the plan; after it, what it adds waits as suggestions.
+            isToc && isOwner && !tocLive ? (file) => attach(file) : undefined
+          }
         />
         </div>
       </div>
       </div>
     </section>
+    </UploadFiles.Provider>
   );
 }

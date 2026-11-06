@@ -38,3 +38,13 @@ if (window.ResizeObserver === undefined) {
     disconnect() {}
   } as unknown as typeof ResizeObserver;
 }
+// React Flow (theory of change canvas) measures with DOMMatrixReadOnly.
+if (window.DOMMatrixReadOnly === undefined) {
+  window.DOMMatrixReadOnly = class {
+    m22 = 1;
+    constructor(transform?: string) {
+      const scale = /scale\(([\d.]+)\)/.exec(transform ?? "");
+      if (scale) this.m22 = Number(scale[1]);
+    }
+  } as unknown as typeof DOMMatrixReadOnly;
+}

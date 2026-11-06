@@ -123,6 +123,11 @@ from policy_atlas.runtime.inherit import inherit_documents
 from policy_atlas.runtime.progress import ProgressEmitter
 from policy_atlas.runtime.run_spec import Config
 from policy_atlas.runtime.scoping_plan import ScopingPlan
+from policy_atlas.theory_of_change import report as toc_report
+from policy_atlas.theory_of_change.backend import StubTocBackend, TocBackend
+from policy_atlas.theory_of_change.check import choose, discover, judge, merge, selecting, summarise
+from policy_atlas.theory_of_change.check import figures as toc_figures
+from policy_atlas.theory_of_change.draft import toc_draft_scope
 
 log = structlog.get_logger()
 
@@ -156,6 +161,7 @@ class HarnessState(TypedDict):
     grounding_judge_backend: GroundingJudgeBackend
     suggest_backend: SuggestBackend
     longlist_backend: LonglistBackend
+    toc_backend: TocBackend
     summary: dict[str, Any] | None
     progress_emitter: ProgressEmitter | None
     error: str | None
@@ -472,6 +478,44 @@ def _scoping_node(name: str) -> Any:
     return run
 
 
+#: The theory-of-change steps (task 054), each ``(conn, *, task_id, run_id,
+#: context, backend)`` on the ToC backend, like the scoping steps;
+#: ``toc_select`` makes one small pick call per link (C28).
+_TOC_STEPS: dict[str, Callable[..., dict[str, Any]]] = {
+    "toc_draft": toc_draft_scope,
+    "toc_select": selecting.toc_select_scope,
+    "toc_search_new": selecting.toc_search_new_scope,
+    "toc_discover": discover.toc_discover_scope,
+    "toc_merge": merge.toc_merge_scope,
+    "toc_judge": judge.toc_judge_scope,
+    "toc_search_again": judge.toc_search_again_scope,
+    "toc_figures": toc_figures.toc_figures_scope,
+    "toc_choose": choose.toc_choose_scope,
+    "toc_summarise": summarise.toc_summarise_scope,
+    "toc_report": toc_report.toc_report_scope,
+}
+
+
+def _toc_node(name: str) -> Any:
+    def run(state: HarnessState) -> HarnessState:
+        step = _TOC_STEPS[name]  # read at run time, so a test can swap a step
+        kwargs: dict[str, Any] = {"backend": state["toc_backend"]}
+        if name in ("toc_select", "toc_search_new"):
+            # The shared pool: the walk's documents closest to each link (C31).
+            kwargs["embedder"] = state["embedding_backend"]
+        if name == "toc_select":
+            # The seminal works lookup reuses the item searches' OpenAlex backend.
+            kwargs["searchers"] = state["search_backends"]
+        if name in ("toc_judge", "toc_search_again"):
+            # Judge reranks each link's candidates with select's rerank backend
+            # (C5), and picks a searchless link's documents by embedding (C27).
+            kwargs["ranker"] = state["ranking_backend"]
+            kwargs["embedder"] = state["embedding_backend"]
+        return _run_scope_component(state, ScopeContext, functools.partial(step, **kwargs))
+
+    return run
+
+
 def _run_group(state: HarnessState) -> HarnessState:
     config = state["config"]
     assert config.extraction_run_id is not None  # registry-enforced at compile
@@ -682,6 +726,8 @@ def build_graph() -> Any:
     g.add_node("extract_interventions", _run_extract_interventions)
     for name in _SCOPING_STEPS:
         g.add_node(name, _scoping_node(name))
+    for name in _TOC_STEPS:
+        g.add_node(name, _toc_node(name))
     g.add_node("group", _run_group)
     g.add_node("synthesise", _run_synthesise)
     g.add_node("finish", _finish)
@@ -709,6 +755,7 @@ def build_graph() -> Any:
             "shortlist": "shortlist",
             "group": "group",
             "synthesise": "synthesise",
+            **{name: name for name in _TOC_STEPS},
         },
     )
     g.add_edge("acquire", "finish")
@@ -729,6 +776,8 @@ def build_graph() -> Any:
     g.add_edge("shortlist", "finish")
     g.add_edge("group", "finish")
     g.add_edge("synthesise", "finish")
+    for name in _TOC_STEPS:
+        g.add_edge(name, "finish")
     g.add_edge("finish", END)
     return g.compile()
 
@@ -807,6 +856,7 @@ def run_harness(
     grounding_judge_backend: GroundingJudgeBackend | None = None,
     suggest_backend: SuggestBackend | None = None,
     longlist_backend: LonglistBackend | None = None,
+    toc_backend: TocBackend | None = None,
     progress_emitter: ProgressEmitter | None = None,
 ) -> dict[str, Any]:
     """Run the compiled harness graph for one run, persisting its output.
@@ -881,6 +931,8 @@ def run_harness(
         longlist_backend: Model seam for the longlist, option_profile,
             constrain and theme components (task 045; task 046, S20);
             defaults to ``StubLonglistBackend()`` — no default egress.
+        toc_backend: Model seam for every theory-of-change step (task 054);
+            defaults to ``StubTocBackend()`` — no default egress.
 
     Returns:
         Harness outcome with ``summary`` populated only after successful
@@ -983,6 +1035,7 @@ def run_harness(
         "longlist_backend": (
             longlist_backend if longlist_backend is not None else StubLonglistBackend()
         ),
+        "toc_backend": toc_backend if toc_backend is not None else StubTocBackend(),
         "summary": None,
         "progress_emitter": progress_emitter,
         "error": None,

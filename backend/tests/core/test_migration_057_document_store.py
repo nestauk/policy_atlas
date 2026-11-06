@@ -319,7 +319,8 @@ def test_the_revisions_round_trip(engine: Engine) -> None:
             # The extension stays installed (documented).
             assert conn.execute(text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")).first()
 
-        command.upgrade(cfg, "head")
+        # REV3, not "head": task 054's chain now follows it (rebased 2026-11-05).
+        command.upgrade(cfg, REV3)
         with engine.begin() as conn:
             assert _current_revision(conn) == REV3
             columns = _columns(conn, "chunk_embedding")

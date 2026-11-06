@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import * as queries from "../api/queries";
 import { LifecycleRoute } from "./LifecycleRoute";
 
-vi.mock("../api/queries", () => ({ useTask: vi.fn(), useArtefact: vi.fn() }));
+vi.mock("../api/queries", () => ({ useTask: vi.fn(), useArtefact: vi.fn(), useToc: () => ({ data: undefined }) }));
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
 

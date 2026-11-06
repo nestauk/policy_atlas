@@ -1207,6 +1207,52 @@
         "title": "CitedInOut",
         "type": "object"
       },
+      "CitedSourceOut": {
+        "description": "One source a Task Agent line cites with ``[n]`` (task 054: the sense check).\n\nArgs:\n    n: The marker's number.\n    title: The document's title.\n    url: Where to read it, when known.\n    year: Its publication year, when known.\n    quote: The passage that supports the line, checked against the document.",
+        "properties": {
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "n",
+          "title",
+          "quote"
+        ],
+        "title": "CitedSourceOut",
+        "type": "object"
+      },
       "ClaimOut": {
         "description": "One span-anchored claim annotation within a block.\n\nArgs:\n    claim_id: The claim's identity.\n    claim_type: Annotation type.\n    text: The spanned text.\n    span: Character offsets `[start, end]` into the block's `prose`, or\n        `None`.\n    citations: Citations attached to this claim (citation-type only).\n    theme: Named themes or groups referenced by a theme claim.",
         "properties": {
@@ -5335,7 +5381,7 @@
         "type": "object"
       },
       "PlanOut": {
-        "description": "Response body for `GET`/`PATCH /api/v1/tasks/{id}/plan`.\n\nArgs:\n    plan: The current Evidence search plan, or null on a scoping task.\n    scoping: The current options-scoping plan, or null on an Evidence\n        search task.\n    capability: Which of the two the task is, so a reader never has to\n        infer it from which field is null.\n    version: Plan row version.\n    status: Plan status (e.g. `draft`, `approved`).\n    opened_run: The walk a plan write opened: the longlist walk\n        `POST .../plan/confirm-baseline` opened, or the shortlist walk a\n        `PATCH .../plan` that changed the risk appetite opened (task 055).\n        Null on every other plan read, and when the opener was refused.",
+        "description": "Response body for `GET`/`PATCH /api/v1/tasks/{id}/plan`.\n\nArgs:\n    plan: The current Evidence search plan, or null on a scoping task.\n    scoping: The current options-scoping plan, or null on an Evidence\n        search task.\n    toc: The current theory-of-change plan (task 054), or null.\n    capability: Which of the two the task is, so a reader never has to\n        infer it from which field is null.\n    version: Plan row version.\n    status: Plan status (e.g. `draft`, `approved`).\n    opened_run: The walk a plan write opened: the longlist walk\n        `POST .../plan/confirm-baseline` opened, or the shortlist walk a\n        `PATCH .../plan` that changed the risk appetite opened (task 055).\n        Null on every other plan read, and when the opener was refused.",
         "properties": {
           "capability": {
             "default": "evidence_search",
@@ -5376,6 +5422,16 @@
             "title": "Status",
             "type": "string"
           },
+          "toc": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TocPlanDraft"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "version": {
             "title": "Version",
             "type": "integer"
@@ -5390,7 +5446,7 @@
       },
       "PlanPatchIn": {
         "additionalProperties": false,
-        "description": "Inbound body for `PATCH /api/v1/tasks/{id}/plan`.\n\nOmitted fields stay as they are. An empty string on a date or geography\nfield clears that constraint. The merged result must still be a valid\nexecutable plan.\n\nArgs:\n    question: Replacement evidence question.\n    backend_scope: Search backend scope.\n    search_effort: Acquisition effort rung.\n    analysis_depth: Analysis component and budget rung.\n    steering_mode: Check-in cadence for the run.\n    screening_criteria: Replacement inclusion/exclusion criteria.\n    published_after: Lower publication-date bound (`YYYY-MM-DD`), or\n        empty to clear.\n    published_before: Upper publication-date bound (`YYYY-MM-DD`), or\n        empty to clear.\n    geography: Country, ISO code, or pinned group label, or empty to\n        clear geography filters.\n    scoping: Options-scoping edits. Mutually exclusive with every field\n        above: an Evidence search field on a scoping task, or `scoping` on\n        an Evidence search task, is a 422.",
+        "description": "Inbound body for `PATCH /api/v1/tasks/{id}/plan`.\n\nOmitted fields stay as they are. An empty string on a date or geography\nfield clears that constraint. The merged result must still be a valid\nexecutable plan.\n\nArgs:\n    question: Replacement evidence question.\n    backend_scope: Search backend scope.\n    search_effort: Acquisition effort rung.\n    analysis_depth: Analysis component and budget rung.\n    steering_mode: Check-in cadence for the run.\n    screening_criteria: Replacement inclusion/exclusion criteria.\n    published_after: Lower publication-date bound (`YYYY-MM-DD`), or\n        empty to clear.\n    published_before: Upper publication-date bound (`YYYY-MM-DD`), or\n        empty to clear.\n    geography: Country, ISO code, or pinned group label, or empty to\n        clear geography filters.\n    scoping: Options-scoping edits. Mutually exclusive with every field\n        above: an Evidence search field on a scoping task, or `scoping` on\n        an Evidence search task, is a 422.\n    toc: Theory-of-change edits (task 054), the same way: only on a\n        theory-of-change task, and alone.",
         "properties": {
           "analysis_depth": {
             "anyOf": [
@@ -5525,6 +5581,16 @@
               }
             ],
             "title": "Steering Mode"
+          },
+          "toc": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TocPlanPatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "title": "PlanPatchIn",
@@ -5608,6 +5674,17 @@
           "sequence": {
             "title": "Sequence",
             "type": "integer"
+          },
+          "toc": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TocPlanDraft"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "type": {
             "const": "plan.updated",
@@ -7612,7 +7689,7 @@
         "type": "object"
       },
       "TaskAgentTranscriptTurnOut": {
-        "description": "One durable task_agent-transcript turn shown in chronological order.\n\nArgs:\n    turn_index: Monotonic per-task conversation coordinate.\n    conversation_id: Owning task_agent conversation, absent only on legacy rows.\n    client_turn_id: The caller's idempotency key for this turn \u2014 returned\n        so a reloaded client can retry its own incomplete latest turn.\n    user_message: Submitted user message.\n    reply: Task Agent reply, absent until a pending turn completes.\n    suggestions: Task Agent quick-reply suggestions, if the turn completed.\n    part: Structured sequential-task_agent proposal, absent for legacy turns.\n    capability: The owning task's capability, absent on legacy turns.\n    status: Durable execution state for this turn.\n    created_at: Receipt timestamp, retained as display metadata.\n    completed_at: Terminal timestamp, absent while still pending.\n    kind: What this turn is. Absent on turns stored before task 044,\n        which are all replies.\n    answer: The cited answer, on an `answer` turn.\n    decision: The recorded gate decision, on a `decision` turn.\n    action: The applied longlist verb, on an `action` turn.",
+        "description": "One durable task_agent-transcript turn shown in chronological order.\n\nArgs:\n    turn_index: Monotonic per-task conversation coordinate.\n    conversation_id: Owning task_agent conversation, absent only on legacy rows.\n    client_turn_id: The caller's idempotency key for this turn \u2014 returned\n        so a reloaded client can retry its own incomplete latest turn.\n    user_message: Submitted user message.\n    reply: Task Agent reply, absent until a pending turn completes.\n    suggestions: Task Agent quick-reply suggestions, if the turn completed.\n    part: Structured sequential-task_agent proposal, absent for legacy turns.\n    capability: The owning task's capability, absent on legacy turns.\n    status: Durable execution state for this turn.\n    created_at: Receipt timestamp, retained as display metadata.\n    completed_at: Terminal timestamp, absent while still pending.\n    kind: What this turn is. Absent on turns stored before task 044,\n        which are all replies.\n    answer: The cited answer, on an `answer` turn.\n    decision: The recorded gate decision, on a `decision` turn.\n    action: The applied longlist verb, on an `action` turn.\n    sources: The sources the reply's `[n]` markers cite, on a theory-of-change\n        turn whose sense check found evaluations (task 054).",
         "properties": {
           "action": {
             "anyOf": [
@@ -7727,6 +7804,13 @@
             ],
             "title": "Reply"
           },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/CitedSourceOut"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
           "status": {
             "enum": [
               "pending",
@@ -7788,7 +7872,7 @@
         "type": "object"
       },
       "TaskAgentTurnOut": {
-        "description": "Response body for one task_agent turn.\n\nA turn is one of four things, named by ``kind``: a planning ``reply``, a\ngrounded ``answer`` from the paused walk's evidence (or the longlist's), a\nrecorded ``decision`` at a gate, or an applied longlist ``action`` (task\n045). They are additive optional fields rather than a discriminated union,\nso every existing reader keeps working and a turn stored before task 044\nstays valid with ``kind`` absent.\n\nArgs:\n    reply: The task_agent's conversational reply for this turn.\n    plan: The full current draft plan.\n    suggestions: The task_agent's suggested answers to its clarifying\n        question, rendered as tappable quick replies. Empty when none.\n    part: Structured sequential-task_agent proposal, when this turn carries one.\n    conversation_id: Task Agent conversation that produced this turn.\n    capability: The owning task's capability, when known. Absent on turns\n        stored before task 044.\n    scoping_plan: The full current scoping draft, on an options-scoping\n        turn. `plan` is null for those turns, and this is null for\n        Evidence search turns.\n    kind: What this turn is. Absent on turns stored before task 044,\n        which are all replies.\n    answer: The cited answer, on an `answer` turn.\n    decision: The recorded gate decision, on a `decision` turn.\n    action: The applied longlist verb, on an `action` turn.",
+        "description": "Response body for one task_agent turn.\n\nA turn is one of four things, named by ``kind``: a planning ``reply``, a\ngrounded ``answer`` from the paused walk's evidence (or the longlist's), a\nrecorded ``decision`` at a gate, or an applied longlist ``action`` (task\n045). They are additive optional fields rather than a discriminated union,\nso every existing reader keeps working and a turn stored before task 044\nstays valid with ``kind`` absent.\n\nArgs:\n    reply: The task_agent's conversational reply for this turn.\n    plan: The full current draft plan.\n    suggestions: The task_agent's suggested answers to its clarifying\n        question, rendered as tappable quick replies. Empty when none.\n    part: Structured sequential-task_agent proposal, when this turn carries one.\n    conversation_id: Task Agent conversation that produced this turn.\n    capability: The owning task's capability, when known. Absent on turns\n        stored before task 044.\n    scoping_plan: The full current scoping draft, on an options-scoping\n        turn. `plan` is null for those turns, and this is null for\n        Evidence search turns.\n    toc_plan: The full current theory-of-change draft, on a theory-of-change\n        turn (task 054).\n    kind: What this turn is. Absent on turns stored before task 044,\n        which are all replies.\n    answer: The cited answer, on an `answer` turn.\n    decision: The recorded gate decision, on a `decision` turn.\n    action: The applied longlist verb, on an `action` turn.\n    sources: The sources the reply's `[n]` markers cite, on a theory-of-change\n        turn whose sense check found evaluations (task 054).",
         "properties": {
           "action": {
             "anyOf": [
@@ -7894,12 +7978,29 @@
               }
             ]
           },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/CitedSourceOut"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
           "suggestions": {
             "items": {
               "type": "string"
             },
             "title": "Suggestions",
             "type": "array"
+          },
+          "toc_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TocPlanDraft"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -7916,7 +8017,8 @@
             "default": "evidence_search",
             "enum": [
               "evidence_search",
-              "options_scoping"
+              "options_scoping",
+              "theory_of_change"
             ],
             "title": "Capability",
             "type": "string"
@@ -8043,7 +8145,8 @@
             "default": "evidence_search",
             "enum": [
               "evidence_search",
-              "options_scoping"
+              "options_scoping",
+              "theory_of_change"
             ],
             "title": "Capability",
             "type": "string"
@@ -8562,6 +8665,3205 @@
           "occurred_at"
         ],
         "title": "TickFrame",
+        "type": "object"
+      },
+      "TocBoxCreate": {
+        "additionalProperties": false,
+        "description": "A box the user adds.",
+        "properties": {
+          "layer": {
+            "enum": [
+              "input",
+              "output",
+              "outcome_short",
+              "outcome_long",
+              "impact",
+              "failure_outcome"
+            ],
+            "title": "Layer",
+            "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TocPositionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "text": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "layer",
+          "text"
+        ],
+        "title": "TocBoxCreate",
+        "type": "object"
+      },
+      "TocBoxEvidenceOut": {
+        "additionalProperties": false,
+        "description": "A box's case studies, the indicators its documents used, and its figures.",
+        "properties": {
+          "box_id": {
+            "format": "uuid",
+            "title": "Box Id",
+            "type": "string"
+          },
+          "case_studies": {
+            "items": {
+              "$ref": "#/components/schemas/TocCaseStudyOut"
+            },
+            "title": "Case Studies",
+            "type": "array"
+          },
+          "figures": {
+            "items": {
+              "$ref": "#/components/schemas/TocFigureOut"
+            },
+            "title": "Figures",
+            "type": "array"
+          },
+          "indicators": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Indicators",
+            "type": "array"
+          }
+        },
+        "required": [
+          "box_id",
+          "case_studies",
+          "indicators",
+          "figures"
+        ],
+        "title": "TocBoxEvidenceOut",
+        "type": "object"
+      },
+      "TocBoxOut": {
+        "additionalProperties": false,
+        "description": "One element in a layer. Boxes are described, not graded (W4).",
+        "properties": {
+          "box_id": {
+            "format": "uuid",
+            "title": "Box Id",
+            "type": "string"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "dosage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dosage"
+          },
+          "edited_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited At"
+          },
+          "edited_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited By"
+          },
+          "layer": {
+            "enum": [
+              "input",
+              "output",
+              "outcome_short",
+              "outcome_long",
+              "impact",
+              "failure_outcome"
+            ],
+            "title": "Layer",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "drafted",
+              "found_in_evidence",
+              "imported",
+              "user",
+              "options_scoping"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TocPositionOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result_criteria": {
+            "$ref": "#/components/schemas/TocResultCriteriaOut"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "seen_in": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seen In"
+          },
+          "seen_in_cites": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Seen In Cites",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "box_id",
+          "layer",
+          "code",
+          "text",
+          "dosage",
+          "result_criteria",
+          "description",
+          "seen_in",
+          "seen_in_cites",
+          "origin",
+          "revision"
+        ],
+        "title": "TocBoxOut",
+        "type": "object"
+      },
+      "TocBoxPatch": {
+        "additionalProperties": false,
+        "description": "A change to one box, with the revision the client saw (C10).",
+        "properties": {
+          "criteria": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TocCriteriaIn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "expected_revision": {
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "enum": [
+                  "input",
+                  "output",
+                  "outcome_short",
+                  "outcome_long",
+                  "impact",
+                  "failure_outcome"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Layer"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "title": "TocBoxPatch",
+        "type": "object"
+      },
+      "TocCaseStudyOut": {
+        "additionalProperties": false,
+        "description": "Where one box was seen (or, for an input, put in place).",
+        "properties": {
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Authors",
+            "type": "array"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "place": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place"
+          },
+          "programme": {
+            "title": "Programme",
+            "type": "string"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "source_type": {
+            "enum": [
+              "academic",
+              "policy",
+              "web"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "task_source_snapshot_id": {
+            "format": "uuid",
+            "title": "Task Source Snapshot Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "task_source_snapshot_id",
+          "programme",
+          "place",
+          "note",
+          "quote",
+          "title",
+          "authors",
+          "year",
+          "url",
+          "source_type"
+        ],
+        "title": "TocCaseStudyOut",
+        "type": "object"
+      },
+      "TocCheckIn": {
+        "additionalProperties": false,
+        "description": "Check named links (C40): new items, or the ones the user picked.",
+        "properties": {
+          "link_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 80,
+            "minItems": 1,
+            "title": "Link Ids",
+            "type": "array"
+          },
+          "mode": {
+            "default": "new_items",
+            "enum": [
+              "new_items",
+              "check_again",
+              "find_more"
+            ],
+            "title": "Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "link_ids"
+        ],
+        "title": "TocCheckIn",
+        "type": "object"
+      },
+      "TocCheckOut": {
+        "additionalProperties": false,
+        "description": "The check walk that started, or null when it waits for the running walk.",
+        "properties": {
+          "capability_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability Run Id"
+          },
+          "queued": {
+            "default": false,
+            "title": "Queued",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "capability_run_id"
+        ],
+        "title": "TocCheckOut",
+        "type": "object"
+      },
+      "TocCountOut": {
+        "additionalProperties": false,
+        "description": "How many items an action changed.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "title": "TocCountOut",
+        "type": "object"
+      },
+      "TocCreatedOut": {
+        "additionalProperties": false,
+        "description": "The id of what was added.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "TocCreatedOut",
+        "type": "object"
+      },
+      "TocCriteriaIn": {
+        "additionalProperties": false,
+        "description": "How we'd know a box's change happened.",
+        "properties": {
+          "definition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Definition"
+          },
+          "indicator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indicator"
+          },
+          "timing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timing"
+          }
+        },
+        "title": "TocCriteriaIn",
+        "type": "object"
+      },
+      "TocDecideIn": {
+        "additionalProperties": false,
+        "description": "Accept or reject every pending document on one link (C44).",
+        "properties": {
+          "accept": {
+            "title": "Accept",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "accept"
+        ],
+        "title": "TocDecideIn",
+        "type": "object"
+      },
+      "TocDocumentOut": {
+        "additionalProperties": false,
+        "description": "One judged document of one link, with what it adds to the verdict (C36).",
+        "properties": {
+          "added_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Added By"
+          },
+          "appraisal_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appraisal Score"
+          },
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Authors",
+            "type": "array"
+          },
+          "condition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Condition"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "evidence_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Type"
+          },
+          "judge_relevance": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judge Relevance"
+          },
+          "judge_support": {
+            "anyOf": [
+              {
+                "enum": [
+                  "strong",
+                  "weak",
+                  "mixed",
+                  "refutes",
+                  "not_about"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judge Support"
+          },
+          "previous_wording": {
+            "title": "Previous Wording",
+            "type": "boolean"
+          },
+          "quality": {
+            "title": "Quality",
+            "type": "integer"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "relevance": {
+            "title": "Relevance",
+            "type": "integer"
+          },
+          "relevance_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance Reason"
+          },
+          "removed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Removed By"
+          },
+          "revision": {
+            "default": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "scored_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scored By"
+          },
+          "source_type": {
+            "enum": [
+              "academic",
+              "policy",
+              "web"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "status": {
+            "default": "counted",
+            "enum": [
+              "counted",
+              "pending",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "support": {
+            "enum": [
+              "strong",
+              "weak",
+              "mixed",
+              "refutes",
+              "not_about"
+            ],
+            "title": "Support",
+            "type": "string"
+          },
+          "task_source_snapshot_id": {
+            "format": "uuid",
+            "title": "Task Source Snapshot Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "number"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "task_source_snapshot_id",
+          "title",
+          "authors",
+          "year",
+          "url",
+          "source_type",
+          "evidence_type",
+          "appraisal_score",
+          "support",
+          "quote",
+          "relevance",
+          "relevance_reason",
+          "quality",
+          "weight",
+          "condition",
+          "previous_wording"
+        ],
+        "title": "TocDocumentOut",
+        "type": "object"
+      },
+      "TocEvidenceOut": {
+        "additionalProperties": false,
+        "description": "Every judged document and case study of the theory.",
+        "properties": {
+          "boxes": {
+            "items": {
+              "$ref": "#/components/schemas/TocBoxEvidenceOut"
+            },
+            "title": "Boxes",
+            "type": "array"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/TocLinkEvidenceOut"
+            },
+            "title": "Links",
+            "type": "array"
+          }
+        },
+        "required": [
+          "links",
+          "boxes"
+        ],
+        "title": "TocEvidenceOut",
+        "type": "object"
+      },
+      "TocEvidencePatch": {
+        "additionalProperties": false,
+        "description": "Change how one judged document counts for its link (C42), with its revision (C10).",
+        "properties": {
+          "action": {
+            "enum": [
+              "remove",
+              "restore",
+              "score",
+              "unscore",
+              "accept",
+              "reject"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "expected_revision": {
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "relevance": {
+            "anyOf": [
+              {
+                "maximum": 3.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance"
+          },
+          "support": {
+            "anyOf": [
+              {
+                "enum": [
+                  "strong",
+                  "weak",
+                  "mixed",
+                  "refutes",
+                  "not_about"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Support"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "action"
+        ],
+        "title": "TocEvidencePatch",
+        "type": "object"
+      },
+      "TocFigureOut": {
+        "additionalProperties": false,
+        "description": "One number a document reports about a link's cause or effect (C37), with its source.",
+        "properties": {
+          "box": {
+            "enum": [
+              "source",
+              "target",
+              "link"
+            ],
+            "title": "Box",
+            "type": "string"
+          },
+          "ci_lower": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci Lower"
+          },
+          "ci_lower_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci Lower Text"
+          },
+          "ci_upper": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci Upper"
+          },
+          "ci_upper_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci Upper Text"
+          },
+          "effect_size_type": {
+            "enum": [
+              "absolute_change",
+              "relative_change",
+              "standardised",
+              "ratio",
+              "level"
+            ],
+            "title": "Effect Size Type",
+            "type": "string"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "evidence_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Type"
+          },
+          "figure_id": {
+            "format": "uuid",
+            "title": "Figure Id",
+            "type": "string"
+          },
+          "k": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "K"
+          },
+          "measure": {
+            "title": "Measure",
+            "type": "string"
+          },
+          "n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N"
+          },
+          "place": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place"
+          },
+          "population": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Population"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "source_authors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Source Authors",
+            "type": "array"
+          },
+          "source_title": {
+            "title": "Source Title",
+            "type": "string"
+          },
+          "source_type": {
+            "enum": [
+              "academic",
+              "policy",
+              "web"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "source_venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Venue"
+          },
+          "source_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Year"
+          },
+          "statement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statement"
+          },
+          "task_source_snapshot_id": {
+            "format": "uuid",
+            "title": "Task Source Snapshot Id",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "value_text": {
+            "title": "Value Text",
+            "type": "string"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "figure_id",
+          "box",
+          "measure",
+          "value_text",
+          "value",
+          "ci_lower_text",
+          "ci_lower",
+          "ci_upper_text",
+          "ci_upper",
+          "unit",
+          "effect_size_type",
+          "population",
+          "place",
+          "year",
+          "n",
+          "k",
+          "quote",
+          "statement",
+          "evidence_id",
+          "task_source_snapshot_id",
+          "source_title",
+          "source_authors",
+          "source_year",
+          "source_venue",
+          "source_type",
+          "evidence_type",
+          "url"
+        ],
+        "title": "TocFigureOut",
+        "type": "object"
+      },
+      "TocGradeRuleOut": {
+        "additionalProperties": false,
+        "description": "One row of the verdict rule, generated from the verdict constants (C36).",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "rule": {
+            "title": "Rule",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "rule"
+        ],
+        "title": "TocGradeRuleOut",
+        "type": "object"
+      },
+      "TocGraphOut": {
+        "additionalProperties": false,
+        "description": "The whole theory as the Result page reads it.",
+        "properties": {
+          "boxes": {
+            "items": {
+              "$ref": "#/components/schemas/TocBoxOut"
+            },
+            "title": "Boxes",
+            "type": "array"
+          },
+          "can_edit": {
+            "default": false,
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "check_status": {
+            "enum": [
+              "none",
+              "drafting",
+              "drafted",
+              "checking",
+              "checked",
+              "stopped",
+              "failed"
+            ],
+            "title": "Check Status",
+            "type": "string"
+          },
+          "context": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Context",
+            "type": "array"
+          },
+          "edits_since_review": {
+            "default": 0,
+            "title": "Edits Since Review",
+            "type": "integer"
+          },
+          "grade_rules": {
+            "items": {
+              "$ref": "#/components/schemas/TocGradeRuleOut"
+            },
+            "title": "Grade Rules",
+            "type": "array"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/TocLinkOut"
+            },
+            "title": "Links",
+            "type": "array"
+          },
+          "links_left_out": {
+            "title": "Links Left Out",
+            "type": "integer"
+          },
+          "pathways": {
+            "items": {
+              "$ref": "#/components/schemas/TocPathwayOut"
+            },
+            "title": "Pathways",
+            "type": "array"
+          },
+          "queued_link_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Queued Link Ids",
+            "type": "array"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TocReportOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reviewing": {
+            "default": false,
+            "title": "Reviewing",
+            "type": "boolean"
+          },
+          "supporting_activities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Supporting Activities",
+            "type": "array"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "check_status",
+          "boxes",
+          "links",
+          "pathways",
+          "context",
+          "supporting_activities",
+          "grade_rules",
+          "report",
+          "links_left_out"
+        ],
+        "title": "TocGraphOut",
+        "type": "object"
+      },
+      "TocHistoryEntryOut": {
+        "additionalProperties": false,
+        "description": "One change in History (C41).",
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "undoable": {
+            "title": "Undoable",
+            "type": "boolean"
+          },
+          "what": {
+            "title": "What",
+            "type": "string"
+          },
+          "who": {
+            "title": "Who",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "at",
+          "who",
+          "what",
+          "undoable"
+        ],
+        "title": "TocHistoryEntryOut",
+        "type": "object"
+      },
+      "TocLinkCreate": {
+        "additionalProperties": false,
+        "description": "Two boxes the user connects.",
+        "properties": {
+          "source_box_id": {
+            "format": "uuid",
+            "title": "Source Box Id",
+            "type": "string"
+          },
+          "target_box_id": {
+            "format": "uuid",
+            "title": "Target Box Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_box_id",
+          "target_box_id"
+        ],
+        "title": "TocLinkCreate",
+        "type": "object"
+      },
+      "TocLinkEvidenceOut": {
+        "additionalProperties": false,
+        "description": "Every document judged for one link, and the figures they give.",
+        "properties": {
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/TocDocumentOut"
+            },
+            "title": "Documents",
+            "type": "array"
+          },
+          "figures": {
+            "items": {
+              "$ref": "#/components/schemas/TocFigureOut"
+            },
+            "title": "Figures",
+            "type": "array"
+          },
+          "link_id": {
+            "format": "uuid",
+            "title": "Link Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "link_id",
+          "documents",
+          "figures"
+        ],
+        "title": "TocLinkEvidenceOut",
+        "type": "object"
+      },
+      "TocLinkOut": {
+        "additionalProperties": false,
+        "description": "One causal step, with its evidence verdict and its state.",
+        "properties": {
+          "assumption_type": {
+            "title": "Assumption Type",
+            "type": "string"
+          },
+          "because_text": {
+            "title": "Because Text",
+            "type": "string"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "conditions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Conditions",
+            "type": "array"
+          },
+          "critical": {
+            "title": "Critical",
+            "type": "boolean"
+          },
+          "edited_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited At"
+          },
+          "edited_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edited By"
+          },
+          "evidence_cites": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Evidence Cites",
+            "type": "array"
+          },
+          "evidence_sentence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Sentence"
+          },
+          "for_text": {
+            "title": "For Text",
+            "type": "string"
+          },
+          "if_text": {
+            "title": "If Text",
+            "type": "string"
+          },
+          "link_id": {
+            "format": "uuid",
+            "title": "Link Id",
+            "type": "string"
+          },
+          "near_threshold": {
+            "title": "Near Threshold",
+            "type": "boolean"
+          },
+          "origin": {
+            "enum": [
+              "drafted",
+              "found_in_evidence",
+              "imported",
+              "user",
+              "options_scoping"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "pending_count": {
+            "default": 0,
+            "title": "Pending Count",
+            "type": "integer"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          },
+          "sentence": {
+            "title": "Sentence",
+            "type": "string"
+          },
+          "source_box_id": {
+            "format": "uuid",
+            "title": "Source Box Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "unchecked",
+              "checking",
+              "checked",
+              "pending",
+              "kept",
+              "no_change"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "target_box_id": {
+            "format": "uuid",
+            "title": "Target Box Id",
+            "type": "string"
+          },
+          "then_text": {
+            "title": "Then Text",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "verdict": {
+            "enum": [
+              "supported",
+              "leaning_supports",
+              "not_sure_mixed",
+              "leaning_against",
+              "not_sure_insufficient",
+              "against"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          },
+          "verdict_if_accepted": {
+            "anyOf": [
+              {
+                "enum": [
+                  "supported",
+                  "leaning_supports",
+                  "not_sure_mixed",
+                  "leaning_against",
+                  "not_sure_insufficient",
+                  "against"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict If Accepted"
+          },
+          "weights": {
+            "$ref": "#/components/schemas/TocWeightsOut"
+          }
+        },
+        "required": [
+          "link_id",
+          "code",
+          "source_box_id",
+          "target_box_id",
+          "sentence",
+          "title",
+          "if_text",
+          "for_text",
+          "then_text",
+          "because_text",
+          "conditions",
+          "assumption_type",
+          "critical",
+          "origin",
+          "revision",
+          "state",
+          "verdict",
+          "near_threshold",
+          "weights",
+          "evidence_sentence",
+          "evidence_cites"
+        ],
+        "title": "TocLinkOut",
+        "type": "object"
+      },
+      "TocLinkPatch": {
+        "additionalProperties": false,
+        "description": "A change to one link, with the revision the client saw (C10).",
+        "properties": {
+          "because_text": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Because Text"
+          },
+          "conditions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conditions"
+          },
+          "critical": {
+            "anyOf": [
+              {
+                "const": true,
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Critical"
+          },
+          "expected_revision": {
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "for_text": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "For Text"
+          },
+          "if_text": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "If Text"
+          },
+          "then_text": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Then Text"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "title": "TocLinkPatch",
+        "type": "object"
+      },
+      "TocLinksIn": {
+        "additionalProperties": false,
+        "description": "Links to act on (Keep the evidence, C43).",
+        "properties": {
+          "link_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "Link Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "link_ids"
+        ],
+        "title": "TocLinksIn",
+        "type": "object"
+      },
+      "TocMoveIn": {
+        "additionalProperties": false,
+        "description": "Where the user dropped a box.",
+        "properties": {
+          "expected_revision": {
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "x",
+          "y"
+        ],
+        "title": "TocMoveIn",
+        "type": "object"
+      },
+      "TocPathwayOut": {
+        "additionalProperties": false,
+        "description": "One ordered route of links.",
+        "properties": {
+          "broken": {
+            "title": "Broken",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "success",
+              "failure"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "link_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Link Ids",
+            "type": "array"
+          },
+          "origin": {
+            "enum": [
+              "drafted",
+              "found_in_evidence",
+              "imported",
+              "user",
+              "options_scoping"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "pathway_id": {
+            "format": "uuid",
+            "title": "Pathway Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "enum": [
+              "kept",
+              "set_aside"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pathway_id",
+          "kind",
+          "status",
+          "label",
+          "reason",
+          "origin",
+          "link_ids",
+          "broken"
+        ],
+        "title": "TocPathwayOut",
+        "type": "object"
+      },
+      "TocPlanDraft": {
+        "description": "Draft or approved theory-of-change plan, as surfaced to the client (task 054).\n\nMirrors the runtime `TocPlan`. Every field except `ready` may be absent\nwhile drafting.\n\nArgs:\n    title: Short user-visible name for the task.\n    question: The user's ask.\n    entry_point: `outcome_first`, `intervention_first` or `existing_theory`.\n    intended_change: The impact, in measurable words.\n    target_population: Who the change is for.\n    intervention: What would be done.\n    dosage: How much of the intervention each beneficiary gets.\n    existing_theory_text: The user's own theory, verbatim.\n    where: The place the theory is for.\n    time_horizon: When the impact is expected.\n    context: What the user said about the setting.\n    published_after: The evidence searched starts at this date (`YYYY-MM-DD`);\n        `None` means any year.\n    published_before: The evidence searched ends at this date, or `None`.\n    assumptions: Every guess the plan is making.\n    ready: Whether the draft has validated into an executable plan.",
+        "properties": {
+          "assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assumptions",
+            "type": "array"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Context"
+          },
+          "dosage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Dosage"
+          },
+          "entry_point": {
+            "anyOf": [
+              {
+                "enum": [
+                  "outcome_first",
+                  "intervention_first",
+                  "existing_theory"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Entry Point"
+          },
+          "existing_theory_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Existing Theory Text"
+          },
+          "intended_change": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Intended Change"
+          },
+          "intervention": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Intervention"
+          },
+          "published_after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Published After"
+          },
+          "published_before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Published Before"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Question"
+          },
+          "ready": {
+            "default": false,
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "target_population": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Target Population"
+          },
+          "time_horizon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Time Horizon"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Title"
+          },
+          "upload_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Upload Id"
+          },
+          "where": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Where"
+          }
+        },
+        "title": "TocPlanDraft",
+        "type": "object"
+      },
+      "TocPlanPatch": {
+        "additionalProperties": false,
+        "description": "Typed replace-field edits for a theory-of-change plan (task 054).\n\nOmitted fields stay as they are; an empty string clears an optional field.\nAllowed only until the draft is on the canvas (S7). `published_after` and\n`published_before` (`YYYY-MM-DD`) set the years of evidence searched; an\nempty `published_after` means any year.",
+        "properties": {
+          "context": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          },
+          "dosage": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dosage"
+          },
+          "intended_change": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intended Change"
+          },
+          "intervention": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intervention"
+          },
+          "published_after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published After"
+          },
+          "published_before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published Before"
+          },
+          "target_population": {
+            "anyOf": [
+              {
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Population"
+          },
+          "time_horizon": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Horizon"
+          },
+          "where": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Where"
+          }
+        },
+        "title": "TocPlanPatch",
+        "type": "object"
+      },
+      "TocPositionOut": {
+        "additionalProperties": false,
+        "description": "Where the user dropped a box on the canvas (C47).",
+        "properties": {
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "TocPositionOut",
+        "type": "object"
+      },
+      "TocProblemsOut": {
+        "additionalProperties": false,
+        "description": "Suggested edits that could not apply, with why.",
+        "properties": {
+          "new_link_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "New Link Ids",
+            "type": "array"
+          },
+          "problems": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Problems",
+            "type": "array"
+          }
+        },
+        "required": [
+          "problems"
+        ],
+        "title": "TocProblemsOut",
+        "type": "object"
+      },
+      "TocProposalDecideIn": {
+        "additionalProperties": false,
+        "description": "Accept or reject one suggested edit, or all pending ones (``index`` null).",
+        "properties": {
+          "accept": {
+            "title": "Accept",
+            "type": "boolean"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
+          "index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index"
+          }
+        },
+        "required": [
+          "accept"
+        ],
+        "title": "TocProposalDecideIn",
+        "type": "object"
+      },
+      "TocProposalEditOut": {
+        "additionalProperties": false,
+        "description": "One suggested edit and what the user decided (C45, C46).",
+        "properties": {
+          "dest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dest"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Layer"
+          },
+          "line": {
+            "title": "Line",
+            "type": "string"
+          },
+          "links": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Links"
+          },
+          "op": {
+            "title": "Op",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "accepted",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "index",
+          "op",
+          "line",
+          "reason",
+          "status"
+        ],
+        "title": "TocProposalEditOut",
+        "type": "object"
+      },
+      "TocProposalOut": {
+        "additionalProperties": false,
+        "description": "A suggestion from the review or the chat, waiting for the user (C45, C46).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "edits": {
+            "items": {
+              "$ref": "#/components/schemas/TocProposalEditOut"
+            },
+            "title": "Edits",
+            "type": "array"
+          },
+          "proposal_id": {
+            "format": "uuid",
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "report_findings": {
+            "items": {
+              "$ref": "#/components/schemas/TocReportFindingOut"
+            },
+            "title": "Report Findings",
+            "type": "array"
+          },
+          "source": {
+            "enum": [
+              "review",
+              "chat",
+              "discover",
+              "draft"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "source",
+          "summary",
+          "created_at",
+          "edits",
+          "report_findings"
+        ],
+        "title": "TocProposalOut",
+        "type": "object"
+      },
+      "TocReportAssumptionOut": {
+        "additionalProperties": false,
+        "description": "One row of Assumptions and evidence.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "conditions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Conditions",
+            "type": "array"
+          },
+          "flag": {
+            "default": false,
+            "title": "Flag",
+            "type": "boolean"
+          },
+          "importance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Importance"
+          },
+          "kind": {
+            "enum": [
+              "assumption",
+              "risk"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share"
+          },
+          "sources": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "statement": {
+            "title": "Statement",
+            "type": "string"
+          },
+          "verdict": {
+            "title": "Verdict",
+            "type": "string"
+          },
+          "verdict_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict Rank"
+          },
+          "why": {
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "statement",
+          "kind",
+          "verdict",
+          "why",
+          "sources"
+        ],
+        "title": "TocReportAssumptionOut",
+        "type": "object"
+      },
+      "TocReportExpansionOut": {
+        "additionalProperties": false,
+        "description": "A route found in the evidence that the user's diagram does not show.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "success",
+              "failure"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "sentence": {
+            "title": "Sentence",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "kind",
+          "sentence"
+        ],
+        "title": "TocReportExpansionOut",
+        "type": "object"
+      },
+      "TocReportFindingOut": {
+        "additionalProperties": false,
+        "description": "A report section that no longer matches the theory (C45).",
+        "properties": {
+          "section": {
+            "title": "Section",
+            "type": "string"
+          },
+          "why": {
+            "title": "Why",
+            "type": "string"
+          }
+        },
+        "required": [
+          "section",
+          "why"
+        ],
+        "title": "TocReportFindingOut",
+        "type": "object"
+      },
+      "TocReportOut": {
+        "additionalProperties": false,
+        "description": "Detailed information as a short narrative report (C38), written on each check.",
+        "properties": {
+          "assumptions": {
+            "items": {
+              "$ref": "#/components/schemas/TocReportAssumptionOut"
+            },
+            "title": "Assumptions",
+            "type": "array"
+          },
+          "expansions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TocReportExpansionOut"
+            },
+            "title": "Expansions",
+            "type": "array"
+          },
+          "how_it_could_fail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "How It Could Fail"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "pathways": {
+            "items": {
+              "$ref": "#/components/schemas/TocReportPathwayOut"
+            },
+            "title": "Pathways",
+            "type": "array"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/TocReportSourceOut"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/TocReportSummaryOut"
+          },
+          "summary_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Text"
+          },
+          "supporting_activities": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Supporting Activities",
+            "type": "array"
+          },
+          "tests": {
+            "items": {
+              "$ref": "#/components/schemas/TocReportTestOut"
+            },
+            "title": "Tests",
+            "type": "array"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TocTheoryVerdictOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "verdict_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict Reason"
+          },
+          "whole_programme": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Whole Programme"
+          }
+        },
+        "required": [
+          "summary",
+          "pathways",
+          "assumptions",
+          "tests",
+          "sources",
+          "method"
+        ],
+        "title": "TocReportOut",
+        "type": "object"
+      },
+      "TocReportPathwayOut": {
+        "additionalProperties": false,
+        "description": "One success pathway in the Overview: a lead-in title and a line or two.",
+        "properties": {
+          "paragraph": {
+            "title": "Paragraph",
+            "type": "string"
+          },
+          "pathway_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pathway Id"
+          },
+          "strength": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strength"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "paragraph"
+        ],
+        "title": "TocReportPathwayOut",
+        "type": "object"
+      },
+      "TocReportSourceOut": {
+        "additionalProperties": false,
+        "description": "One numbered source, in order of first citation.",
+        "properties": {
+          "authors": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Authors",
+            "type": "array"
+          },
+          "citation": {
+            "title": "Citation",
+            "type": "string"
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "n",
+          "citation",
+          "url"
+        ],
+        "title": "TocReportSourceOut",
+        "type": "object"
+      },
+      "TocReportSummaryOut": {
+        "additionalProperties": false,
+        "description": "The report's Summary (C38).",
+        "properties": {
+          "context": {
+            "title": "Context",
+            "type": "string"
+          },
+          "directly_influenced": {
+            "title": "Directly Influenced",
+            "type": "string"
+          },
+          "goal": {
+            "title": "Goal",
+            "type": "string"
+          },
+          "if_then_because": {
+            "title": "If Then Because",
+            "type": "string"
+          },
+          "population": {
+            "title": "Population",
+            "type": "string"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "time_horizon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Horizon"
+          },
+          "weakest_links": {
+            "default": "",
+            "title": "Weakest Links",
+            "type": "string"
+          }
+        },
+        "required": [
+          "goal",
+          "if_then_because",
+          "population",
+          "time_horizon",
+          "directly_influenced",
+          "context"
+        ],
+        "title": "TocReportSummaryOut",
+        "type": "object"
+      },
+      "TocReportTestOut": {
+        "additionalProperties": false,
+        "description": "One thing to test first.",
+        "properties": {
+          "indicator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indicator"
+          },
+          "link": {
+            "title": "Link",
+            "type": "string"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "sentence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sentence"
+          },
+          "test_and_learn": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Test And Learn"
+          }
+        },
+        "required": [
+          "link"
+        ],
+        "title": "TocReportTestOut",
+        "type": "object"
+      },
+      "TocResultCriteriaOut": {
+        "additionalProperties": false,
+        "description": "Mayne's checks on one box.",
+        "properties": {
+          "definition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Definition"
+          },
+          "indicator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Indicator"
+          },
+          "timing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timing"
+          }
+        },
+        "title": "TocResultCriteriaOut",
+        "type": "object"
+      },
+      "TocRevisionOut": {
+        "additionalProperties": false,
+        "description": "The row's revision after a write.",
+        "properties": {
+          "revision": {
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "revision"
+        ],
+        "title": "TocRevisionOut",
+        "type": "object"
+      },
+      "TocStudyIn": {
+        "additionalProperties": false,
+        "description": "A study the user adds to a link: a DOI or a web address (C42).",
+        "properties": {
+          "identifier": {
+            "maxLength": 2000,
+            "minLength": 4,
+            "title": "Identifier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "identifier"
+        ],
+        "title": "TocStudyIn",
+        "type": "object"
+      },
+      "TocTheoryVerdictOut": {
+        "additionalProperties": false,
+        "description": "Can the theory work, and what does the evidence say? (``toc_verdict_v2``).",
+        "properties": {
+          "carrying_step": {
+            "title": "Carrying Step",
+            "type": "string"
+          },
+          "evidence": {
+            "enum": [
+              "supports",
+              "mixed",
+              "too_little",
+              "against"
+            ],
+            "title": "Evidence",
+            "type": "string"
+          },
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "mechanism": {
+            "enum": [
+              "plausible",
+              "implausible"
+            ],
+            "title": "Mechanism",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mechanism",
+          "evidence",
+          "label",
+          "headline",
+          "reason",
+          "carrying_step"
+        ],
+        "title": "TocTheoryVerdictOut",
+        "type": "object"
+      },
+      "TocUndoOut": {
+        "additionalProperties": false,
+        "description": "What Undo could not put back because it changed since (C10).",
+        "properties": {
+          "skipped": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skipped",
+            "type": "array"
+          }
+        },
+        "required": [
+          "skipped"
+        ],
+        "title": "TocUndoOut",
+        "type": "object"
+      },
+      "TocUploadIn": {
+        "additionalProperties": false,
+        "description": "A user's own theory of change as an image or PDF (increment 5, C8): base64 in JSON.",
+        "properties": {
+          "content_type": {
+            "enum": [
+              "image/png",
+              "image/jpeg",
+              "application/pdf"
+            ],
+            "title": "Content Type",
+            "type": "string"
+          },
+          "data_base64": {
+            "maxLength": 14000000,
+            "minLength": 1,
+            "title": "Data Base64",
+            "type": "string"
+          },
+          "file_name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "File Name",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "maxLength": 4000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          }
+        },
+        "required": [
+          "file_name",
+          "content_type",
+          "data_base64"
+        ],
+        "title": "TocUploadIn",
+        "type": "object"
+      },
+      "TocUploadItemOut": {
+        "additionalProperties": false,
+        "description": "One uploaded diagram that was read.",
+        "properties": {
+          "file_name": {
+            "title": "File Name",
+            "type": "string"
+          },
+          "upload_id": {
+            "format": "uuid",
+            "title": "Upload Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "upload_id",
+          "file_name"
+        ],
+        "title": "TocUploadItemOut",
+        "type": "object"
+      },
+      "TocUploadOut": {
+        "additionalProperties": false,
+        "description": "What was read from an uploaded diagram, before the plan uses it.",
+        "properties": {
+          "answered": {
+            "default": false,
+            "title": "Answered",
+            "type": "boolean"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts",
+            "type": "object"
+          },
+          "file_name": {
+            "title": "File Name",
+            "type": "string"
+          },
+          "upload_id": {
+            "format": "uuid",
+            "title": "Upload Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "upload_id",
+          "file_name",
+          "counts"
+        ],
+        "title": "TocUploadOut",
+        "type": "object"
+      },
+      "TocWeightsOut": {
+        "additionalProperties": false,
+        "description": "The numbers behind a link's verdict (C36).",
+        "properties": {
+          "mean_support": {
+            "title": "Mean Support",
+            "type": "number"
+          },
+          "n_documents": {
+            "title": "N Documents",
+            "type": "integer"
+          },
+          "refute_share": {
+            "title": "Refute Share",
+            "type": "number"
+          },
+          "total_weight": {
+            "title": "Total Weight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "total_weight",
+          "mean_support",
+          "refute_share",
+          "n_documents"
+        ],
+        "title": "TocWeightsOut",
         "type": "object"
       },
       "TurnActionOut": {
@@ -9663,7 +12965,7 @@
         ]
       },
       "post": {
-        "description": "Create one active task owned by the authenticated subject.\n\nStamps the creator's organisation onto the row (contract \u00a7 7) \u2014 NULL when\nthe creator is unenrolled, which leaves the row reachable by its owner\nalone. `visibility` takes the column default `private` (owner amendment\n2026-08-26 \u2014 new work is unshared until its owner deliberately shares it).\n\nTask 044 (C10): projects and Links arrive in the **same** request and are\nwritten in the **same** transaction. The old create-then-patch flow could\nleave a real, unassigned task behind, and \"Starts from\" cannot be built on\na flow with that failure mode \u2014 a scoping task linked to nothing has lost\nthe thing it was created for. So any refusal below rolls the task row back\nwith it.\n\nRaises:\n    HTTPException: 404 when a named source task is not readable by the\n        caller.\n    ApiConflict: 409 ``visibility_conflict``, ``link_source_capability``,\n        ``link_project_mismatch`` or ``link_source_unfinished``.",
+        "description": "Create one active task owned by the authenticated subject.\n\nStamps the creator's organisation onto the row (contract \u00a7 7) \u2014 NULL when\nthe creator is unenrolled, which leaves the row reachable by its owner\nalone. `visibility` takes the column default `private` (owner amendment\n2026-08-26 \u2014 new work is unshared until its owner deliberately shares it).\n\nTask 044 (C10): projects and Links arrive in the **same** request and are\nwritten in the **same** transaction. The old create-then-patch flow could\nleave a real, unassigned task behind, and \"Starts from\" cannot be built on\na flow with that failure mode \u2014 a scoping task linked to nothing has lost\nthe thing it was created for. So any refusal below rolls the task row back\nwith it.\n\nA theory of change is refused unless the server setting is on (task 054,\nC15), before anything is written.\n\nRaises:\n    HTTPException: 404 when a named source task is not readable by the\n        caller.\n    ApiUnprocessable: 422 ``capability_not_enabled`` for a theory of\n        change while ``POLICY_ATLAS_THEORY_OF_CHANGE`` is off.\n    ApiConflict: 409 ``visibility_conflict``, ``link_source_capability``,\n        ``link_project_mismatch`` or ``link_source_unfinished``.",
         "operationId": "create_task_api_v1_tasks_post",
         "requestBody": {
           "content": {
@@ -12284,6 +15586,1659 @@
         "summary": "Create Task Agent Turn",
         "tags": [
           "task_agent"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc": {
+      "get": {
+        "description": "Return the theory: boxes, links with their verdicts and states, pathways, summary.",
+        "operationId": "get_toc_api_v1_tasks__task_id__toc_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocGraphOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Toc",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/boxes": {
+      "post": {
+        "description": "Add a box the user wrote (C41).",
+        "operationId": "create_toc_box_api_v1_tasks__task_id__toc_boxes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocBoxCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocCreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Toc Box",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/boxes/{box_id}": {
+      "delete": {
+        "description": "Delete a box and its links; Undo restores them with their evidence (C41).",
+        "operationId": "delete_toc_box_api_v1_tasks__task_id__toc_boxes__box_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "box_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Box Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_revision",
+            "required": true,
+            "schema": {
+              "title": "Expected Revision",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Toc Box",
+        "tags": [
+          "theory-of-change"
+        ]
+      },
+      "patch": {
+        "description": "Edit a box's text, layer, description or how we'd know it happened (C41).",
+        "operationId": "patch_toc_box_api_v1_tasks__task_id__toc_boxes__box_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "box_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Box Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocBoxPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocRevisionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Patch Toc Box",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/boxes/{box_id}/position": {
+      "patch": {
+        "description": "Save where the user dropped a box (C47).",
+        "operationId": "move_toc_box_api_v1_tasks__task_id__toc_boxes__box_id__position_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "box_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Box Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocMoveIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocRevisionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Move Toc Box",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/check": {
+      "post": {
+        "description": "Check named links only (C40): search, pick, judge, figures, summarise.",
+        "operationId": "start_toc_link_check_api_v1_tasks__task_id__toc_check_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocCheckIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocCheckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Start Toc Link Check",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/check/full": {
+      "post": {
+        "description": "Check the whole theory: after the user reviewed an uploaded theory's draft (increment 5).",
+        "operationId": "start_full_toc_check_api_v1_tasks__task_id__toc_check_full_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocCheckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Start Full Toc Check",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/check/stop": {
+      "post": {
+        "description": "Stop the running check before its next step; what it finished stays (C48).",
+        "operationId": "stop_toc_check_api_v1_tasks__task_id__toc_check_stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Stop Toc Check Api V1 Tasks  Task Id  Toc Check Stop Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stop Toc Check",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/events/{event_id}/undo": {
+      "post": {
+        "description": "Put back the state before one edit; rows changed since are skipped and named (C10).",
+        "operationId": "undo_toc_edit_api_v1_tasks__task_id__toc_events__event_id__undo_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocUndoOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Undo Toc Edit",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/evidence": {
+      "get": {
+        "description": "Return every judged document per link and every case study per box.",
+        "operationId": "get_toc_evidence_api_v1_tasks__task_id__toc_evidence_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocEvidenceOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Toc Evidence",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}": {
+      "patch": {
+        "description": "Remove a document from its link, restore it, or set or clear the user's scores (C42).",
+        "operationId": "patch_toc_evidence_api_v1_tasks__task_id__toc_evidence__evidence_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "evidence_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Evidence Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocEvidencePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocRevisionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Patch Toc Evidence",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}/context": {
+      "get": {
+        "description": "Return one judgement's quote, or another passage of its document, in its passage.",
+        "operationId": "get_toc_evidence_context_api_v1_tasks__task_id__toc_evidence__evidence_id__context_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "evidence_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Evidence Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "quote",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Quote"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkContextOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Toc Evidence Context",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/history": {
+      "get": {
+        "description": "Who changed what, newest first (C41). Editors only: it names people.",
+        "operationId": "get_toc_history_api_v1_tasks__task_id__toc_history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TocHistoryEntryOut"
+                  },
+                  "title": "Response Get Toc History Api V1 Tasks  Task Id  Toc History Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Toc History",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/layout/reset": {
+      "post": {
+        "description": "Return every moved box to the computed layout (C47).",
+        "operationId": "reset_toc_layout_api_v1_tasks__task_id__toc_layout_reset_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reset Toc Layout",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/links": {
+      "post": {
+        "description": "Connect two boxes (C41). The sentence starts from the box texts.",
+        "operationId": "create_toc_link_api_v1_tasks__task_id__toc_links_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocLinkCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocCreatedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Toc Link",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/links/keep": {
+      "post": {
+        "description": "Keep the evidence of edited links for their new wording (C43).",
+        "operationId": "keep_toc_evidence_api_v1_tasks__task_id__toc_links_keep_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocLinksIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocCountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Keep Toc Evidence",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/links/{link_id}": {
+      "delete": {
+        "description": "Delete a link; Undo restores it with its evidence (C41).",
+        "operationId": "delete_toc_link_api_v1_tasks__task_id__toc_links__link_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Link Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_revision",
+            "required": true,
+            "schema": {
+              "title": "Expected Revision",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Toc Link",
+        "tags": [
+          "theory-of-change"
+        ]
+      },
+      "patch": {
+        "description": "Edit a link's title, parts or conditions, or mark it critical (C41).",
+        "operationId": "patch_toc_link_api_v1_tasks__task_id__toc_links__link_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Link Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocLinkPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocRevisionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Patch Toc Link",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/links/{link_id}/decide": {
+      "post": {
+        "description": "Accept or reject all the new evidence Find more evidence found on one link (C44).",
+        "operationId": "decide_toc_pending_api_v1_tasks__task_id__toc_links__link_id__decide_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Link Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocDecideIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocCountOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Decide Toc Pending",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/links/{link_id}/studies": {
+      "post": {
+        "description": "Add a study to a link by its DOI (C42): Policy Atlas fetches, judges and adds it.\n\nA check named on the link runs with the DOI as its only search; the judge,\nfigures, classify and appraise read it as any other document, and its\njudgement is marked as added by the user.",
+        "operationId": "add_toc_study_api_v1_tasks__task_id__toc_links__link_id__studies_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Link Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocStudyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocCheckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Add Toc Study",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/proposals": {
+      "get": {
+        "description": "The open suggestions, newest first (C45, C46).",
+        "operationId": "get_toc_proposals_api_v1_tasks__task_id__toc_proposals_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TocProposalOut"
+                  },
+                  "title": "Response Get Toc Proposals Api V1 Tasks  Task Id  Toc Proposals Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Toc Proposals",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/proposals/{proposal_id}/decide": {
+      "post": {
+        "description": "Accept or reject one suggested edit, or all; accepted edits apply as the user's (C45).",
+        "operationId": "decide_toc_proposal_api_v1_tasks__task_id__toc_proposals__proposal_id__decide_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocProposalDecideIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocProblemsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Decide Toc Proposal",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/proposals/{proposal_id}/dismiss": {
+      "post": {
+        "description": "Close a suggestion without acting on what is left of it.",
+        "operationId": "dismiss_toc_proposal_api_v1_tasks__task_id__toc_proposals__proposal_id__dismiss_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Proposal Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Dismiss Toc Proposal",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/report/update": {
+      "post": {
+        "description": "Rewrite the titles, sentences and the report for the theory as it is now (C45).",
+        "operationId": "update_toc_report_api_v1_tasks__task_id__toc_report_update_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "proposal_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Proposal Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocCheckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Toc Report",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/review": {
+      "post": {
+        "description": "Review the theory after edits, off the request path; the Task Agent reports (C45).",
+        "operationId": "start_toc_review_api_v1_tasks__task_id__toc_review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Start Toc Review Api V1 Tasks  Task Id  Toc Review Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Start Toc Review",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/uploads": {
+      "get": {
+        "description": "The task's uploaded diagrams that were read, oldest first, for the chat's pictures.",
+        "operationId": "list_toc_uploads_api_v1_tasks__task_id__toc_uploads_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TocUploadItemOut"
+                  },
+                  "title": "Response List Toc Uploads Api V1 Tasks  Task Id  Toc Uploads Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Toc Uploads",
+        "tags": [
+          "theory-of-change"
+        ]
+      },
+      "post": {
+        "description": "Store a user's own theory diagram and read it (increment 5, C8).\n\nThe file is checked and stored first; the slow vision call runs outside any\ntransaction. Before the draft, the transcription is stored for the Task\nAgent's next plan. Once the theory is drafted, what the diagram adds waits\nas a suggestion, and the chat gets the message and its reply here.",
+        "operationId": "upload_toc_theory_api_v1_tasks__task_id__toc_uploads_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TocUploadIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TocUploadOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Upload Toc Theory",
+        "tags": [
+          "theory-of-change"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/toc/uploads/{upload_id}": {
+      "get": {
+        "description": "The uploaded original, to people who can read the task; never on the public leg (C8).",
+        "operationId": "get_toc_upload_api_v1_tasks__task_id__toc_uploads__upload_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Upload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Toc Upload",
+        "tags": [
+          "theory-of-change"
         ]
       }
     },

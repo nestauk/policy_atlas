@@ -43,7 +43,7 @@ function openTabs(
   // opens as soon as a baseline exists, whatever the walk's ending. Task 045
   // (A7): a longlist opens it the same way — the Result then opens on the
   // longlist.
-  const hasScopingResult = options?.hasBaseline === true || options?.hasLonglist === true;
+  const hasScopingResult = options?.hasBaseline === true || options?.hasLonglist === true || options?.hasToc === true;
   if (hasScopingResult && !open.includes("result")) {
     return LIFECYCLE_TABS.filter((tab) => tab === "result" || open.includes(tab));
   }
@@ -56,6 +56,8 @@ export interface TabOptions {
   hasBaseline?: boolean;
   /** An options-scoping task with a longlist (task 045, `TaskOut.has_longlist`). */
   hasLonglist?: boolean;
+  /** A theory-of-change task whose read returned at least one box (task 054). */
+  hasToc?: boolean;
 }
 
 function baseTabs(status: RunStatus | null | undefined): readonly LifecycleTab[] {

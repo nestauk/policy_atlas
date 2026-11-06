@@ -110,6 +110,26 @@ option_profile_ambition = { tier = "standard", reasoning_effort = "none", timeou
 option_profile_setting = { tier = "standard", reasoning_effort = "high", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
 option_profile_fold = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
 option_profile_place_sentences = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
+# --- Theory of change (task 054) ---------------------------------------------
+# Tiers as on the task branch (owner, 2026-11-04: the planner and the draft on the middle
+# tier). Effort as the branch sent it: "none" on Terra (the judge was measured at it;
+# Terra's default gave unstable stances), the provider default elsewhere. Timeout 300 s,
+# the branch's client timeout (the planner: 180 s, as before): the draft, the report and
+# the vision import take minutes.
+task_agent_toc = { tier = "standard", reasoning_effort = "none", timeout_s = 180 }
+toc_draft = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }   # Sol, for the owner's latency and quality comparison with Terra (2026-11-06)
+toc_merge = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }
+toc_choose = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }
+toc_discover = { tier = "standard", reasoning_effort = "none", timeout_s = 300 }
+toc_judge = { tier = "standard", reasoning_effort = "none", timeout_s = 300 }
+toc_figures = { tier = "fast", reasoning_effort = "medium", timeout_s = 300 }   # one small call per judged document (C37)
+toc_pick = { tier = "fast", reasoning_effort = "medium", timeout_s = 300 }   # one small call per link (C28)
+toc_summarise = { tier = "standard", reasoning_effort = "none", timeout_s = 300 }
+toc_report = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }   # the narrative report (C38)
+toc_review = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }   # the shape review after edits (C45)
+toc_sense_check = { tier = "standard", reasoning_effort = "none", timeout_s = 300 }   # can the theory work at all (red team)
+toc_import = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }   # one vision call reads the user's diagram
+toc_verdict = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }
 
 # ---------------------------------------------------------------------------
 [routes.openai-direct]

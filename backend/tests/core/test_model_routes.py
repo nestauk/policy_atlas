@@ -82,6 +82,21 @@ STEP_TIER_AND_EFFORT: dict[str, tuple[str, str]] = {
     "option_profile_potential_impact": ("standard", "none"),
     "option_profile_ambition": ("standard", "none"),
     "option_profile_setting": ("standard", "high"),
+    # Theory of change (task 054): the tiers the branch ran, Terra at "none".
+    "task_agent_toc": ("standard", "none"),
+    "toc_draft": ("frontier", "medium"),  # Sol since 2026-11-06 (owner, after the Terra comparison)
+    "toc_merge": ("frontier", "medium"),
+    "toc_choose": ("frontier", "medium"),
+    "toc_discover": ("standard", "none"),
+    "toc_judge": ("standard", "none"),
+    "toc_figures": ("fast", "medium"),
+    "toc_pick": ("fast", "medium"),
+    "toc_summarise": ("standard", "none"),
+    "toc_report": ("frontier", "medium"),
+    "toc_review": ("frontier", "medium"),
+    "toc_sense_check": ("standard", "none"),
+    "toc_import": ("frontier", "medium"),
+    "toc_verdict": ("frontier", "medium"),
 }
 
 # Which model each tier names after the switch, per route (gpt-6 family, D2).
@@ -128,6 +143,9 @@ STEP_TIMEOUT_S: dict[str, float] = {
     ),
     "synthesise_write_source_note": 30.0,
     "synthesise_write_intro": 30.0,
+    # Task 054: the branch's client timeouts (the planner's shared client: 180 s).
+    **{step: 300.0 for step in STEP_TIER_AND_EFFORT if step.startswith("toc_")},
+    "task_agent_toc": 180.0,
 }
 
 def _default() -> Route:
@@ -141,10 +159,10 @@ def test_route_file_ships_inside_the_package() -> None:
 
 @pytest.mark.parametrize("name", ["openai-direct", "bedrock", "bedrock-claude"])
 def test_every_step_resolves_todays_model_and_effort_on_every_route(name: str) -> None:
-    """Task 056 D4/D9: 56 steps, each with today's model and effort, on all three routes."""
+    """Task 056 D4/D9: 70 steps (56, plus 14 for task 054), each model and effort, all routes."""
     route = load_route(ROUTE_FILE, name, {})
     assert set(route.steps) == set(STEP_TIER_AND_EFFORT)
-    assert len(route.steps) == 56
+    assert len(route.steps) == 70
     for step, (tier, effort) in STEP_TIER_AND_EFFORT.items():
         assert route.model_for(step) == TIER_MODELS[name][tier], step
         if name == "bedrock" and step == "judge_grounding":

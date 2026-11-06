@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 
 import type { components } from "../../api/gen/types";
-import { usePatchPlan } from "../../api/mutations";
-import { usePlan, useTask } from "../../api/queries";
+import { usePatchPlan, useStartRun } from "../../api/mutations";
+import { usePlan, useTask, useTocUploadFile } from "../../api/queries";
 import { seedComposer } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
 import { COPY } from "../../lib/vocabulary";
@@ -60,6 +60,7 @@ import {
   type RiskAppetite,
 } from "./planVocabulary";
 import { RiskAppetiteSelect } from "../longlist/ShortlistView";
+import { UploadPreview } from "../toc/uploads";
 
 type ScopingPlanDraft = components["schemas"]["ScopingPlanDraft"];
 type TaggedOut = components["schemas"]["TaggedOut"];
@@ -67,6 +68,7 @@ type ScopingConstraintOut = components["schemas"]["ScopingConstraintOut"];
 type YourContextOut = components["schemas"]["YourContextOut"];
 type YourOptionOut = components["schemas"]["YourOptionOut"];
 type TaskLinkOut = components["schemas"]["TaskLinkOut"];
+type TocPlanDraft = components["schemas"]["TocPlanDraft"];
 
 const panelLabelClass = "text-lead font-bold text-white";
 const panelEditButtonClass =
@@ -851,6 +853,306 @@ function ScopingPlanSections({
   );
 }
 
+// --- Theory-of-change plan sections (task 054, step 1.3) ------------------
+
+const TOC_ENTRY_POINT_LABEL: Record<NonNullable<TocPlanDraft["entry_point"]>, string> = {
+  outcome_first: "From the change you want",
+  intervention_first: "From an intervention",
+  existing_theory: "From your own theory of change",
+};
+
+/** One plain field: its value, or the grey "Not decided yet". */
+function PlainField({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div>
+      <dt className={panelHintClass}>{label}</dt>
+      <dd className={cn(panelValueClass, "whitespace-pre-line")}>
+        {value != null && value !== "" ? scrub(value) : <NotDecided />}
+      </dd>
+    </div>
+  );
+}
+
+type TocField =
+  | "intended_change"
+  | "target_population"
+  | "where"
+  | "time_horizon"
+  | "intervention"
+  | "dosage"
+  | "context"
+  | "published_after"
+  | "published_before";
+
+/** A field being edited: its label and text. */
+interface TocFieldInput {
+  label: string;
+  rows: number;
+  value: string;
+  onChange: (value: string) => void;
+}
+
+/**
+ * One theory-of-change plan section edited in place, as an Evidence search
+ * plan's sections are (task 054). Save writes the edits straight away: the
+ * plan has two Start buttons (here and in the chat), so nothing waits for one.
+ * By default each field shows and edits the plan's text as it is; `view`,
+ * `initial`, `toValue` and `input` change that (the years section).
+ */
+function TocEditSection({
+  taskId,
+  toc,
+  label,
+  fields,
+  readOnly,
+  view,
+  initial = (key) => toc[key] ?? "",
+  toValue = (_key, text) => text,
+  input = ({ label: name, rows, value, onChange }) => (
+    <label className="grid gap-1">
+      <span className={panelHintClass}>{name}</span>
+      <textarea rows={rows} value={value} onChange={(event) => onChange(event.target.value)} className={cn(panelFieldClass, "resize-y")} />
+    </label>
+  ),
+}: {
+  taskId: string;
+  toc: TocPlanDraft;
+  label: string;
+  fields: { key: TocField; label: string; rows?: number }[];
+  readOnly: boolean;
+  view?: React.ReactNode;
+  /** A field's text when editing starts, and the value its edited text saves as. */
+  initial?: (key: TocField) => string;
+  toValue?: (key: TocField, text: string) => string;
+  input?: (field: TocFieldInput) => React.ReactNode;
+}) {
+  const patchPlan = usePatchPlan(taskId);
+  const [editing, setEditing] = useState(false);
+  const [drafts, setDrafts] = useState<Partial<Record<TocField, string>>>({});
+  const [error, setError] = useState<string | null>(null);
+  const save = () => {
+    const changed = Object.fromEntries(
+      fields.flatMap(({ key }) => {
+        const text = (drafts[key] ?? "").trim();
+        return text !== initial(key) ? [[key, toValue(key, text)]] : [];
+      }),
+    );
+    if (Object.keys(changed).length === 0) {
+      setEditing(false);
+      return;
+    }
+    patchPlan.mutate(
+      { toc: changed },
+      {
+        onSuccess: () => setEditing(false),
+        onError: (err) => setError((err as Error | undefined)?.message ?? "The edit couldn't be saved. Try again."),
+      },
+    );
+  };
+  return (
+    <PanelSection
+      readOnly={readOnly}
+      label={label}
+      editing={editing}
+      onEdit={() => {
+        setDrafts(Object.fromEntries(fields.map(({ key }) => [key, initial(key)])));
+        setError(null);
+        setEditing(true);
+      }}
+      onCancel={() => setEditing(false)}
+      onSave={save}
+      view={
+        view ?? (
+          <dl className="space-y-3">
+            {fields.map(({ key, label: name }) => (
+              <PlainField key={key} label={name} value={toc[key]} />
+            ))}
+          </dl>
+        )
+      }
+    >
+      <div className="space-y-3">
+        {fields.map(({ key, label: name, rows = 2 }) => (
+          <Fragment key={key}>
+            {input({ label: name, rows, value: drafts[key] ?? "", onChange: (value) => setDrafts((current) => ({ ...current, [key]: value })) })}
+          </Fragment>
+        ))}
+        {error !== null && (
+          <p role="alert" className="text-body text-red-tint">
+            {error}
+          </p>
+        )}
+      </div>
+    </PanelSection>
+  );
+}
+
+/** "2000 onwards", "2000–2010", "Until 2010" or "Any year", from the plan's ISO dates. */
+function tocYearsLabel(after: string, before: string): string {
+  if (after !== "" && before !== "") return `${after}–${before}`;
+  if (after !== "") return `${after} onwards`;
+  if (before !== "") return `Until ${before}`;
+  return "Any year";
+}
+
+/** The year of a plan date ("2000" from "2000-01-01"), or "" when none is set. */
+const yearOf = (date: string | null | undefined) => (date ?? "").slice(0, 4);
+
+/**
+ * The years of evidence the theory's checks search (task 054): the same
+ * from/until year boxes as Evidence search's filters, saved straight away
+ * like the other theory-of-change sections.
+ */
+function TocYearsSection({ taskId, toc, readOnly }: { taskId: string; toc: TocPlanDraft; readOnly: boolean }) {
+  return (
+    <TocEditSection
+      taskId={taskId}
+      toc={toc}
+      readOnly={readOnly}
+      label="Evidence"
+      fields={[
+        { key: "published_after", label: "Published from (year)" },
+        { key: "published_before", label: "Published until (year)" },
+      ]}
+      view={
+        <dl className="space-y-3">
+          <PlainField label="Evidence published" value={tocYearsLabel(yearOf(toc.published_after), yearOf(toc.published_before))} />
+        </dl>
+      }
+      initial={(key) => yearOf(toc[key])}
+      toValue={(key, year) => (year === "" ? "" : `${year}-${key === "published_after" ? "01-01" : "12-31"}`)}
+      input={({ label: name, value, onChange }) => (
+        <label className="block">
+          <span className={`mb-1 block ${panelHintClass}`}>{name}</span>
+          <input type="number" min={1900} max={2100} placeholder="Any" value={value} onChange={(event) => onChange(event.target.value)} className={panelFieldClass} />
+        </label>
+      )}
+    />
+  );
+}
+
+/** The user's uploaded diagram, shown as they gave it (task 054, increment 5). */
+function YourOriginal({ taskId, uploadId }: { taskId: string; uploadId: string }) {
+  const file = useTocUploadFile(taskId, uploadId);
+  return (
+    <div>
+      <dt className={panelHintClass}>Your original</dt>
+      <dd className="mt-1">
+        {file.isError && <span className={panelHintClass}>Your original couldn't be loaded.</span>}
+        {file.data !== undefined && (
+          <UploadPreview
+            blob={file.data}
+            imageClassName="max-h-80 w-full border border-line object-contain"
+            pdf={(url) => (
+              <a href={url} target="_blank" rel="noreferrer" className="text-body font-bold text-aqua hover:underline">
+                Open your original (PDF)
+              </a>
+            )}
+          />
+        )}
+      </dd>
+    </div>
+  );
+}
+
+/** The theory-of-change plan's sections, each edited in place until the draft exists; Start drafts the theory. */
+function TocPlanSections({
+  taskId,
+  toc,
+  readOnly,
+  onStarted,
+}: {
+  taskId: string;
+  toc: TocPlanDraft;
+  readOnly: boolean;
+  onStarted?: () => void;
+}) {
+  const startRun = useStartRun(taskId);
+  const [notice, setNotice] = useState<string | null>(null);
+  return (
+    <>
+      <div className="space-y-6">
+        <PanelSection
+          label="Starting point"
+          editing={false}
+          readOnly={readOnly}
+          view={
+            <dl className="space-y-3">
+              <PlainField
+                label="Entry point"
+                value={toc.entry_point != null ? TOC_ENTRY_POINT_LABEL[toc.entry_point] : null}
+              />
+              {toc.upload_id != null && <YourOriginal taskId={taskId} uploadId={toc.upload_id} />}
+              {toc.existing_theory_text != null &&
+                (toc.upload_id != null ? (
+                  // The transcription is long: the picture is the user's view of it.
+                  <details>
+                    <summary className="cursor-pointer text-meta font-bold text-white hover:underline">How Policy Atlas read it</summary>
+                    <p className="mt-2 whitespace-pre-wrap text-body">{scrub(toc.existing_theory_text)}</p>
+                  </details>
+                ) : (
+                  <PlainField label="Your theory of change" value={toc.existing_theory_text} />
+                ))}
+            </dl>
+          }
+        />
+        <TocEditSection
+          taskId={taskId}
+          toc={toc}
+          readOnly={readOnly}
+          label="The change"
+          fields={[
+            { key: "intended_change", label: "Intended change", rows: 3 },
+            { key: "target_population", label: "Who it is for" },
+            { key: "where", label: "Where", rows: 1 },
+            { key: "time_horizon", label: "Time horizon", rows: 1 },
+          ]}
+        />
+        <TocEditSection
+          taskId={taskId}
+          toc={toc}
+          readOnly={readOnly}
+          label="Intervention"
+          fields={[
+            { key: "intervention", label: "Intervention", rows: 3 },
+            { key: "dosage", label: "Dosage" },
+          ]}
+        />
+        <TocEditSection
+          taskId={taskId}
+          toc={toc}
+          readOnly={readOnly}
+          label="Context"
+          fields={[{ key: "context", label: "What you told us about the setting", rows: 4 }]}
+        />
+        <TocYearsSection taskId={taskId} toc={toc} readOnly={readOnly} />
+      </div>
+      {!readOnly && (
+        <div className="pt-8">
+          <Button
+            className={cn(START_SEARCH_CLASS)}
+            disabled={!toc.ready || startRun.isPending}
+            onClick={() => {
+              setNotice(null);
+              startRun.mutate(undefined, {
+                onSuccess: () => onStarted?.(),
+                onError: () => setNotice("The draft couldn't start. Try again."),
+              });
+            }}
+          >
+            Draft the theory
+          </Button>
+          {notice != null && (
+            <p role="alert" className="mt-2 text-body text-red-tint">
+              {notice}
+            </p>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 /**
  * The search plan, edited in place. Saves stay local until Start search —
  * a task_agent round-trip on every field would rewrite the whole plan.
@@ -1046,6 +1348,15 @@ export function PlanDocument({
               readOnly={readOnly}
               runActive={runActive}
               approved={planQuery.data.status === "approved"}
+              onStarted={onStarted}
+            />
+          )}
+
+          {planQuery.data?.toc != null && (
+            <TocPlanSections
+              taskId={taskId}
+              toc={planQuery.data.toc}
+              readOnly={readOnly}
               onStarted={onStarted}
             />
           )}
@@ -1350,7 +1661,7 @@ export function PlanDocument({
           </div>
           )}
 
-          {!scopingPlan && !readOnly && (
+          {!scopingPlan && planQuery.data?.toc == null && !readOnly && (
           <div className="pt-8">
             <Button className={cn(START_SEARCH_CLASS)} disabled={startDisabled} onClick={start}>
               {startLabel}

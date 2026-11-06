@@ -39,6 +39,8 @@ const activeRows = [
 ];
 
 vi.mock("../api/queries", () => ({
+  // Task 054: the result gate also reads the theory-of-change graph (none here).
+  useToc: () => ({ data: undefined }),
   useTask: () => ({
     data: {
       task_id: "11111111-1111-1111-1111-111111111111",

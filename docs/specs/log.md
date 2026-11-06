@@ -1,5 +1,15 @@
 # Spec update log
 
+## 2026-11-05 (task 054, review before the merge to `dev`)
+Owner rulings of 2026-11-03 to 2026-11-05, given in chat during the live feedback rounds, flowed
+back at the review stack. ADR 0042 § Amendment 2026-11-05 records the as-built state.
+* **Update**: [ToC capability § Rulings](capabilities/theory-of-change/capability.md) — the
+  build rulings: the plan-stage sense check and the two-axis verdict; PowerPoint parked;
+  uploads as one general `task_upload` table and bucket; draw your own; later uploads as one
+  suggestion; web search, the stress-test chat and the option link not built at the merge.
+* **Update**: [ToC components](capabilities/theory-of-change/components.md) — exports are made
+  in the browser (no server export routes, no `python-pptx`); PowerPoint is parked.
+
 ## 2026-11-04
 Task 057 review, owner rulings.
 * **Update** (S5 wording): [prompting § Timeouts](system/prompting.md) — as built: three attempts,
@@ -42,6 +52,286 @@ Contract: `docs/tasks/056-cost-latency/contract.md`; decisions in ADR 0042.
   it reads the section's prompt cache, never a resend of the tool transcript.
 * S5 (the full-text reading stage and the typed progress counts) is applied with Phase 6.
 * **Update** (S5 wording, review of task 056, owner 2026-11-02): [web-api](system/web-api.md) — a `tick`'s three counts `fetched`, `parsed` and `total` are sent as null when absent (were "omitted"), so the wire matches the generated contract, which lists them as always present and nullable.
+## 2026-10-30 (task 054, editing slices B to D)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): an editor
+  can remove a study from a connection, set their own support and relevance over the judge's (the
+  judge's stay visible), and add a study by DOI (C42); an edit marks the evidence "from the earlier
+  wording" with Keep the evidence or Check again (C43). Find more evidence searches again, leaving
+  out what was judged; what it finds waits as pending, with the verdict if accepted (C44). A running
+  check can be stopped (C48); ToC stages show in the Task Agent's running card. Review the theory
+  (`toc_review_v1`, frontier) proposes edits from a closed list and names report sections that no
+  longer match; Update the report rewrites the sentences and the report (C45). The Task Agent
+  (`task_agent_toc_v2`) sees the theory by code, proposes edits as suggestions and records
+  clarifications, which every later step reads through the plan's context (C46, C49). Suggestions
+  apply as the user's own edits. Deviation from the wireframe: suggestions show in a panel above
+  the canvas, and the Task Agent message points to it, rather than as a card inside the chat.
+
+## 2026-10-30 (task 054, editing slice A)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): editors
+  can add, edit, connect, delete and move boxes and connections, mark a connection critical, reset
+  the layout, and undo any edit from a toast or History (contract C41, C47). Each edit records who
+  and when. A check can run on named connections only (`POST /toc/check`, C40): search, pick,
+  judge, figures, classify, appraise and summarise, without discovery, merge, choose or the report.
+  Connections on no pathway (the user's) are drawn on the canvas; boxes with no connection take the
+  next row of their layer's column; a moved box keeps its place and its connections run as curves.
+
+## 2026-10-30 (task 054, evidence fit)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): after a
+  fit review of run 9 (15 of 65 documents, 8 of 38 link figures, 9 of 18 box figures and 8 of 22
+  case studies misfit), `toc_judge_v8` requires the step's source to happen (else not_about;
+  "refutes" means the source happened and the target did not follow), caps evidence from
+  another channel or a rule that removes nothing at weak support and relevance 1, and sees
+  "Alongside" steps (other links into the same target or out of the same source); a case study
+  must show the box itself, and is kept only from a document about the step. `toc_figures_v3`
+  sees the link sentence, the judge's support and quote and the neighbouring steps, and keeps
+  to the judge's finding. `toc_summary_v4` may leave "seen in" empty
+  (`toc_summary_v5`, same day: a box with case studies normally gets one, including a case where
+  the change failed, its mirror image, or a modelled estimate; empty only when every case study is
+  about another product, channel or kind of rule). A box shows a level only
+  from a document of relevance 2 or more.
+
+## 2026-10-30 (task 054, verdict calibration and report navigation)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md) and
+  ADR 0042's verdict rule: six verdicts, "Not sure" dropped. Not enough evidence (W < 4/9);
+  Leaning supports / Leaning against (some evidence, or enough but not clear-cut, average
+  support beyond ±0.5); Confident (W ≥ 1, S̄ ≥ 1, under 25% refuting, was 15%); Mixed;
+  Not confident (S̄ ≤ −1, was −0.5). Calibrated over six runs (123 links). Keys
+  `not_sure_mixed` and `not_sure_insufficient` keep their names. Prompts `toc_choose_v3` and
+  `toc_report_v3` name the new verdicts. The Result page gains the Evidence search's contents
+  sidebar (Canvas, then the report's sections); the report loses its "Detailed information"
+  heading and "Sources" becomes "References"; a code clicked in the report centres the canvas
+  on it; clicking an evidence-balance block opens its citation.
+
+## 2026-10-29 (task 054, presentation round 4)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): the
+  label is "Critical connection" (no "test this first"); hovering it gives the rule: the weakest
+  step on the kept pathways (lowest verdict), ties to the one most pathways pass through. The
+  warning triangle sits at the middle of the route. Sidebar section labels are blue, part labels
+  bold body ink; source lines and judgement lines are body ink, not grey. Hovering or focusing a
+  block of the evidence balance shows its document as the document list does. In a connection's
+  Evidence, the balance and its sentence come before Size of change. Tooltips, like sidebars,
+  open inside full screen.
+
+## 2026-10-29 (task 054, presentation round 3)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): the
+  critical connection carries a red warning triangle on its line instead of a thicker line (key,
+  reading guide and panel header too). A box panel has one Evidence section: the "seen in" note,
+  Size of change, then Case studies, each study one item (programme and place, note, source line
+  with its title, quote). Sidebar labels and listed items are body size. Citation sidebars open
+  inside full screen. The "Figures come from the documents' abstracts" line is removed.
+
+## 2026-10-29 (task 054, presentation round 2)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): a
+  link's "How this works" is one sentence with **If**, **for**, **then** and **because** in bold;
+  hovering a block of the evidence balance names its document; the "close to the threshold"
+  sentence is gone; sidebar items (documents, figures, case studies) share one title, source-line
+  and quote style. A chosen pathway also shows the inputs and outputs that feed it. The last
+  report section is "Sources", listed as the Evidence search lists references (title, authors,
+  year, venue); the method note is no longer shown. The canvas dividers follow the view instead
+  of being very long nodes, which made panning slow.
+
+## 2026-10-29 (task 054, presentation of information)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): the
+  Result page's title and summary come from the report; each link has a short title, and its
+  panel reads title and verdict, how it works, then one Evidence section (size of change with a
+  plain statement per figure, the balance, the cited sentence, the numbered documents); box panels
+  show "How we'd know it happened" and a "seen in" note from case studies; citations open the
+  Evidence search's source sidebar with the quote in context; the canvas dividers run edge to
+  edge. The summary step no longer writes header paragraphs or evaluation questions.
+
+## 2026-10-28 (task 054, narrative Detailed information)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md):
+  Detailed information is now a short narrative report in five sections (Summary, How change
+  happens, Assumptions and evidence, What to test and measure, Sources and method), written by one
+  call on every check, with every code and source number checked by code and the source list and
+  method note written by code. Codes in the text select their box or link on the canvas. It
+  replaces the summary's header paragraphs and evaluation questions. Task 054 contract C38.
+
+## 2026-10-28 (task 054, size of change)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): a new
+  step after the judge finds up to three figures per supporting or refuting document (how much the
+  effect changed, or a baseline level), keeps only those whose quote and number are in the
+  abstract, and shows them as "Size of change" in the link panel (a range across studies, never an
+  average) and as "Figures" on a box. Task 054 contract C37.
+
+## 2026-10-28 (task 054, one evidence verdict per link)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): each
+  link now has one evidence verdict (Confident, Not sure: mixed, Not sure: too little evidence,
+  Not confident: evidence against) instead of two grades, computed from each document's support,
+  quality and relevance to this population and place (a simplified BEAM). The judge, choose and
+  summary steps follow; the canvas shows the verdict by line style, and the link panel shows the
+  evidence balance. Task 054 contract C36; ADR 0042 amendment.
+
+## 2026-10-28 (task 054, Magenta Book layers and short codes)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): the
+  outcome layer splits into short-term and long-term outcomes, with fixed allowed steps (only
+  long-term outcomes lead to an impact); stored outcome boxes become short-term. Every box and link
+  gets a short code (`S3`, `#5`) that is never reused, shown on the canvas and in the panels, and
+  the canvas draws the accountability ceiling after the outputs. Task 054 contract C34 and C35.
+
+## 2026-10-27 (task 054, searches for discovered links)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): after
+  merge, each kept link that discovery added gets its own light search and pick, as the first
+  links do, instead of only borrowing the closest documents from the pool. Task 054 contract C32.
+
+## 2026-10-27 (task 054, study-design search and classify after the judge)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): each
+  link search adds one generated keyword query, run with the systematic-review and trial clauses
+  (5 search calls and 1 generation call per link, up to 60 documents). Each link's pick also sees
+  the 10 documents from the other links' searches closest to it, so a study found for one step
+  can serve another. Classify and appraise now run after the judge, only on documents it found
+  on topic. Crossref lookups respect its limit of 3 at a time. Task 054 contract C31.
+
+## 2026-10-27 (task 054, pick call, box folds, trusted publishers)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): one
+  small model call per link now picks the 10 documents the judge reads (6 of 38 key studies
+  judged in the eval, against 3 for round-robin), with round-robin as the top-up and fallback.
+  Merge also folds boxes that name the same change (same layer, never a user's box into a model
+  one), re-pointing and de-duplicating links. Links only on set-aside pathways are not checked.
+  Web pages from trusted publishers (gov.uk, ONS, NHS, Ofcom, ASA, What Works Centres and others,
+  in one committed list) count by their appraisal score. Missing abstracts come from Crossref.
+  Each walk's finish event carries its token totals and a dollar estimate. Task 054 contract C28
+  to C30.
+
+## 2026-10-27 (task 054, light link check)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): each
+  link's item search now searches the link sentence by meaning (two OpenAlex calls and one
+  Overton call, no query generation, the Evidence search's new `link` depth) and keeps every
+  distinct result. A code step, `toc_select`, replaces the model screen in the check walk: it
+  picks 10 documents per link (in turn from the three result lists, documents with an abstract
+  first) and screens out the rest; the rule is expected to change after a pick-rule experiment.
+  The judge reads up to 10 documents per link with no rerank; a link added by discovery reads the
+  10 closest by meaning. The last live run's rerank alone took about 65 minutes. Task 054
+  contract C27, replacing C24's record cap and box-list screen.
+
+## 2026-10-27 (task 054, discovery consolidates)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): discover's
+  batch proposals are joined by one `toc_consolidate_v1` call before anything is written: repeats
+  merged, boxes reused, at most 3 new success and 2 new failure pathways. The second live run had
+  written 53 boxes and 80 links because parallel batches could not see each other's boxes. The
+  check screen lists the theory's boxes, not link sentences, to fit the screen's 1,000-character
+  limit. Task 054 contract C24 to C26.
+
+## 2026-10-27 (task 054, judge v4)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): the
+  judge prompt is `toc_judge_v4`. It names the step's source and target as "the test", counts a
+  study that changes a close proxy of the source and measures the target, treats a document with
+  no data of its own as not about the step, and decides first whether the step depends on place
+  before it answers "holds here". In a 34-document labelled experiment (3 repeats) it was right on
+  97 of 102 judgements against 92 for v3, and more consistent. Adding the whole theory and the
+  policy to the call made results worse, so it is not sent. A local `openai-6x` model route
+  (gpt-6-luna, gpt-6.1-terra, gpt-6.1-sol) is added; staging and prod are unchanged.
+
+## 2026-10-27 (task 054, arm B)
+* **Update**: [Theory of change components](capabilities/theory-of-change/components.md): each
+  item search's record cap goes from 20 to 40, and the check walk's screen judges documents against
+  the steps it covers (any setting, any intervention) instead of the whole theory, after the
+  offline search eval's arm B won (owner approved). A live run had screened out 13 of 20 relevant
+  documents, including the decisive trials for a mid-chain step. Task 054 contract C24.
+
+## 2026-10-27 (task 054, web pages)
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md) § Trust rules: web
+  pages are classified and appraised like any document; a page from a trusted publisher (configured
+  list) counts by its appraisal score, any other page keeps the cap at *weak* (owner: "If it comes
+  from Eval Task Force, for example, it could be quite strong"). Task 054 contract C23; ADR 0042
+  amended.
+
+## 2026-10-27 (task 054, iteration loop 2)
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md): conditions are 0 to 2
+  per link, only those most likely to fail here, each once in the whole theory; E1 checks that
+  rule instead of "at least one condition" (owner: "way too many assumptions … quite a few
+  duplicates"). Task 054 contract C22 records the loop's other rulings (case studies capped at 5,
+  the judge's neighbouring-step and place-independent condition rules, authors, quote in context,
+  page and canvas fixes); plan 2.3 adds moving boxes with Reset layout for increment 2.
+
+## 2026-10-26 (design close, task 054)
+* **Update**: task 054 contract spec changes 2–5 applied at the plan gate (owner: "Approve!"),
+  with [ADR 0042](../adr/0042-theory-of-change-task-kind.md):
+  [ToC capability](capabilities/theory-of-change/capability.md) § Product surface gains the
+  server setting, the empty lattice and the plan-change choice;
+  [OS capability](capabilities/options-scoping/capability.md) "start a theory of change" moves
+  from ⏸ to ✅; [execution-orchestration](system/execution-orchestration.md) opens the open-web
+  backend for the ToC check walk only; [product.md](product.md) puts Theory of change in scope
+  behind a build flag. Spec change 1 (components) was applied earlier the same day.
+
+## 2026-10-26
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md) § Trust rules: a
+  link and its assumptions answer different questions, get their own judge question and grade, and
+  never share judgements (owner: "add these changes you've listed"). Components § item_evidence
+  and eval E5 updated to match. Found while reviewing the task 054 wireframes.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md): the *supports under
+  conditions* stance and the *holds under conditions* flag are removed; a support may record a
+  condition, and conditions no assumption covers go to consolidate as candidate assumptions
+  (owner: "under conditions is implied, and should be covered by Assumptions"). The link panel
+  lists its assumptions after its evidence. Task 054 contract § Terms amended to match; schema
+  unchanged.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md): summarise writes one
+  evidence sentence per box, link and assumption, citing only that item's judged documents, checked
+  by code (owner: "yes, add them to spec"). Components § summarise updated to match.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md): inputs boxes are
+  searched and graded too, with delivery case studies (owner: "Inputs also can get evidence/case
+  study notes"). Components § Items gives the input item text. Task 054 contract § Terms amended.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md): only links and
+  assumptions are searched and graded; boxes are neutral and show result criteria, case studies
+  and indicators drawn from their links' documents (owner: "Let's go with neutral boxes. Rest of
+  the suggestions sound good"; White 2009, Mayne 2015 and 2017, Funnell and Rogers 2011). This
+  replaces S3's box searches and the same day's input searches. § Output structure rewritten to
+  the reviewed wireframes. Components § Items, § item_evidence, § summarise and § Data updated.
+  Task 054 contract § Wireframe review amendments W1–W10.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md) § Trust rules: a
+  link's evidence answers "did it work elsewhere", an assumption's "will this condition hold here";
+  an assumption never restates its link's mechanism; no shared quotes; E1 restatement check;
+  components § Items assumption text names population and place (owner: "Yes let's apply it").
+  Task 054 contract W11.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md): each box gets a
+  two-sentence description citing its case studies; link sentences read as one paragraph (owner:
+  "more into a narrative - still short"). Task 054 contract W7 extended.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md) § Rulings: journey
+  rulings J1–J9 (option entry reuses the option; at most two questions; draft message; run
+  notification; per-change Undo; canvas and Detailed information equal; stress test always
+  suggested; PDF and PowerPoint both matter; staleness postponed). § Editing during the check
+  updated for per-change Undo. Task 054 contract W12–W13.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md): no separate
+  assumptions. Every link answers *worked elsewhere* and *holds here* (Cartwright and Hardie 2012),
+  and its conditions hold the Magenta Book's assumptions; the canvas colours a link by the lower
+  grade and marks one critical connection; Detailed information shows a link as three paragraphs
+  without repeating evidence (owner: "the evidence for each connection is in fact the
+  Assumption"). Vocabulary, Pipeline, Output structure, Trust rules, Product surface, Evaluation
+  and components § Items, item_evidence, summarise and Data updated. Task 054 contract W14.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md) § Trust rules: a
+  modelling study the judge marks robust counts as score 3 in the ToC grade rule, so it can
+  support *medium*, never *strong*; the shared appraisal is unchanged (owner: "if modelling is
+  robust, then it could be upgraded to Medium evidence"). Task 054 contract W15.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md) § Pipeline: the
+  check order is discover → merge → judge → choose; consolidate splits around the judge (owner:
+  "first elucidate missing pathways, consolidate them and then judge them all together").
+  Components skeleton and task 054 contract C6, W16 and plan chain updated.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md) § Editing during
+  the check: an edit flags the link *Edited · check pending* and keeps its evidence; the user
+  chooses Keep the evidence or a minimal Check again (same-meaning call first, then re-judge only
+  documents already found, then optionally Search for more); no automatic follow-up pass. Status
+  table updated (owner: "Policy Atlas should simply flag that there has been a user edit").
+  Task 054 contract W17.
+* **Update**: [Theory of change](capabilities/theory-of-change/capability.md): Detailed
+  information gains an **Assumptions** section listing every condition, grouped by the Magenta
+  Book's types (computed from layers), with its *holds here* grade, so the PDF report keeps the
+  purpose of the assumptions band (owner: "let's add that assumptions list"). Vocabulary gains
+  *Assumption type*. Task 054 contract W18 (2026-10-26).
+
+## 2026-10-23
+* **Creation**: [Theory of change capability](capabilities/theory-of-change/capability.md) and
+  [components](capabilities/theory-of-change/components.md), a draft for owner review (task 054).
+  Sources: the task 054 approach note and the `stakeholder_atlas` ToC prototype. Every decision is
+  🟡 or ❓ until the owner rules on the open questions.
+* **Update**: owner rulings R1–R16 of the same day applied (Magenta Book layout, four layers,
+  pathways drafted then checked then consolidated, background check while editing, web search,
+  image import, exports, evals). Research behind them:
+  `docs/tasks/054-toc-integration/research-notes.md`. Open: Q4, Q8, Q14, Q17–Q20.
+* **Update**: second round of owner rulings S1–S11 (Magenta Book layers Inputs, Outputs,
+  Outcomes, Impact; strong/medium/weak grades with flags; box searches with case studies; OpenAI web
+  search; uploads kept in S3; one "Design a theory of change" button on the option page).
+* **Update**: third round: `source_option_id` column; option documents shared, not duplicated;
+  on the Bedrock route, web search calls go to Bedrock's US endpoint. No owner questions remain open.
 
 ## 2026-10-12
 Task 046 (the longlist refinement), contract § Spec changes, applied at the step-7 review on the

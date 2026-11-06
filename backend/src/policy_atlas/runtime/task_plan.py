@@ -127,6 +127,20 @@ OPTIONS_SCOPING_STEPS: tuple[str, ...] = (
     "theme",
     "shortlist",
 )
+#: The steps only a theory-of-change chain composes (task 054, S3).
+TOC_STEPS: tuple[str, ...] = (
+    "toc_draft",
+    "toc_select",
+    "toc_search_new",
+    "toc_discover",
+    "toc_merge",
+    "toc_judge",
+    "toc_search_again",
+    "toc_figures",
+    "toc_choose",
+    "toc_summarise",
+    "toc_report",
+)
 DEEP_CHAIN_COMPONENTS: frozenset[DiscretionaryComponent] = frozenset(("select", "extract", "group"))
 DEEP_GROUPING_FACETS: tuple[GroupingFacet, ...] = (
     "intervention",
@@ -337,7 +351,10 @@ def _enabled_components(depth: AnalysisDepth) -> set[DiscretionaryComponent]:
 
 def _validate_registry() -> None:
     missing = sorted(
-        {registry_component_for(step) for step in (*ALL_STEPS, *OPTIONS_SCOPING_STEPS)}
+        {
+            registry_component_for(step)
+            for step in (*ALL_STEPS, *OPTIONS_SCOPING_STEPS, *TOC_STEPS)
+        }
         - set(COMPONENT_REGISTRY)
     )
     if missing:

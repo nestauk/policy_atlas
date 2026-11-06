@@ -70,6 +70,7 @@ from policy_atlas.runtime.agent_backend import (
 )
 from policy_atlas.runtime.capability_registry import (
     EVIDENCE_SEARCH,
+    THEORY_OF_CHANGE,
     expect_task_plan,
     validate_plan,
 )
@@ -96,6 +97,14 @@ from policy_atlas.runtime.task_agent import (
 )
 from policy_atlas.runtime.task_agent_prompt import PLANNER_HISTORY_TURNS_MAX, PlanDraftWire
 from policy_atlas.runtime.task_plan import CountryGroupAuthorship, TaskPlan
+from policy_atlas.runtime.toc_plan import (
+    TOC_PURPOSE,
+    TOC_REVIEW_FIRST_KEY,
+    TOC_WALK_DRAFT,
+    TOC_WALK_KEY,
+    TocPlan,
+)
+from policy_atlas.theory_of_change.backend import OpenAITocBackend
 
 log = structlog.get_logger()
 
@@ -849,6 +858,8 @@ def live_task_agent_and_backends(
         suggest=OpenAIAgentBackend(langfuse_client=langfuse_client),
         # The options-scoping longlist step's calls (task 045, S8).
         longlist=OpenAILonglistBackend(langfuse_client=langfuse_client),
+        # Every theory-of-change step's calls (task 054).
+        toc=OpenAITocBackend(langfuse_client=langfuse_client),
     )
     task_agent = OpenAITaskAgentBackend(langfuse_client=langfuse_client)
     return task_agent, backends
@@ -926,13 +937,15 @@ def persist_approved_plan(
 ) -> tuple[uuid.UUID, uuid.UUID]:
     """Persist an approved plan and its execution scope for an existing task.
 
-    Both plan shapes take this one path (task 044, X7). A scoping plan differs
+    Every plan shape takes this one path (task 044, X7). A scoping plan differs
     in what its intent record says and in two columns the Evidence search
     leaves null: ``purpose='baseline'`` and ``plan_id``, pointing back at the
     plan row minted in this very call. Because ``evidence_scope.plan_id``
     carries a composite FK to ``(plan.plan_id, plan.task_id)``, the scope is
     inserted first without it and updated once the plan row exists — one
     transaction, so no reader ever sees a scope whose ``plan_id`` is missing.
+    A theory-of-change plan does the same with ``purpose='toc'`` and
+    ``context.toc_walk='draft'`` (task 054).
 
     A **new scope row per plan version** is deliberate (C3): the plan row's
     ``evidence_scope_id`` is one-to-one, so an amended plan or a rebuild must
@@ -942,7 +955,8 @@ def persist_approved_plan(
     Args:
         conn: Open transaction that owns the task and plan writes.
         task_id: Existing task receiving the approved plan.
-        plan: Validated ``TaskPlan`` or ``ScopingPlan`` approved by the caller.
+        plan: Validated ``TaskPlan``, ``ScopingPlan`` or ``TocPlan`` approved
+            by the caller.
         conversation_id: Task Agent conversation that owns this plan lineage.
 
     Returns:
@@ -962,12 +976,23 @@ def persist_approved_plan(
         .where(task_plan.c.status == "approved")
         .values(status="superseded")
     )
-    is_scoping = isinstance(plan, ScopingPlan)
-    scope_fields: dict[str, Any] = (
-        _scoping_scope_fields(plan)
-        if is_scoping
-        else {"intent": plan.question, "context": {}, "purpose": None}
-    )
+    scope_fields: dict[str, Any]
+    if isinstance(plan, ScopingPlan):
+        scope_fields = _scoping_scope_fields(plan)
+    elif isinstance(plan, TocPlan):
+        # A theory of change starts with its draft walk (task 054, S3).
+        scope_fields = {
+            "intent": plan.question,
+            "context": {
+                "capability": THEORY_OF_CHANGE,
+                TOC_WALK_KEY: TOC_WALK_DRAFT,
+                # An uploaded theory pauses after the draft for the user's review.
+                **({TOC_REVIEW_FIRST_KEY: True} if plan.upload_id is not None else {}),
+            },
+            "purpose": TOC_PURPOSE,
+        }
+    else:
+        scope_fields = {"intent": plan.question, "context": {}, "purpose": None}
     conn.execute(
         evidence_scope.insert().values(
             evidence_scope_id=scope_id,
@@ -990,7 +1015,7 @@ def persist_approved_plan(
             approved_at=now,
         )
     )
-    if is_scoping:
+    if scope_fields["purpose"] is not None:
         # The composite FK holds only now that the plan row exists.
         conn.execute(
             evidence_scope.update()

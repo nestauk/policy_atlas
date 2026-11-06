@@ -84,6 +84,21 @@ CACHE_MODES: dict[str, PromptCache] = {
     "option_profile_setting": "breakpoint",
     "option_profile_fold": "breakpoint",
     "option_profile_place_sentences": "breakpoint",
+    # Theory of change (task 054): one-shot calls, and the planner's conversation.
+    "task_agent_toc": "auto",
+    "toc_draft": "breakpoint",
+    "toc_merge": "breakpoint",
+    "toc_choose": "breakpoint",
+    "toc_discover": "breakpoint",
+    "toc_judge": "breakpoint",
+    "toc_figures": "breakpoint",
+    "toc_pick": "breakpoint",
+    "toc_summarise": "breakpoint",
+    "toc_report": "breakpoint",
+    "toc_review": "breakpoint",
+    "toc_sense_check": "breakpoint",
+    "toc_import": "breakpoint",
+    "toc_verdict": "breakpoint",
 }
 
 

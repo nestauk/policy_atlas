@@ -570,3 +570,22 @@ def test_trace_root_sets_trace_level_input_and_output_when_the_span_supports_it(
         ("update", {"input": {"component": "x"}, "output": {"n": 1}}),
         ("set_trace_io", {"input": {"component": "x"}, "output": {"n": 1}}),
     ]
+
+
+def test_a_file_sent_to_a_model_is_left_out_of_the_trace() -> None:
+    from policy_atlas.core.tracing import FILE_LEFT_OUT, hide_files
+
+    messages = [
+        {"role": "system", "content": "Read the diagram."},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "data: not a file"},
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgo="}},
+            ],
+        },
+    ]
+    masked = hide_files(data=messages)
+    assert masked[0] == messages[0]
+    assert masked[1]["content"][0]["text"] == "data: not a file"
+    assert masked[1]["content"][1]["image_url"]["url"] == FILE_LEFT_OUT

@@ -608,8 +608,11 @@ resolve_frontend_publish_config() {
     # Options scoping is built up to the longlist only. Show it on staging for
     # colleagues to test; keep it hidden (listed as planned) in production
     # until shortlist + assessment land. Drop this once the capability is done.
+    # Theory of change (task 054) likewise: on staging only, while the API's
+    # POLICY_ATLAS_THEORY_OF_CHANGE (infra/pa_config.json) is on there too.
     if [[ "$ENV_NAME" == "staging" ]]; then
         export VITE_OPTIONS_SCOPING=1
+        export VITE_THEORY_OF_CHANGE=1
     fi
 }
 

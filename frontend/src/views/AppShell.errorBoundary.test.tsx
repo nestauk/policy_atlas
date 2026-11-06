@@ -8,6 +8,8 @@ import { AppShell } from "./AppShell";
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
 vi.mock("../api/queries", () => ({
+  // Task 054: the result gate also reads the theory-of-change graph (none here).
+  useToc: () => ({ data: undefined }),
   useMe: () => ({ data: { user_id: "policy-lead", display_name: "Ada Lovelace", organisation: null, is_admin: false } }),
   useTask: () => ({
     data: { task_id: TASK_ID, name: "Acme task", visibility: "org", is_owner: true },

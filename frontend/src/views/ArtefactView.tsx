@@ -28,9 +28,10 @@ import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
 import { COPY } from "../lib/vocabulary";
 import { RESULT_VIEWS, resultView } from "./lifecycle";
-import { hasLonglist, isBaselineArtefact, statusRun } from "./scopingActivity";
+import { hasLonglist, isBaselineArtefact, isToc, statusRun } from "./scopingActivity";
 import { useChatsEnabled } from "./taskResult";
 import { LonglistView } from "./longlist/LonglistView";
+import { TocResult } from "./toc/TocResult";
 import { ShortlistView } from "./longlist/ShortlistView";
 import { Tabs, TabsList, TabsTrigger } from "../ui/radix/Tabs";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
@@ -324,8 +325,11 @@ export function CitationProvenanceBlock({
   context,
   quote,
   fallbackNote,
+  hideNumber = false,
 }: {
+  /** Reference number; `hideNumber` drops the "[n]" for callers with no numbering. */
   n: number | null;
+  hideNumber?: boolean;
   sourceTitle: string;
   /** A source id/title to open the dossier with, or `null` when the
    *  citation carries nothing dossier-linkable (renders plain text). */
@@ -344,7 +348,7 @@ export function CitationProvenanceBlock({
   return (
     <div className="border border-line p-4">
       <p className="text-body font-bold leading-snug text-blue">
-        [{n ?? "—"}]{" "}
+        {!hideNumber && <>[{n ?? "—"}] </>}
         {sourceRef !== null ? (
           <button
             type="button"
@@ -1332,6 +1336,9 @@ export function ArtefactView() {
   const { taskId = "" } = useParams();
   const isPublicView = usePublicView();
   const task = useTask(taskId);
+  // A theory of change is public like the Result tab (C17): the graph and its
+  // evidence are on the public read leg.
+  if (isToc(task.data)) return <TocResult taskId={taskId} />;
   if (isPublicView || !hasLonglist(task.data)) return <ArtefactReport />;
   return <ScopingResult taskId={taskId} />;
 }

@@ -20,6 +20,7 @@ from policy_atlas.core.embeddings import (
     live_embedding_backend,
 )
 from policy_atlas.core.model_routes import live_api_key, route
+from policy_atlas.core.uploads import UploadStore, store_from_env
 from policy_atlas.evidence_search.synthesis.grounding_judge import (
     GroundingJudgeBackend,
     OpenAIGroundingJudgeBackend,
@@ -152,6 +153,14 @@ def get_task_agent_backend() -> TaskAgentTurnBackend:
     if _live():
         return OpenAITaskAgentBackend(langfuse_client=tracing.get_langfuse())
     return StubTaskAgentBackend()
+
+
+def get_upload_store() -> UploadStore:
+    """Where uploaded files live: S3 when a bucket is configured, else a local folder.
+
+    Tests override this seam with a temporary folder.
+    """
+    return store_from_env()
 
 
 def runner_backends_for(

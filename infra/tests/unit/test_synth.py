@@ -1144,7 +1144,9 @@ def test_frontend_apex_and_www_have_a_and_aaaa_cloudfront_aliases():
 
 def test_frontend_and_fonts_buckets_are_private_and_fonts_are_destroyed():
     buckets = _resources(TEMPLATES["app"], "AWS::S3::Bucket")
-    assert len(buckets) == 2
+    # Frontend, fonts, and users' uploads (task 054 increment 5; its own test in
+    # test_service_wiring checks it is retained, encrypted and HTTPS only).
+    assert len(buckets) == 3
     assert all(
         bucket["Properties"]["PublicAccessBlockConfiguration"] == {
             "BlockPublicAcls": True,

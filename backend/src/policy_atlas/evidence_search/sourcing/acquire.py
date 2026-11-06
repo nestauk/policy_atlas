@@ -237,7 +237,7 @@ def _reconstruct_abstract(index: dict[str, list[int]] | None) -> str | None:
     return " ".join(positions[p] for p in sorted(positions)) or None
 
 
-def _normalize_doi(doi: Any) -> str | None:
+def normalize_doi(doi: Any) -> str | None:
     """Normalize a DOI to lowercase bare form (cross-backend identity key)."""
     if not isinstance(doi, str) or not doi:
         return None
@@ -331,7 +331,7 @@ def _map_openalex_work(record: dict[str, Any]) -> dict[str, Any] | None:
         "title": title,
         "abstract": abstract,
         "year": record.get("publication_year"),
-        "doi": _normalize_doi(record.get("doi")),
+        "doi": normalize_doi(record.get("doi")),
         "language": record.get("language"),
         "backend": "openalex",
         "backend_record_id": record.get("id"),
@@ -400,7 +400,7 @@ def _map_overton_document(record: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
     koi = record.get("keyed_other_identifiers")
-    doi = _normalize_doi(_first_or_none(koi.get("doi")) if isinstance(koi, dict) else None)
+    doi = normalize_doi(_first_or_none(koi.get("doi")) if isinstance(koi, dict) else None)
 
     source = record.get("source") or {}
     envelope = {
@@ -626,8 +626,19 @@ def acquire_sources(
     seen_record_ids: set[str] = set()
     seen_dois: set[str] = set()
     seen_hashes: set[str] = set()
-    for meta, chash in conn.execute(
-        select(source_snapshot.c.metadata, source_snapshot.c.content_hash)
+    # The same keys → the task's document, so a theory-of-change search that
+    # finds a document the task already holds can say so (``source.seen_again``):
+    # the check reads which documents each link's own search found (task 054).
+    # Only that kind writes the row; a longlist's many option searches would
+    # otherwise log every shared paper again, and nothing reads it.
+    says_seen_again = context.context.get("capability") == "theory_of_change"
+    held: dict[str, uuid.UUID] = {}
+    for meta, chash, held_tss in conn.execute(
+        select(
+            source_snapshot.c.metadata,
+            source_snapshot.c.content_hash,
+            task_source_snapshot.c.task_source_snapshot_id,
+        )
         .select_from(
             task_source_snapshot.join(
                 source_snapshot,
@@ -637,14 +648,17 @@ def acquire_sources(
         .where(task_source_snapshot.c.task_id == task_id)
     ):
         seen_hashes.add(chash)
+        held[f"h:{chash}"] = held_tss
         if meta.get("backend_record_id"):
             seen_record_ids.add(meta["backend_record_id"])
+            held[f"r:{meta['backend_record_id']}"] = held_tss
         # normalize on read: uploaded snapshots may carry a prefixed/mixed-case
         # DOI in their free-form metadata; acquire-written envelopes are already
         # normalized, but the guard must hold across origins
-        doi = _normalize_doi(meta.get("doi"))
+        doi = normalize_doi(meta.get("doi"))
         if doi:
             seen_dois.add(doi)
+            held[f"d:{doi}"] = held_tss
 
     now = datetime.now(UTC)
     by_backend: dict[str, dict[str, Any]] = {
@@ -871,6 +885,7 @@ def acquire_sources(
                 error=error,
             )
 
+    seen_again: set[uuid.UUID] = set()
     for name in names:
         counts = by_backend[name]
         kept = 0
@@ -900,6 +915,34 @@ def acquire_sources(
             candidate = candidates[0]
             if not is_new(candidate):
                 counts["already_acquired"] += 1
+                envelope = candidate.mapped["envelope"]
+                known = next(
+                    (
+                        held[key]
+                        for key in (
+                            f"r:{envelope['backend_record_id']}",
+                            f"d:{envelope['doi']}",
+                            f"h:{candidate.chash}",
+                        )
+                        if key in held
+                    ),
+                    None,
+                )
+                if says_seen_again and known is not None and known not in seen_again:
+                    seen_again.add(known)
+                    events.append(
+                        conn,
+                        task_id=task_id,
+                        run_id=run_id,
+                        event_type="source.seen_again",
+                        payload={
+                            "task_source_snapshot_id": str(known),
+                            "evidence_scope_id": str(context.scope_id),
+                            "backend": name,
+                            "query_origin": candidate.origin,
+                            "pool_rank": index + 1,
+                        },
+                    )
                 continue
             persist(candidate, pool_rank=index + 1)
             kept += 1

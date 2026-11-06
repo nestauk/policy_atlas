@@ -28,7 +28,9 @@ are done (spec-prep 2026-06-22; refreshed 2026-07-03); `[ ]` items are open gate
   routes, one route step per call site, prompt caching, Unrated appraisal) merged to `dev`
   with PR #109 on 2026-11-02; 057 (queued ingest through SQS and a Lambda function, the
   content-addressed document store, chunk retrieval in SQL over pgvector, a timeout per
-  model-call step; ADR 0043) reviewed on `task/057-queued-ingest` as of 2026-11-03 — system live at
+  model-call step; ADR 0043) reviewed on `task/057-queued-ingest` as of 2026-11-03; 054 (theory of
+  change, the third capability, behind the `POLICY_ATLAS_THEORY_OF_CHANGE` setting; ADR 0042)
+  reviewed on `task/054-1-core` as of 2026-11-05 with PR #114 — system live at
   `v3.policyatlas.uk`; the next slice is the newest `docs/tasks/NNN-*/contract.md` and
   its `task/NNN-slug` branch).
 - [x] Verification plan for first implementation slices — per-task `verification.md` from

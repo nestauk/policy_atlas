@@ -113,6 +113,17 @@
   --color-violet-tint: #efedfc; /* the higher level word on a profile line (046) */
   --color-aqua-tint: #e6f5f7; /* the lower level word on a profile line (046) */
 
+  /* Evidence verdicts (task 054 theory of change, C36): colour means the
+     verdict and nothing else. The line/dot colour, and a darker twin for words. */
+  --color-verdict-confident: #18a48c;
+  --color-verdict-mixed: #f0a823;
+  --color-verdict-little: #b4b4bb;
+  --color-verdict-against: #d93a12;
+  --color-verdict-confident-text: #0d7a67;
+  --color-verdict-mixed-text: #8f6100;
+  --color-verdict-little-text: #646363;
+  --color-verdict-against-text: #b0300e;
+
   /* Nesta = 0 radius, everywhere */
   /* Motion curves (design-engineering pass, 2026-09-05): the built-in CSS
      easings are too weak for UI. Strong ease-out for anything entering or
@@ -315,4 +326,59 @@
       scroll-behavior: auto !important;
     }
   }
+}
+
+/* Theory of change canvas (task 054, C36): the line style shows the link's
+   evidence verdict. Supported solid green; Leaning supports long green
+   dashes; Mixed solid amber (owner, 2026-11-04); Not enough
+   evidence grey dashed; Leaning against long red dashes; Not
+   confident dotted red. The critical link carries a warning triangle
+   (CriticalMark), not a thicker line. A checking edge is grey and
+   pulses; an unchecked one is a still grey line. Scoped under .react-flow so the library's own edge
+   styles, loaded later, do not win. */
+.react-flow .toc-edge {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.react-flow .toc-edge--supported { stroke: var(--color-verdict-confident); }
+.react-flow .toc-edge--not_sure_mixed { stroke: var(--color-verdict-mixed); }
+.react-flow .toc-edge--not_sure_insufficient { stroke: var(--color-verdict-little); stroke-dasharray: 6 5; }
+.react-flow .toc-edge--against { stroke: var(--color-verdict-against); stroke-dasharray: 2 5; }
+.react-flow .toc-edge--leaning_supports { stroke: var(--color-verdict-confident); stroke-dasharray: 12 5; }
+.react-flow .toc-edge--leaning_against { stroke: var(--color-verdict-against); stroke-dasharray: 12 5; }
+.react-flow .toc-edge--pending { stroke: var(--color-line-2); animation: toc-pulse 1.6s ease-in-out infinite; }
+.react-flow .toc-edge--unchecked { stroke: var(--color-line-2); }
+/* Keyboard focus on a box or a connection: DESIGN's 2px blue outline, offset 2px. */
+.react-flow .react-flow__node-box:focus-visible,
+.react-flow .react-flow__edge:focus-visible { outline: 2px solid var(--color-blue); outline-offset: 2px; }
+/* An uploaded theory waiting for review: a connection Policy Atlas suggested (task 054, increment 5). */
+.react-flow .toc-edge--suggested { stroke: var(--color-blue); stroke-dasharray: 4 4; }
+.react-flow .toc-edge--drawn { stroke: var(--color-navy); }
+.react-flow .toc-edge--preview { stroke: var(--color-blue); stroke-dasharray: 5 4; opacity: 0.6; }
+.react-flow .toc-edge--selected { stroke-width: 3; }
+/* Dividers drawn only into the downloaded image (views/toc/exports.ts). */
+.toc-export-only { display: none; }
+.toc-exporting .toc-export-only { display: block; }
+.react-flow .toc-edge-halo { fill: none; stroke: var(--color-blue); stroke-opacity: 0.18; stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+@keyframes toc-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toc-edge--pending { animation: none; }
+}
+.toc-verdict-supported { color: var(--color-verdict-confident-text); }
+.toc-verdict-not_sure_mixed { color: var(--color-verdict-mixed-text); }
+.toc-verdict-not_sure_insufficient { color: var(--color-verdict-little-text); }
+.toc-verdict-against { color: var(--color-verdict-against-text); }
+.toc-verdict-leaning_supports { color: var(--color-verdict-confident-text); }
+.toc-verdict-leaning_against { color: var(--color-verdict-against-text); }
+/* PDF: the panel is hidden (aside), the canvas and toolbar stay. */
+.toc-print-image { display: none; }
+@media print {
+  .toc-canvas { height: 520px !important; break-inside: avoid; }
+  /* Report (PDF) from the Download menu: the whole canvas as a picture, in place of the bar and the live canvas. */
+  #toc-canvas:has(.toc-print-image) > :not(.toc-print-image) { display: none !important; }
+  .toc-print-image { display: block; width: 100%; height: auto; break-inside: avoid; }
 }

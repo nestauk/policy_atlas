@@ -1442,6 +1442,16 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## LLM screen + classify (task 014 seams)
 
+- **A "Narrative review" evidence type** (owner, 2026-10-27, task 054 iteration). The shared
+  classifier's types have no narrative review, so a peer-reviewed review that summarises a field
+  without a systematic search lands in "Expert Opinion and Commentary" (score 1), e.g. *Challenges
+  in obesity epidemiology* (Obesity Reviews, 2007) on a theory-of-change link. Proposal: add
+  "Narrative review" at score 2 (beside policy syntheses; below observational studies, as CEBM and
+  GRADE rank it), and show "Narrative review" in evidence lists instead of "Expert opinion and
+  commentary". Shared by Evidence search, Options scoping and theory of change, so it needs its own
+  decision: a new `EVIDENCE_TYPES` member, the `DEFAULT_RUBRIC` row (the domain test forces it), the
+  classify prompt, a migration widening the stored-type check, and a re-classify note for existing
+  rows.
 - **Classify-consensus voting** (contract rev 1.3) — screen got 3-rep consensus (decision
   10); classify runs single-call. Whether classify needs the same treatment is eval-gated:
   measure single-call error structure first.
@@ -3474,3 +3484,57 @@ says what is true today and what the lever is. Experiment figures are from the g
   the stored bodies; replace the long-term API key (AWS: "exploration only") with
   short-term keys or SigV4 as its own approval-gated task. Not: TCP keep-alive, the NAT
   sysctl, streaming on the long steps, a token-aware limiter (reasoned out in the brief).
+
+## Theory of change (task 054 seams)
+
+The contract's seams, and what the review stack (2026-11-05) left open. Owner rulings on the
+unbuilt increments are in ADR 0042 § Amendment 2026-11-05.
+
+- **Increments not built at the merge:** web search (increment 3, C7: the Responses call, the
+  route table, Mantle on the Bedrock route, pages through the fetcher, the web cap on grades,
+  "web not searched"); the stress-test conversation kind (increment 4; the Task Agent chat
+  discusses the theory); "Design from an option" (increment 7, C13, C14); PowerPoint and Google
+  Slides (owner, 2026-11-04: parked). Each is its own slice with the contract's tests.
+- **C9 and C11 in part:** `pa_changed` and `prior_version` are stored and never shown; Undo per
+  automatic change, Undo all, Keep mine, Restore for a set-aside pathway and the plan-change
+  choice (Redraft or Keep the canvas) are not built. Lever: one change list in the detail panel
+  reading the stored flags; the store already keeps every before-state.
+- **Race tests with barriers** (contract acceptance 2): the compare-and-apply is tested through
+  409s and skipped rows, not with two writers at a barrier. Lever: one test per writer pair on a
+  scratch database, or accept the row-revision unit tests as the guard.
+- **Access tests for the write routes** (rubric 13): the three public reads have the four-caller
+  matrix; the write and upload routes are tested for the owner, an outsider and anonymous, not
+  for a same-organisation colleague on every route. Lever: one parametrised matrix over the
+  router's write routes.
+- **Evals E1, E2, E6** (contract § Acceptance): the ground-truth and plausibility evals ran
+  (`scripts/evals/theory_of_change/`); the contract's E1 on 30 drafts, E2 on the four labelled
+  datasets with the challenge-called-support rate, and E6 on 20 published theories did not.
+- **Exports opened in their target tools** (increment 6): the draw.io file has not been opened in
+  diagrams.net or Miro; no export result is recorded by tool.
+- **The follow-on check can be refused and leave "checking"** (review, `/code-review`): when a
+  draft lands and `admit_and_mint` refuses the check (`run_active`, `no_plan`), only a log line
+  records it and `check_status` reads "checking" with nothing running. Lever: persist the refusal
+  as an event the status reads, and tell the chat.
+- **Consolidate is billed as discover** (review, Codex): the consolidate call routes as
+  `toc_merge` (frontier) but its tokens land in the `toc_discover` component (standard price),
+  so the walk's cost under-reports one call. Lever: a component per model call.
+- **Finish alerts miss a run that starts and ends between two polls** (review, Codex; every task
+  kind): `before === null` suppresses the alert. Lever: alert on the latest run's identity, not
+  the active-run transition.
+- **Three tables without `UNIQUE(id, task_id)`** (contract § Schema rule): `toc_proposal`,
+  `task_upload`, `toc_figure`. Nothing points at them by foreign key yet. Lever: add the pair
+  when a foreign key needs it.
+- **Annex and build disagree, for the owner:** Restore for set-aside pathways (spec § Output
+  structure); "Your original" from the Result page (the banner sends the reader to the plan);
+  Stop on the chat's progress line (editing wireframe frame 4; built in the canvas bar only);
+  the History list at the bottom of the Result page (C41; built as the History tab). An
+  unchecked connection draws as a faint solid line on the canvas; look at it on a real
+  unchecked theory.
+- **The Task Agent prompt still says "Suggestions, above the canvas"**
+  (`task_agent_toc_prompt.py`): a prompt edit needs a re-pin; the code strings were changed.
+- **`hasToc` means two things** in the frontend (`taskResult.ts`: the task kind; a populated,
+  checked theory); `lifecycle.ts` describes neither. Lever: two names.
+- **The contract's own seams** (§ Disciplines): full-text depth; ES links and links after
+  creation; ES findings reuse; the cross-task duplicate gap; the Miro API; E3, E4, E5, E7, E8;
+  removing the build flag; an upload retention rule; J9 (how an older theory signals it may be
+  out of date).

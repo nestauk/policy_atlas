@@ -111,7 +111,7 @@ def _where(call: _Call) -> str:
 def test_the_scan_sees_the_sites() -> None:
     """Guard against a scan that silently finds nothing."""
     builders = [c for c in CALLS if c.callee == "resolve_openai_client"]
-    assert len(builders) == 21
+    assert len(builders) == 22  # 21 plus task 054's OpenAITocBackend
     assert any(c.callee == "parse_structured" for c in CALLS)
     assert any(c.callee == "traced_parse" for c in CALLS)
 

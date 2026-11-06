@@ -100,6 +100,7 @@ function sampleFrames(): SseFrame[] {
     {
       type: "plan.updated",
       scoping: null,
+      toc: null,
       plan: planDraft(),
       version: 2,
       occurred_at: "2026-07-21T10:00:21Z",
@@ -166,6 +167,7 @@ describe("reduceRunStreamFrame — equal-sequence distinct-type frames", () => {
       {
         type: "plan.updated",
       scoping: null,
+      toc: null,
         plan: planDraft(),
         version: 2,
         occurred_at: "2026-07-21T10:00:20Z",

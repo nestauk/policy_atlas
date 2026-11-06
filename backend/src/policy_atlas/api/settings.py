@@ -30,6 +30,9 @@ class Settings:
         sse_heartbeat_seconds: Idle interval before an SSE keep-alive comment.
         db_pool_size: SQLAlchemy engine connection pool size.
         db_max_overflow: SQLAlchemy engine pool overflow above ``db_pool_size``.
+        theory_of_change_enabled: Whether new theory-of-change tasks may be
+            created (``POLICY_ATLAS_THEORY_OF_CHANGE=1``; task 054, C15).
+            Off by default; existing ones stay readable either way.
         ingest_mode: Where full-text ingestion runs (``POLICY_ATLAS_INGEST_MODE``).
         ingest_queue_url: The SQS queue the documents go to in ``queued`` mode
             (``POLICY_ATLAS_INGEST_QUEUE_URL``); None in process.
@@ -47,6 +50,7 @@ class Settings:
     sse_heartbeat_seconds: float = 15.0
     db_pool_size: int = 5
     db_max_overflow: int = 10
+    theory_of_change_enabled: bool = False
     ingest_mode: IngestMode = "in_process"
     ingest_queue_url: str | None = None
 
@@ -99,6 +103,7 @@ def load_settings() -> Settings:
         sse_heartbeat_seconds=_positive_float("SSE_HEARTBEAT_SECONDS", default=15.0),
         db_pool_size=_positive_int("DB_POOL_SIZE", default=5),
         db_max_overflow=_nonnegative_int("DB_MAX_OVERFLOW", default=10),
+        theory_of_change_enabled=_optional("POLICY_ATLAS_THEORY_OF_CHANGE") == "1",
         ingest_mode=ingest_mode,
         ingest_queue_url=ingest_queue_url_from_env(ingest_mode),
     )

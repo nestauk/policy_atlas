@@ -31,7 +31,7 @@ import {
   type EvidenceSortField,
   type SortOrder,
 } from "./sourcesPresentation";
-import { numberedAuthorships } from "./artefactPresentation";
+import { csvCell, numberedAuthorships, triggerUrlDownload } from "./artefactPresentation";
 import { isScoping } from "./scopingActivity";
 
 const STATUS_FILTERS = [
@@ -463,14 +463,6 @@ function TitleWithDescription({ item, onOpen }: { item: Parameters<typeof screen
   );
 }
 
-/** A CSV cell: quoted/escaped, and defused against spreadsheet formula
- *  injection — titles and venues arrive from external sources. */
-function csvCell(value: string | number | boolean | null | undefined): string {
-  let text = value === null || value === undefined ? "" : String(value);
-  // Also defuse markers behind leading whitespace ("\t=SUM…").
-  if (/^\s*[=+\-@]/.test(text)) text = `'${text}`;
-  return `"${text.replaceAll('"', '""')}"`;
-}
 
 /** Downloads the whole source list (every page, no filters) as a CSV file. */
 function DownloadSourcesButton({ taskId, taskName }: { taskId: string; taskName?: string }) {
@@ -518,10 +510,7 @@ function DownloadSourcesButton({ taskId, taskName }: { taskId: string; taskName?
       ].join("\r\n");
       // UTF-8 BOM so spreadsheet apps decode non-ASCII source text correctly.
       const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${(taskName ?? "Task").replaceAll(/[\\/]/g, "-")} - sources.csv`;
-      anchor.click();
+      triggerUrlDownload(url, `${(taskName ?? "Task").replaceAll(/[\\/]/g, "-")} - sources.csv`);
       URL.revokeObjectURL(url);
     } catch {
       setFailed(true);

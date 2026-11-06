@@ -366,9 +366,14 @@ export interface paths {
          *     the thing it was created for. So any refusal below rolls the task row back
          *     with it.
          *
+         *     A theory of change is refused unless the server setting is on (task 054,
+         *     C15), before anything is written.
+         *
          *     Raises:
          *         HTTPException: 404 when a named source task is not readable by the
          *             caller.
+         *         ApiUnprocessable: 422 ``capability_not_enabled`` for a theory of
+         *             change while ``POLICY_ATLAS_THEORY_OF_CHANGE`` is off.
          *         ApiConflict: 409 ``visibility_conflict``, ``link_source_capability``,
          *             ``link_project_mismatch`` or ``link_source_unfinished``.
          */
@@ -1181,6 +1186,527 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{task_id}/toc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Toc
+         * @description Return the theory: boxes, links with their verdicts and states, pathways, summary.
+         */
+        get: operations["get_toc_api_v1_tasks__task_id__toc_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/boxes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Toc Box
+         * @description Add a box the user wrote (C41).
+         */
+        post: operations["create_toc_box_api_v1_tasks__task_id__toc_boxes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/boxes/{box_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Toc Box
+         * @description Delete a box and its links; Undo restores them with their evidence (C41).
+         */
+        delete: operations["delete_toc_box_api_v1_tasks__task_id__toc_boxes__box_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Patch Toc Box
+         * @description Edit a box's text, layer, description or how we'd know it happened (C41).
+         */
+        patch: operations["patch_toc_box_api_v1_tasks__task_id__toc_boxes__box_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/boxes/{box_id}/position": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Move Toc Box
+         * @description Save where the user dropped a box (C47).
+         */
+        patch: operations["move_toc_box_api_v1_tasks__task_id__toc_boxes__box_id__position_patch"];
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Toc Link Check
+         * @description Check named links only (C40): search, pick, judge, figures, summarise.
+         */
+        post: operations["start_toc_link_check_api_v1_tasks__task_id__toc_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/check/full": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Full Toc Check
+         * @description Check the whole theory: after the user reviewed an uploaded theory's draft (increment 5).
+         */
+        post: operations["start_full_toc_check_api_v1_tasks__task_id__toc_check_full_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/check/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop Toc Check
+         * @description Stop the running check before its next step; what it finished stays (C48).
+         */
+        post: operations["stop_toc_check_api_v1_tasks__task_id__toc_check_stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/events/{event_id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo Toc Edit
+         * @description Put back the state before one edit; rows changed since are skipped and named (C10).
+         */
+        post: operations["undo_toc_edit_api_v1_tasks__task_id__toc_events__event_id__undo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Toc Evidence
+         * @description Return every judged document per link and every case study per box.
+         */
+        get: operations["get_toc_evidence_api_v1_tasks__task_id__toc_evidence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Toc Evidence
+         * @description Remove a document from its link, restore it, or set or clear the user's scores (C42).
+         */
+        patch: operations["patch_toc_evidence_api_v1_tasks__task_id__toc_evidence__evidence_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Toc Evidence Context
+         * @description Return one judgement's quote, or another passage of its document, in its passage.
+         */
+        get: operations["get_toc_evidence_context_api_v1_tasks__task_id__toc_evidence__evidence_id__context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Toc History
+         * @description Who changed what, newest first (C41). Editors only: it names people.
+         */
+        get: operations["get_toc_history_api_v1_tasks__task_id__toc_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/layout/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Toc Layout
+         * @description Return every moved box to the computed layout (C47).
+         */
+        post: operations["reset_toc_layout_api_v1_tasks__task_id__toc_layout_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Toc Link
+         * @description Connect two boxes (C41). The sentence starts from the box texts.
+         */
+        post: operations["create_toc_link_api_v1_tasks__task_id__toc_links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/links/keep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Keep Toc Evidence
+         * @description Keep the evidence of edited links for their new wording (C43).
+         */
+        post: operations["keep_toc_evidence_api_v1_tasks__task_id__toc_links_keep_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/links/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Toc Link
+         * @description Delete a link; Undo restores it with its evidence (C41).
+         */
+        delete: operations["delete_toc_link_api_v1_tasks__task_id__toc_links__link_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Patch Toc Link
+         * @description Edit a link's title, parts or conditions, or mark it critical (C41).
+         */
+        patch: operations["patch_toc_link_api_v1_tasks__task_id__toc_links__link_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/links/{link_id}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Toc Pending
+         * @description Accept or reject all the new evidence Find more evidence found on one link (C44).
+         */
+        post: operations["decide_toc_pending_api_v1_tasks__task_id__toc_links__link_id__decide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/links/{link_id}/studies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Toc Study
+         * @description Add a study to a link by its DOI (C42): Policy Atlas fetches, judges and adds it.
+         *
+         *     A check named on the link runs with the DOI as its only search; the judge,
+         *     figures, classify and appraise read it as any other document, and its
+         *     judgement is marked as added by the user.
+         */
+        post: operations["add_toc_study_api_v1_tasks__task_id__toc_links__link_id__studies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Toc Proposals
+         * @description The open suggestions, newest first (C45, C46).
+         */
+        get: operations["get_toc_proposals_api_v1_tasks__task_id__toc_proposals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/proposals/{proposal_id}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Toc Proposal
+         * @description Accept or reject one suggested edit, or all; accepted edits apply as the user's (C45).
+         */
+        post: operations["decide_toc_proposal_api_v1_tasks__task_id__toc_proposals__proposal_id__decide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/proposals/{proposal_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dismiss Toc Proposal
+         * @description Close a suggestion without acting on what is left of it.
+         */
+        post: operations["dismiss_toc_proposal_api_v1_tasks__task_id__toc_proposals__proposal_id__dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/report/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update Toc Report
+         * @description Rewrite the titles, sentences and the report for the theory as it is now (C45).
+         */
+        post: operations["update_toc_report_api_v1_tasks__task_id__toc_report_update_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Toc Review
+         * @description Review the theory after edits, off the request path; the Task Agent reports (C45).
+         */
+        post: operations["start_toc_review_api_v1_tasks__task_id__toc_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Toc Uploads
+         * @description The task's uploaded diagrams that were read, oldest first, for the chat's pictures.
+         */
+        get: operations["list_toc_uploads_api_v1_tasks__task_id__toc_uploads_get"];
+        put?: never;
+        /**
+         * Upload Toc Theory
+         * @description Store a user's own theory diagram and read it (increment 5, C8).
+         *
+         *     The file is checked and stored first; the slow vision call runs outside any
+         *     transaction. Before the draft, the transcription is stored for the Task
+         *     Agent's next plan. Once the theory is drafted, what the diagram adds waits
+         *     as a suggestion, and the chat gets the message and its reply here.
+         */
+        post: operations["upload_toc_theory_api_v1_tasks__task_id__toc_uploads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/uploads/{upload_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Toc Upload
+         * @description The uploaded original, to people who can read the task; never on the public leg (C8).
+         */
+        get: operations["get_toc_upload_api_v1_tasks__task_id__toc_uploads__upload_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/waitlist": {
         parameters: {
             query?: never;
@@ -1936,6 +2462,29 @@ export interface components {
             quote: string;
             /** Section Title */
             section_title: string;
+        };
+        /**
+         * CitedSourceOut
+         * @description One source a Task Agent line cites with ``[n]`` (task 054: the sense check).
+         *
+         *     Args:
+         *         n: The marker's number.
+         *         title: The document's title.
+         *         url: Where to read it, when known.
+         *         year: Its publication year, when known.
+         *         quote: The passage that supports the line, checked against the document.
+         */
+        CitedSourceOut: {
+            /** N */
+            n: number;
+            /** Quote */
+            quote: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url?: string | null;
+            /** Year */
+            year?: string | null;
         };
         /**
          * ClaimOut
@@ -3936,6 +4485,7 @@ export interface components {
          *         plan: The current Evidence search plan, or null on a scoping task.
          *         scoping: The current options-scoping plan, or null on an Evidence
          *             search task.
+         *         toc: The current theory-of-change plan (task 054), or null.
          *         capability: Which of the two the task is, so a reader never has to
          *             infer it from which field is null.
          *         version: Plan row version.
@@ -3956,6 +4506,7 @@ export interface components {
             scoping?: components["schemas"]["ScopingPlanDraft"] | null;
             /** Status */
             status: string;
+            toc?: components["schemas"]["TocPlanDraft"] | null;
             /** Version */
             version: number;
         };
@@ -3983,6 +4534,8 @@ export interface components {
          *         scoping: Options-scoping edits. Mutually exclusive with every field
          *             above: an Evidence search field on a scoping task, or `scoping` on
          *             an Evidence search task, is a 422.
+         *         toc: Theory-of-change edits (task 054), the same way: only on a
+         *             theory-of-change task, and alone.
          */
         PlanPatchIn: {
             /** Analysis Depth */
@@ -4004,6 +4557,7 @@ export interface components {
             search_effort?: ("rapid" | "standard" | "deep") | null;
             /** Steering Mode */
             steering_mode?: ("frequent" | "moderate" | "minimal" | "unattended") | null;
+            toc?: components["schemas"]["TocPlanPatch"] | null;
         };
         /**
          * PlanStep
@@ -4042,6 +4596,8 @@ export interface components {
             scoping: components["schemas"]["ScopingPlanDraft"] | null;
             /** Sequence */
             sequence: number;
+            /** @default null */
+            toc: components["schemas"]["TocPlanDraft"] | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4991,6 +5547,8 @@ export interface components {
          *         answer: The cited answer, on an `answer` turn.
          *         decision: The recorded gate decision, on a `decision` turn.
          *         action: The applied longlist verb, on an `action` turn.
+         *         sources: The sources the reply's `[n]` markers cite, on a theory-of-change
+         *             turn whose sense check found evaluations (task 054).
          */
         TaskAgentTranscriptTurnOut: {
             action?: components["schemas"]["TurnActionOut"] | null;
@@ -5017,6 +5575,8 @@ export interface components {
             part?: components["schemas"]["PartProposalOut"] | null;
             /** Reply */
             reply: string | null;
+            /** Sources */
+            sources?: components["schemas"]["CitedSourceOut"][];
             /**
              * Status
              * @enum {string}
@@ -5071,11 +5631,15 @@ export interface components {
          *         scoping_plan: The full current scoping draft, on an options-scoping
          *             turn. `plan` is null for those turns, and this is null for
          *             Evidence search turns.
+         *         toc_plan: The full current theory-of-change draft, on a theory-of-change
+         *             turn (task 054).
          *         kind: What this turn is. Absent on turns stored before task 044,
          *             which are all replies.
          *         answer: The cited answer, on an `answer` turn.
          *         decision: The recorded gate decision, on a `decision` turn.
          *         action: The applied longlist verb, on an `action` turn.
+         *         sources: The sources the reply's `[n]` markers cite, on a theory-of-change
+         *             turn whose sense check found evaluations (task 054).
          */
         TaskAgentTurnOut: {
             action?: components["schemas"]["TurnActionOut"] | null;
@@ -5092,8 +5656,11 @@ export interface components {
             /** Reply */
             reply: string;
             scoping_plan?: components["schemas"]["ScopingPlanDraft"] | null;
+            /** Sources */
+            sources?: components["schemas"]["CitedSourceOut"][];
             /** Suggestions */
             suggestions?: string[];
+            toc_plan?: components["schemas"]["TocPlanDraft"] | null;
         };
         /**
          * TaskCreate
@@ -5131,7 +5698,7 @@ export interface components {
              * @default evidence_search
              * @enum {string}
              */
-            capability: "evidence_search" | "options_scoping";
+            capability: "evidence_search" | "options_scoping" | "theory_of_change";
             /** From Task Ids */
             from_task_ids?: string[];
             /** Name */
@@ -5250,7 +5817,7 @@ export interface components {
              * @default evidence_search
              * @enum {string}
              */
-            capability: "evidence_search" | "options_scoping";
+            capability: "evidence_search" | "options_scoping" | "theory_of_change";
             /**
              * Created At
              * Format: date-time
@@ -5496,6 +6063,1174 @@ export interface components {
              * @enum {string}
              */
             type: "tick";
+        };
+        /**
+         * TocBoxCreate
+         * @description A box the user adds.
+         */
+        TocBoxCreate: {
+            /**
+             * Layer
+             * @enum {string}
+             */
+            layer: "input" | "output" | "outcome_short" | "outcome_long" | "impact" | "failure_outcome";
+            position?: components["schemas"]["TocPositionOut"] | null;
+            /** Text */
+            text: string;
+        };
+        /**
+         * TocBoxEvidenceOut
+         * @description A box's case studies, the indicators its documents used, and its figures.
+         */
+        TocBoxEvidenceOut: {
+            /**
+             * Box Id
+             * Format: uuid
+             */
+            box_id: string;
+            /** Case Studies */
+            case_studies: components["schemas"]["TocCaseStudyOut"][];
+            /** Figures */
+            figures: components["schemas"]["TocFigureOut"][];
+            /** Indicators */
+            indicators: string[];
+        };
+        /**
+         * TocBoxOut
+         * @description One element in a layer. Boxes are described, not graded (W4).
+         */
+        TocBoxOut: {
+            /**
+             * Box Id
+             * Format: uuid
+             */
+            box_id: string;
+            /** Code */
+            code: string | null;
+            /** Description */
+            description: string | null;
+            /** Dosage */
+            dosage: string | null;
+            /** Edited At */
+            edited_at?: string | null;
+            /** Edited By */
+            edited_by?: string | null;
+            /**
+             * Layer
+             * @enum {string}
+             */
+            layer: "input" | "output" | "outcome_short" | "outcome_long" | "impact" | "failure_outcome";
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "drafted" | "found_in_evidence" | "imported" | "user" | "options_scoping";
+            position?: components["schemas"]["TocPositionOut"] | null;
+            result_criteria: components["schemas"]["TocResultCriteriaOut"];
+            /** Revision */
+            revision: number;
+            /** Seen In */
+            seen_in: string | null;
+            /** Seen In Cites */
+            seen_in_cites: string[];
+            /** Text */
+            text: string;
+        };
+        /**
+         * TocBoxPatch
+         * @description A change to one box, with the revision the client saw (C10).
+         */
+        TocBoxPatch: {
+            criteria?: components["schemas"]["TocCriteriaIn"] | null;
+            /** Description */
+            description?: string | null;
+            /** Expected Revision */
+            expected_revision: number;
+            /** Layer */
+            layer?: ("input" | "output" | "outcome_short" | "outcome_long" | "impact" | "failure_outcome") | null;
+            /** Text */
+            text?: string | null;
+        };
+        /**
+         * TocCaseStudyOut
+         * @description Where one box was seen (or, for an input, put in place).
+         */
+        TocCaseStudyOut: {
+            /** Authors */
+            authors: string[];
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
+            /** Note */
+            note: string;
+            /** Place */
+            place: string | null;
+            /** Programme */
+            programme: string;
+            /** Quote */
+            quote: string;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "academic" | "policy" | "web";
+            /**
+             * Task Source Snapshot Id
+             * Format: uuid
+             */
+            task_source_snapshot_id: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string | null;
+            /** Year */
+            year: number | null;
+        };
+        /**
+         * TocCheckIn
+         * @description Check named links (C40): new items, or the ones the user picked.
+         */
+        TocCheckIn: {
+            /** Link Ids */
+            link_ids: string[];
+            /**
+             * Mode
+             * @default new_items
+             * @enum {string}
+             */
+            mode: "new_items" | "check_again" | "find_more";
+        };
+        /**
+         * TocCheckOut
+         * @description The check walk that started, or null when it waits for the running walk.
+         */
+        TocCheckOut: {
+            /** Capability Run Id */
+            capability_run_id: string | null;
+            /**
+             * Queued
+             * @default false
+             */
+            queued: boolean;
+        };
+        /**
+         * TocCountOut
+         * @description How many items an action changed.
+         */
+        TocCountOut: {
+            /** Count */
+            count: number;
+        };
+        /**
+         * TocCreatedOut
+         * @description The id of what was added.
+         */
+        TocCreatedOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+        };
+        /**
+         * TocCriteriaIn
+         * @description How we'd know a box's change happened.
+         */
+        TocCriteriaIn: {
+            /** Definition */
+            definition?: string | null;
+            /** Indicator */
+            indicator?: string | null;
+            /** Timing */
+            timing?: string | null;
+        };
+        /**
+         * TocDecideIn
+         * @description Accept or reject every pending document on one link (C44).
+         */
+        TocDecideIn: {
+            /** Accept */
+            accept: boolean;
+        };
+        /**
+         * TocDocumentOut
+         * @description One judged document of one link, with what it adds to the verdict (C36).
+         */
+        TocDocumentOut: {
+            /** Added By */
+            added_by?: string | null;
+            /** Appraisal Score */
+            appraisal_score: number | null;
+            /** Authors */
+            authors: string[];
+            /** Condition */
+            condition: string | null;
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
+            /** Evidence Type */
+            evidence_type: string | null;
+            /** Judge Relevance */
+            judge_relevance?: number | null;
+            /** Judge Support */
+            judge_support?: ("strong" | "weak" | "mixed" | "refutes" | "not_about") | null;
+            /** Previous Wording */
+            previous_wording: boolean;
+            /** Quality */
+            quality: number;
+            /** Quote */
+            quote: string | null;
+            /** Relevance */
+            relevance: number;
+            /** Relevance Reason */
+            relevance_reason: string | null;
+            /** Removed By */
+            removed_by?: string | null;
+            /**
+             * Revision
+             * @default 1
+             */
+            revision: number;
+            /** Scored By */
+            scored_by?: string | null;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "academic" | "policy" | "web";
+            /**
+             * Status
+             * @default counted
+             * @enum {string}
+             */
+            status: "counted" | "pending" | "rejected";
+            /**
+             * Support
+             * @enum {string}
+             */
+            support: "strong" | "weak" | "mixed" | "refutes" | "not_about";
+            /**
+             * Task Source Snapshot Id
+             * Format: uuid
+             */
+            task_source_snapshot_id: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string | null;
+            /** Weight */
+            weight: number;
+            /** Year */
+            year: number | null;
+        };
+        /**
+         * TocEvidenceOut
+         * @description Every judged document and case study of the theory.
+         */
+        TocEvidenceOut: {
+            /** Boxes */
+            boxes: components["schemas"]["TocBoxEvidenceOut"][];
+            /** Links */
+            links: components["schemas"]["TocLinkEvidenceOut"][];
+        };
+        /**
+         * TocEvidencePatch
+         * @description Change how one judged document counts for its link (C42), with its revision (C10).
+         */
+        TocEvidencePatch: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "remove" | "restore" | "score" | "unscore" | "accept" | "reject";
+            /** Expected Revision */
+            expected_revision: number;
+            /** Relevance */
+            relevance?: number | null;
+            /** Support */
+            support?: ("strong" | "weak" | "mixed" | "refutes" | "not_about") | null;
+        };
+        /**
+         * TocFigureOut
+         * @description One number a document reports about a link's cause or effect (C37), with its source.
+         */
+        TocFigureOut: {
+            /**
+             * Box
+             * @enum {string}
+             */
+            box: "source" | "target" | "link";
+            /** Ci Lower */
+            ci_lower: number | null;
+            /** Ci Lower Text */
+            ci_lower_text: string | null;
+            /** Ci Upper */
+            ci_upper: number | null;
+            /** Ci Upper Text */
+            ci_upper_text: string | null;
+            /**
+             * Effect Size Type
+             * @enum {string}
+             */
+            effect_size_type: "absolute_change" | "relative_change" | "standardised" | "ratio" | "level";
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
+            /** Evidence Type */
+            evidence_type: string | null;
+            /**
+             * Figure Id
+             * Format: uuid
+             */
+            figure_id: string;
+            /** K */
+            k: number | null;
+            /** Measure */
+            measure: string;
+            /** N */
+            n: number | null;
+            /** Place */
+            place: string | null;
+            /** Population */
+            population: string | null;
+            /** Quote */
+            quote: string;
+            /** Source Authors */
+            source_authors: string[];
+            /** Source Title */
+            source_title: string;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "academic" | "policy" | "web";
+            /** Source Venue */
+            source_venue: string | null;
+            /** Source Year */
+            source_year: number | null;
+            /** Statement */
+            statement: string | null;
+            /**
+             * Task Source Snapshot Id
+             * Format: uuid
+             */
+            task_source_snapshot_id: string;
+            /** Unit */
+            unit: string | null;
+            /** Url */
+            url: string | null;
+            /** Value */
+            value: number | null;
+            /** Value Text */
+            value_text: string;
+            /** Year */
+            year: string | null;
+        };
+        /**
+         * TocGradeRuleOut
+         * @description One row of the verdict rule, generated from the verdict constants (C36).
+         */
+        TocGradeRuleOut: {
+            /** Label */
+            label: string;
+            /** Rule */
+            rule: string;
+        };
+        /**
+         * TocGraphOut
+         * @description The whole theory as the Result page reads it.
+         */
+        TocGraphOut: {
+            /** Boxes */
+            boxes: components["schemas"]["TocBoxOut"][];
+            /**
+             * Can Edit
+             * @default false
+             */
+            can_edit: boolean;
+            /**
+             * Check Status
+             * @enum {string}
+             */
+            check_status: "none" | "drafting" | "drafted" | "checking" | "checked" | "stopped" | "failed";
+            /** Context */
+            context: string[];
+            /**
+             * Edits Since Review
+             * @default 0
+             */
+            edits_since_review: number;
+            /** Grade Rules */
+            grade_rules: components["schemas"]["TocGradeRuleOut"][];
+            /** Links */
+            links: components["schemas"]["TocLinkOut"][];
+            /** Links Left Out */
+            links_left_out: number;
+            /** Pathways */
+            pathways: components["schemas"]["TocPathwayOut"][];
+            /** Queued Link Ids */
+            queued_link_ids?: string[];
+            report: components["schemas"]["TocReportOut"] | null;
+            /**
+             * Reviewing
+             * @default false
+             */
+            reviewing: boolean;
+            /** Supporting Activities */
+            supporting_activities: string[];
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+        };
+        /**
+         * TocHistoryEntryOut
+         * @description One change in History (C41).
+         */
+        TocHistoryEntryOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /** Undoable */
+            undoable: boolean;
+            /** What */
+            what: string;
+            /** Who */
+            who: string;
+        };
+        /**
+         * TocLinkCreate
+         * @description Two boxes the user connects.
+         */
+        TocLinkCreate: {
+            /**
+             * Source Box Id
+             * Format: uuid
+             */
+            source_box_id: string;
+            /**
+             * Target Box Id
+             * Format: uuid
+             */
+            target_box_id: string;
+        };
+        /**
+         * TocLinkEvidenceOut
+         * @description Every document judged for one link, and the figures they give.
+         */
+        TocLinkEvidenceOut: {
+            /** Documents */
+            documents: components["schemas"]["TocDocumentOut"][];
+            /** Figures */
+            figures: components["schemas"]["TocFigureOut"][];
+            /**
+             * Link Id
+             * Format: uuid
+             */
+            link_id: string;
+        };
+        /**
+         * TocLinkOut
+         * @description One causal step, with its evidence verdict and its state.
+         */
+        TocLinkOut: {
+            /** Assumption Type */
+            assumption_type: string;
+            /** Because Text */
+            because_text: string;
+            /** Code */
+            code: string | null;
+            /** Conditions */
+            conditions: string[];
+            /** Critical */
+            critical: boolean;
+            /** Edited At */
+            edited_at?: string | null;
+            /** Edited By */
+            edited_by?: string | null;
+            /** Evidence Cites */
+            evidence_cites: string[];
+            /** Evidence Sentence */
+            evidence_sentence: string | null;
+            /** For Text */
+            for_text: string;
+            /** If Text */
+            if_text: string;
+            /**
+             * Link Id
+             * Format: uuid
+             */
+            link_id: string;
+            /** Near Threshold */
+            near_threshold: boolean;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "drafted" | "found_in_evidence" | "imported" | "user" | "options_scoping";
+            /**
+             * Pending Count
+             * @default 0
+             */
+            pending_count: number;
+            /** Revision */
+            revision: number;
+            /** Sentence */
+            sentence: string;
+            /**
+             * Source Box Id
+             * Format: uuid
+             */
+            source_box_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "unchecked" | "checking" | "checked" | "pending" | "kept" | "no_change";
+            /**
+             * Target Box Id
+             * Format: uuid
+             */
+            target_box_id: string;
+            /** Then Text */
+            then_text: string;
+            /** Title */
+            title: string | null;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "supported" | "leaning_supports" | "not_sure_mixed" | "leaning_against" | "not_sure_insufficient" | "against";
+            /** Verdict If Accepted */
+            verdict_if_accepted?: ("supported" | "leaning_supports" | "not_sure_mixed" | "leaning_against" | "not_sure_insufficient" | "against") | null;
+            weights: components["schemas"]["TocWeightsOut"];
+        };
+        /**
+         * TocLinkPatch
+         * @description A change to one link, with the revision the client saw (C10).
+         */
+        TocLinkPatch: {
+            /** Because Text */
+            because_text?: string | null;
+            /** Conditions */
+            conditions?: string[] | null;
+            /** Critical */
+            critical?: true | null;
+            /** Expected Revision */
+            expected_revision: number;
+            /** For Text */
+            for_text?: string | null;
+            /** If Text */
+            if_text?: string | null;
+            /** Then Text */
+            then_text?: string | null;
+            /** Title */
+            title?: string | null;
+        };
+        /**
+         * TocLinksIn
+         * @description Links to act on (Keep the evidence, C43).
+         */
+        TocLinksIn: {
+            /** Link Ids */
+            link_ids: string[];
+        };
+        /**
+         * TocMoveIn
+         * @description Where the user dropped a box.
+         */
+        TocMoveIn: {
+            /** Expected Revision */
+            expected_revision: number;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /**
+         * TocPathwayOut
+         * @description One ordered route of links.
+         */
+        TocPathwayOut: {
+            /** Broken */
+            broken: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "success" | "failure";
+            /** Label */
+            label: string;
+            /** Link Ids */
+            link_ids: string[];
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "drafted" | "found_in_evidence" | "imported" | "user" | "options_scoping";
+            /**
+             * Pathway Id
+             * Format: uuid
+             */
+            pathway_id: string;
+            /** Reason */
+            reason: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "kept" | "set_aside";
+        };
+        /**
+         * TocPlanDraft
+         * @description Draft or approved theory-of-change plan, as surfaced to the client (task 054).
+         *
+         *     Mirrors the runtime `TocPlan`. Every field except `ready` may be absent
+         *     while drafting.
+         *
+         *     Args:
+         *         title: Short user-visible name for the task.
+         *         question: The user's ask.
+         *         entry_point: `outcome_first`, `intervention_first` or `existing_theory`.
+         *         intended_change: The impact, in measurable words.
+         *         target_population: Who the change is for.
+         *         intervention: What would be done.
+         *         dosage: How much of the intervention each beneficiary gets.
+         *         existing_theory_text: The user's own theory, verbatim.
+         *         where: The place the theory is for.
+         *         time_horizon: When the impact is expected.
+         *         context: What the user said about the setting.
+         *         published_after: The evidence searched starts at this date (`YYYY-MM-DD`);
+         *             `None` means any year.
+         *         published_before: The evidence searched ends at this date, or `None`.
+         *         assumptions: Every guess the plan is making.
+         *         ready: Whether the draft has validated into an executable plan.
+         */
+        TocPlanDraft: {
+            /** Assumptions */
+            assumptions?: string[];
+            /**
+             * Context
+             * @default null
+             */
+            context: string | null;
+            /**
+             * Dosage
+             * @default null
+             */
+            dosage: string | null;
+            /**
+             * Entry Point
+             * @default null
+             */
+            entry_point: ("outcome_first" | "intervention_first" | "existing_theory") | null;
+            /**
+             * Existing Theory Text
+             * @default null
+             */
+            existing_theory_text: string | null;
+            /**
+             * Intended Change
+             * @default null
+             */
+            intended_change: string | null;
+            /**
+             * Intervention
+             * @default null
+             */
+            intervention: string | null;
+            /**
+             * Published After
+             * @default null
+             */
+            published_after: string | null;
+            /**
+             * Published Before
+             * @default null
+             */
+            published_before: string | null;
+            /**
+             * Question
+             * @default null
+             */
+            question: string | null;
+            /**
+             * Ready
+             * @default false
+             */
+            ready: boolean;
+            /**
+             * Target Population
+             * @default null
+             */
+            target_population: string | null;
+            /**
+             * Time Horizon
+             * @default null
+             */
+            time_horizon: string | null;
+            /**
+             * Title
+             * @default null
+             */
+            title: string | null;
+            /**
+             * Upload Id
+             * @default null
+             */
+            upload_id: string | null;
+            /**
+             * Where
+             * @default null
+             */
+            where: string | null;
+        };
+        /**
+         * TocPlanPatch
+         * @description Typed replace-field edits for a theory-of-change plan (task 054).
+         *
+         *     Omitted fields stay as they are; an empty string clears an optional field.
+         *     Allowed only until the draft is on the canvas (S7). `published_after` and
+         *     `published_before` (`YYYY-MM-DD`) set the years of evidence searched; an
+         *     empty `published_after` means any year.
+         */
+        TocPlanPatch: {
+            /** Context */
+            context?: string | null;
+            /** Dosage */
+            dosage?: string | null;
+            /** Intended Change */
+            intended_change?: string | null;
+            /** Intervention */
+            intervention?: string | null;
+            /** Published After */
+            published_after?: string | null;
+            /** Published Before */
+            published_before?: string | null;
+            /** Target Population */
+            target_population?: string | null;
+            /** Time Horizon */
+            time_horizon?: string | null;
+            /** Where */
+            where?: string | null;
+        };
+        /**
+         * TocPositionOut
+         * @description Where the user dropped a box on the canvas (C47).
+         */
+        TocPositionOut: {
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /**
+         * TocProblemsOut
+         * @description Suggested edits that could not apply, with why.
+         */
+        TocProblemsOut: {
+            /** New Link Ids */
+            new_link_ids?: string[];
+            /** Problems */
+            problems: string[];
+        };
+        /**
+         * TocProposalDecideIn
+         * @description Accept or reject one suggested edit, or all pending ones (``index`` null).
+         */
+        TocProposalDecideIn: {
+            /** Accept */
+            accept: boolean;
+            /** Group */
+            group?: string | null;
+            /** Index */
+            index?: number | null;
+        };
+        /**
+         * TocProposalEditOut
+         * @description One suggested edit and what the user decided (C45, C46).
+         */
+        TocProposalEditOut: {
+            /** Dest */
+            dest?: string | null;
+            /** Group */
+            group?: string | null;
+            /** Index */
+            index: number;
+            /** Key */
+            key?: string | null;
+            /** Kind */
+            kind?: string | null;
+            /** Label */
+            label?: string | null;
+            /** Layer */
+            layer?: string | null;
+            /** Line */
+            line: string;
+            /** Links */
+            links?: string[] | null;
+            /** Op */
+            op: string;
+            /** Reason */
+            reason: string;
+            /** Source */
+            source?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "rejected";
+            /** Text */
+            text?: string | null;
+        };
+        /**
+         * TocProposalOut
+         * @description A suggestion from the review or the chat, waiting for the user (C45, C46).
+         */
+        TocProposalOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Edits */
+            edits: components["schemas"]["TocProposalEditOut"][];
+            /**
+             * Proposal Id
+             * Format: uuid
+             */
+            proposal_id: string;
+            /** Report Findings */
+            report_findings: components["schemas"]["TocReportFindingOut"][];
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "review" | "chat" | "discover" | "draft";
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * TocReportAssumptionOut
+         * @description One row of Assumptions and evidence.
+         */
+        TocReportAssumptionOut: {
+            /** Code */
+            code: string;
+            /**
+             * Conditions
+             * @default []
+             */
+            conditions: string[];
+            /**
+             * Flag
+             * @default false
+             */
+            flag: boolean;
+            /** Importance */
+            importance?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "assumption" | "risk";
+            /** Share */
+            share?: number | null;
+            /** Sources */
+            sources: number[];
+            /** Statement */
+            statement: string;
+            /** Verdict */
+            verdict: string;
+            /** Verdict Rank */
+            verdict_rank?: number | null;
+            /** Why */
+            why: string;
+        };
+        /**
+         * TocReportExpansionOut
+         * @description A route found in the evidence that the user's diagram does not show.
+         */
+        TocReportExpansionOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "success" | "failure";
+            /** Label */
+            label: string;
+            /** Sentence */
+            sentence: string;
+        };
+        /**
+         * TocReportFindingOut
+         * @description A report section that no longer matches the theory (C45).
+         */
+        TocReportFindingOut: {
+            /** Section */
+            section: string;
+            /** Why */
+            why: string;
+        };
+        /**
+         * TocReportOut
+         * @description Detailed information as a short narrative report (C38), written on each check.
+         */
+        TocReportOut: {
+            /** Assumptions */
+            assumptions: components["schemas"]["TocReportAssumptionOut"][];
+            /**
+             * Expansions
+             * @default []
+             */
+            expansions: components["schemas"]["TocReportExpansionOut"][];
+            /** How It Could Fail */
+            how_it_could_fail?: string | null;
+            /** Method */
+            method: string;
+            /** Pathways */
+            pathways: components["schemas"]["TocReportPathwayOut"][];
+            /** Sources */
+            sources: components["schemas"]["TocReportSourceOut"][];
+            summary: components["schemas"]["TocReportSummaryOut"];
+            /** Summary Text */
+            summary_text?: string | null;
+            /**
+             * Supporting Activities
+             * @default []
+             */
+            supporting_activities: string[];
+            /** Tests */
+            tests: components["schemas"]["TocReportTestOut"][];
+            /** Title */
+            title?: string | null;
+            verdict?: components["schemas"]["TocTheoryVerdictOut"] | null;
+            /** Verdict Reason */
+            verdict_reason?: string | null;
+            /** Whole Programme */
+            whole_programme?: string | null;
+        };
+        /**
+         * TocReportPathwayOut
+         * @description One success pathway in the Overview: a lead-in title and a line or two.
+         */
+        TocReportPathwayOut: {
+            /** Paragraph */
+            paragraph: string;
+            /** Pathway Id */
+            pathway_id?: string | null;
+            /** Strength */
+            strength?: string | null;
+            /** Title */
+            title: string;
+        };
+        /**
+         * TocReportSourceOut
+         * @description One numbered source, in order of first citation.
+         */
+        TocReportSourceOut: {
+            /**
+             * Authors
+             * @default []
+             */
+            authors: string[];
+            /** Citation */
+            citation: string;
+            /** Evidence Id */
+            evidence_id?: string | null;
+            /** N */
+            n: number;
+            /** Quote */
+            quote?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Url */
+            url: string | null;
+            /** Venue */
+            venue?: string | null;
+            /** Year */
+            year?: number | null;
+        };
+        /**
+         * TocReportSummaryOut
+         * @description The report's Summary (C38).
+         */
+        TocReportSummaryOut: {
+            /** Context */
+            context: string;
+            /** Directly Influenced */
+            directly_influenced: string;
+            /** Goal */
+            goal: string;
+            /** If Then Because */
+            if_then_because: string;
+            /** Population */
+            population: string;
+            /** Question */
+            question?: string | null;
+            /** Time Horizon */
+            time_horizon: string | null;
+            /**
+             * Weakest Links
+             * @default
+             */
+            weakest_links: string;
+        };
+        /**
+         * TocReportTestOut
+         * @description One thing to test first.
+         */
+        TocReportTestOut: {
+            /** Indicator */
+            indicator?: string | null;
+            /** Link */
+            link: string;
+            /** Question */
+            question?: string | null;
+            /** Sentence */
+            sentence?: string | null;
+            /** Test And Learn */
+            test_and_learn?: string | null;
+        };
+        /**
+         * TocResultCriteriaOut
+         * @description Mayne's checks on one box.
+         */
+        TocResultCriteriaOut: {
+            /** Definition */
+            definition?: string | null;
+            /** Indicator */
+            indicator?: string | null;
+            /** Timing */
+            timing?: string | null;
+        };
+        /**
+         * TocRevisionOut
+         * @description The row's revision after a write.
+         */
+        TocRevisionOut: {
+            /** Revision */
+            revision: number;
+        };
+        /**
+         * TocStudyIn
+         * @description A study the user adds to a link: a DOI or a web address (C42).
+         */
+        TocStudyIn: {
+            /** Identifier */
+            identifier: string;
+        };
+        /**
+         * TocTheoryVerdictOut
+         * @description Can the theory work, and what does the evidence say? (``toc_verdict_v2``).
+         */
+        TocTheoryVerdictOut: {
+            /** Carrying Step */
+            carrying_step: string;
+            /**
+             * Evidence
+             * @enum {string}
+             */
+            evidence: "supports" | "mixed" | "too_little" | "against";
+            /** Headline */
+            headline: string;
+            /** Label */
+            label: string;
+            /**
+             * Mechanism
+             * @enum {string}
+             */
+            mechanism: "plausible" | "implausible";
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * TocUndoOut
+         * @description What Undo could not put back because it changed since (C10).
+         */
+        TocUndoOut: {
+            /** Skipped */
+            skipped: string[];
+        };
+        /**
+         * TocUploadIn
+         * @description A user's own theory of change as an image or PDF (increment 5, C8): base64 in JSON.
+         */
+        TocUploadIn: {
+            /**
+             * Content Type
+             * @enum {string}
+             */
+            content_type: "image/png" | "image/jpeg" | "application/pdf";
+            /** Data Base64 */
+            data_base64: string;
+            /** File Name */
+            file_name: string;
+            /** Message */
+            message?: string | null;
+        };
+        /**
+         * TocUploadItemOut
+         * @description One uploaded diagram that was read.
+         */
+        TocUploadItemOut: {
+            /** File Name */
+            file_name: string;
+            /**
+             * Upload Id
+             * Format: uuid
+             */
+            upload_id: string;
+        };
+        /**
+         * TocUploadOut
+         * @description What was read from an uploaded diagram, before the plan uses it.
+         */
+        TocUploadOut: {
+            /**
+             * Answered
+             * @default false
+             */
+            answered: boolean;
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** File Name */
+            file_name: string;
+            /**
+             * Upload Id
+             * Format: uuid
+             */
+            upload_id: string;
+        };
+        /**
+         * TocWeightsOut
+         * @description The numbers behind a link's verdict (C36).
+         */
+        TocWeightsOut: {
+            /** Mean Support */
+            mean_support: number;
+            /** N Documents */
+            n_documents: number;
+            /** Refute Share */
+            refute_share: number;
+            /** Total Weight */
+            total_weight: number;
         };
         /**
          * TurnActionOut
@@ -7342,6 +9077,937 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["TaskAgentTurnOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toc_api_v1_tasks__task_id__toc_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocGraphOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_toc_box_api_v1_tasks__task_id__toc_boxes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocBoxCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCreatedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_toc_box_api_v1_tasks__task_id__toc_boxes__box_id__delete: {
+        parameters: {
+            query: {
+                expected_revision: number;
+            };
+            header?: never;
+            path: {
+                task_id: string;
+                box_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_toc_box_api_v1_tasks__task_id__toc_boxes__box_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                box_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocBoxPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocRevisionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    move_toc_box_api_v1_tasks__task_id__toc_boxes__box_id__position_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                box_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocMoveIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocRevisionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_toc_link_check_api_v1_tasks__task_id__toc_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocCheckIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCheckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_full_toc_check_api_v1_tasks__task_id__toc_check_full_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCheckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_toc_check_api_v1_tasks__task_id__toc_check_stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    undo_toc_edit_api_v1_tasks__task_id__toc_events__event_id__undo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocUndoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toc_evidence_api_v1_tasks__task_id__toc_evidence_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocEvidenceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_toc_evidence_api_v1_tasks__task_id__toc_evidence__evidence_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                evidence_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocEvidencePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocRevisionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toc_evidence_context_api_v1_tasks__task_id__toc_evidence__evidence_id__context_get: {
+        parameters: {
+            query?: {
+                quote?: string | null;
+            };
+            header?: never;
+            path: {
+                task_id: string;
+                evidence_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChunkContextOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toc_history_api_v1_tasks__task_id__toc_history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocHistoryEntryOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_toc_layout_api_v1_tasks__task_id__toc_layout_reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_toc_link_api_v1_tasks__task_id__toc_links_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocLinkCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCreatedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    keep_toc_evidence_api_v1_tasks__task_id__toc_links_keep_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocLinksIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_toc_link_api_v1_tasks__task_id__toc_links__link_id__delete: {
+        parameters: {
+            query: {
+                expected_revision: number;
+            };
+            header?: never;
+            path: {
+                task_id: string;
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_toc_link_api_v1_tasks__task_id__toc_links__link_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocLinkPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocRevisionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_toc_pending_api_v1_tasks__task_id__toc_links__link_id__decide_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocDecideIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_toc_study_api_v1_tasks__task_id__toc_links__link_id__studies_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocStudyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCheckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toc_proposals_api_v1_tasks__task_id__toc_proposals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocProposalOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_toc_proposal_api_v1_tasks__task_id__toc_proposals__proposal_id__decide_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocProposalDecideIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocProblemsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dismiss_toc_proposal_api_v1_tasks__task_id__toc_proposals__proposal_id__dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_toc_report_api_v1_tasks__task_id__toc_report_update_post: {
+        parameters: {
+            query?: {
+                proposal_id?: string | null;
+            };
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCheckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_toc_review_api_v1_tasks__task_id__toc_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_toc_uploads_api_v1_tasks__task_id__toc_uploads_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocUploadItemOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_toc_theory_api_v1_tasks__task_id__toc_uploads_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocUploadIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocUploadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toc_upload_api_v1_tasks__task_id__toc_uploads__upload_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

@@ -93,8 +93,8 @@ def test_site_names_and_modules_exist_in_the_code() -> None:
     source = "\n".join(p.read_text(encoding="utf-8") for p in _SRC.rglob("*.py"))
     for s in st.SITES:
         assert (_SRC / s.module).is_file(), s.module
-        if s.name.startswith("group:"):
-            continue  # built as f"group:{stage}" in group_clustering.py
+        if s.name.startswith(("group:", "toc:")):
+            continue  # built as f"group:{stage}" and f"toc:{step}" in the code
         assert f'"{s.name}' in source, s.name
 
 

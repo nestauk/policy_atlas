@@ -25,6 +25,7 @@ from policy_atlas.api.contract import (
     PAGE_SIZE_DEFAULT,
     PAGE_SIZE_MAX,
     AnswerPayloadOut,
+    CitedSourceOut,
     ConfirmBaselineIn,
     Page,
     PageMeta,
@@ -36,6 +37,8 @@ from policy_atlas.api.contract import (
     TaskAgentTranscriptTurnOut,
     TaskAgentTurnCreate,
     TaskAgentTurnOut,
+    TocPlanDraft,
+    TocPlanPatch,
     TurnDecisionOut,
 )
 from policy_atlas.api.contract.tasks import LatestRun
@@ -71,6 +74,7 @@ from policy_atlas.api.routers.check_ins import execute_claimed
 from policy_atlas.api.routers.common import (
     active_parentless_walk,
 )
+from policy_atlas.api.toc_start import walk_kind as toc_walk_kind
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import (
@@ -94,6 +98,7 @@ from policy_atlas.runtime.agent_backend import AgentBackend
 from policy_atlas.runtime.capability_registry import (
     EVIDENCE_SEARCH,
     OPTIONS_SCOPING,
+    THEORY_OF_CHANGE,
     AnyPlan,
     TaskAgentProfile,
     capability_of_task,
@@ -126,6 +131,7 @@ from policy_atlas.runtime.task_agent_scoping import (
     latest_approved_scoping_plan,
 )
 from policy_atlas.runtime.task_plan import TaskPlan, _enabled_components
+from policy_atlas.runtime.toc_plan import DEFAULT_PUBLISHED_AFTER, TOC_WALK_CHECK
 
 log = structlog.get_logger()
 
@@ -177,22 +183,28 @@ def _expire_stale_pending_turns(conn: Connection, task_id: uuid.UUID) -> None:
     )
 
 
-def plan_slot(draft: BaseModel, *, scoping_slot: str = "scoping") -> dict[str, Any]:
+def plan_slot(
+    draft: BaseModel, *, scoping_slot: str = "scoping", toc_slot: str = "toc"
+) -> dict[str, Any]:
     """Put a projected draft in its capability's slot.
 
     The contracts keep one slot per capability (``plan`` for Evidence search,
-    ``scoping`` — ``scoping_plan`` on a turn — for options scoping), so this is
-    the one place the draft's type picks the field.
+    ``scoping`` — ``scoping_plan`` on a turn — for options scoping, ``toc`` —
+    ``toc_plan`` on a turn — for a theory of change), so this is the one
+    place the draft's type picks the field.
 
     Args:
-        draft: A ``PlanDraft`` or ``ScopingPlanDraft``.
+        draft: A ``PlanDraft``, ``ScopingPlanDraft`` or ``TocPlanDraft``.
         scoping_slot: The field a scoping draft goes in.
+        toc_slot: The field a theory-of-change draft goes in.
 
     Returns:
         The keyword arguments that place the draft.
     """
     if isinstance(draft, ScopingPlanDraft):
         return {scoping_slot: draft}
+    if isinstance(draft, TocPlanDraft):
+        return {toc_slot: draft}
     return {"plan": draft}
 
 
@@ -229,13 +241,17 @@ def _scoping_plan_out(conn: Connection, task_id: uuid.UUID) -> PlanOut:
     found = approved_scoping_plan(conn, task_id)
     if found is not None:
         return _plan_out(OPTIONS_SCOPING, *found)
-    latest = conn.execute(
-        select(task_agent_transcript.c.response)
-        .where(task_agent_transcript.c.task_id == task_id)
-        .where(task_agent_transcript.c.status == "completed")
-        .order_by(task_agent_transcript.c.turn_index.desc())
-        .limit(1)
-    ).mappings().one_or_none()
+    latest = (
+        conn.execute(
+            select(task_agent_transcript.c.response)
+            .where(task_agent_transcript.c.task_id == task_id)
+            .where(task_agent_transcript.c.status == "completed")
+            .order_by(task_agent_transcript.c.turn_index.desc())
+            .limit(1)
+        )
+        .mappings()
+        .one_or_none()
+    )
     if latest is None or latest["response"] is None:
         raise HTTPException(status_code=404, detail="resource not found")
     response = TaskAgentTurnOut.model_validate(latest["response"])
@@ -247,6 +263,30 @@ def _scoping_plan_out(conn: Connection, task_id: uuid.UUID) -> PlanOut:
         version=0,
         status="draft",
     )
+
+
+def _toc_plan_out(conn: Connection, task_id: uuid.UUID) -> PlanOut:
+    """Return a theory-of-change task's plan as ``GET /plan`` shows it (task 054).
+
+    The approved plan wins; before one exists, the latest completed turn that
+    carried a draft stands in.
+    """
+    row = latest_approved_plan_row(conn, task_id)
+    if row is not None:
+        return _plan_out(THEORY_OF_CHANGE, validate_plan(THEORY_OF_CHANGE, row["payload"]), row)
+    responses = conn.execute(
+        select(task_agent_transcript.c.response)
+        .where(task_agent_transcript.c.task_id == task_id)
+        .where(task_agent_transcript.c.status == "completed")
+        .where(task_agent_transcript.c.response.is_not(None))
+        .order_by(task_agent_transcript.c.turn_index.desc())
+        .limit(1)
+    ).scalars()
+    response = next(iter(responses), None)
+    draft = TaskAgentTurnOut.model_validate(response).toc_plan if response else None
+    if draft is None:
+        raise HTTPException(status_code=404, detail="resource not found")
+    return PlanOut(toc=draft, capability=THEORY_OF_CHANGE, version=0, status="draft")
 
 
 def _apply_scoping_patch(
@@ -306,9 +346,7 @@ def _labelled_answer(payload: AnswerPayloadOut | None) -> AnswerPayloadOut | Non
     """
     if payload is None:
         return None
-    return payload.model_copy(
-        update={"citations": apply_appraisal_labels(payload.citations)}
-    )
+    return payload.model_copy(update={"citations": apply_appraisal_labels(payload.citations)})
 
 
 def _labelled(turn: TaskAgentTurnOut) -> TaskAgentTurnOut:
@@ -386,13 +424,17 @@ def _task_agent_inputs(
     conn: Connection, task_id: uuid.UUID, conversation_id: uuid.UUID, capability: str
 ) -> tuple[list[dict[str, str]], dict[str, object] | None]:
     """Rehydrate the exact task_agent context for one task_agent conversation."""
-    rows = conn.execute(
-        select(task_agent_transcript)
-        .where(task_agent_transcript.c.task_id == task_id)
-        .where(task_agent_transcript.c.conversation_id == conversation_id)
-        .where(task_agent_transcript.c.status == "completed")
-        .order_by(task_agent_transcript.c.turn_index.asc())
-    ).mappings().all()
+    rows = (
+        conn.execute(
+            select(task_agent_transcript)
+            .where(task_agent_transcript.c.task_id == task_id)
+            .where(task_agent_transcript.c.conversation_id == conversation_id)
+            .where(task_agent_transcript.c.status == "completed")
+            .order_by(task_agent_transcript.c.turn_index.asc())
+        )
+        .mappings()
+        .all()
+    )
     turns: list[dict[str, str]] = []
     previous_draft: dict[str, object] | None = None
     for row in rows:
@@ -400,10 +442,10 @@ def _task_agent_inputs(
         task_agent_state = row["task_agent_state"]
         if reply is None:
             raise RuntimeError("completed task_agent transcript row is incomplete")
-        turns.extend((
-            {"role": "user", "text": row["user_message"]},
-            {"role": "planner", "text": reply},
-        ))
+        # A code-authored line (task 054, J3) has no user message.
+        if row["user_message"]:
+            turns.append({"role": "user", "text": row["user_message"]})
+        turns.append({"role": "planner", "text": reply})
         # A gate turn — an answer, an ask-back, a recorded decision — is part
         # of the conversation but carries no plan draft (task 044), so it adds
         # its exchange and leaves the draft where the last planning turn left
@@ -461,6 +503,7 @@ def _transcript_out(row: RowMapping, capability: str) -> TaskAgentTranscriptTurn
         answer=_labelled_answer(projected.answer) if projected is not None else None,
         decision=projected.decision if projected is not None else None,
         action=projected.action if projected is not None else None,
+        sources=projected.sources if projected is not None else [],
     )
 
 
@@ -523,16 +566,18 @@ def _phase_one_turn(
     # the loser's INSERT dies on a unique constraint as a raw 500 (review
     # finding, 2026-07-29). The transaction is short — the LLM call stays
     # outside it (finding I2 rule).
-    access = accessible_task(
-        conn, task_id=task_id, user_id=user_id, write=True, for_update=True
-    )
+    access = accessible_task(conn, task_id=task_id, user_id=user_id, write=True, for_update=True)
     capability = access.row["capability"]
     _expire_stale_pending_turns(conn, task_id)
-    existing = conn.execute(
-        select(task_agent_transcript)
-        .where(task_agent_transcript.c.task_id == task_id)
-        .where(task_agent_transcript.c.client_turn_id == payload.client_turn_id)
-    ).mappings().one_or_none()
+    existing = (
+        conn.execute(
+            select(task_agent_transcript)
+            .where(task_agent_transcript.c.task_id == task_id)
+            .where(task_agent_transcript.c.client_turn_id == payload.client_turn_id)
+        )
+        .mappings()
+        .one_or_none()
+    )
     if existing is not None:
         if existing["user_message"] != payload.message:
             raise ApiConflict(
@@ -552,11 +597,18 @@ def _phase_one_turn(
         if active is not None
         else None
     )
-    if active is not None and gate is None:
+    # A theory-of-change check walk keeps the thread open (task 054, S7): the
+    # turn is admitted and answers questions; the plan stays as approved.
+    toc_checking = (
+        active is not None
+        and capability == THEORY_OF_CHANGE
+        and toc_walk_kind(conn, task_id=task_id, capability_run_id=active["capability_run_id"])
+        == TOC_WALK_CHECK
+    )
+    if active is not None and gate is None and not toc_checking:
         raise ApiConflict(
             "run_active",
-            "finish or stop the current run before replanning; "
-            "use the run's check-ins to steer it",
+            "finish or stop the current run before replanning; use the run's check-ins to steer it",
         )
     # With no walk active, a scoping task that has a longlist sorts the turn
     # into the longlist verbs (task 045, S11), read under the same row lock.
@@ -642,9 +694,7 @@ def _complete_gate_turn(
     did not move the draft" — the planner still sees the conversation.
     """
     with engine.begin() as conn:
-        transcript_rows.complete(
-            conn, task_id=task_id, transcript_id=transcript_id, result=result
-        )
+        transcript_rows.complete(conn, task_id=task_id, transcript_id=transcript_id, result=result)
 
 
 def _persist_half_turn(
@@ -682,9 +732,7 @@ def _stored_decision(conn: Connection, transcript_id: uuid.UUID) -> TurnDecision
     decision — a retry of an ordinary planning turn, which is the common case.
     """
     stored = conn.execute(
-        select(task_agent_transcript.c.response).where(
-            task_agent_transcript.c.id == transcript_id
-        )
+        select(task_agent_transcript.c.response).where(task_agent_transcript.c.id == transcript_id)
     ).scalar_one_or_none()
     if not isinstance(stored, dict):
         return None
@@ -741,9 +789,7 @@ def _dispatch_gate_turn(
         return result
 
     try:
-        sort = gate_turns.sort_turn(
-            agent, utterance=utterance, gate=gate, session_id=task_id
-        )
+        sort = gate_turns.sort_turn(agent, utterance=utterance, gate=gate, session_id=task_id)
         if sort.kind == "question":
             with engine.connect() as conn:
                 window = transcript_rows.answer_window(conn, task_id, conversation_id)
@@ -772,16 +818,18 @@ def _dispatch_gate_turn(
                         conversation_id=conversation_id,
                     )
                 )
-            answered = finish(TaskAgentTurnOut(
-                reply=answer.prose,
-                kind="answer",
-                answer=AnswerPayloadOut.model_validate(answer.payload.as_payload()),
-                capability=OPTIONS_SCOPING,
-                # The decision stays the user's to take, on a turn that asked
-                # and decided at once as much as on any other.
-                suggestions=gate.option_labels,
-                conversation_id=conversation_id,
-            ))
+            answered = finish(
+                TaskAgentTurnOut(
+                    reply=answer.prose,
+                    kind="answer",
+                    answer=AnswerPayloadOut.model_validate(answer.payload.as_payload()),
+                    capability=OPTIONS_SCOPING,
+                    # The decision stays the user's to take, on a turn that asked
+                    # and decided at once as much as on any other.
+                    suggestions=gate.option_labels,
+                    conversation_id=conversation_id,
+                )
+            )
             # Stored raw, returned labelled (C2): the score is the durable
             # fact and the label is derived on every read.
             return _labelled(answered)
@@ -839,16 +887,18 @@ def _dispatch_gate_turn(
             if outcome.follow_on == LONGLIST_PURPOSE and decision.opened_run is None:
                 # The decision stands but no walk opened (F12): say so.
                 reply = gate_turns.CONFIRM_NOT_STARTED_REPLY
-            result = finish(TaskAgentTurnOut(
-                reply=reply,
-                kind="decision",
-                # A turn that lost the race records no decision of its own: the
-                # durable one is the other surface's, and this turn may have
-                # asked for the other option.
-                decision=decision if outcome.recorded else None,
-                capability=OPTIONS_SCOPING,
-                conversation_id=conversation_id,
-            ))
+            result = finish(
+                TaskAgentTurnOut(
+                    reply=reply,
+                    kind="decision",
+                    # A turn that lost the race records no decision of its own: the
+                    # durable one is the other surface's, and this turn may have
+                    # asked for the other option.
+                    decision=decision if outcome.recorded else None,
+                    capability=OPTIONS_SCOPING,
+                    conversation_id=conversation_id,
+                )
+            )
             if outcome.continue_walk is not None:
                 _resume_walk(
                     engine,
@@ -861,13 +911,15 @@ def _dispatch_gate_turn(
                 )
             return result
 
-        return finish(TaskAgentTurnOut(
-            reply=gate_turns.ASK_BACK_REPLY,
-            kind="reply",
-            capability=OPTIONS_SCOPING,
-            suggestions=gate.option_labels,
-            conversation_id=conversation_id,
-        ))
+        return finish(
+            TaskAgentTurnOut(
+                reply=gate_turns.ASK_BACK_REPLY,
+                kind="reply",
+                capability=OPTIONS_SCOPING,
+                suggestions=gate.option_labels,
+                conversation_id=conversation_id,
+            )
+        )
     except Exception:
         # A failure after the decision commit leaves the decision durable and
         # the row failed; the retry re-runs only the half that is still owed,
@@ -1090,15 +1142,28 @@ def create_task_agent_turn(
             except (ValidationError, ValueError):
                 ready = False
         reply_text = turn.reply
+        sources: list[dict[str, Any]] = []
         if approved is not None and profile.after_approve is not None:
             # Outside any transaction, like the Task Agent call: options
             # scoping proposes option designs here (D19) and adds the
             # "did this touch the baseline's inputs" sentence (S4, C1).
             with tracing.trace_scope(user_id=user.user_id):
                 approved, note = profile.after_approve(engine, task_id, approved, agent)
+            # A theory of change's sense check cites its sources with [n] (task 054).
+            sources = list(getattr(note, "sources", None) or [])
             if note is not None:
-                reply_text = f"{turn.reply.rstrip()}\n\n{note}"
-        part = _validated_part(turn.part, profile)
+                reply_text = (
+                    profile.merge_note(turn.reply, note)
+                    if profile.merge_note is not None
+                    else f"{turn.reply.rstrip()}\n\n{note}"
+                )
+        if profile.after_turn is not None:
+            # Outside any transaction: the theory of change stores the edits the
+            # turn proposed and any clarification, and says so (task 054, C46, C49).
+            note = profile.after_turn(engine, task_id, turn, user.user_id)
+            if note:
+                reply_text = f"{reply_text.rstrip()}\n\n{note}"
+        part = _validated_part(getattr(turn, "part", None), profile)
         draft = (
             profile.draft_from_plan(approved)
             if approved is not None
@@ -1106,7 +1171,7 @@ def create_task_agent_turn(
         )
         result = TaskAgentTurnOut(
             reply=reply_text,
-            **plan_slot(draft, scoping_slot="scoping_plan"),
+            **plan_slot(draft, scoping_slot="scoping_plan", toc_slot="toc_plan"),
             capability=capability,
             suggestions=turn.suggested_answers or [],
             part=part,
@@ -1115,6 +1180,7 @@ def create_task_agent_turn(
             # the planning reply that followed it are both this row's (X6).
             kind="decision" if carried_decision is not None else None,
             decision=carried_decision,
+            sources=[CitedSourceOut.model_validate(source) for source in sources],
         )
         # Phase 2 joins plan approval in the same transaction, so an approved
         # plan can never commit without the transcript turn that approved it.
@@ -1195,9 +1261,7 @@ def list_task_agent_turns(
     write grade before it does anything.
     """
     with engine.begin() as conn:
-        access = accessible_task(
-            conn, task_id=task_id, user_id=user.user_id, write=False
-        )
+        access = accessible_task(conn, task_id=task_id, user_id=user.user_id, write=False)
         if access.is_owner:
             _expire_stale_pending_turns(conn, task_id)
         total_items = conn.execute(
@@ -1205,13 +1269,17 @@ def list_task_agent_turns(
             .select_from(task_agent_transcript)
             .where(task_agent_transcript.c.task_id == task_id)
         ).scalar_one()
-        rows = conn.execute(
-            select(task_agent_transcript)
-            .where(task_agent_transcript.c.task_id == task_id)
-            .order_by(task_agent_transcript.c.turn_index.asc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-        ).mappings().all()
+        rows = (
+            conn.execute(
+                select(task_agent_transcript)
+                .where(task_agent_transcript.c.task_id == task_id)
+                .order_by(task_agent_transcript.c.turn_index.asc())
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+            )
+            .mappings()
+            .all()
+        )
     return Page(
         data=[_transcript_out(row, access.row["capability"]) for row in rows],
         pagination=PageMeta(page=page, page_size=page_size, total_items=total_items),
@@ -1230,14 +1298,14 @@ def get_plan(
     colleague's or an administrator's read must not write the owner's rows.
     """
     with engine.begin() as conn:
-        access = accessible_task(
-            conn, task_id=task_id, user_id=user.user_id, write=False
-        )
+        access = accessible_task(conn, task_id=task_id, user_id=user.user_id, write=False)
         if access.is_owner:
             _expire_stale_pending_turns(conn, task_id)
         capability = access.row["capability"]
         if capability == OPTIONS_SCOPING:
             return _scoping_plan_out(conn, task_id)
+        if capability == THEORY_OF_CHANGE:
+            return _toc_plan_out(conn, task_id)
         row, plan, latest = _current_es_plan(conn, task_id, capability)
     if row is not None and plan is not None:
         return _plan_out(EVIDENCE_SEARCH, plan, row)
@@ -1261,17 +1329,21 @@ def _current_es_plan(
         ``response``, ``conversation_id``).
     """
     row = latest_approved_plan_row(conn, task_id)
-    latest = conn.execute(
-        select(
-            task_agent_transcript.c.turn_index,
-            task_agent_transcript.c.response,
-            task_agent_transcript.c.conversation_id,
+    latest = (
+        conn.execute(
+            select(
+                task_agent_transcript.c.turn_index,
+                task_agent_transcript.c.response,
+                task_agent_transcript.c.conversation_id,
+            )
+            .where(task_agent_transcript.c.task_id == task_id)
+            .where(task_agent_transcript.c.status == "completed")
+            .order_by(task_agent_transcript.c.turn_index.desc())
+            .limit(1)
         )
-        .where(task_agent_transcript.c.task_id == task_id)
-        .where(task_agent_transcript.c.status == "completed")
-        .order_by(task_agent_transcript.c.turn_index.desc())
-        .limit(1)
-    ).mappings().one_or_none()
+        .mappings()
+        .one_or_none()
+    )
     if row is None:
         return None, None, latest
     plan = expect_task_plan(validate_plan(capability, row["payload"]))
@@ -1305,9 +1377,7 @@ def _persist_version(
     if latest_turn is not None:
         plan.source_turn_index = latest_turn
     if conversation_id is None:
-        conversation_id = ensure_active_task_agent_conversation(
-            conn, task_id=task_id, now=_now()
-        )
+        conversation_id = ensure_active_task_agent_conversation(conn, task_id=task_id, now=_now())
     persist_approved_plan(conn, task_id=task_id, plan=plan, conversation_id=conversation_id)
     return cast(RowMapping, latest_approved_plan_row(conn, task_id))
 
@@ -1367,9 +1437,7 @@ def _geography_constraints(geography: str, backend_scope: str) -> dict[str, Any]
         return dict(_NO_GEO)
     if geography.strip().casefold() in {"apo", "australian policy online"}:
         if backend_scope != "grey_lit_only":
-            raise ValueError(
-                "the APO restriction needs Sources set to policy literature only"
-            )
+            raise ValueError("the APO restriction needs Sources set to policy literature only")
         return {**_NO_GEO, "publisher_source": "apo"}
     if geography in TIER1_GROUPS:
         return {
@@ -1542,7 +1610,15 @@ def patch_plan(
                 "a run is in progress; finish or stop it, then edit the plan",
             )
         capability = access.row["capability"]
-        es_fields = payload.model_fields_set - {"scoping"}
+        es_fields = payload.model_fields_set - {"scoping", "toc"}
+        if capability == THEORY_OF_CHANGE:
+            if es_fields or payload.scoping is not None or payload.toc is None:
+                raise HTTPException(
+                    status_code=422, detail="edit a theory-of-change plan through 'toc'"
+                )
+            return _patch_toc_plan(conn, task_id, payload.toc)
+        if payload.toc is not None:
+            raise HTTPException(status_code=422, detail="'toc' edits a theory-of-change plan only")
         if capability == OPTIONS_SCOPING:
             if es_fields:
                 raise HTTPException(
@@ -1642,13 +1718,65 @@ def _open_shortlist_after_patch(
             suggest=False,
         )
     except LonglistRefused as exc:
-        log.info(
-            "shortlist.after_patch_refused", task_id=str(task_id), reason=exc.reason
-        )
+        log.info("shortlist.after_patch_refused", task_id=str(task_id), reason=exc.reason)
         return out
     return out.model_copy(
         update={"opened_run": opened_run(engine, task_id=task_id, capability_run_id=run_id)}
     )
+
+
+def _patch_toc_plan(conn: Connection, task_id: uuid.UUID, patch: TocPlanPatch) -> PlanOut:
+    """Apply plan-panel edits to a theory-of-change plan as a new approved version.
+
+    Refused once the draft is on the canvas: the plan is then fixed (S7). The
+    Task Agent's latest draft takes the same edits, so its next turn starts
+    from the edited plan rather than the one before.
+    """
+    from policy_atlas.theory_of_change.store import has_graph
+
+    if has_graph(conn, task_id):
+        raise ApiConflict(
+            "toc_plan_fixed",
+            "the theory is drafted, so its plan is fixed; ask the Task Agent for a new task",
+        )
+    row = latest_approved_plan_row(conn, task_id)
+    if row is None:
+        raise HTTPException(status_code=422, detail="plan is not ready to edit")
+    edits = {key: (value or None) for key, value in patch.model_dump(exclude_unset=True).items()}
+    # The years live in the plan's evidence restriction, not in the Task Agent's
+    # draft: the model never sets them, so they stay out of its state below.
+    years = {key: edits.pop(key) for key in ("published_after", "published_before") if key in edits}
+    payload = {**row["payload"], **edits}
+    if years:
+        restriction = payload.get("evidence_restriction")
+        if restriction is None:
+            restriction = {"published_after": DEFAULT_PUBLISHED_AFTER}
+        payload["evidence_restriction"] = {**restriction, **years}
+    try:
+        plan = validate_plan(THEORY_OF_CHANGE, payload)
+    except (ValidationError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    latest = conn.execute(
+        select(task_agent_transcript.c.id, task_agent_transcript.c.task_agent_state)
+        .where(task_agent_transcript.c.task_id == task_id)
+        .where(task_agent_transcript.c.status == "completed")
+        .where(task_agent_transcript.c.task_agent_state.is_not(None))
+        .order_by(task_agent_transcript.c.turn_index.desc())
+        .limit(1)
+    ).one_or_none()
+    if latest is not None:
+        conn.execute(
+            task_agent_transcript.update()
+            .where(task_agent_transcript.c.id == latest.id)
+            .values(task_agent_state={**latest.task_agent_state, **edits})
+        )
+    conversation_id = conn.execute(
+        select(task_plan.c.conversation_id)
+        .where(task_plan.c.task_id == task_id)
+        .order_by(task_plan.c.version.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    return _plan_out(THEORY_OF_CHANGE, plan, _persist_version(conn, task_id, plan, conversation_id))
 
 
 def _persist_new_scoping_version(
@@ -1837,16 +1965,17 @@ def confirm_baseline(
                         f"longlist against — shorten them, then confirm ({exc})"
                     ),
                 ) from exc
-            next_version = int(
-                conn.execute(
-                    select(func.coalesce(func.max(task_plan.c.version), 0)).where(
-                        task_plan.c.task_id == task_id
-                    )
-                ).scalar_one()
-            ) + 1
-            record = BaselineConfirmed(
-                artefact_id=payload.artefact_id, plan_version=next_version
+            next_version = (
+                int(
+                    conn.execute(
+                        select(func.coalesce(func.max(task_plan.c.version), 0)).where(
+                            task_plan.c.task_id == task_id
+                        )
+                    ).scalar_one()
+                )
+                + 1
             )
+            record = BaselineConfirmed(artefact_id=payload.artefact_id, plan_version=next_version)
             confirmed = current.model_copy(update={"baseline_confirmed": record})
             out = _persist_new_scoping_version(conn, task_id, confirmed)
     # Committed. The opener takes the dispatch lock and the task row itself.
@@ -1881,11 +2010,15 @@ def _open_confirmed_longlist(
         HTTPException: 422 when the plan cannot be screened against.
     """
     with engine.connect() as conn:
-        plan_row = conn.execute(
-            select(task_plan)
-            .where(task_plan.c.task_id == task_id)
-            .where(task_plan.c.version == out.version)
-        ).mappings().one()
+        plan_row = (
+            conn.execute(
+                select(task_plan)
+                .where(task_plan.c.task_id == task_id)
+                .where(task_plan.c.version == out.version)
+            )
+            .mappings()
+            .one()
+        )
     try:
         run_id = open_longlist_walk(
             engine,

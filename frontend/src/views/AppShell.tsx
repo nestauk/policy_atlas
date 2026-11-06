@@ -1,4 +1,5 @@
 import { useLayoutEffect, useState } from "react";
+import { useFinishAlerts } from "./finishAlerts";
 import { Outlet, useLocation, useParams } from "react-router";
 
 import { useArchiveTask, useUpdateTask } from "../api/mutations";
@@ -296,6 +297,8 @@ export function AppShell() {
   // per session — AppShell is the layout route), plus useTasks's own 15s
   // poll while any run is active; the query is shared with TasksListView.
   const allTasks = useTasks();
+  // Browser alerts when a task's work finishes, on any page (owner, 2026-11-04).
+  useFinishAlerts();
   // Task 045 (S15): a scoping task is running when ANY of its walks is —
   // an option search included — so `activeRun` reads `active_run` there and
   // `latest_run` for an Evidence search, as before.

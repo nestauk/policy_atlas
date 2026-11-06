@@ -1,4 +1,5 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useMutationState, useQueryClient } from "@tanstack/react-query";
+import { askForFinishAlerts } from "../lib/askForAlerts";
 
 import type { components } from "./gen/types";
 import { queryKeys, useApiClient } from "./queries";
@@ -45,6 +46,8 @@ export function useCreateTask() {
       projectId?: string | null;
       capability?: components["schemas"]["TaskCreate"]["capability"];
       fromTaskIds?: string[];
+      /** False when the task opens with an upload instead: its message is the opening turn. */
+      openingTurn?: boolean;
     }) => {
       const question = input.question.trim();
       const { data: task, error, response } = await client.POST("/api/v1/tasks", {
@@ -61,6 +64,7 @@ export function useCreateTask() {
       // The opening turn. A failure here leaves a real, usable task whose
       // conversation is simply empty, so it is not worth unwinding the
       // creation — the person can just type the question again.
+      if (input.openingTurn === false) return task;
       await client.POST("/api/v1/tasks/{task_id}/task-agent-turns", {
         params: { path: { task_id: task.task_id } },
         body: { message: question, client_turn_id: crypto.randomUUID() },
@@ -238,6 +242,8 @@ export function useStartRun(taskId: string) {
       if (data === undefined) raise(error, response.status);
       return data;
     },
+    // Every start is a click: the moment the browser lets the page ask to alert when it finishes.
+    onMutate: askForFinishAlerts,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.taskRoot(taskId) }),
   });
 }
@@ -385,5 +391,158 @@ export function useAnswerCheckIn(taskId: string) {
       return { kind: "answered" as const };
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.taskRoot(taskId) }),
+  });
+}
+
+type Schemas = components["schemas"];
+
+/** One edit to a theory of change (task 054, C41, C47, C40). */
+export type TocEdit =
+  | { kind: "createBox"; body: Schemas["TocBoxCreate"] }
+  | { kind: "patchBox"; boxId: string; body: Schemas["TocBoxPatch"] }
+  | { kind: "deleteBox"; boxId: string; revision: number }
+  | { kind: "moveBox"; boxId: string; body: Schemas["TocMoveIn"] }
+  | { kind: "resetLayout" }
+  | { kind: "createLink"; body: Schemas["TocLinkCreate"] }
+  | { kind: "patchLink"; linkId: string; body: Schemas["TocLinkPatch"] }
+  | { kind: "deleteLink"; linkId: string; revision: number }
+  | { kind: "undo"; eventId: string }
+  | { kind: "check"; body: Schemas["TocCheckIn"] }
+  | { kind: "evidence"; evidenceId: string; body: Schemas["TocEvidencePatch"] }
+  | { kind: "keep"; body: Schemas["TocLinksIn"] }
+  | { kind: "addStudy"; linkId: string; body: Schemas["TocStudyIn"] }
+  | { kind: "decide"; linkId: string; accept: boolean }
+  | { kind: "stop" }
+  | { kind: "checkFull" }
+  | { kind: "review" }
+  | { kind: "proposal"; proposalId: string; body: Schemas["TocProposalDecideIn"] }
+  | { kind: "dismiss"; proposalId: string }
+  | { kind: "updateReport"; proposalId?: string };
+
+/** The opening words of the message an upload sends (task 054, increment 5): its bubble shows the file. */
+export const UPLOAD_MESSAGE = "I've uploaded my own theory of change";
+
+/** The message an upload sends to start the planner: the file's name, then the user's note. */
+export function uploadMessage(name: string, note: string): string {
+  return `${UPLOAD_MESSAGE} (${name}).${note === "" ? "" : `\n\n${note}`}`;
+}
+
+/** Marks an upload in progress, so the chat finds it again after a tab switch. */
+export const tocUploadKey = (taskId: string) => ["toc-upload", taskId] as const;
+
+/**
+ * `POST .../toc/uploads` — the user's own theory diagram (task 054, increment 5):
+ * stored, then read by the model (about half a minute).
+ * Upload the user's diagram, then send the message that starts the planner.
+ * Both happen in one job, so they finish even if the chat closes meanwhile
+ * (the user switches tab while the diagram is read).
+ */
+export function useTocUpload(taskId: string) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: tocUploadKey(taskId),
+    mutationFn: async ({ file, note }: { file: File; note: string }) => {
+      const type = file.type === "image/jpg" ? "image/jpeg" : file.type;
+      if (type !== "image/png" && type !== "image/jpeg" && type !== "application/pdf") {
+        throw new Error("Upload a PNG, JPEG or PDF file.");
+      }
+      if (file.size > 10 * 1024 * 1024) throw new Error("The file must be under 10 MB.");
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      const { data, error, response } = await client.POST("/api/v1/tasks/{task_id}/toc/uploads", {
+        params: { path: { task_id: taskId } },
+        body: { file_name: file.name, content_type: type, data_base64: dataUrl.slice(dataUrl.indexOf(",") + 1), message: uploadMessage(file.name, note) },
+      });
+      if (data === undefined) raise(error, response.status);
+      // After the draft, the upload itself answers in the chat (its suggestions); before, the planner reads it.
+      if (data.answered === true) return data;
+      const turn = await client.POST("/api/v1/tasks/{task_id}/task-agent-turns", {
+        params: { path: { task_id: taskId } },
+        body: { message: uploadMessage(data.file_name, note), client_turn_id: crypto.randomUUID() },
+      });
+      if (turn.data === undefined) raise(turn.error, turn.response.status);
+      return data;
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.taskRoot(taskId) }),
+  });
+}
+
+/** The upload running for a task, if any: its file and note, whichever chat started it. */
+export function useTocUploading(taskId: string): { file: File; note: string } | null {
+  const running = useMutationState({
+    filters: { mutationKey: tocUploadKey(taskId), status: "pending" },
+    select: (mutation) => mutation.state.variables as { file: File; note: string },
+  });
+  return running.at(-1) ?? null;
+}
+
+/**
+ * Every theory-of-change write, as one mutation. Each refreshes the graph,
+ * its evidence and History (all under the task's `toc` key). A 409
+ * `toc_stale_revision` reaches the caller as `error.code`.
+ */
+export function useTocEdit(taskId: string) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (edit: TocEdit) => {
+      const task = { task_id: taskId };
+      const done = ({ data, error, response }: { data?: unknown; error?: unknown; response: Response }) => {
+        if (!response.ok) raise(error, response.status);
+        return data;
+      };
+      switch (edit.kind) {
+        case "createBox":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/boxes", { params: { path: task }, body: edit.body }));
+        case "patchBox":
+          return done(await client.PATCH("/api/v1/tasks/{task_id}/toc/boxes/{box_id}", { params: { path: { ...task, box_id: edit.boxId } }, body: edit.body }));
+        case "deleteBox":
+          return done(
+            await client.DELETE("/api/v1/tasks/{task_id}/toc/boxes/{box_id}", { params: { path: { ...task, box_id: edit.boxId }, query: { expected_revision: edit.revision } } }),
+          );
+        case "moveBox":
+          return done(await client.PATCH("/api/v1/tasks/{task_id}/toc/boxes/{box_id}/position", { params: { path: { ...task, box_id: edit.boxId } }, body: edit.body }));
+        case "resetLayout":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/layout/reset", { params: { path: task } }));
+        case "createLink":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/links", { params: { path: task }, body: edit.body }));
+        case "patchLink":
+          return done(await client.PATCH("/api/v1/tasks/{task_id}/toc/links/{link_id}", { params: { path: { ...task, link_id: edit.linkId } }, body: edit.body }));
+        case "deleteLink":
+          return done(
+            await client.DELETE("/api/v1/tasks/{task_id}/toc/links/{link_id}", { params: { path: { ...task, link_id: edit.linkId }, query: { expected_revision: edit.revision } } }),
+          );
+        case "undo":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/events/{event_id}/undo", { params: { path: { ...task, event_id: edit.eventId } } }));
+        case "check":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/check", { params: { path: task }, body: edit.body }));
+        case "evidence":
+          return done(await client.PATCH("/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}", { params: { path: { ...task, evidence_id: edit.evidenceId } }, body: edit.body }));
+        case "keep":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/links/keep", { params: { path: task }, body: edit.body }));
+        case "decide":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/links/{link_id}/decide", { params: { path: { ...task, link_id: edit.linkId } }, body: { accept: edit.accept } }));
+        case "review":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/review", { params: { path: task } }));
+        case "proposal":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/proposals/{proposal_id}/decide", { params: { path: { ...task, proposal_id: edit.proposalId } }, body: edit.body }));
+        case "dismiss":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/proposals/{proposal_id}/dismiss", { params: { path: { ...task, proposal_id: edit.proposalId } } }));
+        case "updateReport":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/report/update", { params: { path: task, query: edit.proposalId !== undefined ? { proposal_id: edit.proposalId } : {} } }));
+        case "stop":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/check/stop", { params: { path: task } }));
+        case "checkFull":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/check/full", { params: { path: task } }));
+        case "addStudy":
+          return done(await client.POST("/api/v1/tasks/{task_id}/toc/links/{link_id}/studies", { params: { path: { ...task, link_id: edit.linkId } }, body: edit.body }));
+      }
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.toc(taskId) }),
   });
 }

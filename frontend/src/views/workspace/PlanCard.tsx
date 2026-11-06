@@ -1,3 +1,4 @@
+import { useStartRun } from "../../api/mutations";
 import { usePlan } from "../../api/queries";
 import type { components } from "../../api/gen/types";
 import { Button } from "../../ui/brand/Button";
@@ -49,6 +50,7 @@ export function PlanCard({
     onDiscardOverlay,
   });
 
+  const startToc = useStartRun(taskId);
   const planOut = planQuery.data;
   // Task 044: a scoping turn's readiness lives on `scoping`, never `plan`
   // (null for that capability) — the capability branch this card needs so a
@@ -58,9 +60,31 @@ export function PlanCard({
   // `useScopingPlanStart`) — this inline card only ever offers the door in.
   const scoping = isScoping(planOut);
   const plan: PlanDraft | null = scoping ? null : (planOut?.plan ?? null);
+  // A theory-of-change plan (task 054) lives on `toc`; its start drafts the theory.
+  const toc = planOut?.toc ?? null;
   const approved = planOut?.status === "approved";
   const scopingReady = scoping && planOut?.scoping?.ready === true;
-  if (started || !approved) return null;
+  // A theory of change keeps "Review the plan" after its draft, so the plan stays one click away (round 7).
+  if (toc !== null && approved && toc.ready) {
+    return (
+      <div className="anim-rise mr-8 flex flex-wrap items-center gap-3" data-testid="plan-ready-actions">
+        <Button className={started ? "border border-navy" : "px-6 py-3.5 text-body"} variant={started ? "secondary" : "primary"} size={started ? "sm" : "md"} onClick={() => onReviewPlan?.()}>
+          {started ? "See the plan" : "Review the plan"}
+        </Button>
+        {isOwner && !started && (
+          <Button className={cn(START_SEARCH_CLASS)} disabled={runActive || startToc.isPending} onClick={() => startToc.mutate(undefined)}>
+            Draft the theory
+          </Button>
+        )}
+        {startToc.isError && (
+          <p role="alert" className="w-full text-body text-red">
+            The draft couldn't start. Try again.
+          </p>
+        )}
+      </div>
+    );
+  }
+  if (started || !approved || toc !== null) return null;
   if (scoping ? !scopingReady : plan === null || !plan.ready) return null;
 
   return (

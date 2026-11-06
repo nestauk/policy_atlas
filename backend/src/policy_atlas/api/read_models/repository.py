@@ -167,6 +167,8 @@ from policy_atlas.options_scoping.shortlist.shortlist import (
 )
 from policy_atlas.runtime.capability_registry import (
     OPTIONS_SCOPING,
+    THEORY_OF_CHANGE,
+    capability_of_task,
     expect_scoping_plan,
     latest_approved_plan_row,
     validate_plan,
@@ -232,9 +234,7 @@ class _LineContext:
     plan_outcomes: Sequence[str]
 
 
-def _line_context(
-    option_profile: object, plan_outcomes: Sequence[str]
-) -> _LineContext:
+def _line_context(option_profile: object, plan_outcomes: Sequence[str]) -> _LineContext:
     """The stored folding maps (none before the profile has run) and the plan's outcomes."""
     folds = stored_folds(option_profile)
     return _LineContext(
@@ -421,9 +421,7 @@ def _collapse_document_lines(
                 unit=clean_text(first.unit) if first is not None else None,
                 setting=clean_text(first.setting) if first is not None else None,
                 outcome=clean_text(first.outcome) if first is not None else None,
-                study_geography=(
-                    clean_text(first.study_geography) if first is not None else None
-                ),
+                study_geography=(clean_text(first.study_geography) if first is not None else None),
             )
         )
     merged.sort(
@@ -798,8 +796,7 @@ def landscape_out(
             # source_snapshot (envelope + full-text); the implicit join is ambiguous.
             task_source_snapshot.join(
                 source_snapshot,
-                task_source_snapshot.c.source_snapshot_id
-                == source_snapshot.c.source_snapshot_id,
+                task_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
             )
         )
         .where(task_source_snapshot.c.task_source_snapshot_id.in_(relevant_ids))
@@ -1022,8 +1019,7 @@ def evidence_page(
             # Explicit onclause — same two-FK ambiguity as landscape_out.
             task_source_snapshot.join(
                 source_snapshot,
-                task_source_snapshot.c.source_snapshot_id
-                == source_snapshot.c.source_snapshot_id,
+                task_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
             )
         )
         .where(task_source_snapshot.c.task_id == task_id)
@@ -1152,9 +1148,7 @@ def evidence_page(
                     and screen.status in {"relevant", "not_relevant", "excluded_retracted"}
                     else None,
                     screen_reason=screen_reasons.get(row.task_source_snapshot_id),
-                    classification_reason=classification_reasons.get(
-                        row.task_source_snapshot_id
-                    ),
+                    classification_reason=classification_reasons.get(row.task_source_snapshot_id),
                     read_in_full=row.full_text_status == "ingested",
                     abstract=abstract,
                     abstract_source=abstract_source,
@@ -1607,6 +1601,7 @@ def _event_decision(row: Any, walk_id: uuid.UUID | None = None) -> DecisionOut:
             capability_run_id=walk_id,
         )
     text = {
+        "component.started": "Started a step.",
         "component.completed": "Completed an evidence-search step.",
         "component.failed": "An evidence-search step failed.",
         "component.skipped": "Skipped an evidence-search step.",
@@ -1673,16 +1668,38 @@ def walks_of_event_runs(
 def decisions_page(
     conn: Connection, task_id: uuid.UUID, page: int, page_size: int
 ) -> Page[DecisionOut]:
-    """Return steering-history decisions plus the explicitly allowlisted audit events."""
+    """Return steering-history decisions plus the explicitly allowlisted audit events.
+
+    A theory-of-change task also gets ``component.started``: its chat shows the
+    step running now (task 054, round 6).
+    """
+    kinds = set(_EVENT_KINDS)
+    if capability_of_task(conn, task_id) == THEORY_OF_CHANGE:
+        kinds.add("component.started")
     allowed = (
         conn.execute(
             select(event_log).where(
-                event_log.c.task_id == task_id, event_log.c.event_type.in_(_EVENT_KINDS)
+                event_log.c.task_id == task_id, event_log.c.event_type.in_(kinds)
             )
         )
         .mappings()
         .all()
     )
+    if "component.started" in kinds:
+        # The item searches run as child walks (one per link): only the walk's own steps.
+        own = set(
+            conn.execute(
+                select(capability_run.c.capability_run_id).where(
+                    capability_run.c.task_id == task_id,
+                    capability_run.c.parent_capability_run_id.is_(None),
+                )
+            ).scalars()
+        )
+        allowed = [
+            row
+            for row in allowed
+            if row["event_type"] != "component.started" or row["run_id"] in own
+        ]
     walks = walks_of_event_runs(conn, task_id, allowed)
     decision_events: list[DecisionOut] = [
         _event_decision(row, walks.get(row.run_id) if row.run_id is not None else None)
@@ -1861,18 +1878,14 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
     # scoring input, surfaced with the label so the UI can say WHY a citation
     # carries a band) — both through the label resolver (task 045, S5), over
     # the documents the citations can resolve to.
-    citation_labels = labels_for_snapshots(
-        conn, task_id=task_id, tss_ids=set(tss_to_envelope)
-    )
+    citation_labels = labels_for_snapshots(conn, task_id=task_id, tss_ids=set(tss_to_envelope))
     citations_by_annotation: dict[uuid.UUID, list[Any]] = {}
     for row in citation_rows:
         citations_by_annotation.setdefault(row.annotation_id, []).append(row)
     refs: dict[uuid.UUID, int] = {}
     reference_order: list[uuid.UUID] = []
     claims_by_block: dict[uuid.UUID, list[ClaimOut]] = {block_id: [] for block_id in ids}
-    claims_alias_by_block: dict[uuid.UUID, dict[str, ClaimOut]] = {
-        block_id: {} for block_id in ids
-    }
+    claims_alias_by_block: dict[uuid.UUID, dict[str, ClaimOut]] = {block_id: {} for block_id in ids}
     for row in annotations:
         locator = row.locator if isinstance(row.locator, Mapping) else {}
         start, end = locator.get("start"), locator.get("end")
@@ -1918,15 +1931,15 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
             else "reasoning"
         )
         claim_out = ClaimOut(
-                claim_id=row.unit_id,
-                claim_type=cast(Any, claim_type),
-                text=row.content,
-                span=span,
-                citations=claim_citations,
-                weakly_grounded=_weakly_grounded(row.payload),
-                gap=_gap_out(row.payload),
-                theme=_theme_out(row.payload, characterisation_themes, grouping_themes),
-            )
+            claim_id=row.unit_id,
+            claim_type=cast(Any, claim_type),
+            text=row.content,
+            span=span,
+            citations=claim_citations,
+            weakly_grounded=_weakly_grounded(row.payload),
+            gap=_gap_out(row.payload),
+            theme=_theme_out(row.payload, characterisation_themes, grouping_themes),
+        )
         claims_by_block[row.block_id].append(claim_out)
         synthesis_claim_id = row_payload.get("claim_id")
         if isinstance(synthesis_claim_id, str):
@@ -1984,7 +1997,8 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                             card_uuid = uuid.uuid4()
                         # Task per-card claims from stored claim_ids/spans
                         card_claims = _task_card_claims(
-                            raw_card, block_claim_by_id,
+                            raw_card,
+                            block_claim_by_id,
                         )
                         result_claim_str = raw_card.get("result_claim_id")
                         result_claim_uuid = (
@@ -2003,7 +2017,8 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                             else:
                                 result_claim_uuid = None
                         strength, design, since_year = _card_evidence_fields(
-                            raw_card, card_claims,
+                            raw_card,
+                            card_claims,
                         )
                         cards.append(
                             CaseStudyCardOut(
@@ -2085,9 +2100,7 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
     # Task most_relevant_notes from counts JSONB (task 034 S5).
     raw_counts = synthesis.get("counts")
     raw_mrs_notes = (
-        raw_counts.get("most_relevant_notes", [])
-        if isinstance(raw_counts, Mapping)
-        else []
+        raw_counts.get("most_relevant_notes", []) if isinstance(raw_counts, Mapping) else []
     )
     mrs_notes_out = [
         MostRelevantNoteOut(source_id=str(note["source_id"]), note=str(note["note"]))
@@ -2097,9 +2110,7 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
         and isinstance(note.get("note"), str)
     ]
     raw_full_report_intro = (
-        raw_counts.get("full_report_intro")
-        if isinstance(raw_counts, Mapping)
-        else None
+        raw_counts.get("full_report_intro") if isinstance(raw_counts, Mapping) else None
     )
     full_report_intro_out = (
         raw_full_report_intro.strip()
@@ -2203,16 +2214,18 @@ def _task_card_claims(
             if block_claim is None:
                 continue
             span = span_by_id.get(cid)
-            result.append(ClaimOut(
-                claim_id=block_claim.claim_id,
-                claim_type=block_claim.claim_type,
-                text=block_claim.text,
-                span=span,
-                citations=block_claim.citations,
-                weakly_grounded=block_claim.weakly_grounded,
-                gap=block_claim.gap,
-                theme=block_claim.theme,
-            ))
+            result.append(
+                ClaimOut(
+                    claim_id=block_claim.claim_id,
+                    claim_type=block_claim.claim_type,
+                    text=block_claim.text,
+                    span=span,
+                    citations=block_claim.citations,
+                    weakly_grounded=block_claim.weakly_grounded,
+                    gap=block_claim.gap,
+                    theme=block_claim.theme,
+                )
+            )
             # A stored entry with an explicitly-null span is the write path's
             # own record that this claim's text bound into the card title, not
             # the prose (synthesise.py stores span=None on a prose miss) —
@@ -2236,16 +2249,18 @@ def _task_card_claims(
     for claim in unique_claims.values():
         pos = card_prose.find(claim.text)
         if pos >= 0:
-            result.append(ClaimOut(
-                claim_id=claim.claim_id,
-                claim_type=claim.claim_type,
-                text=claim.text,
-                span=(pos, pos + len(claim.text)),
-                citations=claim.citations,
-                weakly_grounded=claim.weakly_grounded,
-                gap=claim.gap,
-                theme=claim.theme,
-            ))
+            result.append(
+                ClaimOut(
+                    claim_id=claim.claim_id,
+                    claim_type=claim.claim_type,
+                    text=claim.text,
+                    span=(pos, pos + len(claim.text)),
+                    citations=claim.citations,
+                    weakly_grounded=claim.weakly_grounded,
+                    gap=claim.gap,
+                    theme=claim.theme,
+                )
+            )
     result.sort(key=lambda claim: claim.span[0] if claim.span is not None else -1)
     return result
 
@@ -2436,8 +2451,7 @@ def _theme_sources_for_task_source_snapshots(
         .select_from(
             task_source_snapshot.join(
                 source_snapshot,
-                task_source_snapshot.c.source_snapshot_id
-                == source_snapshot.c.source_snapshot_id,
+                task_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
             )
         )
         .where(
@@ -2774,9 +2788,7 @@ def source_dossier_out(
     elif source_id in selected:
         status, reason = "selected", None
     elif (
-        screen is not None
-        and screen.status == "relevant"
-        and row["full_text_status"] == "ingested"
+        screen is not None and screen.status == "relevant" and row["full_text_status"] == "ingested"
     ):
         status, reason = "read_in_full", None
     elif (
@@ -2931,8 +2943,7 @@ def source_records_out(
             ipr.c.created_at,
         )
         .select_from(
-            om.join(ipr, (ipr.c.record_id == om.c.unit_id) & (ipr.c.task_id == om.c.task_id))
-            .join(
+            om.join(ipr, (ipr.c.record_id == om.c.unit_id) & (ipr.c.task_id == om.c.task_id)).join(
                 option,
                 (option.c.option_id == om.c.option_id) & (option.c.task_id == om.c.task_id),
             )
@@ -3109,7 +3120,7 @@ def _clamped_quote_window(
     task_id: uuid.UUID,
     text: str,
     quote: str,
-    sequence: int,
+    sequence: int | None,
     source_snapshot_id: uuid.UUID,
 ) -> ChunkContextOut | None:
     """Clamp a unique quote to a local window, with short edge neighbours.
@@ -3119,7 +3130,9 @@ def _clamped_quote_window(
         task_id: Owning task (for year/venue).
         text: The cited chunk's raw content.
         quote: The citation or chat quote, as stored.
-        sequence: Chunk sequence in the snapshot.
+        sequence: Chunk sequence in the snapshot, or ``None`` when ``text``
+            is not a chunk (a theory-of-change judgement read the title and
+            abstract): then no neighbouring chunk is shown.
         source_snapshot_id: Snapshot the chunk belongs to.
 
     Returns:
@@ -3133,11 +3146,11 @@ def _clamped_quote_window(
     end_window = min(len(text), end + _CONTEXT_SIDE_CHARS)
     previous = None
     following = None
-    if start_window == 0:
+    if start_window == 0 and sequence is not None:
         raw = _adjacent_chunk(conn, source_snapshot_id, sequence - 1)
         if raw:
             previous = _edge_snippet(raw, from_end=True)
-    if end_window == len(text):
+    if end_window == len(text) and sequence is not None:
         raw = _adjacent_chunk(conn, source_snapshot_id, sequence + 1)
         if raw:
             following = _edge_snippet(raw, from_end=False)
@@ -3239,8 +3252,7 @@ def _chunk_metadata(
         .select_from(
             task_source_snapshot.join(
                 source_snapshot,
-                task_source_snapshot.c.source_snapshot_id
-                == source_snapshot.c.source_snapshot_id,
+                task_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
             )
         )
         .where(
@@ -3338,9 +3350,7 @@ def _latest_longlist_row(conn: Connection, task_id: uuid.UUID) -> Any | None:
     return conn.execute(
         select(longlist_result)
         .where(longlist_result.c.task_id == task_id)
-        .order_by(
-            longlist_result.c.created_at.desc(), longlist_result.c.longlist_result_id.desc()
-        )
+        .order_by(longlist_result.c.created_at.desc(), longlist_result.c.longlist_result_id.desc())
         .limit(1)
     ).one_or_none()
 
@@ -3361,7 +3371,9 @@ def _scoping_plan_version(
             select(task_plan.c.version, task_plan.c.payload)
             .where(task_plan.c.task_id == task_id)
             .where(task_plan.c.version == version)
-        ).mappings().one_or_none()
+        )
+        .mappings()
+        .one_or_none()
     )
     if row is None:
         return None
@@ -3420,9 +3432,7 @@ def _option_relations(
     for row in rows:
         component, package = row.from_option_id, row.to_option_id
         out.setdefault(component, []).append(
-            RelationOut(
-                kind="part_of", other_option_id=package, other_name=names.get(package, "")
-            )
+            RelationOut(kind="part_of", other_option_id=package, other_name=names.get(package, ""))
         )
         out.setdefault(package, []).append(
             RelationOut(
@@ -3837,8 +3847,10 @@ def _added_searches(
                 )
                 .join(
                     task_source_snapshot,
-                    (task_source_snapshot.c.task_source_snapshot_id
-                     == source_extraction_record.c.task_source_snapshot_id)
+                    (
+                        task_source_snapshot.c.task_source_snapshot_id
+                        == source_extraction_record.c.task_source_snapshot_id
+                    )
                     & (task_source_snapshot.c.task_id == ipr.c.task_id),
                 )
                 .join(
@@ -4105,14 +4117,11 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
         themes=len(themes),
         included=sum(1 for row in rows if row.state == "included"),
         excluded=sum(1 for row in rows if row.state == "excluded"),
-        no_in_scope=sum(
-            1 for row in rows if row.state == "included" and row.no_in_scope_evidence
-        ),
+        no_in_scope=sum(1 for row in rows if row.state == "included" and row.no_in_scope_evidence),
         none_fits=sum(
             1
             for row in rows
-            if row.primary_lever_type is None
-            and row.lever_none_fits_reason is not None
+            if row.primary_lever_type is None and row.lever_none_fits_reason is not None
         ),
     )
     taxonomy = _as_mapping(result.provenance).get("taxonomy_version")
@@ -4278,8 +4287,10 @@ def _option_documents(
                 )
                 .join(
                     source_tss,
-                    (source_tss.c.task_source_snapshot_id
-                     == source_extraction_record.c.task_source_snapshot_id)
+                    (
+                        source_tss.c.task_source_snapshot_id
+                        == source_extraction_record.c.task_source_snapshot_id
+                    )
                     & (source_tss.c.task_id == fru.c.task_id),
                 )
                 .join(
@@ -4521,9 +4532,7 @@ def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> Op
     )
     plan = plan_row[1] if plan_row is not None else None
     plan_outcomes = _plan_outcomes(plan)
-    context = _line_context(
-        result.option_profile if result is not None else None, plan_outcomes
-    )
+    context = _line_context(result.option_profile if result is not None else None, plan_outcomes)
     members = list(
         conn.execute(
             select(option_membership)

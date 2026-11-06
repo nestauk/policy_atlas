@@ -161,6 +161,18 @@ from policy_atlas.runtime.task_plan import (
     TaskPlan,
     registry_component_for,
 )
+from policy_atlas.runtime.toc_plan import (
+    TOC_CHECK_MODE_KEY,
+    TOC_LINKS_KEY,
+    TOC_PURPOSE,
+    TOC_STUDIES_KEY,
+    TOC_WALK_CHECK,
+    TOC_WALK_KEY,
+    link_scale_for,
+    toc_stop_requested,
+)
+from policy_atlas.theory_of_change.backend import TocBackend
+from policy_atlas.theory_of_change.cost import walk_cost
 
 log = structlog.get_logger()
 
@@ -185,6 +197,17 @@ LLM_BEARING_COMPONENTS = frozenset(
         "theme",
         # Task 046 (R37): option_profile makes the lever-typing calls.
         "option_profile",
+        # Task 054: every theory-of-change step makes model calls.
+        "toc_draft",
+        "toc_select",
+        "toc_search_new",
+        "toc_discover",
+        "toc_merge",
+        "toc_judge",
+        "toc_figures",
+        "toc_choose",
+        "toc_summarise",
+        "toc_report",
         # Task 055: shortlist makes the one proposal call (and its re-ask).
         "shortlist",
     }
@@ -305,6 +328,8 @@ class RunnerBackends:
         longlist: Optional model seam for the options-scoping ``longlist``
             step (task 045); ``None`` lets the harness resolve the
             deterministic ``StubLonglistBackend``.
+        toc: Optional model seam for every theory-of-change step (task
+            054); ``None`` lets the harness resolve ``StubTocBackend``.
         queue: The full-text ingest queue client (task 057). ``None`` lets the
             runner build the in-process client over its own engine.
         connect: Opens one short committed transaction for the full-text stage's
@@ -330,6 +355,7 @@ class RunnerBackends:
     langfuse_client: Langfuse | None = None
     suggest: SuggestBackend | None = None
     longlist: LonglistBackend | None = None
+    toc: TocBackend | None = None
     queue: QueueClient | None = None
     connect: ConnectFactory | None = None
 
@@ -998,6 +1024,41 @@ def _run_plan_impl(
     # run, on a resumed walk).
     option_search_children: list[uuid.UUID] | None = None
     option_searches_joined = False
+    # A theory-of-change check walk's item searches (task 054, S3): the same
+    # two barriers, dispatched before the first step and joined before
+    # ``toc_select``. A ToC walk never pauses, so never resumes.
+    toc_check = (
+        purpose == TOC_PURPOSE
+        and scope_context.get(TOC_WALK_KEY) == TOC_WALK_CHECK
+        # Updating the report searches nothing (C45).
+        and scope_context.get(TOC_CHECK_MODE_KEY) != "report"
+    )
+    toc_children: list[uuid.UUID] | None = None
+    toc_joined = False
+    toc_new_joined = False
+    toc_retry_joined = False
+
+    def toc_plan_row() -> dict[str, Any]:
+        return {
+            "plan_id": steering_state.plan_id,
+            "version": steering_state.plan_version,
+            "payload": steering_state.plan.model_dump(mode="json"),
+        }
+
+    def toc_searches_failed(stage: str, reason: str) -> None:
+        """A ToC barrier whose searches did not all finish: a skipped stage and a flag."""
+        step_outcomes.append(
+            RunStepOutcome(
+                component=stage,
+                run_id=None,
+                status="skipped",
+                wall_clock_s=None,
+                skipped=True,
+                reason=reason,
+            )
+        )
+        flagged_events.append({"component": stage, "status": "skipped", "reason": reason})
+
     # The most-recent ATTEMPTED run id per registry component, INCLUDING failed
     # attempts (FIX 1): un-blinds class 9 (downstream_capability_reduced), which
     # scans the walk's attempted run ids for component.failed/skipped events — a
@@ -1122,6 +1183,125 @@ def _run_plan_impl(
 
     while remaining_steps:
         step = remaining_steps.pop(0)
+        # The user stopped a theory-of-change walk (task 054, C48): end it before the
+        # next step; what finished stays.
+        if purpose == TOC_PURPOSE and toc_stop_requested(
+            engine, task_id=task_id, capability_run_id=capability_run_id
+        ):
+            return _finish_run(
+                engine,
+                step_outcomes,
+                flagged_events,
+                status="aborted",
+                capability_run_id=capability_run_id,
+                task_id=task_id,
+            )
+        if toc_check:
+            if toc_children is None:
+                toc_children = option_search.dispatch_toc_item_searches(
+                    engine,
+                    task_id=task_id,
+                    parent_id=capability_run_id,
+                    plan_row=toc_plan_row(),
+                    backends=backend_bundle,
+                    session_id=session_id,
+                    links=scope_context.get(TOC_LINKS_KEY),
+                    dois=scope_context.get(TOC_STUDIES_KEY),
+                    scale=link_scale_for(scope_context),
+                    # Find more evidence searches in new words (C44).
+                    reformulate=scope_context.get(TOC_CHECK_MODE_KEY) == "find_more",
+                )
+            if step.component == "toc_select" and not toc_joined:
+                toc_joined = True
+                joined = option_search.join_option_searches(
+                    engine,
+                    task_id=task_id,
+                    parent_id=capability_run_id,
+                    child_ids=toc_children,
+                    stage=option_search.TOC_ITEM_SEARCHES_STAGE,
+                    timeout=option_search.toc_join_timeout(len(toc_children)),
+                )
+                # A failed item search degrades the walk, never fails it.
+                if joined.failed:
+                    toc_searches_failed(
+                        option_search.TOC_ITEM_SEARCHES_STAGE,
+                        f"{joined.failed} of {joined.total} item searches did not finish",
+                    )
+            # The second fan-out (C32): after merge, the kept links discovery
+            # added get their own item search, dispatched and joined before
+            # ``toc_search_new`` picks their documents.
+            if step.component == "toc_search_new" and not toc_new_joined:
+                toc_new_joined = True
+                from policy_atlas.theory_of_change.check.selecting import links_without_search
+
+                with engine.connect() as conn:
+                    new_links = links_without_search(
+                        conn, task_id=task_id, walk_id=capability_run_id
+                    )
+                if new_links:
+                    stage = option_search.TOC_NEW_LINK_SEARCHES_STAGE
+                    new_children = option_search.dispatch_toc_item_searches(
+                        engine,
+                        task_id=task_id,
+                        parent_id=capability_run_id,
+                        plan_row=toc_plan_row(),
+                        backends=backend_bundle,
+                        session_id=session_id,
+                        links=new_links,
+                        stage=stage,
+                    )
+                    joined = option_search.join_option_searches(
+                        engine,
+                        task_id=task_id,
+                        parent_id=capability_run_id,
+                        child_ids=new_children,
+                        stage=stage,
+                        timeout=option_search.toc_join_timeout(len(new_children)),
+                    )
+                    # A failed search leaves its link to the pool fallback.
+                    if joined.failed:
+                        toc_searches_failed(
+                            stage,
+                            f"{joined.failed} of {joined.total} new-link searches did not finish",
+                        )
+            # The third fan-out (C44): after the judge, a link left with too
+            # little evidence gets one reformulated search, dispatched and joined
+            # before ``toc_search_again`` picks and judges its new documents.
+            if step.component == "toc_search_again" and not toc_retry_joined:
+                toc_retry_joined = True
+                from policy_atlas.theory_of_change.check.selecting import links_without_evidence
+
+                with engine.connect() as conn:
+                    thin_links = links_without_evidence(
+                        conn, task_id=task_id, walk_id=capability_run_id
+                    )
+                if thin_links:
+                    stage = option_search.TOC_RETRY_SEARCHES_STAGE
+                    retry_children = option_search.dispatch_toc_item_searches(
+                        engine,
+                        task_id=task_id,
+                        parent_id=capability_run_id,
+                        plan_row=toc_plan_row(),
+                        backends=backend_bundle,
+                        session_id=session_id,
+                        links=thin_links,
+                        stage=stage,
+                        reformulate=True,
+                    )
+                    joined = option_search.join_option_searches(
+                        engine,
+                        task_id=task_id,
+                        parent_id=capability_run_id,
+                        child_ids=retry_children,
+                        stage=stage,
+                        timeout=option_search.toc_join_timeout(len(retry_children)),
+                    )
+                    # A failed search leaves its link as the judge left it.
+                    if joined.failed:
+                        toc_searches_failed(
+                            stage,
+                            f"{joined.failed} of {joined.total} second searches did not finish",
+                        )
         if purpose == LONGLIST_PURPOSE:
             # The fan-out: the first step after ``suggest`` (whether it
             # succeeded or not — the user's own options are entrants either
@@ -5580,10 +5760,11 @@ def _finish_run(
             .where(capability_run.c.capability_run_id == capability_run_id)
             .where(capability_run.c.task_id == task_id)
         ).scalar_one_or_none()
-    if purpose == LONGLIST_PURPOSE:
+    if purpose in (LONGLIST_PURPOSE, TOC_PURPOSE):
         # Every end of a longlist walk — the spine failed, an abort, or the
         # walk's own finish — ends the option searches the join never waited
         # for, before the walk itself (task 045, S2). After a join, a no-op.
+        # A theory-of-change check walk's item searches end the same way (054).
         option_search.abandon_children(engine, task_id=task_id, parent_id=capability_run_id)
     with engine.begin() as conn:
         ended_at = datetime.now(UTC)
@@ -5631,19 +5812,38 @@ def _finish_run(
                 .where(capability_run.c.task_id == task_id)
                 .values(status=status, ended_at=ended_at)
             )
+            finished: dict[str, Any] = {
+                "capability_run_id": str(capability_run_id),
+                "status": status,
+            }
+            if purpose == TOC_PURPOSE and not is_child:
+                # The run-level cost line (task 054, C30): tokens per step, US dollars.
+                finished["cost"] = walk_cost(conn, task_id=task_id, walk_id=capability_run_id)
+                log.info(
+                    "toc_check.cost",
+                    capability_run_id=str(capability_run_id),
+                    **finished["cost"],
+                )
             events.append(
                 conn,
                 task_id=task_id,
                 run_id=None,
                 event_type="run.finished",
-                payload={"capability_run_id": str(capability_run_id), "status": status},
+                payload=finished,
             )
         # A completed run closes its task_agent conversation atomically with the
         # terminal status + run.finished event (029 strand 2): a crash can
         # never leave a succeeded run with an active task_agent conversation.
         # A child walk never does (task 045, P3): the thread the user is
         # watching belongs to its parent. Nor does any option search.
-        if status in ("succeeded", "degraded") and not is_child and not is_option_search:
+        # Nor does a theory-of-change walk (054, S7): the thread stays open
+        # through the check and after it.
+        if (
+            status in ("succeeded", "degraded")
+            and not is_child
+            and not is_option_search
+            and purpose != TOC_PURPOSE
+        ):
             close_task_agent_conversation(conn, task_id=task_id, closed_at=ended_at)
     collation = render_collation(flagged_events)
     log.info("runner.collation", render=collation)
@@ -5890,6 +6090,7 @@ def _run_step_attempt(
                     grounding_judge_backend=backends.grounding_judge,
                     suggest_backend=backends.suggest,
                     longlist_backend=backends.longlist,
+                    toc_backend=backends.toc,
                     search_backends=backends.search_backends,
                     search_generation_backend=backends.search_generation,
                     document_fetcher=ingest_backends.document_fetcher,
