@@ -595,7 +595,6 @@ def test_section_completed_carries_citations_and_the_card_frame_is_ephemeral() -
                     "n": 3,
                     "source_id": str(source_id),
                     "title": "Breakfast clubs",
-                    "tier": "tier_1",
                 },
                 {
                     "start": 0,
@@ -603,16 +602,20 @@ def test_section_completed_carries_citations_and_the_card_frame_is_ephemeral() -
                     "n": 4,
                     "source_id": None,
                     "title": "Unknown source",
-                    "tier": None,
                 },
+            ],
+            # Round 13: the verdict is the claim's.
+            "claims": [
+                {"start": 0, "end": 11, "tier": "tier_1", "rationale": "Matches the trial."}
             ],
         }
     )
     assert isinstance(completed, ArtefactSectionCompletedFrame)
-    assert [(c.n, c.source_id, c.tier) for c in completed.citations] == [
-        (3, source_id, "tier_1"),
-        (4, None, None),
+    assert [(c.n, c.source_id) for c in completed.citations] == [(3, source_id), (4, None)]
+    assert [(c.start, c.end, c.tier, c.rationale) for c in completed.claims] == [
+        (0, 11, "tier_1", "Matches the trial.")
     ]
+    assert "tier" not in completed.model_dump(mode="json")["citations"][0]
     dumped = completed.model_dump(mode="json")
     assert dumped["citations"][0]["source_id"] == str(source_id)
     # A frame recorded before the field existed still validates, with none.
@@ -627,6 +630,7 @@ def test_section_completed_carries_citations_and_the_card_frame_is_ephemeral() -
         }
     )
     assert isinstance(older, ArtefactSectionCompletedFrame) and older.citations == []
+    assert older.claims == []
 
     card = _adapter().validate_python(
         {
@@ -662,7 +666,6 @@ def test_round8_citation_ids_the_intro_role_and_the_source_note_frame() -> None:
                     "n": 1,
                     "source_id": None,
                     "title": "Breakfast clubs",
-                    "tier": "tier_1",
                     "citation_id": str(citation_id),
                     "claim_id": str(claim_id),
                     "quote": "Costs fell in both trials.",

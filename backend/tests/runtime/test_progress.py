@@ -93,6 +93,7 @@ def test_progress_emitter_uses_display_order_and_closes_empty_key_findings(
             "title": "Key findings",
             "prose": "",
             "citations": [],
+            "claims": [],
         }
 
         # A cursor after the skeleton is a reconnect mid-synthesis: replay
@@ -190,7 +191,6 @@ def test_progress_emitter_case_studies_slot_and_citations_survive_replay(
             "n": 1,
             "source_id": source_id,
             "title": "Breakfast clubs",
-            "tier": "tier_2",
             # Round 8: the saved ids and the quote ride along.
             "citation_id": str(uuid.uuid4()),
             "claim_id": str(uuid.uuid4()),
@@ -198,7 +198,7 @@ def test_progress_emitter_case_studies_slot_and_citations_survive_replay(
         }
         # Recorded in the round-7 shape (no ids, no quote).
         card_citation = {"start": 20, "end": 31, "n": 2, "source_id": None,
-                         "title": "Unknown source", "tier": None}
+                         "title": "Unknown source"}
         emitter.section_started(0)
         emitter.section_completed(0, prose="Evidence prose.", citations=[body_citation])
         emitter.key_findings_started()

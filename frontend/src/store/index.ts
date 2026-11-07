@@ -6,6 +6,7 @@ export { RunStreamProvider, useRunStream } from "./useRunStream";
 export { createInitialRunStreamState } from "./types";
 export type {
   LiveCard,
+  LiveCheckedClaim,
   LiveCitation,
   LiveClaim,
   LiveSearchQuery,

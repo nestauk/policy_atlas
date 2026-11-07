@@ -796,10 +796,11 @@ def funnel_out(conn: Connection, task_id: uuid.UUID) -> FunnelOut:
     )
     effective = _effective_screens(conn, task_id)
     statuses = [row.status for row in effective.values()]
+    # Distinct documents (task 058, round 13): a redrawn plan appraises a
+    # document once per question; the `appraised=true` filter lists it once.
     appraised = int(
         conn.execute(
-            select(func.count())
-            .select_from(source_appraisal_result)
+            select(func.count(func.distinct(source_appraisal_result.c.task_source_snapshot_id)))
             .where(source_appraisal_result.c.task_id == task_id)
         ).scalar_one()
     )
@@ -1093,6 +1094,22 @@ def _expand_evidence_statuses(values: Iterable[str]) -> set[str]:
     return expanded
 
 
+def _read_depth(
+    *, read_in_full: bool, status: str, screen_status: str | None, abstract: str | None
+) -> Literal["full_text", "abstract", "title"] | None:
+    """The read depth the sources table's Status column shows (task 058, round 13).
+
+    The client's ``readDepthLabel``: the full text when it was collected; for
+    a relevant or unavailable source, the abstract when it has one, else the
+    title; no depth for the rest.
+    """
+    if read_in_full:
+        return "full_text"
+    if status == "unavailable" or screen_status == "relevant":
+        return "abstract" if abstract and abstract.strip() else "title"
+    return None
+
+
 def _query_record_ids(
     conn: Connection, task_id: uuid.UUID, query_id: int
 ) -> tuple[str, set[str]] | None:
@@ -1158,6 +1175,8 @@ def evidence_page(
     year_to: int | None = None,
     country: str | None = None,
     query: int | None = None,
+    depth: Literal["full_text", "abstract", "title"] | None = None,
+    appraised: bool | None = None,
 ) -> Page[EvidenceItemOut]:
     """Return one evidence page, deriving status task-wide before paging.
 
@@ -1169,6 +1188,11 @@ def evidence_page(
     row's ``query_id`` (:func:`_query_record_ids`, task 058, round 12): a
     row matches by its backend and backend record id. A key no search of this
     task has, or a search from before the ids were recorded, keeps nothing.
+
+    ``depth`` keeps the rows the table's Status column shows at that read
+    depth (:func:`_read_depth`); ``appraised`` keeps the documents the
+    appraise stage scored (``True``) or did not (``False``), as the funnel's
+    quality-checked row counts them (task 058, round 13).
 
     `status`/`cited`/`theme` filters are collection-true: status is derived for
     every task source (bounded — one task's worth of rows, the
@@ -1234,6 +1258,17 @@ def evidence_page(
     synthesis = _latest_synthesis(conn, task_id)
     cited_snapshots = (
         _cited_snapshot_ids(conn, synthesis["artefact_id"]) if synthesis is not None else set()
+    )
+    appraised_sources = (
+        set(
+            conn.execute(
+                select(source_appraisal_result.c.task_source_snapshot_id).where(
+                    source_appraisal_result.c.task_id == task_id
+                )
+            ).scalars()
+        )
+        if appraised is not None
+        else None
     )
     themed_sources = (
         set(
@@ -1325,6 +1360,20 @@ def evidence_page(
         ):
             continue
         abstract, abstract_source = _abstract_fields(metadata)
+        if appraised_sources is not None and (
+            (row.task_source_snapshot_id in appraised_sources) != appraised
+        ):
+            continue
+        if depth is not None and (
+            _read_depth(
+                read_in_full=row.full_text_status == "ingested",
+                status=status,
+                screen_status=screen.status if screen is not None else None,
+                abstract=abstract,
+            )
+            != depth
+        ):
+            continue
         sortable_items.append(
             (
                 EvidenceItemOut(
@@ -1728,12 +1777,16 @@ OPTION_INCLUDED = "option.included"
 #: *remove from shortlist*, written by the same module.
 OPTION_SHORTLISTED = "option.shortlisted"
 OPTION_UNSHORTLISTED = "option.unshortlisted"
+#: A reason given after the user's own one-click exclusion (task 058, round
+#: 13): the exclusion stands, its reason is filled in.
+OPTION_EXCLUSION_REASON_ADDED = "option.exclusion_reason_added"
 OPTION_EVENT_KINDS: tuple[str, ...] = (
     OPTION_ADDED,
     OPTION_EXCLUDED,
     OPTION_INCLUDED,
     OPTION_SHORTLISTED,
     OPTION_UNSHORTLISTED,
+    OPTION_EXCLUSION_REASON_ADDED,
 )
 #: Policy Atlas's shortlist proposal (task 055, A7): one event per proposal,
 #: the record of its places, note, appetite and versions. Written by the
@@ -1767,6 +1820,7 @@ _OPTION_VERBS = {
     OPTION_INCLUDED: "included",
     OPTION_SHORTLISTED: "shortlisted",
     OPTION_UNSHORTLISTED: "unshortlisted",
+    OPTION_EXCLUSION_REASON_ADDED: "gave a reason",
 }
 
 #: The bare lifecycle kind of each stored lifecycle event type, both
@@ -2172,7 +2226,6 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                 reference_order.append(doc_key)
             source_meta, locator_text = meta.get(_envelope_id(snapshot_id), ({}, "Unknown source"))
             label = citation_labels.get(tss_id) if tss_id is not None else None
-            payload = row_payload
             claim_citations.append(
                 CitationOut(
                     citation_id=cited.citation_id,
@@ -2180,12 +2233,6 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                     source_id=tss_id,
                     source_title=_title(source_meta, locator_text),
                     quote=cited.quote,
-                    grounding_tier=cast(str | None, payload.get("verdict"))
-                    if isinstance(payload.get("verdict"), str)
-                    else None,
-                    grounding_rationale=cast(str, payload.get("rationale"))
-                    if isinstance(payload.get("rationale"), str)
-                    else None,
                     appraisal_label=appraisal_label(label.quality_score, unrated=label.unrated)
                     if label is not None
                     else None,
@@ -2205,6 +2252,12 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                 text=row.content,
                 span=span,
                 citations=claim_citations,
+                grounding_tier=cast(str, row_payload.get("verdict"))
+                if isinstance(row_payload.get("verdict"), str)
+                else None,
+                grounding_rationale=cast(str, row_payload.get("rationale"))
+                if isinstance(row_payload.get("rationale"), str)
+                else None,
                 weakly_grounded=_weakly_grounded(row.payload),
                 gap=_gap_out(row.payload),
                 theme=_theme_out(row.payload, characterisation_themes, grouping_themes),

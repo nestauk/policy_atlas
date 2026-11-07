@@ -403,9 +403,6 @@ class CitationOut(BaseModel):
             citation resolves to one (joins to the sources/dossier surface).
         source_title: Cited source's title (envelope metadata).
         quote: The quoted span from the source.
-        grounding_tier: Optional grounding-judge tier label.
-        grounding_rationale: The grounding judge's recorded reason for the
-            tier, when one was persisted with the verdict.
         appraisal_label: Optional appraisal label.
         evidence_type: The cited document's classified evidence type — the
             input the appraisal rubric scores from.
@@ -418,8 +415,6 @@ class CitationOut(BaseModel):
     source_id: uuid.UUID | None = None
     source_title: str
     quote: str
-    grounding_tier: str | None = None
-    grounding_rationale: str | None = None
     appraisal_label: str | None = None
     evidence_type: str | None = None
     text_basis: str | None = None
@@ -495,6 +490,9 @@ class ClaimOut(BaseModel):
         span: Character offsets `[start, end]` into the block's `prose`, or
             `None`.
         citations: Citations attached to this claim (citation-type only).
+        grounding_tier: The grounding judge's verdict on the claim, when it
+            was checked (task 058, round 13: the claim's, not each citation's).
+        grounding_rationale: The judge's recorded reason for the verdict.
         theme: Named themes or groups referenced by a theme claim.
     """
 
@@ -503,6 +501,8 @@ class ClaimOut(BaseModel):
     text: str
     span: tuple[int, int] | None = None
     citations: list[CitationOut] = Field(default_factory=list)
+    grounding_tier: str | None = None
+    grounding_rationale: str | None = None
     weakly_grounded: bool | None = None
     gap: GapOut | None = None
     theme: ThemeRefOut | None = None

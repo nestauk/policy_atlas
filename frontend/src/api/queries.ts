@@ -29,7 +29,7 @@ export const queryKeys = {
   landscape: (taskId: string, scope?: "cited") =>
     ["tasks", taskId, "landscape", scope] as const,
   evidence: (taskId: string, query?: EvidenceQuery) =>
-    ["tasks", taskId, "evidence", query?.page, query?.page_size, query?.status, query?.cited, query?.sort, query?.order, query?.theme, query?.origin, query?.evidence_type, query?.strength, query?.year_from, query?.year_to, query?.country, query?.query] as const,
+    ["tasks", taskId, "evidence", query?.page, query?.page_size, query?.status, query?.cited, query?.sort, query?.order, query?.theme, query?.origin, query?.evidence_type, query?.strength, query?.year_from, query?.year_to, query?.country, query?.query, query?.depth, query?.appraised] as const,
   findings: (taskId: string, query?: FindingsQuery) =>
     ["tasks", taskId, "findings", query?.page, query?.page_size, query?.profile, query?.facet, query?.group, query?.group_id, query?.source_id] as const,
   decisions: (taskId: string, page?: number, pageSize?: number) =>
@@ -122,6 +122,11 @@ export interface EvidenceQuery extends PageQuery {
    *  only the sources that search or pass returned; an empty page for a
    *  search from before the ids were kept (task 058, round 12). */
   query?: number;
+  /** The read depth the Status column shows (task 058, round 13). */
+  depth?: "full_text" | "abstract" | "title";
+  /** `true`: the documents the appraise stage scored, the funnel's
+   *  quality-checked row (task 058, round 13). */
+  appraised?: boolean;
 }
 
 interface FindingsQuery extends PageQuery {

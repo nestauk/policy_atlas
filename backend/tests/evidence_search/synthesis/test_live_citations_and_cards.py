@@ -196,7 +196,6 @@ def test_completed_sections_carry_citations_numbered_as_the_saved_report(
                 "n": citation.n,
                 "source_id": str(citation.source_id) if citation.source_id else None,
                 "title": citation.source_title,
-                "tier": citation.grounding_tier,
                 # Round 8: the saved ids and quote, so the live page can ask
                 # for the citation's context before the commit.
                 "citation_id": str(citation.citation_id),
@@ -210,6 +209,20 @@ def test_completed_sections_carry_citations_numbered_as_the_saved_report(
         ]
         live = completed[section.title]
         assert live["citations"] == expected, section.title
+        # Round 13: the verdict rides on the claim, as the saved claim has it.
+        expected_claims = [
+            {
+                "claim_id": str(claim.claim_id),
+                "start": claim.span[0],
+                "end": claim.span[1],
+                "tier": claim.grounding_tier,
+                "rationale": claim.grounding_rationale,
+            }
+            for block in section.blocks
+            for claim in block.claims
+            if claim.span is not None and claim.citations
+        ]
+        assert live["claims"] == expected_claims, section.title
         for entry in live["citations"]:
             assert live["prose"][entry["start"] : entry["end"]]
         seen_any += len(expected)
@@ -243,9 +256,14 @@ def test_reference_numbering_skips_unknown_chunks(conn: Connection) -> None:
     claim = SimpleNamespace(
         span=(0, 4),
         verdict="tier_2",
+        rationale="Matches.",
         citation_rows=[SimpleNamespace(chunk_id=str(uuid.uuid4()), quote="q")],
     )
     assert numbering.citations([claim]) == []
+    # The claim's verdict stands whether or not its chunk is known (round 13).
+    assert numbering.claim_verdicts([claim]) == [
+        {"claim_id": None, "start": 0, "end": 4, "tier": "tier_2", "rationale": "Matches."}
+    ]
     assert numbering.citations([]) == []
     assert UNKNOWN_SOURCE == "Unknown source"
 

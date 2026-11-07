@@ -373,9 +373,7 @@ def test_the_reads_are_org_scoped_and_public_like_the_artefact(
         for caller in (owner, colleague):
             assert _longlist(client, built.task_id, caller.headers).status_code == 200
             assert _card(client, built, "Mentoring", caller.headers).status_code == 200
-        absent = client.get(
-            f"/api/v1/tasks/{uuid.uuid4()}/longlist", headers=stranger.headers
-        )
+        absent = client.get(f"/api/v1/tasks/{uuid.uuid4()}/longlist", headers=stranger.headers)
         hidden = _longlist(client, built.task_id, stranger.headers)
         assert hidden.status_code == absent.status_code == 404
         assert hidden.content == absent.content
@@ -414,9 +412,7 @@ def test_a_link_grants_no_read_of_the_targets_options(engine: Engine, tmp_path: 
                 .where(task.c.task_id == built.source_task_id)
                 .values(owner_user_id=source_owner.user_id)
             )
-        source = client.get(
-            f"/api/v1/tasks/{built.source_task_id}", headers=source_owner.headers
-        )
+        source = client.get(f"/api/v1/tasks/{built.source_task_id}", headers=source_owner.headers)
         assert source.status_code == 200
         assert _longlist(client, built.task_id, source_owner.headers).status_code == 404
         assert _card(client, built, "Youth guarantee", source_owner.headers).status_code == 404
@@ -644,7 +640,12 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
         assert counts["no_in_scope"] == 1  # Mentoring: its only document is from 2010
         assert counts["none_fits"] == 1
         assert set(counts) == {
-            "options", "themes", "included", "excluded", "no_in_scope", "none_fits"
+            "options",
+            "themes",
+            "included",
+            "excluded",
+            "no_in_scope",
+            "none_fits",
         }
 
         themed = [oid for theme in body["themes"] for oid in theme["option_ids"]]
@@ -676,8 +677,11 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
         # Ambition is the profile's own call (task 046, R40): the stub marks none.
         assert guarantee["ambition"] is None
         removed = {
-            "settings", "is_entrant_with_no_documents", "restriction_text",
-            "design_version", "abstract_only",
+            "settings",
+            "is_entrant_with_no_documents",
+            "restriction_text",
+            "design_version",
+            "abstract_only",
         }
         assert not removed & guarantee.keys()
 
@@ -708,9 +712,7 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
 # --- the card ----------------------------------------------------------------------
 
 
-def test_the_card_carries_every_section_and_never_how_sure(
-    engine: Engine, tmp_path: Path
-) -> None:
+def test_the_card_carries_every_section_and_never_how_sure(engine: Engine, tmp_path: Path) -> None:
     with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague)
         response = _card(client, built, "Youth guarantee", owner.headers)
@@ -778,9 +780,9 @@ def test_the_card_carries_every_section_and_never_how_sure(
             "in_scope_documents": 0,
             "documents": 1,
         }
-        assert {
-            j["constraint_id"]: j["verdict"] for j in mentoring["judgements"]
-        }["distinct"] == "passes"
+        assert {j["constraint_id"]: j["verdict"] for j in mentoring["judgements"]}[
+            "distinct"
+        ] == "passes"
         for body in (
             _longlist(client, built.task_id, owner.headers).text,
             *(_card(client, built, name, owner.headers).text for name in built.options),
@@ -1282,16 +1284,12 @@ def test_also_found_as_joins_a_merged_duplicate_and_a_folded_seed(conn: Connecti
 
 
 def _decisions(client: TestClient, built: _Built, headers: dict[str, str]) -> list[dict[str, Any]]:
-    response = client.get(
-        f"/api/v1/tasks/{built.task_id}/decisions?page_size=200", headers=headers
-    )
+    response = client.get(f"/api/v1/tasks/{built.task_id}/decisions?page_size=200", headers=headers)
     assert response.status_code == 200, response.text
     return [d for d in response.json()["data"] if d["kind"].startswith("option.")]
 
 
-def test_exclude_records_the_reason_and_include_reverses_it(
-    engine: Engine, tmp_path: Path
-) -> None:
+def test_exclude_records_the_reason_and_include_reverses_it(engine: Engine, tmp_path: Path) -> None:
     with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague)
         oid = built.options["Youth guarantee"]
@@ -1343,6 +1341,40 @@ def test_exclude_records_the_reason_and_include_reverses_it(
         )
         assert unknown.status_code == 404
         assert len(_decisions(client, built, owner.headers)) == 3
+
+
+def test_a_reason_after_a_one_click_exclusion_fills_it_in_and_says_so_once(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Task 058, round 13: excluding again with a reason, after the user's own
+    exclusion, keeps the exclusion and writes one reason line, not a second
+    exclusion."""
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
+        built = _org_build(engine, owner, colleague)
+        oid = built.options["Youth guarantee"]
+        url = f"/api/v1/tasks/{built.task_id}/options/{oid}/exclude"
+        assert client.post(url, headers=owner.headers).status_code == 200
+        reasoned = client.post(url, headers=owner.headers, json={"reason": " Too costly. "})
+        assert reasoned.status_code == 200, reasoned.text
+        assert reasoned.json()["state"] == "excluded"
+        assert reasoned.json()["exclusion"] == {
+            "constraint": "your decision",
+            "reason": "Too costly.",
+            "by": "user",
+        }
+        history = _decisions(client, built, owner.headers)
+        assert [h["kind"] for h in history] == [
+            "option.exclusion_reason_added",
+            "option.excluded",
+        ]
+        assert history[0]["summary"] == (
+            "You gave a reason for setting aside “Youth guarantee”: Too costly."
+        )
+        assert history[0]["decided_by"] == "user"
+        # Excluding again with no reason changes nothing: the reason stays.
+        again = client.post(url, headers=owner.headers, json={"reason": "  "})
+        assert again.json()["exclusion"]["reason"] == "Too costly."
+        assert len(_decisions(client, built, owner.headers)) == 2
 
 
 def test_user_state_survives_a_rebuilds_constrain(engine: Engine, tmp_path: Path) -> None:
@@ -1406,7 +1438,8 @@ def test_add_proposes_a_design_mints_it_and_opens_a_parentless_walk(
 ) -> None:
     agent = _design_backend()
     overrides: dict[Callable[..., object], Callable[..., object]] = {
-        get_agent_backend: lambda: agent, get_runner_backends: _runner_backends
+        get_agent_backend: lambda: agent,
+        get_runner_backends: _runner_backends,
     }
     with tenancy_client(tmp_path, overrides=overrides) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague, linked=False)
@@ -1468,7 +1501,8 @@ def test_the_buttons_are_run_active_while_a_parentless_walk_runs(
 ) -> None:
     agent = _design_backend()
     overrides: dict[Callable[..., object], Callable[..., object]] = {
-        get_agent_backend: lambda: agent, get_runner_backends: _runner_backends
+        get_agent_backend: lambda: agent,
+        get_runner_backends: _runner_backends,
     }
     with tenancy_client(tmp_path, overrides=overrides) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague)
@@ -1543,7 +1577,8 @@ def test_the_buttons_are_run_active_while_a_parentless_walk_runs(
 def test_the_buttons_are_422_on_an_evidence_search_task(engine: Engine, tmp_path: Path) -> None:
     agent = _design_backend()
     overrides: dict[Callable[..., object], Callable[..., object]] = {
-        get_agent_backend: lambda: agent, get_runner_backends: _runner_backends
+        get_agent_backend: lambda: agent,
+        get_runner_backends: _runner_backends,
     }
     with api_client(tmp_path, overrides) as (client, owner, _other):
         task_id = create_task(client, owner)
@@ -1828,7 +1863,8 @@ def test_add_answers_with_the_option_when_its_search_is_still_queued(
     monkeypatch.setattr(longlist_actions, "_await_new_run", never_opens)
     agent = _design_backend()
     overrides: dict[Callable[..., object], Callable[..., object]] = {
-        get_agent_backend: lambda: agent, get_runner_backends: _runner_backends
+        get_agent_backend: lambda: agent,
+        get_runner_backends: _runner_backends,
     }
     try:
         with tenancy_client(tmp_path, overrides=overrides) as (client, (owner, colleague, _)):
@@ -1948,8 +1984,6 @@ def test_an_option_from_the_evidence_search_names_its_report_section(
     card = repository.option_out(conn, walk.task_id, drawn)
     assert card is not None
     assert card.from_section == "What works for employers"
-
-
 
 
 # --- task 055: the shortlist place, the proposal and the plan inputs -----------

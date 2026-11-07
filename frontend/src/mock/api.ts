@@ -15,6 +15,7 @@ import {
   mockCaseStudiesProse,
   mockCaseStudyCards,
   mockSectionCitations,
+  mockSectionClaims,
   MOCK_CASE_STUDIES_INDEX,
   MOCK_FULL_REPORT_INTRO,
   MOCK_INTRO_INDEX,
@@ -419,10 +420,15 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       isRecord(body) && Array.isArray(body.from_task_ids)
         ? body.from_task_ids.filter((value): value is string => typeof value === "string")
         : [];
-    // Task 044 (C10, C11): the mock's single-task world only ever offers the
-    // current task as a "Starts from" candidate — its name is captured here,
-    // before the same object below is overwritten to become the new task.
-    const sourceTaskName = mockTask.name;
+    // Task 044 (C10, C11); round 13: each chosen search's own name, read
+    // before `mockTask` below is overwritten to become the new task. An id
+    // the mock does not hold keeps the id as its name.
+    const sourceNames = fromTaskIds.map(
+      (taskId) =>
+        (taskId === mockTask.task_id
+          ? mockTask.name
+          : mockOtherTasks.find((other) => other.task_id === taskId)?.name) ?? taskId,
+    );
     if (capability === "options_scoping") {
       baselineGateAnswer = createDeferred();
       baselineGateDecision = null;
@@ -444,18 +450,14 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
         isRecord(body) && Array.isArray(body.project_ids)
           ? body.project_ids.filter((value): value is string => typeof value === "string")
           : [],
-      links:
-        fromTaskIds.length > 0
-          ? [
-              {
-                link_id: MOCK_LINK_ID,
-                source_task_id: fromTaskIds[0],
-                source_task_name: sourceTaskName,
-                source_capability_run_id: MOCK_LINK_SOURCE_RUN_ID,
-                flagged: false,
-              },
-            ]
-          : [],
+      // One link per chosen search, each under its own name (round 13).
+      links: fromTaskIds.map((sourceTaskId, index) => ({
+        link_id: index === 0 ? MOCK_LINK_ID : `${MOCK_LINK_ID.slice(0, -2)}${String(index + 1).padStart(2, "0")}`,
+        source_task_id: sourceTaskId,
+        source_task_name: sourceNames[index],
+        source_capability_run_id: MOCK_LINK_SOURCE_RUN_ID,
+        flagged: false,
+      })),
     };
     Object.assign(mockTask, task);
     // A fresh task starts a fresh session in the mock's single-task world —
@@ -837,6 +839,10 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     // A coverage row's `query_id` (round 12): only what that search returned.
     const queryId = url.searchParams.get("query");
     const returned = queryId === null ? null : (mockEvidenceByQuery[Number(queryId)] ?? []);
+    // Round 13: the Status column's read depth, and the appraised documents
+    // (the mock's: those with a strength).
+    const depth = url.searchParams.get("depth");
+    const appraised = url.searchParams.get("appraised");
     const sort = url.searchParams.get("sort") as EvidenceSortField | null;
     const order = url.searchParams.get("order") as "asc" | "desc" | null;
     let rows = mockEvidence.filter((item) => {
@@ -856,6 +862,8 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
         && (strength === null || item.appraisal_tier === strength)
         && (country === null || mockCountryMatches(item.country ?? null, country))
         && (returned === null || returned.includes(item.source_id))
+        && (depth === null || mockReadDepth(item) === depth)
+        && (appraised === null || (item.appraisal_tier != null) === (appraised === "true"))
         && yearMatches;
     });
     // Server-side-equivalent sort (collection-true, matches
@@ -1485,6 +1493,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
         title: mockArtefactSkeleton[0].title,
         prose: mockArtefactSectionProse[0],
         citations: mockSectionCitations[0],
+        claims: mockSectionClaims[0],
         occurred_at: FRAME_TIME,
         sequence: nextSequence(),
       });
@@ -1513,6 +1522,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
           title: mockArtefactSkeleton[streamed].title,
           prose: mockArtefactSectionRepairedProse[1],
           citations: mockSectionCitations[streamed],
+          claims: mockSectionClaims[streamed],
           occurred_at: FRAME_TIME,
           sequence: nextSequence(),
         });
@@ -1582,6 +1592,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
         title: mockArtefactSkeleton[streamed].title,
         prose: mockArtefactSectionRepairedProse[1],
         citations: mockSectionCitations[streamed],
+        claims: mockSectionClaims[streamed],
         occurred_at: FRAME_TIME,
         sequence: nextSequence(),
       });
@@ -1607,6 +1618,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
         title: mockArtefactSkeleton[MOCK_CASE_STUDIES_INDEX].title,
         prose: mockCaseStudiesProse,
         citations: mockSectionCitations[MOCK_CASE_STUDIES_INDEX],
+        claims: mockSectionClaims[MOCK_CASE_STUDIES_INDEX],
         occurred_at: FRAME_TIME,
         sequence: nextSequence(),
       });
@@ -1825,6 +1837,16 @@ function toSse(frame: SseFrame): string {
 
 function page<T>(data: T[]) {
   return { data, pagination: { page: 1, page_size: data.length, total_items: data.length, has_more: false } };
+}
+
+/** The read depth the Status column shows, as the server's `depth` filter
+ *  reads it (round 13). */
+function mockReadDepth(item: components["schemas"]["EvidenceItemOut"]): "full_text" | "abstract" | "title" | null {
+  if (item.read_in_full) return "full_text";
+  if (item.status === "unavailable" || item.screen_status === "relevant") {
+    return item.abstract?.trim() ? "abstract" : "title";
+  }
+  return null;
 }
 
 /**

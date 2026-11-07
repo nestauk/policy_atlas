@@ -121,15 +121,33 @@ export interface LiveSection {
    *  on completion when the section has any, and kept until the committed
    *  report replaces the live view (task 058, round 7). */
   citations?: LiveCitation[];
+  /** The checked section's claims with the checker's verdict
+   *  (`artefact.section_completed.claims`, task 058, round 13): the verdict
+   *  is the claim's, not each citation's. Set on completion when the section
+   *  has any; join to `citations` by `claimId`, or by span. */
+  checkedClaims?: LiveCheckedClaim[];
   /** Case-study cards as each one closes in the streamed reply
    *  (`artefact.section_card`), in order; cleared on completion and when the
    *  draft is replaced (task 058, round 7). */
   cards?: LiveCard[];
 }
 
+/** One checked claim on a completed live section (task 058, round 13):
+ *  `[start, end)` in code points of `prose`, the checker's `tier` (null when
+ *  not checked) and its `rationale`. `claimId` is the committed report's
+ *  claim id, or null without a saved row. */
+export interface LiveCheckedClaim {
+  claimId: string | null;
+  start: number;
+  end: number;
+  tier: string | null;
+  rationale: string | null;
+}
+
 /** One checked citation on a completed live section (task 058, round 7).
  *  `[start, end)` counts code points of the section's `prose`; `n` is the
- *  report-wide reference number; `tier` is the judge's verdict, or null.
+ *  report-wide reference number (the verdict is the claim's since round 13:
+ *  `LiveSection.checkedClaims`).
  *  `citationId` and `claimId` are the ids the committed report's citation and
  *  claim carry (the chunk context is asked for by `citationId`), and `quote`
  *  the checked quote (round 8); the ids are null and the quote empty on a
@@ -140,7 +158,6 @@ export interface LiveCitation {
   n: number;
   sourceId: string | null;
   title: string;
-  tier: string | null;
   citationId: string | null;
   claimId: string | null;
   quote: string;

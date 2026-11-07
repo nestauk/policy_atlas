@@ -172,15 +172,47 @@ export const mockOtherTasks: components["schemas"]["TaskOut"][] = Array.from({ l
   };
 });
 
+/** A finished Evidence search in the mock project (round 13): the New page's
+ *  "Evidence search to start from" offers only these, so the scoping journey
+ *  can link one. Listed with the other tasks and readable by id. */
+export const MOCK_LINKABLE_SEARCH_ID = "30000000-0000-4000-8000-000000000001";
+export const MOCK_LINKABLE_SEARCH_NAME = "Youth employment programmes: what works";
+mockOtherTasks.unshift({
+  task_id: MOCK_LINKABLE_SEARCH_ID,
+  name: MOCK_LINKABLE_SEARCH_NAME,
+  question: "Which programmes help young people not in education, employment or training into work?",
+  status: "active",
+  created_at: "2026-07-16T09:00:00Z",
+  updated_at: "2026-07-16T11:30:00Z",
+  archived_at: null,
+  latest_run: {
+    capability_run_id: "30000000-0000-4000-8000-0000000000a1",
+    status: "succeeded",
+    started_at: "2026-07-16T09:05:00Z",
+    ended_at: "2026-07-16T11:30:00Z",
+  },
+  visibility: "org",
+  is_owner: true,
+  owner_display: "Ada Lovelace",
+  is_public: false,
+  access: "full",
+  project_ids: [MOCK_PROJECT_ID],
+  capability: "evidence_search",
+  links: [],
+  active_run: null,
+  has_longlist: false,
+});
+
 /** Task 033 phase 10a: the one project the mock serves. `task_count`
  *  mirrors the real read model's own derivation (never cached on the row) —
- *  it counts `mockTask`, the fixture's only member. */
+ *  it counts `mockTask` and the finished search a scoping task can start
+ *  from (round 13). */
 export const mockProject: components["schemas"]["ProjectOut"] = {
   project_id: MOCK_PROJECT_ID,
   name: "Child health, Tower Hamlets",
   description: `${TASK.many} assessing childhood health policy levers for the borough.`,
   created_at: "2026-07-15T09:00:00Z",
-  task_count: 1,
+  task_count: 2,
   visibility: "org",
   is_owner: true,
   owner_display: "Ada Lovelace",
@@ -633,6 +665,9 @@ const MOCK_CASE_STUDIES_CITED: MockCitedClaim = {
   cites: [{ citationId: "50000000-0000-4000-8000-000000000005", n: 2, source: mockEvidence[4], quote: "Breakfast uptake rose in the first year of universal provision." }],
 };
 
+/** The checker's reason the mock gives every checked claim (round 13). */
+const MOCK_GROUNDING_RATIONALE = "The quote states the result the sentence reports.";
+
 function mockClaimOut(claim: MockCitedClaim, span: [number, number] = claim.span): components["schemas"]["ClaimOut"] {
   return {
     claim_id: claim.claimId,
@@ -645,8 +680,10 @@ function mockClaimOut(claim: MockCitedClaim, span: [number, number] = claim.span
       source_id: cite.source.source_id,
       source_title: cite.source.title,
       quote: cite.quote,
-      grounding_tier: "tier_2",
     })),
+    // Round 13: the checker's verdict is the claim's.
+    grounding_tier: "tier_2",
+    grounding_rationale: MOCK_GROUNDING_RATIONALE,
   };
 }
 
@@ -658,7 +695,6 @@ function mockLiveCitations(claims: MockCitedClaim[]): components["schemas"]["Sec
       n: cite.n,
       source_id: cite.source.source_id,
       title: cite.source.title,
-      tier: "tier_2",
       // Round 8: the committed report's ids (the mock answers the chunk
       // context for any citation id) and the checked quote.
       citation_id: cite.citationId,
@@ -666,6 +702,18 @@ function mockLiveCitations(claims: MockCitedClaim[]): components["schemas"]["Sec
       quote: cite.quote,
     })),
   );
+}
+
+/** The checked claims a completed section carries, each with its verdict
+ *  (`artefact.section_completed.claims`, round 13). */
+function mockLiveClaims(claims: MockCitedClaim[]): components["schemas"]["SectionClaim"][] {
+  return claims.map((claim) => ({
+    claim_id: claim.claimId,
+    start: claim.span[0],
+    end: claim.span[1],
+    tier: "tier_2",
+    rationale: MOCK_GROUNDING_RATIONALE,
+  }));
 }
 
 /** The full report's introduction as the writer streams it into the `intro`
@@ -730,7 +778,7 @@ export const mockArtefact: components["schemas"]["ArtefactOut"] = {
       blocks: [{
         block_id: "30000000-0000-4000-8000-000000000001",
         prose: "Universal breakfast provision can support more consistent breakfast consumption when access is non-stigmatising.",
-        claims: [{ claim_id: "40000000-0000-4000-8000-000000000001", claim_type: "citation", text: "support more consistent breakfast consumption", span: [34, 79], citations: [{ citation_id: "50000000-0000-4000-8000-000000000001", n: 1, source_title: mockEvidence[2].title, quote: "Breakfast participation increased when provision was universal.", grounding_tier: "tier_2", appraisal_label: "moderate" }] }],
+        claims: [{ claim_id: "40000000-0000-4000-8000-000000000001", claim_type: "citation", text: "support more consistent breakfast consumption", span: [34, 79], citations: [{ citation_id: "50000000-0000-4000-8000-000000000001", n: 1, source_title: mockEvidence[2].title, quote: "Breakfast participation increased when provision was universal.", appraisal_label: "moderate" }], grounding_tier: "tier_2", grounding_rationale: MOCK_GROUNDING_RATIONALE }],
         gaps: ["Few evaluations report outcomes for recently arrived families."],
       }],
     },
@@ -827,7 +875,6 @@ export const mockSectionCitations: Record<number, components["schemas"]["Section
       n: 1,
       source_id: mockEvidence[2].source_id,
       title: mockEvidence[2].title,
-      tier: "tier_2",
       citation_id: "50000000-0000-4000-8000-000000000001",
       claim_id: "40000000-0000-4000-8000-000000000001",
       quote: "Breakfast participation increased when provision was universal.",
@@ -835,6 +882,22 @@ export const mockSectionCitations: Record<number, components["schemas"]["Section
   ],
   [MOCK_STREAMED_SECTION_INDEX]: mockLiveCitations(MOCK_BODY_CITED),
   [MOCK_CASE_STUDIES_INDEX]: mockLiveCitations([MOCK_CASE_STUDIES_CITED]),
+};
+
+/** Each completed section's checked claims with their verdicts, keyed by
+ *  display index like {@link mockSectionCitations} (round 13). */
+export const mockSectionClaims: Record<number, components["schemas"]["SectionClaim"][]> = {
+  0: [
+    {
+      claim_id: "40000000-0000-4000-8000-000000000001",
+      start: 34,
+      end: 79,
+      tier: "tier_2",
+      rationale: MOCK_GROUNDING_RATIONALE,
+    },
+  ],
+  [MOCK_STREAMED_SECTION_INDEX]: mockLiveClaims(MOCK_BODY_CITED),
+  [MOCK_CASE_STUDIES_INDEX]: mockLiveClaims([MOCK_CASE_STUDIES_CITED]),
 };
 
 

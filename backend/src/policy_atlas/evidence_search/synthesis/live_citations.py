@@ -63,6 +63,9 @@ class _Claim(Protocol):
     def verdict(self) -> str | None: ...
 
     @property
+    def rationale(self) -> str | None: ...
+
+    @property
     def citation_rows(self) -> Sequence[_CitationRow]: ...
 
 
@@ -109,8 +112,7 @@ class ReferenceNumbering:
             citations by chunk id then quote (the read model's order):
             ``start``, ``end`` (the
             claim's span), ``n``, ``source_id`` (the task source id as a
-            string, or ``None``), ``title`` and ``tier`` (the verdict, or
-            ``None``), ``citation_id`` and ``claim_id`` (strings, or
+            string, or ``None``), ``title``, ``citation_id`` and ``claim_id`` (strings, or
             ``None`` without a saved row to match) and ``quote``. A citation
             whose chunk is unknown is left out, as the read model leaves it
             out.
@@ -201,12 +203,50 @@ class ReferenceNumbering:
                         "n": self._numbers[doc_key],
                         "source_id": str(tss_id) if tss_id is not None else None,
                         "title": titles.get(envelope_of(snapshot_id), UNKNOWN_SOURCE),
-                        "tier": claim.verdict if isinstance(claim.verdict, str) else None,
                         "citation_id": citation_id,
                         "claim_id": claim_id,
                         "quote": row.quote,
                     }
                 )
+        return entries
+
+    def claim_verdicts(
+        self, claims: Sequence[_Claim], *, block_id: str | uuid.UUID | None = None
+    ) -> list[dict[str, Any]]:
+        """One section's checked claims with the checker's verdict (task 058, round 13).
+
+        The verdict is the claim's, not a citation's: one entry per spanned
+        claim that cites, in span order.
+
+        Args:
+            claims: The section's claims as persisted.
+            block_id: The block they were saved in; when given, each entry
+                carries the saved claim's id.
+
+        Returns:
+            ``claim_id`` (string, or ``None``), ``start``, ``end``, ``tier``
+            (the verdict, or ``None`` when not checked) and ``rationale``.
+        """
+        claim_ids: dict[tuple[int, int], str] = {}
+        if block_id is not None:
+            for (start, end, _chunk, _quote), ids in self._saved_ids(block_id).items():
+                if ids:
+                    claim_ids.setdefault((start, end), ids[0][1])
+        entries: list[dict[str, Any]] = []
+        for claim in sorted(
+            (claim for claim in claims if claim.span is not None and claim.citation_rows),
+            key=lambda claim: cast("tuple[int, int]", claim.span),
+        ):
+            start, end = cast("tuple[int, int]", claim.span)
+            entries.append(
+                {
+                    "claim_id": claim_ids.get((start, end)),
+                    "start": start,
+                    "end": end,
+                    "tier": claim.verdict if isinstance(claim.verdict, str) else None,
+                    "rationale": claim.rationale if isinstance(claim.rationale, str) else None,
+                }
+            )
         return entries
 
     def _saved_ids(

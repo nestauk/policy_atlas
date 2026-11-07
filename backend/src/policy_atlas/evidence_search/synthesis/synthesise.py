@@ -6406,7 +6406,10 @@ def synthesise_scope(
         section_citations = reference_numbering.citations(claims, block_id=block_id)
         if progress_emitter is not None:
             progress_emitter.section_completed(
-                section_index, prose=final_prose, citations=section_citations
+                section_index,
+                prose=final_prose,
+                citations=section_citations,
+                claims=reference_numbering.claim_verdicts(claims, block_id=block_id),
             )
         total_chunk_rejections += accounting.chunk_claims_rejected
         total_structural_rejections += accounting.claims_rejected_structural
@@ -6594,7 +6597,11 @@ def synthesise_scope(
             )
             if progress_emitter is not None:
                 progress_emitter.key_findings_completed(
-                    prose=key_findings_result["prose"], citations=kf_citations
+                    prose=key_findings_result["prose"],
+                    citations=kf_citations,
+                    claims=reference_numbering.claim_verdicts(
+                        kf_claims, block_id=key_findings_result["block_id"]
+                    ),
                 )
         else:
             key_findings_rollup = {
@@ -6673,7 +6680,11 @@ def synthesise_scope(
             )
             if progress_emitter is not None:
                 progress_emitter.case_studies_completed(
-                    prose=case_studies_result["prose"], citations=cs_citations
+                    prose=case_studies_result["prose"],
+                    citations=cs_citations,
+                    claims=reference_numbering.claim_verdicts(
+                        cs_claims, block_id=case_studies_result["block_id"]
+                    ),
                 )
         else:
             case_studies_rollup = {

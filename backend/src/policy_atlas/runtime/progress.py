@@ -152,6 +152,7 @@ class ProgressEmitter:
         *,
         prose: str,
         citations: Sequence[Mapping[str, Any]] = (),
+        claims: Sequence[Mapping[str, Any]] = (),
     ) -> None:
         """Record a normal section after its artefact write.
 
@@ -159,8 +160,11 @@ class ProgressEmitter:
             synthesis_index: Zero-based position in the generation loop.
             prose: Final whole-section prose shown by the live view.
             citations: The section's checked citations over ``prose``
-                (``start``, ``end``, ``n``, ``source_id``, ``title``,
-                ``tier``; task 058, round 7).
+                (``start``, ``end``, ``n``, ``source_id``, ``title``; task
+                058, round 7).
+            claims: The section's checked claims with their verdicts
+                (``claim_id``, ``start``, ``end``, ``tier``, ``rationale``;
+                task 058, round 13).
         """
         payload = self._compose(
             lambda: {
@@ -168,6 +172,7 @@ class ProgressEmitter:
                 "title": self._section(synthesis_index)["title"],
                 "prose": prose,
                 "citations": [dict(citation) for citation in citations],
+                "claims": [dict(claim) for claim in claims],
             }
         )
         if payload is not None:
@@ -180,7 +185,11 @@ class ProgressEmitter:
             self._append("artefact.section_started", payload)
 
     def key_findings_completed(
-        self, *, prose: str, citations: Sequence[Mapping[str, Any]] = ()
+        self,
+        *,
+        prose: str,
+        citations: Sequence[Mapping[str, Any]] = (),
+        claims: Sequence[Mapping[str, Any]] = (),
     ) -> None:
         """Close the key-findings slot, including the intentional empty case.
 
@@ -188,6 +197,7 @@ class ProgressEmitter:
             prose: Generated prose, or an empty string when no key-findings
                 block was warranted.
             citations: The block's checked citations over ``prose``.
+            claims: The block's checked claims with their verdicts.
         """
         payload = self._compose(
             lambda: {
@@ -195,6 +205,7 @@ class ProgressEmitter:
                 "title": self._key_findings_section()["title"],
                 "prose": prose,
                 "citations": [dict(citation) for citation in citations],
+                "claims": [dict(claim) for claim in claims],
             }
         )
         if payload is not None:
@@ -207,7 +218,11 @@ class ProgressEmitter:
             self._append("artefact.section_started", payload)
 
     def case_studies_completed(
-        self, *, prose: str, citations: Sequence[Mapping[str, Any]] = ()
+        self,
+        *,
+        prose: str,
+        citations: Sequence[Mapping[str, Any]] = (),
+        claims: Sequence[Mapping[str, Any]] = (),
     ) -> None:
         """Close the case-studies slot, including the empty case (no cards survived).
 
@@ -216,6 +231,7 @@ class ProgressEmitter:
                 text, cards separated by a blank line), or an empty string
                 when no case studies were kept.
             citations: The block's checked citations over ``prose``.
+            claims: The block's checked claims with their verdicts.
         """
         payload = self._compose(
             lambda: {
@@ -223,6 +239,7 @@ class ProgressEmitter:
                 "title": self._case_studies_section()["title"],
                 "prose": prose,
                 "citations": [dict(citation) for citation in citations],
+                "claims": [dict(claim) for claim in claims],
             }
         )
         if payload is not None:
@@ -247,6 +264,7 @@ class ProgressEmitter:
                 "title": self._intro_section()["title"],
                 "prose": prose,
                 "citations": [],
+                "claims": [],
             }
         )
         if payload is not None:

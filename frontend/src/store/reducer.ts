@@ -367,6 +367,17 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
       // The checked citations stay until the committed report replaces the
       // live view (task 058, round 7). A section with none carries none.
       delete settled.citations;
+      delete settled.checkedClaims;
+      if (frame.claims !== undefined && frame.claims.length > 0) {
+        // Round 13: the checker's verdict, per claim.
+        settled.checkedClaims = frame.claims.map((claim) => ({
+          claimId: claim.claim_id ?? null,
+          start: claim.start,
+          end: claim.end,
+          tier: claim.tier ?? null,
+          rationale: claim.rationale ?? null,
+        }));
+      }
       if (frame.citations !== undefined && frame.citations.length > 0) {
         settled.citations = frame.citations.map((citation) => ({
           start: citation.start,
@@ -374,7 +385,6 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
           n: citation.n,
           sourceId: citation.source_id,
           title: citation.title,
-          tier: citation.tier,
           // Round 8: absent on a frame recorded before the fields existed.
           citationId: citation.citation_id ?? null,
           claimId: citation.claim_id ?? null,

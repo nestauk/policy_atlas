@@ -761,7 +761,11 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
             citation_out = artefact["sections"][0]["blocks"][0]["claims"][0]["citations"][0]
             assert citation_out["source_title"] == "Selected trial"
             assert citation_out["source_id"] == cited_source["source_id"]
-            assert citation_out["grounding_rationale"] == "Quote matches the source verbatim."
+            # Round 13: the verdict and its reason are the claim's, not the citation's.
+            claim_out = artefact["sections"][0]["blocks"][0]["claims"][0]
+            assert claim_out["grounding_rationale"] == "Quote matches the source verbatim."
+            assert "grounding_rationale" not in citation_out
+            assert "grounding_tier" not in citation_out
             # The appraisal band's scoring input rides with the label.
             assert citation_out["evidence_type"] == "RCTs and Quasi-Experimental Studies"
             assert citation_out["appraisal_label"] == "Moderate"
@@ -2823,6 +2827,100 @@ def test_a_source_with_a_collected_full_text_links_to_it(
                 f"/api/v1/tasks/{task_id}/sources/{fetched}", headers=owner
             ).json()
             assert dossier["full_text_url"] == "https://example.org/report.pdf"
+        finally:
+            with engine.begin() as conn:
+                delete_task_data(conn, task_id)
+
+
+def test_the_sources_filter_by_read_depth_and_by_appraisal(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Task 058, round 13: ``depth`` keeps the rows the Status column shows at
+    that depth; ``appraised`` the documents the appraise stage scored."""
+    with api_client(tmp_path) as (client, owner, _other):
+        task_id = uuid.UUID(create_task(client, owner))
+        scope_id = _seed_evidence_filter_fixture(engine, task_id)
+        try:
+            with engine.begin() as conn:
+                run_id = conn.execute(
+                    select(runs.c.run_id).where(runs.c.task_id == task_id)
+                ).scalar_one()
+                _, with_abstract = seed_source(
+                    conn, task_id, {"title": "With abstract", "abstract": "What it found."}
+                )
+                seed_screening_result(
+                    conn, task_id, run_id, scope_id, with_abstract, status="relevant"
+                )
+                selected = conn.execute(
+                    select(task_source_snapshot.c.task_source_snapshot_id)
+                    .join(
+                        source_snapshot,
+                        source_snapshot.c.source_snapshot_id
+                        == task_source_snapshot.c.source_snapshot_id,
+                    )
+                    .where(
+                        task_source_snapshot.c.task_id == task_id,
+                        source_snapshot.c.metadata["title"].astext == "Selected",
+                    )
+                ).scalar_one()
+                conn.execute(
+                    insert(source_appraisal_result).values(
+                        source_appraisal_result_id=uuid.uuid4(),
+                        evidence_scope_id=scope_id,
+                        task_source_snapshot_id=selected,
+                        task_id=task_id,
+                        appraised_by_run_id=run_id,
+                        quality_score=4,
+                        rubric_version="test",
+                        appraised_at=now(),
+                    )
+                )
+
+            def titles(query: str) -> list[str]:
+                response = client.get(
+                    f"/api/v1/tasks/{task_id}/evidence?{query}&sort=title", headers=owner
+                )
+                assert response.status_code == 200, response.text
+                return [row["title"] for row in response.json()["data"]]
+
+            assert titles("depth=full_text") == ["Demoted after full text"]
+            assert titles("depth=abstract") == ["With abstract"]
+            assert titles("depth=title") == ["Not selected", "Selected"]
+            assert titles("appraised=true") == ["Selected"]
+            assert "Selected" not in titles("appraised=false")
+            funnel = client.get(f"/api/v1/tasks/{task_id}/funnel", headers=owner).json()
+            assert funnel["quality_checked"] == len(titles("appraised=true"))
+            # A redrawn plan appraises the same document again under its new
+            # question: the funnel still counts it once.
+            with engine.begin() as conn:
+                second_scope = seed_scope(conn, task_id, intent="The redrawn question")
+                conn.execute(
+                    insert(source_appraisal_result).values(
+                        source_appraisal_result_id=uuid.uuid4(),
+                        evidence_scope_id=second_scope,
+                        task_source_snapshot_id=selected,
+                        task_id=task_id,
+                        appraised_by_run_id=run_id,
+                        quality_score=3,
+                        rubric_version="test",
+                        appraised_at=now(),
+                    )
+                )
+            funnel = client.get(f"/api/v1/tasks/{task_id}/funnel", headers=owner).json()
+            assert funnel["quality_checked"] == len(titles("appraised=true")) == 1
+            # "Full text accessed" counts the texts obtained, as `depth=full_text`
+            # lists them: a failed fetch is in neither (round 13).
+            with engine.begin() as conn:
+                conn.execute(
+                    update(task_source_snapshot)
+                    .where(task_source_snapshot.c.task_source_snapshot_id == with_abstract)
+                    .values(full_text_status="fetch_failed", full_text_error="paywall")
+                )
+            funnel = client.get(f"/api/v1/tasks/{task_id}/funnel", headers=owner).json()
+            assert funnel["read_in_full"] == len(titles("depth=full_text")) == 1
+            assert (
+                client.get(f"/api/v1/tasks/{task_id}/evidence?depth=page", headers=owner)
+            ).status_code == 422
         finally:
             with engine.begin() as conn:
                 delete_task_data(conn, task_id)

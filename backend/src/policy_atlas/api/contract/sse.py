@@ -154,8 +154,6 @@ class SectionCitation(BaseModel):
         source_id: The source's id in this task, or `null` when the cited
             text is not one of the task's sources.
         title: The source's title as the committed report's references name it.
-        tier: The checker's verdict on the claim (`tier_1` ... `tier_4`,
-            `unsupported_mis_cited`), or `null` when it was not checked.
         citation_id: The saved citation's id, the one the committed report's
             citation carries, so the page can ask for its chunk context while
             the run is live (round 8); `null` on frames recorded before the
@@ -170,10 +168,31 @@ class SectionCitation(BaseModel):
     n: int
     source_id: uuid.UUID | None
     title: str
-    tier: str | None
     citation_id: uuid.UUID | None = None
     claim_id: uuid.UUID | None = None
     quote: str = ""
+
+
+class SectionClaim(BaseModel):
+    """One checked claim on a completed live section (task 058, round 13).
+
+    The checker's verdict belongs to the claim, not to each of its citations.
+
+    Args:
+        claim_id: The saved claim's id, the one the committed report's claim
+            carries; `null` without a saved row to match.
+        start: First code point of the claim's text in `prose`.
+        end: One past its last code point.
+        tier: The checker's verdict (`tier_1` ... `tier_4`,
+            `unsupported_mis_cited`), or `null` when it was not checked.
+        rationale: The checker's reason for the verdict, when recorded.
+    """
+
+    claim_id: uuid.UUID | None = None
+    start: int
+    end: int
+    tier: str | None = None
+    rationale: str | None = None
 
 
 class ArtefactSectionCompletedFrame(_PersistedFrameBase):
@@ -183,6 +202,8 @@ class ArtefactSectionCompletedFrame(_PersistedFrameBase):
         citations: The section's checked citations over `prose` (task 058,
             round 7); empty when it has none, and on frames recorded before
             the field existed.
+        claims: The section's checked claims with their verdicts (task 058,
+            round 13); empty on frames recorded before the field existed.
     """
 
     type: Literal["artefact.section_completed"]
@@ -190,6 +211,7 @@ class ArtefactSectionCompletedFrame(_PersistedFrameBase):
     title: str
     prose: str
     citations: list[SectionCitation] = Field(default_factory=list)
+    claims: list[SectionClaim] = Field(default_factory=list)
 
 
 class CheckinPendingFrame(_PersistedFrameBase):

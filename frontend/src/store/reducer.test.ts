@@ -622,16 +622,16 @@ describe("reduceRunStreamFrame — streamed drafts", () => {
     const withCitations: SseFrame = {
       ...completed,
       citations: [
-        { start: 0, end: 12, n: 2, source_id: "tss-a", title: "Breakfast clubs", tier: "tier_2" },
-        { start: 0, end: 12, n: 5, source_id: null, title: "Unknown source", tier: null },
+        { start: 0, end: 12, n: 2, source_id: "tss-a", title: "Breakfast clubs" },
+        { start: 0, end: 12, n: 5, source_id: null, title: "Unknown source" },
       ],
     } as SseFrame;
     const live = fold(createInitialRunStreamState(), [...writingFrames(), delta(3, "The evidence")]);
     const state = reduceRunStreamFrame(live, withCitations);
     // Recorded in the round-7 shape: the round-8 ids are null, the quote empty.
     const expected = [
-      { start: 0, end: 12, n: 2, sourceId: "tss-a", title: "Breakfast clubs", tier: "tier_2", citationId: null, claimId: null, quote: "" },
-      { start: 0, end: 12, n: 5, sourceId: null, title: "Unknown source", tier: null, citationId: null, claimId: null, quote: "" },
+      { start: 0, end: 12, n: 2, sourceId: "tss-a", title: "Breakfast clubs", citationId: null, claimId: null, quote: "" },
+      { start: 0, end: 12, n: 5, sourceId: null, title: "Unknown source", citationId: null, claimId: null, quote: "" },
     ];
     expect(state.liveSections[3].citations).toEqual(expected);
     // Kept: a late ephemeral frame or the next section's frames leave them.
@@ -651,6 +651,7 @@ describe("reduceRunStreamFrame — streamed drafts", () => {
     // existed, carries none.
     const older = reduceRunStreamFrame(live, completed);
     expect(older.liveSections[3].citations).toBeUndefined();
+    expect(older.liveSections[3].checkedClaims).toBeUndefined();
   });
 
   it("completion carries each citation's saved ids and quote (round 8)", () => {
@@ -663,14 +664,18 @@ describe("reduceRunStreamFrame — streamed drafts", () => {
           n: 2,
           source_id: "tss-a",
           title: "Breakfast clubs",
-          tier: "tier_2",
           citation_id: "c-1",
           claim_id: "u-1",
           quote: "Participation rose.",
         },
       ],
+      // Round 13: the verdict is the claim's.
+      claims: [{ claim_id: "u-1", start: 0, end: 12, tier: "tier_2", rationale: "Matches the trial." }],
     };
     const state = fold(createInitialRunStreamState(), [...writingFrames(), withIds]);
+    expect(state.liveSections[3].checkedClaims).toEqual([
+      { claimId: "u-1", start: 0, end: 12, tier: "tier_2", rationale: "Matches the trial." },
+    ]);
     expect(state.liveSections[3].citations).toEqual([
       {
         start: 0,
@@ -678,7 +683,6 @@ describe("reduceRunStreamFrame — streamed drafts", () => {
         n: 2,
         sourceId: "tss-a",
         title: "Breakfast clubs",
-        tier: "tier_2",
         citationId: "c-1",
         claimId: "u-1",
         quote: "Participation rose.",

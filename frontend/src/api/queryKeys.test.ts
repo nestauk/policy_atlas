@@ -21,6 +21,8 @@ describe("queryKeys.evidence", () => {
       { year_to: 2024 },
       { country: "United Kingdom" },
       { query: 12 },
+      { depth: "abstract" },
+      { appraised: true },
     ];
     for (const query of variants) {
       expect(queryKeys.evidence("p", query)).not.toEqual(base);

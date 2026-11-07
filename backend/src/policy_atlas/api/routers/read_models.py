@@ -109,6 +109,24 @@ def evidence(
             ),
         ),
     ] = None,
+    depth: Annotated[
+        Literal["full_text", "abstract", "title"] | None,
+        Query(
+            description=(
+                "The read depth the Status column shows: the full text, the abstract "
+                "only, or the title only (task 058, round 13)."
+            ),
+        ),
+    ] = None,
+    appraised: Annotated[
+        bool | None,
+        Query(
+            description=(
+                "`true`: the documents the appraise stage scored, the funnel's quality-"
+                "checked row; `false`: the rest (task 058, round 13)."
+            ),
+        ),
+    ] = None,
 ) -> Page[EvidenceItemOut]:
     """Return a bounded page from the evidence status ladder, optionally filtered."""
     _readable(conn, task_id, user)
@@ -131,6 +149,8 @@ def evidence(
         year_to=year_to,
         country=country,
         query=query,
+        depth=depth,
+        appraised=appraised,
     )
 
 

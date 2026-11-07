@@ -308,8 +308,8 @@ def option_sentence(verb: str, name: str, reason: object, actor: Actor) -> str:
     """One line for a person's change to the longlist or shortlist.
 
     Args:
-        verb: ``added``, ``excluded``, ``included``, ``shortlisted`` or
-            ``unshortlisted``.
+        verb: ``added``, ``excluded``, ``included``, ``shortlisted``,
+            ``unshortlisted`` or ``gave a reason``.
         name: The option's name.
         reason: The reason given, if any (kept on an exclusion line).
         actor: Who did it.
@@ -318,6 +318,10 @@ def option_sentence(verb: str, name: str, reason: object, actor: Actor) -> str:
         E.g. "You excluded the option “Mentoring”: too costly".
     """
     subject = actor.subject
+    if verb == "gave a reason":
+        # A reason after the person's own exclusion (round 13): its own line.
+        words = str(reason or "").strip()
+        return f"{subject} gave a reason for setting aside \u201c{name}\u201d: {words}"
     if verb == "shortlisted":
         return f"{subject} added “{name}” to the shortlist."
     if verb == "unshortlisted":
@@ -329,9 +333,7 @@ def option_sentence(verb: str, name: str, reason: object, actor: Actor) -> str:
     return sentence
 
 
-def check_in_sentence(
-    payload: Mapping[str, Any], option_label: str | None, actor: Actor
-) -> str:
+def check_in_sentence(payload: Mapping[str, Any], option_label: str | None, actor: Actor) -> str:
     """One line for a check-in answer: what was chosen, and by whom.
 
     Args:

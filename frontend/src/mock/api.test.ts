@@ -11,6 +11,8 @@ import {
   MOCK_TASK_AGENT_CONVERSATION_ID,
   MOCK_PROJECT_ID,
   MOCK_TASK_ID,
+  MOCK_LINKABLE_SEARCH_ID,
+  MOCK_LINKABLE_SEARCH_NAME,
   MOCK_THEME_ID_ACTIVE_TRAVEL,
   MOCK_THEME_ID_SCHOOL_FOOD,
   MOCK_CASE_STUDIES_INDEX,
@@ -399,8 +401,8 @@ describe("mock API", () => {
       resetMockScenario();
       const matching = await mockFetch(`http://localhost/api/v1/tasks?project_id=${MOCK_PROJECT_ID}`);
       const { data: matchingData } = await matching.json() as { data: { task_id: string }[] };
-      expect(matchingData).toHaveLength(1);
-      expect(matchingData[0].task_id).toBe(MOCK_TASK_ID);
+      // The scoping journey's search to start from shares the project (round 13).
+      expect(matchingData.map((task) => task.task_id)).toEqual([MOCK_TASK_ID, MOCK_LINKABLE_SEARCH_ID]);
 
       const nonMatching = await mockFetch(
         "http://localhost/api/v1/tasks?project_id=00000000-0000-4000-8000-000000000000",
@@ -420,16 +422,16 @@ describe("mock API", () => {
       const read = async (query: string) => await (await mockFetch(`http://localhost/api/v1/tasks?${query}`)).json() as ListPage;
       const first = await read("scope=mine");
       expect(first.data).toHaveLength(20);
-      expect(first.pagination).toMatchObject({ page: 1, total_items: 56, has_more: true });
+      expect(first.pagination).toMatchObject({ page: 1, total_items: 57, has_more: true });
       expect(first.data.every((task) => task.is_owner)).toBe(true);
       const second = await read("scope=mine&page=2");
       expect(second.data).toHaveLength(20);
       expect(second.pagination.has_more).toBe(true);
       const third = await read("scope=mine&page=3");
-      expect(third.data).toHaveLength(16);
+      expect(third.data).toHaveLength(17);
       expect(third.pagination.has_more).toBe(false);
       const organisation = await read("scope=all");
-      expect(organisation.pagination.total_items).toBe(62);
+      expect(organisation.pagination.total_items).toBe(63);
       const archived = await read("status=archived");
       expect(archived.data).toHaveLength(3);
       expect(archived.data.every((task) => task.status === "archived")).toBe(true);
@@ -473,6 +475,16 @@ describe("mock API", () => {
       expect(row.status).toBe(200);
       expect((await row.json() as { abstract: string | null }).abstract).toBe(mockEvidence[0].abstract);
       expect((await dossier("no-such-source")).status).toBe(404);
+    });
+
+    it("GET /evidence?depth= and ?appraised= keep the funnel row's sources (round 13)", async () => {
+      resetMockScenario();
+      const ids = async (query: string) =>
+        ((await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/evidence?${query}`)).json()) as { data: { source_id: string }[] }).data.map((row) => row.source_id);
+      expect(await ids("depth=full_text")).toEqual(mockEvidence.filter((row) => row.read_in_full).map((row) => row.source_id));
+      expect((await ids("depth=abstract")).length).toBeGreaterThan(0);
+      expect(await ids("depth=title")).toEqual([mockEvidence[8].source_id]);
+      expect(await ids("appraised=true")).toEqual(mockEvidence.filter((row) => row.appraisal_tier != null).map((row) => row.source_id));
     });
 
     it("GET /evidence pages like the server, honouring page and page_size (round 12)", async () => {
@@ -603,6 +615,29 @@ describe("mock API", () => {
       expect(plan.capability).toBe("options_scoping");
       expect(plan.plan).toBeNull();
       expect(plan.scoping?.ready).toBe(true);
+    });
+
+    it("links each chosen search under its own name (round 13)", async () => {
+      resetMockScenario();
+      const ownName = (await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}`)).json() as { name: string }).name;
+      const response = await mockFetch("http://localhost/api/v1/tasks", {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Cutting NEET numbers",
+          capability: "options_scoping",
+          project_ids: [MOCK_PROJECT_ID],
+          from_task_ids: [MOCK_LINKABLE_SEARCH_ID, MOCK_TASK_ID],
+        }),
+      });
+      const task = await response.json() as { links: { link_id: string; source_task_id: string; source_task_name: string }[] };
+      expect(task.links.map((link) => [link.source_task_id, link.source_task_name])).toEqual([
+        [MOCK_LINKABLE_SEARCH_ID, MOCK_LINKABLE_SEARCH_NAME],
+        [MOCK_TASK_ID, ownName],
+      ]);
+      expect(new Set(task.links.map((link) => link.link_id)).size).toBe(2);
+      // The task as read back carries the same links.
+      const read = await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}`)).json() as { links: { source_task_name: string }[] };
+      expect(read.links.map((link) => link.source_task_name)).toEqual([MOCK_LINKABLE_SEARCH_NAME, ownName]);
     });
 
     it("carries no link when from_task_ids is empty", async () => {
@@ -950,7 +985,11 @@ describe("mock API", () => {
       expect([citation.start, citation.end]).toEqual(finalClaim.span);
       expect(citation.n).toBe(finalClaim.citations![0].n);
       expect(citation.title).toBe(finalClaim.citations![0].source_title);
-      expect(citation.tier).toBe(finalClaim.citations![0].grounding_tier);
+      // Round 13: the verdict rides on the claim, live and committed alike.
+      expect(keyFindings.claims).toEqual([
+        { claim_id: finalClaim.claim_id, start: finalClaim.span![0], end: finalClaim.span![1], tier: finalClaim.grounding_tier, rationale: finalClaim.grounding_rationale },
+      ]);
+      expect("tier" in citation).toBe(false);
       expect(keyFindings.prose.slice(citation.start, citation.end)).toBe(finalClaim.text);
       // Every section's live citations are the committed report's, span by span.
       for (const entry of completed) {
@@ -965,7 +1004,6 @@ describe("mock API", () => {
                 end: claim.span![1],
                 n: cited.n,
                 title: cited.source_title,
-                tier: cited.grounding_tier,
                 // Round 8: the committed ids and quote ride on the live citation.
                 citation_id: cited.citation_id,
                 claim_id: claim.claim_id,
@@ -974,12 +1012,11 @@ describe("mock API", () => {
             ),
         );
         expect(
-          (entry.citations ?? []).map(({ start, end, n, title, tier, citation_id, claim_id, quote }) => ({
+          (entry.citations ?? []).map(({ start, end, n, title, citation_id, claim_id, quote }) => ({
             start,
             end,
             n,
             title,
-            tier,
             citation_id,
             claim_id,
             quote,
@@ -988,6 +1025,14 @@ describe("mock API", () => {
         for (const each of entry.citations ?? []) {
           expect(entry.prose.slice(each.start, each.end).length).toBeGreaterThan(0);
         }
+        // Each claim's verdict is the committed claim's.
+        const claimsExpected = section.blocks!.flatMap((block) =>
+          (block.claims ?? [])
+            .filter((claim) => claim.span != null && (claim.citations ?? []).length > 0)
+            .sort((left, right) => left.span![0] - right.span![0])
+            .map((claim) => ({ claim_id: claim.claim_id, start: claim.span![0], end: claim.span![1], tier: claim.grounding_tier, rationale: claim.grounding_rationale })),
+        );
+        expect(entry.claims ?? []).toEqual(claimsExpected);
       }
       expect(completed.find((entry) => entry.index === MOCK_STREAMED_SECTION_INDEX)!.citations).toHaveLength(3);
       expect(completed.find((entry) => entry.index === MOCK_CASE_STUDIES_INDEX)!.citations).toHaveLength(1);

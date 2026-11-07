@@ -1497,10 +1497,14 @@ export interface components {
          *         citations: The section's checked citations over `prose` (task 058,
          *             round 7); empty when it has none, and on frames recorded before
          *             the field existed.
+         *         claims: The section's checked claims with their verdicts (task 058,
+         *             round 13); empty on frames recorded before the field existed.
          */
         ArtefactSectionCompletedFrame: {
             /** Citations */
             citations?: components["schemas"]["SectionCitation"][];
+            /** Claims */
+            claims?: components["schemas"]["SectionClaim"][];
             /** Index */
             index: number;
             /**
@@ -2215,9 +2219,6 @@ export interface components {
          *             citation resolves to one (joins to the sources/dossier surface).
          *         source_title: Cited source's title (envelope metadata).
          *         quote: The quoted span from the source.
-         *         grounding_tier: Optional grounding-judge tier label.
-         *         grounding_rationale: The grounding judge's recorded reason for the
-         *             tier, when one was persisted with the verdict.
          *         appraisal_label: Optional appraisal label.
          *         evidence_type: The cited document's classified evidence type — the
          *             input the appraisal rubric scores from.
@@ -2234,10 +2235,6 @@ export interface components {
             citation_id: string;
             /** Evidence Type */
             evidence_type?: string | null;
-            /** Grounding Rationale */
-            grounding_rationale?: string | null;
-            /** Grounding Tier */
-            grounding_tier?: string | null;
             /** N */
             n: number;
             /** Quote */
@@ -2272,6 +2269,9 @@ export interface components {
          *         span: Character offsets `[start, end]` into the block's `prose`, or
          *             `None`.
          *         citations: Citations attached to this claim (citation-type only).
+         *         grounding_tier: The grounding judge's verdict on the claim, when it
+         *             was checked (task 058, round 13: the claim's, not each citation's).
+         *         grounding_rationale: The judge's recorded reason for the verdict.
          *         theme: Named themes or groups referenced by a theme claim.
          */
         ClaimOut: {
@@ -2288,6 +2288,10 @@ export interface components {
              */
             claim_type: "citation" | "gap" | "reasoning" | "pattern" | "theme" | "unspanned_assertion";
             gap?: components["schemas"]["GapOut"] | null;
+            /** Grounding Rationale */
+            grounding_rationale?: string | null;
+            /** Grounding Tier */
+            grounding_tier?: string | null;
             /** Span */
             span?: [
                 number,
@@ -5275,8 +5279,6 @@ export interface components {
          *         source_id: The source's id in this task, or `null` when the cited
          *             text is not one of the task's sources.
          *         title: The source's title as the committed report's references name it.
-         *         tier: The checker's verdict on the claim (`tier_1` ... `tier_4`,
-         *             `unsupported_mis_cited`), or `null` when it was not checked.
          *         citation_id: The saved citation's id, the one the committed report's
          *             citation carries, so the page can ask for its chunk context while
          *             the run is live (round 8); `null` on frames recorded before the
@@ -5309,10 +5311,44 @@ export interface components {
             source_id: string | null;
             /** Start */
             start: number;
-            /** Tier */
-            tier: string | null;
             /** Title */
             title: string;
+        };
+        /**
+         * SectionClaim
+         * @description One checked claim on a completed live section (task 058, round 13).
+         *
+         *     The checker's verdict belongs to the claim, not to each of its citations.
+         *
+         *     Args:
+         *         claim_id: The saved claim's id, the one the committed report's claim
+         *             carries; `null` without a saved row to match.
+         *         start: First code point of the claim's text in `prose`.
+         *         end: One past its last code point.
+         *         tier: The checker's verdict (`tier_1` ... `tier_4`,
+         *             `unsupported_mis_cited`), or `null` when it was not checked.
+         *         rationale: The checker's reason for the verdict, when recorded.
+         */
+        SectionClaim: {
+            /**
+             * Claim Id
+             * @default null
+             */
+            claim_id: string | null;
+            /** End */
+            end: number;
+            /**
+             * Rationale
+             * @default null
+             */
+            rationale: string | null;
+            /** Start */
+            start: number;
+            /**
+             * Tier
+             * @default null
+             */
+            tier: string | null;
         };
         /**
          * SectionOut
@@ -7464,6 +7500,10 @@ export interface operations {
                 country?: string | null;
                 /** @description A coverage row's `query_id`: only the sources that search returned (task 058, round 12). Empty for a search run before the ids were kept. */
                 query?: number | null;
+                /** @description The read depth the Status column shows: the full text, the abstract only, or the title only (task 058, round 13). */
+                depth?: ("full_text" | "abstract" | "title") | null;
+                /** @description `true`: the documents the appraise stage scored, the funnel's quality-checked row; `false`: the rest (task 058, round 13). */
+                appraised?: boolean | null;
             };
             header?: never;
             path: {

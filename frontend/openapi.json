@@ -277,13 +277,20 @@
         "type": "object"
       },
       "ArtefactSectionCompletedFrame": {
-        "description": "A live-artefact section's whole prose is available.\n\nArgs:\n    citations: The section's checked citations over `prose` (task 058,\n        round 7); empty when it has none, and on frames recorded before\n        the field existed.",
+        "description": "A live-artefact section's whole prose is available.\n\nArgs:\n    citations: The section's checked citations over `prose` (task 058,\n        round 7); empty when it has none, and on frames recorded before\n        the field existed.\n    claims: The section's checked claims with their verdicts (task 058,\n        round 13); empty on frames recorded before the field existed.",
         "properties": {
           "citations": {
             "items": {
               "$ref": "#/components/schemas/SectionCitation"
             },
             "title": "Citations",
+            "type": "array"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/SectionClaim"
+            },
+            "title": "Claims",
             "type": "array"
           },
           "index": {
@@ -1410,7 +1417,7 @@
         "type": "object"
       },
       "CitationOut": {
-        "description": "One citation attached to a citation-type claim.\n\nArgs:\n    citation_id: Durable citation identity \u2014 the key for the\n        chunk-context endpoint (`GET .../citations/{citation_id}/context`).\n    n: Reference number (matches a `ReferenceOut.n`).\n    source_id: The cited document's task source identity, when the\n        citation resolves to one (joins to the sources/dossier surface).\n    source_title: Cited source's title (envelope metadata).\n    quote: The quoted span from the source.\n    grounding_tier: Optional grounding-judge tier label.\n    grounding_rationale: The grounding judge's recorded reason for the\n        tier, when one was persisted with the verdict.\n    appraisal_label: Optional appraisal label.\n    evidence_type: The cited document's classified evidence type \u2014 the\n        input the appraisal rubric scores from.\n    text_basis: The cited document's extraction basis (`abstract_only`\n        or `full_text`), when known (task 046).",
+        "description": "One citation attached to a citation-type claim.\n\nArgs:\n    citation_id: Durable citation identity \u2014 the key for the\n        chunk-context endpoint (`GET .../citations/{citation_id}/context`).\n    n: Reference number (matches a `ReferenceOut.n`).\n    source_id: The cited document's task source identity, when the\n        citation resolves to one (joins to the sources/dossier surface).\n    source_title: Cited source's title (envelope metadata).\n    quote: The quoted span from the source.\n    appraisal_label: Optional appraisal label.\n    evidence_type: The cited document's classified evidence type \u2014 the\n        input the appraisal rubric scores from.\n    text_basis: The cited document's extraction basis (`abstract_only`\n        or `full_text`), when known (task 046).",
         "properties": {
           "appraisal_label": {
             "anyOf": [
@@ -1438,28 +1445,6 @@
               }
             ],
             "title": "Evidence Type"
-          },
-          "grounding_rationale": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Grounding Rationale"
-          },
-          "grounding_tier": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Grounding Tier"
           },
           "n": {
             "title": "N",
@@ -1531,7 +1516,7 @@
         "type": "object"
       },
       "ClaimOut": {
-        "description": "One span-anchored claim annotation within a block.\n\nArgs:\n    claim_id: The claim's identity.\n    claim_type: Annotation type.\n    text: The spanned text.\n    span: Character offsets `[start, end]` into the block's `prose`, or\n        `None`.\n    citations: Citations attached to this claim (citation-type only).\n    theme: Named themes or groups referenced by a theme claim.",
+        "description": "One span-anchored claim annotation within a block.\n\nArgs:\n    claim_id: The claim's identity.\n    claim_type: Annotation type.\n    text: The spanned text.\n    span: Character offsets `[start, end]` into the block's `prose`, or\n        `None`.\n    citations: Citations attached to this claim (citation-type only).\n    grounding_tier: The grounding judge's verdict on the claim, when it\n        was checked (task 058, round 13: the claim's, not each citation's).\n    grounding_rationale: The judge's recorded reason for the verdict.\n    theme: Named themes or groups referenced by a theme claim.",
         "properties": {
           "citations": {
             "items": {
@@ -1566,6 +1551,28 @@
                 "type": "null"
               }
             ]
+          },
+          "grounding_rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grounding Rationale"
+          },
+          "grounding_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grounding Tier"
           },
           "span": {
             "anyOf": [
@@ -7576,7 +7583,7 @@
         "type": "object"
       },
       "SectionCitation": {
-        "description": "One checked citation on a completed live section (task 058, round 7).\n\nOne entry per citation row of the section's judged claims, so a claim\nciting two sources gives two entries over the same span.\n\nArgs:\n    start: First code point of the cited claim's text in `prose`.\n    end: One past its last code point.\n    n: The report-wide reference number, numbered as the committed\n        report numbers its references (by source, in order of first\n        citation).\n    source_id: The source's id in this task, or `null` when the cited\n        text is not one of the task's sources.\n    title: The source's title as the committed report's references name it.\n    tier: The checker's verdict on the claim (`tier_1` ... `tier_4`,\n        `unsupported_mis_cited`), or `null` when it was not checked.\n    citation_id: The saved citation's id, the one the committed report's\n        citation carries, so the page can ask for its chunk context while\n        the run is live (round 8); `null` on frames recorded before the\n        field existed.\n    claim_id: The saved claim's id, the one the committed report's claim\n        carries; `null` on older frames.\n    quote: The checked quote the citation rests on; empty on older frames.",
+        "description": "One checked citation on a completed live section (task 058, round 7).\n\nOne entry per citation row of the section's judged claims, so a claim\nciting two sources gives two entries over the same span.\n\nArgs:\n    start: First code point of the cited claim's text in `prose`.\n    end: One past its last code point.\n    n: The report-wide reference number, numbered as the committed\n        report numbers its references (by source, in order of first\n        citation).\n    source_id: The source's id in this task, or `null` when the cited\n        text is not one of the task's sources.\n    title: The source's title as the committed report's references name it.\n    citation_id: The saved citation's id, the one the committed report's\n        citation carries, so the page can ask for its chunk context while\n        the run is live (round 8); `null` on frames recorded before the\n        field existed.\n    claim_id: The saved claim's id, the one the committed report's claim\n        carries; `null` on older frames.\n    quote: The checked quote the citation rests on; empty on older frames.",
         "properties": {
           "citation_id": {
             "anyOf": [
@@ -7633,17 +7640,6 @@
             "title": "Start",
             "type": "integer"
           },
-          "tier": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Tier"
-          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -7654,10 +7650,65 @@
           "end",
           "n",
           "source_id",
-          "title",
-          "tier"
+          "title"
         ],
         "title": "SectionCitation",
+        "type": "object"
+      },
+      "SectionClaim": {
+        "description": "One checked claim on a completed live section (task 058, round 13).\n\nThe checker's verdict belongs to the claim, not to each of its citations.\n\nArgs:\n    claim_id: The saved claim's id, the one the committed report's claim\n        carries; `null` without a saved row to match.\n    start: First code point of the claim's text in `prose`.\n    end: One past its last code point.\n    tier: The checker's verdict (`tier_1` ... `tier_4`,\n        `unsupported_mis_cited`), or `null` when it was not checked.\n    rationale: The checker's reason for the verdict, when recorded.",
+        "properties": {
+          "claim_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Claim Id"
+          },
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Rationale"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tier"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "SectionClaim",
         "type": "object"
       },
       "SectionOut": {
@@ -12084,6 +12135,47 @@
               ],
               "description": "A coverage row's `query_id`: only the sources that search returned (task 058, round 12). Empty for a search run before the ids were kept.",
               "title": "Query"
+            }
+          },
+          {
+            "description": "The read depth the Status column shows: the full text, the abstract only, or the title only (task 058, round 13).",
+            "in": "query",
+            "name": "depth",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "full_text",
+                    "abstract",
+                    "title"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The read depth the Status column shows: the full text, the abstract only, or the title only (task 058, round 13).",
+              "title": "Depth"
+            }
+          },
+          {
+            "description": "`true`: the documents the appraise stage scored, the funnel's quality-checked row; `false`: the rest (task 058, round 13).",
+            "in": "query",
+            "name": "appraised",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`true`: the documents the appraise stage scored, the funnel's quality-checked row; `false`: the rest (task 058, round 13).",
+              "title": "Appraised"
             }
           }
         ],

@@ -1172,6 +1172,7 @@ def test_synthesis_progress_survives_rolled_back_component_before_terminal_event
             "title": "Evidence",
             "prose": "Completed before failure.",
             "citations": [],
+            "claims": [],
         }
     finally:
         _cleanup(engine, task_id)
