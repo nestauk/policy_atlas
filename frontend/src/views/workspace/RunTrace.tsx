@@ -478,7 +478,7 @@ function TraceCard({
       </div>
       </div>
       {onSeePlan !== undefined && (
-        <button type="button" className={cn(QUIET_CONTROL_CLASS, "mt-2 text-meta", WORDS_INDENT)} onClick={onSeePlan}>
+        <button type="button" data-plan-opener="" className={cn(QUIET_CONTROL_CLASS, "mt-2 text-meta", WORDS_INDENT)} onClick={onSeePlan}>
           See plan
         </button>
       )}

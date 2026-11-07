@@ -461,6 +461,11 @@
 @layer base {
   html {
     background: var(--color-ground);
+    /* The page keeps its scrollbar's gutter whether or not it scrolls, so a
+       view that fits the screen does not shift the layout sideways against
+       one that does (owner, round 13: the Tasks / Projects and Mine /
+       Organisation switches). */
+    scrollbar-gutter: stable;
   }
   body,
   #root {

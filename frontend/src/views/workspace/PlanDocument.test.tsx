@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -320,6 +321,54 @@ describe("PlanDocument", () => {
     expect(screen.queryByText("Esc closes")).toBeNull();
     await user.keyboard("{Escape}");
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // Owner, round 13: a press anywhere outside the plan closes it, as the
+  // shared Sheet's outside press does; focus goes back to "See plan".
+  it("closes on a press outside it, not on one inside it, in its menus or on a control that opens it", async () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <button type="button" data-plan-opener="">
+          See plan
+        </button>
+        <p>The page</p>
+        <PlanDocument taskId={TASK_ID} placement="side" onClose={onClose} overlay={{}} onOverlayChange={vi.fn()} />
+      </TooltipProvider>,
+    );
+    await user.click(screen.getByRole("heading", { name: "Search plan" }));
+    await user.click(screen.getByRole("button", { name: "See plan" }));
+    await user.click(screen.getAllByRole("button", { name: "Edit" })[1]);
+    await user.click(screen.getByRole("button", { name: "Search scope" }));
+    await user.click(screen.getByRole("option", { name: "Focused" }));
+    expect(onClose).not.toHaveBeenCalled();
+    await user.click(screen.getByText("The page"));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives focus back to the control that opened it when it closes", async () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    const user = userEvent.setup();
+    function Host() {
+      const [open, setOpen] = useState(false);
+      return (
+        <TooltipProvider delayDuration={0}>
+          <button type="button" data-plan-opener="" onClick={() => setOpen(true)}>
+            See plan
+          </button>
+          {open && (
+            <PlanDocument taskId={TASK_ID} placement="side" onClose={() => setOpen(false)} overlay={{}} onOverlayChange={vi.fn()} />
+          )}
+        </TooltipProvider>
+      );
+    }
+    render(<Host />);
+    await user.click(screen.getByRole("button", { name: "See plan" }));
+    await user.click(screen.getByRole("button", { name: "Close the search plan" }));
+    expect(screen.queryByRole("dialog", { name: "Search plan" })).toBeNull();
+    expect(screen.getByRole("button", { name: "See plan" })).toHaveFocus();
   });
 
   it("leaves Escape to a field being edited", async () => {

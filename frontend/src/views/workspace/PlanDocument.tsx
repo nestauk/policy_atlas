@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { components } from "../../api/gen/types";
 import { usePatchPlan } from "../../api/mutations";
@@ -869,10 +869,27 @@ function escapeTakenElsewhere(event: KeyboardEvent): boolean {
   return document.querySelector("[data-radix-popper-content-wrapper]") !== null;
 }
 
+/** Marks a control that opens the plan ("See plan", "Review the plan"): a
+ *  press on it while the plan is open is not a press outside it. */
+export const PLAN_OPENER_ATTR = "data-plan-opener";
+
+/** Whether a press lands outside the plan: not in it, not in an overlay it
+ *  opened (a popover or menu portalled out of it), not on a control that
+ *  opens it. */
+function pressedOutside(target: EventTarget | null, plan: HTMLElement | null): boolean {
+  if (!(target instanceof Node) || plan === null) return false;
+  if (plan.contains(target)) return false;
+  const element = target instanceof Element ? target : target.parentElement;
+  if (element === null) return false;
+  return element.closest(`[data-radix-popper-content-wrapper], [${PLAN_OPENER_ATTR}]`) === null;
+}
+
 /**
  * The search plan, edited in place. Saves stay local until Start search —
  * a task_agent round-trip on every field would rewrite the whole plan.
- * Escape closes it (task 058, N15).
+ * Escape closes it (task 058, N15), and so does a press anywhere outside it
+ * (owner, round 13; the shared Sheet's outside press). Closed, focus goes
+ * back to what opened it ("See plan") unless the reader moved it elsewhere.
  */
 export function PlanDocument({
   taskId,
@@ -929,6 +946,28 @@ export function PlanDocument({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
+
+  // A press anywhere outside the plan closes it (owner, round 13).
+  const planRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      if (pressedOutside(event.target, planRef.current)) onClose();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [onClose]);
+
+  // Focus goes back to the control that opened the plan when it closes,
+  // unless the reader has put it somewhere else (pressed another control).
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const plan = planRef.current;
+    return () => {
+      const focused = document.activeElement;
+      const lost = focused === null || focused === document.body || (plan !== null && plan.contains(focused));
+      if (lost && opener !== null && opener.isConnected) opener.focus();
+    };
+  }, []);
 
   const [editingQuestion, setEditingQuestion] = useState(false);
   const [editingSettings, setEditingSettings] = useState(false);
@@ -1011,6 +1050,7 @@ export function PlanDocument({
 
   return (
     <aside
+      ref={planRef}
       role="dialog"
       aria-modal={placement === "center"}
       aria-label={scopingPlan ? "Scoping plan" : "Search plan"}

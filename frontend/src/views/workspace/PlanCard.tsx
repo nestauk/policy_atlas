@@ -117,6 +117,8 @@ export function PlanCard({
         )}
         <button
           type="button"
+          // Pressing it while the plan is open is not a press outside it.
+          data-plan-opener=""
           onClick={() => onReviewPlan?.()}
           className={cn(LINK_CLASS, "text-body")}
         >
