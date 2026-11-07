@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 
-import { useLandscape, useTask } from "../api/queries";
+import { useLandscape, useLonglist, useTask } from "../api/queries";
+import type { components } from "../api/gen/types";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
@@ -13,6 +14,7 @@ import { ReauthRedirect } from "../ui/feedback";
 import { ArrivalProvider, useArrives, useFirstPaintDone } from "../ui/motion/arrivals";
 import { feedsSources, liveStages, useLiveRefetch } from "./sourcesPresentation";
 import { RetryCard } from "../ui/feedback/RetryCard";
+import { isScoping } from "./scopingActivity";
 
 /** One row of the list: a committed theme, or a discovered one whose count
  *  is on its way (`size` null). */
@@ -167,6 +169,11 @@ export function ThemesView() {
   const { taskId = "" } = useParams();
   const task = useTask(taskId);
   useDocumentTitle(task.data?.name, "Themes");
+  // An options-scoping task's themes are the longlist's option clusters
+  // (owner, round 13); an Evidence search's are the landscape's. The
+  // longlist is read only on a scoping task.
+  const scoping = isScoping(task.data);
+  const longlist = useLonglist(scoping ? taskId : "");
   const landscape = useLandscape(taskId);
   // While Mapping runs the themes refetch every 5 s, and until the first
   // lands their rows pulse in place (owner, round 8).
@@ -190,6 +197,8 @@ export function ThemesView() {
   const items = themeItems(stream.liveThemes, themes);
   const isEmpty = !isPending && !isError && items.length === 0;
   const firstPaintDone = useFirstPaintDone(!isPending, taskId);
+
+  if (scoping) return <ScopingThemes taskId={taskId} longlist={longlist} />;
 
   return (
     <main className="py-8">
@@ -242,5 +251,117 @@ export function ThemesView() {
         </ArrivalProvider>
       )}
     </main>
+  );
+}
+
+type LonglistOut = components["schemas"]["LonglistOut"];
+
+/** One option cluster and its options, in the longlist's order. */
+export type ScopingTheme = {
+  themeId: string;
+  name: string;
+  description: string;
+  options: Array<{ id: string; name: string; excluded: boolean }>;
+};
+
+/**
+ * The longlist's themes with their options (owner, round 13): each theme in
+ * the longlist's order, its options in the order the theme lists them. An
+ * option id the longlist does not carry is left out.
+ *
+ * Args:
+ *   longlist: The longlist read.
+ *
+ * Returns:
+ *   The themes, each with at least one option.
+ */
+export function scopingThemes(longlist: Pick<LonglistOut, "themes" | "options">): ScopingTheme[] {
+  const byId = new Map((longlist.options ?? []).map((option) => [option.option_id, option]));
+  return (longlist.themes ?? [])
+    .map((theme) => ({
+      themeId: theme.theme_id,
+      name: theme.name,
+      description: theme.description ?? "",
+      options: (theme.option_ids ?? []).flatMap((id) => {
+        const option = byId.get(id);
+        return option === undefined ? [] : [{ id, name: option.name, excluded: option.state === "excluded" }];
+      }),
+    }))
+    .filter((theme) => theme.options.length > 0);
+}
+
+function optionCount(count: number): string {
+  return count === 1 ? "1 option" : `${count} options`;
+}
+
+/**
+ * An options-scoping task's Themes subtab (owner, round 13: it was empty
+ * after a completed run): the longlist's option clusters from the longlist
+ * read, no new endpoint. Each theme is a section: its name at Lead Bold
+ * Navy with its option count at the right, its description at Body Grey,
+ * then its options as a ruled list, each name a link to its card (an
+ * excluded option in Grey, as the longlist sets it).
+ */
+function ScopingThemes({ taskId, longlist }: { taskId: string; longlist: ReturnType<typeof useLonglist> }) {
+  const unauthenticated = longlist.isError && errorCode(longlist.error) === "unauthenticated";
+  const themes = longlist.data ? scopingThemes(longlist.data) : [];
+  return (
+    <main className="py-8">
+      {longlist.isPending && (
+        <div aria-busy="true" aria-label="Loading themes" className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="anim-breathe h-16 border border-line bg-paper-2" />
+          ))}
+        </div>
+      )}
+      {longlist.isError &&
+        (unauthenticated ? (
+          <ReauthRedirect />
+        ) : (
+          <RetryCard copy="Themes couldn't be loaded." onRetry={() => void longlist.refetch()} />
+        ))}
+      {!longlist.isPending && !longlist.isError && themes.length === 0 && (
+        <Card role="status" className="p-8 text-center text-body text-grey">
+          Themes appear once the longlist is built.
+        </Card>
+      )}
+      {themes.length > 0 && (
+        <div className="space-y-10">
+          {themes.map((theme) => (
+            <ScopingThemeSection key={theme.themeId} taskId={taskId} theme={theme} />
+          ))}
+        </div>
+      )}
+    </main>
+  );
+}
+
+function ScopingThemeSection({ taskId, theme }: { taskId: string; theme: ScopingTheme }) {
+  const headingId = `theme-${theme.themeId}`;
+  return (
+    <section aria-labelledby={headingId}>
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 id={headingId} className="min-w-0 text-lead font-bold text-navy">
+          {scrub(theme.name)}
+        </h2>
+        <p className="shrink-0 text-body text-grey">{optionCount(theme.options.length)}</p>
+      </div>
+      {theme.description !== "" && <p className="mt-1 max-w-[44em] text-body text-grey">{scrub(theme.description)}</p>}
+      <ul className="mt-3 border-t border-line">
+        {theme.options.map((option) => (
+          <li key={option.id} className="border-b border-line">
+            <Link
+              to={`/tasks/${taskId}/options/${option.id}`}
+              className={cn(
+                "block py-3 text-body underline-offset-[3px] hover:bg-paper-2 hover:underline",
+                option.excluded ? "text-grey" : "text-navy",
+              )}
+            >
+              {scrub(option.name)}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

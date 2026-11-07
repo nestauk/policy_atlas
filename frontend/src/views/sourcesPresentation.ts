@@ -134,7 +134,7 @@ export const sourcesPageSizeChoice = rememberedChoice<SourcesPageSize>("sources-
 
 /** The URL params the filter row sets, besides the screening toggles:
  *  "Clear filters" removes these and keeps the screening choice. */
-export const FACET_PARAMS = ["cited", "theme", "origin", "type", "strength", "year_from", "year_to", "country", "query"] as const;
+export const FACET_PARAMS = ["cited", "theme", "origin", "type", "strength", "year_from", "year_to", "country", "query", "depth", "appraised"] as const;
 
 /**
  * A year range in words: "2015 to 2020", "2016" for one year, "2015 to
@@ -174,13 +174,13 @@ export const ORIGIN_FILTER_OPTIONS = ["OpenAlex", "Overton"] as const;
 const STATUS_LABELS: Record<EvidenceItem["status"], string> = {
   found: "Found",
   screened_out: "Screened out",
-  relevant: "Included",
-  not_selected: "Included — not shortlisted",
+  relevant: "Relevant",
+  not_selected: "Relevant — not shortlisted",
   selected: "Shortlisted",
   read_in_full: "Full text collected",
   findings_extracted: "Findings extracted",
   cited: "Cited in the report",
-  unavailable: "Included — abstract only",
+  unavailable: "Relevant — abstract only",
 };
 
 /** Return the source's user-facing ladder label, withholding unknown states. */
@@ -276,7 +276,8 @@ export type CellPulses = { relevant: boolean; type: boolean; strength: boolean; 
  * only where the value is absent, and only while the stage that fills it
  * runs. Screening fills Relevant for every source; classifying fills the
  * evidence type and strength of the relevant ones; reading the full texts
- * decides the Status of the relevant ones not yet read. Once the stage ends
+ * decides the Status of the relevant ones not yet read in full, whatever
+ * they read now (owner, round 13: the value may still change). Once the stage ends
  * nothing pulses, whatever the cell holds.
  *
  * Args:
@@ -296,7 +297,9 @@ export function cellPulses(
     relevant: live.has("screen") && item.screen_status == null,
     type: classifying && relevant && !item.evidence_type,
     strength: classifying && relevant && !item.appraisal_tier,
-    status: live.has("ingest") && relevant && !item.read_in_full && item.status !== "unavailable",
+    // While the full texts are fetched a relevant source's depth may still
+    // change, whatever it reads now (owner, round 13).
+    status: live.has("ingest") && relevant && !item.read_in_full,
   };
 }
 

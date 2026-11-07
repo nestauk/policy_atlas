@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -109,8 +110,8 @@ describe("LandscapeView — finished", () => {
     expect(rows.map((row) => within(row).getByRole("rowheader").textContent)).toEqual([
       "Found",
       "Relevant",
-      "Quality-checked",
-      "Full text",
+      "Appraised",
+      "Full text accessed",
       "Shortlisted",
       "Cited",
     ]);
@@ -118,7 +119,7 @@ describe("LandscapeView — finished", () => {
     expect(within(table).queryByText("Findings")).toBeNull();
   });
 
-  it("links each funnel row the table can filter to, and only those (round 11)", () => {
+  it("links each funnel row the table can filter to, and only those (rounds 11 and 13)", () => {
     reads();
     renderLandscape();
     const table = screen.getByRole("table", { name: "From search to citation" });
@@ -126,9 +127,10 @@ describe("LandscapeView — finished", () => {
     expect(within(table).getByRole("link", { name: "Found" })).toHaveAttribute("href", `${base}?status=all`);
     expect(within(table).getByRole("link", { name: "Relevant" })).toHaveAttribute("href", `${base}?status=Included`);
     expect(within(table).getByRole("link", { name: "Cited" })).toHaveAttribute("href", `${base}?cited=true`);
-    for (const name of ["Quality-checked", "Full text", "Shortlisted"]) {
-      expect(within(table).queryByRole("link", { name })).toBeNull();
-    }
+    // Round 13: the evidence read's appraised and depth filters.
+    expect(within(table).getByRole("link", { name: "Appraised" })).toHaveAttribute("href", `${base}?appraised=true`);
+    expect(within(table).getByRole("link", { name: "Full text accessed" })).toHaveAttribute("href", `${base}?depth=full_text`);
+    expect(within(table).queryByRole("link", { name: "Shortlisted" })).toBeNull();
   });
 
   it("switches the publisher countries between the list (the default) and the map", { timeout: 20_000 }, async () => {
@@ -203,6 +205,18 @@ describe("LandscapeView — finished", () => {
     const modelling = within(table).getByRole("rowheader", { name: "Modelling & simulation" }).closest("tr");
     expect(modelling).toHaveTextContent("0");
     expect(screen.queryByTestId("classified-so-far")).toBeNull();
+  });
+
+  it("says what the publisher countries count in the i beside the heading, not on the page (round 13)", async () => {
+    reads();
+    renderLandscape();
+    expect(screen.queryByText(/The country of the publishing venue/)).toBeNull();
+    const section = screen.getByRole("region", { name: "Where sources were published" });
+    const hint = within(section).getByRole("button", { name: "About where sources were published" });
+    expect(hint).toHaveClass("cursor-help");
+    await userEvent.hover(hint);
+    expect((await screen.findAllByText(/^The country of the publishing venue, when the database reports it\./)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("This is not necessarily where the study took place.")).length).toBeGreaterThan(0);
   });
 
   it("pins Not reported last in the geography table", () => {

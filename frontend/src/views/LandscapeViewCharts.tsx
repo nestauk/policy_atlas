@@ -15,7 +15,7 @@ import { cn } from "../ui/brand/cn";
 import { fillYearRange, humaniseLabel, normaliseGeographies } from "../ui/charts/EvidenceDistributionChart";
 import "./landscape.css";
 import { PANE_LABEL_CLASS } from "../ui/brand/label";
-import { evidenceTypeLabel, FULL_TEXT } from "../ui/brand/evidence";
+import { evidenceTypeLabel } from "../ui/brand/evidence";
 
 /* ---------------------------------------------------------------------------
  * Landscape charts (task 058, landscape polish; lead rulings 2026-11-05).
@@ -160,8 +160,11 @@ export function RankedBars({ caption, rows, busy = false }: { caption: string; r
 const FUNNEL_STAGES = [
   { key: "found", label: "Found", stages: ["acquire"] },
   { key: "relevant", label: "Relevant", stages: ["screen"] },
-  { key: "quality_checked", label: "Quality-checked", stages: ["classify", "appraise"] },
-  { key: "read_in_full", label: FULL_TEXT, stages: ["ingest"] },
+  // Round 13 (owner): the count is of appraisal results, so the row says
+  // what was done; the full texts' row says they were accessed (the table's
+  // Status words are unchanged).
+  { key: "quality_checked", label: "Appraised", stages: ["classify", "appraise"] },
+  { key: "read_in_full", label: "Full text accessed", stages: ["ingest"] },
   { key: "selected", label: "Shortlisted", stages: ["select"] },
   { key: "cited", label: "Cited", stages: ["synthesise"] },
 ] as const;
@@ -648,12 +651,15 @@ export function LandscapeSection({
   title,
   figure,
   control,
+  hint,
   children,
 }: {
   title: string;
   figure?: string | null;
   /** A control at the heading row's right end (the List / Map switch). */
   control?: ReactNode;
+  /** An `InfoHint` beside the heading: what the section counts (round 13). */
+  hint?: ReactNode;
   children: ReactNode;
 }) {
   const headingId = useId();
@@ -665,9 +671,18 @@ export function LandscapeSection({
           control ? "items-center pb-2" : "items-baseline pb-2.5",
         )}
       >
-        <h2 id={headingId} className={PANE_LABEL_CLASS}>
-          {title}
-        </h2>
+        {hint === undefined ? (
+          <h2 id={headingId} className={PANE_LABEL_CLASS}>
+            {title}
+          </h2>
+        ) : (
+          <div className="flex items-center gap-1">
+            <h2 id={headingId} className={PANE_LABEL_CLASS}>
+              {title}
+            </h2>
+            {hint}
+          </div>
+        )}
         {figure ? <p className="text-meta text-grey">{figure}</p> : null}
         {control}
       </div>

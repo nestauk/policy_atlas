@@ -36,6 +36,7 @@ import { CAPTION_LABEL_CLASS } from "../ui/brand/label";
 import { cn } from "../ui/brand/cn";
 import { RetryCard } from "../ui/feedback/RetryCard";
 import { OutlineSwitch } from "../ui/brand/OutlineSwitch";
+import { InfoHint } from "../ui/brand/InfoHint";
 
 const TITLES = {
   funnel: "From search to citation",
@@ -46,6 +47,12 @@ const TITLES = {
 } as const;
 
 const sum = (data: Record<string, number>) => Object.values(data).reduce((total, count) => total + count, 0);
+
+/** What "Where sources were published" counts (owner, round 13: on hover). */
+const GEOGRAPHY_NOTE = [
+  "The country of the publishing venue, when the database reports it. Sources without one are counted as “Not reported”.",
+  "This is not necessarily where the study took place.",
+] as const;
 
 /**
  * Landscape: distributions over the screened-in set ONLY (the funnel is the
@@ -82,18 +89,23 @@ export function LandscapeView() {
   const findings = typeof funnel.data?.findings === "number" ? funnel.data.findings : null;
 
   // Each funnel row leads to the table filtered to its set, when the table
-  // can filter to it (round 11): Found to every source, Relevant to the
-  // screened-in set, Cited to the cited sources. Quality-checked, Full text
-  // and Shortlisted have no filter on the table, so they lead nowhere.
+  // can filter to it (rounds 11 and 13): Found to every source, Relevant to
+  // the screened-in set, Appraised and Full text accessed to theirs (the
+  // evidence read's `appraised` and `depth` filters), Cited to the cited
+  // sources. Shortlisted has no filter on the table, so it leads nowhere.
   const allSources = `/tasks/${taskId}/sources/all`;
   const funnelHref = (key: string): string | undefined =>
     key === "found"
       ? `${allSources}?status=all`
       : key === "relevant"
         ? `${allSources}?status=Included`
-        : key === "cited"
-          ? `${allSources}?cited=true`
-          : undefined;
+        : key === "quality_checked"
+          ? `${allSources}?appraised=true`
+          : key === "read_in_full"
+            ? `${allSources}?depth=full_text`
+            : key === "cited"
+              ? `${allSources}?cited=true`
+              : undefined;
   const funnelTable = funnelRows(funnel.data, runLive, live).map((row) => {
     const href = row.count ? funnelHref(row.key) : undefined;
     return href !== undefined ? { ...row, href } : row;
@@ -190,6 +202,10 @@ export function LandscapeView() {
           {Object.keys(geographies).length > 0 && (
             <LandscapeSection
               title={TITLES.geographies}
+              // What the section counts, on hover (owner, round 13): it left
+              // the page. Task 031: publisher country only, never the
+              // authors' countries, which answer a different question.
+              hint={<InfoHint label="About where sources were published" note={GEOGRAPHY_NOTE} />}
               control={
                 onlyNotReported(geographies) ? null : (
                   <OutlineSwitch label="Show as" choices={GEOGRAPHY_VIEWS} value={geographyView} onChange={setGeographyView} height={32} />
@@ -200,12 +216,6 @@ export function LandscapeView() {
                 <p className="text-meta text-navy">No publisher country was reported for these sources.</p>
               ) : (
                 <>
-                  {/* Task 031: publisher country only — never the authors'
-                      countries, which answer a different question. */}
-                  <p className="mb-4 max-w-[44em] break-words text-body text-grey">
-                    The country of the publishing venue, when the database reports it. Sources
-                    without one are counted as “Not reported”.
-                  </p>
                   {geographyView === "map" ? (
                     // The list stays the keyboard's path (round 11): the map
                     // is for the eye and its countries take no focus.

@@ -143,13 +143,13 @@ describe("SourcesView — the default filter during a run (task 058, N16)", { ti
   it("returns to Included once screening has completed", () => {
     streamState = running([stage("acquire", "completed"), stage("screen", "completed")]);
     renderSources();
-    expect(screen.getByRole("button", { name: "Included" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Relevant" })).toHaveAttribute("aria-pressed", "true");
     expect(lastEvidenceQuery()).toMatchObject({ status: ["Included"] });
   });
 
   it("keeps Included for a task with no live stream and no run in flight", () => {
     renderSources();
-    expect(screen.getByRole("button", { name: "Included" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Relevant" })).toHaveAttribute("aria-pressed", "true");
   });
 });
 
@@ -651,7 +651,7 @@ describe("SourcesView — refinement batch (owner live-demo list, 2026-08-05)", 
       sort: "relevance",
       order: "desc",
     });
-    expect(screen.getByRole("button", { name: "Included" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Relevant" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("columnheader", { name: /Relevant/ })).toHaveAttribute(
       "aria-sort",
       "descending",
@@ -661,7 +661,7 @@ describe("SourcesView — refinement batch (owner live-demo list, 2026-08-05)", 
   it("Included narrows via the status param", async () => {
     const user = userEvent.setup();
     renderSources();
-    await user.click(screen.getByRole("button", { name: "Included" }));
+    await user.click(screen.getByRole("button", { name: "Relevant" }));
     expect(screen.getByTestId("location")).toHaveTextContent("status=Included");
     expect(lastEvidenceQuery()).toMatchObject({ status: ["Included"] });
   });
@@ -993,7 +993,7 @@ describe("SourcesView — the filter row (round 10)", { timeout: 20_000 }, () =>
     renderSources();
     const row = screen.getByRole("group", { name: "Filter sources" });
     const screening = within(row).getByRole("group", { name: "Screening" });
-    expect(within(screening).getAllByRole("button").map((button) => button.textContent)).toEqual(["All", "Included", "Screened out"]);
+    expect(within(screening).getAllByRole("button").map((button) => button.textContent)).toEqual(["All", "Relevant", "Screened out"]);
     expect(within(screening).queryByRole("button", { name: "Cited" })).toBeNull();
     // Each select is a visible bordered control at least 24 px tall.
     // Every control is a 32 px outline box on the bar's one baseline (round 11).
@@ -1011,7 +1011,7 @@ describe("SourcesView — the filter row (round 10)", { timeout: 20_000 }, () =>
     expect(facets).toHaveClass("flex-wrap", "gap-3");
     expect(facets).not.toContainElement(screening);
     // The screening switch: the chosen choice has a Navy border and words.
-    expect(within(screening).getByRole("button", { name: "Included" })).toHaveClass("border-navy", "text-navy", "h-8");
+    expect(within(screening).getByRole("button", { name: "Relevant" })).toHaveClass("border-navy", "text-navy", "h-8");
     expect(within(screening).getByRole("button", { name: "All" })).toHaveClass("border-line-2", "text-grey");
   });
 
@@ -1049,7 +1049,7 @@ describe("SourcesView — the filter row (round 10)", { timeout: 20_000 }, () =>
     const user = userEvent.setup();
     renderSources();
     expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Included" }));
+    await user.click(screen.getByRole("button", { name: "Relevant" }));
     expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Cited" }));
     await user.click(screen.getByRole("button", { name: /^Origin/ }));
@@ -1160,6 +1160,33 @@ describe("SourcesView — the rows (round 10)", () => {
   });
 });
 
+// Round 13 (owner): the funnel's Appraised and Full text accessed rows open
+// the table on their sets through the evidence read's filters.
+describe("SourcesView — the funnel's sets (round 13)", { timeout: 20_000 }, () => {
+  it("filters on appraised and full text, each shown as a chip whose × clears it", async () => {
+    const user = userEvent.setup();
+    renderSources(undefined, "?appraised=true&depth=full_text");
+    expect(lastEvidenceQuery()).toMatchObject({ appraised: true, depth: "full_text" });
+    const bar = screen.getByRole("group", { name: "Filter sources" });
+    expect(within(bar).getByRole("button", { name: "Appraised" }).closest("span")).toHaveClass("bg-navy");
+    expect(within(bar).getByRole("button", { name: "Full text accessed" }).closest("span")).toHaveClass("bg-navy");
+    await user.click(within(bar).getByRole("button", { name: "Appraised" }));
+    expect(screen.getByTestId("location")).not.toHaveTextContent("appraised");
+    expect(screen.getByTestId("location")).toHaveTextContent("depth=full_text");
+    // Clear filters takes the rest.
+    await user.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(screen.getByTestId("location")).not.toHaveTextContent("depth");
+  });
+
+  it("names the screened-in set Relevant, as the funnel does, the API's value unchanged", async () => {
+    const user = userEvent.setup();
+    renderSources(undefined, "?status=all");
+    await user.click(screen.getByRole("button", { name: "Relevant" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("status=Included");
+    expect(screen.queryByRole("button", { name: "Included" })).toBeNull();
+  });
+});
+
 // Round 12 (owner): 25 a page by default, 50 or 100 by choice, remembered
 // per task; the URL names the size only when it is not 25.
 describe("SourcesView — sources per page (round 12)", { timeout: 20_000 }, () => {
@@ -1243,6 +1270,15 @@ describe("SourcesView — states in the table's frame (round 10)", { timeout: 20
     expect(loading).toHaveAttribute("aria-busy", "true");
     expect(within(loading).getByRole("button", { name: "Sort by source" })).toBeInTheDocument();
     expect(loading.querySelectorAll(".sources-row-skeleton")).toHaveLength(6);
+    // Round 13 (owner): a bar in every column of every row, each sized to
+    // its column, the source's two lines included; Relevant's at the right.
+    for (const row of loading.querySelectorAll(".sources-row-skeleton")) {
+      const cells = [...row.querySelectorAll("td")];
+      expect(cells).toHaveLength(6);
+      for (const cell of cells) expect(cell.querySelector(".placeholder-bar")).not.toBeNull();
+      expect(cells[0].querySelectorAll(".placeholder-bar")).toHaveLength(2);
+      expect(cells[4].querySelector(".placeholder-bar")).toHaveClass("ml-auto");
+    }
   });
 
   it("fails inside the frame with the sentence and a 40 px ghost Try again", async () => {

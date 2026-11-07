@@ -1,16 +1,17 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createInitialRunStreamState, type RunStreamState } from "../store";
 
 import { mockLandscape } from "../mock/fixtures";
-import { ThemesView } from "./ThemesView";
+import { scopingThemes, ThemesView } from "./ThemesView";
 import * as queries from "../api/queries";
 
 vi.mock("../api/queries", () => ({
   useTask: vi.fn(),
   useLandscape: vi.fn(),
+  useLonglist: vi.fn(() => ({ data: undefined, isPending: false, isError: false })),
 }));
 
 let streamState: RunStreamState = createInitialRunStreamState();
@@ -203,5 +204,66 @@ describe("ThemesView — the themes while documents are assigned (owner, round 9
     expect(names).toEqual(["School food environments", "Active travel"]);
     expect(screen.getByText("Active travel").closest("li")).toBe(before);
     expect(screen.getByText("30 documents")).toHaveClass("anim-swap-in");
+  });
+});
+
+// Round 13 (owner): an options-scoping task's Themes subtab shows the
+// longlist's option clusters (it was empty after a completed run).
+describe("ThemesView — an options-scoping task's themes (round 13)", () => {
+  const longlist = {
+    themes: [
+      { theme_id: "t1", name: "Earlier support", description: "Help before young people leave school.", option_ids: ["o2", "o1", "gone"] },
+      { theme_id: "t2", name: "Empty theme", description: "", option_ids: [] },
+    ],
+    options: [
+      { option_id: "o1", name: "Youth guarantee", state: "included" },
+      { option_id: "o2", name: "Careers advice in schools", state: "excluded" },
+    ],
+  };
+
+  it("lists each theme's options in the theme's order, leaving out unknown ids and empty themes", () => {
+    expect(scopingThemes(longlist as never)).toEqual([
+      {
+        themeId: "t1",
+        name: "Earlier support",
+        description: "Help before young people leave school.",
+        options: [
+          { id: "o2", name: "Careers advice in schools", excluded: true },
+          { id: "o1", name: "Youth guarantee", excluded: false },
+        ],
+      },
+    ]);
+  });
+
+  it("shows each theme as a section, its description, and its options linking to their cards", () => {
+    vi.mocked(queries.useTask).mockReturnValue(
+      { data: { name: "NEET task", capability: "options_scoping" } } as unknown as ReturnType<typeof queries.useTask>,
+    );
+    vi.mocked(queries.useLandscape).mockReturnValue(
+      { data: undefined, isPending: false, isError: false } as unknown as ReturnType<typeof queries.useLandscape>,
+    );
+    vi.mocked(queries.useLonglist).mockReturnValue(
+      { data: longlist, isPending: false, isError: false } as unknown as ReturnType<typeof queries.useLonglist>,
+    );
+    renderThemes();
+    // The longlist is read for this task.
+    expect(vi.mocked(queries.useLonglist)).toHaveBeenLastCalledWith(TASK_ID);
+    const section = screen.getByRole("region", { name: "Earlier support" });
+    expect(within(section).getByText("Help before young people leave school.")).toBeInTheDocument();
+    expect(within(section).getByText("2 options")).toBeInTheDocument();
+    const links = within(section).getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual(["Careers advice in schools", "Youth guarantee"]);
+    expect(links[1]).toHaveAttribute("href", `/tasks/${TASK_ID}/options/o1`);
+    // An excluded option reads in Grey, as the longlist sets it.
+    expect(links[0]).toHaveClass("text-grey");
+    expect(screen.queryByRole("region", { name: "Empty theme" })).toBeNull();
+  });
+
+  it("does not read the longlist on an Evidence search task", () => {
+    vi.mocked(queries.useLandscape).mockReturnValue(
+      { data: mockLandscape, isPending: false, isError: false } as unknown as ReturnType<typeof queries.useLandscape>,
+    );
+    renderThemes();
+    expect(vi.mocked(queries.useLonglist)).toHaveBeenLastCalledWith("");
   });
 });

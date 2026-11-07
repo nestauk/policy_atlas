@@ -69,7 +69,9 @@ import "./sources.css";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
-  { key: "Included", label: "Included" },
+  // The API's value stays "Included"; the set is named Relevant, as the
+  // funnel names it (owner, round 13).
+  { key: "Included", label: "Relevant" },
   { key: "screened_out", label: "Screened out" },
 ] as const;
 
@@ -103,6 +105,10 @@ export function SourcesView() {
     STATUS_FILTERS.find((filter) => filter.key === requestedStatus)?.key ??
     (screened || isScoping(task.data) ? "Included" : "all");
   const citedFilter = searchParams.get("cited") === "true";
+  // The funnel's Appraised and Full text accessed sets (round 13): the
+  // evidence read's `appraised` and `depth` filters.
+  const appraisedFilter = searchParams.get("appraised") === "true";
+  const fullTextFilter = searchParams.get("depth") === "full_text";
   const originFilter = ORIGIN_FILTER_OPTIONS.find((value) => value === searchParams.get("origin"));
   const typeFilter = searchParams.get("type") ?? undefined;
   const strengthFilter = STRENGTH_TIERS.find(
@@ -167,6 +173,8 @@ export function SourcesView() {
     year_to: yearTo,
     country: countryFilter,
     query: queryFilter !== undefined ? Number(queryFilter) : undefined,
+    appraised: appraisedFilter || undefined,
+    depth: fullTextFilter ? "full_text" : undefined,
   });
   const dossier = useSourceDossier(taskId, sourceId);
   const findings = useFindings(taskId, sourceId ? { page_size: 200, source_id: sourceId } : undefined);
@@ -405,6 +413,10 @@ export function SourcesView() {
             </button>
           </span>
         )}
+        {/* The funnel's sets (round 13), set from its rows, each a chip whose
+            × clears it. */}
+        {appraisedFilter && <SetChip words="Appraised" onClear={() => setFacet("appraised", undefined)} />}
+        {fullTextFilter && <SetChip words="Full text accessed" onClear={() => setFacet("depth", undefined)} />}
         {/* When the table stacks the headers hide, so sorting moves here. */}
         <FilterSelect
           className="@min-[54rem]/sources:hidden"
@@ -715,6 +727,19 @@ function DepthValue({ item, depth }: { item: EvidenceItem; depth: ReadDepth }) {
   );
 }
 
+/** A set the funnel opened the table on (round 13): the applied Navy chip,
+ *  its × clearing it, as Cited is. */
+function SetChip({ words, onClear }: { words: string; onClear: () => void }) {
+  return (
+    <span className={FILTER_CHIP_APPLIED}>
+      <button type="button" aria-pressed onClick={onClear} className={cn(FILTER_CHIP_PART, "pl-2.5 pr-2")}>
+        {words}
+        <CloseIcon size={12} />
+      </button>
+    </span>
+  );
+}
+
 /** A cited source, under its Status (round 12, in place of the chip): a
  *  12 px Green tick and the word, Meta Ink. */
 function CitedMark() {
@@ -766,8 +791,9 @@ function SourceMetaLine({ item }: { item: EvidenceItem }) {
 
 /** The list's loading state in the table's own frame: the real header row
  *  and six rows at about the real row height, a placeholder bar where the
- *  title and its line will sit and one in Year, type and strength. They
- *  breathe, and hold still under reduced motion. */
+ *  title and its line will sit and one in every value column, each sized to
+ *  its column (owner, round 13: Relevant and Status were blank). They breathe
+ *  together, and hold still under reduced motion. */
 function SourcesLoading({ header }: { header: ReactNode }) {
   return (
     <div className="sources-frame" aria-busy="true" aria-label="Loading sources" role="status">
@@ -782,10 +808,11 @@ function SourcesLoading({ header }: { header: ReactNode }) {
                 <span className="placeholder-bar mt-3 h-2.5 w-2/5" />
               </td>
               <td className="sources-cell sources-cell-year"><span className="placeholder-bar h-2.5 w-10" /></td>
-              <td className="sources-cell sources-value"><span className="placeholder-bar h-2.5 w-14" /></td>
-              <td className="sources-cell sources-value"><span className="placeholder-bar h-2.5 w-14" /></td>
-              <td className="sources-cell sources-value" />
-              <td className="sources-cell sources-value" />
+              <td className="sources-cell sources-value sources-cell-type"><span className="placeholder-bar h-2.5 w-24" /></td>
+              <td className="sources-cell sources-value"><span className="placeholder-bar h-2.5 w-16" /></td>
+              {/* Relevant's figure sits at the right, so its bar does too. */}
+              <td className="sources-cell sources-value sources-cell-relevant"><span className="placeholder-bar ml-auto h-2.5 w-10" /></td>
+              <td className="sources-cell sources-value sources-cell-status"><span className="placeholder-bar h-2.5 w-16" /></td>
             </tr>
           ))}
         </tbody>
@@ -1316,7 +1343,7 @@ function SourceDossier({
   return (
     <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent title={source ? scrub(source.title) : "Source dossier"}>
-        {isPending && <p role="status" className="anim-breathe-soft text-body text-grey">Loading the dossier…</p>}
+        {isPending && <p role="status" className="anim-breathe-soft text-body text-grey">{DOSSIER_LOADING_LINE}</p>}
         {isError && <p role="alert" className="text-body text-navy">This source dossier couldn't be loaded.</p>}
         {source && (
           <SourceDossierBody
@@ -1439,6 +1466,10 @@ export function useDossierRecords(
     fromOption: optionId !== null,
   };
 }
+
+/** The source sheet's loading line, one copy for every route into it (the
+ *  report, the Sources table, the option card; owner, round 13). */
+export const DOSSIER_LOADING_LINE = "Loading source details…";
 
 /** Full source provenance, used by every route into the source dossier sheet.
  *

@@ -125,7 +125,7 @@ describe("funnelRows", () => {
 
   it("counts sources only: Findings is not a funnel row", () => {
     const rows = funnelRows({ ...funnel, findings: 71 } as never, false, new Set());
-    expect(labels(rows)).toEqual(["Found", "Relevant", "Quality-checked", "Full text", "Shortlisted", "Cited"]);
+    expect(labels(rows)).toEqual(["Found", "Relevant", "Appraised", "Full text accessed", "Shortlisted", "Cited"]);
     expect(rows.map((row) => row.count)).toEqual([312, 118, 90, 38, 24, 19]);
   });
 
@@ -137,16 +137,16 @@ describe("funnelRows", () => {
     const rows = funnelRows({ found: 312, relevant: 118 }, true, new Set(["classify"]));
     expect(rows).toHaveLength(6);
     expect(rows[0]).toMatchObject({ label: "Found", count: 312 });
-    expect(rows[2]).toMatchObject({ label: "Quality-checked", count: null, pending: true, muted: false });
-    expect(rows[3]).toMatchObject({ label: "Full text", count: null, pending: false, muted: true });
+    expect(rows[2]).toMatchObject({ label: "Appraised", count: null, pending: true, muted: false });
+    expect(rows[3]).toMatchObject({ label: "Full text accessed", count: null, pending: false, muted: true });
   });
 
-  it("pulses Full text while the run fetches the full texts and Shortlisted while it shortlists", () => {
+  it("pulses Full text accessed while the run fetches the full texts and Shortlisted while it shortlists", () => {
     const fetching = funnelRows({ found: 312, relevant: 118, quality_checked: 90 }, true, new Set(["ingest"]));
-    expect(fetching[3]).toMatchObject({ label: "Full text", pending: true });
+    expect(fetching[3]).toMatchObject({ label: "Full text accessed", pending: true });
     expect(fetching[4]).toMatchObject({ label: "Shortlisted", pending: false, muted: true });
     const shortlisting = funnelRows({ found: 312, relevant: 118, quality_checked: 90, read_in_full: 38 }, true, new Set(["select"]));
-    expect(shortlisting[3]).toMatchObject({ label: "Full text", count: 38 });
+    expect(shortlisting[3]).toMatchObject({ label: "Full text accessed", count: 38 });
     expect(shortlisting[4]).toMatchObject({ label: "Shortlisted", pending: true });
   });
 
