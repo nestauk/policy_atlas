@@ -57,7 +57,6 @@ const citation = (n: number, title: string, extra: Record<string, unknown> = {})
   source_id: `src-${n}`,
   source_title: title,
   quote: `Quote ${n}.`,
-  grounding_tier: "tier_2",
   ...extra,
 });
 
@@ -86,6 +85,8 @@ const artefact = {
             {
               claim_id: "kf-1",
               claim_type: "citation" as const,
+              // The verdict is the claim's (round 13).
+              grounding_tier: "tier_2",
               text: KF_CLAIM,
               span: [KF_PROSE.indexOf(KF_CLAIM), KF_PROSE.indexOf(KF_CLAIM) + KF_CLAIM.length],
               citations: [
@@ -126,6 +127,8 @@ const artefact = {
             {
               claim_id: "body-1",
               claim_type: "citation" as const,
+              // The verdict is the claim's (round 13).
+              grounding_tier: "tier_2",
               text: BODY_PROSE,
               span: [0, BODY_PROSE.length],
               citations: [citation(7, "School meals trial")],
@@ -324,8 +327,14 @@ describe("the committed report page (task 058, round 10)", () => {
     expect(href("Found")).toBe(`${all}?status=all`);
     expect(href("Relevant")).toBe(`${all}?status=Included`);
     expect(href("Cited")).toBe(`${all}?cited=true`);
+    expect(href("Full text")).toBe(`${all}?depth=full_text`);
+    // The References' quiet link, not Electric Blue (owner, round 13).
+    for (const link of within(section).getAllByRole("link").filter((node) => node.closest("table") !== null)) {
+      expect(link).toHaveClass("text-navy", "decoration-line-2");
+      expect(link).not.toHaveClass("text-blue");
+    }
     // The clickable-only rule: the table has no filter for these.
-    for (const plain of ["Full text", "Shortlisted", "Not reported"]) {
+    for (const plain of ["Shortlisted", "Not reported"]) {
       expect(within(section).queryByRole("link", { name: plain })).toBeNull();
       expect(within(section).getByText(plain)).toBeInTheDocument();
     }
@@ -383,6 +392,19 @@ describe("the committed report page (task 058, round 10)", () => {
     // One source names its title.
     await user.click(screen.getByRole("button", { name: /What families said/ }));
     expect(screen.getByRole("button", { name: "Source 7: School meals trial" })).toHaveTextContent("[7]");
+  });
+
+  it("shows the claim's verdict once under the Claim, the citation boxes holding the source and the quote (round 13)", async () => {
+    const user = userEvent.setup();
+    renderReport();
+    const findings = screen.getByRole("heading", { name: "Key findings" }).closest("section") as HTMLElement;
+    await user.click(within(findings).getByRole("button", { name: "Sources 7 and 12" }));
+    const sheet = await screen.findByRole("dialog");
+    expect(sheet.querySelectorAll("[data-judge-block]")).toHaveLength(1);
+    expect(within(sheet).getAllByText("Tier 2 · grounded")).toHaveLength(1);
+    const boxes = sheet.querySelectorAll("[data-citation-block]");
+    expect(boxes).toHaveLength(2);
+    for (const box of boxes) expect(box.querySelector("[data-judge-block]")).toBeNull();
   });
 
   it("sets the appraisal chip in the soft tone and evidence types in sentence case", () => {

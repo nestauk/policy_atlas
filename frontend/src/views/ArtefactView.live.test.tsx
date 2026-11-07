@@ -232,8 +232,10 @@ describe("ArtefactView around a run", () => {
         state: "filled",
         prose: LIVE_PROSE,
         citations: [
-          { start: 0, end: 12, n: 2, sourceId: "s1", title: "Smith 2023", tier: "tier_2", citationId: null, claimId: null, quote: "" },
+          { start: 0, end: 12, n: 2, sourceId: "s1", title: "Smith 2023", citationId: null, claimId: null, quote: "" },
         ],
+        // The verdict is the claim's (round 13).
+        checkedClaims: [{ claimId: null, start: 0, end: 12, tier: "tier_2", rationale: null }],
       },
     ]);
     view.rerender(page());
@@ -260,7 +262,8 @@ describe("ArtefactView around a run", () => {
                   claim_type: "citation" as const,
                   text: LIVE_PROSE,
                   span: [0, 12],
-                  citations: [{ citation_id: "x", n: 1, source_title: "Smith 2023", quote: "q", grounding_tier: "tier_2" }],
+                  grounding_tier: "tier_2",
+                  citations: [{ citation_id: "x", n: 1, source_title: "Smith 2023", quote: "q" }],
                 },
               ],
             },
@@ -347,12 +350,13 @@ describe("ArtefactView around a run", () => {
             n: 2,
             sourceId: "s1",
             title: "Smith 2023",
-            tier: "tier_2",
             citationId: "cit-1",
             claimId: "claim-1",
             quote: "Charges stopped families taking a place.",
           },
         ],
+        // The verdict is the claim's (round 13).
+        checkedClaims: [{ claimId: "claim-1", start: 0, end: 12, tier: "tier_2", rationale: null }],
       },
       { index: 2, title: "Outreach", focus: "", state: "writing" },
     ]);
@@ -412,8 +416,9 @@ describe("ArtefactView around a run", () => {
         state: "filled",
         prose: "Costs prose.",
         citations: [
-          { start: 0, end: 12, n: 2, sourceId: "s1", title: "Smith 2023", tier: "tier_2", citationId: "cit-1", claimId: "claim-1", quote: "New quote." },
+          { start: 0, end: 12, n: 2, sourceId: "s1", title: "Smith 2023", citationId: "cit-1", claimId: "claim-1", quote: "New quote." },
         ],
+        checkedClaims: [{ claimId: "claim-1", start: 0, end: 12, tier: "tier_2", rationale: null }],
       },
       { index: 2, title: "Outreach", focus: "", state: "writing" },
     ]);
@@ -466,8 +471,9 @@ describe("ArtefactView around a run", () => {
                   claim_type: "citation" as const,
                   text: "Costs prose.",
                   span: [0, 12],
+                  grounding_tier: "tier_2",
                   citations: [
-                    { citation_id: "x", n: 1, source_id: "s1", source_title: "Smith 2023", quote: "q", grounding_tier: "tier_2", appraisal_label: "Strong" },
+                    { citation_id: "x", n: 1, source_id: "s1", source_title: "Smith 2023", quote: "q", appraisal_label: "Strong" },
                   ],
                 },
               ],

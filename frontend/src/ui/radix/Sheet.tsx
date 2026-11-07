@@ -57,9 +57,13 @@ export function SheetContent({
   description,
   descriptionHidden = false,
   side = "right",
+  headerAction,
   ...props
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
   title: string;
+  /** A quiet control in the header before the close button (the source
+   *  sheet's "Back to the claim", owner round 13). */
+  headerAction?: ReactNode;
   description?: string;
   /** The description names the dialog for a screen reader but is not shown
    *  (the provenance sheet's "Claim provenance"; task 058, round 10). */
@@ -104,9 +108,12 @@ export function SheetContent({
               </DialogPrimitive.Description>
             )}
           </div>
-          <DialogPrimitive.Close asChild>
-            <CloseButton aria-label="Close panel" />
-          </DialogPrimitive.Close>
+          <div className="flex shrink-0 items-center gap-3">
+            {headerAction}
+            <DialogPrimitive.Close asChild>
+              <CloseButton aria-label="Close panel" />
+            </DialogPrimitive.Close>
+          </div>
         </div>
         <div className="flex-1 px-5 py-4">{children}</div>
       </DialogPrimitive.Content>

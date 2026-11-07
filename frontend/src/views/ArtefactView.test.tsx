@@ -1143,10 +1143,8 @@ describe("renderLeadColonBullet double-citation suppression", () => {
               n: 7,
               source_title: "A study",
               quote: "",
-              grounding_tier: null,
               appraisal_label: null,
               source_id: null,
-              grounding_rationale: null,
               evidence_type: null,
             },
           ],
@@ -1226,7 +1224,7 @@ describe("CitationProvenanceBlock authorships (042)", () => {
     },
   };
 
-  it("sets the source line as the References read it, after the quote (round 12)", () => {
+  it("bounds a citation in its own box: the judge's callout, then the References-form source line, then the quote (round 13)", () => {
     const { container } = render(
       <CitationProvenanceBlock
         n={1}
@@ -1235,18 +1233,63 @@ describe("CitationProvenanceBlock authorships (042)", () => {
         onOpenDossier={() => {}}
         context={baseContext}
         quote="The quoted"
+        judgement={{ label: "Tier 2 · grounded", words: "The passage says so." }}
       />,
     );
+    const block = container.querySelector("[data-citation-block]") as HTMLElement;
+    // Its own box, a hairline all round: the coloured rule is the Claim's.
+    expect(block).toHaveClass("border", "border-line", "p-4");
+    expect(block.className).not.toMatch(/border-l-/);
+    // Judge and Quote labelled in the dossier's style; the source line not.
+    const labels = [...block.querySelectorAll("[data-provenance-label]")].map((label) => label.textContent);
+    expect(labels).toEqual(["Judge", "Quote"]);
+    // The AI's judgement carries the blue diamond; the other labels do not.
+    const marks = block.querySelectorAll("[data-testid='ai-mark']");
+    expect(marks).toHaveLength(1);
+    expect(marks[0].closest("[data-provenance-label]")).toHaveTextContent("Judge");
+    // The judge in a tinted callout: the tier in Navy Semibold, its words at Body Grey.
+    const verdict = screen.getByText("Tier 2 · grounded");
+    expect(verdict).toHaveClass("font-semibold", "text-navy");
+    expect(verdict.parentElement).toHaveClass("bg-blue-tint-2");
+    expect(screen.getByText("The passage says so.")).toHaveClass("text-body", "text-grey");
+    // The source, title first: "[1] Title" in Navy Semibold, then the byline in Grey.
     const name = screen.getByText("A study");
-    expect(name.closest("p")).toHaveTextContent("[1] Sampleton A, Mockford C (2022). A study. BMJ Open.");
-    expect(name).toHaveClass("font-bold");
-    // The quote, highlighted in its passage, comes first.
+    expect(name.closest("p")).toHaveTextContent(/^\[1\]\s*A study$/);
+    expect(name.closest("p")).toHaveClass("font-semibold", "text-navy");
+    const byline = screen.getByText("Sampleton A, Mockford C · 2022 · BMJ Open");
+    expect(byline).toHaveClass("text-body", "text-grey");
+    expect(name.compareDocumentPosition(byline) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The source line has its own room: 12 px above and below.
+    expect(name.closest("p")?.parentElement).toHaveClass("my-3");
+    expect(verdict.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The quote, highlighted in its passage, last.
     const quote = screen.getByText("The quoted");
     expect(quote.tagName).toBe("MARK");
-    expect(quote.compareDocumentPosition(name) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(name.compareDocumentPosition(quote) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Names only, as the References: the institutions are the dossier's.
     expect(container.querySelector("sup")).toBeNull();
     expect(screen.queryByText(/University of Exampleshire/)).toBeNull();
+  });
+
+  it("tints an unsupported verdict's callout red and an unchecked one grey", () => {
+    const tint = (label: string) => {
+      const { unmount } = render(
+        <CitationProvenanceBlock
+          n={1}
+          sourceTitle="A study"
+          sourceRef={null}
+          onOpenDossier={() => {}}
+          context={baseContext}
+          quote="The quoted"
+          judgement={{ label, words: "Words." }}
+        />,
+      );
+      const classes = screen.getByText(label).parentElement?.className ?? "";
+      unmount();
+      return classes;
+    };
+    expect(tint("Unsupported")).toContain("bg-red-tint");
+    expect(tint("Unchecked")).toContain("bg-ground");
   });
 
   it("starts the source line at the number and title when the context carries no authors", () => {
@@ -1260,7 +1303,8 @@ describe("CitationProvenanceBlock authorships (042)", () => {
         quote="The quoted"
       />,
     );
-    expect(screen.getByText("A study").closest("p")).toHaveTextContent("[1] A study (2022). BMJ Open.");
+    expect(screen.getByText("A study").closest("p")).toHaveTextContent(/^\[1\]\s*A study$/);
+    expect(screen.getByText("2022 · BMJ Open")).toHaveClass("text-grey");
   });
 });
 

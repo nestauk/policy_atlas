@@ -5,6 +5,13 @@
  * dossier, the option card and the Markdown download.
  */
 
+/** A source title that opens its dossier, as the report's References and
+ *  most relevant sources show it: Navy, underlined in Line 2, the underline
+ *  turning Navy on hover (round 10, finding 1). Shared with the option card
+ *  (round 13): the References, the most relevant sources, the citation sheet and the option card. */
+export const SOURCE_TITLE_LINK_CLASS =
+  "text-navy underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 hover:decoration-navy";
+
 /** One author (or corporate author) and their institutions (042 wire shape). */
 export type AuthorshipLike = { name: string; institutions?: string[] | null };
 

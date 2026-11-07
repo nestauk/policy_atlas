@@ -1,4 +1,4 @@
-import { createContext, Fragment, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Children, createContext, Fragment, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
@@ -23,7 +23,7 @@ import {
   splitLeadColon,
 } from "./artefactPresentation";
 import type { TopSource } from "./artefactPresentation";
-import { displayUrl, referenceParts } from "../ui/brand/reference";
+import { displayUrl, referenceAuthorsShort, referenceParts, SOURCE_TITLE_LINK_CLASS } from "../ui/brand/reference";
 import type { SidebarEntry } from "./ArtefactOutline";
 import { ArtefactDownload } from "./ArtefactDownload";
 import { errorCode } from "../lib/errors";
@@ -40,15 +40,19 @@ import { usePlanPanel } from "./planPanel";
 import { ShortlistView } from "./longlist/ShortlistView";
 import { Tabs, TabsList, TabsTrigger } from "../ui/radix/Tabs";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
-import type { LiveCitation, LiveClaim, LiveSection, LiveSourceNote, RunStreamState } from "../store";
+import type { LiveCheckedClaim, LiveCitation, LiveClaim, LiveSection, LiveSourceNote, RunStreamState } from "../store";
 import { LiveMark } from "../ui/brand/Card";
+import { FoldMarkIcon } from "../ui/brand/FoldMarkIcon";
+import { ArrowLeftIcon } from "../ui/brand/icons";
 import { Chip, type ChipProps } from "../ui/brand/Chip";
 import { BULLET_ITEM_CLASS, BULLET_MARK_CLASS } from "../ui/brand/BulletList";
+import { useOpenAtTop } from "../lib/openAtTop";
 import {
   citationJudgement,
   evidenceTypeLabel,
   strengthHint,
   TIER_LABEL,
+  UNCHECKED,
   type CitationJudgement,
 } from "../ui/brand/evidence";
 import { StrengthMark } from "../ui/brand/EvidenceMarks";
@@ -86,7 +90,7 @@ import {
 } from "./ArtefactOutline";
 import { useExpandForPrint } from "../ui/brand/Disclosure";
 import { Tooltip } from "../ui/radix/Tooltip";
-import { SourceDossierBody, useDossierRecords } from "./SourcesView";
+import { DOSSIER_LOADING_LINE, SourceDossierBody, useDossierRecords } from "./SourcesView";
 import { useActiveConversation } from "./workspace/chat/conversationState";
 import "./artefact.css";
 import { scrollPane, useEasedHeight, useFollowTail, useHoldHeightWhileShorter, useRevealedText } from "./streamPacing";
@@ -121,6 +125,10 @@ interface ClaimLike {
     }> | null;
   } | null;
   weakly_grounded?: boolean | null;
+  /** The judge's verdict on the claim (`ClaimOut`, round 13: the verdict is
+   *  the claim's, no longer copied onto each citation). */
+  grounding_tier?: string | null;
+  grounding_rationale?: string | null;
   /** True for a claim the live page built from a checked section's
    *  citations (task 058, round 8): the sheet opens on what the run knows
    *  (the span, the tier, each citation's id, quote and title) and leaves out
@@ -331,54 +339,76 @@ function useChunkContext(taskId: string, citationId: string | null) {
   });
 }
 
-/** One citation's provenance block (demo CitationContext/ClaimPanel), in a
- *  fixed order on the sheet's one type scale (owner, round 12): the quote
- *  first, highlighted inside its surrounding source passage (or, on a lookup
- *  failure, the quote alone with the caller's honest note); then the source
- *  line as the References read it ("[2] Sampleton A, Mockford C (2022).
- *  **Title**. Venue."), the source's name the only bold on the sheet and the
- *  way into its dossier; then the evidence type and strength at Meta; then
- *  the judge's words under their Meta label. No chips (chat moved to
- *  `judgement` too, round 12). Presentational: callers own the chunk-context
- *  query. */
-export function CitationProvenanceBlock({
-  n,
-  sourceTitle,
-  sourceRef,
-  onOpenDossier,
+/** The judge's callout tint (owner, round 13): a checked tier on Blue
+ *  Wash 2 ("blue means checked"), an unsupported one on Red Tint, an
+ *  unchecked one on Ground. */
+function judgementTint(judgement: CitationJudgement): string {
+  if (judgement.label === UNCHECKED) return "bg-ground";
+  if (judgement.label === TIER_LABEL.unsupported_mis_cited) return "bg-red-tint";
+  return "bg-blue-tint-2";
+}
+
+/** A part's label on the sheet, the dossier's label style (Meta Grey).
+ *  "Judge" carries the Policy Atlas blue diamond before it, the mark of the
+ *  product's own AI work (owner, round 13). */
+function ProvenanceLabel({ children, ai = false }: { children: string; ai?: boolean }) {
+  return (
+    <p data-provenance-label="" className="mb-1 flex items-center gap-1.5 text-meta text-grey">
+      {ai && <FoldMarkIcon size={10} data-testid="ai-mark" />}
+      {children}
+    </p>
+  );
+}
+
+/** The judge's verdict: "Judge" led by the blue diamond (the product's AI
+ *  judgement), over its tinted callout, the tier's label in Navy Semibold
+ *  and the judge's words at Body Grey (owner, round 13). */
+function JudgeBlock({ judgement }: { judgement: CitationJudgement }) {
+  return (
+    <div data-judge-block="">
+      <ProvenanceLabel ai>Judge</ProvenanceLabel>
+      <div className={cn("px-3 py-2", judgementTint(judgement))}>
+        <p className="text-body font-semibold text-navy">{judgement.label}</p>
+        <p className="mt-0.5 text-body text-grey">{scrub(judgement.words)}</p>
+      </div>
+    </div>
+  );
+}
+
+/** The evidence type on the sheet's marks line, its hover the classifier's
+ *  reasoning read from the cited source's dossier, as the badges and the
+ *  Sources table do (owner, round 13): the dotted word, the help cursor,
+ *  the Meta tooltip. Without a task and a source to ask, the type alone. */
+function ClassificationHint({ taskId, sourceId, type }: { taskId: string; sourceId: string | null; type: string }) {
+  const label = scrub(evidenceTypeLabel(type));
+  if (taskId === "" || sourceId === null) return <span>{label}</span>;
+  return (
+    <Tooltip content={<ClassificationReason taskId={taskId} sourceId={sourceId} />} className="text-meta">
+      <span className="cursor-help">
+        <span className="reason-word">{label}</span>
+      </span>
+    </Tooltip>
+  );
+}
+
+/** One quote in a source's box: "Quote" over the passage at Body, the quoted
+ *  words in the highlight, the surrounding sentences Grey; on a lookup
+ *  failure the quote alone with the caller's honest note. */
+export function CitationQuote({
   context,
   quote,
   fallbackNote,
-  evidenceType = null,
-  strength = null,
-  judgement = null,
+  label = "Quote",
 }: {
-  n: number | null;
-  sourceTitle: string;
-  /** A source id/title to open the dossier with, or `null` when the
-   *  citation carries nothing dossier-linkable (renders plain text). */
-  sourceRef: string | null;
-  onOpenDossier: (sourceRef: string) => void;
   context: { isPending: boolean; isError: boolean; data: components["schemas"]["ChunkContextOut"] | undefined };
   quote: string;
-  /** Shown under the quote on a lookup failure, alongside it — never in
-   *  place of the honest quote fallback (chat's non-verbatim-quote case). */
   fallbackNote?: string;
-  /** The cited source's classified evidence type, when it has one. */
-  evidenceType?: string | null;
-  /** The cited source's appraised strength, when it has one. */
-  strength?: string | null;
-  judgement?: CitationJudgement | null;
+  /** "Quote", or "Quote 1", "Quote 2", … when a source gives several. */
+  label?: string;
 }) {
-  const parts = referenceParts({
-    title: sourceTitle,
-    year: typeof context.data?.year === "number" ? context.data.year : null,
-    venue: context.data?.venue ?? null,
-    authorships: context.data?.authorships,
-  });
-  const title = scrub(sourceTitle);
   return (
     <div>
+      <ProvenanceLabel>{label}</ProvenanceLabel>
       <div className="space-y-2 text-body">
         {context.isPending && (
           <p role="status" className="anim-breathe-soft text-grey">
@@ -405,45 +435,108 @@ export function CitationProvenanceBlock({
           </>
         )}
       </div>
-      {/* The source line, in the References' citation form. */}
-      <p className="mt-3 text-body text-ink [overflow-wrap:anywhere]">
-        <span className="tabular-nums text-grey">[{n ?? "—"}]</span>{" "}
-        {parts.lead !== null && scrub(parts.lead)}
-        {sourceRef !== null ? (
-          // A button that wraps with the line, so the full stop and the
-          // venue follow the name on a phone (a <button> breaks as a block).
-          <span
-            role="button"
-            tabIndex={0}
-            className={cn("cursor-pointer font-bold", SOURCE_TITLE_LINK_CLASS)}
-            onClick={() => onOpenDossier(sourceRef)}
-            onKeyDown={(event) => {
-              if (event.key !== "Enter" && event.key !== " ") return;
-              event.preventDefault();
-              onOpenDossier(sourceRef);
-            }}
-          >
-            {title}
-          </span>
-        ) : (
-          <span className="font-bold text-navy">{title}</span>
-        )}
-        {parts.afterTitle}
-        {parts.venue !== null && <span className="text-grey"> {scrub(parts.venue)}</span>}
-      </p>
-      {(evidenceType !== null || strength !== null) && (
-        <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-meta text-grey">
-          {evidenceType !== null && <span>{scrub(evidenceTypeLabel(evidenceType))}</span>}
-          {evidenceType !== null && strength !== null && <span aria-hidden="true">·</span>}
-          {strength !== null && <StrengthHint label={strength} evidenceType={evidenceType} />}
+    </div>
+  );
+}
+
+/** One source's provenance block (owner, round 13): its own box (a Line
+ *  hairline, no coloured rule: that is the Claim's). The report's sheet
+ *  groups a claim's citations by source, one box each, and shows the
+ *  claim's one verdict under the Claim; chat passes one citation and its own
+ *  `judgement`, set first in the box. Then the source, unlabelled, with
+ *  12 px of room above and below, title first: "[2] Title" at Body Semibold
+ *  Navy, the title the way into the dossier, then "Sampleton A, Mockford C ·
+ *  2022 · BMJ Open" in Grey, then the evidence type (its reasoning on hover)
+ *  and strength at Meta; then each quote under its own "Quote" label,
+ *  highlighted inside its passage (`CitationQuote`). One type scale (round
+ *  12). Presentational: callers own the chunk-context queries. */
+export function CitationProvenanceBlock({
+  n,
+  sourceTitle,
+  sourceRef,
+  onOpenDossier,
+  context,
+  quote,
+  fallbackNote,
+  evidenceType = null,
+  strength = null,
+  judgement = null,
+  taskId = "",
+  sourceId = null,
+  quotes,
+}: {
+  n: number | null;
+  sourceTitle: string;
+  /** A source id/title to open the dossier with, or `null` when the
+   *  citation carries nothing dossier-linkable (renders plain text). */
+  sourceRef: string | null;
+  onOpenDossier: (sourceRef: string) => void;
+  context: { isPending: boolean; isError: boolean; data: components["schemas"]["ChunkContextOut"] | undefined };
+  quote: string;
+  /** Shown under the quote on a lookup failure, alongside it — never in
+   *  place of the honest quote fallback (chat's non-verbatim-quote case). */
+  fallbackNote?: string;
+  /** The cited source's classified evidence type, when it has one. */
+  evidenceType?: string | null;
+  /** The cited source's appraised strength, when it has one. */
+  strength?: string | null;
+  /** A per-citation verdict (chat). The report's sheet shows its claim's
+   *  one verdict under the Claim instead (`ProvenanceSheet`'s `judgement`). */
+  judgement?: CitationJudgement | null;
+  /** The task and the cited source, for the evidence type's reasoning on
+   *  hover; without them the type is plain. */
+  taskId?: string;
+  sourceId?: string | null;
+  /** Several quotes from this one source, each a `CitationQuote` (the
+   *  report groups a claim's citations by source, owner round 13); without
+   *  it the block shows the one `quote` in `context`. */
+  quotes?: ReactNode;
+}) {
+  // Title first (owner, round 13): the title on its own line, then the
+  // authors, year and venue in Grey; the References keep their author-year
+  // form.
+  const byline = [
+    referenceAuthorsShort(context.data?.authorships),
+    context.data?.year,
+    context.data?.venue,
+  ].filter((part): part is string | number => part != null && part !== "");
+  const title = scrub(sourceTitle);
+  return (
+    <div data-citation-block="" className="border border-line p-4">
+      {judgement !== null && <JudgeBlock judgement={judgement} />}
+      {/* The source, unlabelled, with its own room: the title, then its
+          byline, then the evidence marks. */}
+      <div className={judgement !== null ? "my-3" : "mb-3"}>
+        {/* The number in its own column, so a long title wraps beside it. */}
+        <p className="flex items-baseline gap-1.5 text-body font-semibold text-navy [overflow-wrap:anywhere]">
+          <span className="shrink-0 font-normal tabular-nums text-grey">[{n ?? "—"}]</span>
+          {sourceRef !== null ? (
+            <button
+              type="button"
+              className={cn("cursor-pointer text-left", SOURCE_TITLE_LINK_CLASS)}
+              onClick={() => onOpenDossier(sourceRef)}
+            >
+              {title}
+            </button>
+          ) : (
+            <span>{title}</span>
+          )}
         </p>
-      )}
-      {judgement !== null && (
-        <div className="mt-3">
-          <p className="text-meta text-grey">{judgement.label}</p>
-          <p className="mt-0.5 text-body text-navy">{scrub(judgement.words)}</p>
-        </div>
-      )}
+        {byline.length > 0 && (
+          <p className="mt-0.5 text-body text-grey">{byline.map((part) => scrub(String(part))).join(" · ")}</p>
+        )}
+        {(evidenceType !== null || strength !== null) && (
+          <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-meta text-grey">
+            {evidenceType !== null && <ClassificationHint taskId={taskId} sourceId={sourceId} type={evidenceType} />}
+            {evidenceType !== null && strength !== null && <span aria-hidden="true">·</span>}
+            {strength !== null && <StrengthHint label={strength} evidenceType={evidenceType} />}
+          </p>
+        )}
+      </div>
+      {/* Each quote under its own "Quote" label (owner, round 13). */}
+      <div className="space-y-3">
+        {quotes ?? <CitationQuote context={context} quote={quote} fallbackNote={fallbackNote} />}
+      </div>
     </div>
   );
 }
@@ -505,62 +598,114 @@ function ClassificationReason({ taskId, sourceId }: { taskId: string; sourceId: 
   return <p>{dossier.isError ? "The reasoning could not be loaded." : "No reasoning was recorded for this type."}</p>;
 }
 
-/** One citation's provenance block in the claim panel (demo
- *  CitationContext): the shared block, with the citation's evidence type,
- *  strength and the judge's verdict as words, not chips (round 12). */
-function CitationContext({
+/** One quote of a source group: its passage read on demand. */
+function ReportQuote({ taskId, citation, label }: { taskId: string; citation: CitationOut; label: string }) {
+  const context = useChunkContext(taskId, citation.citation_id);
+  return <CitationQuote context={context} quote={citation.quote} label={label} />;
+}
+
+/** One source's box in the claim panel (owner, round 13): a claim's
+ *  citations grouped by source, the source line once, then each of its
+ *  quotes under its own "Quote" label. The byline comes from the first
+ *  quote's passage read (the chunk context carries the authors, year and
+ *  venue). */
+function SourceGroupBlock({
   taskId,
-  citation,
+  citations,
   onOpenDossier,
   live = false,
 }: {
   taskId: string;
-  citation: CitationOut;
+  citations: CitationOut[];
   onOpenDossier: (title: string) => void;
   /** The report is still being written: the title is not a link yet. */
   live?: boolean;
 }) {
-  const context = useChunkContext(taskId, citation.citation_id);
+  const first = citations[0];
+  const context = useChunkContext(taskId, first.citation_id);
   return (
     <CitationProvenanceBlock
-      n={citation.n}
-      sourceTitle={citation.source_title}
-      sourceRef={live ? null : (citation.source_id ?? citation.source_title)}
+      n={first.n}
+      sourceTitle={first.source_title}
+      sourceRef={live ? null : (first.source_id ?? first.source_title)}
       onOpenDossier={onOpenDossier}
       context={context}
-      quote={citation.quote}
-      evidenceType={nonEmpty(citation.evidence_type)}
-      strength={nonEmpty(citation.appraisal_label)}
-      judgement={citationJudgement(citation.grounding_tier, citation.grounding_rationale)}
+      quote={first.quote}
+      evidenceType={nonEmpty(first.evidence_type)}
+      strength={nonEmpty(first.appraisal_label)}
+      taskId={taskId}
+      sourceId={nonEmpty(first.source_id)}
+      quotes={citations.map((citation, at) => (
+        <ReportQuote
+          key={citation.citation_id}
+          taskId={taskId}
+          citation={citation}
+          // Several quotes from one source are numbered in order (owner, round 13).
+          label={citations.length > 1 ? `Quote ${at + 1}` : "Quote"}
+        />
+      ))}
     />
   );
+}
+
+/** A claim's citations grouped by source (`source_id`, else the title), in
+ *  the order each source is first cited. */
+export function citationsBySource<C extends { source_id?: string | null; source_title: string }>(
+  citations: readonly C[],
+): C[][] {
+  const groups = new Map<string, C[]>();
+  for (const citation of citations) {
+    const key = citation.source_id ?? `title:${citation.source_title}`;
+    const group = groups.get(key);
+    if (group === undefined) groups.set(key, [citation]);
+    else group.push(citation);
+  }
+  return [...groups.values()];
+}
+
+/** The claim's verdict (round 13: the tier and rationale are the claim's,
+ *  `ClaimOut.grounding_tier` and `grounding_rationale`). A claim with no
+ *  citations has nothing judged against a source. */
+function claimJudgement(claim: ClaimLike): CitationJudgement | null {
+  if ((claim.citations ?? []).length === 0) return null;
+  return citationJudgement(claim.grounding_tier, claim.grounding_rationale);
 }
 
 function nonEmpty(value: string | null | undefined): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
 }
 
-/** The provenance sheet a claim (report) or a claim/citation (chat) opens:
- *  the "Where this comes from" shell, then its blocks in a fixed order with
- *  one hairline rule between them and nothing else drawn (owner, round 12):
- *  the claim's words (one line per string — chat stacks several when
- *  multiple claims cite one citation), a caller-supplied extras slot (the
- *  reader's gap/type-hint/theme/weak-grounding blocks, each a block of its
- *  own), then the citation blocks as children. The Sheet keeps its close
+/** The citation sheet's title, the report's and chat's (owner, round 13;
+ *  it read "Where this comes from"). */
+export const PROVENANCE_SHEET_TITLE = "Evidence for this claim";
+
+/** The provenance sheet a claim (report) or a claim/citation (chat) opens
+ *  (owner, round 13): the "Evidence for this claim" shell, then the claim's
+ *  block (its words behind the 2 px blue rule; one line per string — chat
+ *  stacks several when multiple claims cite one citation), a caller-supplied
+ *  extras slot (the reader's gap/type-hint/theme/weak-grounding lines), the
+ *  claim's one Judge block (lead, round 13), then one bounded block per
+ *  citation, 16 px apart. The Sheet keeps its close
  *  button and focus rules. */
 export function ProvenanceSheet({
   description = "Claim provenance",
   claimTexts,
   extras,
+  judgement = null,
   onClose,
   children,
 }: {
   description?: string;
   claimTexts: string[];
   extras?: ReactNode;
+  /** The claim's one verdict, shown once under the Claim (lead, round 13:
+   *  the read model copies the claim's verdict onto every citation). */
+  judgement?: CitationJudgement | null;
   onClose: () => void;
+  /** One element per source box (the label over them counts sources). */
   children: ReactNode;
 }) {
+  const citationCount = Children.toArray(children).length;
   return (
     <Sheet
       open
@@ -570,31 +715,38 @@ export function ProvenanceSheet({
     >
       {/* "Claim provenance" repeats the title on screen: it stays the
           dialog's accessible description only (round 10, C3). */}
-      <SheetContent title="Where this comes from" description={description} descriptionHidden>
-        <div className={PROVENANCE_BLOCKS_CLASS}>
+      <SheetContent title={PROVENANCE_SHEET_TITLE} description={description} descriptionHidden>
+        {/* The claim's block, then one bounded block per citation, 16 px
+            apart (owner, round 13). */}
+        <div className="space-y-4">
           {claimTexts.some((text) => text !== "") && (
-            <div className="space-y-2">
-              {claimTexts
-                .filter((text) => text !== "")
-                .map((text, index) => (
-                  <p key={index} className="text-body text-navy">
-                    {scrub(text)}
-                  </p>
-                ))}
+            <div>
+              <ProvenanceLabel>Claim</ProvenanceLabel>
+              <div className="space-y-2 border-l-2 border-l-blue pl-3">
+                {claimTexts
+                  .filter((text) => text !== "")
+                  .map((text, index) => (
+                    <p key={index} className="text-body text-navy">
+                      {scrub(text)}
+                    </p>
+                  ))}
+              </div>
             </div>
           )}
           {extras}
-          {children}
+          {judgement !== null && <JudgeBlock judgement={judgement} />}
+          {citationCount > 0 && (
+            // One label over the boxes, counting sources: "Source", "Sources · 2".
+            <div className="space-y-4">
+              <ProvenanceLabel>{citationCount === 1 ? "Source" : `Sources · ${citationCount}`}</ProvenanceLabel>
+              {children}
+            </div>
+          )}
         </div>
       </SheetContent>
     </Sheet>
   );
 }
-
-/** The sheet's blocks: one hairline rule between each, 16 px either side of
- *  it, none above the first or below the last. */
-const PROVENANCE_BLOCKS_CLASS =
-  "divide-y divide-line [&>*]:py-4 [&>*:first-child]:pt-0 [&>*:last-child]:pb-0";
 
 /** The provenance panel a claim span opens (demo ClaimPanel): the claim, its
  *  type explainer, and every citation's highlighted source passage — over
@@ -718,13 +870,14 @@ function ClaimPanel({
       description="Claim provenance"
       claimTexts={[claim.text]}
       extras={extras}
+      judgement={claimJudgement(claim)}
       onClose={onClose}
     >
-      {(claim.citations ?? []).map((citation) => (
-        <CitationContext
-          key={citation.citation_id}
+      {citationsBySource(claim.citations ?? []).map((group) => (
+        <SourceGroupBlock
+          key={group[0].citation_id}
           taskId={taskId}
-          citation={citation}
+          citations={group}
           onOpenDossier={onOpenDossier}
           live={claim.live === true}
         />
@@ -846,7 +999,7 @@ function ClaimSpan({
   const before = swap.liveNumbers.get(markerKey(claim.span, text));
   const renumbered = swap.arriving && before !== undefined && before !== citationNumbers.join(",");
   const first = (claim.citations ?? [])[0];
-  const tier = first?.grounding_tier ?? null;
+  const tier = claim.grounding_tier ?? null;
   const tip =
     first !== undefined ? (
       <CitationTooltipBody
@@ -1198,11 +1351,15 @@ export function SourceDossier({
   sourceRef,
   optionId = null,
   onClose,
+  onBack,
 }: {
   taskId: string;
   /** A source id (citations carry one) or a display title (references,
    *  theme members — the legacy title-keyed path). */
   sourceRef: string;
+  /** Opened from a claim's sheet: "Back to the claim" returns to it (owner,
+   *  round 13). Absent from every other route in. */
+  onBack?: () => void;
   /** The option whose card opened the dossier (the `option` search
    *  parameter): on an options-scoping task the slot then reads "In this
    *  option" (task 046, amendment 3, R67). */
@@ -1230,13 +1387,30 @@ export function SourceDossier({
     >
       <SheetContent
         title={scrub(byId ? (dossier.data?.title ?? source?.title ?? "Source") : sourceRef)}
+        headerAction={
+          onBack !== undefined ? (
+            // "Back" with the icons module's left arrow; its
+            // name and tooltip say where it goes (owner, round 13).
+            <Tooltip content={<p>Back to the claim</p>} className="text-meta">
+              <button
+                type="button"
+                onClick={onBack}
+                aria-label="Back to the claim"
+                className={cn(QUIET_CONTROL_CLASS, "inline-flex items-center gap-1 text-meta")}
+              >
+                <ArrowLeftIcon size={14} />
+                Back
+              </button>
+            </Tooltip>
+          ) : undefined
+        }
       >
         {/* isLoading, not isPending: while the title→id lookup has not
          *  resolved, the dossier query is disabled and pending forever —
          *  isPending would render a stuck (and duplicate) loading line. */}
         {((!byId && evidence.isPending) || dossier.isLoading) && (
           <p role="status" className="anim-breathe-soft text-body text-grey">
-            Loading the dossier…
+            {DOSSIER_LOADING_LINE}
           </p>
         )}
         {dossier.isError && <p role="alert" className="text-body text-navy">This source dossier couldn't be loaded.</p>}
@@ -1960,14 +2134,25 @@ function liveRole(section: LiveSection): NonNullable<SectionLike["role"]> {
 /** The checked citations of a completed section as the committed report's
  *  claims (one claim per cited span, its citations in order), so the live
  *  page renders them with the report's own prose component. */
-export function liveClaims(prose: string, citations: readonly LiveCitation[] | undefined): ClaimLike[] {
+export function liveClaims(
+  prose: string,
+  citations: readonly LiveCitation[] | undefined,
+  checked: readonly LiveCheckedClaim[] | undefined = undefined,
+): ClaimLike[] {
   const chars = Array.from(prose);
   const bySpan = new Map<string, ClaimLike>();
+  // The checker's verdict is the claim's (round 13), matched by the claim's
+  // id when both carry it, else by its span.
+  const byId = new Map((checked ?? []).filter((claim) => claim.claimId !== null).map((claim) => [claim.claimId, claim]));
+  const bySpanVerdict = new Map((checked ?? []).map((claim) => [`${claim.start}:${claim.end}`, claim]));
   for (const citation of citations ?? []) {
     const key = `${citation.start}:${citation.end}`;
     let claim = bySpan.get(key);
     if (claim === undefined) {
+      const verdict = (citation.claimId !== null ? byId.get(citation.claimId) : undefined) ?? bySpanVerdict.get(key);
       claim = {
+        grounding_tier: verdict?.tier ?? null,
+        grounding_rationale: verdict?.rationale ?? null,
         // The committed report's claim id when the frame carries it (round
         // 8), so the sheet can follow the claim across the swap.
         claim_id: citation.claimId ?? `live:${key}`,
@@ -1983,7 +2168,6 @@ export function liveClaims(prose: string, citations: readonly LiveCitation[] | u
       citation_id: citation.citationId,
       n: citation.n,
       source_title: citation.title,
-      grounding_tier: citation.tier,
       source_id: citation.sourceId,
       quote: citation.quote,
     } as unknown as CitationOut);
@@ -1997,6 +2181,7 @@ export function liveClaims(prose: string, citations: readonly LiveCitation[] | u
 export function liveCaseStudyCards(
   prose: string,
   citations: readonly LiveCitation[] | undefined,
+  checked: readonly LiveCheckedClaim[] | undefined = undefined,
 ): CaseStudyCardLike[] {
   const chars = Array.from(prose);
   const text = chars.join("");
@@ -2013,7 +2198,10 @@ export function liveCaseStudyCards(
     const own = (citations ?? [])
       .filter((citation) => citation.start >= bodyStart && citation.end <= bodyEnd)
       .map((citation) => ({ ...citation, start: citation.start - bodyStart, end: citation.end - bodyStart }));
-    cards.push({ title: match[1], prose: body, claims: liveClaims(body, own) });
+    const ownChecked = (checked ?? [])
+      .filter((claim) => claim.start >= bodyStart && claim.end <= bodyEnd)
+      .map((claim) => ({ ...claim, start: claim.start - bodyStart, end: claim.end - bodyStart }));
+    cards.push({ title: match[1], prose: body, claims: liveClaims(body, own, ownChecked) });
   });
   return cards;
 }
@@ -2177,9 +2365,10 @@ function SectionBody({
     };
   }, [ghost]);
   const citations = section?.citations;
+  const checkedClaims = section?.checkedClaims;
   const liveBlocks = useMemo(
-    () => [{ block_id: "live", prose, claims: liveClaims(prose, citations) }],
-    [prose, citations],
+    () => [{ block_id: "live", prose, claims: liveClaims(prose, citations, checkedClaims) }],
+    [prose, citations, checkedClaims],
   );
 
   if (blocks !== undefined || filled) {
@@ -2544,7 +2733,9 @@ function useLiveReport(
     );
     if (section.role === "case_studies") {
       const cards =
-        section.state === "filled" ? liveCaseStudyCards(section.prose ?? "", section.citations) : (section.cards ?? []);
+        section.state === "filled"
+          ? liveCaseStudyCards(section.prose ?? "", section.citations, section.checkedClaims)
+          : (section.cards ?? []);
       return (
         <CaseStudiesSection
           key={`section:${id}`}
@@ -2778,11 +2969,9 @@ function plainClick(event: React.MouseEvent): boolean {
   return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
 }
 
-/** A source title that opens its dossier (the references, the most relevant
- *  sources): Navy, underlined in Line 2, the underline turning Navy on
- *  hover (round 10, finding 1). */
-const SOURCE_TITLE_LINK_CLASS =
-  "text-navy underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 hover:decoration-navy";
+/* A source title that opens its dossier (the references, the most relevant
+ * sources, the provenance sheet) takes the shared `SOURCE_TITLE_LINK_CLASS`
+ * (ui/brand/reference): Navy, underlined in Line 2, Navy on hover. */
 
 function SourceTitleLink({
   sourceRef,
@@ -3220,20 +3409,56 @@ function ArtefactReport() {
   // report by its claim id once that report has taken the page (never into
   // an older report held under a re-run), so the sheet gains what only the
   // committed report has (task 058, round 8).
+  // A claim named in the address (`?claim=`) is the sheet a source was
+  // opened from: the dossier's "Back to the claim" and the browser's Back
+  // return to it (owner, round 13).
+  const claimParam = searchParams.get("claim");
+  const committedSections = artefact.data?.sections as SectionLike[] | undefined;
+  const claimFromAddress =
+    dossierSource === null && claimParam !== null ? committedClaim(committedSections, claimParam) : null;
   const shownClaim =
     detailClaim?.live === true && !(showLive || readyHere) && artefact.data != null
-      ? (committedClaim(artefact.data.sections as SectionLike[] | undefined, detailClaim.claim_id) ?? detailClaim)
-      : detailClaim;
+      ? (committedClaim(committedSections, detailClaim.claim_id) ?? detailClaim)
+      : (detailClaim ?? claimFromAddress);
+  const openDossierFromClaim = (sourceRef: string, claimId: string) => {
+    setDetailClaim(null);
+    // The entry the reader leaves names the claim, so Back returns to its
+    // sheet; then the source opens on a new entry that keeps the claim.
+    const here = new URLSearchParams(window.location.search);
+    here.set("claim", claimId);
+    history.replaceState(history.state, "", `${window.location.pathname}?${here.toString()}${window.location.hash}`);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set("claim", claimId);
+      next.set("source", sourceRef);
+      next.delete("option");
+      return next;
+    });
+  };
+  const closeClaim = () => {
+    setDetailClaim(null);
+    if (claimParam !== null) {
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.delete("claim");
+          return next;
+        },
+        { replace: true },
+      );
+    }
+  };
   const claimPanel = (
     <ClaimPanel
       key="claim-panel"
       taskId={taskId}
       claim={shownClaim}
-      onClose={() => setDetailClaim(null)}
-      onOpenDossier={(title) => {
-        setDetailClaim(null);
-        openDossier(title);
-      }}
+      onClose={closeClaim}
+      onOpenDossier={(sourceRef) =>
+        shownClaim !== null && shownClaim.live !== true
+          ? openDossierFromClaim(sourceRef, shownClaim.claim_id)
+          : (setDetailClaim(null), openDossier(sourceRef))
+      }
     />
   );
   const live = useLiveReport(stream, question, isPublicView ? undefined : planPanel.openPlan, {
@@ -3282,6 +3507,12 @@ function ArtefactReport() {
   );
   const arriving = swap.arriving ? "anim-swap-in" : "";
   useKeepReadingPlace(renderingLive, swap.swapped);
+  // The baseline opens at its top with focus on its title (round 13, as the
+  // Longlist and Shortlist do), so switching to it never keeps the
+  // longlist's scroll offset. Not the report, and not a baseline the reader
+  // watched being written: there the reading place is kept.
+  const baselineTitle = useRef<HTMLHeadingElement>(null);
+  useOpenAtTop(baselineTitle, "baseline");
   const liveBody = (
     <ReportSwapContext.Provider value={swapValue}>
       <ReportPage entries={live.entries}>{live.children}</ReportPage>
@@ -3304,8 +3535,21 @@ function ArtefactReport() {
       const next = new URLSearchParams(current);
       next.delete("source");
       next.delete("option");
+      next.delete("claim");
       return next;
     });
+  };
+  // Back to the claim's sheet, in place of the source (owner, round 13).
+  const backToClaim = () => {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("source");
+        next.delete("option");
+        return next;
+      },
+      { replace: true },
+    );
   };
   const { setActiveConversation, openDraftChat } = useActiveConversation();
   // Chats need a result to ask about (038 V8) — the same gate as New chat.
@@ -3513,7 +3757,13 @@ function ArtefactReport() {
                 heading never changes at the swap; the generated title names
                 the download (round 10, D1). A baseline keeps its own title
                 ("Do nothing: …"), which says what the profile is. */}
-            <h1 className={REPORT_TITLE_CLASS}>{scrub(baseline ? data.title : (question ?? data.title))}</h1>
+            <h1
+              ref={baseline && !swap.swapped ? baselineTitle : undefined}
+              tabIndex={baseline ? -1 : undefined}
+              className={cn(REPORT_TITLE_CLASS, baseline && "outline-none")}
+            >
+              {scrub(baseline ? data.title : (question ?? data.title))}
+            </h1>
             {/* The date on its own line under the title (owner, round 11). */}
             {lastUpdated != null && (
               <p className={cn(REPORT_DATELINE_CLASS, arriving)}>
@@ -3620,6 +3870,7 @@ function ArtefactReport() {
               sourceRef={dossierSource}
               optionId={dossierOption}
               onClose={closeDossier}
+              onBack={claimParam !== null ? backToClaim : undefined}
             />
           ) : null,
         ]}

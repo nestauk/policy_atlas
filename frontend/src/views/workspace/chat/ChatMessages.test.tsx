@@ -134,7 +134,7 @@ describe("ChatMessages", () => {
     renderChat([turn({ claims: [{ claim_id: "c1", text: "Costs fell sharply.", citation_ns: [1], verdict: "tier_2", rationale: "Matches the source passage." }] })]);
     const [marker] = screen.getAllByRole("button", { name: "[1]" });
     await userEvent.setup().click(marker);
-    expect(screen.getByText("Where this comes from")).toBeInTheDocument();
+    expect(screen.getByText("Evidence for this claim")).toBeInTheDocument();
     expect(screen.getByText("Costs fell sharply.")).toBeInTheDocument();
     expect(await screen.findByText(/sharply last year/)).toBeInTheDocument();
     expect(screen.getByText("An intro sentence.")).toBeInTheDocument();
@@ -203,7 +203,7 @@ describe("ChatMessages", () => {
     renderChat([turn()]);
     const [marker] = screen.getAllByRole("button", { name: "[1]" });
     await userEvent.setup().click(marker);
-    await screen.findByText("Where this comes from");
+    await screen.findByText("Evidence for this claim");
     expect(screen.queryByText("moderate")).not.toBeInTheDocument();
   });
 
@@ -230,7 +230,7 @@ describe("ChatMessages", () => {
     ]);
     const [marker] = screen.getAllByRole("button", { name: "[1]" });
     await userEvent.setup().click(marker);
-    await screen.findByText("Where this comes from");
+    await screen.findByText("Evidence for this claim");
     expect(screen.queryByText("Abstract only")).not.toBeInTheDocument();
   });
 
@@ -265,7 +265,7 @@ describe("ChatMessages", () => {
     // claim's own text, not the trailing marker.
     expect(screen.getAllByRole("button", { name: "[1]" })).toHaveLength(2);
     await userEvent.setup().click(span);
-    const sheet = screen.getByRole("dialog", { name: "Where this comes from" });
+    const sheet = screen.getByRole("dialog", { name: "Evidence for this claim" });
     // Appears twice: the claim-text blockquote, and again inside the
     // highlighted quote-in-context below it.
     expect(within(sheet).getAllByText(spanText)).toHaveLength(2);
@@ -287,7 +287,7 @@ describe("ChatMessages", () => {
     const span = screen.getByRole("button", { name: spanText });
     span.focus();
     await userEvent.setup().keyboard("{Enter}");
-    expect(screen.getByRole("dialog", { name: "Where this comes from" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Evidence for this claim" })).toBeInTheDocument();
   });
 
   it("keeps a marker nested inside a claim span opening only its own citation sheet — no double-open from the enclosing span", async () => {
@@ -302,7 +302,7 @@ describe("ChatMessages", () => {
     ]);
     const [inlineMarker] = screen.getAllByRole("button", { name: "[1]" });
     await userEvent.setup().click(inlineMarker);
-    expect(screen.getAllByRole("dialog", { name: "Where this comes from" })).toHaveLength(1);
+    expect(screen.getAllByRole("dialog", { name: "Evidence for this claim" })).toHaveLength(1);
     expect(mockGet).toHaveBeenCalledTimes(1);
   });
 
@@ -370,8 +370,8 @@ describe("ChatMessages", () => {
     const [inlineMarker] = screen.getAllByRole("button", { name: "[1]" });
     inlineMarker.focus();
     await userEvent.setup().keyboard("{Enter}");
-    expect(screen.getAllByRole("dialog", { name: "Where this comes from" })).toHaveLength(1);
-    const sheet = screen.getByRole("dialog", { name: "Where this comes from" });
+    expect(screen.getAllByRole("dialog", { name: "Evidence for this claim" })).toHaveLength(1);
+    const sheet = screen.getByRole("dialog", { name: "Evidence for this claim" });
     expect(within(sheet).getByRole("button", { name: "Source One" })).toBeInTheDocument();
     expect(within(sheet).queryByRole("button", { name: "Source Two" })).not.toBeInTheDocument();
   });
@@ -400,7 +400,7 @@ describe("ChatMessages", () => {
     // either way).
     const [marker] = screen.getAllByRole("button", { name: "[2]" });
     await userEvent.setup().click(marker);
-    const sheet = screen.getByRole("dialog", { name: "Where this comes from" });
+    const sheet = screen.getByRole("dialog", { name: "Evidence for this claim" });
     expect(within(sheet).getByRole("button", { name: "Correct Two" })).toBeInTheDocument();
     expect(within(sheet).queryByRole("button", { name: "Wrong One" })).not.toBeInTheDocument();
   });

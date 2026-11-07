@@ -7,6 +7,7 @@ import { REPORT_SECTION_HEADING_CLASS } from "./artefactPresentation";
 import { evidenceTypeLabel, FULL_TEXT } from "../ui/brand/evidence";
 import { LABEL_CLASS } from "../ui/brand/label";
 import { LINK_CLASS, QUIET_CONTROL_CLASS } from "../ui/brand/inlineActions";
+import { SOURCE_TITLE_LINK_CLASS } from "../ui/brand/reference";
 import { ChevronIcon } from "../ui/brand/icons";
 import { DisclosureWord, useExpandForPrint } from "../ui/brand/Disclosure";
 import { cn } from "../ui/brand/cn";
@@ -733,15 +734,19 @@ export function gatheredCountHref(allSources: string, label: string): string | u
   if (label === "Found") return `${allSources}?status=all`;
   if (label === "Relevant") return `${allSources}?status=Included`;
   if (label === "Cited") return `${allSources}?cited=true`;
+  // The table's depth filter (round 13): the sources read in full.
+  if (label === "Full text") return `${allSources}?depth=full_text`;
   return undefined;
 }
 
-/** A row's label: a link in the Link style where the table can filter to
- *  it, plain otherwise (the clickable-only rule). */
+/** A row's label: a link where the table can filter to it, plain
+ *  otherwise (the clickable-only rule). The References' quiet title link
+ *  (Navy, the Line 2 underline turning Navy on hover), not Electric Blue,
+ *  so the table stays calm (owner, round 13). */
 function GatheredLabel({ href, children }: { href: string | undefined; children: React.ReactNode }) {
   if (href === undefined) return <>{children}</>;
   return (
-    <Link to={href} className={LINK_CLASS}>
+    <Link to={href} className={SOURCE_TITLE_LINK_CLASS}>
       {children}
     </Link>
   );

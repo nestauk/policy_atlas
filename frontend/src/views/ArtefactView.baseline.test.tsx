@@ -193,6 +193,16 @@ describe("ArtefactView — the options-scoping baseline", () => {
     expect(screen.queryByRole("heading", { name: "Full report" })).not.toBeInTheDocument();
   });
 
+  it("opens the baseline at its top with focus on its title (round 13), and not a report", () => {
+    const view = renderBaseline();
+    const title = screen.getByRole("heading", { level: 1, name: "Do nothing: current policy and trajectory" });
+    expect(title).toHaveAttribute("tabindex", "-1");
+    expect(document.activeElement).toBe(title);
+    view.unmount();
+    renderBaseline({ artefact: { ...mockBaselineArtefact, template: null, depth_label: null } });
+    expect(screen.getByRole("heading", { level: 1 })).not.toHaveAttribute("tabindex");
+  });
+
   it("leaves an Evidence search report exactly as it was — no band, no depth label", () => {
     renderBaseline({
       artefact: { ...mockBaselineArtefact, template: null, depth_label: null },
