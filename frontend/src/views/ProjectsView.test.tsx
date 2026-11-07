@@ -375,7 +375,7 @@ const PROJECT_ROW = {
 // Task 058, lists polish: the shared header, the list's own frame for
 // loading and empty, and one row recipe with the Tasks page.
 describe("ProjectsView — the page header and list (lists polish)", () => {
-  it("keeps New project in its slot, disabled, while the form is open, so Create is the one blue fill", async () => {
+  it("keeps New project in its slot, disabled, while the form is open", async () => {
     vi.mocked(mutations.useCreateProject).mockReturnValue(
       { mutate: vi.fn(), isPending: false, isError: false } as unknown as ReturnType<
         typeof mutations.useCreateProject
@@ -391,6 +391,42 @@ describe("ProjectsView — the page header and list (lists polish)", () => {
       screen.getByRole("button", { name: "New project" }),
     );
     expect(screen.getByLabelText("Project name")).toBeInTheDocument();
+  });
+
+  // Round 13: the form is the shared name field with Create and Cancel.
+  it("makes the project from the shared name field on Create or Enter, and closes the form", async () => {
+    const mutate = vi.fn(
+      (_body: unknown, options: { onSuccess: (project: { project_id: string; name: string }) => void }) =>
+        options.onSuccess({ project_id: "p-new", name: "Coastal towns" }),
+    );
+    vi.mocked(mutations.useCreateProject).mockReturnValue(
+      { mutate, isPending: false } as unknown as ReturnType<typeof mutations.useCreateProject>,
+    );
+    const user = userEvent.setup();
+    renderList();
+    await user.click(screen.getByRole("button", { name: "New project" }));
+    const field = screen.getByRole("textbox", { name: "Project name" });
+    expect(field).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+    await user.type(field, "Coastal towns{Enter}");
+    expect(mutate).toHaveBeenCalledWith({ name: "Coastal towns" }, expect.anything());
+    expect(screen.queryByRole("textbox", { name: "Project name" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the name and says so when the project cannot be made; Cancel closes the form", async () => {
+    const mutate = vi.fn((_body: unknown, options: { onError: () => void }) => options.onError());
+    vi.mocked(mutations.useCreateProject).mockReturnValue(
+      { mutate, isPending: false } as unknown as ReturnType<typeof mutations.useCreateProject>,
+    );
+    const user = userEvent.setup();
+    renderList();
+    await user.click(screen.getByRole("button", { name: "New project" }));
+    await user.type(screen.getByRole("textbox", { name: "Project name" }), "Coastal towns");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(screen.getByRole("alert")).toHaveTextContent(/^The project couldn't be created\. Try again\.$/);
+    expect(screen.getByRole("textbox", { name: "Project name" })).toHaveValue("Coastal towns");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("textbox", { name: "Project name" })).not.toBeInTheDocument();
   });
 
   // Round 11 (owner): the header keeps only the primary; Find a project is

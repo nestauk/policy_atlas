@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 
-import { useArchiveProject, useUpdateProject, type useUpdateTask } from "../api/mutations";
+import { useArchiveProject, useUpdateProject } from "../api/mutations";
 import { useProjects } from "../api/queries";
 import { PROJECT, TASK } from "../lib/vocabulary";
 
@@ -9,14 +9,20 @@ import { scrub } from "../lib/scrub";
 import { Button, buttonVariants } from "../ui/brand/Button";
 import { cn } from "../ui/brand/cn";
 import { ChevronIcon } from "../ui/brand/icons";
-import { Select } from "../ui/brand/Select";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { MENU_ITEM_CLASS, moveMenuFocus } from "../ui/radix/menu";
+import { useAddTaskToProject } from "./projectActions";
+import { ProjectPicker } from "./ProjectPicker";
 import { SHARE_COPY } from "./sharePresentation";
 
 /** The header's 40 px controls (Save, Cancel, the confirm's two buttons). */
 const CONTROL_CLASS = "h-10 whitespace-nowrap py-0";
 const OUTLINE_CONTROL_CLASS = cn(buttonVariants({ variant: "outline" }), CONTROL_CLASS);
+
+/** The rename field's button: "Save" on screen (owner, round 13), named
+ *  "Save name" for a screen reader, on the headers and the rows alike. */
+const SAVE_WORD = "Save";
+const SAVE_NAME_LABEL = "Save name";
 
 /** One mutation the menu runs: it calls back once it has settled. */
 export type Action<T> = (value: T, done: { onSuccess: () => void; onError: () => void }) => void;
@@ -33,7 +39,7 @@ export type MenuStep = {
 
 /**
  * The rename field (task 058, owner round 11; split out in round 12 so the
- * list rows use it too): the name as a field in place, with Save name and
+ * list rows use it too): the name as a field in place, with Save and
  * Cancel beside it. Enter saves, Escape (anywhere in the group) cancels; a
  * failed save is said under the field. `onClose` runs when it closes either
  * way, for the caller to put focus back on its control.
@@ -124,8 +130,16 @@ export function NameRenameField({
         )}
       />
       <span className="flex shrink-0 items-center gap-1">
-        <button type="button" className={OUTLINE_CONTROL_CLASS} disabled={draft.trim() === "" || pending} onClick={save}>
-          Save name
+        {/* The visible word is "Save" (owner, round 13); the name keeps the
+            word it saves, which holds the visible word (label in name). */}
+        <button
+          type="button"
+          aria-label={SAVE_NAME_LABEL}
+          className={OUTLINE_CONTROL_CLASS}
+          disabled={draft.trim() === "" || pending}
+          onClick={save}
+        >
+          {SAVE_WORD}
         </button>
         <Button type="button" variant="ghost" className={cn(CONTROL_CLASS, "px-3 text-body")} onClick={onClose}>
           Cancel
@@ -468,15 +482,16 @@ export function NameMenu({
 }
 
 /**
- * A task's "Add to project" step (owner, round 12; the task header's menu
- * and the list rows' share it): the reader's projects the task is not in,
- * through the app's dropdown, then "Add" and "Cancel". A refusal is said in
- * the step.
+ * A task's "Add to project" step (owner, rounds 12 and 13; the task header's
+ * menu and the list rows' share it): the shared `ProjectPicker` (the New page
+ * and the Share page use the same one) listing the projects the task is not
+ * in, then "New project…", which makes a project on the spot and chooses
+ * it; then "Add" and "Cancel". A refusal is said in the step.
  */
 function AddToProjectStep({
   label,
   placeholder,
-  options,
+  projects,
   add,
   error,
   pending,
@@ -486,7 +501,7 @@ function AddToProjectStep({
   label: string;
   /** The dropdown's words before a choice ("Select a project"). */
   placeholder: string;
-  options: ReadonlyArray<{ value: string; label: string }>;
+  projects: ReadonlyArray<{ project_id: string; name: string }>;
   add: Action<string>;
   /** Said in the step when the change fails. */
   error: string;
@@ -495,31 +510,34 @@ function AddToProjectStep({
 }) {
   const [chosen, setChosen] = useState("");
   const [failed, setFailed] = useState(false);
+  // While a new project is named, its own Create and Cancel are the step's
+  // only buttons: one Cancel on screen, not two.
+  const [naming, setNaming] = useState(false);
   const id = useId();
   return (
     <div role="group" aria-labelledby={`${id}-label`}>
       <label id={`${id}-label`} htmlFor={id} className="mb-2 block text-meta font-semibold text-navy">
         {label}
       </label>
-      <Select
+      <ProjectPicker
         id={id}
         label={label}
         value={chosen}
         placeholder={placeholder}
-        options={options}
+        projects={projects}
         onChange={(value) => {
           setChosen(value);
           setFailed(false);
         }}
         disabled={pending}
-        className="w-full"
+        onNaming={(name) => setNaming(name !== null)}
       />
       {failed && (
         <p role="alert" className="mt-2 text-meta text-red">
           {error}
         </p>
       )}
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className={cn("mt-3 flex flex-wrap gap-2", naming && "hidden")}>
         <button
           type="button"
           className={OUTLINE_CONTROL_CLASS}
@@ -537,42 +555,36 @@ function AddToProjectStep({
 }
 
 /**
- * The "Add to project" item for a task's menu (owner, round 12): the same
- * item and step on the task header's menu and on a task row's, so the two
- * menus match. It lists the projects the Share page offers (one cached
- * `useProjects` query) less those the task is already in, and runs the
- * Share page's change: the task's `project_ids` with the chosen one added
- * (`useUpdateTask`). A task already in every project gets the item
- * disabled, its reason "Already in every project".
+ * The "Add to project" item for a task's menu (owner, rounds 12 and 13): the
+ * same item and step on the task header's menu and on a task row's, so the
+ * two menus match. It lists the projects the Share page offers (one cached
+ * `useProjects` query) less those the task is already in, then "New
+ * project…", and adds the task through `useAddTaskToProject`, the Share
+ * page's same change. It is never disabled: a task in
+ * every project still has "New project…".
  *
  * Args:
+ *   taskId: The task.
  *   projectIds: The task's projects now.
- *   update: The task's `useUpdateTask` result.
  *
  * Returns:
  *   The menu step to pass as `steps`.
  */
-export function useAddToProjectStep(
-  projectIds: readonly string[] | null | undefined,
-  update: ReturnType<typeof useUpdateTask>,
-): MenuStep {
+export function useAddToProjectStep(taskId: string, projectIds: readonly string[] | null | undefined): MenuStep {
   const projects = useProjects();
+  const { add, isPending } = useAddTaskToProject(taskId, projectIds);
   const memberIds = projectIds ?? [];
   const available = (projects.data?.data ?? []).filter((project) => !memberIds.includes(project.project_id));
-  const inEveryProject = projects.data !== undefined && available.length === 0;
   return {
     label: `Add to ${PROJECT.lower}`,
-    reason: inEveryProject ? `Already in every ${PROJECT.lower}` : undefined,
     render: ({ close }) => (
       <AddToProjectStep
         label={SHARE_COPY.addToProject}
         placeholder={SHARE_COPY.selectProject}
-        options={available.map((project) => ({ value: project.project_id, label: project.name }))}
-        add={(projectId, done) =>
-          update.mutate({ project_ids: [...memberIds, projectId] }, { onSuccess: done.onSuccess, onError: done.onError })
-        }
+        projects={available}
+        add={(projectId, done) => add(projectId, { onSuccess: done.onSuccess, onError: done.onError })}
         error={SHARE_COPY.projectsFailed}
-        pending={update.isPending}
+        pending={isPending}
         close={close}
       />
     ),

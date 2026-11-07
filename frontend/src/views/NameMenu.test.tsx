@@ -92,6 +92,15 @@ describe("NameMenu", () => {
     await vi.waitFor(() => expect(screen.getByRole("button", { name: "Task settings" })).toHaveFocus());
   });
 
+  // Owner, round 13: the button reads "Save"; a screen reader hears "Save name".
+  it("shows Save on the rename field's button, named Save name", async () => {
+    const { user } = menu();
+    await user.click(screen.getByRole("button", { name: "Task settings" }));
+    await user.click(screen.getByRole("menuitem", { name: "Rename" }));
+    const save = screen.getByRole("button", { name: "Save name" });
+    expect(save).toHaveTextContent(/^Save$/);
+  });
+
   it("cancels a rename on Escape and says so when a save fails", async () => {
     const { user } = menu({ rename: (_name: string, done: Done) => done.onError() });
     await user.click(screen.getByRole("button", { name: "Task settings" }));

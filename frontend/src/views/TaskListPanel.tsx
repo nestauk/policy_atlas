@@ -305,7 +305,7 @@ function TaskRowWithMenu({
   const archived = row.status === "archived";
   const pending = update.isPending || archive.isPending;
   // The header's "Add to project", shared (owner, round 12).
-  const addToProject = useAddToProjectStep(row.project_ids, update);
+  const addToProject = useAddToProjectStep(row.task_id, row.project_ids);
 
   if (editing) {
     return (

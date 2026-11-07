@@ -10,13 +10,12 @@ import {
   useProjectsPaged,
   useTasksPaged,
 } from "../api/queries";
-import { useArchiveProject, useCreateProject, useUpdateProject } from "../api/mutations";
+import { useArchiveProject, useUpdateProject } from "../api/mutations";
 import { isConflictCode, conflictSentences } from "../lib/errors";
 import { Figures } from "../lib/figures";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
 import { COPY, PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
-import { Button } from "../ui/brand/Button";
 import { Card } from "../ui/brand/Card";
 import {
   PAGE_COLUMN_CLASS,
@@ -52,6 +51,7 @@ import {
   type MoreTasks,
 } from "./TaskListPanel";
 import { FindPopover } from "./FindPopover";
+import { ProjectNameField } from "./ProjectPicker";
 import { RowFold, RowMenuControl, RowRenameField, useDepartingRows } from "./ListRowMenu";
 import { ProjectName } from "./NameMenu";
 import { VisibilityControl, visibilityOutcomeLine } from "./VisibilityControl";
@@ -88,8 +88,6 @@ export function ProjectsView() {
   // (`last_activity_at`, round 12) and the page keeps its order, so a page
   // that arrives with "Show more" lands below the rows already shown.
   const { rows, more } = pagedProjects(projects);
-  const create = useCreateProject();
-  const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   // An archived row folds away where it stood (owner, round 12).
   const { shown, depart } = useDepartingRows(rows, (project) => project.project_id);
@@ -117,8 +115,8 @@ export function ProjectsView() {
         actions={
           // The header keeps only the primary (owner, round 11). It stays
           // in its slot while the form is open, disabled, so the header
-          // does not reflow and the form's Create is the one blue fill on
-          // the page.
+          // does not reflow; the form's Create is the shared name field's
+          // outline Create (round 13).
           <PagePrimary onClick={() => setCreating(true)} disabled={creating}>
             New {PROJECT.lower}
           </PagePrimary>
@@ -146,49 +144,19 @@ export function ProjectsView() {
         }
       />
 
+      {/* The New project form is the one name field and Create (round 13;
+          the picker's "New project…" uses the same): a label over it. */}
       {creating && (
         <Card className="mt-4 max-w-md p-5">
-          <form
-            className="flex flex-col gap-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const trimmed = name.trim();
-              if (!trimmed) return;
-              create.mutate(
-                { name: trimmed },
-                {
-                  onSuccess: () => {
-                    setName("");
-                    setCreating(false);
-                  },
-                },
-              );
-            }}
-          >
-            <label className="text-meta font-semibold text-navy" htmlFor="new-project-name">
-              {PROJECT.one} name
-            </label>
-            <input
-              id="new-project-name"
-              autoFocus
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              className="border border-line-2 bg-paper px-3 py-2.5 text-body"
-            />
-            {create.isError && (
-              <p role="alert" className="text-body text-red">
-                The {PROJECT.lower} couldn't be created. Try again.
-              </p>
-            )}
-            <div className="flex items-center gap-2">
-              <Button type="submit" disabled={create.isPending || !name.trim()}>
-                Create
-              </Button>
-              <Button type="button" variant="ghost" onClick={() => setCreating(false)}>
-                Cancel
-              </Button>
-            </div>
-          </form>
+          <label className="mb-3 block text-meta font-semibold text-navy" htmlFor="new-project-name">
+            {PROJECT.one} name
+          </label>
+          <ProjectNameField
+            id="new-project-name"
+            label={`${PROJECT.one} name`}
+            onCreated={() => setCreating(false)}
+            onCancel={() => setCreating(false)}
+          />
         </Card>
       )}
 

@@ -61,7 +61,6 @@ export const COPY = {
   findProject: `Find a ${PROJECT.lower}`,
   allTasks: `All ${TASK.lowerMany}`,
   noTasks: `No ${TASK.lowerMany} yet`,
-  noProject: `No ${PROJECT.lower}`,
   comingSoon: "Coming soon",
   /** `AppShell`'s header popover — the trigger's `aria-label` and `title`. */
   taskSettings: `${TASK.one} settings`,

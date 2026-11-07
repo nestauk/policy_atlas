@@ -39,10 +39,12 @@ function asPaged(flat: Flat) {
 }
 
 // The rows' own menu (round 12) runs the task's rename and archive.
-const taskMutations = vi.hoisted(() => ({ update: vi.fn(), archive: vi.fn() }));
+const taskMutations = vi.hoisted(() => ({ update: vi.fn(), archive: vi.fn(), createProject: vi.fn() }));
 vi.mock("../api/mutations", () => ({
   useUpdateTask: vi.fn(() => ({ mutate: taskMutations.update, isPending: false })),
   useArchiveTask: vi.fn(() => ({ mutate: taskMutations.archive, isPending: false })),
+  // The step's "New project…" (round 13).
+  useCreateProject: vi.fn(() => ({ mutate: taskMutations.createProject, isPending: false })),
 }));
 
 vi.mock("../api/queries", () => ({
@@ -893,17 +895,32 @@ describe("TasksListView — the row's menu: the dots and Add to project (round 1
     expect(screen.getByRole("alert")).toHaveTextContent("The projects couldn't be changed. Try again.");
   });
 
-  it("disables the item, with its reason, when the task is in every project", async () => {
+  // Round 13: never disabled; a task in every project still has New project….
+  it("offers New project… when the task is in every project, and adds the task to the one it makes", async () => {
     vi.mocked(queries.useMe).mockReturnValue(ENROLLED);
     vi.mocked(queries.useProjects).mockReturnValue(projectsOf([{ project_id: "p-1", name: "Child health" }]));
     tasks.mockReturnValue({
       data: { data: [{ ...ROW, project_ids: ["p-1"] }] }, isPending: false, isError: false, refetch: vi.fn(),
     } as unknown as Flat);
+    taskMutations.createProject.mockImplementation(
+      (_body: unknown, options: { onSuccess: (project: { project_id: string; name: string }) => void }) =>
+        options.onSuccess({ project_id: "p-new", name: "Coastal towns" }),
+    );
+    taskMutations.update.mockImplementation((_body: unknown, options: { onSuccess: () => void }) => options.onSuccess());
     const user = userEvent.setup();
     renderView();
     await user.click(screen.getByRole("button", { name: "Task settings: Healthier childhoods" }));
-    const item = screen.getByRole("menuitem", { name: /Add to project/ });
-    expect(item).toBeDisabled();
-    expect(item).toHaveTextContent("Already in every project");
+    const item = screen.getByRole("menuitem", { name: "Add to project" });
+    expect(item).toBeEnabled();
+    await user.click(item);
+    await user.click(screen.getByRole("combobox", { name: "Add to a project" }));
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["New project…"]);
+    await user.click(screen.getByRole("option", { name: "New project…" }));
+    await user.type(screen.getByRole("textbox", { name: "New project name" }), "Coastal towns");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(taskMutations.createProject).toHaveBeenCalledWith({ name: "Coastal towns" }, expect.anything());
+    expect(screen.getByRole("combobox", { name: "Add to a project" })).toHaveTextContent("Coastal towns");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    expect(taskMutations.update).toHaveBeenCalledWith({ project_ids: ["p-1", "p-new"] }, expect.anything());
   });
 });

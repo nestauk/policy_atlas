@@ -17,7 +17,10 @@ vi.mock("../api/queries", () => ({
 
 vi.mock("../api/mutations", () => ({
   useUpdateTask: vi.fn(),
+  // The shared picker's "New project…" (round 13).
+  useCreateProject: vi.fn(() => ({ mutate: createProject, isPending: false })),
 }));
+const createProject = vi.hoisted(() => vi.fn());
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
 const PROJECT_A = "60000000-0000-4000-8000-000000000001";
@@ -91,6 +94,33 @@ describe("ShareView — layout (round 10, S1, S2, S10)", () => {
       expect(button.className).not.toMatch(/\bcutout\b|\bbg-blue\b/);
       expect(button).toHaveClass("h-10");
     }
+  });
+});
+
+// Owner, round 13 (item 23): each sharing section says what it is for in one
+// plain Body Grey line straight under its heading, as the effect of the
+// choice rather than as if it were already made.
+describe("ShareView — what each section is for (round 13)", () => {
+  const lineUnder = (heading: string) => screen.getByRole("heading", { level: 2, name: heading }).nextElementSibling;
+
+  it("explains the public link and the organisation under their headings, in Body Grey", () => {
+    setup({ organisation: ORG });
+    const publicLine = lineUnder(SHARE_COPY.publicHeading);
+    expect(publicLine).toHaveTextContent(
+      /^Making this task public creates a link that anyone can open to read the report, without a Policy Atlas account\.$/,
+    );
+    expect(publicLine).toHaveClass("text-body", "text-grey");
+    const orgLine = lineUnder(SHARE_COPY.orgHeading);
+    expect(orgLine).toHaveTextContent(/^Sharing with your organisation lets everyone in it open this task from their Tasks list\.$/);
+    expect(orgLine).toHaveClass("text-body", "text-grey");
+  });
+
+  it("explains the public link to a colleague too, and keeps the Projects line as it was", () => {
+    setup({ task: { is_owner: false, is_public: true } });
+    expect(lineUnder(SHARE_COPY.publicHeading)).toHaveTextContent(SHARE_COPY.publicExplain);
+    const projects = screen.getByRole("region", { name: SHARE_COPY.projectsHeading });
+    expect(projects).toHaveTextContent(SHARE_COPY.notInProject);
+    expect(lineUnder(SHARE_COPY.projectsHeading)).toBeNull();
   });
 });
 
@@ -194,7 +224,8 @@ describe("ShareView — projects (round 10, S5, S8)", () => {
     expect(add.tagName).toBe("BUTTON");
     expect(add).toHaveTextContent(SHARE_COPY.selectProject);
     await user.click(add);
-    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["School food"]);
+    // The others, then New project… (round 13).
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["School food", "New project…"]);
     await user.click(screen.getByRole("option", { name: "School food" }));
     expect(updateMutate).toHaveBeenCalled();
     expect(JSON.stringify(updateMutate.mock.calls.at(-1)?.[0])).toContain(PROJECT_B);
@@ -239,10 +270,22 @@ describe("ShareView — projects (round 10, S5, S8)", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(SHARE_COPY.projectsFailed);
   });
 
-  it("points to Projects when the owner has none to add to (P5)", () => {
-    setup();
-    const line = screen.getByText(/Not in a project\./);
-    expect(line).toHaveTextContent("Not in a project. Create one in Projects.");
-    expect(within(line).getByRole("link", { name: "Projects" })).toHaveAttribute("href", "/projects");
+  // Round 13: the shared picker replaces the link to Projects; with none
+  // to add to, the owner names a project here and the task joins it.
+  it("lets the owner make a project here and adds the task to it, with no link to Projects", async () => {
+    createProject.mockReset();
+    createProject.mockImplementation(
+      (_body: unknown, options: { onSuccess: (project: { project_id: string; name: string }) => void }) =>
+        options.onSuccess({ project_id: PROJECT_B, name: "Coastal towns" }),
+    );
+    const { user, mutate: updateMutate } = setup();
+    expect(screen.getByText(/Not in a project\./)).toHaveTextContent(/^Not in a project\.$/);
+    expect(screen.queryByRole("link", { name: "Projects" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: SHARE_COPY.addToProject }));
+    await user.click(screen.getByRole("option", { name: "New project…" }));
+    await user.type(screen.getByRole("textbox", { name: "New project name" }), "Coastal towns");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    expect(createProject).toHaveBeenCalledWith({ name: "Coastal towns" }, expect.anything());
+    expect(updateMutate.mock.calls.at(-1)?.[0]).toEqual({ project_ids: [PROJECT_B] });
   });
 });

@@ -54,6 +54,7 @@ const taskState = vi.hoisted(() => ({
 const projectsState = vi.hoisted(() => ({
   rows: [] as { project_id: string; name: string }[],
   update: vi.fn(),
+  createProject: vi.fn(),
 }));
 
 // Both mocked as spies (task 037 review fix) so a describe block below can
@@ -116,6 +117,7 @@ vi.mock("./workspace/PlanDocument", () => ({
 
 vi.mock("../api/mutations", () => ({
   useUpdateTask: () => ({ mutate: projectsState.update, isPending: false }),
+  useCreateProject: () => ({ mutate: projectsState.createProject, isPending: false }),
   useArchiveTask: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }));
 
@@ -537,14 +539,26 @@ describe("AppShell — the task-settings popover (task 033 phase 10c, contract �
     expect(screen.queryByRole("button", { name: "Add" })).not.toBeInTheDocument();
   });
 
-  it("owner: disables Add to project, with its reason, when the task is in every project", async () => {
+  // Round 13: never disabled; a task in every project still has New project….
+  it("owner: offers New project… in the header's step when the task is in every project", async () => {
     taskState.isOwner = true;
     taskState.projectIds = ["p-1"];
     projectsState.rows = [{ project_id: "p-1", name: "Child health" }];
-    await openTaskSettings();
-    const item = screen.getByRole("menuitem", { name: /Add to project/ });
-    expect(item).toBeDisabled();
-    expect(item).toHaveTextContent("Already in every project");
+    projectsState.update.mockReset();
+    projectsState.update.mockImplementation((_body: unknown, options: { onSuccess: () => void }) => options.onSuccess());
+    projectsState.createProject.mockReset();
+    projectsState.createProject.mockImplementation(
+      (_body: unknown, options: { onSuccess: (project: { project_id: string; name: string }) => void }) =>
+        options.onSuccess({ project_id: "p-new", name: "Coastal towns" }),
+    );
+    const user = await openTaskSettings();
+    await user.click(screen.getByRole("menuitem", { name: "Add to project" }));
+    await user.click(screen.getByRole("combobox", { name: "Add to a project" }));
+    await user.click(screen.getByRole("option", { name: "New project…" }));
+    await user.type(screen.getByRole("textbox", { name: "New project name" }), "Coastal towns{Enter}");
+    expect(projectsState.createProject).toHaveBeenCalledWith({ name: "Coastal towns" }, expect.anything());
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    expect(projectsState.update).toHaveBeenCalledWith({ project_ids: ["p-1", "p-new"] }, expect.anything());
     taskState.projectIds = [];
     projectsState.rows = [];
   });

@@ -61,7 +61,7 @@ function TaskName({
   const archive = useArchiveTask(taskId);
   const toast = useToast();
   // The same "Add to project" as a task row's menu (owner, round 12).
-  const addToProject = useAddToProjectStep(projectIds, update);
+  const addToProject = useAddToProjectStep(taskId, projectIds);
   return (
     <NameMenu
       steps={[addToProject]}
@@ -350,7 +350,9 @@ export function AppShell() {
         base === null ? "min-h-svh" : "h-svh overflow-hidden",
       )}
     >
-      <NavBar aria-label="App" className="shrink-0">
+      {/* Its own View Transition layer, held still above the page, so a
+          longlist regroup never draws over it (round 13, owner). */}
+      <NavBar aria-label="App" className="shrink-0 [view-transition-name:app-nav] [view-transition-class:shell-chrome]">
         <NavHomeLink />
         {/* Below md the link group wraps to its own second row (order-last +
             w-full), left-justified, while the account icon stays on the logo
@@ -379,7 +381,10 @@ export function AppShell() {
         {auth.user !== null && <AccountMenu signOut={() => auth.signOut()} />}
       </NavBar>
       {base !== null && (
-        <NavBar aria-label={TASK.one} className="shrink-0 bg-ground">
+        <NavBar
+          aria-label={TASK.one}
+          className="shrink-0 bg-ground [view-transition-name:task-nav] [view-transition-class:shell-chrome]"
+        >
           <div className="flex min-w-0 flex-1 items-center gap-2">
             {task.data !== undefined && (
               <>

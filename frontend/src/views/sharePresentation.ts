@@ -8,6 +8,9 @@ import { PROJECT, TASK } from "../lib/vocabulary";
  */
 export const SHARE_COPY = {
   publicHeading: "Public link",
+  /** What the section is for, one plain line under its heading, said as
+   *  the effect of the choice, not as if it were made (owner, round 13). */
+  publicExplain: `Making this ${TASK.lower} public creates a link that anyone can open to read the report, without a Policy Atlas account.`,
   publicOn: "Public. Anyone with the link can read it.",
   publicOff: "Not public.",
   makePublic: "Make public",
@@ -21,6 +24,8 @@ export const SHARE_COPY = {
   copyFailed: "Couldn't copy. The link is selected.",
   publicFailed: "Public sharing couldn't be changed. Try again.",
   orgHeading: "Organisation",
+  /** What the section is for (owner, round 13). */
+  orgExplain: `Sharing with your organisation lets everyone in it open this ${TASK.lower} from their ${TASK.many} list.`,
   orgShared: "Shared with your organisation",
   orgPrivate: "Private",
   shareWithOrg: "Share with organisation",
@@ -30,9 +35,6 @@ export const SHARE_COPY = {
   followsProject: (count: number) => `Follows its ${count === 1 ? PROJECT.lower : PROJECT.lowerMany}: `,
   projectsHeading: `${PROJECT.many} this ${TASK.lower} belongs to`,
   notInProject: `Not in a ${PROJECT.lower}.`,
-  /** With no project to add it to, the way to make one (P5): before and
-   *  after the link to the Projects page. */
-  createProject: [`Create one in `, PROJECT.many, "."] as const,
   addToProject: `Add to a ${PROJECT.lower}`,
   selectProject: `Select a ${PROJECT.lower}`,
   remove: "Remove",

@@ -8,7 +8,8 @@ import { useDocumentTitle } from "../lib/title";
 import { LIFECYCLE_LABELS } from "../lib/vocabulary";
 import { Button, buttonVariants } from "../ui/brand/Button";
 import { Card } from "../ui/brand/Card";
-import { Select } from "../ui/brand/Select";
+import { useAddTaskToProject } from "./projectActions";
+import { ProjectPicker } from "./ProjectPicker";
 import { PROSE_LINK_CLASS } from "../ui/brand/inlineActions";
 import { cn } from "../ui/brand/cn";
 import { useToast } from "../ui/radix/Toast";
@@ -39,6 +40,7 @@ const COPIED_MS = 2000;
 function SettingsRow({
   headingId,
   heading,
+  explain,
   state,
   note,
   control,
@@ -46,6 +48,9 @@ function SettingsRow({
 }: {
   headingId: string;
   heading: string;
+  /** One plain line under the heading saying what the section is for
+   *  (owner, round 13), Body Grey. */
+  explain?: string;
   state?: string;
   note?: ReactNode;
   control?: ReactNode;
@@ -61,6 +66,7 @@ function SettingsRow({
           <h2 id={headingId} className="text-lead font-semibold text-navy">
             {heading}
           </h2>
+          {explain !== undefined && <p className="mt-1 text-body text-grey">{explain}</p>}
           {state !== undefined && <p className="mt-1 text-body font-semibold text-navy">{state}</p>}
           {note !== undefined && <p className="mt-1 text-body text-grey">{note}</p>}
         </div>
@@ -144,6 +150,7 @@ function PublicLinkSection({
     <SettingsRow
       headingId={headingId}
       heading={SHARE_COPY.publicHeading}
+      explain={SHARE_COPY.publicExplain}
       state={isPublic ? SHARE_COPY.publicOn : SHARE_COPY.publicOff}
       control={
         confirming ? undefined : (
@@ -237,6 +244,9 @@ export function ShareView() {
   const projects = useProjects();
   const me = useMe();
   const update = useUpdateTask(taskId);
+  // Adding goes through the one add (round 13); removing stays a membership
+  // change here, the only place that removes.
+  const addToProject = useAddTaskToProject(taskId, task.data?.project_ids);
   const toast = useToast();
   const titleId = useId();
   const orgHeadingId = useId();
@@ -324,6 +334,7 @@ export function ShareView() {
             <SettingsRow
               headingId={`${titleId}-public`}
               heading={SHARE_COPY.publicHeading}
+              explain={SHARE_COPY.publicExplain}
               state={task.data.is_public ? SHARE_COPY.publicOn : SHARE_COPY.publicOff}
             />
           ))}
@@ -332,6 +343,7 @@ export function ShareView() {
           <SettingsRow
             headingId={orgHeadingId}
             heading={SHARE_COPY.orgHeading}
+            explain={SHARE_COPY.orgExplain}
             state={task.data.visibility === "private" ? SHARE_COPY.orgPrivate : SHARE_COPY.orgShared}
             // A task in a project follows the project's visibility, so the
             // control that could only fail is not offered (S4, P3).
@@ -364,16 +376,6 @@ export function ShareView() {
           {memberIds.length === 0 ? (
             <p className="mt-1 text-body text-grey">
               {SHARE_COPY.notInProject}
-              {isOwner && projects.data !== undefined && available.length === 0 && (
-                <>
-                  {" "}
-                  {SHARE_COPY.createProject[0]}
-                  <Link to="/projects" className={PROSE_LINK_CLASS}>
-                    {SHARE_COPY.createProject[1]}
-                  </Link>
-                  {SHARE_COPY.createProject[2]}
-                </>
-              )}
             </p>
           ) : (
             <ul className="mt-3 divide-y divide-line border-t border-line">
@@ -396,22 +398,30 @@ export function ShareView() {
               ))}
             </ul>
           )}
-          {isOwner && available.length > 0 && (
+          {isOwner && (
             <div className="mt-6 max-w-md">
               <label htmlFor="share-add-to-project" className="mb-2 block text-body font-semibold text-navy">
                 {SHARE_COPY.addToProject}
               </label>
-              {/* The app's dropdown (round 12): picking a project adds it,
-                  and the control goes back to its placeholder. */}
-              <Select
+              {/* The shared picker (round 13; the New page and the task menu
+                  use the same one): picking a project adds it, and "New
+                  project…" makes one on the spot and adds it; the control
+                  goes back to its placeholder. */}
+              <ProjectPicker
                 id="share-add-to-project"
                 label={SHARE_COPY.addToProject}
                 value=""
                 placeholder={SHARE_COPY.selectProject}
-                options={available.map((project) => ({ value: project.project_id, label: project.name }))}
-                disabled={update.isPending}
-                onChange={(value) => setMembership([...memberIds, value])}
-                className="w-full"
+                projects={available}
+                disabled={update.isPending || addToProject.isPending}
+                onChange={(value) => {
+                  if (value === "") return;
+                  setError(null);
+                  addToProject.add(value, {
+                    onError: (failure) =>
+                      setError({ section: "projects", text: refusalSentence(failure, SHARE_COPY.projectsFailed) }),
+                  });
+                }}
               />
             </div>
           )}

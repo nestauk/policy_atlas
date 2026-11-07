@@ -22,7 +22,7 @@ export const ROW_LEAVE_MS = 200;
  * and while its menu is open; on phones it always shows. It sits in the
  * row's right padding (`pr-12` in the row recipe), so it covers no column.
  *
- * Rename turns the row into the name's field with Save name and Cancel
+ * Rename turns the row into the name's field with Save and Cancel
  * (`RowRenameField`); the caller renders that in place of the row's link
  * while `editing` is on.
  */
@@ -86,7 +86,7 @@ export function RowMenuControl({
   );
 }
 
-/** The row while its name is edited: the field with Save name and Cancel,
+/** The row while its name is edited: the field with Save and Cancel,
  *  at the row's height and padding, in Body Semibold Navy like the name. */
 export function RowRenameField(props: {
   name: string;
