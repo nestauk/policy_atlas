@@ -272,17 +272,17 @@ test.describe("mock task-lifecycle journey", () => {
     ).toBeVisible({ timeout: 5_000 });
 
     // Demo annotation grammar: the citation numbers ride as one inline chip;
-    // clicking it (or the span) opens the "Where this comes from" panel with
+    // clicking it (or the span) opens the "Evidence for this claim" panel with
     // the quote highlighted in its source passage.
     // The marker is the claim's one control, named for what it opens
     // (round 10, C1): "Source 1: <title>".
     const marker = page.getByRole("button", { name: /^Source 1: / });
     await expect(marker).toBeVisible();
     await marker.click();
-    await expect(page.getByText("Where this comes from")).toBeVisible();
+    await expect(page.getByText("Evidence for this claim")).toBeVisible();
     await expect(page.getByText(CITATION_QUOTE).first()).toBeVisible();
     await page
-      .getByRole("dialog", { name: "Where this comes from" })
+      .getByRole("dialog", { name: "Evidence for this claim" })
       .getByRole("button", { name: CITED_SOURCE_TITLE })
       .click();
     await expect(page).toHaveURL(/[?&]source=/);
@@ -296,7 +296,7 @@ test.describe("mock task-lifecycle journey", () => {
     // expand the section to reach its claims.
     await page.getByRole("button", { name: /Implications for local action/ }).click();
     await page.getByRole("button", { name: "pattern" }).click();
-    const themePanel = page.getByRole("dialog", { name: "Where this comes from" });
+    const themePanel = page.getByRole("dialog", { name: "Evidence for this claim" });
     await expect(themePanel.getByText("Active-travel offers")).toBeVisible();
     // The source count is a disclosure: expanding lists the member documents,
     // each opening its dossier.
@@ -615,10 +615,10 @@ test.describe("mock task-lifecycle journey", () => {
 
     // 030 fold: the claim's own span renders with the report's citation-
     // marker affordance — a distinct clickable region from the literal `[1]`
-    // marker above — and opens the claim-keyed "Where this comes from" sheet
+    // marker above — and opens the claim-keyed "Evidence for this claim" sheet
     // (the claim text as its blockquote) on click.
     await chat.getByRole("button", { name: MOCK_CHAT_CLAIM_TEXT }).click();
-    const claimSheet = page.getByRole("dialog", { name: "Where this comes from" });
+    const claimSheet = page.getByRole("dialog", { name: "Evidence for this claim" });
     await expect(claimSheet).toBeVisible();
     await expect(claimSheet.getByText(MOCK_CHAT_CLAIM_TEXT)).toBeVisible();
     // 030 fold (Rev 3.6): the sheet's citation block carries the artefact
@@ -692,7 +692,7 @@ test.describe("mock task-lifecycle journey", () => {
       await page.getByRole("button", { name: /Implications for local action/ }).click();
       await page.getByRole("button", { name: "pattern" }).click();
       await page
-        .getByRole("dialog", { name: "Where this comes from" })
+        .getByRole("dialog", { name: "Evidence for this claim" })
         .getByRole("link", { name: "See the findings in this theme" })
         .click();
       await expect(page).toHaveURL(/sources\/findings\?facet=.*group=/);
@@ -964,7 +964,7 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     );
     await firstMarker.click();
     const sheet = page.getByRole("dialog");
-    await expect(sheet.getByText("Where this comes from")).toBeVisible();
+    await expect(sheet.getByText("Evidence for this claim")).toBeVisible();
     await expect(sheet.getByText(CITED_SOURCE_TITLE)).toBeVisible();
     // Not a link before the report is committed.
     await expect(sheet.getByRole("button", { name: CITED_SOURCE_TITLE })).toHaveCount(0);

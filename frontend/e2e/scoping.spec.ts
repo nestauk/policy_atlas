@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { MOCK_TASK_ID, mockProject, mockTask } from "../src/mock/fixtures";
+import { MOCK_LINKABLE_SEARCH_NAME, MOCK_TASK_ID, mockProject } from "../src/mock/fixtures";
 
 /** New task → Options scoping → the question → Prepare plan, landing on the
  *  Agent tab. */
@@ -48,17 +48,18 @@ test.describe("mock options-scoping journey", () => {
       .getByLabel("Your question")
       .fill("How can we reduce the number of young people not in education, employment or training?");
 
-    // Starts from is disabled until a project is chosen.
-    await expect(
-      page.getByText("Choose a project to start from its Evidence searches"),
-    ).toBeVisible();
-
-    await page.getByLabel(/Add to a project/).click();
+    // Round 13: a Project field and an "Evidence search to start from"
+    // field, both the app's dropdown; the search field is always there on
+    // a scoping task.
+    await page.getByRole("combobox", { name: "Project" }).click();
     await page.getByRole("option", { name: mockProject.name }).click();
 
-    const startsFrom = page.getByRole("group", { name: "Starts from" });
-    await expect(startsFrom).toBeVisible();
-    await page.getByLabel(mockTask.name).check();
+    // Only a search with a finished run is linkable (round 13); the mock
+    // offers one in the project.
+    const startsFrom = page.getByRole("group", { name: "Evidence search to start from" });
+    const search = startsFrom.getByRole("checkbox", { name: MOCK_LINKABLE_SEARCH_NAME });
+    await search.check();
+    await expect(search).toBeChecked();
 
     await page.getByRole("button", { name: "Prepare plan" }).click();
 
@@ -70,7 +71,9 @@ test.describe("mock options-scoping journey", () => {
     const plan = page.getByRole("dialog", { name: "Scoping plan" });
     await expect(plan).toBeVisible();
     await expect(plan.getByRole("heading", { name: "Starts from" })).toBeVisible();
-    await expect(plan.getByText(`Evidence search: ${mockTask.name} · linked`)).toBeVisible();
+    await expect(
+      plan.getByText("Evidence search: Youth employment programmes: what works · linked", { exact: true }),
+    ).toBeVisible();
     await expect(plan.getByRole("heading", { name: "Question and intended change" })).toBeVisible();
     await expect(plan.getByRole("heading", { name: "Settings" })).toBeVisible();
     await expect(plan.getByRole("heading", { name: "Constraints and preferences" })).toBeVisible();
@@ -390,9 +393,40 @@ test.describe("task 058 options scoping: the gate and the longlist build", () =>
     const lines = await seenLines(page);
     expect(lines.filter((line) => /provisional/i.test(line))).toEqual([]);
     await expect(page.getByRole("heading", { level: 1, name: "Longlist" })).toBeVisible();
-    await seen(page, "Shortlisted");
+    // The shortlist wave marks its rows with the filled check (round 13): on
+    // the finished list a held row's toggle is pressed, named for what
+    // pressing it does.
+    await expect(page.getByRole("button", { name: "Remove from shortlist" }).first()).toHaveAttribute(
+      "aria-pressed",
+      "true",
+      { timeout: 30_000 },
+    );
     await expect(page.getByRole("group", { name: "Group by" })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole("heading", { level: 1, name: "Longlist" })).toBeVisible();
+  });
+
+  // Round 13 (owner): an open group's Exclude sits on the description's
+  // line at the right edge; its target never overlaps the heading's Show / Hide.
+  test("an open group's Exclude theme sits on its description's line, clear of Show / Hide", async ({ page }) => {
+    await startScopingWalk(page);
+    const thread = page.getByRole("region", { name: "Task Agent conversation" });
+    await thread.getByRole("radio", { name: /^Confirm plan and build longlist/ }).click();
+    const trace = thread.getByRole("region", { name: "Analysis run" });
+    await expect(trace.getByTestId("trace-header")).toContainText("The longlist is ready", { timeout: 40_000 });
+    await trace.getByRole("link", { name: "Read it →" }).click();
+    await page.getByRole("button", { name: "Show all" }).click();
+    const control = page.getByRole("button", { name: "Exclude theme" }).first();
+    const section = control.locator("xpath=ancestor::section[1]");
+    const heading = section.locator("h2 button");
+    const description = section.locator("p.text-grey").first();
+    const [a, b, d] = [await control.boundingBox(), await heading.boundingBox(), await description.boundingBox()];
+    if (a === null || b === null || d === null) throw new Error("no box");
+    // No overlap with the heading's target.
+    expect(a.y >= b.y + b.height || a.y + a.height <= b.y).toBe(true);
+    // On the description's line, at the section's right edge.
+    expect(a.y).toBeGreaterThanOrEqual(d.y - 1);
+    expect(a.y).toBeLessThan(d.y + d.height);
+    expect(Math.abs(a.x + a.width - (b.x + b.width))).toBeLessThanOrEqual(1);
   });
 
   test("the trace folds to The longlist is ready once the build ends, and nothing else shows the run", async ({
