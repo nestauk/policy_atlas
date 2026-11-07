@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { Link } from "react-router";
 
 import type { components } from "../../api/gen/types";
@@ -23,6 +24,7 @@ import {
 import { Select } from "../../ui/brand/Select";
 import { ShortlistToggle, useOptionActions } from "./optionActions";
 import { usePublicView } from "../publicView";
+import { useOpenAtTop } from "../../lib/openAtTop";
 
 type LonglistOut = components["schemas"]["LonglistOut"];
 type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
@@ -97,6 +99,9 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
   const suggest = useSuggestMore(taskId);
   const walkActive = isRunActive(task.data);
   const actions = useOptionActions(taskId, walkActive);
+  // A Result-tab switch opens the page at its top, focus on the title (round 13, owner).
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  useOpenAtTop(titleRef, "shortlist");
   // The public link reads the shortlist; it changes nothing (round 12).
   const publicView = usePublicView();
 
@@ -200,7 +205,9 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
       {/* One header with the longlist's (round 10, lead): "Shortlist" as the
           title, the plan's question under it in Lead Grey, no label over it. */}
       <header>
-        <h1 className={REPORT_TITLE_CLASS}>Shortlist</h1>
+        <h1 ref={titleRef} tabIndex={-1} className={cn(REPORT_TITLE_CLASS, "outline-none")}>
+          Shortlist
+        </h1>
         {question !== "Longlist" && (
           <p className="mt-2 max-w-prose-measure text-lead text-grey max-md:text-body">{question}</p>
         )}

@@ -48,7 +48,8 @@ export function LifecycleBottomBar({
   return (
     <nav
       aria-label="Task stages"
-      className="print-hide shrink-0 border-t border-line bg-paper md:hidden"
+      // Its own View Transition layer, held still (round 13, owner).
+      className="print-hide shrink-0 border-t border-line bg-paper md:hidden [view-transition-name:task-stages] [view-transition-class:shell-chrome]"
     >
       <div className="overflow-x-auto px-4 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
         <LifecycleBar items={items} hint={hint} lead={lead} />

@@ -68,8 +68,9 @@ export function MinusIcon(props: IconProps) {
   );
 }
 
-/** Exclude: a circle with a bar. */
-export function BanIcon(props: IconProps) {
+/** Exclude: a circle with a diagonal bar, before the Exclude controls'
+ *  words (round 13, owner). */
+export function ExcludeIcon(props: IconProps) {
   return (
     <Glyph {...props}>
       <circle cx="8" cy="8" r="5.5" />
@@ -164,6 +165,16 @@ export function ExpandIcon(props: IconProps) {
   );
 }
 
+/** Back: an arrow pointing left (the source sheet's Back to the claim,
+ *  round 13). */
+export function ArrowLeftIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M13 8H3M7.5 3.5 3 8l4.5 4.5" />
+    </Glyph>
+  );
+}
+
 /** Down to the end of a transcript. */
 export function ArrowDownIcon(props: IconProps) {
   return (
@@ -179,6 +190,24 @@ export function DownloadIcon(props: IconProps) {
     <Glyph {...props}>
       <path d="M8 2.5v7.5M4.75 6.75 8 10l3.25-3.25" />
       <path d="M3 13h10" />
+    </Glyph>
+  );
+}
+
+/** Shortlist: a circled check (round 13, owner), an outline circle when the
+ *  option holds no place, a filled circle with a white check when it does;
+ *  the fill eases over 150 ms (none under reduced motion). */
+export function CheckCircleIcon({ filled = false, ...props }: IconProps & { filled?: boolean }) {
+  return (
+    <Glyph {...props}>
+      <circle
+        cx="8"
+        cy="8"
+        r="6.25"
+        fill={filled ? "currentColor" : "transparent"}
+        className="transition-[fill] duration-150 ease-[var(--ease-out-strong)] motion-reduce:transition-none"
+      />
+      {filled && <path d="M5.25 8.25 7.1 10.1 10.75 6.25" stroke="white" />}
     </Glyph>
   );
 }

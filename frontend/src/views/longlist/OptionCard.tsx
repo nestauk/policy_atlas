@@ -15,7 +15,7 @@ import { SectionDisclosure, type SidebarEntry } from "../ArtefactOutline";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
 import { REPORT_TITLE_CLASS, ReportPage } from "../reportPage";
 import { REPORT_BODY_CLASS } from "../artefactPresentation";
-import { referenceParts } from "../../ui/brand/reference";
+import { SOURCE_TITLE_LINK_CLASS, referenceParts } from "../../ui/brand/reference";
 import {
   authorityWords,
   GRID_COLUMN_LINES,
@@ -26,7 +26,7 @@ import {
   MIDDLE_WORD,
   NOT_EVALUATED_LINE,
   outcomeCoverage,
-  outcomeCoverageWords,
+  outcomeCoverageLines,
   targetCoverage,
   targetCoverageWords,
   actsOnParts,
@@ -48,9 +48,10 @@ import {
   originLabel,
   relationLabel,
 } from "./longlistPresentation";
-import { ExcludeReasonForm, OptionActionButton, ShortlistToggle, useOptionActions } from "./optionActions";
+import { AddReason, invitesReason, OptionActionButton, ShortlistToggle, useOptionActions } from "./optionActions";
 import { RetryCard } from "../../ui/feedback/RetryCard";
 import { LINK_CLASS, PROSE_LINK_CLASS } from "../../ui/brand/inlineActions";
+import { useOpenAtTop } from "../../lib/openAtTop";
 import { InfoHint } from "../../ui/brand/InfoHint";
 import { BulletList } from "../../ui/brand/BulletList";
 import { ChevronIcon } from "../../ui/brand/icons";
@@ -93,11 +94,6 @@ const FEATURES_SHOWN = 6;
  *  References form (authors, year, the title as the link to its dossier,
  *  which opens over the card, the venue), then one Meta Grey
  *  line of its facts joined by the middot, nothing under it. */
-/** A reference's title as the report's References show it (round 12, item
- *  28): Navy over a Line 2 underline that turns Navy on hover. */
-const REFERENCE_TITLE_LINK_CLASS =
-  "text-navy underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 hover:decoration-navy";
-
 function DocumentLine({
   taskId,
   optionId,
@@ -115,19 +111,19 @@ function DocumentLine({
     : null;
   // The References form (round 12): authors, year, the title, the venue; a
   // part the read lacks is left out, so the title alone still reads.
-  const { lead, title, afterTitle, venue } = referenceParts({
+  // The title first, the year in brackets after it, then the venue (round
+  // 13, owner: no authors on the card).
+  const { title, afterTitle, venue } = referenceParts({
     title: scrub(document.title),
     year: document.year ?? null,
     venue: document.venue == null ? null : scrub(document.venue),
-    authorships: (document.authors ?? []).map((name) => ({ name: scrub(name) })),
   });
   const facts = documentFacts(document);
   return (
     <li className="py-2.5 first:pt-0 last:pb-0">
       <p className="text-ink [overflow-wrap:anywhere]">
-        {lead}
         {dossier !== null ? (
-          <Link className={REFERENCE_TITLE_LINK_CLASS} to={dossier}>
+          <Link className={SOURCE_TITLE_LINK_CLASS} to={dossier}>
             {title}
           </Link>
         ) : (
@@ -343,9 +339,9 @@ function CardSection({
  *  type: Navy Semibold, Grey when it is unclear who can act (round 10: no
  *  tint, as the level words). */
 const AUTHORITY_WORD_CLASS: Record<"within_your_power" | "needs_action_by" | "unclear", string> = {
-  within_your_power: "text-meta font-semibold text-navy",
-  needs_action_by: "text-meta font-semibold text-navy",
-  unclear: "text-meta font-semibold text-grey",
+  within_your_power: "font-semibold text-navy",
+  needs_action_by: "font-semibold text-navy",
+  unclear: "font-semibold text-grey",
 };
 
 /** A line's level word in the one Navy look after a 6 px Navy square, the
@@ -369,7 +365,9 @@ const NOTICE_WORD_CLASS = { red: "font-semibold text-red", navy: "font-semibold 
 
 /** The profile table's cells: three columns from `sm` up; stacked blocks below it, so the
  *  sentence keeps the full width at 390 px (22b, after the browser check). */
-const PROFILE_NAME_CELL = "block pt-2.5 pr-4 align-top text-meta font-normal text-grey sm:w-44 sm:table-cell sm:py-2.5";
+// The line's name and its mark at the block's reading size, as the sentence
+// cells (round 13, owner: they read too small); the name in Grey.
+const PROFILE_NAME_CELL = "block pt-2.5 pr-4 align-top font-normal text-grey sm:w-48 sm:table-cell sm:py-2.5";
 const PROFILE_WORD_CELL = "block pr-4 align-top sm:w-40 sm:table-cell sm:py-2.5";
 const PROFILE_SENTENCE_CELL = "block pb-2.5 align-top sm:table-cell sm:py-2.5";
 
@@ -385,24 +383,9 @@ const PROFILE_SENTENCE_CELL = "block pb-2.5 align-top sm:table-cell sm:py-2.5";
 export function OptionCard() {
   const { taskId = "", optionId = "" } = useParams();
   const titleRef = useRef<HTMLHeadingElement>(null);
-  const openedFor = useRef<string | null>(null);
   // An option opens at its top with focus on its title (round 12, owner
-  // bug: it opened at the foot, the app's scrolling pane keeping the
-  // longlist's offset). Once per option, so a dossier opening over the card
-  // or an action's notice never moves the reader; a link to a section (a
-  // hash) keeps its own scroll.
-  useLayoutEffect(() => {
-    const title = titleRef.current;
-    if (title === null || openedFor.current === optionId) return;
-    openedFor.current = optionId;
-    if (window.location.hash !== "") return;
-    for (let node = title.parentElement; node !== null && node !== document.body; node = node.parentElement) {
-      const overflowY = getComputedStyle(node).overflowY;
-      if (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") node.scrollTop = 0;
-    }
-    if (document.scrollingElement != null) document.scrollingElement.scrollTop = 0;
-    title.focus({ preventScroll: true });
-  });
+  // bug: it opened at the foot), once per option.
+  useOpenAtTop(titleRef, optionId);
   const task = useTask(taskId);
   const plan = usePlan(taskId);
   const option = useOption(taskId, optionId);
@@ -483,6 +466,14 @@ export function OptionCard() {
   const profileLines = profile === null ? [] : PROFILE_LINE_KEYS.map((key) => ({ key, line: profile.lines.find((line) => line.key === key) }))
     // A profile written before the ninth line existed has eight; show no empty row.
     .filter(({ key, line }) => key !== "potential_impact" || line !== undefined);
+  // The open table's order (round 13, owner): ambition (its own row first),
+  // potential impact, the lines that compare, then those that do not.
+  const compares = (key: (typeof profileLines)[number]["key"]) => LEVEL_WORDS[key].less !== null;
+  const orderedProfileLines = [
+    ...profileLines.filter(({ key }) => key === "potential_impact"),
+    ...profileLines.filter(({ key }) => key !== "potential_impact" && compares(key)),
+    ...profileLines.filter(({ key }) => !compares(key)),
+  ];
   const cellLines = profile === null ? [] : GRID_COLUMN_LINES
     // Likewise no Potential impact cell for a profile without that line.
     .filter((key) => key !== "potential_impact" || profile.lines.some((line) => line.key === key))
@@ -518,12 +509,13 @@ export function OptionCard() {
             <span aria-hidden="true" className="mx-2">/</span>
             <span>{scrub(item.name)}</span>
           </nav>
-          <div className="-my-1 flex items-center gap-3">
+          <div className="flex items-center gap-6">
             <ShortlistToggle
               actions={actions}
               optionId={optionId}
               shortlistState={item.shortlist?.state}
               excluded={excluded}
+              worded
             />
             <OptionActionButton actions={actions} optionId={optionId} excluded={excluded} />
           </div>
@@ -536,7 +528,6 @@ export function OptionCard() {
         <p className={cn("mt-3 max-w-prose-measure", REPORT_BODY_CLASS)}>{scrub(item.description)}</p>
         <p className="mt-2 text-meta text-grey">{scrub(headerLine)}</p>
 
-        <ExcludeReasonForm actions={actions} optionId={optionId} className="mt-4 flex flex-wrap items-center gap-2" />
 
         {actions.notice !== null && (
           <p role="alert" className="mt-3 text-body text-red">
@@ -569,34 +560,8 @@ export function OptionCard() {
         {/* Where it has been evaluated first, then the notices, then the
             documents (round 12, owner: the Sources lines and Your outcomes
             went; the counts are the row's and the collapsed summary's). */}
-        {/* With no evaluation the subheading stays and says so (round 12,
-            owner), so the section never drops to the documents alone. */}
-        {item.document_count > 0 && item.evaluated_count === 0 && (
-          <div>
-            <h3 className={BLOCK_SUBHEADING_CLASS}>Where it has been evaluated</h3>
-            <p className="text-grey">{NOT_EVALUATED_LINE}</p>
-          </div>
-        )}
-        {item.document_count > 0 && item.evaluated_count > 0 && placeSentences.length > 0 && (
-              <div>
-                <h3 className={BLOCK_SUBHEADING_CLASS}>Where it has been evaluated</h3>
-                <dl aria-label="Where it has been evaluated" className="divide-y divide-line">
-                  {placeSentences.map((entry) => (
-                    <div
-                      key={entry.place}
-                      data-where={entry.where ? "true" : undefined}
-                      className="grid gap-x-4 py-1.5 sm:grid-cols-[10rem_1fr]"
-                    >
-                      {/* The plan's own place leads the list; no mark of its
-                          own (round 12, owner). */}
-                      <dt className="text-navy">{scrub(entry.place)}</dt>
-                      <dd>{scrub(entry.sentence)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-          )}
-        {/* Your target and outcomes (round 12, owner): the report's
+        {/* Your target and outcomes, first in Evidence (round 13, owner),
+            then where it has been evaluated. Round 12: the report's
             method-table pattern, the plan's words left and their coverage
             right; the target first. Tabular figures are left off: under
             them the fallback face widens the spaces between the words, as
@@ -636,7 +601,12 @@ export function OptionCard() {
                           covered ? "text-navy" : "text-grey",
                         )}
                       >
-                        {outcomeCoverageWords(entry)}
+                        {/* One line each (round 13, owner). */}
+                        {outcomeCoverageLines(entry).map((line) => (
+                          <span key={line} className="block">
+                            {line}
+                          </span>
+                        ))}
                       </td>
                     </tr>
                   );
@@ -645,6 +615,33 @@ export function OptionCard() {
             </table>
           </div>
         )}
+        {/* With no evaluation the subheading stays and says so (round 12,
+            owner), so the section never drops to the documents alone. */}
+        {item.document_count > 0 && item.evaluated_count === 0 && (
+          <div>
+            <h3 className={BLOCK_SUBHEADING_CLASS}>Where it has been evaluated</h3>
+            <p className="text-grey">{NOT_EVALUATED_LINE}</p>
+          </div>
+        )}
+        {item.document_count > 0 && item.evaluated_count > 0 && placeSentences.length > 0 && (
+              <div>
+                <h3 className={BLOCK_SUBHEADING_CLASS}>Where it has been evaluated</h3>
+                <dl aria-label="Where it has been evaluated" className="divide-y divide-line">
+                  {placeSentences.map((entry) => (
+                    <div
+                      key={entry.place}
+                      data-where={entry.where ? "true" : undefined}
+                      className="grid gap-x-4 py-1.5 sm:grid-cols-[10rem_1fr]"
+                    >
+                      {/* The plan's own place leads the list; no mark of its
+                          own (round 12, owner). */}
+                      <dt className="text-navy">{scrub(entry.place)}</dt>
+                      <dd>{scrub(entry.sentence)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+          )}
         {/* The notices (round 11, item 4): a flat
             block with a hairline rule, each a word in its tone then its
             sentence (round 10, finding 7: no card inside the sheet, no chips). */}
@@ -653,6 +650,12 @@ export function OptionCard() {
             {excluded && item.exclusion != null && (
               <p>
                 <span className={NOTICE_WORD_CLASS.red}>Excluded:</span> {scrub(exclusionLine(item.exclusion))}
+                {invitesReason(item.exclusion) && (
+                  <>
+                    {" "}
+                    <AddReason actions={actions} optionId={optionId} current={item.exclusion.reason ?? ""} className="ml-2" />
+                  </>
+                )}
               </p>
             )}
             {item.no_in_scope_evidence && item.in_scope != null && (
@@ -715,7 +718,7 @@ export function OptionCard() {
                 </td>
                 <td className={PROFILE_SENTENCE_CELL}>{scrub(item.ambition_reason ?? "")}</td>
               </tr>
-              {profileLines.map(({ key, line }) => {
+              {orderedProfileLines.map(({ key, line }) => {
                 const mark = line?.mark ?? null;
                 const marked = LEVEL_WORDS[key].less !== null;
                 const authority = key === "who_decides" ? item.authority : null;

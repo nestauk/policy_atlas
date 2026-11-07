@@ -78,13 +78,18 @@ export function PublicTaskShell() {
         <PublicViewProvider value={true}>
           <RunStreamProvider taskId={taskId} connect={false}>
             <div className="flex h-svh w-full min-w-0 max-w-full flex-col overflow-hidden">
-              <NavBar aria-label="App" className="shrink-0">
+              {/* Its own View Transition layer, held still above the page, so a
+                  longlist regroup never draws over it (round 13, owner). */}
+              <NavBar aria-label="App" className="shrink-0 [view-transition-name:app-nav] [view-transition-class:shell-chrome]">
                 <NavHomeLink />
                 <Button size="sm" onClick={onSignIn}>
                   Sign in
                 </Button>
               </NavBar>
-              <NavBar aria-label={TASK.one} className="shrink-0 bg-ground">
+              <NavBar
+                aria-label={TASK.one}
+                className="shrink-0 bg-ground [view-transition-name:task-nav] [view-transition-class:shell-chrome]"
+              >
                 <div className="flex min-w-0 items-center gap-2">
                   <span className="truncate text-lead font-semibold text-navy">
                     {scrub(task.data.name)}

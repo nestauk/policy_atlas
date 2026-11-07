@@ -7,6 +7,9 @@ import { mockLonglist } from "../../mock/fixtures";
 import { LonglistGrid } from "./LonglistGrid";
 import { PublicViewProvider } from "../publicView";
 
+/** A grid head's name, without its count (round 13: the list's group heading). */
+const headName = (header: HTMLElement) => header.querySelector(".uppercase .uppercase")?.textContent ?? header.textContent;
+
 /** Chooses a line from the Columns dropdown. */
 async function pickColumn(user: ReturnType<typeof userEvent.setup>, name: string) {
   await user.click(screen.getByRole("combobox", { name: "Columns" }));
@@ -55,12 +58,26 @@ beforeEach(() => {
 });
 
 describe("LonglistGrid", () => {
-  it("lays out rows by lever type (plus None fits) and columns by the chosen line, Ambition first", () => {
+  // Round 13 (owner): the grid's heads take the list's group heading, the
+  // name in the uppercase Label style in Navy and the count in Meta Grey.
+  // Round 13 (owner): the heads take the list's group heading, the name
+  // alone, with no count.
+  it("heads its columns and rows in the list's group heading style, the name alone", () => {
+    renderGrid();
+    const head = screen.getAllByRole("columnheader")[1];
+    expect(head.querySelector(".uppercase .uppercase")).toHaveClass("text-navy");
+    expect(head).not.toHaveTextContent(/options?|shortlisted/);
+    const row = screen.getAllByRole("rowheader")[0];
+    expect(row.querySelector(".uppercase .uppercase")).toHaveClass("text-navy");
+    expect(row).not.toHaveTextContent(/options?|shortlisted/);
+  });
+
+  it("lays out rows by lever type (plus Other) and columns by the chosen line, Ambition first", () => {
     renderGrid(true);
     expect(screen.getByRole("row", { name: /Enforce existing powers/ })).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: /None fits/ })).toBeInTheDocument();
-    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
-      "Lever type",
+    expect(screen.getByRole("row", { name: /Other/ })).toBeInTheDocument();
+    expect(screen.getAllByRole("columnheader").map(headName)).toEqual([
+      "Lever",
       "Smaller",
       "Middle",
       "Bigger",
@@ -94,8 +111,8 @@ describe("LonglistGrid", () => {
     const user = userEvent.setup();
     renderGrid(true);
     await pickColumn(user, "Cost");
-    const heads = screen.getAllByRole("columnheader").map((header) => header.textContent);
-    expect(heads).toEqual(["Lever type", "Cheaper", "Middle", "Costlier", "Untagged"]);
+    const heads = screen.getAllByRole("columnheader").map(headName);
+    expect(heads).toEqual(["Lever", "Cheaper", "Middle", "Costlier", "Untagged"]);
     // The sanctions regime is marked cheaper; mentoring has no cost mark, so Middle.
     const cellIndex = (name: string) => {
       const cell = screen.getByRole("link", { name }).closest("td") as HTMLElement;
@@ -105,7 +122,7 @@ describe("LonglistGrid", () => {
     expect(cellIndex("School-based mentoring")).toBe(heads.indexOf("Middle"));
     expect(cellIndex("Youth guarantee")).toBe(heads.indexOf("Untagged"));
     await pickColumn(user, "Delivery complexity");
-    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toContain("More complex");
+    expect(screen.getAllByRole("columnheader").map(headName)).toContain("More complex");
   });
 
   // Task 055: Potential impact carries a mark (the owner, 2026-10-27).
@@ -113,8 +130,8 @@ describe("LonglistGrid", () => {
     const user = userEvent.setup();
     renderGrid(true);
     await pickColumn(user, "Potential impact");
-    const heads = screen.getAllByRole("columnheader").map((header) => header.textContent);
-    expect(heads).toEqual(["Lever type", "Lower", "Middle", "Higher", "Untagged"]);
+    const heads = screen.getAllByRole("columnheader").map(headName);
+    expect(heads).toEqual(["Lever", "Lower", "Middle", "Higher", "Untagged"]);
     const cellIndex = (name: string) => {
       const cell = screen.getByRole("link", { name }).closest("td") as HTMLElement;
       return Array.from((cell.parentElement as HTMLElement).children).indexOf(cell);
@@ -130,7 +147,7 @@ describe("LonglistGrid", () => {
       if (added === undefined) throw new Error("fixture has no unprofiled option");
       added.ambition = "more";
     });
-    const heads = screen.getAllByRole("columnheader").map((header) => header.textContent);
+    const heads = screen.getAllByRole("columnheader").map(headName);
     const cell = screen.getByRole("link", { name: "Youth guarantee" }).closest("td") as HTMLElement;
     expect(Array.from((cell.parentElement as HTMLElement).children).indexOf(cell)).toBe(heads.indexOf("Untagged"));
     first.unmount();
@@ -139,12 +156,12 @@ describe("LonglistGrid", () => {
         option.profile ??= { lines: [], settings: [] };
       }
     });
-    expect(screen.queryByRole("columnheader", { name: "Untagged" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /^Untagged/ })).not.toBeInTheDocument();
   });
 
   it("shows Middle in the grid, keeps the old band words out, and builds no compare table", () => {
     const { container } = renderGrid();
-    expect(screen.getByRole("columnheader", { name: "Middle" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /^Middle/ })).toBeInTheDocument();
     for (const banned of [/less than most/i, /like most/i, /more than most/i, /do minimum/i, /incremental/i, /structural/i]) {
       expect(container).not.toHaveTextContent(banned);
     }
@@ -159,11 +176,27 @@ describe("LonglistGrid", () => {
     expect(structuralCell).not.toBeNull();
     expect(within(structuralCell as HTMLElement).getByText("National sanctions regime")).toBeInTheDocument();
     expect(screen.queryByText("no option of this type on the longlist")).not.toBeInTheDocument();
-    expect(screen.queryByRole("row", { name: /Convene/ })).not.toBeInTheDocument();
-    const absent = screen.getByText(/^No options: /);
-    expect(absent).toHaveTextContent(/Convene/);
-    expect(absent).toHaveClass("text-grey");
-    expect(absent).not.toHaveTextContent(/Enforce existing powers|Regulate/);
+    expect(screen.queryByRole("row", { name: /^Convene/ })).not.toBeInTheDocument();
+    // Round 13 (owner): under the grid in the row heads' column, "No options
+    // for" then each lever on its own line, as heads, not in the table.
+    expect(screen.queryByRole("row", { name: /^No options found for/ })).not.toBeInTheDocument();
+    const absent = screen.getByRole("group", { name: "No options found for" });
+    expect(absent.closest("table")).toBeNull();
+    expect(absent).toHaveClass("w-44", "space-y-2");
+    // A Line hairline across the grid under its last row, 24 px above the foot.
+    expect(absent.parentElement).toHaveClass("border-t", "border-line", "pt-6");
+    expect(absent.parentElement).not.toHaveClass("w-44");
+    const lines = Array.from(absent.children).map((line) => line.textContent);
+    expect(lines[0]).toBe("No options found for");
+    expect(lines).toContain("Convene");
+    expect(lines).not.toContain("Other");
+    expect(lines.join(" ")).not.toMatch(/Enforce existing powers|Regulate/);
+    // The words a Body Grey line in sentence case; the
+    // names in the heads' style (round 13, owner).
+    const [words, ...names] = Array.from(absent.children);
+    expect(words).toHaveClass("text-body", "text-grey");
+    expect(words).not.toHaveClass("uppercase");
+    for (const line of names) expect(line).toHaveClass("uppercase", "text-grey");
   });
 
   it("hides excluded options until asked", () => {
@@ -172,13 +205,22 @@ describe("LonglistGrid", () => {
   });
 
   // Round 10 (finding 6): states in words, no chips; red only on the failure word.
-  it("carries the excluded state and no in-scope evidence on tiles in words", () => {
+  it("marks an excluded tile with the grey exclude glyph and no in-scope evidence in words", () => {
     const { container } = renderGrid(true);
     const excludedLink = screen.getByRole("link", { name: "National sanctions regime" });
     expect(excludedLink).toHaveClass("text-grey");
     const excludedCell = excludedLink.closest("td") as HTMLElement;
-    // Round 12 (owner): the grey alone marks an excluded option, no red word.
-    expect(within(excludedCell).getByText("Excluded")).toHaveClass("text-grey");
+    // Round 13 (owner): no word on an excluded tile; the grey exclude glyph
+    // in the toggle's corner, not a control, its exclusion line as the
+    // tooltip and its name.
+    const tile = excludedLink.closest("li") as HTMLElement;
+    expect(within(tile).queryByText("Excluded")).not.toBeInTheDocument();
+    expect(within(tile).queryByRole("button")).not.toBeInTheDocument();
+    const mark = within(tile).getByTestId("tile-excluded");
+    expect(mark).toHaveClass("text-grey", "absolute", "-top-2", "-right-2", "h-10", "w-10");
+    expect(mark.querySelector("svg")).toHaveAttribute("width", "24");
+    expect(mark).toHaveAccessibleName(/^(Excluded by you|Breaks ")/);
+    expect(within(excludedCell).queryByText(/^Excluded$/)).not.toBeInTheDocument();
 
     const noInScopeLink = screen.getByRole("link", { name: "School-based mentoring" });
     const noInScopeCell = noInScopeLink.closest("td") as HTMLElement;
@@ -212,8 +254,9 @@ describe("LonglistGrid", () => {
   });
 
   // Round 12 (owner): the shortlisted lead each cell, the rest after them in
-  // their own order; a toggle moves the tile with the regroup's View Transition.
-  it("puts the shortlisted first in a cell and moves a tile there when it is shortlisted", () => {
+  // their own order; a toggle moves the tile there in place, with no View
+  // Transition (round 13, owner: only a new Columns line runs one).
+  it("puts the shortlisted first in a cell and moves a tile there in place when it is shortlisted", () => {
     const start = vi.fn((update: () => void) => {
       update();
       return { finished: Promise.resolve() };
@@ -247,8 +290,22 @@ describe("LonglistGrid", () => {
       expect(names()).toEqual(["Cell option 2", "Cell option 0", "Cell option 1", "Cell option 3"]);
       expect(start).not.toHaveBeenCalled();
       rerender(tree(make([2, 3])));
-      expect(start).toHaveBeenCalledTimes(1);
+      expect(start).not.toHaveBeenCalled();
       expect(names()).toEqual(["Cell option 2", "Cell option 3", "Cell option 0", "Cell option 1"]);
+      // Show excluded updates in place too; a new Columns line moves the tiles.
+      const shown = make([2, 3]);
+      rerender(
+        <MemoryRouter>
+          <LonglistGrid taskId={TASK_ID} longlist={shown} showExcluded />
+        </MemoryRouter>,
+      );
+      expect(start).not.toHaveBeenCalled();
+      rerender(
+        <MemoryRouter>
+          <LonglistGrid taskId={TASK_ID} longlist={shown} showExcluded line="potential_impact" />
+        </MemoryRouter>,
+      );
+      expect(start).toHaveBeenCalledTimes(1);
     } finally {
       Reflect.deleteProperty(document, "startViewTransition");
     }
@@ -266,7 +323,7 @@ describe("LonglistGrid", () => {
         </MemoryRouter>
       </PublicViewProvider>,
     );
-    expect(screen.queryByRole("button", { name: /shortlist/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^(Add to|Remove from) shortlist$/ })).not.toBeInTheDocument();
     expect(screen.getAllByText("Shortlisted").length).toBeGreaterThan(0);
     expect(screen.getByRole("combobox", { name: "Columns" })).toBeInTheDocument();
   });
@@ -297,11 +354,11 @@ describe("LonglistGrid", () => {
     renderGrid(true);
     // The bundle is Policy Atlas's pick; the youth guarantee was added by you.
     const bundle = screen.getByRole("link", { name: "Universal youth offer bundle" }).closest("li") as HTMLElement;
-    const held = within(bundle).getByRole("button", { name: "Shortlisted" });
+    const held = within(bundle).getByRole("button", { name: "Remove from shortlist" });
     expect(held).toBeEnabled();
     expect(held).toHaveAttribute("aria-pressed", "true");
     const guarantee = screen.getByRole("link", { name: "Youth guarantee" }).closest("li") as HTMLElement;
-    expect(within(guarantee).getByRole("button", { name: "Shortlisted" })).toBeInTheDocument();
+    expect(within(guarantee).getByRole("button", { name: "Remove from shortlist" })).toBeInTheDocument();
     // A set-aside pick offers Add.
     const mentoring = screen.getByRole("link", { name: "School-based mentoring" }).closest("li") as HTMLElement;
     await user.click(within(mentoring).getByRole("button", { name: "Add to shortlist" }));
@@ -325,7 +382,7 @@ describe("LonglistGrid", () => {
 
   it("disables the shortlist actions while a walk is running", () => {
     renderGrid(false, undefined, { capability_run_id: "x", status: "running", started_at: "2026-10-27T00:00:00Z" });
-    for (const button of screen.getAllByRole("button", { name: /shortlist/i })) expect(button).toBeDisabled();
+    for (const button of screen.getAllByRole("button", { name: /^(Add to|Remove from) shortlist$/ })) expect(button).toBeDisabled();
   });
 
   it("links a tile through to the option card", () => {

@@ -11,6 +11,8 @@ import {
 } from "../../mock/fixtures";
 import * as queries from "../../api/queries";
 import * as mutations from "../../api/mutations";
+import { TOGGLE_GLYPH_SIZE } from "./optionActions";
+import { REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
 
 vi.mock("../../api/queries", () => ({
   useTask: vi.fn(),
@@ -134,8 +136,8 @@ describe("LonglistView", () => {
     expect(screen.getByText(/^4 options in 2 themes/)).toHaveTextContent(
       "4 options in 2 themes and 2 levers · 2 shortlisted · 1 excluded · 1 with no in-scope evidence",
     );
-    // At the list's foot, not over it (review finding 22).
-    expect(screen.getByText("Read from titles and abstracts")).toBeInTheDocument();
+    // Round 13 (owner): no "Read from titles and abstracts" note on the page.
+    expect(screen.queryByText(/Read from titles and abstracts/)).not.toBeInTheDocument();
     expect(screen.queryByText("scoping pass")).not.toBeInTheDocument();
     expect(screen.queryByText(/^Longlist$/i, { selector: "p" })).not.toBeInTheDocument();
   });
@@ -149,6 +151,38 @@ describe("LonglistView", () => {
       "4 options in 2 themes and 2 levers · 2 shortlisted · 1 with no in-scope evidence",
     );
     expect(screen.queryByText(/excluded/)).not.toBeInTheDocument();
+  });
+
+  // Round 13 (owner): "View as" before the switch, the grid's Columns on the
+  // same row, and the lever types with no option said plainly in both views.
+  it("labels the switch View as, puts Columns on the left in the grid, and names the levers with no option", async () => {
+    const user = userEvent.setup();
+    renderLonglist();
+    expect(screen.getByText("View as")).toHaveClass("text-meta", "text-grey");
+    expect(screen.queryByRole("combobox", { name: "Columns" })).not.toBeInTheDocument();
+    await user.click(within(screen.getByRole("group", { name: "View as" })).getByRole("button", { name: "Grid" }));
+    const columns = screen.getByRole("combobox", { name: "Columns" });
+    const controls = screen.getByTestId("longlist-controls");
+    // Its visible label before it, the controls row's label style (round 13, owner).
+    const columnsLabel = within(controls).getByText("Columns");
+    expect(columnsLabel).toHaveClass("text-meta", "text-grey");
+    expect(columnsLabel.compareDocumentPosition(columns) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Columns on the left; the view switch keeps the right edge in both views.
+    expect(controls.firstElementChild?.contains(columns)).toBe(true);
+    expect(controls.lastElementChild?.contains(screen.getByRole("group", { name: "View as" }))).toBe(true);
+    // Round 13 (owner): listed under the grid, as heads.
+    const absent = screen.getByRole("group", { name: "No options found for" });
+    expect(absent).not.toHaveTextContent(/Other/);
+    await user.click(within(screen.getByRole("group", { name: "View as" })).getByRole("button", { name: "List" }));
+    expect(controls.lastElementChild?.contains(screen.getByRole("group", { name: "View as" }))).toBe(true);
+    await user.click(within(screen.getByRole("group", { name: "Group by" })).getByRole("button", { name: "Lever" }));
+    // The lever grouping's last heading, the names one Grey line under it.
+    // Round 13 (owner): the words a Body Grey line, not a heading.
+    expect(screen.queryByRole("heading", { name: "No options found for" })).not.toBeInTheDocument();
+    const words = within(screen.getByRole("region", { name: "No options found for" })).getByTestId("no-options-for");
+    expect(words).toHaveClass("text-body", "text-grey");
+    expect(words).not.toHaveClass("uppercase");
+    expect(words.nextElementSibling).toHaveClass("uppercase", "text-grey");
   });
 
   it("shows the excluded part as plain text in grid mode", async () => {
@@ -180,23 +214,31 @@ describe("LonglistView", () => {
   // Show all ends the controls row on the same edge.
   it("puts the count and then Show / Hide at the heading line's right, and Show all last in the controls row", () => {
     renderClosedLonglist();
-    const heading = screen.getByRole("button", { name: /^A universal offer 1 option$/ });
+    const heading = screen.getByRole("button", { name: /^A universal offer 1 option · 1 shortlisted$/ });
     const parts = Array.from(heading.children);
     expect(parts).toHaveLength(3);
     expect(parts[0]).toHaveTextContent(/^A universal offer$/);
     expect(parts[0]).toHaveClass("flex-1");
-    expect(parts[1]).toHaveTextContent(/^1 option$/);
+    expect(parts[1]).toHaveTextContent(/^1 option · 1 shortlisted$/);
     expect(parts[1]).toHaveClass("text-meta", "text-grey", "text-right");
     expect(parts[2]).toHaveTextContent(/^Show$/);
+    // Round 13 (owner): Show all with Group by on the left; View as on the right edge.
     const showAll = screen.getByRole("button", { name: "Show all" });
-    expect(showAll.nextElementSibling).toBeNull();
+    // Round 13 (owner): Show all at the count line's right, under the
+    // controls row and inside the hairlines.
+    const countLine = screen.getByText(/^4 options in 2 themes/);
+    expect(showAll.parentElement).toBe(countLine.parentElement);
+    expect(showAll.previousElementSibling).toBe(countLine);
+    const block = screen.getByTestId("longlist-controls-block");
+    expect(block.firstElementChild).toBe(screen.getByTestId("longlist-controls"));
+    expect(block.lastElementChild).toBe(countLine.parentElement);
     // Round 12 (owner): the name in Navy, the count Grey; no contents
     // sidebar, the list on the page's full column.
     expect(parts[0]).toHaveClass("text-navy");
     expect(screen.queryByRole("navigation", { name: /contents/i })).toBeNull();
     expect(document.querySelector(".longlist-paper")).toHaveClass("md:max-w-[1180px]");
     // Round 12 (owner): a Line hairline above and below the controls row.
-    expect(screen.getByTestId("longlist-controls")).toHaveClass("border-y", "border-line", "py-3");
+    expect(screen.getByTestId("longlist-controls-block")).toHaveClass("border-y", "border-line", "py-3");
   });
 
   // Round 12 (owner): what a theme and a lever are, in an "i" beside Group
@@ -214,19 +256,32 @@ describe("LonglistView", () => {
     expect(screen.queryByText(/^Theme: a group/, { selector: "main p" })).toBeNull();
   });
 
-  it("gathers excluded options in one collapsed section at the end, headed Excluded with its count", async () => {
+  // Round 13 (owner): Excluded is a section, its heading at the page's
+  // section size with its description; inside it only groups, the options
+  // excluded one by one under "Options", shut like the others.
+  it("ends with an Excluded section of groups, the single exclusions under Options, shut", async () => {
     const user = userEvent.setup();
     renderLonglist();
+    const section = screen.getByRole("region", { name: "Excluded" });
+    const heading = within(section).getByRole("heading", { level: 2, name: "Excluded" });
+    expect(heading).toHaveClass(...REPORT_SECTION_HEADING_CLASS.split(" "));
+    expect(heading).not.toHaveClass("uppercase");
+    expect(heading.nextElementSibling).toHaveTextContent("Excluded from shortlisting by a constraint or by you.");
+    expect(section).toHaveClass("border-t", "border-line", "mt-8", "pt-8");
+    // No loose rows: every row sits in a group.
+    expect(Array.from(section.children).filter((child) => child.tagName === "UL")).toHaveLength(0);
     expect(screen.queryByText("National sanctions regime")).not.toBeInTheDocument();
-    const heading = screen.getByRole("button", { name: /^Excluded 1 option$/ });
-    await user.click(heading);
+    const options = within(section).getByRole("button", { name: /^Options 1 option/ });
+    expect(options).toHaveAttribute("aria-expanded", "false");
+    expect(options.closest("h3")).not.toBeNull();
+    await user.click(options);
     expect(screen.getByText("National sanctions regime")).toBeInTheDocument();
   });
 
   // Round 11 (review finding 3): a theme heading says its count, not its instruments.
   it("tags each row with its lever only, no mark and no ambition word, and counts the theme's options", async () => {
     renderLonglist();
-    expect(screen.getByRole("button", { name: /^A universal offer 1 option$/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^A universal offer 1 option · 1 shortlisted$/ })).toBeInTheDocument();
     expect(screen.queryByText(/regulation only/)).toBeNull();
     const row = screen.getByText("Universal youth offer bundle").closest("li") as HTMLElement;
     expect(within(row).getByText("Regulate")).toBeInTheDocument();
@@ -236,14 +291,14 @@ describe("LonglistView", () => {
   it("groups by lever type, with the theme on each row, and offers no ambition grouping", async () => {
     const user = userEvent.setup();
     renderLonglist();
-    await user.click(within(screen.getByRole("group", { name: "Group by" })).getByRole("button", { name: "Lever type" }));
+    await user.click(within(screen.getByRole("group", { name: "Group by" })).getByRole("button", { name: "Lever" }));
     expect(screen.getByRole("button", { name: /^Provide a service 1 option$/ })).toBeInTheDocument();
     expect(screen.getByText("Deliver or fund a service or programme directly to people.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Conditionality and support/ })).not.toBeInTheDocument();
     const row = screen.getByText("School-based mentoring").closest("li") as HTMLElement;
     expect(within(row).getByText("Conditionality and support")).toBeInTheDocument();
     const groupBy = screen.getByRole("group", { name: "Group by" });
-    expect(within(groupBy).getAllByRole("button").map((button) => button.textContent)).toEqual(["Theme", "Lever type"]);
+    expect(within(groupBy).getAllByRole("button").map((button) => button.textContent)).toEqual(["Theme", "Lever"]);
     expect(screen.queryByRole("button", { name: /^Untagged/ })).not.toBeInTheDocument();
   });
 
@@ -267,7 +322,9 @@ describe("LonglistView", () => {
 
   // R85; round 11 (review finding 4): the grey line carries the signal's
   // first part only; the rest is the card's.
-  it("carries the evidence signal's first part on the grey line, without a document count part", async () => {
+  // Round 13 (owner: avoid information overload): the grey line carries the
+  // document count alone; the evaluated / describe split is the card's.
+  it("carries the document count alone on the grey line, not the evaluated / describe split", async () => {
     renderLonglist({}, (longlist) => {
       const mentoring = (longlist.options ?? []).find((o) => o.name === "School-based mentoring");
       if (mentoring) {
@@ -276,19 +333,17 @@ describe("LonglistView", () => {
       }
     });
     const rich = within(screen.getByText("Universal youth offer bundle").closest("li") as HTMLElement);
-    expect(rich.getByText("5 documents evaluated it")).toBeInTheDocument();
-    expect(rich.queryByText("4 more describe it")).toBeNull();
-    expect(rich.queryByText("Measures 2 of your 2 outcomes")).toBeNull();
-    expect(rich.queryByText("9 documents")).not.toBeInTheDocument();
+    expect(rich.getByText("9 documents")).toBeInTheDocument();
+    expect(rich.queryByText(/evaluated it|describe it/)).toBeNull();
     const bare = within(screen.getByText("School-based mentoring").closest("li") as HTMLElement);
-    expect(bare.getByText("No evaluations, 3 documents describe it")).toBeInTheDocument();
-    expect(bare.queryByText("3 documents")).not.toBeInTheDocument();
+    expect(bare.getByText("3 documents")).toBeInTheDocument();
+    expect(bare.queryByText(/No evaluations/)).toBeNull();
   });
 
   it("keeps the list's own words free of 'studies', 'serves' and 'aimed at'", async () => {
     const user = userEvent.setup();
     const { container } = renderLonglist();
-    await user.click(screen.getByRole("button", { name: /^Excluded/ }));
+    await user.click(screen.getByRole("button", { name: /^Options \d/ }));
     expect(container).not.toHaveTextContent(/\bstudies\b|\bserves\b|aimed at/i);
   });
 
@@ -303,12 +358,12 @@ describe("LonglistView", () => {
   it("an excluded row shows its evidence and exclusion reason; its relation is the card's", async () => {
     const user = userEvent.setup();
     renderLonglist();
-    await user.click(screen.getByRole("button", { name: /^Excluded/ }));
+    await user.click(screen.getByRole("button", { name: /^Options \d/ }));
     const row = screen.getByText("National sanctions regime").closest("li");
     expect(row).not.toBeNull();
     const scoped = within(row as HTMLElement);
-    expect(scoped.getByText("3 documents evaluated it")).toBeInTheDocument();
-    expect(scoped.queryByText("6 documents")).not.toBeInTheDocument();
+    expect(scoped.getByText("6 documents")).toBeInTheDocument();
+    expect(scoped.queryByText(/evaluated it/)).not.toBeInTheDocument();
     // Round 12 (owner): the exclusion in the meta line's grey, who set it
     // aside first, no red word; the row keeps every other row's sizes.
     expect(scoped.queryByText("Excluded:")).not.toBeInTheDocument();
@@ -328,54 +383,159 @@ describe("LonglistView", () => {
     expect(within(addedRow as HTMLElement).queryByText("added by you")).toBeNull();
   });
 
-  it("Exclude asks for a reason and posts once", async () => {
-    const user = userEvent.setup();
+  // Round 13 (owner): Exclude leaves the rows; a group heading excludes
+  // every included option in it, the reason saying which group.
+  it("has no Exclude on a row", () => {
     renderLonglist();
     const row = screen.getByText("School-based mentoring").closest("li") as HTMLElement;
-    await user.click(within(row).getByRole("button", { name: "Exclude" }));
-    const input = within(row).getByPlaceholderText("Why exclude this option?");
-    await user.type(input, "Duplicates the mentoring pilot");
-    await user.click(within(row).getByRole("button", { name: "Exclude" }));
+    expect(within(row).queryByRole("button", { name: /Exclude|Include again|Option actions/ })).not.toBeInTheDocument();
+  });
+
+  it("excludes every included option in a theme at once from its heading, the theme as the reason, none twice", async () => {
+    const user = userEvent.setup();
+    renderLonglist();
+    const section = screen.getByRole("button", { name: /^Conditionality and support/ }).closest("section") as HTMLElement;
+    // Round 13 (owner): at the open group's foot, not on the heading.
+    const heading = within(section).getByRole("heading", { level: 2 });
+    expect(within(heading).queryByRole("button", { name: /Exclude/ })).not.toBeInTheDocument();
+    // The first line inside the open group, before the rows (round 13, owner).
+    const control = within(section).getByRole("button", { name: "Exclude theme" });
+    const firstRow = within(section).getAllByRole("listitem")[0];
+    expect(control.compareDocumentPosition(firstRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // On the description's line, at its right edge (the toggles' column);
+    // the box-overlap check with Show / Hide is in the scoping e2e.
+    const description = within(section).getByText(/./, { selector: "p.text-grey" });
+    expect(description.parentElement).toContainElement(control);
+    expect(within(section).getByTestId("edge-action")).toBe(control);
+    // The words, then the glyph at the row toggle's size, centred in its 40 px width
+    // (one column with the toggles; one constant for both).
+    const glyph = within(control).getByTestId("edge-action-glyph");
+    expect(control.lastElementChild).toBe(glyph);
+    expect(glyph).toHaveClass("w-10");
+    expect(glyph).not.toHaveClass("h-10");
+    const toggle = within(section).getAllByRole("button", { name: /^(Add to|Remove from) shortlist$/ })[0];
+    expect(glyph.querySelector("svg")).toHaveAttribute("width", String(TOGGLE_GLYPH_SIZE));
+    expect(toggle.querySelector("svg")).toHaveAttribute("width", String(TOGGLE_GLYPH_SIZE));
+    await user.click(control);
+    // The theme holds an excluded option and an included one: only the included one is posted.
     expect(excludeMutate).toHaveBeenCalledTimes(1);
     expect(excludeMutate).toHaveBeenCalledWith(
-      { optionId: MOCK_OPTION_ID_NO_IN_SCOPE, reason: "Duplicates the mentoring pilot" },
+      { optionId: MOCK_OPTION_ID_NO_IN_SCOPE, reason: "with the theme Conditionality and support" },
+      expect.anything(),
+    );
+    expect(within(section).queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+
+  it("says which group went on each option it set aside", async () => {
+    const user = userEvent.setup();
+    renderLonglist();
+    const section = screen.getByRole("button", { name: /^A universal offer/ }).closest("section") as HTMLElement;
+    await user.click(within(section).getByRole("button", { name: "Exclude theme" }));
+    expect(excludeMutate).toHaveBeenCalledWith(
+      { optionId: MOCK_OPTION_ID_PACKAGE, reason: "with the theme A universal offer" },
       expect.anything(),
     );
   });
 
-  // Deviation 46 (owner, 2026-09-24): the reason is optional on the button too.
-  it("Exclude with a blank reason posts no reason", async () => {
+  // Round 13 (owner): an excluded theme shows as a group under Excluded,
+  // collapsible like an included group and shut by default, its description
+  // showing while shut; open, Include again its first line, then its rows
+  // reading "Excluded by you" alone; the single exclusions after it.
+  it("groups a theme excluded whole under Excluded as a collapsible group, before the single exclusions", async () => {
     const user = userEvent.setup();
-    renderLonglist();
-    const row = screen.getByText("School-based mentoring").closest("li") as HTMLElement;
-    await user.click(within(row).getByRole("button", { name: "Exclude" }));
-    await user.click(within(row).getByRole("button", { name: "Exclude" }));
-    expect(excludeMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_NO_IN_SCOPE }, expect.anything());
+    renderLonglist({}, (longlist) => {
+      const bundle = (longlist.options ?? []).find((option) => option.option_id === MOCK_OPTION_ID_PACKAGE);
+      if (bundle) {
+        bundle.state = "excluded";
+        bundle.exclusion = { by: "user", constraint: "your decision", reason: "with the theme A universal offer" };
+      }
+    });
+    // No longer a theme of its own on the list: only its group in Excluded.
+    const excluded = screen.getByRole("region", { name: "Excluded" });
+    for (const button of screen.getAllByRole("button", { name: /^A universal offer/ })) expect(excluded).toContainElement(button);
+    // A hairline sets Excluded apart from the groups above it.
+    expect(excluded).toHaveClass("border-t", "border-line", "mt-8", "pt-8");
+    const toggle = within(excluded).getByRole("button", { name: /^A universal offer/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle.closest("h3")).not.toBeNull();
+    expect(toggle).toHaveTextContent(/^A universal offer 1 optionShow$/);
+    const group = toggle.closest("section") as HTMLElement;
+    // Shut: the description shows, the rows and Include again do not.
+    expect(within(group).getByText("A single, non-conditional offer replacing today's patchwork.")).toHaveClass("text-grey");
+    expect(within(group).queryByText("Universal youth offer bundle")).not.toBeInTheDocument();
+    expect(within(group).queryByRole("button", { name: "Include theme again" })).not.toBeInTheDocument();
+    await user.click(toggle);
+    // The group's control says what it brings back; an option's stays "Include again".
+    const include = within(group).getByRole("button", { name: "Include theme again" });
+    expect(within(group).getAllByRole("button", { name: "Include again" }).length).toBeGreaterThan(0);
+    const firstRow = within(group).getAllByRole("listitem")[0];
+    expect(include.compareDocumentPosition(firstRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(group).getByText("Universal youth offer bundle")).toBeInTheDocument();
+    // The heading names the theme; the row does not repeat it.
+    expect(within(firstRow).getByText(/^Excluded by you/)).toHaveTextContent(/^Excluded by you$/);
+    // "Add a reason" is the option card's only (round 13, owner).
+    expect(within(excluded).queryByRole("button", { name: "Add a reason" })).not.toBeInTheDocument();
+    expect(within(firstRow).queryByText(/with the theme/)).not.toBeInTheDocument();
+    // The option excluded one by one lists after the group, under Options.
+    await user.click(within(excluded).getByRole("button", { name: /^Options \d/ }));
+    const single = within(excluded).getByText("National sanctions regime");
+    expect(group.compareDocumentPosition(single) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(group).not.toContainElement(single);
+    await user.click(include);
+    expect(includeMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_PACKAGE }, expect.anything());
   });
 
-  // F15: a refused exclude says why, next to its row.
-  it("shows the conflict sentence when an exclude is refused", async () => {
-    excludeMutate.mockImplementationOnce((_input, options: { onError: (error: unknown) => void }) =>
-      options.onError(Object.assign(new Error("busy"), { code: "run_active", status: 409 })),
-    );
+  // Round 13 (owner): one row for both states; an excluded row adds only its
+  // exclusion line, with Include again on the row.
+  it("gives an excluded row the included row's lines plus its exclusion line and Include again", async () => {
     const user = userEvent.setup();
     renderLonglist();
-    const row = screen.getByText("School-based mentoring").closest("li") as HTMLElement;
-    await user.click(within(row).getByRole("button", { name: "Exclude" }));
-    await user.click(within(row).getByRole("button", { name: "Exclude" }));
-    expect(within(row).getByRole("alert")).toHaveTextContent(/A run is already active/);
+    await user.click(screen.getByRole("button", { name: /^Options \d/ }));
+    const row = screen.getByText("National sanctions regime").closest("li") as HTMLElement;
+    // No theme on the grey line, as an included row under a theme.
+    expect(row).not.toHaveTextContent("Conditionality and support");
+    expect(within(row).getByText("6 documents")).toBeInTheDocument();
+    // Include again on the action column, the group's Exclude's form: words,
+    // then the undo glyph at the row toggle's size; not on the exclusion line.
+    const include = within(row).getByRole("button", { name: "Include again" });
+    expect(include).toHaveAttribute("data-testid", "edge-action");
+    expect(include.lastElementChild?.querySelector("svg")).toHaveAttribute("width", String(TOGGLE_GLYPH_SIZE));
+    expect(within(row).getByText(/^Excluded by you|^Breaks/)).not.toContainElement(include);
+    await user.click(include);
+    expect(includeMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_EXCLUDED }, expect.anything());
   });
 
-  // F15: nothing to exclude or include while a walk runs.
-  it("disables Exclude and Include again while a walk is active", async () => {
+  // Round 13 (owner): a reason given on the option card reads as text on
+  // the row's exclusion line; the row offers no form of its own.
+  it("shows a reason given on the card as text on the row, under the group's heading without its words", async () => {
     const user = userEvent.setup();
+    renderLonglist({}, (longlist) => {
+      const bundle = (longlist.options ?? []).find((option) => option.option_id === MOCK_OPTION_ID_PACKAGE);
+      if (bundle) {
+        bundle.state = "excluded";
+        bundle.exclusion = { by: "user", constraint: "your decision", reason: "with the theme A universal offer: Too costly" };
+      }
+    });
+    await user.click(screen.getByRole("button", { name: /^A universal offer/ }));
+    const row = screen.getByText("Universal youth offer bundle").closest("li") as HTMLElement;
+    expect(within(row).getByText(/^Excluded by you/)).toHaveTextContent(/^Excluded by you · Too costly$/);
+    expect(within(row).queryByRole("button", { name: "Add a reason" })).not.toBeInTheDocument();
+    expect(within(row).queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("disables a group's Exclude while a walk is active", () => {
     renderLonglist({ active_run: { capability_run_id: "run-1", status: "running", started_at: "now" } });
-    const row = screen.getByText("School-based mentoring").closest("li") as HTMLElement;
-    expect(within(row).getByRole("button", { name: "Exclude" })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: /^Excluded/ }));
-    const excludedRow = screen.getByText("National sanctions regime").closest("li") as HTMLElement;
-    expect(within(excludedRow).getByRole("button", { name: "Include again" })).toBeDisabled();
+    const section = screen.getByRole("button", { name: /^Conditionality and support/ }).closest("section") as HTMLElement;
+    expect(within(section).getByRole("button", { name: "Exclude theme" })).toBeDisabled();
   });
+
+  it("offers nothing on a shut group", () => {
+    renderClosedLonglist();
+    const section = screen.getByRole("button", { name: /^Conditionality and support/ }).closest("section") as HTMLElement;
+    expect(within(section).queryByRole("button", { name: /Exclude|Include( theme| lever)? again/ })).not.toBeInTheDocument();
+  });
+
 
   // Round 10 (finding 6): the meta line is whole fields, the middot bound
   // to the field before it, so no wrapped line starts with one; the
@@ -388,16 +548,6 @@ describe("LonglistView", () => {
     for (const field of fields.slice(0, -1)) expect(field.textContent).toMatch(/ ·,$/);
     expect(fields[fields.length - 1].textContent).toBe("No in-scope evidence");
     expect(row.querySelector("[class*='text-[11.5px]']")).toBeNull();
-  });
-
-  it("Include again posts once for an excluded option", async () => {
-    const user = userEvent.setup();
-    renderLonglist();
-    await user.click(screen.getByRole("button", { name: /^Excluded/ }));
-    const row = screen.getByText("National sanctions regime").closest("li") as HTMLElement;
-    await user.click(within(row).getByRole("button", { name: "Include again" }));
-    expect(includeMutate).toHaveBeenCalledTimes(1);
-    expect(includeMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_EXCLUDED }, expect.anything());
   });
 
   it("Add an option posts once and is disabled while a walk is active", async () => {
@@ -420,7 +570,7 @@ describe("LonglistView", () => {
     const user = userEvent.setup();
     renderLonglist();
     await user.click(screen.getByRole("button", { name: "Grid" }));
-    expect(screen.getByRole("columnheader", { name: "Smaller" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /^Smaller/ })).toBeInTheDocument();
     expect(screen.queryByText("Conditionality and support")).not.toBeInTheDocument();
     expect(screen.queryByText("National sanctions regime")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Show excluded/ }));
@@ -434,13 +584,13 @@ describe("LonglistView — the view switches (round 10, findings 3 and 13)", () 
     renderLonglist();
     const groupBy = within(screen.getByRole("group", { name: "Group by" }));
     expect(groupBy.getByRole("button", { name: "Theme" })).toHaveAttribute("aria-pressed", "true");
-    expect(groupBy.getByRole("button", { name: "Lever type" })).toHaveAttribute("aria-pressed", "false");
-    for (const button of [...groupBy.getAllByRole("button"), ...within(screen.getByRole("group", { name: "View" })).getAllByRole("button")]) {
+    expect(groupBy.getByRole("button", { name: "Lever" })).toHaveAttribute("aria-pressed", "false");
+    for (const button of [...groupBy.getAllByRole("button"), ...within(screen.getByRole("group", { name: "View as" })).getAllByRole("button")]) {
       expect(button.className).toContain("border");
       expect(button.className).not.toMatch(/bg-blue/);
     }
-    await user.click(groupBy.getByRole("button", { name: "Lever type" }));
-    expect(groupBy.getByRole("button", { name: "Lever type" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(groupBy.getByRole("button", { name: "Lever" }));
+    expect(groupBy.getByRole("button", { name: "Lever" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("offers no grid on a phone", () => {
@@ -453,7 +603,7 @@ describe("LonglistView — the view switches (round 10, findings 3 and 13)", () 
     })) as unknown as typeof window.matchMedia;
     try {
       renderLonglist();
-      expect(screen.queryByRole("group", { name: "View" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("group", { name: "View as" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Grid" })).not.toBeInTheDocument();
       expect(screen.getByRole("group", { name: "Group by" })).toBeInTheDocument();
     } finally {
@@ -467,7 +617,7 @@ describe("LonglistView — the shortlist toggle on rows (task 055; round 10, fin
     const user = userEvent.setup();
     renderLonglist();
     const held = within(screen.getByText("Universal youth offer bundle").closest("li") as HTMLElement).getByRole("button", {
-      name: "Shortlisted",
+      name: "Remove from shortlist",
     });
     expect(held).toHaveAttribute("aria-pressed", "true");
     const open = within(screen.getByText("School-based mentoring").closest("li") as HTMLElement).getByRole("button", {
@@ -491,13 +641,15 @@ describe("LonglistView — the shortlist toggle on rows (task 055; round 10, fin
     expect(groups.length).toBeGreaterThan(0);
     for (const group of groups) {
       const held = Array.from(group.children).map(
-        (row) => within(row as HTMLElement).queryByRole("button", { name: "Shortlisted" }) !== null,
+        (row) => within(row as HTMLElement).queryByRole("button", { name: "Remove from shortlist" }) !== null,
       );
       expect(held).toEqual([...held].sort((a, b) => Number(b) - Number(a)));
     }
   });
 
-  it("moves a row to the head of its group when it is shortlisted, through the regroup's View Transition", () => {
+  // Round 13 (owner): a shortlist toggle updates in place; only a regroup
+  // runs the View Transition (it glitched over the header).
+  it("moves a row to the head of its group when it is shortlisted, in place with no View Transition", () => {
     const start = vi.fn((update: () => void) => {
       update();
       return { finished: Promise.resolve() };
@@ -535,8 +687,29 @@ describe("LonglistView — the shortlist toggle on rows (task 055; round 10, fin
           </MemoryRouter>
         </PublicViewProvider>,
       );
-      expect(start).toHaveBeenCalledTimes(1);
+      expect(start).not.toHaveBeenCalled();
       expect(names()).toEqual([last, ...before.slice(0, -1)]);
+      // A whole theme excluded is a regroup: it moves.
+      const regrouped = mockLonglist();
+      twoInATheme(regrouped);
+      const theme = (regrouped.themes ?? [])[0];
+      for (const option of regrouped.options ?? []) {
+        if ((theme.option_ids ?? []).includes(option.option_id)) {
+          option.state = "excluded";
+          option.exclusion = { by: "user", constraint: "your decision", reason: `with the theme ${theme.name}` };
+        }
+      }
+      vi.mocked(queries.useLonglist).mockReturnValue({ data: regrouped } as unknown as ReturnType<typeof queries.useLonglist>);
+      rerender(
+        <PublicViewProvider value={false}>
+          <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/result`]}>
+            <Routes>
+              <Route path="/tasks/:taskId/result" element={<LonglistView taskId={TASK_ID} longlist={regrouped} />} />
+            </Routes>
+          </MemoryRouter>
+        </PublicViewProvider>,
+      );
+      expect(start).toHaveBeenCalledTimes(1);
     } finally {
       Reflect.deleteProperty(document, "startViewTransition");
     }
@@ -548,11 +721,10 @@ describe("LonglistView — the shortlist toggle on rows (task 055; round 10, fin
     publicLink = true;
     const user = userEvent.setup();
     renderLonglist();
-    await user.click(screen.getByRole("button", { name: /^Excluded/ }));
-    expect(screen.queryByRole("button", { name: /shortlist/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Options \d/ }));
+    expect(screen.queryByRole("button", { name: /^(Add to|Remove from) shortlist$/ })).not.toBeInTheDocument();
     expect(screen.getAllByText("Shortlisted").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: "Exclude" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Include again" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^(Exclude|Include again)$/ })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Add an option")).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Group by" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Hide all" })).toBeInTheDocument();
@@ -560,6 +732,6 @@ describe("LonglistView — the shortlist toggle on rows (task 055; round 10, fin
 
   it("disables every toggle while a walk runs", () => {
     renderLonglist({ active_run: { capability_run_id: "x", status: "running", started_at: "2026-10-27T00:00:00Z" } });
-    for (const button of screen.getAllByRole("button", { name: /shortlist/i })) expect(button).toBeDisabled();
+    for (const button of screen.getAllByRole("button", { name: /^(Add to|Remove from) shortlist$/ })) expect(button).toBeDisabled();
   });
 });

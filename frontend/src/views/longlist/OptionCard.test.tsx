@@ -15,6 +15,7 @@ import { PublicViewProvider } from "../publicView";
 import * as presentation from "./longlistPresentation";
 import * as queries from "../../api/queries";
 import * as mutations from "../../api/mutations";
+import { TOGGLE_GLYPH_SIZE } from "./optionActions";
 
 vi.mock("../../api/queries", () => ({
   useTask: vi.fn(),
@@ -97,6 +98,12 @@ function renderCard(optionId: string, overrides: Record<string, unknown> = {}) {
   );
 }
 
+/** Presses the option card's Exclude or Include again (round 13: a quiet
+ *  text control on the card only). */
+async function chooseFromOptionMenu(user: ReturnType<typeof userEvent.setup>, scope: HTMLElement, item: string) {
+  await user.click(within(scope).getByRole("button", { name: item }));
+}
+
 /** Whether the next render sits in the public link's view (round 12). */
 let publicLink = false;
 
@@ -121,12 +128,20 @@ describe("OptionCard — shortlist (task 055)", () => {
 
 
 
-  // Round 10 (finding 6): the state is a toggle in words, pressed on a place.
-  it("shows Shortlisted, pressed, on a place, and pressing it gives the place up", async () => {
+  // Round 13 (owner): on the card both controls take one form, the glyph
+  // then the words in the quiet style, side by side, at one glyph size.
+  it("shows Shortlisted beside the filled check, pressed, beside Exclude, and pressing it gives the place up", async () => {
     const user = userEvent.setup();
     renderCard(MOCK_OPTION_ID_ADDED_BY_YOU);
     const toggle = screen.getByRole("button", { name: "Shortlisted" });
     expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(toggle.firstElementChild?.tagName.toLowerCase()).toBe("svg");
+    expect(toggle.querySelector("circle")).toHaveAttribute("fill", "currentColor");
+    const exclude = screen.getByRole("button", { name: "Exclude" });
+    expect(exclude.firstElementChild?.tagName.toLowerCase()).toBe("svg");
+    expect(toggle.parentElement).toBe(exclude.parentElement);
+    expect(toggle.querySelector("svg")).toHaveAttribute("width", String(TOGGLE_GLYPH_SIZE));
+    expect(exclude.querySelector("svg")).toHaveAttribute("width", String(TOGGLE_GLYPH_SIZE));
     await user.click(toggle);
     expect(unshortlistMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_ADDED_BY_YOU }, expect.anything());
   });
@@ -142,7 +157,7 @@ describe("OptionCard — shortlist (task 055)", () => {
 
   it("offers no shortlist action on an excluded option", () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED);
-    expect(screen.queryByRole("button", { name: /shortlist/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^(Add to|Remove from) shortlist$/ })).not.toBeInTheDocument();
   });
 });
 
@@ -299,23 +314,35 @@ describe("OptionCard", () => {
     expect(screen.queryByText(/how sure/i)).not.toBeInTheDocument();
   });
 
-  it("Exclude asks for a reason and posts once", async () => {
+  // Round 13 (owner): Exclude acts at once; "Add a reason" follows.
+  it("excludes at once, with no reason asked first", async () => {
     const user = userEvent.setup();
     renderCard(MOCK_OPTION_ID_NO_IN_SCOPE);
-    await user.click(screen.getByRole("button", { name: "Exclude" }));
-    await user.type(screen.getByPlaceholderText("Why exclude this option?"), "Duplicates another option");
-    await user.click(screen.getByRole("button", { name: "Exclude" }));
+    await chooseFromOptionMenu(user, document.body, "Exclude");
     expect(excludeMutate).toHaveBeenCalledTimes(1);
+    expect(excludeMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_NO_IN_SCOPE }, expect.anything());
+    expect(screen.queryByPlaceholderText("Why exclude this option?")).not.toBeInTheDocument();
+  });
+
+  it("offers Add a reason after the reader's own exclusion, saving it through the exclusion route", async () => {
+    const user = userEvent.setup();
+    renderCard(MOCK_OPTION_ID_EXCLUDED, {
+      exclusion: { by: "user", constraint: "your decision", reason: "with the theme Conditionality and support" },
+    });
+    await user.click(screen.getByRole("button", { name: "Add a reason" }));
+    await user.type(screen.getByRole("textbox", { name: "Why exclude this option?" }), "Too costly");
+    await user.click(screen.getByRole("button", { name: "Save" }));
     expect(excludeMutate).toHaveBeenCalledWith(
-      { optionId: MOCK_OPTION_ID_NO_IN_SCOPE, reason: "Duplicates another option" },
+      { optionId: MOCK_OPTION_ID_EXCLUDED, reason: "with the theme Conditionality and support: Too costly" },
       expect.anything(),
     );
   });
 
+
   it("shows Include again for an excluded option", async () => {
     const user = userEvent.setup();
     renderCard(MOCK_OPTION_ID_EXCLUDED);
-    await user.click(screen.getByRole("button", { name: "Include again" }));
+    await chooseFromOptionMenu(user, document.body, "Include again");
     expect(includeMutate).toHaveBeenCalledTimes(1);
     expect(includeMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_EXCLUDED }, expect.anything());
   });
@@ -369,7 +396,7 @@ describe("OptionCard", () => {
     expect(within(section).getAllByRole("listitem")[0]).toHaveTextContent(/^Average ambition$/);
   });
 
-  it("shows a table after a click on the heading, Ambition first, then the nine lines", async () => {
+  it("shows a table after a click on the heading: ambition, potential impact, the compared lines, then the rest", async () => {
     const user = userEvent.setup();
     renderCard(MOCK_OPTION_ID_EXCLUDED);
     await user.click(screen.getByRole("button", { name: /What it could take/ }));
@@ -379,21 +406,28 @@ describe("OptionCard", () => {
     expect(within(rows[0]).getByRole("rowheader")).toHaveTextContent("Ambition");
     expect(rows[0]).toHaveTextContent("Bigger");
     expect(rows[0]).toHaveTextContent("Changes who is entitled to a national benefit");
+    // Round 13 (owner): ambition, potential impact, the lines that compare,
+    // then those that do not.
     expect(rows.slice(1).map((row) => within(row).getByRole("rowheader").textContent)).toEqual([
+      "Potential impact",
       "Cost",
       "Time to set up",
       "Time to effect",
       "Workforce requirements",
-      "Who decides",
-      "Dependencies",
       "Coordination requirements",
       "Delivery complexity",
-      "Potential impact",
+      "Who decides",
+      "Dependencies",
     ]);
-    expect(rows[9]).toHaveTextContent("Moderate if it works");
-    expect(rows[9]).toHaveTextContent("Higher");
-    expect(rows[1]).toHaveTextContent("Cheaper");
-    expect(rows[2]).toHaveTextContent("Middle");
+    expect(rows[1]).toHaveTextContent("Moderate if it works");
+    expect(rows[1]).toHaveTextContent("Higher");
+    expect(rows[2]).toHaveTextContent("Cheaper");
+    expect(rows[3]).toHaveTextContent("Middle");
+    // The name and the mark at the block's size, the name in Grey.
+    const name = within(rows[2]).getByRole("rowheader");
+    expect(name).toHaveClass("text-grey");
+    expect(name.className).not.toMatch(/\btext-(meta|caption|body)\b/);
+    expect(within(rows[2]).getByText("Cheaper").className).not.toMatch(/\btext-(meta|caption|body)\b/);
     expect(within(section).getByText("Costs are mostly staff time; no capital spend is reported.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /What it could take/ })).not.toHaveTextContent("Policy Atlas's estimate");
   });
@@ -551,16 +585,19 @@ describe("OptionCard", () => {
     const table = within(section).getByRole("table", { name: "Your target and outcomes" });
     const rows = within(table).getAllByRole("row");
     expect(rows.map((row) => row.textContent)).toEqual([
-      "NEET rate at 6 monthsMeasured in 2 · discussed in 1",
+      "NEET rate at 6 monthsMeasured in 2Discussed in 1",
       "WellbeingNot covered",
     ]);
-    expect(within(rows[1]).getByText("Not covered")).toHaveClass("text-grey");
+    expect(within(rows[1]).getByText("Not covered").closest("td")).toHaveClass("text-grey");
     // The table takes the block's reading size, as the places list (round 12, owner).
     expect(table.className).not.toMatch(/text-(body|meta|lead|caption)/);
-    expect(within(rows[0]).getByText("Measured in 2 · discussed in 1")).toHaveClass("text-right");
+    // One line each (round 13, owner).
+    expect(within(rows[0]).getByText("Measured in 2")).toHaveClass("block");
+    expect(within(rows[0]).getByText("Discussed in 1")).toHaveClass("block");
     const places = within(section).getByRole("heading", { level: 3, name: "Where it has been evaluated" });
     const toggle = within(section).getByRole("button", { name: /^Show \d+ documents/ });
-    expect(places.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Round 13 (owner): first in Evidence, above where it has been evaluated.
+    expect(heading.compareDocumentPosition(places) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(heading.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -803,15 +840,18 @@ describe("OptionCard", () => {
   });
 
   // Round 12: the reference in the References form, as the report's list.
-  it("reads a document's reference as authors, year, the title as the link, then the venue", async () => {
+  // Round 13 (owner): no authors; the title first, the year in brackets
+  // after it, then the venue; the title as the report's References show it.
+  it("reads a document's reference as the title, its year, then the venue, with no authors", async () => {
     renderCard(MOCK_OPTION_ID_EXCLUDED, {
       documents: [doc(1, "evaluated", { authors: ["Sampleton, A.", "Mockford, C."], venue: "Journal of Youth Policy" })],
     });
     await openDocuments();
     const title = screen.getByRole("link", { name: "Paper 1" });
     const reference = title.closest("p") as HTMLElement;
-    expect(reference.textContent).toMatch(/^.+\(2021\)\. Paper 1\. Journal of Youth Policy\.$/);
-    expect(reference.textContent?.indexOf("(2021)")).toBeLessThan(reference.textContent?.indexOf("Paper 1") ?? 0);
+    expect(reference.textContent).toBe("Paper 1 (2021). Journal of Youth Policy.");
+    expect(reference).not.toHaveTextContent(/Sampleton/);
+    expect(title).toHaveClass("text-navy", "decoration-line-2", "hover:decoration-navy");
     expect(within(reference).getByText("Journal of Youth Policy.")).toHaveClass("text-grey");
   });
 
@@ -890,9 +930,8 @@ describe("OptionCard", () => {
     publicLink = true;
     const user = userEvent.setup();
     renderCard(MOCK_OPTION_ID_ADDED_BY_YOU, { document_count: 1, evaluated_count: 1, documents: [doc(1, "evaluated")] });
-    expect(screen.queryByRole("button", { name: /shortlist/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Exclude" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Include again" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^(Add to|Remove from) shortlist$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^(Exclude|Include again)$/ })).not.toBeInTheDocument();
     await openDocuments();
     await user.click(screen.getByRole("link", { name: "Paper 1" }));
     expect(screen.getByRole("dialog", { name: "Source dossier" })).toBeInTheDocument();

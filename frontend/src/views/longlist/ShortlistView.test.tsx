@@ -151,7 +151,7 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     expect(screen.queryByText(/4 observational/)).not.toBeInTheDocument();
     expect(screen.getByText(/Proposed, not yet implemented/)).toBeInTheDocument();
     // Round 10 (finding 6): each place's toggle says Shortlisted, pressed.
-    const toggles = screen.getAllByRole("button", { name: "Shortlisted" });
+    const toggles = screen.getAllByRole("button", { name: "Remove from shortlist" });
     expect(toggles).toHaveLength(2);
     for (const toggle of toggles) expect(toggle).toHaveAttribute("aria-pressed", "true");
   });
@@ -169,7 +169,7 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
   it("calls Remove from shortlist for a place", async () => {
     const user = await openShortlist();
     const row = screen.getByRole("link", { name: "Universal youth offer bundle" }).closest("li") as HTMLElement;
-    await user.click(within(row).getByRole("button", { name: "Shortlisted" }));
+    await user.click(within(row).getByRole("button", { name: "Remove from shortlist" }));
     expect(unshortlistMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_PACKAGE }, expect.anything());
   });
 
@@ -179,7 +179,7 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     await openShortlist();
     expect(screen.queryByRole("combobox", { name: "Risk appetite" })).not.toBeInTheDocument();
     expect(screen.getByText(RISK_APPETITE_LABELS.mostly_tried)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /shortlist/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^(Add to|Remove from) shortlist$/ })).not.toBeInTheDocument();
     expect(screen.getAllByText("Shortlisted").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Suggest more" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Add more from the longlist" })).not.toBeInTheDocument();

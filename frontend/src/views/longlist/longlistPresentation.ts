@@ -63,6 +63,24 @@ export function constraintLabel(text: string): string {
   return text.trim().replace(/[.。]+$/, "");
 }
 
+/**
+ * The reason a group's Exclude records on each of its options (round 13,
+ * owner): "with the theme <name>" or "with the lever <name>", the reader's
+ * own words after a colon when they give some.
+ *
+ * Args:
+ *   kind: The grouping, "theme" or "lever".
+ *   name: The group's name as its heading shows it.
+ *   words: The reader's reason, if any.
+ *
+ * Returns:
+ *   The reason to record.
+ */
+export function groupExclusionReason(kind: "theme" | "lever", name: string, words: string): string {
+  const base = `with the ${kind} ${name.trim()}`;
+  return words.trim() === "" ? base : `${base}: ${words.trim()}`;
+}
+
 type ExclusionOut = components["schemas"]["ExclusionOut"];
 type OptionDocumentOut = components["schemas"]["OptionDocumentOut"];
 
@@ -82,7 +100,7 @@ export function exclusionLine(exclusion: Pick<ExclusionOut, "by" | "constraint" 
   const reason = (exclusion.reason ?? "").trim();
   const constraint = constraintLabel(exclusion.constraint ?? "");
   const byYou = exclusion.by === "user" || fold(constraint) === "your decision";
-  const head = byYou ? "Set aside by you" : constraint !== "" ? `Breaks "${constraint}"` : "";
+  const head = byYou ? "Excluded by you" : constraint !== "" ? `Breaks "${constraint}"` : "";
   return [head, reason].filter((part) => part !== "").join(" · ");
 }
 
@@ -126,7 +144,9 @@ export function rowMetaFields(option: OptionSummaryOut, lever: string | null, th
   if (lever !== null) fields.push(lever);
   if (theme !== null) fields.push(theme);
   if (option.search_pending) fields.push("searching for its evidence…");
-  else fields.push(evidenceSignal(option).split(" · ")[0]);
+  // The count alone on the list (round 13, owner: no evaluated / describe
+  // split on the page); the card keeps the split.
+  else fields.push(option.document_count === 0 ? "No documents yet" : countOf(option.document_count, "document", "documents"));
   if (option.no_in_scope_evidence) fields.push(NO_IN_SCOPE_WORDS);
   return fields;
 }
@@ -167,6 +187,10 @@ export function instrumentsSummary(
   return joinAnd(ordered.map(leverNoun));
 }
 
+/** The group of options no lever type names (round 13, owner: "Other",
+ *  not "No lever fits"), sorted last. */
+export const OTHER_LEVER = "Other";
+
 /** Sort key: taxonomy position of the primary lever (none fits last), then name. */
 export function byLeverThenName(leverTypes: readonly string[]) {
   return (a: OptionSummaryOut, b: OptionSummaryOut): number => {
@@ -182,7 +206,7 @@ export function byLeverThenName(leverTypes: readonly string[]) {
 /** A row's lever, as the first thing after its name: "Provide a service".
  *  A row carries no mark and no ambition word (R40, R44). */
 export function leverLabel(option: OptionSummaryOut): string {
-  return option.primary_lever_type == null ? "No lever fits" : capitalise(option.primary_lever_type);
+  return option.primary_lever_type == null ? OTHER_LEVER : capitalise(option.primary_lever_type);
 }
 
 /** A taxonomy definition as a heading's line: capitalised, one full stop. */
@@ -199,11 +223,11 @@ export function themeSummary(description: string): string {
 
 /** The lever line on the option card (task 046, amendment 3, § 2.5): "Lever:
  *  Subsidise, with Regulate and Provide a service." — the primary type and the
- *  secondary types, or "Lever: none fits." when no type fits. The reason is a
+ *  secondary types, or "Lever: other." when no type fits (round 13, owner). The reason is a
  *  separate sentence under it. */
 export function leverLine(primary: string | null | undefined, secondary: string[] | undefined): string {
   // One sentence with the lever nouns (round 12, owner): "Lever: regulation."
-  if (primary == null) return "Lever: none fits.";
+  if (primary == null) return "Lever: other.";
   const also = (secondary ?? []).map(leverNoun);
   return also.length > 0 ? `Lever: ${leverNoun(primary)}, with ${joinAnd(also)}.` : `Lever: ${leverNoun(primary)}.`;
 }
@@ -487,14 +511,14 @@ export function outcomeCoverage(
   });
 }
 
-/** An outcome's coverage in words: "Measured in 2 · discussed in 1", a part
- *  with none left out, or "Not covered". */
-export function outcomeCoverageWords({ measured, discussed }: Pick<OutcomeCoverage, "measured" | "discussed">): string {
-  const parts = [
+/** An outcome's coverage as lines (round 13, owner): "Measured in 2" over
+ *  "Discussed in 1", a line with none left out, or "Not covered". */
+export function outcomeCoverageLines({ measured, discussed }: Pick<OutcomeCoverage, "measured" | "discussed">): string[] {
+  const lines = [
     ...(measured > 0 ? [`Measured in ${measured}`] : []),
-    ...(discussed > 0 ? [`${measured > 0 ? "discussed" : "Discussed"} in ${discussed}`] : []),
+    ...(discussed > 0 ? [`Discussed in ${discussed}`] : []),
   ];
-  return parts.length > 0 ? parts.join(" · ") : "Not covered";
+  return lines.length > 0 ? lines : ["Not covered"];
 }
 
 /** The plan's target in the option's documents (round 12, owner). */
@@ -570,6 +594,46 @@ export function seeInSourcesWords(count: number): string {
   return count === 1 ? "See this document in Sources" : `See these ${count} documents in Sources`;
 }
 
+/** A group's count in its heading (round 13, owner): "12 options", then
+ *  " · 3 shortlisted" when any of its options holds a place. */
+export function groupCountWords(total: number, shortlisted: number): string {
+  const head = countOf(total, "option", "options");
+  return shortlisted > 0 ? `${head} · ${shortlisted} shortlisted` : head;
+}
+
+/** Exclude's words, short enough for a control; the tooltip carries the
+ *  meaning (round 13, owner). */
+export const EXCLUDE_FROM_SHORTLISTING = "Exclude";
+export const EXCLUDE_GROUP_FROM_SHORTLISTING = {
+  theme: "Exclude theme",
+  lever: "Exclude lever",
+} as const;
+/** An excluded group's control; an option's stays "Include again" (round 13, owner). */
+export const INCLUDE_GROUP_AGAIN = {
+  theme: "Include theme again",
+  lever: "Include lever again",
+} as const;
+/** The group's tooltip. */
+export const EXCLUDE_TOOLTIP =
+  "Excludes these options from being shortlisted. They stay on the longlist under Excluded.";
+/** The card's tooltip. */
+export const EXCLUDE_OPTION_TOOLTIP =
+  "Excludes this option from being shortlisted. It stays on the longlist under Excluded.";
+
+/** The heading for the lever types no option uses (round 13, owner). */
+export const NO_OPTIONS_FOR = "No options found for";
+
+/** The lever types with no included option, in the taxonomy's order (round
+ *  13, owner: shown prominently in both views). */
+export function uncoveredLevers(
+  leverTypes: readonly string[],
+  options: readonly Pick<OptionSummaryOut, "state" | "primary_lever_type">[],
+): string[] {
+  return leverTypes.filter(
+    (lever) => !options.some((option) => option.state !== "excluded" && option.primary_lever_type === lever),
+  );
+}
+
 /** The documents disclosure's words (round 12, owner): closed, the count
  *  and its groups, "Show 6 documents · 2 evaluated it · 4 describe it" (a
  *  group with none left out); open, "Hide documents". */
@@ -586,8 +650,8 @@ export function documentsToggleWords(open: boolean, evaluated: number, describin
  *  for both directions, the word itself saying which way ("Quicker",
  *  "Higher"), after a 6 px Navy square; no tint, so no colour reads as good
  *  or bad. A line with no mark reads "Middle" in Grey. */
-export const LEVEL_MARKED_CLASS = "inline-flex items-center gap-1.5 text-meta font-semibold text-navy";
-export const LEVEL_MIDDLE_CLASS = "text-meta font-semibold text-grey";
+export const LEVEL_MARKED_CLASS = "inline-flex items-center gap-1.5 font-semibold text-navy";
+export const LEVEL_MIDDLE_CLASS = "font-semibold text-grey";
 
 /** The collapsed profile's summary of its unmarked lines (round 10): "Middle
  *  on 6 of 8" once, rather than "Middle" in six cells; "No line stands out"
@@ -748,7 +812,7 @@ export function deliveredLeadInParts(
 /** The lever sentence as runs, the lever nouns strong (round 12, owner):
  *  "Lever: **regulation**, with **services**." */
 export function leverLineParts(primary: string | null | undefined, secondary: string[] | undefined): SentencePart[] {
-  if (primary == null) return [{ text: "Lever: none fits.", strong: false }];
+  if (primary == null) return [{ text: "Lever: ", strong: false }, { text: "other", strong: true }, { text: ".", strong: false }];
   const also = (secondary ?? []).map(leverNoun);
   return [
     { text: "Lever: ", strong: false },

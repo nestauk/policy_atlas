@@ -1,7 +1,7 @@
 import { useFindings, useSourceDossier } from "../../api/queries";
 import { scrub } from "../../lib/scrub";
 import { Sheet, SheetContent } from "../../ui/radix/Sheet";
-import { SourceDossierBody, useDossierRecords } from "../SourcesView";
+import { DOSSIER_LOADING_LINE, SourceDossierBody, useDossierRecords } from "../SourcesView";
 
 /**
  * A document's dossier over the option card (round 12, owner bug: a
@@ -39,7 +39,7 @@ export function OptionDossier({
       <SheetContent title={dossier.data ? scrub(dossier.data.title) : "Source dossier"}>
         {dossier.isPending && (
           <p role="status" className="anim-breathe-soft text-body text-grey">
-            Loading the dossier…
+            {DOSSIER_LOADING_LINE}
           </p>
         )}
         {dossier.isError && (

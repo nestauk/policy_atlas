@@ -8,7 +8,8 @@ import { useTask } from "../../api/queries";
 import { SECTION_EXPAND_LINK_CLASS } from "../ArtefactOutline";
 import { isRunActive } from "../scopingActivity";
 import { Select } from "../../ui/brand/Select";
-import { ShortlistToggle, useOptionActions } from "./optionActions";
+import { ShortlistToggle, useOptionActions, WithTooltip } from "./optionActions";
+import { ExcludeIcon } from "../../ui/brand/icons";
 import {
   GRID_COLUMN_LINES,
   LEVEL_WORDS,
@@ -17,10 +18,14 @@ import {
   NO_IN_SCOPE_WORDS,
   capitalise,
   holdsPlace,
-  joinAnd,
+  NO_OPTIONS_FOR,
+  OTHER_LEVER,
   shortlistedFirst,
+  exclusionLine,
 } from "./longlistPresentation";
 import { useRegroupTransition } from "./regroupTransition";
+import { GroupHeading } from "./GroupHeading";
+import { LABEL_CLASS } from "../../ui/brand/label";
 
 type LonglistOut = components["schemas"]["LonglistOut"];
 type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
@@ -28,18 +33,21 @@ type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
 type GridLine = (typeof GRID_COLUMN_LINES)[number];
 
 const NONE_FITS_KEY = "__none_fits__";
+/** The tile's corner glyph: the shortlist check, or an excluded tile's mark. */
+const GRID_TOGGLE_GLYPH = 24;
 const UNTAGGED_KEY = "__untagged__";
 const MIDDLE_KEY = "__middle__";
 
-const HEADER_CELL_CLASS =
-  "border-b border-navy px-3 py-2 text-meta font-semibold text-navy";
+/** A column head's cell; the words take the list's group heading
+ *  (`GroupHeading`, round 13, owner). */
+const HEADER_CELL_CLASS = "border-b border-navy px-3 py-2 align-bottom font-normal";
 
 /** A cell shows this many options before folding the rest behind "+N more". */
 const CELL_LIMIT = 4;
 
 /**
  * The reduced grid (D12, contract deliverable 9): rows the lever types in
- * taxonomy order plus "None fits", columns the chosen line's `less` word,
+ * taxonomy order plus "Other", columns the chosen line's `less` word,
  * "Middle", `more` word and "Untagged" (R41) — tiles that open the option and carry its excluded/
  * no-in-scope-evidence states in words. The lever types with no option are
  * one Grey line under the table, "No options: Subsidise, Tax or charge and
@@ -48,15 +56,21 @@ const CELL_LIMIT = 4;
  * each tile on the name's line (task 055; round 10, finding 6). Offered from
  * `md` up only: the list view hides the switch on a phone.
  */
+export type { GridLine };
 export function LonglistGrid({
   taskId,
   longlist,
   showExcluded,
+  line: controlledLine,
 }: {
   taskId: string;
   longlist: LonglistOut;
   /** Excluded options stay out of the grid unless the reader asks. */
   showExcluded: boolean;
+  /** The chosen line, when the page's controls row holds the Columns
+   *  choice (round 13, owner); the grid then draws neither that choice nor
+   *  the line of levers with no option, which the page shows instead. */
+  line?: GridLine;
 }) {
   const task = useTask(taskId);
   const actions = useOptionActions(taskId, isRunActive(task.data));
@@ -64,12 +78,12 @@ export function LonglistGrid({
     () => (longlist.options ?? []).filter((option) => showExcluded || option.state !== "excluded"),
     [longlist.options, showExcluded],
   );
-  // A toggle that moves a tile to the head of its cell moves it (round 12):
-  // the signature is each option's place on the shortlist and its state.
-  const options = useRegroupTransition(
-    listed,
-    listed.map((option) => `${option.option_id}:${holdsPlace(option) ? 1 : 0}:${option.state}`).join(","),
-  );
+  const [ownLine, setLine] = useState<GridLine>("ambition");
+  const wantedLine = controlledLine ?? ownLine;
+  // Only a new Columns line moves the tiles (round 13, owner): a shortlist
+  // toggle, Show excluded or Include again updates in place.
+  const regrouped = useMemo(() => ({ listed, line: wantedLine }), [listed, wantedLine]);
+  const { listed: options, line } = useRegroupTransition(regrouped, wantedLine);
   const [openCells, setOpenCells] = useState<Set<string>>(new Set());
   const toggleCell = (key: string) =>
     setOpenCells((current) => {
@@ -78,7 +92,7 @@ export function LonglistGrid({
       else next.add(key);
       return next;
     });
-  const [line, setLine] = useState<GridLine>("ambition");
+  const pageOwnsControls = controlledLine !== undefined;
   const leverTypes = longlist.lever_types ?? [];
 
   const hasNoneFits = options.some(
@@ -91,6 +105,8 @@ export function LonglistGrid({
       leverKey === NONE_FITS_KEY ? option.primary_lever_type == null : option.primary_lever_type === leverKey,
     );
   const rows = [...leverTypes, ...(hasNoneFits ? [NONE_FITS_KEY] : [])].filter(leverHas);
+  // The lever types no option in the grid uses, listed under it (round
+  // 13, owner); never "Other".
   const emptyLevers = leverTypes.filter((lever) => !leverHas(lever)).map(capitalise);
   const columns: { key: string; label: string }[] = [
     { key: "less", label: LEVEL_WORDS[line].less ?? "" },
@@ -128,6 +144,7 @@ export function LonglistGrid({
 
   return (
     <div>
+      {!pageOwnsControls && (
       <div className="print-hide mb-4 flex items-center gap-3">
         <label
           htmlFor="longlist-grid-columns"
@@ -144,16 +161,17 @@ export function LonglistGrid({
           className="w-64"
         />
       </div>
+      )}
       <div className="-mx-6 overflow-x-auto px-6">
         <table className="w-full min-w-[640px] table-fixed border-collapse text-left">
           <thead>
             <tr>
               <th scope="col" className={cn(HEADER_CELL_CLASS, "w-44 pl-0")}>
-                Lever type
+                <GroupHeading title="Lever" count="" />
               </th>
               {columns.map((column) => (
                 <th key={column.key} scope="col" className={HEADER_CELL_CLASS}>
-                  {scrub(column.label)}
+                  <GroupHeading title={column.label} count="" />
                 </th>
               ))}
             </tr>
@@ -161,17 +179,14 @@ export function LonglistGrid({
           <tbody>
             {rows.map((leverKey) => {
               const rowLabel =
-                leverKey === NONE_FITS_KEY ? "None fits" : capitalise(leverKey);
+                leverKey === NONE_FITS_KEY ? OTHER_LEVER : capitalise(leverKey);
               return (
                 <tr
                   key={leverKey}
                   className="border-b border-line align-top last:border-b-0"
                 >
-                  <th
-                    scope="row"
-                    className="py-3 pl-0 pr-3 text-meta font-semibold text-navy"
-                  >
-                    {scrub(rowLabel)}
+                  <th scope="row" className="py-3 pl-0 pr-3 font-normal">
+                    <GroupHeading title={rowLabel} count="" />
                   </th>
                   {columns.map(({ key: columnKey }) => {
                     const cellKey = `${leverKey}|${columnKey}`;
@@ -186,7 +201,7 @@ export function LonglistGrid({
                             <li
                               key={option.option_id}
                               // Named for the move when a toggle reorders the cell (`longlist.css`).
-                              className="longlist-row leading-snug"
+                              className="longlist-row relative pr-7 leading-snug"
                               style={{ "--longlist-row": `opt-${option.option_id}` } as CSSProperties}
                             >
                               <Link
@@ -198,23 +213,26 @@ export function LonglistGrid({
                               >
                                 {scrub(option.name)}
                               </Link>
-                              {(option.state === "excluded" || option.no_in_scope_evidence) && (
-                                <span className="mt-0.5 block text-meta">
-                                  {option.state === "excluded" ? (
-                                    <span className="text-grey">Excluded</span>
-                                  ) : (
-                                    <span className="text-grey">{NO_IN_SCOPE_WORDS}</span>
-                                  )}
-                                </span>
+                              {option.state !== "excluded" && option.no_in_scope_evidence && (
+                                <span className="mt-0.5 block text-meta text-grey">{NO_IN_SCOPE_WORDS}</span>
                               )}
-                              <ShortlistToggle
-                                actions={actions}
-                                optionId={option.option_id}
-                                shortlistState={option.shortlist?.state}
-                                excluded={option.state === "excluded"}
-                                align="start"
-                                className="mt-0.5 grid w-fit"
-                              />
+                              {/* The check in the tile's top-right corner, its
+                                  target over the padding (round 13, owner); an
+                                  excluded tile shows the exclude glyph there in
+                                  Grey, its exclusion line as the tooltip, no
+                                  words on the tile (round 13, owner). */}
+                              {option.state === "excluded" ? (
+                                <ExcludedMark line={option.exclusion == null ? "" : scrub(exclusionLine(option.exclusion))} />
+                              ) : (
+                                <ShortlistToggle
+                                  actions={actions}
+                                  optionId={option.option_id}
+                                  shortlistState={option.shortlist?.state}
+                                  excluded={false}
+                                  glyphSize={GRID_TOGGLE_GLYPH}
+                                  className="absolute -top-2 -right-2"
+                                />
+                              )}
                               {actions.notice !== null &&
                                 actions.notice.optionId === option.option_id && (
                                   <p role="alert" className="mt-1 text-meta text-red">
@@ -243,9 +261,46 @@ export function LonglistGrid({
           </tbody>
         </table>
       </div>
+      {/* The lever types no option uses, directly under the grid in the row
+          heads' column only, each a head with nothing under it (round 13,
+          owner); never "Other". */}
       {emptyLevers.length > 0 && (
-        <p className="mt-3 text-meta text-grey">No options: {joinAnd(emptyLevers)}</p>
+        // A Line hairline across the grid's width under its last row, the
+        // rows' own rule, then the foot 24 px below it (round 13, owner).
+        <div data-testid="grid-foot" className="border-t border-line pt-6">
+          <div aria-label={NO_OPTIONS_FOR} role="group" className="w-44 space-y-2">
+            {/* The words as a Body Grey line in sentence case, so they never
+                read as one more lever; the names keep the heads' style, 8 px
+                apart (round 13, owner). */}
+            <p data-testid="no-options-for" className="text-body text-grey">
+              {NO_OPTIONS_FOR}
+            </p>
+            {emptyLevers.map((name) => (
+              <p key={name} className={cn(LABEL_CLASS, "text-grey")}>
+                {name}
+              </p>
+            ))}
+          </div>
+        </div>
       )}
     </div>
+  );
+}
+
+/** An excluded tile's mark in the toggle's corner: the exclude glyph in
+ *  Grey, not a control, its exclusion line as the tooltip (round 13, owner). */
+function ExcludedMark({ line }: { line: string }) {
+  return (
+    <WithTooltip note={line || undefined}>
+      <span
+        role="img"
+        tabIndex={0}
+        aria-label={line || "Excluded"}
+        data-testid="tile-excluded"
+        className="absolute -top-2 -right-2 inline-flex h-10 w-10 items-center justify-center text-grey"
+      >
+        <ExcludeIcon size={GRID_TOGGLE_GLYPH} />
+      </span>
+    </WithTooltip>
   );
 }

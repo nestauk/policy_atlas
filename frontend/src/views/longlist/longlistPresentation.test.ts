@@ -14,10 +14,12 @@ import {
   constraintNotices,
   countsLine,
   documentFacts,
+  groupCountWords,
+  uncoveredLevers,
   seeInSourcesWords,
   midSentence,
   outcomeCoverage,
-  outcomeCoverageWords,
+  outcomeCoverageLines,
   targetCoverage,
   targetCoverageWords,
   deliveredLeadInParts,
@@ -25,6 +27,8 @@ import {
   actsOnParts,
   documentsToggleWords,
   exclusionLine,
+  EXCLUDE_OPTION_TOOLTIP,
+  EXCLUDE_TOOLTIP,
   profilePoints,
   leverCount,
   rowMetaFields,
@@ -65,7 +69,7 @@ describe("longlist presentation (task 046)", () => {
     expect(leverLine("subsidise", ["inform"])).toBe("Lever: subsidies, with information.");
     expect(leverLine("regulate", [])).toBe("Lever: regulation.");
     expect(leverLine("subsidise", undefined)).toBe("Lever: subsidies.");
-    expect(leverLine(null, [])).toBe("Lever: none fits.");
+    expect(leverLine(null, [])).toBe("Lever: other.");
   });
 
   // Task 046, amendment 4 (R83): the header never says "0 excluded".
@@ -96,7 +100,8 @@ describe("longlist presentation (task 046)", () => {
       no_in_scope_evidence: false,
       shortlist: { state: "proposed", reason: "r" },
     } as unknown as Parameters<typeof rowMetaFields>[0];
-    expect(rowMetaFields(option, "Subsidise", null)).toEqual(["Subsidise", "5 documents evaluated it"]);
+    expect(rowMetaFields(option, "Subsidise", null)).toEqual(["Subsidise", "9 documents"]);
+    expect(rowMetaFields({ ...option, document_count: 1 }, null, null)).toEqual(["1 document"]);
     expect(rowMetaFields({ ...option, search_pending: true }, null, null)).toEqual(["searching for its evidence…"]);
     expect(
       rowMetaFields({ ...option, document_count: 0, no_in_scope_evidence: true }, null, "Staying in work"),
@@ -182,7 +187,7 @@ describe("longlist presentation (amendment 2 words)", () => {
 
   it("labels a row with its lever only", () => {
     expect(leverLabel({ primary_lever_type: "provide a service", ambition: "more" } as never)).toBe("Provide a service");
-    expect(leverLabel({ primary_lever_type: null, ambition: "less" } as never)).toBe("No lever fits");
+    expect(leverLabel({ primary_lever_type: null, ambition: "less" } as never)).toBe("Other");
   });
 });
 
@@ -397,12 +402,20 @@ describe("profilePoints", () => {
 });
 
 // Round 12 (owner): "Breaks your decision" was unclear.
+// Round 13 (owner): the tooltips end at "under Excluded".
+describe("Exclude's tooltips", () => {
+  it("say what Exclude does and where the options stay", () => {
+    expect(EXCLUDE_TOOLTIP).toBe("Excludes these options from being shortlisted. They stay on the longlist under Excluded.");
+    expect(EXCLUDE_OPTION_TOOLTIP).toBe("Excludes this option from being shortlisted. It stays on the longlist under Excluded.");
+  });
+});
+
 describe("exclusionLine", () => {
-  it("says the user's own exclusion as Set aside by you, the reason after it when there is one", () => {
+  it("says the user's own exclusion as Excluded by you, the reason after it when there is one", () => {
     expect(exclusionLine({ by: "user", constraint: "your decision", reason: "Out of our remit" })).toBe(
-      "Set aside by you · Out of our remit",
+      "Excluded by you · Out of our remit",
     );
-    expect(exclusionLine({ by: "user", constraint: "your decision", reason: "  " })).toBe("Set aside by you");
+    expect(exclusionLine({ by: "user", constraint: "your decision", reason: "  " })).toBe("Excluded by you");
   });
 
   it("says a constraint's exclusion as Breaks with the constraint, then the reason", () => {
@@ -475,11 +488,11 @@ describe("outcomeCoverage", () => {
     ]);
   });
 
-  it("words the coverage, leaving out a part with none", () => {
-    expect(outcomeCoverageWords({ measured: 2, discussed: 1 })).toBe("Measured in 2 · discussed in 1");
-    expect(outcomeCoverageWords({ measured: 1, discussed: 0 })).toBe("Measured in 1");
-    expect(outcomeCoverageWords({ measured: 0, discussed: 3 })).toBe("Discussed in 3");
-    expect(outcomeCoverageWords({ measured: 0, discussed: 0 })).toBe("Not covered");
+  it("words the coverage as lines, leaving out a line with none", () => {
+    expect(outcomeCoverageLines({ measured: 6, discussed: 7 })).toEqual(["Measured in 6", "Discussed in 7"]);
+    expect(outcomeCoverageLines({ measured: 1, discussed: 0 })).toEqual(["Measured in 1"]);
+    expect(outcomeCoverageLines({ measured: 0, discussed: 3 })).toEqual(["Discussed in 3"]);
+    expect(outcomeCoverageLines({ measured: 0, discussed: 0 })).toEqual(["Not covered"]);
   });
 });
 
@@ -503,7 +516,7 @@ describe("leverLineParts and deliveredLeadInParts", () => {
   it("marks the lever nouns strong", () => {
     expect(strong(leverLineParts("regulate", ["provide a service", "inform"]))).toEqual(["regulation", "services", "information"]);
     expect(leverLineParts("regulate", []).map((part) => part.text).join("")).toBe("Lever: regulation.");
-    expect(strong(leverLineParts(null, []))).toEqual([]);
+    expect(strong(leverLineParts(null, []))).toEqual(["other"]);
   });
   it("marks the setting strong and leaves a settingless lead-in plain", () => {
     expect(strong(deliveredLeadInParts(["school", "home"]))).toEqual(["in schools and at home"]);
@@ -540,5 +553,23 @@ describe("seeInSourcesWords", () => {
   it("names the count, in the singular for one", () => {
     expect(seeInSourcesWords(12)).toBe("See these 12 documents in Sources");
     expect(seeInSourcesWords(1)).toBe("See this document in Sources");
+  });
+});
+
+// Round 13 (owner): a group's count says how many are shortlisted.
+describe("groupCountWords and uncoveredLevers", () => {
+  it("adds the shortlisted count when there is one", () => {
+    expect(groupCountWords(12, 3)).toBe("12 options · 3 shortlisted");
+    expect(groupCountWords(1, 1)).toBe("1 option · 1 shortlisted");
+    expect(groupCountWords(12, 0)).toBe("12 options");
+  });
+  it("lists the lever types no included option uses, never Other", () => {
+    expect(
+      uncoveredLevers(["regulate", "inform", "devolve"], [
+        { state: "included", primary_lever_type: "regulate" },
+        { state: "excluded", primary_lever_type: "inform" },
+        { state: "included", primary_lever_type: null },
+      ]),
+    ).toEqual(["inform", "devolve"]);
   });
 });

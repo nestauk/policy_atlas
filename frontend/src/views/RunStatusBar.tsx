@@ -212,7 +212,9 @@ export function RunStatusBar() {
         data-open={open}
         aria-hidden={open ? undefined : true}
         className={cn(
-          "grid shrink-0 transition-[grid-template-rows,opacity] duration-200 ease-[var(--ease-out-strong)] motion-reduce:transition-none",
+          // Its own View Transition layer, held still (round 13, owner).
+          "grid shrink-0 [view-transition-name:run-status] [view-transition-class:shell-chrome]",
+          "transition-[grid-template-rows,opacity] duration-200 ease-[var(--ease-out-strong)] motion-reduce:transition-none",
           open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
           cause.instant && "transition-none",
         )}

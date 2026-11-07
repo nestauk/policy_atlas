@@ -56,3 +56,18 @@ html.longlist-regrouping::view-transition-old(*.longlist-row):only-child {
     opacity: 0;
   }
 }
+
+/* The app's chrome (the header and its hairline, the task bar, the stage bar
+   and the run status bar) carries its own names (`shell-chrome`), so it is
+   captured apart from the page and drawn still above the moving rows, which
+   otherwise paint over it for the transition's length (round 13, owner). */
+html.longlist-regrouping::view-transition-group(*.shell-chrome) {
+  z-index: 1;
+  animation: none;
+}
+html.longlist-regrouping::view-transition-old(*.shell-chrome) {
+  display: none;
+}
+html.longlist-regrouping::view-transition-new(*.shell-chrome) {
+  animation: none;
+}
