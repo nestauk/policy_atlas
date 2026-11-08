@@ -83,6 +83,8 @@ synthesise_write_source_note = { tier = "fast", reasoning_effort = "medium", tim
 synthesise_write_intro = { tier = "fast", reasoning_effort = "medium", timeout_s = 30 }
 judge_grounding = { tier = "fast", reasoning_effort = "medium", timeout_s = 120 }
 # --- Conversation and agents -----------------------------------------------
+task_title = { tier = "fast", reasoning_effort = "low", timeout_s = 20 }   # one short line from the confirmed question (task 058, round 14)
+chat_title = { tier = "fast", reasoning_effort = "low", timeout_s = 20 }   # one short line from the chat's first message (task 058, round 14)
 chat = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }   # the tool turn, the prose stream and the final parse share this step
 agent_route = { tier = "standard", reasoning_effort = "medium", timeout_s = 60 }
 agent_triage = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }

@@ -145,6 +145,8 @@ STEP_VERBS: dict[str, str] = {
     "synthesise_write_intro": "Writing the introduction",
     "judge_grounding": "Checking claims",
     "chat": "Answering",
+    "task_title": "Naming the task",
+    "chat_title": "Naming the chat",
     "agent_route": "Reading your reply",
     "agent_triage": "Deciding the next step",
     "agent_decide": "Deciding the next step",
