@@ -165,6 +165,7 @@ STEP_VERBS: dict[str, str] = {
     "longlist_distinct": "Checking the options are distinct",
     "longlist_authority": "Checking who can act",
     "longlist_shortlist": "Choosing the shortlist",
+    "shortlist_note": "Updating the shortlist note",
     "option_profile_line": "Estimating each option",
     "option_profile_potential_impact": "Judging potential impact",
     "option_profile_ambition": "Judging ambition",
