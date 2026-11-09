@@ -11,7 +11,16 @@ import { onLinkedView, RunStatusBar } from "./RunStatusBar";
 import * as taskLive from "./taskLive";
 import type { LifecycleTab } from "./lifecycle";
 
+/** The task's run read (round 14): loaded by default, no latest run. */
+const taskRead = vi.hoisted(() => ({
+  loaded: true,
+  latestRun: null as { capability_run_id: string; status: string } | null,
+}));
+
 vi.mock("../api/queries", () => ({
+  useTask: () => ({
+    data: taskRead.loaded ? { task_id: "t1", latest_run: taskRead.latestRun } : undefined,
+  }),
   useConversations: () => ({
     isSuccess: true,
     data: { data: [{ id: "ta-1", kind: "task_agent", title: "Task Agent", closed_at: null }] },
@@ -107,6 +116,29 @@ describe("RunStatusBar (task 058, owner rounds 7 and 8: the status bar returns, 
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     vi.mocked(taskLive.useMountedTraces).mockReturnValue(0);
+    taskRead.loaded = true;
+    taskRead.latestRun = null;
+  });
+
+  // Owner, round 14: entering a finished task the bar flashed in and out
+  // while the stream replayed the run; it waits for the run read.
+  it("stays shut until the task's run read has loaded", () => {
+    taskRead.loaded = false;
+    live("sources", stream("running"));
+    renderStrip();
+    expect(statusBar()).toHaveAttribute("data-open", "false");
+  });
+
+  it("stays shut for a run the read says has ended, and opens for a run newer than the read", () => {
+    taskRead.latestRun = { capability_run_id: "r1", status: "succeeded" };
+    live("sources", stream("running"));
+    const view = renderStrip();
+    expect(statusBar()).toHaveAttribute("data-open", "false");
+    view.unmount();
+    taskRead.latestRun = { capability_run_id: "r0", status: "succeeded" };
+    live("sources", stream("running"));
+    renderStrip();
+    expect(statusBar()).toHaveAttribute("data-open", "true");
   });
   afterEach(() => {
     vi.useRealTimers();

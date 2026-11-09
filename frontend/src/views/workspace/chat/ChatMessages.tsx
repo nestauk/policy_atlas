@@ -6,20 +6,22 @@ import { conflictSentences, isConflictCode } from "../../../lib/errors";
 import { scrub } from "../../../lib/scrub";
 import type { ChatConversationRow } from "../../../store";
 import { Button } from "../../../ui/brand/Button";
-import { Chip } from "../../../ui/brand/Chip";
+import { QUIET_CONTROL_CLASS } from "../../../ui/brand/inlineActions";
+import { SOURCE_TITLE_LINK_CLASS } from "../../../ui/brand/reference";
 import { Tooltip } from "../../../ui/radix/Tooltip";
 import {
   CITATION_MARKER_CLASS,
   CITATION_SPAN_CLASS,
-  ChipWithTooltip,
   CitationProvenanceBlock,
   CitationTooltipBody,
   ProvenanceSheet,
   SourceDossier,
   spanSegments,
 } from "../../ArtefactView";
-import { ABSTRACT_ONLY, citationJudgement, TIER_LABEL, TIER_TEXT, uncheckedLabel, uncheckedWords } from "../../../ui/brand/evidence";
-import { DepthMark } from "../../../ui/brand/EvidenceMarks";
+import { ABSTRACT_ONLY, citationJudgement, evidenceTypeLabel, TIER_LABEL, TIER_TEXT, uncheckedLabel, uncheckedWords } from "../../../ui/brand/evidence";
+import { DepthMark, StrengthMark, ToneSquare } from "../../../ui/brand/EvidenceMarks";
+import { ActionLine } from "../ActionLine";
+import { PacedReply, usePacedText } from "../PacedReply";
 import { LABEL_CLASS } from "../../../ui/brand/label";
 import { cn } from "../../../ui/brand/cn";
 
@@ -89,7 +91,7 @@ export function ChatMessages({ taskId, rows, onOpenTaskAgent, onRetry }: { taskI
   const [active, setActive] = useState<ActiveProvenance | null>(null);
   const [dossierRef, setDossierRef] = useState<string | null>(null);
   const datedRows = useMemo(() => rows.map((row, index) => ({ row, showDate: index === 0 || dayOf(createdAt(row)) !== dayOf(createdAt(rows[index - 1])) })), [rows]);
-  return <div className="space-y-5">{datedRows.map(({ row, showDate }) => <div key={keyOf(row)} className="space-y-3">{showDate && <DateDivider value={createdAt(row)} />}<UserBubble text={userMessageOf(row)} />{activityOf(row).length > 0 && <p className="mr-8 text-body text-grey">{activitySummary(activityOf(row))}</p>}<AssistantMessage turn={row} onCitation={(citation) => setActive({ kind: "citation", turn: row, citation })} onClaim={(claim) => setActive({ kind: "claim", turn: row, claim })} onOpenDossier={setDossierRef} onOpenTaskAgent={onOpenTaskAgent} onRetry={onRetry} /></div>)}{active !== null && <ChatProvenanceSheet taskId={taskId} active={active} onClose={() => setActive(null)} onOpenDossier={setDossierRef} />}{dossierRef !== null && <SourceDossier taskId={taskId} sourceRef={dossierRef} onClose={() => setDossierRef(null)} />}</div>;
+  return <div className="space-y-5">{datedRows.map(({ row, showDate }) => <div key={keyOf(row)} className="space-y-3">{showDate && <DateDivider value={createdAt(row)} />}<UserBubble text={userMessageOf(row)} /><AssistantMessage turn={row} onCitation={(citation) => setActive({ kind: "citation", turn: row, citation })} onClaim={(claim) => setActive({ kind: "claim", turn: row, claim })} onOpenDossier={setDossierRef} onOpenTaskAgent={onOpenTaskAgent} onRetry={onRetry} /></div>)}{active !== null && <ChatProvenanceSheet taskId={taskId} active={active} onClose={() => setActive(null)} onOpenDossier={setDossierRef} />}{dossierRef !== null && <SourceDossier taskId={taskId} sourceRef={dossierRef} onClose={() => setDossierRef(null)} />}</div>;
 }
 
 /** One grounded answer on its own — the chat's assistant prose, its claim
@@ -155,8 +157,35 @@ function AssistantMessage({ turn, onCitation, onClaim, onOpenDossier, onOpenTask
       <Button size="sm" variant="secondary" onClick={() => onRetry(clientTurnIdOf(turn))}>Retry</Button>
     </div>;
   }
-  if (!answer && !("id" in turn && turn.status === "pending")) return null;
-  return <div className="mr-8 space-y-2"><p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink"><AnnotatedChatProse text={answer} citations={citations} claims={claims} turn={turn} disabled={cancelled} onCitation={onCitation} onClaim={onClaim} /></p>{"id" in turn && turn.status === "pending" && <p role="status" className="anim-breathe text-body text-grey">Checking the evidence…</p>}{cancelled && <Chip tone="yellow">Stopped before evidence check</Chip>}{warning && <Chip tone="yellow">Not evidence-checked</Chip>}{handoff && <div className="border-l-2 border-yellow bg-yellow-tint/50 p-3 text-body text-navy">The evidence base does not hold this.<Button size="sm" variant="secondary" className="ml-2" onClick={onOpenTaskAgent}>Open Task Agent</Button></div>}{citations.length > 0 && <References citations={citations} turn={turn} onCitation={onCitation} onOpenDossier={onOpenDossier} />}{answer && <button type="button" aria-label="Copy answer" title="Copy answer" onClick={() => void copy()} className="text-grey hover:text-blue"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="5" width="9" height="10" rx="1" /><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h2" /></svg></button>}</div>;
+  // While the agent works, the Task Agent's action line (owner, round 14):
+  // the turning mark with what the chat stream says it is doing (the read
+  // tools' words), then, once the answer is stored, the evidence check.
+  const streaming = !("id" in turn) && turn.status === "pending";
+  const checking = "id" in turn && turn.status === "pending";
+  const labels = activityOf(turn);
+  const working = streaming ? (labels.length > 0 ? activitySummary(labels) : null) : checking ? "Checking the evidence…" : null;
+  if (!answer && !streaming && !checking) return null;
+  return <div className="mr-8 space-y-2">{answer && <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{streaming ? <PacedReply turnId={clientTurnIdOf(turn)} text={answer} streamed /> : <PacedChatProse turn={turn} text={answer} citations={citations} claims={claims} disabled={cancelled} onCitation={onCitation} onClaim={onClaim} />}</p>}{(streaming || checking) && <ActionLine label={working} live arrivalId={`chat-action:${clientTurnIdOf(turn)}`} />}{cancelled && <NoticeLine>Stopped before evidence check</NoticeLine>}{warning && <NoticeLine>Not evidence-checked</NoticeLine>}{handoff && <div className="border-l-2 border-yellow bg-yellow-tint/50 p-3 text-body text-navy">The evidence base does not hold this.<Button size="sm" variant="secondary" className="ml-2" onClick={onOpenTaskAgent}>Open Task Agent</Button></div>}{citations.length > 0 && <References citations={citations} turn={turn} onCitation={onCitation} onOpenDossier={onOpenDossier} />}{answer && <button type="button" aria-label="Copy answer" title="Copy answer" onClick={() => void copy()} className="text-grey hover:text-blue"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="5" width="9" height="10" rx="1" /><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h2" /></svg></button>}</div>;
+}
+
+/** A stored answer's prose, paced (owner, round 14): one that was streamed
+ *  here carries on from where the streamed words had got to, then shows
+ *  its citation markers and claims as they are revealed; the history shows
+ *  at once. */
+function PacedChatProse({ turn, text, ...rest }: { turn: ChatConversationRow; text: string; citations: ChatCitation[]; claims: ChatClaim[]; disabled: boolean; onCitation: (citation: ChatCitation) => void; onClaim: (claim: ChatClaim) => void }) {
+  const revealed = usePacedText(clientTurnIdOf(turn), text, false);
+  return <AnnotatedChatProse text={revealed.text} turn={turn} {...rest} />;
+}
+
+/** A notice about an answer's check, in the marks' language (owner, round
+ *  14: no chips): the yellow tone square, then the words at Meta Grey. */
+function NoticeLine({ children }: { children: string }) {
+  return (
+    <p className="flex items-center gap-1.5 text-meta text-grey">
+      <ToneSquare colour="yellow" />
+      {children}
+    </p>
+  );
 }
 
 /** The prose's annotation layer (029 Fix C + 030 fold): span-anchored claims
@@ -284,32 +313,41 @@ function resolveCitation(citations: ChatCitation[], n: number): ChatCitation | n
 // support (Enter/Space on the summary) for free, styled to the footer's
 // existing caption typography.
 function References({ citations, turn, onCitation, onOpenDossier }: { citations: ChatCitation[]; turn: ChatConversationRow; onCitation: (citation: ChatCitation) => void; onOpenDossier: (sourceRef: string) => void }) {
-  return <footer className="border-t border-line pt-2"><details><summary className={cn(LABEL_CLASS, "cursor-pointer")}>References ({citations.length})</summary><div className="mt-2 space-y-2">{citations.map((citation, index) => {
+  // The report's References (owner, round 14): the number column, the
+  // number in Electric Blue opening the source; the reference line, the title
+  // opening it too; then the marks line: the judge's verdict (opening the
+  // citation's sheet), the evidence type, the strength and the read depth,
+  // with the shared marks in place of the old chips.
+  return <footer className="border-t border-line pt-2"><details><summary className={cn(LABEL_CLASS, "cursor-pointer")}>References ({citations.length})</summary><ol className="mt-2 space-y-2 text-body text-ink">{citations.map((citation, index) => {
     const sourceRef = citation.source_id ?? citation.source_title ?? null;
     const titleText = scrub(citation.source_title ?? citation.title ?? citationId(citation) ?? "Citation");
-    return <div key={citationId(citation) || index} className="text-caption text-ink"><button type="button" onClick={() => onCitation(citation)} className={CITATION_MARKER_CLASS}>[{citation.n ?? index + 1}]</button>{" "}
+    const n = citation.n ?? index + 1;
+    const { tier } = verdictInfoFor(turn, citation);
+    const verdict = tier !== null ? TIER_LABEL[tier] : uncheckedLabel(enrichmentStatusOf(turn) === "failed");
+    const type = nonEmptyText(citation.evidence_type);
+    const strength = nonEmptyText(citation.appraisal_label);
+    return <li key={citationId(citation) || index} className="flex gap-3">
       {sourceRef !== null
-        ? <button type="button" onClick={() => onOpenDossier(sourceRef)} className="cursor-pointer text-left font-semibold hover:underline">{titleText}</button>
-        : <span>{titleText}</span>}
-      {citation.quote && <span className="text-grey"> — “{scrub(citation.quote)}”</span>}
-      <span className="ml-2"><VerdictChip turn={turn} citation={citation} /></span>
-    </div>;
-  })}</div></details></footer>;
+        ? <button type="button" onClick={() => onOpenDossier(sourceRef)} aria-label={`Source ${n}: ${titleText}`} className="w-9 shrink-0 cursor-pointer self-start text-right font-semibold tabular-nums text-blue hover:underline">[{n}]</button>
+        : <span className="w-9 shrink-0 text-right font-semibold tabular-nums text-grey">[{n}]</span>}
+      <div className="min-w-0 [overflow-wrap:anywhere]">
+        {sourceRef !== null
+          ? <button type="button" onClick={() => onOpenDossier(sourceRef)} className={cn(SOURCE_TITLE_LINK_CLASS, "cursor-pointer text-left")}>{titleText}</button>
+          : <span>{titleText}</span>}
+        <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-meta text-grey">
+          <Tooltip content={verdictTooltipContent(turn, citation)}>
+            <button type="button" onClick={() => onCitation(citation)} className={QUIET_CONTROL_CLASS}>{verdict}</button>
+          </Tooltip>
+          {type !== null && <><span aria-hidden="true">·</span><span>{scrub(evidenceTypeLabel(type))}</span></>}
+          {strength !== null && <><span aria-hidden="true">·</span><span className="inline-flex items-center gap-1.5"><StrengthMark tier={strength} /></span></>}
+          {citation.text_basis === "abstract_only" && <><span aria-hidden="true">·</span><span className="inline-flex items-center gap-1.5"><DepthMark depth={ABSTRACT_ONLY} /></span></>}
+        </p>
+      </div>
+    </li>;
+  })}</ol></details></footer>;
 }
 
-/** The judge verdict chip + rationale tooltip (029 Fix B), over the shared
- *  `ChipWithTooltip` (030 fold) — chat's own tone/label vocabulary (the
- *  verdict tier only; the citation's appraisal pair, when present, renders
- *  as its own separate `AppraisalChip` — sheet only, see `ChatCitationBlock`).
- *  Shared by the References row and the citation sheet so there is exactly
- *  one copy. */
-function VerdictChip({ turn, citation }: { turn: ChatConversationRow; citation: ChatCitation }) {
-  const { tier } = verdictInfoFor(turn, citation);
-  const checkFailed = enrichmentStatusOf(turn) === "failed";
-  return <ChipWithTooltip tone={tier === "unsupported_mis_cited" ? "red" : tier === null ? "soft" : "blue"} label={tier === null ? uncheckedLabel(checkFailed) : TIER_LABEL[tier]} content={verdictTooltipContent(turn, citation)} />;
-}
-
-/** The rationale/hint body shared by `VerdictChip` and the inline marker's
+/** The rationale/hint body shared by the References verdict and the inline marker's
  *  hover (Fix C) — a Tooltip's `content`, never a chip of its own. */
 function verdictTooltipContent(turn: ChatConversationRow, citation: ChatCitation) {
   const { tier, rationale } = verdictInfoFor(turn, citation);
@@ -444,12 +482,12 @@ function createdAt(row: ChatConversationRow) { return "id" in row ? row.created_
 function userMessageOf(row: ChatConversationRow) { return "id" in row ? row.user_message : row.userMessage; }
 function keyOf(row: ChatConversationRow) { return "id" in row ? row.id : row.clientTurnId; }
 function dayOf(value: string) { return new Date(value).toISOString().slice(0, 10); }
+function activitySummary(labels: string[]) { return labels.length === 1 ? labels[0] : `${labels.at(-1) ?? "Checked the evidence"} — ${labels.length} searches`; }
 function activityOf(row: ChatConversationRow) { return "id" in row ? [] : row.activityLabels; }
 function clientTurnIdOf(row: ChatConversationRow) { return "id" in row ? row.client_turn_id : row.clientTurnId; }
 // The durable `ChatTurnOut` carries no error fields at all — a failed row
 // read back from a refetch degrades to the generic fallback below.
 function errorCodeOf(row: ChatConversationRow) { return "id" in row ? undefined : row.errorCode; }
-function activitySummary(labels: string[]) { return labels.length === 1 ? labels[0] : `${labels.at(-1) ?? "Checked the evidence"} — ${labels.length} searches`; }
 function citationsOf(turn: ChatConversationRow): ChatCitation[] { return "id" in turn && Array.isArray(turn.citations) ? turn.citations.filter((citation) => citation !== null && typeof citation === "object") as ChatCitation[] : []; }
 /** A string field's value, or null when it is absent or blank. */
 function nonEmptyText(value: string | null | undefined): string | null {

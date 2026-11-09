@@ -77,9 +77,12 @@ const WORDS_INDENT = "ml-[22px]";
 const TABLE_ROW =
   "flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5 @lg:grid @lg:grid-cols-[minmax(0,1fr)_auto_5.75rem] @lg:gap-x-5";
 
-/** The right group (counts and time, then the link): its own line under the
- *  words when narrow, two of the table's columns when wide. */
-const RIGHT_GROUP = "flex items-baseline gap-x-1.5 @lg:contents";
+/** The right group (counts and time, then the link): two of the table's
+ *  columns when wide; narrow, right-aligned on the row's right edge as the
+ *  wide table is (owner, round 14), on the label's line or the line under
+ *  it, the link wrapping to its own line at the right edge when the two do
+ *  not fit. */
+const RIGHT_GROUP = "flex min-w-0 flex-1 flex-wrap items-baseline justify-end gap-x-1.5 @lg:contents";
 
 /** The separator between items. A no-break space binds each "·" to the word
  *  before it, so a separator never starts a line; the line breaks after it
@@ -127,19 +130,19 @@ export type RowContext = {
 
 /**
  * The right-hand cells of a line: what it measured (counts, a time) in grey
- * tabular figures, then where it points in blue. Narrow, they follow the
- * words with a separator bound to the cell before the link, so a wrapped
- * link never opens its line with a dot; wide, each takes its column,
+ * tabular figures, then where it points in blue. Narrow, they sit at the
+ * row's right edge with a separator bound to the cell before the link, so a
+ * wrapped link never opens its line with a dot; wide, each takes its column,
  * right-aligned, and an empty cell keeps the column.
  */
 function RightCells({ meta, link, landed = false }: { meta: string | null; link: ReactNode; landed?: boolean }) {
   return (
     <span className={cn(RIGHT_GROUP, "text-meta", LINE)}>
-      <span className={cn("text-grey @lg:text-right", landed && "anim-swap-in")}>
+      <span className={cn("text-right text-grey", landed && "anim-swap-in")}>
         {meta !== null && <Figures text={meta} />}
         {meta !== null && link !== null && <NarrowSeparator />}
       </span>
-      {link !== null ? <span className="@lg:text-right">{link}</span> : <span aria-hidden="true" className="hidden @lg:block" />}
+      {link !== null ? <span className="text-right">{link}</span> : <span aria-hidden="true" className="hidden @lg:block" />}
     </span>
   );
 }

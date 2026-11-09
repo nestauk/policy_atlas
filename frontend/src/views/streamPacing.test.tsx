@@ -334,6 +334,67 @@ describe("useEasedHeight — nested boxes", () => {
   });
 });
 
+// Round 14: the thread's box is created long before a reply's box inside
+// it, so its observer hears every change first; it must still measure after
+// the reply's box has started easing the change.
+describe("useEasedHeight — an outer box created first", () => {
+  function Inner({ lines }: { lines: number }) {
+    const [box, content] = useEasedHeight(true);
+    return (
+      <div ref={box} data-box="inner">
+        <div ref={content}>
+          {Array.from({ length: lines }, (_, index) => (
+            <p key={index}>line</p>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  function Outer({ showInner, lines }: { showInner: boolean; lines: number }) {
+    const [box, content] = useEasedHeight(true, true);
+    return (
+      <div ref={box} data-box="outer">
+        <div ref={content} data-content="outer">{showInner && <Inner lines={lines} />}</div>
+      </div>
+    );
+  }
+
+  it("leaves the change to the inner box, which eases it first", async () => {
+    let absorbed = false;
+    let grown = false;
+    const calls: string[] = [];
+    const restoreAnimate = HTMLElement.prototype.animate;
+    HTMLElement.prototype.animate = function (this: HTMLElement) {
+      const which = this.getAttribute("data-box") ?? "other";
+      calls.push(which);
+      if (which === "inner") absorbed = true;
+      return { cancel: vi.fn(), onfinish: null } as unknown as Animation;
+    } as typeof HTMLElement.prototype.animate;
+    const spy = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) {
+      // The outer box's content is taller once the line lands, unless the
+      // inner box is easing it from its old height.
+      if (this.getAttribute("data-content") === "outer") return grown && !absorbed ? 40 : 20;
+      return grown ? 40 : 20;
+    });
+    const view = render(<Outer showInner={false} lines={1} />);
+    view.rerender(<Outer showInner lines={1} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    calls.length = 0;
+    grown = true;
+    view.rerender(<Outer showInner lines={2} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(calls).toEqual(["inner"]);
+    spy.mockRestore();
+    HTMLElement.prototype.animate = restoreAnimate;
+  });
+});
+
 describe("useEasedHeight — growth only", () => {
   function Box({ lines }: { lines: number }) {
     const [box, content] = useEasedHeight(true, true);

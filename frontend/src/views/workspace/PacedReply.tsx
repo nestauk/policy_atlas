@@ -21,6 +21,36 @@ function remember(id: string, shown: number): void {
 }
 
 /**
+ * A reply's text at a steady pace, shared by the Task Agent and the chats
+ * (owner, round 14: the chats stream the same way): whole words at a steady
+ * rate catching up within 800 ms (`useRevealedText`). The history shows at
+ * once; a streamed reply starts from nothing, and the stored turn that
+ * replaces it carries on from where it was (keyed by the client turn id).
+ *
+ * Args:
+ *   turnId: The turn's client id, shared by the streamed and stored turn.
+ *   text: The reply so far.
+ *   streamed: True for the streamed turn; false for the stored one.
+ *
+ * Returns:
+ *   The revealed text and the offsets where recent batches began.
+ */
+export function usePacedText(
+  turnId: string,
+  text: string,
+  streamed: boolean,
+): { text: string; batches: readonly number[] } {
+  const started = revealedSoFar.get(turnId);
+  const initial = streamed ? (started ?? 0) : started;
+  const revealed = useRevealedText(text, !streamed && started === undefined, initial);
+  const shown = Array.from(revealed.text).length;
+  useEffect(() => {
+    if (streamed || revealedSoFar.has(turnId)) remember(turnId, shown);
+  }, [turnId, shown, streamed]);
+  return revealed;
+}
+
+/**
  * The Task Agent's reply at a steady pace (task 058, round 9; the animation
  * sweep's entry 6): the planner's deltas land in bursts, so the reply is
  * revealed the way the Result tab reveals the report (`useRevealedText`:
@@ -36,16 +66,9 @@ function remember(id: string, shown: number): void {
  *   streamed: True for the streamed turn; false for the stored one.
  */
 export function PacedReply({ turnId, text, streamed }: { turnId: string; text: string; streamed: boolean }) {
-  const started = revealedSoFar.get(turnId);
-  // The history shows at once; a streamed reply starts from nothing, and a
-  // stored one carries on from its streamed turn.
-  const initial = streamed ? (started ?? 0) : started;
-  const revealed = useRevealedText(text, !streamed && started === undefined, initial);
+  const revealed = usePacedText(turnId, text, streamed);
   const chars = Array.from(revealed.text);
   const shown = chars.length;
-  useEffect(() => {
-    if (streamed || revealedSoFar.has(turnId)) remember(turnId, shown);
-  }, [turnId, shown, streamed]);
 
   const cuts = revealed.batches.filter((cut) => cut > 0 && cut < shown);
   if (cuts.length === 0) return <>{scrub(revealed.text)}</>;

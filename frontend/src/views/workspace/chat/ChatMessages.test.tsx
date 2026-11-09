@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../../../ui/radix/Tooltip";
@@ -94,10 +94,30 @@ describe("ChatMessages", () => {
     expect(screen.queryByText("Tier 2 · grounded")).not.toBeInTheDocument();
   });
 
-  it("renders a still-streaming optimistic turn's activity summary and partial prose", () => {
+  // Owner, round 14: the chats feel like the Task Agent. While the answer
+  // streams, the turning mark and the activity line sit under it, and the
+  // words come at the paced reveal's steady rate rather than as they land.
+  it("renders a still-streaming optimistic turn's activity line under its paced prose", async () => {
     renderChat([optimisticTurn({ activityLabels: ["Searching sources", "Reading passages"], answer: "Costs fell so " })]);
-    expect(screen.getByText("Reading passages — 2 searches")).toBeInTheDocument();
-    expect(screen.getByText("Costs fell so", { exact: false })).toBeInTheDocument();
+    const line = screen.getByRole("status");
+    expect(line).toHaveTextContent("Reading passages — 2 searches");
+    expect(line.querySelector("svg")).not.toBeNull();
+    const prose = () => [...document.querySelectorAll("p.whitespace-pre-wrap")].find((p) => p.textContent?.includes("Costs fell so"));
+    await waitFor(() => expect(prose()).toBeDefined());
+    // The line follows the answer.
+    expect((prose() as Element).compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("shows the turning mark alone before the stream says what it is doing", () => {
+    renderChat([optimisticTurn({ activityLabels: [], answer: "" })]);
+    expect(screen.getByRole("status")).toHaveTextContent("Working");
+  });
+
+  it("says a stopped or unchecked answer on a marks line, not a chip", () => {
+    renderChat([turn({ status: "cancelled", stopped_before_evidence_check: true })]);
+    const notice = screen.getByText("Stopped before evidence check");
+    expect(notice.tagName).toBe("P");
+    expect(notice.querySelector("[data-tone='yellow']")).not.toBeNull();
   });
 
   it("renders a failed turn honestly with a known conflict sentence and a wired retry", async () => {
@@ -124,6 +144,28 @@ describe("ChatMessages", () => {
     await userEvent.setup().click(screen.getByText("References (1)"));
     expect(details).toHaveAttribute("open");
     expect(screen.getByText("Tier 2 · grounded")).toBeInTheDocument();
+  });
+
+  // Owner, round 14: References in the report's style, the shared marks in
+  // place of the chips.
+  it("lays a References row out as the report's: the blue number, the reference line and the marks line", async () => {
+    mockGet.mockResolvedValue({ data: { context: "context text", year: 2024 }, error: undefined });
+    renderChat([
+      turn({
+        citations: [{ id: "chunk-1", n: 1, quote: "Costs fell", source_title: "A breakfast study", source_id: "s1", state: "verdict:tier_2", appraisal_label: "Moderate", evidence_type: "Cohort study", text_basis: "abstract_only" }],
+      }),
+    ]);
+    const user = userEvent.setup();
+    await user.click(screen.getByText("References (1)"));
+    const row = screen.getByRole("button", { name: "Source 1: A breakfast study" }).closest("li") as HTMLElement;
+    expect(within(row).getByRole("button", { name: "Source 1: A breakfast study" })).toHaveClass("text-blue", "tabular-nums");
+    expect(within(row).getByRole("button", { name: "A breakfast study" })).toBeInTheDocument();
+    expect(within(row).getByTestId("strength-mark")).toBeInTheDocument();
+    expect(within(row).getByTestId("status-mark")).toHaveAttribute("data-tone", "yellow");
+    expect(row.querySelector(".rounded-full, [class*='chip']")).toBeNull();
+    // The verdict opens the citation's sheet.
+    await user.click(within(row).getByRole("button", { name: "Tier 2 · grounded" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
   it("opens the citation sheet from an inline marker with the citing claim text and the highlighted context (029 Fix B)", async () => {
@@ -166,7 +208,7 @@ describe("ChatMessages", () => {
     ]);
     const [marker] = screen.getAllByRole("button", { name: "[1]" });
     await userEvent.setup().click(marker);
-    expect(await screen.findByText("moderate")).toBeInTheDocument();
+    expect(await within(await screen.findByRole("dialog")).findByText("moderate")).toBeInTheDocument();
   });
 
   // Round 12: the sheet's citation block takes the report's blocks: the
@@ -219,8 +261,9 @@ describe("ChatMessages", () => {
     const [marker] = screen.getAllByRole("button", { name: "[1]" });
     await userEvent.setup().click(marker);
     // The Sources table's word and tone square (round 12 consolidation).
-    expect(await screen.findByText("Abstract only")).toBeInTheDocument();
-    expect(screen.getByTestId("status-mark")).toHaveAttribute("data-tone", "yellow");
+    const sheet = await screen.findByRole("dialog");
+    expect(await within(sheet).findByText("Abstract only")).toBeInTheDocument();
+    expect(within(sheet).getByTestId("status-mark")).toHaveAttribute("data-tone", "yellow");
   });
 
   it("omits the abstract-only label in the citation sheet when text_basis is full_text", async () => {
@@ -263,7 +306,10 @@ describe("ChatMessages", () => {
     // The literal `[1]` marker stays its own, separate, small button (the
     // References row below carries a second one) — the span wraps only the
     // claim's own text, not the trailing marker.
-    expect(screen.getAllByRole("button", { name: "[1]" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "[1]" })).toHaveLength(1);
+    // The References row's number is the report's: Electric Blue, named for
+    // its source, opening it (owner, round 14).
+    expect(screen.getByRole("button", { name: "Source 1: A breakfast study" })).toHaveClass("text-blue");
     await userEvent.setup().click(span);
     const sheet = screen.getByRole("dialog", { name: "Evidence for this claim" });
     // Appears twice: the claim-text blockquote, and again inside the

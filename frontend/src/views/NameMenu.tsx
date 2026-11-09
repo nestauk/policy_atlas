@@ -5,13 +5,13 @@ import { useArchiveProject, useUpdateProject } from "../api/mutations";
 import { useProjects } from "../api/queries";
 import { PROJECT, TASK } from "../lib/vocabulary";
 
-import { scrub } from "../lib/scrub";
 import { Button, buttonVariants } from "../ui/brand/Button";
 import { cn } from "../ui/brand/cn";
 import { ChevronIcon } from "../ui/brand/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { MENU_ITEM_CLASS, moveMenuFocus } from "../ui/radix/menu";
 import { useAddTaskToProject } from "./projectActions";
+import { ChangingText } from "./workspace/ChangingText";
 import { ProjectPicker } from "./ProjectPicker";
 import { SHARE_COPY } from "./sharePresentation";
 
@@ -402,7 +402,9 @@ export function NameMenu({
   const trigger = useRef<HTMLButtonElement>(null);
   const backToTrigger = () => window.setTimeout(() => trigger.current?.focus(), 0);
 
-  const title = <span className={cn("min-w-0", wrap ? "text-pretty" : "truncate", titleClassName)}>{scrub(name)}</span>;
+  // A backend rename is revealed as a generation; the reader's own rename
+  // remounts the title with the new name, so it just commits.
+  const title = <ChangingText text={name} wrap={wrap} className={titleClassName} testIdPrefix="name" />;
 
   if (editing) {
     return (
@@ -426,7 +428,9 @@ export function NameMenu({
   const chevronMenu = canEdit && (
     <NameActionsMenu
       label={label}
-      onRename={() => setEditing(true)}
+      onRename={() => {
+        setEditing(true);
+      }}
       archive={archive}
       archiveSentence={archiveSentence}
       archiveError={archiveError}
@@ -449,7 +453,9 @@ export function NameMenu({
           className={cn(
             "pressable inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center text-grey -my-2",
             wrap ? "ml-1 align-baseline" : "ml-0.5 self-baseline",
-            "transition-colors duration-150 hover:bg-blue-tint-2 hover:text-navy",
+            // While a backend rename is revealed the chevron fades out and
+            // back (opacity only: it keeps its place and its focus).
+            "transition-[color,background-color,opacity] duration-150 hover:bg-blue-tint-2 hover:text-navy peer-data-[changing=true]:opacity-0",
             "data-[state=open]:bg-blue-tint-2 data-[state=open]:text-navy",
           )}
         >
@@ -592,6 +598,33 @@ export function useAddToProjectStep(taskId: string, projectIds: readonly string[
 }
 
 /**
+ * The project archive confirm's sentence (owner, round 14): what happens to
+ * the project and to its tasks. Archiving also archives the tasks that are
+ * in no other project; the server counts them on the project row
+ * (`ProjectOut.solo_task_count`, the backend builder's this round), and the
+ * clause is left out when there are none or the count is not known yet.
+ *
+ * Args:
+ *   soloTaskCount: How many of the project's tasks are in no other project.
+ *
+ * Returns:
+ *   One plain sentence.
+ */
+export function projectArchiveSentence(soloTaskCount: number | null | undefined): string {
+  const base = `Archiving removes this ${PROJECT.lower} from your active ${PROJECT.lowerMany}`;
+  if (soloTaskCount == null || soloTaskCount <= 0) return `${base}.`;
+  const tasks = soloTaskCount === 1 ? `1 ${TASK.lower}` : `${soloTaskCount} ${TASK.lowerMany}`;
+  return `${base} and archives its ${tasks} that ${soloTaskCount === 1 ? "is" : "are"} in no other ${PROJECT.lower}.`;
+}
+
+/** The project row's count of tasks in no other project, typed here until
+ *  the generated `ProjectOut` carries it (round 14). */
+export function soloTaskCount(project: object): number | null {
+  const value = (project as { solo_task_count?: unknown }).solo_task_count;
+  return typeof value === "number" ? value : null;
+}
+
+/**
  * A project page's title with the same menu as a task's (owner, round 11:
  * "add a way to archive (and rename) projects"). Rename saves in place;
  * Archive, once confirmed, leaves the page for the Projects list. An
@@ -602,11 +635,14 @@ export function ProjectName({
   name,
   isOwner,
   archived,
+  soloTasks = null,
 }: {
   projectId: string;
   name: string;
   isOwner: boolean;
   archived: boolean;
+  /** Its tasks in no other project, for the archive sentence (round 14). */
+  soloTasks?: number | null;
 }) {
   const update = useUpdateProject(projectId);
   const archive = useArchiveProject(projectId);
@@ -634,7 +670,7 @@ export function ProjectName({
                 onError: done.onError,
               })
       }
-      archiveSentence={`Archiving removes this ${PROJECT.lower} from your active ${PROJECT.lowerMany}. Its ${TASK.lowerMany} stay as they are.`}
+      archiveSentence={projectArchiveSentence(soloTasks)}
       archiveError={`The ${PROJECT.lower} couldn't be archived. Try again.`}
     />
   );

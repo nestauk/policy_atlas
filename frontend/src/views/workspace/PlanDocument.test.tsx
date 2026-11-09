@@ -371,6 +371,35 @@ describe("PlanDocument", () => {
     expect(screen.getByRole("button", { name: "See plan" })).toHaveFocus();
   });
 
+  // Owner, round 14: every open starts at the plan's top, its title in view.
+  it("opens at its own top, and goes back there when its content first arrives", () => {
+    const set = vi.fn();
+    const original = Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop");
+    Object.defineProperty(Element.prototype, "scrollTop", {
+      configurable: true,
+      get: () => 0,
+      set(value: number) {
+        if ((this as Element).getAttribute("data-testid") === "plan-pane") set(value);
+      },
+    });
+    mockUsePlan({ isPending: true, data: undefined });
+    const view = render(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument taskId={TASK_ID} placement="side" onClose={vi.fn()} overlay={{}} onOverlayChange={vi.fn()} />
+      </TooltipProvider>,
+    );
+    expect(set).toHaveBeenCalledWith(0);
+    set.mockClear();
+    mockUsePlan({ data: planOut(fullPlan()) });
+    view.rerender(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument taskId={TASK_ID} placement="side" onClose={vi.fn()} overlay={{}} onOverlayChange={vi.fn()} />
+      </TooltipProvider>,
+    );
+    expect(set).toHaveBeenCalledWith(0);
+    if (original !== undefined) Object.defineProperty(Element.prototype, "scrollTop", original);
+  });
+
   it("leaves Escape to a field being edited", async () => {
     mockUsePlan({ data: planOut(fullPlan()) });
     const onClose = vi.fn();

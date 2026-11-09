@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -182,6 +182,20 @@ describe("ChatSidePanel", () => {
     await user.click(screen.getByRole("button", { name: "Open the Agent" }));
     expect(state.create).not.toHaveBeenCalled();
     expect(state.setActiveConversation).toHaveBeenCalledWith("plan-1");
+  });
+
+  // Round 14: the backend names the open chat and the cached read carries
+  // it; the header reveals it at once, no tab switch needed.
+  it("reveals the open chat's new title in the header as soon as the read carries it", async () => {
+    state.activeConversationId = "c1";
+    const view = render(<ChatSidePanel taskId="p1" isOwner />);
+    expect(screen.getByText("Cost barriers")).toBeInTheDocument();
+    state.rows = [{ ...CHAT_ROW, title: "Cost barriers to childcare take-up" }];
+    view.rerender(<ChatSidePanel taskId="p1" isOwner />);
+    expect(screen.getByTestId("chat-title-leaving")).toHaveTextContent("Cost barriers");
+    expect(screen.getByRole("link", { name: "View in Agent tab: Cost barriers to childcare take-up" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTestId("chat-title-revealing")).toBeNull(), { timeout: 2000 });
+    expect(screen.getByText("Cost barriers to childcare take-up")).toBeInTheDocument();
   });
 
   it("renders the open panel with the header naming the chat, toggles the shared list, and closes", async () => {

@@ -10,6 +10,7 @@ import { usePlanPanel } from "../../planPanel";
 import { useChatsEnabled } from "../../taskResult";
 import { TaskAgentPane } from "../TaskAgentPane";
 import { ChatPane } from "./ChatPane";
+import { ChangingText } from "../ChangingText";
 import { Tooltip, TooltipProvider } from "../../../ui/radix/Tooltip";
 import { ConversationList, type ConversationRow } from "./ConversationList";
 import { ConversationRail, RAIL_TOOLTIP_CLASS, RAIL_TOOLTIP_DELAY_MS } from "./ConversationRail";
@@ -223,7 +224,9 @@ export function ChatSidePanel({
             className="group/name flex min-w-0 flex-1 items-center gap-2 px-1 text-meta font-semibold text-navy hover:underline"
           >
             {taskAgentOpen && <FoldMarkIcon size={10} />}
-            <span className="truncate">{currentTitle}</span>
+            {/* A chat's title as the backend names it (round 14), revealed;
+                keyed by the chat, so opening another never reads as one. */}
+            <ChangingText key={activeConversationId} text={currentTitle} testIdPrefix="chat-title" />
             <ExpandIcon
               size={13}
               className="shrink-0 text-grey opacity-0 transition-opacity duration-150 group-hover/name:opacity-100 group-focus-visible/name:opacity-100"

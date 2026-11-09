@@ -140,6 +140,10 @@ describe("tabOfPath", () => {
     expect(tabOfPath("/tasks/t2/result", "/tasks/t1")).toBeNull();
     expect(tabOfPath("/tasks/t1/nowhere", "/tasks/t1")).toBeNull();
   });
+
+  it("counts an option card as the Result's (round 14)", () => {
+    expect(tabOfPath("/tasks/t1/options/o1", "/tasks/t1")).toBe("result");
+  });
 });
 
 describe("taskDestination", () => {

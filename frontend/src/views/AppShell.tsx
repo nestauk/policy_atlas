@@ -1,8 +1,8 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
-import { Outlet, useLocation, useParams } from "react-router";
+import { Link, Outlet, useLocation, useParams } from "react-router";
 
 import { useArchiveTask, useUpdateTask } from "../api/mutations";
-import { useCheckIns, useMe, useTask } from "../api/queries";
+import { useCheckIns, useMe, useProject, useTask } from "../api/queries";
 import { useAuth } from "../auth";
 import { capabilityLabel } from "../lib/capabilities";
 import { TitleMarkerProvider } from "../lib/title";
@@ -12,7 +12,7 @@ import { cn } from "../ui/brand/cn";
 import { LifecycleBar, LifecycleBottomBar } from "../ui/brand/LifecycleBar";
 import { NavBar, NavHomeLink, NavItem } from "../ui/brand/Nav";
 import { COPY, PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
-import { lifecycleTabs, publicLifecycleTabs, sourcesLanding, withChat, withSourcesLanding } from "./lifecycle";
+import { lifecycleTabs, publicLifecycleTabs, sourcesLanding, tabOfPath, withChat, withSourcesLanding } from "./lifecycle";
 import { PlanPanelProvider, usePlanPanel } from "./planPanel";
 import { PublicViewProvider } from "./publicView";
 import { isScoping, tabRunStatus } from "./scopingActivity";
@@ -24,10 +24,12 @@ import { RunStreamProvider } from "../store";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { MENU_ITEM_CLASS, moveMenuFocus } from "../ui/radix/menu";
 import { iconButtonClass } from "../ui/brand/icons";
+import { PROSE_LINK_CLASS } from "../ui/brand/inlineActions";
 import { AppFooter } from "./AppFooter";
 import { SensitiveInfoBanner } from "./SensitiveInfoBanner";
 import { ChatSidePanel } from "./workspace/chat/ChatSidePanel";
 import { PlanDocument } from "./workspace/PlanDocument";
+import { SHEET_SCRIM_CLASS } from "../ui/radix/Sheet";
 import { ToastProvider, useToast } from "../ui/radix/Toast";
 import { TooltipProvider } from "../ui/radix/Tooltip";
 import { NameMenu, useAddToProjectStep } from "./NameMenu";
@@ -69,7 +71,7 @@ function TaskName({
       label={COPY.taskSettings}
       fieldLabel={`${TASK.one} name`}
       titleClassName="text-heading font-bold text-navy max-md:text-lead max-md:font-bold"
-      below={<span className="block truncate text-meta leading-tight text-grey">{capabilityLabel(capability)}</span>}
+      below={<TaskKindLine capability={capability} projectIds={projectIds} />}
       canEdit={isOwner}
       pending={update.isPending || archive.isPending}
       rename={(next, done) =>
@@ -92,6 +94,39 @@ function TaskName({
       archiveSentence={`Archiving removes this ${TASK.lower} from your active ${TASK.lowerMany}.`}
       archiveError={`The ${TASK.lower} couldn't be archived. Try again.`}
     />
+  );
+}
+
+/**
+ * The short line under the task's name (owner, round 14): the capability,
+ * then "· in <project>" when the task belongs to one, the name linking to
+ * the project; with several, the first and "and N more". A project the
+ * reader cannot read (or still loading) is left out rather than guessed.
+ */
+function TaskKindLine({
+  capability,
+  projectIds,
+}: {
+  capability: string | null | undefined;
+  projectIds: readonly string[] | null | undefined;
+}) {
+  const ids = projectIds ?? [];
+  const first = ids[0] ?? "";
+  const project = useProject(first);
+  const more = ids.length - 1;
+  return (
+    <span className="block truncate text-meta leading-tight text-grey">
+      {capabilityLabel(capability)}
+      {project.data !== undefined && (
+        <>
+          {" · in "}
+          <Link to={`/projects/${first}`} className={PROSE_LINK_CLASS}>
+            {scrub(project.data.name)}
+          </Link>
+          {more > 0 && ` and ${more} more`}
+        </>
+      )}
+    </span>
   );
 }
 
@@ -230,7 +265,12 @@ function ShellPlanPanel({ taskId }: { taskId: string }) {
   const status = live?.stream.run?.status;
   if (!plan.open) return null;
   return (
-    <div className="absolute inset-y-0 right-0 z-30 flex min-h-0 w-[min(46rem,55%)] shadow-[0_10px_30px_rgba(15,41,74,0.14)] max-md:left-0 max-md:w-auto">
+    <>
+    {/* Over a tab the plan dims the page with the sheets' scrim (owner,
+        round 14); a press on it is a press outside the plan, which closes
+        it. The Agent tab's plan sits beside the thread with no scrim. */}
+    <div aria-hidden="true" data-testid="plan-scrim" className={SHEET_SCRIM_CLASS} />
+    <div className="absolute inset-y-0 right-0 z-50 flex min-h-0 w-[min(46rem,55%)] shadow-[0_10px_30px_rgba(15,41,74,0.14)] max-md:left-0 max-md:w-auto">
       <PlanDocument
         taskId={taskId}
         placement="side"
@@ -241,6 +281,7 @@ function ShellPlanPanel({ taskId }: { taskId: string }) {
         onOverlayChange={() => undefined}
       />
     </div>
+    </>
   );
 }
 
@@ -310,6 +351,20 @@ export function AppShell() {
   // belongs to the signed-in shell only; the public task shell has no stream
   // (task 058, N12).
   const liveShell = base !== null && taskResolved && !publicAccess;
+
+  // A lifecycle tab opens at its top (owner, round 14; `lib/openAtTop`'s
+  // rule): the tabs share one scrolling pane, which would otherwise keep the
+  // last tab's offset. Only when the tab changes (a Sources subtab or the
+  // Result tab's view keeps its place) and never over a link's own `#hash`.
+  const scrollPane = useRef<HTMLDivElement>(null);
+  const tab = base === null ? null : tabOfPath(location.pathname, base);
+  const lastTab = useRef(tab);
+  useLayoutEffect(() => {
+    if (lastTab.current === tab) return;
+    lastTab.current = tab;
+    if (tab === null || location.hash !== "" || scrollPane.current === null) return;
+    scrollPane.current.scrollTop = 0;
+  }, [tab, location.hash]);
 
   // Task views lock to the viewport so the app/lifecycle chrome stays put
   // and only the panes below scroll. List pages keep normal document scroll.
@@ -441,6 +496,7 @@ export function AppShell() {
               (owner, round 11), so the line never runs under the rail. */}
           {liveShell && <RunStatusBar />}
           <div
+            ref={scrollPane}
             data-testid={footerInScrollPane ? "task-scroll-pane" : undefined}
             className={cn(
               "min-h-0 min-w-0 flex-1",

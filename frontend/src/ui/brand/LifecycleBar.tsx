@@ -17,9 +17,10 @@ type LifecycleBarItem = {
   locked: boolean;
   /** Rendered beside the label when the tab wants attention (a pending check-in). */
   marker?: ReactNode;
-  /** When the link opens on a subview (Sources during a run), the tab still
-   *  reads as current anywhere under this path. */
-  activePrefix?: string;
+  /** When the link opens on a subview (Sources during a run), or the tab
+   *  owns more than its own path (Result and the option cards, round 14),
+   *  the tab reads as current anywhere under this path or these paths. */
+  activePrefix?: string | readonly string[];
 };
 
 /**
@@ -69,7 +70,10 @@ export function LifecycleBar({
   lead?: ReactNode;
 }) {
   const { pathname } = useLocation();
-  const under = (prefix: string) => pathname === prefix || pathname.startsWith(`${prefix}/`);
+  const under = (prefix: string | readonly string[]) =>
+    (typeof prefix === "string" ? [prefix] : prefix).some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`),
+    );
   return (
     <div className="flex items-end gap-5">
       {lead !== undefined && (

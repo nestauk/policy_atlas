@@ -57,7 +57,12 @@ const STRENGTH_TONES: Record<StrengthTier, StrengthTone> = {
 
 /** The strength's tone, or `null` for a tier the vocabulary does not hold. */
 export function strengthTone(tier: string | null | undefined): StrengthTone | null {
-  return tier ? (STRENGTH_TONES[tier as StrengthTier] ?? null) : null;
+  if (!tier) return null;
+  // Matched whatever its case or surrounding space ("moderate", " Strong "),
+  // so every surface's word gets its square (round 14: chat's citations).
+  const wanted = tier.trim().toLowerCase();
+  const known = STRENGTH_TIERS.find((name) => name.toLowerCase() === wanted);
+  return known === undefined ? null : STRENGTH_TONES[known];
 }
 
 /** The palette colour a tone square takes: the palette's own green, yellow

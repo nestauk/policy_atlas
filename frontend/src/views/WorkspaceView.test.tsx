@@ -243,6 +243,16 @@ describe("WorkspaceView — the Agent tab is two columns (038 V8, owner ruling 2
     expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
   });
 
+  // Round 14: with a chat open, the tab names it (and follows its title).
+  it("names the open chat in the browser tab, and the Agent tab otherwise", () => {
+    const view = renderAtAgentTab("?chat=c1");
+    expect(document.title).toContain("Cost barriers");
+    view.unmount();
+    renderAtAgentTab();
+    expect(document.title).toContain("Agent");
+    expect(document.title).not.toContain("Cost barriers");
+  });
+
   it("opens the chat a ?chat= deep link names, the same param the other tabs' overlay uses", () => {
     renderAtAgentTab("?chat=c1");
     expect(screen.getByTestId("chat-pane")).toHaveTextContent("c1");

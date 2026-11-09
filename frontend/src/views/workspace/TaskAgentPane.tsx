@@ -26,12 +26,10 @@ import type {
   StageEntry,
 } from "../../store";
 import { Button } from "../../ui/brand/Button";
-import { BRAND_MARK_SIZE } from "../../ui/brand/foldMark";
-import { FoldMarkAnimated } from "../../ui/brand/FoldMarkAnimated";
 import { cn } from "../../ui/brand/cn";
 import { conflictSentences, errorCode, isConflictCode } from "../../lib/errors";
 import { ReauthRedirect, ReconnectingBanner } from "../../ui/feedback";
-import { Arrival, ArrivalProvider, useArrives, useFirstPaintDone } from "../../ui/motion/arrivals";
+import { Arrival, ArrivalProvider, useFirstPaintDone } from "../../ui/motion/arrivals";
 import { prefersReducedMotion } from "../../ui/motion/motion";
 import { useEasedHeight } from "../streamPacing";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
@@ -45,6 +43,8 @@ import { CheckInCard, SettledGateCard } from "./CheckInCard";
 import { BASELINE_GATE_KIND } from "./checkInPresentation";
 import type { components } from "../../api/gen/types";
 import { PartCard, type PartState, type PlanStep, confirmTarget, derivePartStates, planSteps, settledSummary } from "./PartCard";
+import { ActionLine } from "./ActionLine";
+import { GrowBox } from "./GrowBox";
 import { PacedReply } from "./PacedReply";
 import { PlanCard } from "./PlanCard";
 import type { PlanOverlay } from "./planOverlay";
@@ -341,21 +341,9 @@ function TaskAgentBubble({
   );
 }
 
-/** The grey action line under a streaming planner reply (task 058, N9;
- *  annex scene 10): what the planner is doing, with the Policy Atlas fold
- *  mark turning while the reply is arriving (owner, 2026-11-05: the mark,
- *  not the yellow dot, when the Task Agent is working). After a dropped
- *  connection the mark holds still while the transcript is re-read. */
+/** The action line under a streaming planner reply: the shared one. */
 function PlannerActionLine({ label, live, turnId }: { label: string; live: boolean; turnId: string }) {
-  const arrives = useArrives(`action:${turnId}`);
-  return (
-    <p role="status" className={cn("mr-8 flex items-center gap-2 text-body text-grey", arrives && "anim-rise")}>
-      <span className="inline-flex size-[17px] shrink-0 items-center justify-center" aria-hidden="true">
-        <FoldMarkAnimated size={BRAND_MARK_SIZE} onDark={false} reducedMotion={live ? undefined : true} />
-      </span>
-      {scrub(label)}
-    </p>
-  );
+  return <ActionLine label={label} live={live} arrivalId={`action:${turnId}`} />;
 }
 
 /** Whether a turn on its way shows the planner's action line. */
@@ -514,6 +502,79 @@ function DurableTurn({
             </Button>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+/** A turn on its way: the user's words (a confirm turn shows none; its
+ *  settled card is the record), the reply as it streams with the action
+ *  line under it, or the failure with its Retry. */
+function InFlightTurn({
+  turn,
+  composerDisabled,
+  onDiscard,
+  onRetry,
+}: {
+  turn: OptimisticTaskAgentTurn;
+  composerDisabled: boolean;
+  onDiscard: () => void;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="space-y-6">
+      {/* Button-confirm turns never show a bubble — durable turns hide
+          them too; the settled part card is the record. */}
+      {confirmTarget(turn.userMessage) === null && <UserBubble text={turn.userMessage} turnId={turn.clientTurnId} />}
+      {/* The reply and the action line under it are one block, so the
+          reply's box can open the gap between them as its first line
+          lands (round 12). */}
+      {((turn.reply !== undefined && turn.reply !== "") || actionShown(turn)) && (
+        <div>
+          <TaskAgentBubble
+            text={turn.reply ?? ""}
+            turnId={turn.clientTurnId}
+            streamed
+            gapBelow={actionShown(turn)}
+          />
+          {actionShown(turn) && (
+            <PlannerActionLine label={turn.progressLabel ?? ""} live={turn.status === "pending"} turnId={turn.clientTurnId} />
+          )}
+        </div>
+      )}
+      {turn.status === "failed" && (
+        <Arrival arrivalId={`failed:${turn.clientTurnId}`} className="mr-8 border border-line bg-paper px-3.5 py-2.5">
+          <p className="text-body text-ink">
+            {isConflictCode(turn.errorCode)
+              ? conflictSentences[turn.errorCode]
+              : "That turn couldn't be processed. Your draft so far is unchanged."}
+          </p>
+          {turn.errorCode === "stale_turn" || turn.errorCode === "already_answered" ? (
+            // Retrying the same client_turn_id can never clear a
+            // stale_turn conflict, and an already-answered check-in
+            // will not un-answer itself — offer the refresh instead.
+            // Both render inline, right where the message was typed;
+            // neither becomes a toast.
+            <Button
+              size="sm"
+              variant="secondary"
+              className="mt-2"
+              onClick={onDiscard}
+            >
+              Refresh conversation
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="mt-2"
+              disabled={composerDisabled}
+              onClick={onRetry}
+            >
+              Retry
+            </Button>
+          )}
+        </Arrival>
       )}
     </div>
   );
@@ -813,7 +874,7 @@ export function TaskAgentPane({
         onWheel={footer.onWheel}
         onTouchStart={footer.onTouchStart}
         onTouchMove={footer.onTouchMove}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto py-4 [scrollbar-gutter:stable]"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto py-4 [overflow-anchor:none] [scrollbar-gutter:stable]"
       >
         {/* Bottom-anchor: pushes a short thread to the composer end; the
             landing prompt sits in the top third (1:2 spacer split). */}
@@ -848,7 +909,11 @@ export function TaskAgentPane({
           </h2>
         )}
 
-        {thread.flatMap((item, index) => {
+        {(() => {
+          // One list (round 14): a turn on its way and the stored turn that
+          // replaces it share their key and their GrowBox, so the swap eases
+          // in place; the plan card stays after both, never jumping between.
+          const durable = thread.flatMap((item, index) => {
           const rendered =
             item.type === "gate_check_in" ? (
               <CheckInCard
@@ -863,8 +928,8 @@ export function TaskAgentPane({
                 <SettledGateCard label={item.decision.label} />
               </Arrival>
             ) : item.type === "task_agent_turn" ? (
+              <GrowBox key={`turn-${item.turn.client_turn_id}`} arrivalId={`turn:${item.turn.client_turn_id}`}>
               <DurableTurn
-                key={`turn-${item.turn.turn_index}`}
                 taskId={taskId}
                 turn={item.turn}
                 isLatest={item.turn.turn_index === latestTurnIndex}
@@ -876,11 +941,14 @@ export function TaskAgentPane({
                 scopingPlan={planQuery.data?.scoping}
                 onSend={(text) => send({ message: text, clientTurnId: crypto.randomUUID() })}
               />
+              </GrowBox>
             ) : item.run.capability_run_id === liveRunId && liveTrace !== null ? (
-              <div key="live-run-block" className="space-y-6">
+              <GrowBox key="live-run-block" arrivalId={`run:${liveRunId}`}>
+              <div className="space-y-6">
                 <Arrival arrivalId={`run:${liveRunId}`}>{liveTrace}</Arrival>
                 <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} stages={stream.stages} />
               </div>
+              </GrowBox>
             ) : (
               <RunBlock
                 key={`run-${item.run.capability_run_id}`}
@@ -895,68 +963,33 @@ export function TaskAgentPane({
                 checkIns={checkInsQuery.data}
               />
             );
-          return index === planCardAt - 1
-            ? [rendered, <PlanCard key="plan-card" taskId={taskId} runActive={runActive} streaming={streaming} started={planStarted} isOwner={isOwner} onReviewPlan={onReviewPlan} overlay={planOverlay} onOverlayApplied={onOverlayApplied} onDiscardOverlay={onDiscardOverlay} />]
-            : [rendered];
-        })}
+          return [{ rendered, index }];
+          });
+          const planCard = (
+            <PlanCard key="plan-card" taskId={taskId} runActive={runActive} streaming={streaming} started={planStarted} isOwner={isOwner} onReviewPlan={onReviewPlan} overlay={planOverlay} onOverlayApplied={onOverlayApplied} onDiscardOverlay={onDiscardOverlay} />
+          );
+          const inFlight = transcript.optimisticTurns.map((turn: OptimisticTaskAgentTurn) => (
+            <GrowBox key={`turn-${turn.clientTurnId}`} arrivalId={`turn:${turn.clientTurnId}`}>
+              <InFlightTurn
+                turn={turn}
+                composerDisabled={composerDisabled}
+                onDiscard={() => transcript.discard(turn.clientTurnId)}
+                onRetry={() => void transcript.retry(turn.clientTurnId)}
+              />
+            </GrowBox>
+          ));
+          // The plan card follows the last turn; with turns on their way and
+          // nothing after the stored ones, it follows those too.
+          const planAfterInFlight = inFlight.length > 0 && planCardAt >= thread.length;
+          return [
+            ...durable.flatMap(({ rendered, index }) =>
+              index === planCardAt - 1 && !planAfterInFlight ? [rendered, planCard] : [rendered],
+            ),
+            ...inFlight,
+            ...(planAfterInFlight && planCardAt > 0 ? [planCard] : []),
+          ];
+        })()}
 
-        {transcript.optimisticTurns.map((turn: OptimisticTaskAgentTurn) => (
-          <div key={turn.clientTurnId} className="space-y-6">
-            {/* Button-confirm turns never show a bubble — durable turns hide
-                them too; the settled part card is the record. */}
-            {confirmTarget(turn.userMessage) === null && <UserBubble text={turn.userMessage} turnId={turn.clientTurnId} />}
-            {/* The reply and the action line under it are one block, so the
-                reply's box can open the gap between them as its first line
-                lands (round 12). */}
-            {((turn.reply !== undefined && turn.reply !== "") || actionShown(turn)) && (
-              <div>
-                <TaskAgentBubble
-                  text={turn.reply ?? ""}
-                  turnId={turn.clientTurnId}
-                  streamed
-                  gapBelow={actionShown(turn)}
-                />
-                {actionShown(turn) && (
-                  <PlannerActionLine label={turn.progressLabel ?? ""} live={turn.status === "pending"} turnId={turn.clientTurnId} />
-                )}
-              </div>
-            )}
-            {turn.status === "failed" && (
-              <Arrival arrivalId={`failed:${turn.clientTurnId}`} className="mr-8 border border-line bg-paper px-3.5 py-2.5">
-                <p className="text-body text-ink">
-                  {isConflictCode(turn.errorCode)
-                    ? conflictSentences[turn.errorCode]
-                    : "That turn couldn't be processed. Your draft so far is unchanged."}
-                </p>
-                {turn.errorCode === "stale_turn" || turn.errorCode === "already_answered" ? (
-                  // Retrying the same client_turn_id can never clear a
-                  // stale_turn conflict, and an already-answered check-in
-                  // will not un-answer itself — offer the refresh instead.
-                  // Both render inline, right where the message was typed;
-                  // neither becomes a toast.
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="mt-2"
-                    onClick={() => transcript.discard(turn.clientTurnId)}
-                  >
-                    Refresh conversation
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="mt-2"
-                    disabled={composerDisabled}
-                    onClick={() => void transcript.retry(turn.clientTurnId)}
-                  >
-                    Retry
-                  </Button>
-                )}
-              </Arrival>
-            )}
-          </div>
-        ))}
 
         {/* The planner's question, then its quick replies (N10). The chips
             send a task_agent turn (task 033 phase 10c, contract § 11 / rubric
@@ -983,10 +1016,12 @@ export function TaskAgentPane({
         )}
 
         {liveTrace !== null && !threadHasLiveRun && (
-          <div key="live-run-fallback" className="space-y-6">
+          <GrowBox key="live-run-fallback" arrivalId={`run:${liveRunId}`}>
+          <div className="space-y-6">
             <Arrival arrivalId={`run:${liveRunId}`}>{liveTrace}</Arrival>
             <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} stages={stream.stages} />
           </div>
+          </GrowBox>
         )}
         {/* A waiting check-in sits under the run's trace. */}
         {stream.pendingCheckIn !== null && stream.pendingCheckIn.kind !== BASELINE_GATE_KIND && (

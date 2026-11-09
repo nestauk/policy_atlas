@@ -34,6 +34,12 @@ describe("evidence strength", () => {
     ]);
     expect(STRENGTH_TIERS.map(strengthTierColour)).toEqual(["green", "green", "yellow", "yellow", "red", "red"]);
     expect(strengthTone("Moderate confidence")).toBeNull();
+    // Round 14: matched whatever its case or surrounding space (chat sends
+    // "moderate"), so the word always gets its square.
+    expect(strengthTierColour("moderate")).toBe("yellow");
+    expect(strengthTierColour(" very STRONG ")).toBe("green");
+    expect(strengthTone("unrated")).toBe("weak");
+    expect(strengthTone("")).toBeNull();
     expect(strengthTierColour(null)).toBeNull();
   });
 

@@ -66,7 +66,10 @@ export function WorkspaceView() {
   const [planPlacement, setPlanPlacement] = useState<"center" | "side">("side");
   // Plan edits live in the store (task 058, N20): leaving the tab keeps them.
   const [planOverlay, setPlanOverlay] = usePlanEdits(taskId);
-  useDocumentTitle(task.data?.name, LIFECYCLE_LABELS.agent);
+  // With a chat open, the tab names it, following its title as the backend
+  // names it (round 14: the cached read carries the new title).
+  const openChatTitle = rows.find((row) => row.id === chatId)?.title ?? "";
+  useDocumentTitle(task.data?.name, openChatTitle !== "" && chatId !== null && chatId !== DRAFT_CHAT_ID ? openChatTitle : LIFECYCLE_LABELS.agent);
 
   const runActive = stream.run?.status === "running" || stream.run?.status === "paused";
   // Task 033 phase 10c (contract § 11 / rubric 37) — the Plan route (this

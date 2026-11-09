@@ -677,6 +677,20 @@ function useSettleMotion(settled: boolean) {
   const [leaving, setLeaving] = useState(false);
   const [justSettled, setJustSettled] = useState(false);
   const [flip, setFlip] = useState(0);
+  // The box's open height, held through the settle's commit (round 14): the
+  // open form leaves the flow in that commit, and anything that reads the
+  // layout before the height animation starts (React giving focus back to
+  // the pressed option) saw a shorter thread and clamped its scroll, so the
+  // thread dropped for a frame. Released once the animation holds it.
+  // Set by the press that settles the card (an event handler, so it lands in
+  // the settle's own commit); a settle that comes from the data needs none,
+  // since only a press makes React give focus back. The layout effect
+  // clears the inline height once the animation holds the box.
+  const [hold, setHold] = useState<number | null>(null);
+  const holdForSettle = () => {
+    const box = boxRef.current;
+    if (box !== null && !prefersReducedMotion()) setHold(box.offsetHeight);
+  };
   // Derived during render, so the fading form and the settled words land in
   // the same commit.
   if (seen !== settled) {
@@ -701,20 +715,32 @@ function useSettleMotion(settled: boolean) {
   useLayoutEffect(() => {
     const box = boxRef.current;
     if (box === null) return;
-    const height = box.offsetHeight;
-    const from = lastHeight.current;
+    const settling = flip !== animated.current;
+    // While held, the settled height is the settled words' own (the one
+    // child in the flow) plus the box's borders; never the held height.
+    const inFlow = box.firstElementChild as HTMLElement | null;
+    const height =
+      settling && hold !== null && inFlow !== null
+        ? inFlow.offsetHeight + (box.offsetHeight - box.clientHeight)
+        : box.offsetHeight;
+    const from = settling && hold !== null ? hold : lastHeight.current;
     lastHeight.current = height;
-    if (flip === animated.current) return;
-    animated.current = flip;
-    if (typeof box.animate !== "function") return;
-    const timing = { duration: SETTLE_MS, easing: EASE_OUT_STRONG };
-    if (from !== null && from !== height) {
-      box.animate([{ height: `${from}px` }, { height: `${height}px` }], timing);
+    if (settling) {
+      animated.current = flip;
+      if (typeof box.animate === "function") {
+        const timing = { duration: SETTLE_MS, easing: EASE_OUT_STRONG };
+        if (from !== null && from !== height) {
+          box.animate([{ height: `${from}px` }, { height: `${height}px` }], timing);
+        }
+        shellRef.current?.animate([{ transform: "translateX(-2rem)" }, { transform: "translateX(0)" }], timing);
+      }
     }
-    shellRef.current?.animate([{ transform: "translateX(-2rem)" }, { transform: "translateX(0)" }], timing);
+    // The hold is for one commit: the animation holds the box from here (and
+    // a press that did not settle the card leaves it as it was).
+    if (box.style.height !== "") box.style.height = "";
   });
 
-  return { shellRef, boxRef, leaving, justSettled, hadOpenForm };
+  return { shellRef, boxRef, leaving, justSettled, hadOpenForm, hold, holdForSettle };
 }
 
 /**
@@ -767,7 +793,12 @@ export function PartCard({
   const name = partName ?? part.title;
 
   const settled = confirmedOption !== null || state.answered || !state.live;
-  const { shellRef, boxRef, leaving, justSettled, hadOpenForm } = useSettleMotion(settled);
+  const { shellRef, boxRef, leaving, justSettled, hadOpenForm, hold, holdForSettle } = useSettleMotion(settled);
+  // Every send settles the card: hold its height for the settle's commit.
+  const send = (message: string) => {
+    holdForSettle();
+    onSend(message);
+  };
   // An arriving open card lays itself out (the animation sweep's entry 5):
   // its chip groups and radio rows fade up 4 px in turn, 80 ms after the
   // card and 40 ms apart (capped at six), so the eye reads it top-down as it
@@ -823,7 +854,7 @@ export function PartCard({
           label={`Change ${name}`}
           disabled={disabled}
           onSend={(text) => {
-            onSend(`Change this part: ${text}`);
+            send(`Change this part: ${text}`);
             setChanging(false);
           }}
         />
@@ -840,7 +871,7 @@ export function PartCard({
   const scopeButton = part.id === "scope" && primary !== undefined;
   const looksRight = () => {
     if (primary === undefined) return;
-    onSend(
+    send(
       staged.length === 0
         ? confirmMessage(part, primary)
         : `${chipEditMessage(staged)}\n\n[confirm part=${part.id} option=${primary.id}]`,
@@ -931,7 +962,7 @@ export function PartCard({
                 size="sm"
                 disabled={disabled}
                 onClick={() => {
-                  onSend(chipEditMessage(staged));
+                  send(chipEditMessage(staged));
                   setStaged([]);
                 }}
               >
@@ -972,7 +1003,7 @@ export function PartCard({
                   data-part-option={option.primary ? "primary" : "secondary"}
                   onChoose={() => {
                     setPickedId(option.id);
-                    if (!words) onSend(confirmMessage(part, option));
+                    if (!words) send(confirmMessage(part, option));
                   }}
                 />
                 {words && selected && interactive && (
@@ -981,7 +1012,7 @@ export function PartCard({
                       label={option.label}
                       disabled={disabled}
                       onSend={(text) => {
-                        onSend(`${option.label}: ${text}`);
+                        send(`${option.label}: ${text}`);
                         setPickedId(null);
                       }}
                     />
@@ -1023,6 +1054,7 @@ export function PartCard({
       )}
       <div
         ref={boxRef}
+        style={hold !== null ? { height: hold } : undefined}
         data-testid={settled ? "part-settled" : "part-card"}
         className={cn(
           "relative overflow-hidden border transition-[background-color,border-color] duration-300 ease-[var(--ease-out-strong)]",

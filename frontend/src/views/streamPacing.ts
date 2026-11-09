@@ -252,6 +252,40 @@ export function useFollowTail(anchorRef: RefObject<HTMLElement | null>, active: 
   }, [anchorRef, active]);
 }
 
+/** Marks an eased box while its height animation runs, so a box around it
+ *  follows the in-between heights instead of easing them again. */
+export const EASING_ATTR = "data-easing";
+
+/** Eased boxes waiting to measure a change, run together deepest first. */
+let pendingMeasures: { depth: number; measure: () => void }[] = [];
+
+/** How many elements enclose `element`: a nested box is deeper than the box
+ *  around it. */
+function depthOf(element: Element): number {
+  let depth = 0;
+  for (let node = element.parentElement; node !== null; node = node.parentElement) depth += 1;
+  return depth;
+}
+
+/**
+ * Measure a box's change once every observer has heard it, the deepest box
+ * first (round 14: the thread's box, created first, measured a reply's new
+ * line before the reply's own box had eased it, and clipped the action line
+ * under it). All the observers hear one change in the same delivery; the
+ * flush runs after it, so a nested box always absorbs its own change before
+ * a box around it measures.
+ */
+function scheduleMeasure(depth: number, measure: () => void): void {
+  if (pendingMeasures.length === 0) {
+    queueMicrotask(() => {
+      const batch = pendingMeasures.sort((a, b) => b.depth - a.depth);
+      pendingMeasures = [];
+      for (const item of batch) item.measure();
+    });
+  }
+  pendingMeasures.push({ depth, measure });
+}
+
 /** How long a section's height takes to follow its text when repaired
  *  sentences change length (task 058, owner round 8). */
 export const EASE_HEIGHT_MS = 300;
@@ -280,9 +314,10 @@ const EASE_OUT_STRONG = "cubic-bezier(0.23, 1, 0.32, 1)";
  * animations would chase each other).
  *
  * Boxes nest (round 12: the thread around a streamed reply). The change is
- * measured a microtask after the MutationObserver hears it, so an eased box
- * inside this one that hears the same change starts its own ease first and
- * this box eases only what that one does not absorb. A ResizeObserver only
+ * measured after every observer has heard it, the deepest box first
+ * (round 14), so an eased box inside this one that hears the same change
+ * starts its own ease first and this box eases only what that one does not
+ * absorb. A ResizeObserver only
  * reads: it keeps the height to ease from current while the content grows
  * without a DOM change here (the inner box opening); and a grow-only box
  * whose ease ends short of content that grew under it carries on from
@@ -313,6 +348,7 @@ export function useEasedHeight(
       running?.cancel();
       last = next;
       outer.style.overflow = "clip";
+      outer.setAttribute(EASING_ATTR, "");
       const animation = outer.animate([{ height: `${from}px` }, { height: `${next}px` }], {
         duration: EASE_HEIGHT_MS,
         easing: EASE_OUT_STRONG,
@@ -332,26 +368,37 @@ export function useEasedHeight(
         }
         last = now;
         outer.style.overflow = "";
+        outer.removeAttribute(EASING_ATTR);
       };
     };
     const measure = () => {
       queued = false;
       const next = inner.offsetHeight;
       if (Math.abs(next - last) < 1) return;
+      // A box inside this one is easing its own change: the content's height
+      // is that box's in-between height, which this box follows rather than
+      // chasing with an ease of its own (round 14: the turn's box chased the
+      // reply's and clipped the action line under it).
+      if (inner.querySelector(`[${EASING_ATTR}]`) !== null) {
+        if (running === null) last = next;
+        return;
+      }
       if (growOnly && next < last) {
         // A shrink passes through: drop any growth still running.
         running?.cancel();
         running = null;
         outer.style.overflow = "";
+        outer.removeAttribute(EASING_ATTR);
         last = next;
         return;
       }
       ease(running !== null ? outer.getBoundingClientRect().height : last, next);
     };
+    const depth = depthOf(outer);
     const observer = new MutationObserver(() => {
       if (queued) return;
       queued = true;
-      queueMicrotask(measure);
+      scheduleMeasure(depth, measure);
     });
     observer.observe(inner, { subtree: true, childList: true, characterData: true, attributes: true });
     // Read only: it never resizes a box, so it cannot loop with the
@@ -368,6 +415,7 @@ export function useEasedHeight(
       follower?.disconnect();
       running?.cancel();
       outer.style.overflow = "";
+      outer.removeAttribute(EASING_ATTR);
     };
   }, [active, growOnly]);
   return [box, content];

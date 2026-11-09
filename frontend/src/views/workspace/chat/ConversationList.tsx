@@ -7,6 +7,7 @@ import { COPY } from "../../../lib/vocabulary";
 import { cn } from "../../../ui/brand/cn";
 import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
 import { DRAFT_CHAT_ID, TASK_AGENT_TAB_ID, taskAgentConversationId, useConversationMutations } from "./conversationState";
+import { ChangingText } from "../ChangingText";
 import { ArchiveIcon, ChevronIcon, ICON_ROW, PencilIcon, RestoreIcon, iconButtonClass } from "../../../ui/brand/icons";
 import { CAPTION_LABEL_CLASS } from "../../../ui/brand/label";
 
@@ -198,7 +199,10 @@ function ListRow({ row, taskAgentId, selectedId, onOpen, editing, title, setTitl
         )}
       >
         {isTaskAgent && <FoldMarkIcon size={10} className="text-blue" />}
-        <span className="truncate">{label}</span>
+        {/* A chat's title, written by the backend from its first message
+            and put in the cached reads (round 14), is revealed as the task's
+            name is; the reader's own rename remounts the label and commits. */}
+        {isTaskAgent ? <span className="truncate">{label}</span> : <ChangingText text={row.title} testIdPrefix="chat-title" />}
       </button>
       {!isTaskAgent && row.id !== DRAFT_CHAT_ID && (
         <div className="flex shrink-0 items-center opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 group-focus-within/row:opacity-100">

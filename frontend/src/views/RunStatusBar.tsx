@@ -1,7 +1,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 
-import { useConversations } from "../api/queries";
+import { useConversations, useTask } from "../api/queries";
 import { Figures } from "../lib/figures";
 import { useNow } from "../lib/freshness";
 import { createInitialRunStreamState } from "../store";
@@ -104,8 +104,20 @@ export function RunStatusBar() {
   const live = useTaskLive();
   const stream = live?.stream ?? NO_STREAM;
   const run = stream.run;
-  const ticking = run?.status === "running" || run?.status === "paused";
   const taskId = live?.taskId ?? "";
+  // The bar waits for the task's run read (owner, round 14: entering a
+  // finished task it flashed in and out while the stream replayed the
+  // run). It shows once that read has loaded, and never for the run the
+  // read says has ended; a run newer than the read (just started) shows.
+  const task = useTask(taskId);
+  const latestRun = task.data?.latest_run ?? null;
+  const readSaysEnded =
+    latestRun !== null &&
+    latestRun.capability_run_id === run?.id &&
+    latestRun.status !== "running" &&
+    latestRun.status !== "paused";
+  const ticking =
+    (run?.status === "running" || run?.status === "paused") && task.data !== undefined && !readSaysEnded;
   const conversations = useConversations(taskId, { status: "active" });
   const { activeConversationId, setActiveConversation } = useActiveConversation();
   const wide = useSidebarAvailable();

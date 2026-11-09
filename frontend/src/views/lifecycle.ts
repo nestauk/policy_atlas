@@ -102,8 +102,14 @@ export function lifecycleTabs(
     label: LIFECYCLE_LABELS[tab],
     to: `${base}${TAB_PATHS[tab]}`,
     locked: !open.includes(tab),
+    // The option cards are the Result's (owner, round 14): the Result tab
+    // stays current on them, its rule full.
+    ...(tab === "result" ? { activePrefix: RESULT_PREFIXES.map((path) => `${base}${path}`) } : {}),
   }));
 }
+
+/** Every path the Result tab owns: its views and the option cards. */
+const RESULT_PREFIXES = ["/result", "/options"] as const;
 
 /**
  * Which Sources view the Sources tab opens on (annex § Owner round after the
@@ -246,6 +252,8 @@ export function tabOfPath(pathname: string, base: string): LifecycleTab | null {
   if (pathname === base || pathname === `${base}/`) return "agent";
   if (!pathname.startsWith(`${base}/`)) return null;
   const segment = pathname.slice(base.length + 1).split("/")[0];
+  // An option card is the Result's (round 14).
+  if (segment === "options") return "result";
   return LIFECYCLE_TABS.find((tab) => tab !== "agent" && TAB_PATHS[tab] === `/${segment}`) ?? null;
 }
 

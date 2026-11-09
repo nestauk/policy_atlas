@@ -10,6 +10,7 @@ import { PrivacyView } from "./legal/PrivacyView";
 import { TermsView } from "./legal/TermsView";
 import { useDocumentTitle } from "../lib/title";
 import { TASK } from "../lib/vocabulary";
+import { usePlanPanel } from "./planPanel";
 
 // Round 12: the shell forgets a task's report expand state when the reader
 // leaves the task; the hook is watched here, its rule is ArtefactOutline's.
@@ -94,6 +95,10 @@ vi.mock("../api/queries", () => ({
       : undefined,
   }),
   useProjects: () => ({ data: { data: projectsState.rows } }),
+  // Round 14: the capability line names the task's first project.
+  useProject: (projectId: string) => ({
+    data: projectsState.rows.find((row) => row.project_id === projectId),
+  }),
   useCheckIns: () => ({ data: { data: [{ check_in_id: "pending-1" }] } }),
   // The chat side panel (029 rev 3.4) mounts on non-workspace task routes.
   useConversations: useConversationsState.mock,
@@ -141,7 +146,15 @@ vi.mock("../api/sse", () => ({
 /** A task page that sets its title the way every task view does. */
 function TitledTask() {
   useDocumentTitle("Acme task", "Sources");
-  return <div>task</div>;
+  const plan = usePlanPanel();
+  return (
+    <div>
+      task
+      <button type="button" onClick={plan.openPlan}>
+        Open the plan (test)
+      </button>
+    </div>
+  );
 }
 
 function renderShell(initialPath: string) {
@@ -931,5 +944,54 @@ describe("AppShell — the scoping readers (task 045)", () => {
     inside.unmount();
     renderShell("/");
     expect(logoAnimates()).toBe(false);
+  });
+});
+
+describe("AppShell — round 14 (owner)", () => {
+  beforeEach(() => {
+    taskState.isOwner = true;
+    taskState.capability = "evidence_search";
+    taskState.projectIds = [];
+    projectsState.rows = [];
+  });
+
+  it("names the task's project after its kind, linking to it, and counts the others", () => {
+    projectsState.rows = [
+      { project_id: "p1", name: "Child health, Tower Hamlets" },
+      { project_id: "p2", name: "Food environments" },
+    ];
+    taskState.projectIds = ["p1", "p2"];
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    const task = screen.getByRole("navigation", { name: TASK.one });
+    expect(within(task).getByText(/^Evidence search · in/)).toHaveTextContent(
+      "Evidence search · in Child health, Tower Hamlets and 1 more",
+    );
+    expect(within(task).getByRole("link", { name: "Child health, Tower Hamlets" })).toHaveAttribute("href", "/projects/p1");
+  });
+
+  it("says only the kind for a task in no project", () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    const task = screen.getByRole("navigation", { name: TASK.one });
+    expect(within(task).getByText("Evidence search")).toBeInTheDocument();
+    expect(within(task).queryByText(/· in/)).toBeNull();
+  });
+
+  it("dims the page with the sheets' scrim while the plan is open over a tab", async () => {
+    const user = userEvent.setup();
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    expect(screen.queryByTestId("plan-scrim")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Open the plan (test)" }));
+    expect(screen.getByRole("complementary", { name: "Search plan" })).toBeInTheDocument();
+    expect(screen.getByTestId("plan-scrim")).toHaveClass("bg-navy/40");
+  });
+
+  it("opens a lifecycle tab at its top", async () => {
+    const user = userEvent.setup();
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    const pane = screen.getByTestId("task-scroll-pane");
+    pane.scrollTop = 480;
+    const nav = screen.getByRole("navigation", { name: TASK.one });
+    await user.click(within(nav).getByRole("link", { name: /^Share/ }));
+    expect(screen.getByTestId("task-scroll-pane").scrollTop).toBe(0);
   });
 });

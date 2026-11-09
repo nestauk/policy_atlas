@@ -202,8 +202,13 @@ describe("RunTrace — live (annex § The run trace; owner round 6: the card's b
     expect(rowGrid.className).toContain(template);
     expect(topGrid.className).toContain(template);
     const counts = [...done.querySelectorAll("span.text-grey")].find((el) => el.textContent?.startsWith("312 found"));
-    expect(counts).toHaveClass("@lg:text-right");
-    expect(within(done).getByRole("link", { name: "Sources →" }).parentElement).toHaveClass("@lg:text-right");
+    expect(counts).toHaveClass("text-right");
+    const linkCell = within(done).getByRole("link", { name: "Sources →" }).parentElement as HTMLElement;
+    expect(linkCell).toHaveClass("text-right");
+    // Narrow (the sidebar, a phone), the counts and the link sit on the row's
+    // right edge as the wide table's do, the link wrapping to its own line
+    // there (owner, round 14), not inline after the words.
+    expect(linkCell.parentElement).toHaveClass("flex-1", "flex-wrap", "justify-end", "@lg:contents");
     // Narrow, a finished row's counts take the line under its label.
     expect(within(done).getByText("Searching and screening")).toHaveClass("basis-full", "@lg:basis-auto");
     // Every line shares one line box, so the rows stand equal.
@@ -347,7 +352,7 @@ describe("RunTrace — live (annex § The run trace; owner round 6: the card's b
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
     const running = SEARCHED.map((e) => ({ ...e, status: e.stage === "screen" ? ("started" as const) : e.status }));
     const { rerender } = render(trace({ stages: running, liveness: {} }));
-    const counts = () => rowOf("Searching and screening").querySelector(".text-grey.\\@lg\\:text-right");
+    const counts = () => rowOf("Searching and screening").querySelector(".text-grey.text-right");
     expect(counts()).not.toHaveClass("anim-swap-in");
     rerender(trace());
     expect(rowOf("Searching and screening")).not.toHaveClass("anim-rise");

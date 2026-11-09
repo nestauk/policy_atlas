@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { components } from "../../api/gen/types";
 import { usePatchPlan } from "../../api/mutations";
@@ -949,6 +949,14 @@ export function PlanDocument({
 
   // A press anywhere outside the plan closes it (owner, round 13).
   const planRef = useRef<HTMLElement>(null);
+  // Every open starts at the plan's top, its title in view (owner, round 14),
+  // and again when its content first arrives, so a late load never leaves
+  // the pane part-way down.
+  const paneRef = useRef<HTMLDivElement>(null);
+  const loaded = planQuery.data !== undefined;
+  useLayoutEffect(() => {
+    if (paneRef.current !== null) paneRef.current.scrollTop = 0;
+  }, [loaded]);
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
       if (pressedOutside(event.target, planRef.current)) onClose();
@@ -1078,7 +1086,7 @@ export function PlanDocument({
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={paneRef} data-testid="plan-pane" className="min-h-0 flex-1 overflow-y-auto">
         <div className={cn("mx-auto w-full px-5 py-8", READING_COLUMN_MAX_W)}>
           <div className="mb-6 flex items-start justify-between gap-3 border-b border-white/15 pb-6">
             <header className="min-w-0 flex-1">
