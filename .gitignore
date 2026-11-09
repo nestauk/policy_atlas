@@ -92,3 +92,6 @@ scripts/feasibility_checks/
 docs/tasks/*/research/
 docs/tasks/*/spec-changes-proposed.md
 docs/tasks/*/intent.md
+
+# A dev sign-in issuer started from the repo root instead of backend/ (the real one is backend/.dev-issuer)
+.dev-issuer/
