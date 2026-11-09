@@ -17,6 +17,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
@@ -535,3 +536,80 @@ def test_the_note_is_rewritten_only_when_the_places_have_moved(
         # Fresh again: a second press writes nothing.
         assert client.post(url, headers=owner.headers).json()["note"] == "stub note"
         assert note_lines() == ["Policy Atlas updated the shortlist note."]
+
+
+def test_a_note_refresh_opens_no_run_and_writes_only_its_history_line(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Round 15 (owner): the refresh runs inline under the request: no
+    capability or component run, no ``run.*`` or stage event, so the Task
+    Agent thread gets no new progress card; only its one History line."""
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
+        built = _org_build(engine, owner, colleague, linked=False)
+        guarantee = built.options["Youth guarantee"]
+        with engine.begin() as conn:
+            conn.execute(
+                longlist_result.update()
+                .where(longlist_result.c.task_id == built.task_id)
+                .values(
+                    shortlist={
+                        "note": "Old note.",
+                        "provenance": {"appetite": "mostly_tried"},
+                        "places_at": [],
+                    }
+                )
+            )
+        assert _post(client, built, guarantee, "shortlist", owner.headers).status_code == 200
+
+        def runs() -> list[Any]:
+            response = client.get(
+                f"/api/v1/tasks/{built.task_id}/runs?page_size=200", headers=owner.headers
+            )
+            assert response.status_code == 200, response.text
+            return list(response.json()["data"])
+
+        def event_types() -> list[str]:
+            with engine.connect() as conn:
+                return [entry["event_type"] for entry in events.read(conn, built.task_id)]
+
+        runs_before, events_before = runs(), event_types()
+        # The live half of the stream: nothing reaches the tick hub.
+        from policy_atlas.api.routers import sse
+        from policy_atlas.core import liveness
+
+        hub_ticks: list[Any] = []
+        original_publish = liveness.tick_hub.publish_tick
+
+        def capture(task: uuid.UUID, **payload: Any) -> None:
+            hub_ticks.append(payload)
+            original_publish(task, **payload)
+
+        monkeypatch.setattr(liveness.tick_hub, "publish_tick", capture)
+        with engine.connect() as conn:
+            capability_runs_before = conn.execute(
+                select(capability_run.c.capability_run_id).where(
+                    capability_run.c.task_id == built.task_id
+                )
+            ).all()
+        refreshed = client.post(
+            f"/api/v1/tasks/{built.task_id}/shortlist/note", headers=owner.headers
+        )
+        assert refreshed.status_code == 200, refreshed.text
+        assert refreshed.json()["note_stale"] is False
+        assert runs() == runs_before
+        with engine.connect() as conn:
+            capability_runs_after = conn.execute(
+                select(capability_run.c.capability_run_id).where(
+                    capability_run.c.task_id == built.task_id
+                )
+            ).all()
+        assert capability_runs_after == capability_runs_before
+        assert event_types()[len(events_before) :] == ["shortlist.note_updated"]
+        assert hub_ticks == []
+        # The persisted half: the stream maps the new event to no frame at all.
+        with engine.connect() as conn:
+            rows = sse._event_rows(conn, task_id=built.task_id, after=0, through=None)
+            new_rows = rows[len(events_before) :]
+            assert [row["event_type"] for row in new_rows] == ["shortlist.note_updated"]
+            frames = sse._map_rows(conn, task_id=built.task_id, rows=new_rows, through=None)
+        assert frames == []

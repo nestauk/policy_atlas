@@ -1430,3 +1430,24 @@ describe("reduceRunStreamFrame — child walks", () => {
     expect(state.runs[CHILD_ID]).toBe("interrupted");
   });
 });
+
+describe("a tick with no run (round 15)", () => {
+  it("never opens a run, whether a run is tracked or not", () => {
+    const tick = {
+      type: "tick",
+      stage: null,
+      activity: "Updating the shortlist note",
+      done: null,
+      total: null,
+      unit: null,
+      section: null,
+      heartbeat: false,
+      dropped: 0,
+      capability_run_id: null,
+      occurred_at: "2026-11-09T10:00:00Z",
+    } as unknown as SseFrame;
+    const fresh = reduceRunStreamFrame(createInitialRunStreamState(), tick);
+    expect(fresh.run).toBeNull();
+    expect(Object.keys(fresh.runs ?? {})).toEqual([]);
+  });
+});
