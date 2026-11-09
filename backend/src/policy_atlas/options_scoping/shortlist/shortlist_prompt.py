@@ -29,11 +29,6 @@ SHORTLIST_MAX_OUTPUT_TOKENS = 4_096
 #: One reason, after strip (contract § The component, code checks).
 SHORTLIST_REASON_MAX_CHARS = 400
 
-#: The not-covered note's bound lives with the note step
-#: (``shortlist_note_prompt.SHORTLIST_NOTE_MAX_CHARS``); kept here only until
-#: the step stops reading it.
-SHORTLIST_NOTE_MIN_CHARS = 1
-SHORTLIST_NOTE_MAX_CHARS = 1_200
 
 
 class ShortlistPickWire(BaseModel):
@@ -261,7 +256,5 @@ def reask_message(*, failures: list[str], to_fill: int) -> ChatCompletionMessage
             failures="\n".join(f"- {failure}" for failure in failures),
             to_fill=to_fill,
             reason_max=SHORTLIST_REASON_MAX_CHARS,
-            note_min=SHORTLIST_NOTE_MIN_CHARS,
-            note_max=SHORTLIST_NOTE_MAX_CHARS,
         ),
     }
