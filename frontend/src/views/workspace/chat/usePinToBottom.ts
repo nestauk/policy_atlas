@@ -1,6 +1,8 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { RefObject, UIEvent } from "react";
 
+import { afterEasedHeights } from "../../streamPacing";
+
 /** A reader this close to the end still counts as "at the end". */
 const PINNED_WITHIN = 120;
 
@@ -27,9 +29,13 @@ export function usePinToBottom(
   key: string,
 ) {
   const pinned = useRef(true);
+  // Exactly at the end at the last look: what a DOM change puts back.
+  const atBottom = useRef(true);
   const [atEnd, setAtEnd] = useState(true);
   const sync = (el: HTMLElement) => {
-    pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < PINNED_WITHIN;
+    const below = el.scrollHeight - el.scrollTop - el.clientHeight;
+    pinned.current = below < PINNED_WITHIN;
+    atBottom.current = below < 1;
   };
 
   useLayoutEffect(() => {
@@ -51,7 +57,21 @@ export function usePinToBottom(
     const observer = new ResizeObserver(pin);
     observer.observe(content);
     observer.observe(el);
-    return () => observer.disconnect();
+    // A change that lays the content out shorter inside React's commit and
+    // that an eased box then gives back leaves the size where it was, so the
+    // observer above never hears it; but the region's offset was pulled back
+    // when the content was shorter. Once the boxes have eased, a reader who
+    // was at the very end is put back there, before the frame is painted.
+    const changes = new MutationObserver(() =>
+      afterEasedHeights(() => {
+        if (atBottom.current) el.scrollTop = el.scrollHeight;
+      }),
+    );
+    changes.observe(content, { subtree: true, childList: true, characterData: true });
+    return () => {
+      observer.disconnect();
+      changes.disconnect();
+    };
   }, [scrollRef, contentRef, key]);
 
   const jumpToEnd = () => {

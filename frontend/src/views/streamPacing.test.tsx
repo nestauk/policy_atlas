@@ -374,6 +374,28 @@ describe("useEasedHeight — what it owes", () => {
     stub.restore();
   });
 
+  // Owner, 2026-11-09 (jitter after a decision): a turn arriving above the
+  // plan card brought its gap at once, dropping the plan card and sliding it
+  // back. A confirm turn's box mounts empty, before its action line.
+  it("opens the gap under it with it, even while it is empty", () => {
+    function Empty() {
+      const [box, content] = useEasedHeight(true, false, true);
+      return (
+        <div ref={box} style={{ marginBottom: "24px" }}>
+          <div ref={content} />
+        </div>
+      );
+    }
+    const stub = stubBoxes(() => 0);
+    const view = render(<Empty />);
+    const box = view.container.firstElementChild;
+    const live = stub.made.filter((made) => !made.animation.cancelled);
+    expect(live.map((made) => [made.el === box, made.keyframes])).toEqual([
+      [true, [{ marginBottom: "0px" }, { marginBottom: "24px" }]],
+    ]);
+    stub.restore();
+  });
+
   it("opens from nothing on mount, and again after a development remount", () => {
     function Opening() {
       const [box, content] = useEasedHeight(true, false, true);

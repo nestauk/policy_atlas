@@ -286,6 +286,17 @@ function scheduleMeasure(depth: number, measure: () => void): void {
   pendingMeasures.push({ depth, measure });
 }
 
+/**
+ * Run `after` once the eased boxes have measured the DOM change being
+ * delivered and started their eases: a scroll pin re-pins then (owner,
+ * 2026-11-09: a turn losing its action line was laid out shorter inside
+ * React's commit, before any box could ease it, and the scroll region's
+ * offset was pulled back and never put right).
+ */
+export function afterEasedHeights(after: () => void): void {
+  scheduleMeasure(-1, after);
+}
+
 /** How long a section's height takes to follow its text when repaired
  *  sentences change length (task 058, owner round 8). */
 export const EASE_HEIGHT_MS = 300;
@@ -353,6 +364,7 @@ export function useEasedHeight(
     const height = () => inner.getBoundingClientRect().height;
     let last = height();
     let running: Animation | null = null;
+    let opening: Animation | null = null;
     let queued = false;
     // What the box still owes its content mid-ease (negative: it is still
     // giving back a shrink).
@@ -389,7 +401,24 @@ export function useEasedHeight(
     };
     // Cleared once opened, not here: a development remount (StrictMode runs
     // the effect twice) cancels the first open and must open again.
-    if (toOpen.current && last >= 1) ease(last);
+    if (toOpen.current) {
+      if (last >= 1) ease(last);
+      // The gap under the box opens with it, even while the box is empty (a
+      // confirm turn waiting for its action line), so a block arriving above
+      // another (a turn above the plan card) moves nothing under it: the gap
+      // arriving at once dropped the plan card and slid it back (owner,
+      // 2026-11-09: jitter after a decision).
+      const gap = getComputedStyle(outer).marginBottom;
+      if (Number.parseFloat(gap) > 0) {
+        opening = outer.animate([{ marginBottom: "0px" }, { marginBottom: gap }], {
+          duration: EASE_HEIGHT_MS,
+          easing: EASE_OUT_STRONG,
+        });
+        opening.onfinish = () => {
+          toOpen.current = false;
+        };
+      }
+    }
     easedBoxes.add(outer);
     const depth = depthOf(outer);
     const observer = new MutationObserver((records) => {
@@ -416,6 +445,7 @@ export function useEasedHeight(
       observer.disconnect();
       follower?.disconnect();
       easedBoxes.delete(outer);
+      opening?.cancel();
       release();
     };
   }, [active, growOnly]);
