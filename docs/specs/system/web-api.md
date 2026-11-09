@@ -128,7 +128,8 @@ turns, never a run-slot conflict) · 500 `internal` (opaque).
 
 Unbounded lists (tasks, evidence/sources, findings, decisions) return
 `{"data": [...], "pagination": {"page": n, "page_size": n,
-"total_items": n}}`; `page_size` default 50, **server cap 200**
+"total_items": n, "has_more": bool}}`; `page_size` default 50 (20 for tasks
+and projects, the list pages; task 058), **server cap 200**
 (`Query(le=200)`). Offset pagination is deliberate at per-task scale;
 the additive migration path is an opaque `cursor` param alongside (never a
 breaking reshape). Bounded structural reads (plan, funnel, landscape,
@@ -198,6 +199,9 @@ Splash-page **Request access** intake. Public — no bearer token.
   task's readers key on what exists and what is active, never on a single
   latest run; `latest_run` stays as it is for the Evidence search (owner,
   plan review P4: "scoping readers see what exists and what is active").
+  `active_run` also carries `stage` (the current public stage key) and
+  `stage_label` (the server's copy), taken from the parentless walk so a
+  scoping task shows its own stage, not a child search's (task 058, S4).
 - `GET /api/v1/tasks/{id}` → task (read grade, or the public leg —
   § Auth boundary). A public-leg read returns the **redacted shape**:
   `access = "public"`, `is_owner = false`, `owner_display = null`,
@@ -299,15 +303,36 @@ spans three tables, so it is enforced in the write paths and pinned by a
 property test — no CHECK can express it.
 
 Tenancy scoping matches tasks exactly: an unknown project and an
-unreadable one are the same indistinguishable 404. There is no project
-archive route and no `archived_at` on the row; both land together if archiving
-is wanted (`docs/deferred.md` § Task lifecycle IA).
+unreadable one are the same indistinguishable 404.
+
+**Archiving (task 058, owner round 11; gate G3 ratified at the review,
+2026-11-09).** A project carries a nullable `archived_at`; the list reads
+`status=active` by default (`?status=archived|all` to widen) and orders by
+`last_activity_at` (the newest of the project's own `created_at` and its
+members' `updated_at`). `ProjectOut` adds `archived_at`, `last_activity_at` and
+`solo_task_count` (the caller's own active tasks here that sit in no other
+active project). `POST /api/v1/projects/{id}/archive` (owner only,
+idempotent) → `{archived_task_count}`: it archives the project and those solo
+tasks with it, and skips a task whose walk is running or paused. A
+non-owner's `PATCH project_ids` is refused 403 with "Only the task's owner can
+change its projects."
 
 ### Task Agent turns
 
 - `POST /api/v1/tasks/{id}/task-agent-turns`
-  `{message, client_turn_id}` → `{reply, plan, suggestions[]}` — one real
-  planner turn. Every turn is durable in the per-task
+  `{message, client_turn_id}` → an `application/x-ndjson` event stream (task
+  058, S4, replacing the JSON body: the frontend and backend deploy
+  together): `progress` ("Drafting the plan"), `delta` fragments of the
+  reply as the planner writes it, then exactly one terminal event,
+  `completed {turn: TaskAgentTurnOut}` or `failed {error, turn_index}`. The
+  chat route's rules apply: the reservation and every authorisation error
+  resolve before the headers (as the JSON envelope); the turn finishes and
+  persists whether or not the client stays connected; a connection error
+  before the first token is retried once; a replay of a completed turn is one
+  `completed` line. A gate decision, an answer or a longlist action is one
+  `completed` line. `TaskAgentTurnOut` (and the transcript turn) carries
+  `question`, the planner's clarifying question, above its `suggestions`.
+  One real planner turn. Every turn is durable in the per-task
   `task_agent_transcript`: its monotonic `turn_index`, assigned when the user
   message is received, is the conversation ordering coordinate;
   `created_at` is display metadata only. `message` caps at 10 000 characters
@@ -475,6 +500,11 @@ archived conversations are the same 404.
   x-ndjson`, one JSON object per line, a discriminated union on `type`:
   - `progress {label}` — a user-facing read-tool activity label before that
     tool runs (e.g. "Searching the evidence…"), never a fake token.
+  - `conversation.titled {conversation_id, title}` — sent once, while the
+    first turn's stream is open, when the `chat_title` step's line replaces
+    the message's cut as the chat's title (task 058, round 14); never
+    terminal. A task's name comes the same way from its confirmed question
+    (the `task_title` step), reaching clients as `task.updated {name}`.
   - `delta {text}` — a provider-neutral prose fragment.
   - `completed {turn}` — the one successful terminal event: the durable
     `ChatTurnOut` row, citation floor already applied.
@@ -625,6 +655,19 @@ render honest absence: missing stages are `null`/absent, never faked.
   generated roadmap line for the full-report body; absence is a normal
   state and the client renders nothing in its place.
 
+- `DecisionOut` carries `actor_display` and `actor_is_viewer` (task 058,
+  round 10), so History can say who without a second read.
+
+- Evidence rows carry `country` (an ISO country name, or null), `full_text_url`
+  (the document's own address once its text was collected) and
+  `full_text_status` (`not_attempted` · `queued` · `ingested` · `failed`);
+  `CoverageBackendDetailOut.passes` and `CoverageQueryOut.query_id` name the
+  search's passes and queries (task 058, rounds 9 to 12).
+
+- The grounding verdict belongs to the claim (task 058, owner round 10):
+  `ClaimOut.grounding_tier` and `.grounding_rationale`, moved off
+  `CitationOut`. Chat's turn citations keep theirs for now.
+
 - Artefact `ClaimOut.theme` resolves a theme claim's durable characterisation
   or grouping references to named items (`name`, optional `description` and
   `size`; grouping items also carry their `facet` for deep-linking), including
@@ -634,11 +677,25 @@ render honest absence: missing stages are `null`/absent, never faked.
 
 **Longlist routes** *([task 045 contract](../tasks/045-scoping-longlist/contract.md), deliverable 11; Options scoping only)*:
 `GET /api/v1/tasks/{id}/longlist` (themes, options, counts, states, the run it
-came from) · `GET /api/v1/tasks/{id}/options/{option_id}` (the option card) ·
+came from; 404 until the first clustering result; `LonglistThemeOut.document_count`,
+`OptionDocumentOut.authors` and `.venue`, `OptionProfileOut.acts_on`, and
+`ShortlistOut.note_stale`, task 058) · `GET /api/v1/tasks/{id}/options`
+(task 058, S4: every option row of the task from the end of the suggest stage,
+`{option_id, name, description, origin, state, merged_into_option_id,
+search_status, found}`, where `search_status` is `queued` · `searching` ·
+`searched` · `failed` from the option's own search and `found` its acquired
+count, null until searched; the same read predicate as the longlist; no
+provisional flag, the client knows from `has_longlist`; served on the public
+leg while the longlist is being built, as the longlist itself is public
+read-only: owner, 2026-11-09) ·
+`GET /api/v1/tasks/{id}/options/{option_id}` (the option card) ·
 `POST /api/v1/tasks/{id}/options` (add by hand — the button's path, the same
 handler as the chat verb) · `POST .../options/{option_id}/exclude` and
-`.../include` (with the user's reason). Each write is logged as the user's
-turn in History (OS ruling 1). All additive.
+`.../include` (with the user's reason) · `POST /api/v1/tasks/{id}/shortlist/note`
+(owner only: rewrites the shortlist note; 404 on no shortlist, 409 while a walk
+runs, 503 when the writer fails; task 058, round 11). Each write is logged as
+the user's turn in History (OS ruling 1). `RunOut.stages` (`RunStageOut`) lists
+a run's stages with their status and timings (task 058, N23). All additive.
 
 The C.1 additions enrich these records additively: coverage exposes public
 backend names and post-run query detail; evidence exposes effective-screen
@@ -659,8 +716,11 @@ task's rows).
 - `GET .../evidence`: `status` (repeatable; any evidence status ladder
   value, plus the aggregate shortcut `Included` = the 7 ladder positions
   reached once a source is screened in — i.e. every status except `found`
-  and `screened_out`) · `cited` (bool). An unrecognised `status` value is
-  422.
+  and `screened_out`) · `cited` (bool) · `country` (an ISO country name, or
+  `none` for rows without one) · `query` (a coverage query id: the rows that
+  search found) · `depth` (`full_text`) · `appraised` (bool) · `theme` (a
+  characterisation theme, or a longlist theme id on an Options scoping task)
+  (task 058, rounds 9 to 14). An unrecognised `status` value is 422.
 - `GET .../findings`: `profile` (`iof | icf`; 422 if unrecognised) ·
   `facet`+`group` (both required together — a facet name and an exact
   group label within it; an unknown facet/group pair returns an empty
@@ -698,31 +758,68 @@ Frame vocabulary (discriminated union, `type` names are contract):
 |---|---|---|
 | `run.status` | `{capability_run_id, status}` | walk open/park/finish/interrupt |
 | `stage.started` | `{stage, label, blurb}` | component run start |
-| `stage.completed` | `{stage, label, summary, seconds}` | component terminal |
+| `stage.completed` | `{stage, label, summary, seconds, counts: [{value, noun}]}` (`counts` is what the done row shows, in the server's words; task 058) | component terminal |
+| `tick` and `run.status` | `tick` carries `capability_run_id` (task 058 review) so a late frame from an earlier run is dropped by the client | |
 | `stage.failed` | `{stage, label, reason, skipped}` | component failure/skip |
-| `artefact.skeleton` | `{sections: [{index, title, focus}]}` in presentation order | synthesise presentation progress |
+| `artefact.skeleton` | `{sections: [{index, title, focus, role}]}` in presentation order; `role` is `intro`, `key_findings`, `case_studies` or `section` | synthesise presentation progress |
 | `artefact.section_started` | `{index}` | synthesise presentation progress |
-| `artefact.section_completed` | `{index, title, prose}` | synthesise presentation progress |
+| `artefact.section_completed` | `{index, title, prose, citations: [{start, end, n, source_id, title, citation_id, claim_id, chunk_id, quote}], claims: [{claim_id, start, end, tier, rationale}]}` (the judged markers that replace the draft's; task 058). The citation rows commit with the whole report, so `citation_id` cannot be read until then; `chunk_id` (2026-11-09) lets the page read the passage by chunk and quote (`GET .../chunks/{chunk_id}/context?quote=`) while the report is still being written | synthesise presentation progress |
 | `checkin.pending` | the full check-in resource | `steering.pause` |
 | `checkin.resolved` | `{check_in_id, response, decided_by}` | `steering.decision` |
 | `plan.updated` | `{plan, version}` | plan row supersession |
 | `task.updated` | `{name?, question?, status?}` | lifecycle audit events |
-| `tick` | `{stage?, note, fetched, parsed, total, ephemeral: true}` (the three counts null when absent) | **ephemeral channel** — never persisted, never state-bearing, no `id:` |
+| `tick` | `{stage?, activity, done, total, unit, section, heartbeat, dropped, ephemeral: true}` (`done`, `total`, `unit` and `section` null when absent) | **ephemeral channel** — never persisted, never state-bearing, no `id:` |
+| `artefact.section_delta` | `{index, text, mode: "append" \| "replace", occurred_at, ephemeral: true}` | **ephemeral**: prose appended to the section being written (task 058); display-only, never replayed |
+| `artefact.section_revising` | `{index, spans: [{start, end}], occurred_at, ephemeral: true}` | **ephemeral**: the sentences the judge failed, sent before the repair (task 058); display-only, never replayed |
+| `artefact.section_sources` | `{index, sources: [{source_id, title}], occurred_at, ephemeral: true}` | **ephemeral**: the sources the writer has read for the section (task 058, round 7) |
+| `artefact.section_claim` | `{index, start, end, sources, occurred_at, ephemeral: true}` | **ephemeral**: a cited sentence as the writer's claim closes, shown as a muted provisional marker (task 058, round 7) |
+| `artefact.section_card` | `{index, title, prose, occurred_at, ephemeral: true}` | **ephemeral**: a case-study card as it is written (task 058, round 7) |
+| `artefact.source_note` | `{source_id, title, note, occurred_at, ephemeral: true}` | **ephemeral**: a source note as it is written (task 058, round 8) |
+| `search.query` | `{backend, query, kind, results, occurred_at, ephemeral: true}` | **ephemeral**: a search query as it runs, normalised and bounded (task 058, round 9) |
+| `characterise.themes` | `{themes: [{label, description}], stage, occurred_at, ephemeral: true}` | **ephemeral**: the themes as they are found (task 058, round 9) |
 
-`stage` keys are the pinned stable component vocabulary (`acquire`,
-`screen`, `classify`, `appraise`, `ingest` ("Reading the full texts"),
-`characterise`, `select`, `extract`, `group`, `synthesise`); labels/blurbs
-are server-supplied presentation and may change. A `tick`'s optional integer
-counts `fetched`, `parsed` and `total` (the `ingest` stage's documents fetched,
-read and eligible, task 056) are null when absent. Nothing else internal
-(module names, model ids, raw payload keys) is observable. The frontend store must rebuild idempotently from
+`stage` keys are the pinned stable component vocabulary, nineteen keys
+(task 058, S1). Evidence search: `acquire`, `screen`, `classify`, `appraise`,
+`ingest`, `characterise`, `select`, `extract`, `group`, `synthesise`. Options
+scoping: `inherit`, `suggest`, `option_searches`, `extract_interventions`,
+`longlist`, `option_profile`, `constrain`, `theme`, `shortlist`. Labels,
+blurbs and the activity text are server-supplied presentation from one table
+(`api/stage_vocabulary.py`, task 058 N17) and may change; the client renders
+them and keeps no stage copy of its own. A plan step carries a `row` key:
+stages that share a row key render as one card row; `acquire` and `screen`
+are two rows ("Searching", "Screening"; owner, round 10), `classify` and
+`appraise` share "Classifying", so the client decides nothing about rows.
+
+A `tick` (task 058, S2) carries one set of fields for every stage:
+`activity` (the line the client shows as it is, in the server's plain
+voice), `done` and `total` (integers, null when the stage has no honest
+count: no total known before its loop started), `unit` (`documents`,
+`batches`, `abstracts`, `searches`, `sections`, `windows`, `options`; null
+with no count), `section` (the writer's section line, null outside writing),
+`heartbeat` (true when the server repeated the current tick because a model
+call is still in flight, every 10 s) and `dropped` (the server's dropped-tick
+counter for the task, for the silent-gap measure). Ticks are coalesced to at
+most one per task per stage per 500 ms. A client that connects mid-run
+receives, after the durable replay, the last tick per stage and the current
+section draft as one `artefact.section_delta` with `mode: "replace"`, from
+process-local memory that is cleared when the stage or the run ends and
+expires after ten minutes. Nothing else internal (module names, model ids,
+raw payload keys) is observable. The frontend store must rebuild idempotently from
 replay alone — mid-run refresh, server restart with a parked pending
 check-in, and reconnect-mid-stream are the tested cases.
 
-`artefact.*` frames are durable presentation/progress records, not partial
-artefact reads or authoritative artefact content: whole-section prose is sent
-for live rendering, while the report — the artefact of record — is committed
-only when synthesis completes. The skeleton's display `index` is the identity
+`artefact.*` frames other than the ephemeral ones (`tick`, the five
+`artefact.*` frames marked ephemeral, `search.query` and
+`characterise.themes`) are durable presentation/progress records, not partial artefact reads or authoritative
+artefact content: whole-section prose is sent for live rendering, while the
+report — the artefact of record — is committed only when synthesis completes.
+`artefact.section_delta` and `artefact.section_revising` (task 058, S3) are
+display-only: the draft a client builds from deltas is never shown as
+verified, carries a muted provisional marker per cited sentence as the
+writer's claim closes (`artefact.section_claim`), and is replaced by
+`artefact.section_completed`, whose judged markers replace the provisional
+ones and which stays the record; a replay carries no
+deltas, so a store rebuilt from replay holds the completed prose only. The skeleton's display `index` is the identity
 used by every artefact frame; it includes key findings first (although that
 section is generated last) and conclusions last. An empty key-findings pass
 still closes its slot with `artefact.section_completed` and empty prose.
@@ -761,6 +858,28 @@ honestly, never silently).
 
 Additive changes append here with dates; removals require a documented
 deprecation window and never break the generated client within `/api/v1`.
+
+- **2026-11-09 — task 058 at the review (owner-accepted proposals B1 to
+  B13), additive.** Six more ephemeral SSE frames (`artefact.section_sources`,
+  `artefact.section_claim`, `artefact.section_card`, `artefact.source_note`,
+  `search.query`, `characterise.themes`); `tick.capability_run_id`;
+  `occurred_at` on the deltas and revisions; the skeleton's `role`;
+  `section_completed.citations[]` (with `chunk_id`, added the same day on the
+  owner's "fix it at the root": the passage of a finished section's citation
+  is readable during the write) and `.claims[]`; the provisional claim
+  markers on the draft; `acquire` and `screen` as two rows; `page_size` 20 for
+  tasks and projects and `pagination.has_more`; project archiving
+  (`archived_at`, `POST /projects/{id}/archive`, `?status=`,
+  `last_activity_at`, `solo_task_count`, ordering by activity, the 403
+  message); `DecisionOut.actor_display` and `.actor_is_viewer`; evidence rows'
+  `country`, `full_text_url`, `full_text_status` and the `country`, `query`,
+  `depth`, `appraised`, `theme` filters; `CoverageBackendDetailOut.passes`,
+  `CoverageQueryOut.query_id`; the grounding verdict on `ClaimOut`;
+  `LonglistThemeOut.document_count`, `OptionDocumentOut.authors` and `.venue`,
+  `OptionProfileOut.acts_on`, `RunOut.stages`, `ShortlistOut.note_stale`,
+  `POST /tasks/{id}/shortlist/note`; the chat stream's `conversation.titled`
+  and names from the question; the options read on the public leg. Nothing
+  removed.
 
 - **2026-09-05 — task 038 (ADR 0036), the one break without a window.**
   `/api/v1/projects/**` (the Task) → `/api/v1/tasks/**`; `/api/v1/portfolios/**`

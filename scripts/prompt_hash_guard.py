@@ -50,6 +50,9 @@ EXTRA_FILES: tuple[str, ...] = (
     "backend/src/policy_atlas/evidence_search/corpus/theme_grouping.py",
     # The facet-group clustering prompts.
     "backend/src/policy_atlas/evidence_search/group/group_clustering.py",
+    # The planner prompt substitutes TIME_BANDS from here (task 058), so a band edit
+    # changes the prompt text.
+    "backend/src/policy_atlas/runtime/task_plan.py",
 )
 
 

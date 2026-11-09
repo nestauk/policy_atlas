@@ -1,9 +1,10 @@
 """The template-keyed section writer (task 044, owner ruling 2026-09-09 — option 2).
 
 One writer, one shared core, a preamble per output kind. The Evidence search
-report's assembled prompt must stay byte-identical to ``synthesise_section_v10``
-as it was before the split; the baseline preamble is the only other template
-in this slice.
+report's assembled prompt is pinned byte for byte to its current version
+(``synthesise_section_v12``; it was ``v10`` before the split, and the words
+changed once since, in task 058); the baseline preamble is the only other
+template in this slice.
 """
 
 from __future__ import annotations
@@ -15,22 +16,24 @@ import pytest
 from policy_atlas.evidence_search.synthesis import section_prompt as sb
 from policy_atlas.evidence_search.synthesis.baseline_prompt import BASELINE_SECTION_PREAMBLE
 
-# sha256 of SECTION_SYSTEM_PROMPT at commit 91beec2a (before the split), with and
-# without the v8 priority block. Recorded from the live module, not retyped.
-_V10_SHA256 = "87126525d75f0d49ba105a047fdb926e8534832bf612e1e6afa9784ec8c39a42"
-_V10_WITH_PRIORITY_SHA256 = "e38e6c1e7c3448149e6fd177f2592725ed5d03d41d1c613eeaf58f07956f17fb"
+# sha256 of SECTION_SYSTEM_PROMPT as pinned for synthesise_section_v12 (task 058,
+# 2026-11-05: the "How to work" bullet names write_section), with and without the
+# v8 priority block. Recorded from the live module, not retyped. The v10 values
+# (commit 91beec2a, before the split) were 87126525… and e38e6c1e….
+_V12_SHA256 = "0a1ea1045eba7aeb5057a10b3dd15c3f95f6145e90b8e37eb3da690cbf3beafb"
+_V12_WITH_PRIORITY_SHA256 = "ca63de3ab2c04ec5e44631aab3205b266ebcfa04b6a1709f4900188133911e41"
 
 
 def _sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def test_section_system_prompt_report_is_byte_identical_to_v10() -> None:
-    assert _sha(sb.SECTION_SYSTEM_PROMPT) == _V10_SHA256
-    assert _sha(sb._section_system_prompt({})) == _V10_SHA256
-    assert _sha(sb._section_system_prompt({"template": "report"})) == _V10_SHA256
+def test_section_system_prompt_report_is_byte_identical_to_v12() -> None:
+    assert _sha(sb.SECTION_SYSTEM_PROMPT) == _V12_SHA256
+    assert _sha(sb._section_system_prompt({})) == _V12_SHA256
+    assert _sha(sb._section_system_prompt({"template": "report"})) == _V12_SHA256
     assert _sha(sb._section_system_prompt({"priority_block_active": True})) == (
-        _V10_WITH_PRIORITY_SHA256
+        _V12_WITH_PRIORITY_SHA256
     )
 
 

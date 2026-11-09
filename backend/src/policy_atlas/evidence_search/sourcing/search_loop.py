@@ -9,6 +9,7 @@ machinery.
 
 from __future__ import annotations
 
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -21,11 +22,13 @@ from typing import Any, Literal, TypedDict, cast
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core import tracing
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import liveness, tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.prompt_fields import parse_guidance_channel
 from policy_atlas.core.schema import (
     DIRECTIVE_STRING_MAX,
+    evidence_scope,
     search_coverage_record,
 )
 from policy_atlas.core.usage import UsageAccumulator
@@ -963,6 +966,221 @@ def _overton_country(record: dict[str, Any]) -> str | None:
     return source.get("country") if isinstance(source, dict) else None
 
 
+#: The activity line names the query out at about this many characters (round 9).
+QUERY_LINE_CHARS = 60
+
+#: The calls the page sees one by one, by verb, and what each is (round 9).
+#: Citation chasing and id lookups are shown as one entry per pass instead.
+_LIVE_QUERY_KIND: dict[str, liveness.SearchQueryKind] = {
+    "search": "topic",
+    "search_semantic": "semantic",
+}
+
+
+def _short_query(text: str, limit: int = QUERY_LINE_CHARS) -> str:
+    """Cut a query for the activity line at about ``limit`` characters, on a word."""
+    text = liveness.normalise_query(text)
+    if len(text) <= limit:
+        return text
+    head = text[: limit + 1]
+    cut = head.rsplit(" ", 1)[0] if " " in head else text[:limit]
+    return cut.rstrip(" ,;:") + "…"
+
+
+def _counted(count: int, many: str, one: str) -> str:
+    """One of two ``ACTIVITY`` lines, by whether ``count`` is one."""
+    return activity(one) if count == 1 else activity(many, count=count)
+
+
+def _record_key(backend_name: str, record: dict[str, Any]) -> str | None:
+    """A record's identity for the running found count, or ``None`` without one."""
+    key = record.get("id") or record.get("policy_document_id")
+    return f"{backend_name}:{key}" if key else None
+
+
+class _LiveSearch:
+    """What the page sees of the search while it runs (task 058, round 9).
+
+    Each topic and semantic query is published as it goes out and again when
+    it comes back (``search.query``); a citations or lookup pass is published
+    once at its start and once at its end, described in words, never by its
+    ids. The activity line counts the distinct records found so far and names
+    the query that went out last and is still out. Both legs and their
+    thread pools report here, so one lock guards the state; the hub's own
+    lock is taken inside it, which keeps each query's two messages in order.
+    An option search publishes no query frames (lead ruling, round 9): its
+    lines only.
+    """
+
+    def __init__(self, round_index: int, *, publish_queries: bool = True) -> None:
+        self._round_index = round_index
+        self._publish_queries = publish_queries
+        self._lock = threading.Lock()
+        self._seen: set[str] = set()
+        self._unkeyed = 0
+        self._out: dict[tuple[str, str, liveness.SearchQueryKind], int] = {}
+        self._results: dict[tuple[str, str, liveness.SearchQueryKind], int] = {}
+        #: Topic and semantic queries out now, the one sent last at the end.
+        self._named: list[str] = []
+        self._passes_out = 0
+
+    def writing_queries(self) -> None:
+        """Say the queries are being written (before the generation call)."""
+        liveness.publish_progress(activity=activity("search.writing_queries"))
+
+    def started(self) -> None:
+        """Say the search has started, before the first query goes out."""
+        with self._lock:
+            self._publish_line()
+
+    def sent(self, backend_name: str, query: str, kind: liveness.SearchQueryKind) -> None:
+        """Publish one query going out.
+
+        Args:
+            backend_name: The database searched.
+            query: The query text, or the pass's description.
+            kind: What the query is.
+        """
+        key = (backend_name, query, kind)
+        with self._lock:
+            self._out[key] = self._out.get(key, 0) + 1
+            if kind in ("topic", "semantic"):
+                self._named.append(query)
+            else:
+                self._passes_out += 1
+            if self._out[key] == 1 and self._publish_queries:
+                liveness.publish_search_query(backend_name, query, kind, None)
+            self._publish_line()
+
+    def returned(
+        self,
+        backend_name: str,
+        query: str,
+        kind: liveness.SearchQueryKind,
+        records: list[dict[str, Any]],
+    ) -> None:
+        """Publish one query coming back, with what it returned.
+
+        The same query sent more than once (one call per filter variant) is
+        one entry: its count adds up, and it shows as back when the last
+        copy is back.
+
+        Args:
+            backend_name: The database searched.
+            query: The query text, or the pass's description.
+            kind: What the query is.
+            records: The records it returned (after any local filter).
+        """
+        with self._lock:
+            self._count(backend_name, records)
+            self._back(backend_name, query, kind, len(records))
+
+    def pass_done(
+        self,
+        backend_name: str,
+        description: str,
+        kind: liveness.SearchQueryKind,
+        *,
+        results: int,
+    ) -> None:
+        """Publish a citations or lookup pass as finished.
+
+        Its calls' records were counted as each call came back.
+
+        Args:
+            backend_name: The database searched.
+            description: The pass's description, as it was sent.
+            kind: ``"citations"`` or ``"lookup"``.
+            results: The records the whole pass kept.
+        """
+        with self._lock:
+            self._back(backend_name, description, kind, results)
+
+    def _back(
+        self, backend_name: str, query: str, kind: liveness.SearchQueryKind, results: int
+    ) -> None:
+        """Mark one copy of a query back (the caller holds the lock)."""
+        key = (backend_name, query, kind)
+        self._out[key] = max(self._out.get(key, 0) - 1, 0)
+        self._results[key] = self._results.get(key, 0) + results
+        if kind in ("topic", "semantic"):
+            # The copy sent last of this text goes: the line then names the
+            # query still out that was sent last.
+            for position in range(len(self._named) - 1, -1, -1):
+                if self._named[position] == query:
+                    del self._named[position]
+                    break
+        else:
+            self._passes_out = max(self._passes_out - 1, 0)
+        if self._out[key] == 0 and self._publish_queries:
+            liveness.publish_search_query(backend_name, query, kind, self._results[key])
+        self._publish_line()
+
+    def counted(self, backend_name: str, records: list[dict[str, Any]]) -> None:
+        """Add one id-pass call's records to the found count.
+
+        Args:
+            backend_name: The database searched.
+            records: The records the call returned (after any local filter).
+        """
+        with self._lock:
+            self._count(backend_name, records)
+            self._publish_line()
+
+    @property
+    def found(self) -> int:
+        """The distinct records the calls have returned so far."""
+        with self._lock:
+            return len(self._seen) + self._unkeyed
+
+    def _count(self, backend_name: str, records: list[dict[str, Any]]) -> None:
+        for record in records:
+            key = _record_key(backend_name, record)
+            if key is None:
+                self._unkeyed += 1
+            else:
+                self._seen.add(key)
+
+    def _publish_line(self) -> None:
+        found = len(self._seen) + self._unkeyed
+        again = self._round_index >= 2
+        if self._named:
+            query = _short_query(self._named[-1])
+            line = (
+                activity(
+                    "acquire.searching_again_query",
+                    pass_number=self._round_index,
+                    found=found,
+                    query=query,
+                )
+                if again
+                else activity("acquire.searching_query", found=found, query=query)
+            )
+        elif self._passes_out:
+            line = activity("acquire.following", found=found)
+        elif again:
+            line = activity("acquire.searching_again", pass_number=self._round_index, found=found)
+        else:
+            line = activity("acquire.searching", found=found)
+        liveness.publish_progress(activity=line, done=found, total=None, unit="documents")
+
+
+def _is_option_search(conn: Connection, scope_id: uuid.UUID) -> bool:
+    """Whether the scope is an option search's (purpose ``targeted``, task 045)."""
+    from policy_atlas.runtime.scoping_plan import TARGETED_PURPOSE
+
+    purpose = conn.execute(
+        select(evidence_scope.c.purpose).where(evidence_scope.c.evidence_scope_id == scope_id)
+    ).scalar_one_or_none()
+    return purpose == TARGETED_PURPOSE
+
+
+def _kept_records(spec: _CallSpec, fetched: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The records a call keeps: the first ``max_records``, then the local filter."""
+    records = fetched[: spec.max_records]
+    return [record for record in records if spec.keep(record)] if spec.keep else records
+
+
 PoolEntry = tuple[dict[str, Any], str, str]
 """One record handed to acquire: ``(record, query_origin, verb)``."""
 
@@ -1028,10 +1246,13 @@ class _Pass:
         origin_of: The origin and verb of the call that returned each record
             object, keyed by ``id(record)``.
         ranked_count: How many records the ranking produced per backend.
+        live: What the page sees while the search runs (round 9), or
+            ``None`` to publish nothing.
     """
 
     constants: DepthConstants
     variant_count: dict[str, int]
+    live: _LiveSearch | None = None
     executed: list[ExecutedCall] = field(default_factory=list)
     calls: dict[str, int] = field(default_factory=dict)
     origin_of: dict[int, tuple[str, str]] = field(default_factory=dict)
@@ -1103,12 +1324,38 @@ class _Pass:
             self.origin_of.setdefault(id(record), (spec.origin, spec.verb))
         return call
 
+    def _fetch(self, backend_name: str, spec: _CallSpec) -> list[dict[str, Any]]:
+        """Run one call's fetch, telling the page as it goes out and comes back (round 9).
+
+        A topic or semantic query is published on its own; a call of a
+        citations or lookup pass only adds its records to the found count
+        (its pass is published by the leg).
+        """
+        live = self.live
+        if live is None:
+            return spec.fetch(spec.max_records)
+        kind = _LIVE_QUERY_KIND.get(spec.verb)
+        if kind is not None:
+            live.sent(backend_name, spec.query, kind)
+        try:
+            fetched = spec.fetch(spec.max_records)
+        except Exception:
+            if kind is not None:
+                live.returned(backend_name, spec.query, kind, [])
+            raise
+        kept = _kept_records(spec, fetched)
+        if kind is not None:
+            live.returned(backend_name, spec.query, kind, kept)
+        else:
+            live.counted(backend_name, kept)
+        return fetched
+
     def execute(self, backend: acquire.SearchBackendBase, spec: _CallSpec) -> ExecutedCall | None:
         """Make one logical call now, or skip it when the backend's budget is spent."""
         if not self._reserve(backend):
             return None
         try:
-            fetched: list[dict[str, Any]] | BaseException = spec.fetch(spec.max_records)
+            fetched: list[dict[str, Any]] | BaseException = self._fetch(backend.name, spec)
         except Exception as exc:
             fetched = exc
         return self._finish(backend, spec, fetched)
@@ -1129,7 +1376,7 @@ class _Pass:
         outcomes: list[list[dict[str, Any]] | BaseException] = []
         with ThreadPoolExecutor(max_workers=SEARCH_CONCURRENCY) as executor:
             futures = [
-                tracing.submit_with_context(executor, spec.fetch, spec.max_records)
+                tracing.submit_with_context(executor, self._fetch, backend.name, spec)
                 for spec in admitted
             ]
             for future in futures:
@@ -1311,16 +1558,24 @@ def _openalex_leg(
             for start in range(0, len(targets), pool.RESOLVE_BATCH)
         )
     ]
+    backward_pass = _counted(len(targets), "search.lookup_works", "search.lookup_works_one")
+    if search.live is not None and resolve_specs:
+        search.live.sent("openalex", backward_pass, "lookup")
     backward: list[dict[str, Any]] = []
     for resolved in search.execute_batch(backend, resolve_specs):
         if resolved is not None:
             backward.extend(resolved.records)
+    if search.live is not None and resolve_specs:
+        search.live.pass_done("openalex", backward_pass, "lookup", results=len(backward))
 
     # 6. Forward: the works that cite the best-connected seeds, paged until a
     #    short page (so sequential), 100 seed ids per request.
     chased = pool.forward_seeds(
         seeds, counts, top=pool.FORWARD_TOP, max_cites=pool.FORWARD_MAX_CITES
     )
+    forward_pass = _counted(len(chased), "search.citations_from", "search.citations_from_one")
+    if search.live is not None and chased:
+        search.live.sent("openalex", forward_pass, "citations")
     citing: list[dict[str, Any]] = []
     for start in range(0, len(chased), pool.FORWARD_IDS_PER_CALL):
         ids = chased[start : start + pool.FORWARD_IDS_PER_CALL]
@@ -1345,6 +1600,8 @@ def _openalex_leg(
                 < pool.KEYWORD_PER_CALL
             ):
                 break
+    if search.live is not None and chased:
+        search.live.pass_done("openalex", forward_pass, "citations", results=len(citing))
     forward = pool.score_forward(citing, seed_ids, counts, excluded_ids=set(targets))
     forward = forward[: pool.FORWARD_KEEP]
     summary.forward_candidates = len(forward)
@@ -1433,8 +1690,14 @@ def _overton_leg(
         if isinstance(post_filter, list)
         else None
     )
+    landmark_ids = pool.landmark_targets(counts, result_ids, pool.OVERTON_LANDMARKS)
+    landmark_pass = _counted(
+        len(landmark_ids), "search.lookup_documents", "search.lookup_documents_one"
+    )
+    if search.live is not None and landmark_ids:
+        search.live.sent("overton", landmark_pass, "lookup")
     landmarks: list[dict[str, Any]] = []
-    for document_id in pool.landmark_targets(counts, result_ids, pool.OVERTON_LANDMARKS):
+    for document_id in landmark_ids:
         call = search.execute(
             backend,
             _CallSpec(
@@ -1449,6 +1712,8 @@ def _overton_leg(
         )
         if call is not None:
             landmarks.extend(call.records)
+    if search.live is not None and landmark_ids:
+        search.live.pass_done("overton", landmark_pass, "lookup", results=len(landmarks))
     summary.landmarks = len(landmarks)
 
     # 4. One ranked pool over results and landmarks.
@@ -1502,6 +1767,12 @@ def run_search(
     round_index = count_search_runs(conn, task_id=task_id, scope_id=context.scope_id) + 1
     record_cap = parse_record_cap(context.context)
     started = time.monotonic()
+    # Task 058, round 9: the line appears at once, while the queries are
+    # written, then counts what the queries find as each comes back.
+    # Option searches (options scoping's targeted scopes) publish no query
+    # frames: only the run the user started shows its queries (round 9).
+    live = _LiveSearch(round_index, publish_queries=not _is_option_search(conn, context.scope_id))
+    live.writing_queries()
 
     wire, usage = generation_backend.generate_queries(
         QueriesPayload(intent=context.intent, guidance=guidance)
@@ -1510,13 +1781,14 @@ def run_search(
     usage_totals.add(usage)
     queries, paraphrases = validated_queries(wire)
     queries_dropped = len(wire.queries) - len(queries)
+    live.started()
 
     # The two legs run side by side (plan S13): one pass state per backend, so
     # each has a single writer; the legs never touch the database connection;
     # they are merged in backend-list order below, so the events, counts and
     # pool order are the same as a sequential run.
     variant_count = {name: len(variants[name]) for name in names}
-    passes = {name: _Pass(constants, variant_count) for name in names}
+    passes = {name: _Pass(constants, variant_count, live=live) for name in names}
     leg_jobs: dict[str, Callable[[], Any]] = {}
     for backend in backends:
         if backend.name == "openalex":
@@ -1578,6 +1850,8 @@ def run_search(
         depth=depth,
         scope_wire_params=scope_wire_params,
         search_guidance=guidance,
+        round_index=round_index,
+        search_found=live.found,
     )
     legs = {name: summaries.get(name, _LegSummary()) for name in names}
     counts["search"] = {

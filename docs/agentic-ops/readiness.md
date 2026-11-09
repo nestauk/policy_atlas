@@ -28,8 +28,11 @@ are done (spec-prep 2026-06-22; refreshed 2026-07-03); `[ ]` items are open gate
   routes, one route step per call site, prompt caching, Unrated appraisal) merged to `dev`
   with PR #109 on 2026-11-02; 057 (queued ingest through SQS and a Lambda function, the
   content-addressed document store, chunk retrieval in SQL over pgvector, a timeout per
-  model-call step; ADR 0043) reviewed on `task/057-queued-ingest` as of 2026-11-03 — system live at
-  `v3.policyatlas.uk`; the next slice is the newest `docs/tasks/NNN-*/contract.md` and
+  model-call step; ADR 0043) merged to `dev` on 2026-11-04 (PR #111); 058 (perceived latency:
+  a live activity line from coalesced ticks, streamed report sections and planner reply, one
+  server source of progress copy, the longlist from the first minute, fifteen owner polish
+  rounds across the app; ADR 0044) reviewed on `task/058-perceived-latency` as of 2026-11-09 —
+  system live at `v3.policyatlas.uk`; the next slice is the newest `docs/tasks/NNN-*/contract.md` and
   its `task/NNN-slug` branch).
 - [x] Verification plan for first implementation slices — per-task `verification.md` from
   `docs/tasks/_templates/`, gated by the task-cycle review stack.

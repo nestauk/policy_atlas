@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.schema import block, synthesis_result
-from policy_atlas.runtime.scoping_plan import ScopingPlan
+from policy_atlas.runtime.scoping_plan import RISK_APPETITE_LABELS, ScopingPlan
 
 #: The baseline section whose prose the gate quotes back. Matches the section
 #: title the baseline prompt asks for; a stub or degraded artefact may not carry
@@ -31,11 +31,11 @@ KEY_ASSUMPTION_TITLE = "Key assumption"
 KEY_ASSUMPTION_ABSENT = "Key assumption: not found"
 
 #: The card's heading.
-GATE_HEADING = "Confirm the plan against the baseline"
+GATE_HEADING = "Does the plan still look right now you have the baseline?"
 
 
 def baseline_settings(plan: ScopingPlan) -> dict[str, Any]:
-    """Return the four plan settings the gate shows beside the baseline.
+    """Return the five plan settings the gate shows beside the baseline.
 
     Args:
         plan: The approved scoping plan the walk ran from.
@@ -43,13 +43,15 @@ def baseline_settings(plan: ScopingPlan) -> dict[str, Any]:
     Returns:
         ``target_unit``, ``where``, ``outcomes`` (plain strings, tags dropped —
         the card shows what was run, the plan document shows where it came
-        from) and ``depth``.
+        from), ``depth`` and ``risk_appetite`` (the label the user sees;
+        task 058, N19).
     """
     return {
         "target_unit": plan.target_unit.text,
         "where": plan.where.text,
         "outcomes": [outcome.text for outcome in plan.outcomes],
         "depth": plan.depth,
+        "risk_appetite": RISK_APPETITE_LABELS[plan.risk_appetite],
     }
 
 

@@ -1,5 +1,29 @@
 # Knowledge update log
 
+## 2026-11-09 (task 058, review stack)
+* **New**: [route-step-needs-three-rows](route-step-needs-three-rows.md) — the streamed
+  section turn's missing cache-mode row made every streamed turn fall back silently; the
+  fallback count was in memory and a log line only (one real fallback found in the trace).
+* **New**: [model-step-routes-carry-the-task-session](model-step-routes-carry-the-task-session.md)
+  — the note refresh route's `trace_scope` carried the user only; seven session-less traces
+  on the instance; the title generations are sibling root traces, not nested.
+* **Update**: [executor-fanout-context-and-usage](executor-fanout-context-and-usage.md) — a
+  `Future` done-callback runs in an empty context on the pool thread; carry the submitting
+  thread's context (`core/done_callbacks.py`).
+* **Update**: [bedrock-route-facts](bedrock-route-facts.md) — what streams on the
+  OpenAI-compatible endpoint: a strict `json_schema` string field streams, a forced tool call
+  bursts; the ready-tool-then-write-turn shape streams and keeps the cache prefix.
+* **Update**: [parallel-agent-test-databases](parallel-agent-test-databases.md) — tests
+  without the `engine` fixture depended on an earlier test's migration; conftest migrates
+  once per worker.
+  Folded from the build's seven candidates: the done-callback, the streaming shapes, the
+  three rows and the conftest migration (above); the hub's whole-queue drain into the
+  three-rows concept's neighbour in `docs/deferred.md` § Perceived latency (the resync on a
+  full queue replaced the drain lesson at the review). To the failure log, not knowledge: the
+  Codex spend cap ending a job mid-apply, and the frontend-designer's turn limit on
+  screenshot rounds (agentic-ops facts, not system facts).
+
+
 ## 2026-10-22 (task 053, CI fix and tier change)
 * **Update**: [model-route-constants-read-at-import](model-route-constants-read-at-import.md)
   — three tiers on every route from 2026-10-22; the default route carries the owner's

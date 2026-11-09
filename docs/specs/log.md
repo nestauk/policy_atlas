@@ -1,5 +1,24 @@
 # Spec update log
 
+## 2026-11-05
+* **Update**: [Web API § SSE](system/web-api.md) — task 058 spec items S1 to S3, approved with the
+  task 058 contract (revision 2, 2026-11-04): the stage-key list names all nineteen keys (the nine
+  Options scoping keys were in code but not in the spec); the `tick` frame is reshaped to one set of
+  fields for every stage (`activity`, `done`, `total`, `unit`, `section`, `heartbeat`, `dropped`;
+  the `ingest`-only `note`, `fetched`, `parsed` are removed, the frontend and backend deploy
+  together); two new ephemeral frames `artefact.section_delta` and `artefact.section_revising`,
+  display-only, with `section_completed` staying the record; labels, blurbs and activity text come
+  from one server table; a plan step's `row` key says which stages share a card row.
+* **Update**: [Web API § SSE](system/web-api.md) — task 058 build: `stage.completed` carries
+  `counts: [{value, noun}]`, the done row's counts in the server's words (N17; the client keeps no
+  table of count keys).
+* **Update**: [Web API § Task Agent turns, § Tasks, § Read models](system/web-api.md) — task 058
+  S4: `POST /task-agent-turns` responds with the chat route's event stream; `TaskAgentTurnOut.question`;
+  `TaskOut.active_run.stage` and `stage_label`; `GET /tasks/{id}/options` with per-option search
+  status. [Evidence search § Output structure](capabilities/evidence-search/capability.md) and
+  [Options scoping § Product surface](capabilities/options-scoping/capability.md) — task 058 S5: one
+  paragraph each on the live Result tab (streamed sections; the longlist from the first minute).
+
 ## 2026-11-04
 Task 057 review, owner rulings.
 * **Update** (S5 wording): [prompting § Timeouts](system/prompting.md) — as built: three attempts,

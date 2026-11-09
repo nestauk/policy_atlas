@@ -90,7 +90,15 @@ def evidence(
         Literal["title", "year", "type", "strength", "status", "relevance"] | None, Query()
     ] = None,
     order: Annotated[Literal["asc", "desc"] | None, Query()] = None,
-    theme: Annotated[uuid.UUID | None, Query()] = None,
+    theme: Annotated[
+        uuid.UUID | None,
+        Query(
+            description=(
+                "A theme's id: a characterisation theme's sources, or on an options-scoping "
+                "task a longlist theme's, the documents of its options (task 058, round 14)."
+            ),
+        ),
+    ] = None,
     origin: Annotated[Literal["OpenAlex", "Overton", "Uploaded"] | None, Query()] = None,
     evidence_type: Annotated[str | None, Query(max_length=200)] = None,
     strength: Annotated[
@@ -98,6 +106,45 @@ def evidence(
     ] = None,
     year_from: Annotated[int | None, Query(ge=1000, le=3000)] = None,
     year_to: Annotated[int | None, Query(ge=1000, le=3000)] = None,
+    country: Annotated[
+        str | None,
+        Query(
+            min_length=1,
+            max_length=200,
+            description=(
+                "A publisher country, by any spelling; `none` for the sources with no "
+                "country (Landscape's Not reported row; task 058, round 14)."
+            ),
+        ),
+    ] = None,
+    query: Annotated[
+        int | None,
+        Query(
+            ge=1,
+            description=(
+                "A coverage row's `query_id`: only the sources that search returned "
+                "(task 058, round 12). Empty for a search run before the ids were kept."
+            ),
+        ),
+    ] = None,
+    depth: Annotated[
+        Literal["full_text", "abstract", "title"] | None,
+        Query(
+            description=(
+                "The read depth the Status column shows: the full text, the abstract "
+                "only, or the title only (task 058, round 13)."
+            ),
+        ),
+    ] = None,
+    appraised: Annotated[
+        bool | None,
+        Query(
+            description=(
+                "`true`: the documents the appraise stage scored, the funnel's quality-"
+                "checked row; `false`: the rest (task 058, round 13)."
+            ),
+        ),
+    ] = None,
 ) -> Page[EvidenceItemOut]:
     """Return a bounded page from the evidence status ladder, optionally filtered."""
     _readable(conn, task_id, user)
@@ -118,6 +165,10 @@ def evidence(
         strength=strength,
         year_from=year_from,
         year_to=year_to,
+        country=country,
+        query=query,
+        depth=depth,
+        appraised=appraised,
     )
 
 
@@ -200,7 +251,9 @@ def decisions(
     # read (owner / same-org / admin) applies, never the public leg — a
     # signed-in outsider gets the indistinguishable 404 even on a public row.
     accessible_task(conn, task_id=task_id, user_id=user.user_id, write=False)
-    return repository.decisions_page(conn, task_id, page, page_size)
+    return repository.decisions_page(
+        conn, task_id, page, page_size, viewer_user_id=user.user_id
+    )
 
 
 @router.get("/{task_id}/artefact", response_model=ArtefactOut)

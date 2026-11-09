@@ -83,6 +83,8 @@ from pydantic import ValidationError
 from sqlalchemy import and_, select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import liveness
 from policy_atlas.core.clustering_engine import (
     AssignmentOutput,
     ClusterAssignment,
@@ -1235,6 +1237,18 @@ def _option_policy(max_labels: int) -> ClusteringPolicy:
         label_noun="option",
         log_event_prefix="longlist",
         max_concurrent_batches=MAX_CONCURRENT_BATCHES,
+        progress_key="longlist.batches",
+        on_labels=_publish_options,
+    )
+
+
+def _publish_options(labels: list[ClusterLabel]) -> None:
+    """Show the options found while sources are assigned to them (task 058, round 11).
+
+    The residual pass sends the whole list again, which replaces the first.
+    """
+    liveness.publish_themes(
+        [(label.label, label.description or None) for label in labels], stage="longlist"
     )
 
 
@@ -1645,6 +1659,9 @@ def longlist_scope(
         LonglistFailure: If clustering fails or the exhaustiveness invariant
             (units = memberships + unclustered + not an option) breaks.
     """
+    # The stage line while the discovery call runs (task 058, N24): the
+    # loop's own words, which the wrapper's verb never overwrites.
+    liveness.publish_progress(activity=activity("longlist.clustering"))
     plan, plan_version = walk_plan(
         conn, task_id=task_id, run_id=run_id, scope_id=context.scope_id
     )

@@ -8,12 +8,16 @@ contract package.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 #: Default page size when the caller omits `page_size`.
 PAGE_SIZE_DEFAULT = 50
+
+#: Default page size of the Tasks and Projects lists (task 058, round 12,
+#: owner): twenty rows, then "Show more" while `has_more`.
+LIST_PAGE_SIZE_DEFAULT = 20
 
 #: Server-enforced page-size cap (`Query(le=PAGE_SIZE_MAX)` at the route).
 PAGE_SIZE_MAX = 200
@@ -88,11 +92,20 @@ class PageMeta(BaseModel):
         page_size: Number of items requested per page (server-capped at
             `PAGE_SIZE_MAX`).
         total_items: Total number of items across all pages.
+        has_more: Whether a later page holds more items (task 058, round 10):
+            ``page * page_size < total_items``. Derived, never set by a route,
+            so a "Show more" control needs no arithmetic of its own.
     """
 
     page: int = Field(ge=1)
     page_size: int = Field(ge=1, le=PAGE_SIZE_MAX)
     total_items: int = Field(ge=0)
+    has_more: bool = False
+
+    @model_validator(mode="after")
+    def _derive_has_more(self) -> PageMeta:
+        self.has_more = self.page * self.page_size < self.total_items
+        return self
 
 
 class Page[T](BaseModel):
@@ -105,3 +118,50 @@ class Page[T](BaseModel):
 
     data: list[T]
     pagination: PageMeta
+
+
+#: The pinned stable component-vocabulary stage keys (spec § SSE).
+StageKey = Literal[
+    "acquire",
+    "screen",
+    "classify",
+    "appraise",
+    "ingest",
+    "characterise",
+    "select",
+    "extract",
+    "group",
+    "synthesise",
+    "inherit",
+    "suggest",
+    "option_searches",
+    "extract_interventions",
+    "longlist",
+    "option_profile",
+    "constrain",
+    "theme",
+    "shortlist",
+]
+
+#: `StageKey`'s members as a plain tuple, for runtime membership checks.
+STAGE_KEYS: tuple[StageKey, ...] = (
+    "acquire",
+    "screen",
+    "classify",
+    "appraise",
+    "ingest",
+    "characterise",
+    "select",
+    "extract",
+    "group",
+    "synthesise",
+    "inherit",
+    "suggest",
+    "option_searches",
+    "extract_interventions",
+    "longlist",
+    "option_profile",
+    "constrain",
+    "theme",
+    "shortlist",
+)

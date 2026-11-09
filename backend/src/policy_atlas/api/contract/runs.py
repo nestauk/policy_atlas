@@ -12,7 +12,9 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+from .common import StageKey
 
 #: Run lifecycle status. Contract (spec § Runs).
 RunStatus = Literal[
@@ -24,6 +26,45 @@ RunStatus = Literal[
     "aborted",
     "interrupted",
 ]
+
+
+class StageCount(BaseModel):
+    """One count a done row shows, with its noun: `312 found` (task 058, N17)."""
+
+    value: int
+    noun: str
+
+
+class RunStageOut(BaseModel):
+    """One step of a walk, as its stage frames told it (task 058, round 11).
+
+    The walk's own steps only: an option search's steps belong to that child
+    walk, not to the longlist walk that dispatched it. The same words the
+    `stage.started` and `stage.completed` frames carry, so a walk that has
+    ended renders its rows as the live one did.
+
+    Args:
+        stage: The public stage key.
+        label: The row's label.
+        status: `started` (no end recorded), `completed`, `failed` or
+            `skipped`.
+        started_at: When the step started, or `None` when only its end is
+            recorded.
+        ended_at: When it ended, or `None` while started.
+        summary: The done row's scalar counts (`stage.completed.summary`),
+            or `{"reason": ...}` for a failed or skipped step.
+        counts: The counts the done row shows, each with its noun.
+        seconds: The step's wall time, when recorded.
+    """
+
+    stage: StageKey
+    label: str
+    status: Literal["started", "completed", "failed", "skipped"]
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    summary: dict[str, int | float | str] = Field(default_factory=dict)
+    counts: list[StageCount] = Field(default_factory=list)
+    seconds: float | None = None
 
 
 class RunCreate(BaseModel):
@@ -57,6 +98,8 @@ class RunOut(BaseModel):
             walk's option search), or `None` for a parentless walk (task 045).
         purpose: The walk's intent-record purpose (`baseline`, `longlist`,
             `targeted`, ...), or `None` for an Evidence search walk.
+        stages: The walk's own steps in the order started (task 058, round
+            11), on the list and the one-run reads; empty elsewhere.
     """
 
     capability_run_id: uuid.UUID
@@ -69,3 +112,4 @@ class RunOut(BaseModel):
     artefact_id: uuid.UUID | None = None
     parent_capability_run_id: uuid.UUID | None = None
     purpose: str | None = None
+    stages: list[RunStageOut] = Field(default_factory=list)

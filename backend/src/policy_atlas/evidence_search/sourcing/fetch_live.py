@@ -22,7 +22,6 @@ import httpcore
 import httpx
 import structlog
 
-from policy_atlas.core.liveness import publish_current_tick
 from policy_atlas.evidence_search.sourcing.ingest_full_text import (
     DEADLINE_MARGIN_S,
     EUROPE_PMC_FULL_TEXT_URL,
@@ -343,26 +342,14 @@ class LiveDocumentFetcher:
             type, or ``FetchResult(status="error")`` with a reason code.
         """
         cache_key = _strip_fragment(url)
-        publish_current_tick(stage="acquire", note="Fetching a source in full.")
         try:
-            result = self._fetch_deduped(cache_key)
-            note = (
-                "Read a source in full."
-                if result.status == "ok"
-                else "A source could not be fetched — recorded."
-            )
-            publish_current_tick(
-                stage="acquire",
-                note=note,
-            )
-            return result
+            return self._fetch_deduped(cache_key)
         except Exception as exc:
             log.warning(
                 "fetch_live.unexpected",
                 url=_redact_url(cache_key),
                 exc_type=type(exc).__name__,
             )
-            publish_current_tick(stage="acquire", note="A source could not be fetched — recorded.")
             return FetchResult(status="error", error="fetch_error")
 
     def fetch_europe_pmc_xml(self, pmcid: str) -> bytes | None:

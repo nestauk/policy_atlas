@@ -17,6 +17,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
@@ -141,7 +142,15 @@ def test_add_on_a_pick_makes_it_yours_and_a_repeat_changes_nothing(
         assert [h["kind"] for h in history] == ["option.shortlisted"]  # one event, not two
         assert history[0]["decided_by"] == "user"
         assert history[0]["detail"]["actor"] == owner.user_id
-        assert history[0]["summary"] == "Added “Mentoring” to the shortlist."
+        assert history[0]["summary"] == "You added “Mentoring” to the shortlist."
+        assert history[0]["actor_is_viewer"] is True
+        # Task 058, round 10: "You" is the reader's word only; a colleague
+        # reads the owner's name.
+        seen_by_colleague = _history(client, built, colleague.headers)
+        name = seen_by_colleague[0]["actor_display"]
+        assert name and name != "You"
+        assert seen_by_colleague[0]["actor_is_viewer"] is False
+        assert seen_by_colleague[0]["summary"] == f"{name} added “Mentoring” to the shortlist."
 
 
 def test_add_on_an_option_with_no_place_makes_it_yours(engine: Engine, tmp_path: Path) -> None:
@@ -199,7 +208,7 @@ def test_remove_sets_a_pick_aside_clears_your_place_and_opens_no_walk(
         history = _history(client, built, owner.headers)
         assert [h["kind"] for h in history] == ["option.unshortlisted"] * 2
         assert all(h["decided_by"] == "user" for h in history)
-        assert history[1]["summary"] == "Removed “Mentoring” from the shortlist."
+        assert history[1]["summary"] == "You removed “Mentoring” from the shortlist."
         assert history[0]["detail"]["previous_state"] == "added_by_you"
 
 
@@ -458,3 +467,237 @@ def test_the_shortlist_routes_are_the_owner_s(engine: Engine, tmp_path: Path) ->
         assert _row(engine, foreign).shortlist_state is None
         assert _row(engine, oid).shortlist_state is None
         assert executor.submitted == []
+
+
+def test_the_note_is_rewritten_only_when_the_places_have_moved(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Task 058, round 14: ``note_stale`` once the places differ from the ones
+    the note was written against; the refresh writes the note through its one
+    writer with the places, logs one History line, and is a no-op when fresh."""
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
+        built = _org_build(engine, owner, colleague, linked=False)
+        guarantee = built.options["Youth guarantee"]
+        with engine.begin() as conn:
+            conn.execute(
+                longlist_result.update()
+                .where(longlist_result.c.task_id == built.task_id)
+                .values(
+                    shortlist={
+                        "note": "Old note.",
+                        "provenance": {"appetite": "mostly_tried"},
+                        "places_at": [],
+                    }
+                )
+            )
+
+        def shortlist() -> dict[str, Any]:
+            body = client.get(
+                f"/api/v1/tasks/{built.task_id}/longlist", headers=owner.headers
+            ).json()
+            return dict(body["shortlist"])
+
+        def note_lines() -> list[str]:
+            response = client.get(
+                f"/api/v1/tasks/{built.task_id}/decisions?page_size=200", headers=owner.headers
+            )
+            return [
+                row["summary"]
+                for row in response.json()["data"]
+                if row["kind"] == "shortlist.note_updated"
+            ]
+
+        url = f"/api/v1/tasks/{built.task_id}/shortlist/note"
+        # Fresh: no places then, none now. The refresh changes nothing.
+        assert shortlist()["note_stale"] is False
+        fresh = client.post(url, headers=owner.headers)
+        assert fresh.status_code == 200, fresh.text
+        assert fresh.json()["note"] == "Old note." and note_lines() == []
+
+        # The reader adds a place by hand: the note is stale.
+        assert _post(client, built, guarantee, "shortlist", owner.headers).status_code == 200
+        assert shortlist()["note_stale"] is True
+        # A colleague cannot rewrite it.
+        assert client.post(url, headers=colleague.headers).status_code in (403, 404)
+
+        written = client.post(url, headers=owner.headers)
+        assert written.status_code == 200, written.text
+        assert written.json()["note"] == "stub note"
+        assert written.json()["note_stale"] is False
+        assert note_lines() == ["Policy Atlas updated the shortlist note."]
+        with engine.connect() as conn:
+            stored = conn.execute(
+                select(longlist_result.c.shortlist).where(
+                    longlist_result.c.task_id == built.task_id
+                )
+            ).scalar_one()
+        assert stored["places_at"] == [str(guarantee)]
+        assert stored["provenance"] == {"appetite": "mostly_tried"}
+        # Fresh again: a second press writes nothing.
+        assert client.post(url, headers=owner.headers).json()["note"] == "stub note"
+        assert note_lines() == ["Policy Atlas updated the shortlist note."]
+
+
+def _stale_note(engine: Engine, built: _Built) -> None:
+    """Store a proposal note written against no places, so a refresh writes."""
+    with engine.begin() as conn:
+        conn.execute(
+            longlist_result.update()
+            .where(longlist_result.c.task_id == built.task_id)
+            .values(
+                shortlist={
+                    "note": "Old note.",
+                    "provenance": {"appetite": "mostly_tried"},
+                    "places_at": [],
+                }
+            )
+        )
+
+
+def test_a_note_refresh_carries_the_tasks_session(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Task 058 review: the ``shortlist:note`` traces had no session id."""
+    from contextlib import contextmanager
+
+    from policy_atlas.core import tracing
+
+    scopes: list[dict[str, Any]] = []
+
+    @contextmanager
+    def fake_propagate_attributes(**attributes: Any) -> Any:
+        scopes.append(attributes)
+        yield
+
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
+        built = _org_build(engine, owner, colleague, linked=False)
+        guarantee = built.options["Youth guarantee"]
+        _stale_note(engine, built)
+        assert _post(client, built, guarantee, "shortlist", owner.headers).status_code == 200
+        monkeypatch.setattr(tracing, "propagate_attributes", fake_propagate_attributes)
+        refreshed = client.post(
+            f"/api/v1/tasks/{built.task_id}/shortlist/note", headers=owner.headers
+        )
+
+    assert refreshed.status_code == 200, refreshed.text
+    assert {"session_id": str(built.task_id), "user_id": owner.user_id} in scopes
+
+
+def test_a_note_with_a_link_has_the_link_taken_out(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Plan P5: the note shows no link. The proposal re-asked a note with one
+    (``test_a_note_with_a_link_re_asks_naming_it`` on dev); the note's own step
+    has no re-ask wording, so its writer takes the link out (task 058 review)."""
+    from types import SimpleNamespace
+
+    from policy_atlas.options_scoping.scoping_backend import StubLonglistBackend
+    from policy_atlas.options_scoping.shortlist.shortlist_note_prompt import (
+        ShortlistNoteWire,
+    )
+
+    writer = StubLonglistBackend(
+        shortlist_note_responses=ShortlistNoteWire(
+            note="Leaves out [the pilot](https://example.org/p) and see www.example.org. too."
+        )
+    )
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
+        built = _org_build(engine, owner, colleague, linked=False)
+        _stale_note(engine, built)
+        guarantee = built.options["Youth guarantee"]
+        assert _post(client, built, guarantee, "shortlist", owner.headers).status_code == 200
+        # The refresh reads only the bundle's longlist writer.
+        app: Any = client.app
+        app.dependency_overrides[get_runner_backends] = lambda: SimpleNamespace(
+            longlist=writer
+        )
+        refreshed = client.post(
+            f"/api/v1/tasks/{built.task_id}/shortlist/note", headers=owner.headers
+        )
+
+    assert refreshed.status_code == 200, refreshed.text
+    assert writer.calls["shortlist_note"] == 1
+    with engine.connect() as conn:
+        stored = conn.execute(
+            select(longlist_result.c.shortlist).where(
+                longlist_result.c.task_id == built.task_id
+            )
+        ).scalar_one()
+    assert stored["note"] == "Leaves out the pilot and see too."
+
+
+def test_a_note_refresh_opens_no_run_and_writes_only_its_history_line(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Round 15 (owner): the refresh runs inline under the request: no
+    capability or component run, no ``run.*`` or stage event, so the Task
+    Agent thread gets no new progress card; only its one History line."""
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
+        built = _org_build(engine, owner, colleague, linked=False)
+        guarantee = built.options["Youth guarantee"]
+        with engine.begin() as conn:
+            conn.execute(
+                longlist_result.update()
+                .where(longlist_result.c.task_id == built.task_id)
+                .values(
+                    shortlist={
+                        "note": "Old note.",
+                        "provenance": {"appetite": "mostly_tried"},
+                        "places_at": [],
+                    }
+                )
+            )
+        assert _post(client, built, guarantee, "shortlist", owner.headers).status_code == 200
+
+        def runs() -> list[Any]:
+            response = client.get(
+                f"/api/v1/tasks/{built.task_id}/runs?page_size=200", headers=owner.headers
+            )
+            assert response.status_code == 200, response.text
+            return list(response.json()["data"])
+
+        def event_types() -> list[str]:
+            with engine.connect() as conn:
+                return [entry["event_type"] for entry in events.read(conn, built.task_id)]
+
+        runs_before, events_before = runs(), event_types()
+        # The live half of the stream: nothing reaches the tick hub.
+        from policy_atlas.api.routers import sse
+        from policy_atlas.core import liveness
+
+        hub_ticks: list[Any] = []
+        original_publish = liveness.tick_hub.publish_tick
+
+        def capture(task: uuid.UUID, **payload: Any) -> None:
+            hub_ticks.append(payload)
+            original_publish(task, **payload)
+
+        monkeypatch.setattr(liveness.tick_hub, "publish_tick", capture)
+        with engine.connect() as conn:
+            capability_runs_before = conn.execute(
+                select(capability_run.c.capability_run_id).where(
+                    capability_run.c.task_id == built.task_id
+                )
+            ).all()
+        refreshed = client.post(
+            f"/api/v1/tasks/{built.task_id}/shortlist/note", headers=owner.headers
+        )
+        assert refreshed.status_code == 200, refreshed.text
+        assert refreshed.json()["note_stale"] is False
+        assert runs() == runs_before
+        with engine.connect() as conn:
+            capability_runs_after = conn.execute(
+                select(capability_run.c.capability_run_id).where(
+                    capability_run.c.task_id == built.task_id
+                )
+            ).all()
+        assert capability_runs_after == capability_runs_before
+        assert event_types()[len(events_before) :] == ["shortlist.note_updated"]
+        assert hub_ticks == []
+        # The persisted half: the stream maps the new event to no frame at all.
+        with engine.connect() as conn:
+            rows = sse._event_rows(conn, task_id=built.task_id, after=0, through=None)
+            new_rows = rows[len(events_before) :]
+            assert [row["event_type"] for row in new_rows] == ["shortlist.note_updated"]
+            frames = sse._map_rows(conn, task_id=built.task_id, rows=new_rows, through=None)
+        assert frames == []

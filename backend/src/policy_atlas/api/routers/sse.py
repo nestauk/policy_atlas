@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator, Collection, Iterable, Iterator
 from functools import partial
 from typing import Annotated, Any, cast
 
@@ -13,22 +13,35 @@ import anyio
 import structlog
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.sql.elements import ColumnElement
 
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.check_ins_read import _check_in
 from policy_atlas.api.contract import (
+    ArtefactSectionCardFrame,
+    ArtefactSectionClaimFrame,
     ArtefactSectionCompletedFrame,
+    ArtefactSectionDeltaFrame,
+    ArtefactSectionRevisingFrame,
+    ArtefactSectionSourcesFrame,
     ArtefactSectionStartedFrame,
     ArtefactSkeletonFrame,
+    ArtefactSourceNoteFrame,
+    CharacteriseThemesFrame,
     CheckinPendingFrame,
     CheckinResolvedFrame,
+    LiveTheme,
     PlanUpdatedFrame,
+    RunStageOut,
     RunStatus,
     RunStatusFrame,
+    SearchQueryFrame,
+    SectionSourceRef,
+    SectionSpan,
     StageCompletedFrame,
+    StageCount,
     StageFailedFrame,
     StageKey,
     StageStartedFrame,
@@ -49,6 +62,9 @@ from policy_atlas.api.settings import Settings
 
 # Shared with the check-in read model — one vocabulary, one leak surface.
 from policy_atlas.api.stage_vocabulary import (
+    STAGE_COUNTS,
+)
+from policy_atlas.api.stage_vocabulary import (
     STAGE_PRESENTATION as _STAGE_PRESENTATION,
 )
 from policy_atlas.api.stage_vocabulary import (
@@ -58,8 +74,20 @@ from policy_atlas.api.stage_vocabulary import (
     stage_for_payload as _stage,
 )
 from policy_atlas.core import events
-from policy_atlas.core.liveness import Tick, tick_hub
-from policy_atlas.core.schema import event_log, task_plan
+from policy_atlas.core.liveness import (
+    HubMessage,
+    SearchQuery,
+    SectionCard,
+    SectionDelta,
+    SectionRevising,
+    SectionSources,
+    SourceNote,
+    SourceRef,
+    ThemesFound,
+    Tick,
+    tick_hub,
+)
+from policy_atlas.core.schema import event_log, runs, task_plan
 from policy_atlas.runtime import steering_events
 from policy_atlas.runtime.capability_registry import (
     capability_of_task,
@@ -238,6 +266,99 @@ _STAGE_EVENT_TYPES = frozenset(
 )
 
 
+def walk_stages(
+    conn: Connection, *, task_id: uuid.UUID, walk_ids: Collection[uuid.UUID]
+) -> dict[uuid.UUID, list[RunStageOut]]:
+    """Each walk's own steps, folded from the stage frames its events map to (round 11).
+
+    The same frames the stream sends (labels, summaries, counts, seconds), so
+    an ended walk in the thread renders its rows as the live one did. An
+    option search's steps name that child walk and stay with it. A walk-level
+    stage without a component run (``option_searches``) names its walk in the
+    payload; a completion written before round 11 does not, and belongs to
+    the walk whose ``option_searches`` started most recently before it.
+
+    Args:
+        conn: Open database connection.
+        task_id: The task.
+        walk_ids: The walks to fold.
+
+    Returns:
+        Walk id → its steps in the order started (absent when it has none).
+    """
+    wanted = set(walk_ids)
+    if not wanted:
+        return {}
+    walk_runs = select(runs.c.run_id).where(
+        runs.c.task_id == task_id, runs.c.capability_run_id.in_(wanted)
+    )
+    rows = [
+        dict(row._mapping)
+        for row in conn.execute(
+            select(event_log)
+            .where(event_log.c.task_id == task_id)
+            .where(event_log.c.event_type.in_(_STAGE_EVENT_TYPES))
+            .where(or_(event_log.c.run_id.in_(walk_runs), event_log.c.run_id.is_(None)))
+            .order_by(event_log.c.sequence)
+        )
+    ]
+    folded: dict[uuid.UUID, list[RunStageOut]] = {}
+    open_fan_out: uuid.UUID | None = None
+    for frame in _map_rows(conn, task_id=task_id, rows=rows, through=None):
+        walk = _uuid(frame.get("capability_run_id"))
+        if frame["stage"] == "option_searches":
+            if frame["type"] == "stage.started":
+                open_fan_out = walk
+            elif walk is None:
+                walk = open_fan_out
+        if walk is None or walk not in wanted:
+            continue
+        entries = folded.setdefault(walk, [])
+        if frame["type"] == "stage.started":
+            entries.append(
+                RunStageOut(
+                    stage=frame["stage"],
+                    label=frame["label"],
+                    status="started",
+                    started_at=frame["occurred_at"],
+                )
+            )
+            continue
+        if frame["type"] == "stage.completed":
+            ended = RunStageOut(
+                stage=frame["stage"],
+                label=frame["label"],
+                status="completed",
+                ended_at=frame["occurred_at"],
+                summary=frame["summary"] or {},
+                counts=frame["counts"] or [],
+                seconds=frame["seconds"],
+            )
+        else:
+            ended = RunStageOut(
+                stage=frame["stage"],
+                label=frame["label"],
+                status="skipped" if frame["skipped"] else "failed",
+                ended_at=frame["occurred_at"],
+                summary={"reason": frame["reason"]},
+            )
+        open_entry = next(
+            (
+                i
+                for i in range(len(entries) - 1, -1, -1)
+                if entries[i].stage == ended.stage and entries[i].status == "started"
+            ),
+            None,
+        )
+        if open_entry is None:
+            entries.append(ended)
+        else:
+            entries[open_entry] = ended.model_copy(
+                update={"started_at": entries[open_entry].started_at}
+            )
+    return folded
+
+
 def _frames_for_row(
     conn: Connection,
     *,
@@ -256,7 +377,14 @@ def _frames_for_row(
         return []
     event_type = row["event_type"]
     persisted = _persisted_kwargs(row)
-    stage_walk = (walks or {}).get(row["run_id"]) if row.get("run_id") is not None else None
+    # A walk-level stage with no component run of its own (the longlist
+    # walk's ``option_searches``, written by the runner's fan-out and join)
+    # names its walk in the payload (task 058, round 11).
+    stage_walk = (
+        (walks or {}).get(row["run_id"])
+        if row.get("run_id") is not None
+        else _uuid(payload.get("capability_run_id"))
+    )
     if event_type in {
         "run.opened",
         "run.parked",
@@ -304,13 +432,19 @@ def _frames_for_row(
         if stage is None:
             return []
         label, _ = _presentation(stage)
+        summary = _summary(payload)
         return [
             StageCompletedFrame(
                 type="stage.completed",
                 stage=stage,
                 label=label,
-                summary=_summary(payload),
+                summary=summary,
                 seconds=_seconds(conn, task_id=task_id, row=row, payload=payload),
+                counts=[
+                    StageCount(value=int(summary[key]), noun=noun)
+                    for key, noun in STAGE_COUNTS.get(stage, ())
+                    if isinstance(summary.get(key), int | float)
+                ],
                 capability_run_id=stage_walk,
                 **persisted,
             ).model_dump(mode="json")
@@ -414,7 +548,7 @@ def _summary(payload: dict[str, Any]) -> dict[str, int | float | str]:
     """
     hidden = {
         "component", "registry_component", "plan_id", "plan_version", "session_id",
-        "already_in_store",
+        "already_in_store", "capability_run_id",
     }
     summary: dict[str, int | float | str] = {
         key: value
@@ -443,7 +577,12 @@ def _seconds(
     row: dict[str, Any],
     payload: dict[str, Any],
 ) -> float | None:
-    """Read an adjacent timing record when available, then use terminal payload time."""
+    """Return a stage's seconds: the terminal payload's time first, else its timing row.
+
+    The runner puts ``wall_clock_s`` on ``component.completed`` (task 058, N5),
+    so a live tail has the time before the later ``component.timing`` row
+    lands. Older rows without it fall back to that timing row.
+    """
     wall_clock = payload.get("wall_clock_s")
     if isinstance(wall_clock, int | float) and not isinstance(wall_clock, bool):
         return float(wall_clock)
@@ -605,20 +744,127 @@ def _encode_frame(frame: dict[str, Any]) -> str:
     return f"id: {frame['sequence']}\nevent: {frame['type']}\ndata: {payload}\n\n"
 
 
-def _encode_tick(tick: Tick) -> str:
+def _encode_ephemeral(message: HubMessage) -> str:
     """Serialize a validated ephemeral frame without an SSE id line."""
-    stage = cast(StageKey | None, tick.stage) if tick.stage in _STAGE_PRESENTATION else None
-    frame = TickFrame(
-        type="tick",
-        stage=stage,
-        note=tick.note,
-        fetched=tick.fetched,
-        parsed=tick.parsed,
-        total=tick.total,
-        occurred_at=tick.occurred_at,
-    )
-    # The counts are null when absent, as the generated contract says (owner, 2026-11-02).
-    return f"event: tick\ndata: {frame.model_dump_json()}\n\n"
+    if isinstance(message, Tick):
+        stage = (
+            cast(StageKey | None, message.stage)
+            if message.stage in _STAGE_PRESENTATION
+            else None
+        )
+        frame: (
+            TickFrame
+            | ArtefactSectionDeltaFrame
+            | ArtefactSectionRevisingFrame
+            | ArtefactSectionSourcesFrame
+            | ArtefactSectionClaimFrame
+            | ArtefactSectionCardFrame
+            | ArtefactSourceNoteFrame
+            | SearchQueryFrame
+            | CharacteriseThemesFrame
+        ) = (
+            TickFrame(
+                type="tick",
+                stage=stage,
+                activity=message.activity,
+                done=message.done,
+                total=message.total,
+                unit=message.unit,
+                section=message.section,
+                heartbeat=message.heartbeat,
+                dropped=message.dropped,
+                capability_run_id=message.run_id,
+                occurred_at=message.occurred_at,
+            )
+        )
+    elif isinstance(message, SectionDelta):
+        frame = ArtefactSectionDeltaFrame(
+            type="artefact.section_delta",
+            index=message.index,
+            text=message.text,
+            mode=message.mode,
+            occurred_at=message.occurred_at,
+        )
+    elif isinstance(message, SectionRevising):
+        frame = ArtefactSectionRevisingFrame(
+            type="artefact.section_revising",
+            index=message.index,
+            spans=[SectionSpan(start=start, end=end) for start, end in message.spans],
+            occurred_at=message.occurred_at,
+        )
+    elif isinstance(message, SectionSources):
+        frame = ArtefactSectionSourcesFrame(
+            type="artefact.section_sources",
+            index=message.index,
+            sources=_source_refs(message.sources),
+            occurred_at=message.occurred_at,
+        )
+    elif isinstance(message, SectionCard):
+        frame = ArtefactSectionCardFrame(
+            type="artefact.section_card",
+            index=message.index,
+            title=message.title,
+            prose=message.prose,
+            occurred_at=message.occurred_at,
+        )
+    elif isinstance(message, SourceNote):
+        frame = ArtefactSourceNoteFrame(
+            type="artefact.source_note",
+            source_id=message.source_id,
+            title=message.title,
+            note=message.note,
+            occurred_at=message.occurred_at,
+        )
+    elif isinstance(message, SearchQuery):
+        frame = SearchQueryFrame(
+            type="search.query",
+            backend=message.backend,
+            query=message.query,
+            kind=message.kind,
+            results=message.results,
+            occurred_at=message.occurred_at,
+        )
+    elif isinstance(message, ThemesFound):
+        frame = CharacteriseThemesFrame(
+            type="characterise.themes",
+            stage=message.stage,
+            themes=[
+                LiveTheme(label=label, description=description)
+                for label, description in message.themes
+            ],
+            occurred_at=message.occurred_at,
+        )
+    else:
+        frame = ArtefactSectionClaimFrame(
+            type="artefact.section_claim",
+            index=message.index,
+            start=message.start,
+            end=message.end,
+            sources=_source_refs(message.sources),
+            occurred_at=message.occurred_at,
+        )
+    return f"event: {frame.type}\ndata: {frame.model_dump_json()}\n\n"
+
+
+def _ephemeral_lines(messages: Iterable[HubMessage]) -> Iterator[str]:
+    """Encode each ephemeral message, skipping one that cannot be encoded.
+
+    The hub remembers what it sent, so one bad message would otherwise close
+    every reader's stream on every reconnect. The skip logs the message's
+    type only, never its text.
+    """
+    for message in messages:
+        try:
+            yield _encode_ephemeral(message)
+        except ValueError:
+            # Pydantic's serialisation error and UnicodeEncodeError are both
+            # ValueErrors (a lone surrogate raises either).
+            log.warning("api.sse_ephemeral_skipped", message_type=type(message).__name__)
+
+
+def _source_refs(sources: tuple[SourceRef, ...]) -> list[SectionSourceRef]:
+    """Name each ``(source_id, title)`` pair as the frame carries it."""
+    return [SectionSourceRef(source_id=source_id, title=title) for source_id, title in sources]
 
 
 @router.get("/{task_id}/events")
@@ -641,30 +887,34 @@ async def stream_events(
     )
 
     async def body() -> AsyncIterator[str]:
-        queue = await tick_hub.subscribe(task_id)
+        queue, cached = await tick_hub.subscribe_with_snapshot(task_id)
         next_sequence = max(snapshot + 1, cursor + 1)
         last_heartbeat = asyncio.get_running_loop().time()
         try:
             for frame in replay:
                 yield _encode_frame(frame)
+            for line in _ephemeral_lines(cached):
+                yield line
             while True:
                 now = asyncio.get_running_loop().time()
                 heartbeat_remaining = max(
                     0.0, settings.sse_heartbeat_seconds - (now - last_heartbeat)
                 )
                 timeout = min(settings.sse_poll_interval_seconds, heartbeat_remaining)
+                pending: list[HubMessage] = []
                 try:
-                    tick = await asyncio.wait_for(queue.get(), timeout=timeout)
+                    pending.append(await asyncio.wait_for(queue.get(), timeout=timeout))
                 except TimeoutError:
-                    tick = None
-                # The tick is **held**, not yielded, until the tail has
-                # re-authorised. A tick carries the task's current stage and
-                # its progress note — task-derived content — so yielding it
-                # first handed a caller whose access had just gone one more
-                # frame about work they may no longer read. Re-authorisation is
-                # the first thing every iteration does; nothing is written to
-                # the response before it answers.
-                pending_tick = _encode_tick(tick) if tick is not None else None
+                    pass
+                else:
+                    while True:
+                        try:
+                            pending.append(queue.get_nowait())
+                        except asyncio.QueueEmpty:
+                            break
+                # The whole ephemeral batch is held until the tail has
+                # re-authorised. Nothing is written to the response before it
+                # answers (task 058, N4 and N7).
                 batch = await anyio.to_thread.run_sync(
                     partial(
                         _tail,
@@ -682,12 +932,13 @@ async def stream_events(
                     log.info("api.sse_revoked", task_id=str(task_id))
                     return
                 last_sequence, tail = batch
-                # Order within the iteration is unchanged: the ephemeral tick
-                # still precedes the durable frames it was observed alongside.
-                if pending_tick is not None:
-                    yield pending_tick
+                # Durable rows first: a run's ``run.opened`` and its first
+                # ticks can share a batch, and a tick ahead of it would be
+                # dropped as another walk's.
                 for frame in tail:
                     yield _encode_frame(frame)
+                for line in _ephemeral_lines(pending):
+                    yield line
                 next_sequence = last_sequence + 1
                 now = asyncio.get_running_loop().time()
                 if now - last_heartbeat >= settings.sse_heartbeat_seconds:

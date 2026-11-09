@@ -15,7 +15,7 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser
-from policy_atlas.api.contract import RunCreate, RunOut
+from policy_atlas.api.contract import RunCreate, RunOut, RunStageOut
 from policy_atlas.api.contract.common import PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX, Page, PageMeta
 from policy_atlas.api.deps import (
     get_current_user,
@@ -380,8 +380,12 @@ def list_runs(
             .offset((page - 1) * page_size)
             .limit(page_size)
         ).mappings().all()
+        stages = _walk_stages(conn, task_id, [row["capability_run_id"] for row in rows])
     return Page(
-        data=[run_out(row) for row in rows],
+        data=[
+            run_out(row).model_copy(update={"stages": stages.get(row["capability_run_id"], [])})
+            for row in rows
+        ],
         pagination=PageMeta(page=page, page_size=page_size, total_items=int(total)),
     )
 
@@ -401,6 +405,18 @@ def get_run(
             .where(capability_run.c.task_id == task_id)
             .where(capability_run.c.capability_run_id == run_id)
         ).mappings().one_or_none()
+        stages = _walk_stages(conn, task_id, [run_id]) if row is not None else {}
     if row is None:
         raise HTTPException(status_code=404, detail="resource not found")
-    return run_out(row)
+    return run_out(row).model_copy(update={"stages": stages.get(run_id, [])})
+
+
+def _walk_stages(
+    conn: Connection, task_id: uuid.UUID, walk_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[RunStageOut]]:
+    """Each walk's own steps, as the stream told them (task 058, round 11)."""
+    # Imported here: the stream router imports the task-agent router, which
+    # reaches this module through the longlist start.
+    from policy_atlas.api.routers.sse import walk_stages
+
+    return walk_stages(conn, task_id=task_id, walk_ids=walk_ids)

@@ -1,7 +1,14 @@
 import type { ReactNode } from "react";
-import { NavLink } from "react-router";
+import { Link, NavLink, useLocation } from "react-router";
 
 import { cn } from "./cn";
+import { GROWING_RULE_ACTIVE_CLASS, GROWING_RULE_CLASS } from "./Nav";
+
+const TAB_CLASS = cn(
+  "inline-flex items-center gap-1.5 border-b-[3px] border-transparent pb-1 text-lead font-semibold leading-none text-grey no-underline transition-colors duration-150 hover:text-navy",
+  GROWING_RULE_CLASS,
+);
+const TAB_ACTIVE_CLASS = cn(GROWING_RULE_ACTIVE_CLASS, "text-navy");
 
 type LifecycleBarItem = {
   tab: string;
@@ -10,6 +17,10 @@ type LifecycleBarItem = {
   locked: boolean;
   /** Rendered beside the label when the tab wants attention (a pending check-in). */
   marker?: ReactNode;
+  /** When the link opens on a subview (Sources during a run), or the tab
+   *  owns more than its own path (Result and the option cards, round 14),
+   *  the tab reads as current anywhere under this path or these paths. */
+  activePrefix?: string | readonly string[];
 };
 
 /**
@@ -28,25 +39,48 @@ type LifecycleBarItem = {
 export function LifecycleBottomBar({
   items,
   hint,
+  lead,
 }: {
   items: readonly LifecycleBarItem[];
   hint: string;
+  /** A control set before the tabs (the task's "Plan" control). */
+  lead?: ReactNode;
 }) {
   return (
     <nav
       aria-label="Task stages"
-      className="print-hide shrink-0 border-t border-line bg-paper md:hidden"
+      // Its own View Transition layer, held still (round 13, owner).
+      className="print-hide shrink-0 border-t border-line bg-paper md:hidden [view-transition-name:task-stages] [view-transition-class:shell-chrome]"
     >
       <div className="overflow-x-auto px-4 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
-        <LifecycleBar items={items} hint={hint} />
+        <LifecycleBar items={items} hint={hint} lead={lead} />
       </div>
     </nav>
   );
 }
 
-export function LifecycleBar({ items, hint }: { items: readonly LifecycleBarItem[]; hint: string }) {
+export function LifecycleBar({
+  items,
+  hint,
+  lead,
+}: {
+  items: readonly LifecycleBarItem[];
+  hint: string;
+  /** A control set before the tabs, behind a hairline (the "Plan" control). */
+  lead?: ReactNode;
+}) {
+  const { pathname } = useLocation();
+  const under = (prefix: string | readonly string[]) =>
+    (typeof prefix === "string" ? [prefix] : prefix).some(
+      (path) => pathname === path || pathname.startsWith(`${path}/`),
+    );
   return (
     <div className="flex items-end gap-5">
+      {lead !== undefined && (
+        <span className="inline-flex items-end gap-5 after:mb-1 after:h-4 after:w-px after:bg-line-2 after:content-['']">
+          {lead}
+        </span>
+      )}
       {items.map((item) =>
         item.locked ? (
           <span
@@ -58,6 +92,17 @@ export function LifecycleBar({ items, hint }: { items: readonly LifecycleBarItem
             {item.label}
             <span className="sr-only"> — {hint}</span>
           </span>
+        ) : item.activePrefix !== undefined ? (
+          // The link opens a subview, so the tab's own match is the prefix.
+          <Link
+            key={item.tab}
+            to={item.to}
+            aria-current={under(item.activePrefix) ? "page" : undefined}
+            className={cn(TAB_CLASS, under(item.activePrefix) && TAB_ACTIVE_CLASS)}
+          >
+            {item.label}
+            {item.marker}
+          </Link>
         ) : (
           <NavLink
             key={item.tab}
@@ -65,12 +110,7 @@ export function LifecycleBar({ items, hint }: { items: readonly LifecycleBarItem
             // Agent is the bare task path, so without `end` it would stay
             // active on every stage beneath it.
             end={item.tab === "agent"}
-            className={({ isActive }) =>
-              cn(
-                "inline-flex items-center gap-1.5 border-b-[3px] border-transparent pb-1 text-lead font-semibold leading-none text-grey no-underline hover:text-navy",
-                isActive && "border-blue text-navy",
-              )
-            }
+            className={({ isActive }) => cn(TAB_CLASS, isActive && TAB_ACTIVE_CLASS)}
           >
             {item.label}
             {item.marker}

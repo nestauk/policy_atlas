@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 from sqlalchemy import select, update
@@ -47,11 +48,31 @@ def both_generations(*kinds: str) -> frozenset[str]:
     return frozenset(f"{prefix}.{kind}" for kind in kinds for prefix in ("task", "project"))
 
 
+def touch_task(conn: Connection, task_id: uuid.UUID) -> None:
+    """Mark a task as worked on now, so lists sorted newest first see it.
+
+    A run starting or ending, and a check-in answer, are work on the task
+    even though no task field changes (task 058, round 10): without this the
+    Tasks list's "newest first" is creation order for Evidence search.
+
+    Call it **first** in the transaction, before any run row is written: the
+    API's task-locked writes take the task row before the run rows, and the
+    same order here means the two can never wait on each other.
+
+    Args:
+        conn: Open connection whose transaction owns the write.
+        task_id: The task to touch.
+    """
+    conn.execute(update(task).where(task.c.task_id == task_id).values(updated_at=datetime.now(UTC)))
+
+
 def rename_task(
     conn: Connection,
     task_id: uuid.UUID,
     new_name: str,
     actor: str,
+    *,
+    extra: dict[str, Any] | None = None,
 ) -> None:
     """Rename a task and append its audit event in the caller transaction.
 
@@ -60,6 +81,8 @@ def rename_task(
         task_id: Task to rename.
         new_name: New task name.
         actor: Authenticated actor recorded in the event payload.
+        extra: More payload, e.g. the title prompt's version and the question
+            a written name stands for (task 058, round 14).
 
     Raises:
         LookupError: If ``task_id`` does not identify a task.
@@ -81,18 +104,26 @@ def rename_task(
         task_id=task_id,
         run_id=None,
         event_type="task.renamed",
-        payload={"name_from": name_from, "name_to": new_name, "actor": actor},
+        payload={"name_from": name_from, "name_to": new_name, "actor": actor, **(extra or {})},
     )
     log.info("task.renamed", task_id=str(task_id), actor=actor)
 
 
-def archive_task(conn: Connection, task_id: uuid.UUID, actor: str) -> bool:
+def archive_task(
+    conn: Connection,
+    task_id: uuid.UUID,
+    actor: str,
+    *,
+    extra: dict[str, Any] | None = None,
+) -> bool:
     """Archive a task once and append a same-transaction audit event.
 
     Args:
         conn: Open connection whose transaction owns both writes.
         task_id: Task to archive.
         actor: Authenticated actor recorded in the event payload.
+        extra: More payload: the project whose archive archived it
+            (``project_id``, ``project_name``; task 058, round 14).
 
     Returns:
         ``True`` when this call archived the task, ``False`` when it was
@@ -122,7 +153,7 @@ def archive_task(conn: Connection, task_id: uuid.UUID, actor: str) -> bool:
         task_id=task_id,
         run_id=None,
         event_type="task.archived",
-        payload={"actor": actor},
+        payload={"actor": actor, **(extra or {})},
     )
     log.info("task.archived", task_id=str(task_id), actor=actor)
     return True

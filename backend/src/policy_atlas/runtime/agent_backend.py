@@ -44,7 +44,7 @@ import os
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 import structlog
 from langfuse import Langfuse
@@ -96,6 +96,14 @@ from policy_atlas.runtime.option_design_prompt import (
     OPTION_DESIGN_PROMPT_VERSION,
     OptionDesignWire,
     build_option_design_messages,
+)
+from policy_atlas.runtime.title_prompt import (
+    CHAT_TITLE_PROMPT_VERSION,
+    TASK_TITLE_PROMPT_VERSION,
+    TITLE_MAX_OUTPUT_TOKENS,
+    TitleWire,
+    build_chat_title_messages,
+    build_task_title_messages,
 )
 
 if TYPE_CHECKING:
@@ -476,6 +484,33 @@ class OpenAIAgentBackend:
         )
         return _scrub_decision(parsed.to_wire())
 
+    def write_title(
+        self,
+        kind: Literal["task", "chat"],
+        text: str,
+        *,
+        session_id: uuid.UUID | None = None,
+    ) -> str | None:
+        """Write a short task or chat title through structured OpenAI output."""
+        task = kind == "task"
+        messages = (
+            build_task_title_messages(question=text)
+            if task
+            else build_chat_title_messages(first_message=text)
+        )
+        parsed = self._parse(
+            messages,
+            response_format=TitleWire,
+            step="task_title" if task else "chat_title",
+            max_output_tokens=TITLE_MAX_OUTPUT_TOKENS,
+            usage_event="task_agent.title.usage" if task else "chat.title.usage",
+            label="task-agent-title" if task else "chat-title",
+            prompt_version=TASK_TITLE_PROMPT_VERSION if task else CHAT_TITLE_PROMPT_VERSION,
+            name="task_agent:title" if task else "chat:title",
+            session_id=session_id,
+        )
+        return parsed.title
+
     def sort_gate_turn(
         self,
         utterance: str,
@@ -732,6 +767,8 @@ class StubAgentBackend:
         suggest_responses: Canned :class:`SuggestResponse` value(s), or
             ``None`` (the default suggests one option from the plan and one
             per linked report).
+        title_responses: Canned title line(s), or ``None`` (the default
+            writes none, so the caller falls back to a cut of the text).
     """
 
     def __init__(
@@ -744,6 +781,7 @@ class StubAgentBackend:
         longlist_sort_responses: LonglistVerbWire | list[LonglistVerbWire] | None = None,
         option_design_responses: OptionDesignWire | list[OptionDesignWire] | None = None,
         suggest_responses: SuggestResponse | list[SuggestResponse] | None = None,
+        title_responses: str | list[str] | None = None,
     ) -> None:
         self._route_queue = _as_queue(route_responses)
         self._triage_queue = _as_queue(triage_responses)
@@ -752,6 +790,9 @@ class StubAgentBackend:
         self._longlist_sort_queue = _as_queue(longlist_sort_responses)
         self._option_design_queue = _as_queue(option_design_responses)
         self._suggest_queue = _as_queue(suggest_responses)
+        self._title_queue: list[str] = _as_queue(title_responses)
+        #: ``(kind, text)`` per title call (round 14).
+        self.title_calls: list[tuple[str, str]] = []
         self.route_calls = 0
         self.triage_calls = 0
         self.decide_calls = 0
@@ -800,6 +841,19 @@ class StubAgentBackend:
         del request, header, payload, digest, framing, session_id
         self.decide_calls += 1
         return _next(self._decide_queue, _proceed)
+
+    def write_title(
+        self,
+        kind: Literal["task", "chat"],
+        text: str,
+        *,
+        session_id: uuid.UUID | None = None,
+    ) -> str | None:
+        del session_id
+        self.title_calls.append((kind, text))
+        if not self._title_queue:
+            return None
+        return _next(self._title_queue, str)
 
     def sort_gate_turn(
         self,

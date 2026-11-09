@@ -32,4 +32,25 @@ describe("ConversationRail", () => {
     // New chat keeps its name while disabled; the reason is the tooltip's.
     expect(screen.getByRole("button", { name: "New chat" })).toBeDisabled();
   });
+
+  // Owner, round 8: the rail's Task Agent is the still fold mark and its
+  // plain name, with no run status, no hover status and no timer; the run
+  // strip and the trace carry the run.
+  it("names the Task Agent plainly with the still fold mark, and carries no run status or timer", () => {
+    render(
+      <ConversationRail
+        toggleLabel="Open the Agent"
+        expanded={false}
+        onToggle={() => undefined}
+        onNewChat={() => undefined}
+        chatsEnabled
+        onTaskAgent={false}
+        onSelectTaskAgent={() => undefined}
+      />,
+    );
+    const mark = screen.getByRole("button", { name: "Task Agent" });
+    expect(mark.querySelector("svg")).not.toBeNull();
+    expect(mark.querySelector("[data-live-mark]")).toBeNull();
+    expect(screen.queryByTestId("rail-elapsed")).toBeNull();
+  });
 });

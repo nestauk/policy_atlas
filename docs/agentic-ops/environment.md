@@ -1,7 +1,11 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (057 (`task/057-queued-ingest`, queued ingest, the document store, SQL retrieval and
+stands (058 (`task/058-perceived-latency`, perceived latency) adds one migration, `c4e8a2f6d1b3`
+(`project.archived_at`, nullable, no table rewrite; its downgrade drops the column and loses the
+archive times) — `alembic upgrade head` after pulling it — and three frontend packages for the
+Landscape map (`d3-geo`, `topojson-client`, `world-atlas`) — `pnpm install` in `frontend/`; it adds
+no env var; 057 (`task/057-queued-ingest`, queued ingest, the document store, SQL retrieval and
 step timeouts) adds three migrations, `a3d8f6c1e2b4` (expand: the store key and vector columns),
 `b7e2c4a9d1f3` (a resumable backfill of the binary vectors and token arrays; about 20 minutes on
 a dev database with 270,000 chunk embeddings, and it commits per batch so it can be stopped and

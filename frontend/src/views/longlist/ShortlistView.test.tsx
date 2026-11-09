@@ -1,16 +1,20 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MOCK_OPTION_ID_NO_IN_SCOPE, mockLonglist } from "../../mock/fixtures";
 import { ShortlistView } from "./ShortlistView";
+import { CARD_FROM_SHORTLIST } from "./OptionCard";
+import { PublicViewProvider } from "../publicView";
+import { RISK_APPETITE_LABELS } from "../workspace/planVocabulary";
 import {
   MOCK_OPTION_ID_ADDED_BY_YOU,
   MOCK_OPTION_ID_PACKAGE,
 } from "../../mock/fixtures";
 import * as queries from "../../api/queries";
 import * as mutations from "../../api/mutations";
+import * as shortlistNote from "./shortlistNote";
 
 vi.mock("../../api/queries", () => ({
   useTask: vi.fn(),
@@ -35,6 +39,13 @@ vi.mock("../../api/mutations", () => ({
   useShortlistVerb: vi.fn(),
   useSuggestMore: vi.fn(),
   usePatchPlan: vi.fn(),
+}));
+
+const noteMutate = vi.fn();
+let notePending = false;
+vi.mock("./shortlistNote", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./shortlistNote")>()),
+  useRefreshShortlistNote: vi.fn(),
 }));
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
@@ -81,18 +92,27 @@ function renderShortlist(
   vi.mocked(mutations.useAddOption).mockReturnValue(
     { mutate: addMutate, isPending: false } as unknown as ReturnType<typeof mutations.useAddOption>,
   );
+  vi.mocked(shortlistNote.useRefreshShortlistNote).mockImplementation(
+    () => ({ mutate: noteMutate, isPending: notePending }) as unknown as ReturnType<typeof shortlistNote.useRefreshShortlistNote>,
+  );
   const longlist = mockLonglist();
   adjust?.(longlist);
   return render(
-    <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/result`]}>
-      <Routes>
-        <Route path="/tasks/:taskId/result" element={<ShortlistView taskId={TASK_ID} longlist={longlist} />} />
-      </Routes>
-    </MemoryRouter>,
+    <PublicViewProvider value={publicLink}>
+      <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/result`]}>
+        <Routes>
+          <Route path="/tasks/:taskId/result" element={<ShortlistView taskId={TASK_ID} longlist={longlist} />} />
+        </Routes>
+      </MemoryRouter>
+    </PublicViewProvider>,
   );
 }
 
+/** Whether the next render sits in the public link's view (round 12). */
+let publicLink = false;
+
 beforeEach(() => {
+  publicLink = false;
   shortlistMutate.mockClear();
   unshortlistMutate.mockClear();
   suggestMutate.mockClear();
@@ -101,6 +121,8 @@ beforeEach(() => {
   excludeMutate.mockClear();
   includeMutate.mockClear();
   addMutate.mockClear();
+  noteMutate.mockClear();
+  notePending = false;
 });
 
 describe("ShortlistView — the Shortlist result view (task 055)", () => {
@@ -122,8 +144,10 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
 
   it("renders the title, the appetite select, both groups and the rows", async () => {
     await openShortlist();
-    expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Risk appetite" })).toHaveValue("mostly_tried");
+    // The longlist's header (round 10): "Shortlist", the question under it.
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Shortlist$/);
+    expect(screen.getByText("How can we cut the NEET rate?")).toHaveClass("text-grey");
+    expect(screen.getByRole("combobox", { name: "Risk appetite" })).toHaveTextContent(RISK_APPETITE_LABELS.mostly_tried);
     // No baseline line and no facts strip (owner, 2026-10-27).
     expect(screen.queryByText(/situation today/)).not.toBeInTheDocument();
     const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
@@ -131,12 +155,19 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     // The pick: name, the option's description, the lever and the footing in
     // plain words, then Policy Atlas's reason under its label, and Remove.
     expect(screen.getByRole("link", { name: "Universal youth offer bundle" })).toBeInTheDocument();
-    expect(screen.getByText("Mock reason: names a fact on the card.")).toBeInTheDocument();
-    expect(screen.getByText("Policy Atlas's reason")).toBeInTheDocument();
+    // Round 10 (C4): a bold "Why:" lead-in on the line, no uppercase label over it.
+    const reason = screen.getByText(/Mock reason: names a fact on the card\./);
+    expect(reason).toHaveTextContent(/^Why: Mock reason: names a fact on the card\.$/);
+    expect(within(reason).getByText("Why:").tagName).toBe("STRONG");
+    expect(screen.queryByText("Policy Atlas's reason")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Shortlist$/i, { selector: "p" })).not.toBeInTheDocument();
     expect(screen.getAllByText(/Evaluated, including a review/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/4 observational/)).not.toBeInTheDocument();
     expect(screen.getByText(/Proposed, not yet implemented/)).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Remove from shortlist" })).toHaveLength(2);
+    // Round 10 (finding 6): each place's toggle says Shortlisted, pressed.
+    const toggles = screen.getAllByRole("button", { name: "Remove from shortlist" });
+    expect(toggles).toHaveLength(2);
+    for (const toggle of toggles) expect(toggle).toHaveAttribute("aria-pressed", "true");
   });
 
   it("puts a user place's row reason as 'Added by you' and lists places alphabetically within a group", async () => {
@@ -156,9 +187,24 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     expect(unshortlistMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_PACKAGE }, expect.anything());
   });
 
+  // Round 12 (owner): the public link reads the shortlist and changes nothing.
+  it("is read-only on the public link: the appetite as words, no toggle, Suggest more, Add more or Assess", async () => {
+    publicLink = true;
+    await openShortlist();
+    expect(screen.queryByRole("combobox", { name: "Risk appetite" })).not.toBeInTheDocument();
+    expect(screen.getByText(RISK_APPETITE_LABELS.mostly_tried)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^(Add to|Remove from) shortlist$/ })).not.toBeInTheDocument();
+    expect(screen.getAllByText("Shortlisted").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Suggest more" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Add more from the longlist" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Assess/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Suggest more asks/)).not.toBeInTheDocument();
+  });
+
   it("patches the plan with the appetite only when the select changes", async () => {
     const user = await openShortlist();
-    await user.selectOptions(screen.getByRole("combobox", { name: "Risk appetite" }), "tried_only");
+    await user.click(screen.getByRole("combobox", { name: "Risk appetite" }));
+    await user.click(screen.getByRole("option", { name: RISK_APPETITE_LABELS.tried_only }));
     expect(patchMutate).toHaveBeenCalledWith({ scoping: { risk_appetite: "tried_only" } });
   });
 
@@ -172,9 +218,12 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     await openShortlist({}, (longlist) => {
       longlist.shortlist.stale = false;
     });
+    // Round 10 (finding 4): the reason is words under it, not a tooltip.
     const button = screen.getByRole("button", { name: "Suggest more" });
     expect(button).toBeDisabled();
-    expect(button).toHaveAttribute("title", "Nothing left to propose");
+    expect(button).not.toHaveAttribute("title");
+    expect(screen.getByText("Nothing left to propose.")).toBeVisible();
+    expect(button).toHaveAccessibleDescription("Nothing left to propose.");
   });
 
   it("Suggest more is disabled while a walk runs", async () => {
@@ -184,7 +233,7 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     );
     const button = screen.getByRole("button", { name: "Suggest more" });
     expect(button).toBeDisabled();
-    expect(button).toHaveAttribute("title", "A walk is running");
+    expect(button).toHaveAccessibleDescription("A walk is running.");
   });
 
   it("Suggest more posts once when an included option is left", async () => {
@@ -198,10 +247,10 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     const user = await openShortlist({}, (longlist) => {
       longlist.shortlist.stale = true;
     });
-    expect(screen.getByText("Press Suggest more to re-propose")).toBeInTheDocument();
+    expect(screen.getByText("The plan has changed. Suggest more to update the picks.")).toBeInTheDocument();
     const button = screen.getByRole("button", { name: "Suggest more" });
     expect(button).toBeEnabled();
-    expect(button).not.toHaveAttribute("title");
+    expect(button).not.toHaveAttribute("aria-describedby");
     await user.click(button);
     expect(suggestMutate).toHaveBeenCalledTimes(1);
   });
@@ -237,22 +286,24 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     await openShortlist({}, (longlist) => {
       longlist.shortlist.stale = false;
     });
-    expect(screen.queryByText("Press Suggest more to re-propose")).not.toBeInTheDocument();
+    expect(screen.queryByText("The plan has changed. Suggest more to update the picks.")).not.toBeInTheDocument();
   });
 
-  it("shows the not-covered note under its label, and hides both when there is no note", async () => {
+  it("shows the not-covered note after its bold lead-in (round 10, C4)", async () => {
     await openShortlist({}, (longlist) => {
       longlist.shortlist.note = "Nothing here tackles the wider labour market.";
     });
-    expect(screen.getByText("What this shortlist leaves out")).toBeInTheDocument();
-    expect(screen.getByText("Nothing here tackles the wider labour market.")).toBeInTheDocument();
+    expect(screen.getByText(/Nothing here tackles the wider labour market\./)).toHaveTextContent(
+      /^Not covered: Nothing here tackles the wider labour market\.$/,
+    );
+    expect(screen.queryByText("What this shortlist leaves out")).not.toBeInTheDocument();
   });
 
-  it("hides the note section when the note is null", async () => {
+  it("hides the note when the note is null", async () => {
     await openShortlist({}, (longlist) => {
       longlist.shortlist.note = null;
     });
-    expect(screen.queryByText("What this shortlist leaves out")).not.toBeInTheDocument();
+    expect(screen.queryByText("Not covered:")).not.toBeInTheDocument();
   });
 
   it("adds the provenance footer only when it carries a total", async () => {
@@ -272,16 +323,24 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     expect(screen.queryByText(/document lines/)).not.toBeInTheDocument();
   });
 
-  it("shows Assess disabled with its line", async () => {
-    await openShortlist();
-    expect(screen.getByRole("button", { name: "Assess these 2" })).toBeDisabled();
-    expect(screen.getByText("Assessment is not yet available.")).toBeInTheDocument();
+  // Round 10 (finding 4): one primary, Assess; while it is off its reason
+  // is the line under it. Suggest more is a secondary.
+  it("makes Assess the page's one primary, off with its reason in words", async () => {
+    const { container } = renderShortlist();
+    const assess = screen.getByRole("button", { name: "Assess these 2" });
+    expect(assess).toBeDisabled();
+    expect(assess).toHaveAccessibleDescription("Assessment is not yet available.");
+    expect(container.querySelectorAll(".cutout, .cutout-sm")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Suggest more" }).className).not.toMatch(/cutout|bg-blue/);
   });
 
   it("links back to the longlist instead of repeating it", async () => {
     await openShortlist();
     expect(screen.queryByRole("heading", { name: "Other options" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Add more from the longlist" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add more from the longlist" })).toHaveAttribute(
+      "href",
+      `/tasks/${TASK_ID}/result`,
+    );
     expect(screen.getByRole("button", { name: "Suggest more" })).toBeInTheDocument();
   });
 
@@ -312,7 +371,133 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
       option.state = "excluded";
       option.exclusion = { by: "constrain", constraint: "Only include options a local authority can fund directly", reason: "It needs national funding." };
     });
-    expect(screen.getByText(/It needs national funding\./)).toBeInTheDocument();
+    const notice = screen.getByText(/It needs national funding\./);
+    expect(within(notice).getByText("Excluded:")).toHaveClass("text-red");
   });
 
+});
+
+// Owner, 2026-11-08: the "Not covered" note kept current without a call per
+// change: once on opening when stale; after changes, one call 3 s after the
+// last; none when fresh; never on the public link.
+describe("ShortlistView, the note kept current", () => {
+  type Longlist = ReturnType<typeof mockLonglist>;
+  const staleNote = (stale: boolean) => (longlist: Longlist) => {
+    longlist.shortlist = { ...longlist.shortlist, note: "Nothing on housing.", note_stale: stale } as Longlist["shortlist"];
+  };
+  const tree = (longlist: Longlist) => (
+    <PublicViewProvider value={false}>
+      <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/result`]}>
+        <Routes>
+          <Route path="/tasks/:taskId/result" element={<ShortlistView taskId={TASK_ID} longlist={longlist} />} />
+        </Routes>
+      </MemoryRouter>
+    </PublicViewProvider>
+  );
+
+  it("rewrites a stale note once on opening, and says it is behind until then", () => {
+    renderShortlist({}, staleNote(true));
+    expect(noteMutate).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Written before your latest changes.")).toHaveClass("text-meta", "text-grey");
+  });
+
+  it("asks nothing when the note is fresh, then or later", () => {
+    vi.useFakeTimers();
+    try {
+      renderShortlist({}, staleNote(false));
+      vi.advanceTimersByTime(10_000);
+      expect(noteMutate).not.toHaveBeenCalled();
+      expect(screen.queryByText("Written before your latest changes.")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("waits 3 s after the last change, one timer reset by each change, then rewrites once", () => {
+    vi.useFakeTimers();
+    try {
+      const { rerender, unmount } = renderShortlist({}, staleNote(false));
+      const changed = (held: string[]) => {
+        const next = mockLonglist();
+        staleNote(true)(next);
+        for (const option of next.options ?? []) {
+          if (held.includes(option.option_id)) option.shortlist = { state: "added_by_you", reason: null };
+        }
+        return next;
+      };
+      rerender(tree(changed([MOCK_OPTION_ID_NO_IN_SCOPE])));
+      vi.advanceTimersByTime(2000);
+      rerender(tree(changed([MOCK_OPTION_ID_NO_IN_SCOPE, MOCK_OPTION_ID_PACKAGE])));
+      vi.advanceTimersByTime(2900);
+      expect(noteMutate).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(100);
+      expect(noteMutate).toHaveBeenCalledTimes(1);
+      // A later change, then leaving the page: the timer is cancelled.
+      rerender(tree(changed([MOCK_OPTION_ID_PACKAGE])));
+      unmount();
+      vi.advanceTimersByTime(5000);
+      expect(noteMutate).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Owner, 2026-11-08: no breathing words; the Task Agent's working line in
+  // the note's place, then the new note fades in.
+  it("shows the turning mark and Reviewing the shortlist for gaps in the note's place while it is rewritten", () => {
+    notePending = true;
+    const { rerender } = renderShortlist({}, staleNote(true));
+    const line = screen.getByRole("status");
+    expect(line).toHaveTextContent(/^Reviewing the shortlist for gaps$/);
+    expect(line.querySelector("svg")).not.toBeNull();
+    expect(screen.queryByText(/Nothing on housing\./)).not.toBeInTheDocument();
+    expect(document.querySelector(".anim-breathe-soft")).toBeNull();
+    expect(screen.queryByText("Written before your latest changes.")).not.toBeInTheDocument();
+    // The new note lands: it replaces the line with the arrivals' fade.
+    notePending = false;
+    const next = mockLonglist();
+    next.shortlist = { ...next.shortlist, note: "Nothing on transport.", note_stale: false } as Longlist["shortlist"];
+    rerender(tree(next));
+    expect(screen.queryByText("Reviewing the shortlist for gaps")).not.toBeInTheDocument();
+    expect(screen.getByText(/Nothing on transport\./).closest("p")).toHaveClass("anim-swap-in");
+  });
+
+  it("does not fade the note the page opened with", () => {
+    renderShortlist({}, staleNote(false));
+    expect(screen.getByText(/Nothing on housing\./).closest("p")).not.toHaveClass("anim-swap-in");
+  });
+
+  it("asks nothing on the public link", () => {
+    publicLink = true;
+    renderShortlist({}, staleNote(true));
+    expect(noteMutate).not.toHaveBeenCalled();
+    expect(screen.queryByText("Written before your latest changes.")).not.toBeInTheDocument();
+  });
+});
+
+// Round 15 (owner): the Shortlist page's option links tell the card where
+// it was opened from, so its breadcrumb (and Back) lead here.
+describe("ShortlistView, the way to an option card", () => {
+  it("carries the shortlist as the card's origin on its option links", async () => {
+    const user = userEvent.setup();
+    renderShortlist();
+    const link = screen.getAllByRole("link").find((anchor) => anchor.getAttribute("href")?.includes("/options/")) as HTMLElement;
+    cleanup();
+    function Probe() {
+      return <p data-testid="probe">{JSON.stringify(useLocation().state)}</p>;
+    }
+    const href = link.getAttribute("href") ?? "";
+    render(
+      <PublicViewProvider value={false}>
+        <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/result`]}>
+          <Routes>
+            <Route path="/tasks/:taskId/result" element={<ShortlistView taskId={TASK_ID} longlist={mockLonglist()} />} />
+            <Route path="/tasks/:taskId/options/:optionId" element={<Probe />} />
+          </Routes>
+        </MemoryRouter>
+      </PublicViewProvider>,
+    );
+    await user.click(screen.getAllByRole("link").find((anchor) => anchor.getAttribute("href") === href) as HTMLElement);
+    expect(screen.getByTestId("probe")).toHaveTextContent(JSON.stringify(CARD_FROM_SHORTLIST));
+  });
 });

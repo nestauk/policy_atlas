@@ -1,19 +1,44 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { consumeEventStream } from "../api/sse";
 import type { SseFrame } from "../api/sseFrame";
-import { mockFetch, resetMockScenario, setMockMe } from "./api";
+import { mockFetch, resetMockScenario, setMockMe, setMockPace } from "./api";
 import {
+  STAGE_PRESENTATION,
   MOCK_CHAT_CITATION_CHUNK_ID,
   MOCK_CHAT_CITATION_QUOTE,
   MOCK_CHECK_IN_ID,
   MOCK_TASK_AGENT_CONVERSATION_ID,
   MOCK_PROJECT_ID,
   MOCK_TASK_ID,
+  MOCK_LINKABLE_SEARCH_ID,
+  MOCK_LINKABLE_SEARCH_NAME,
   MOCK_THEME_ID_ACTIVE_TRAVEL,
   MOCK_THEME_ID_SCHOOL_FOOD,
+  MOCK_CASE_STUDIES_INDEX,
+  MOCK_FULL_REPORT_INTRO,
+  MOCK_INTRO_INDEX,
+  MOCK_STREAMED_SECTION_INDEX,
+  mockArtefact,
+  mockCoverage,
+  mockEvidence,
+  mockArtefactSectionProse,
+  mockArtefactSectionRepairedProse,
+  mockCaseStudiesProse,
+  mockCaseStudyCards,
+  mockCheckIn,
+  mockKeyFindingsClaim,
+  mockSectionOneRevisingSpan,
+  mockSourceNotes,
+  mockSearchQueries,
+  mockLiveThemes,
+  mockLandscape,
   mockEvidenceThemeIds,
   mockMeEnrolled,
+  foldMockOptionRows,
+  mockWalkLonglist,
+  seedMockOptionRows,
+  mockTask,
 } from "./fixtures";
 
 interface MockChatTurn {
@@ -28,6 +53,9 @@ async function readNdjson(response: Response): Promise<Record<string, unknown>[]
   const text = await response.text();
   return text.trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
 }
+
+// The scripted walks wait 400 ms between ticks; the tests play them at 2%.
+beforeAll(() => setMockPace(0.02));
 
 describe("mock API", () => {
   it("serves deterministic, screened-in landscape fixtures", async () => {
@@ -110,7 +138,7 @@ describe("mock API", () => {
     await consumed;
     // Live artefact sections streamed in before the run's terminal status.
     expect(frames.some((frame) => frame.type === "artefact.skeleton")).toBe(true);
-    expect(frames.filter((frame) => frame.type === "artefact.section_completed")).toHaveLength(2);
+    expect(frames.filter((frame) => frame.type === "artefact.section_completed")).toHaveLength(4); // key findings, body, case studies, introduction
     expect(frames.at(-1)).toMatchObject({ type: "run.status", status: "succeeded" });
   });
 
@@ -179,7 +207,7 @@ describe("mock API", () => {
     await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("checkin.pending"));
     await mockFetch(
       `http://localhost/api/v1/tasks/${MOCK_TASK_ID}/check-ins/${MOCK_CHECK_IN_ID}/response`,
-      { method: "POST", body: JSON.stringify({ kind: "option", option_id: "suggested-balanced" }) },
+      { method: "POST", body: JSON.stringify({ kind: "option", option_id: "continue" }) },
     );
     await consumed;
     expect(frames.filter((frame) => frame.type === "artefact.section_completed")).toHaveLength(2);
@@ -256,8 +284,12 @@ describe("mock API", () => {
       });
       expect(streamed.headers.get("Content-Type")).toBe("application/x-ndjson");
       const events = await readNdjson(streamed);
-      expect(events.map((event) => event.type)).toEqual(["progress", "delta", "delta", "completed"]);
-      const completedTurn = events.at(-1)?.turn as MockChatTurn;
+      // Round 14: the first message's chat is titled after the answer.
+      expect(events.map((event) => event.type)).toEqual(["progress", "delta", "delta", "completed", "conversation.titled"]);
+      expect(events.at(-1)).toMatchObject({ conversation_id: conversation.id, title: "What does the evidence show" });
+      const listed = (await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/conversations`)).json()) as { data: { id: string; title: string }[] };
+      expect(listed.data.find((row) => row.id === conversation.id)?.title).toBe("What does the evidence show");
+      const completedTurn = events.find((event) => event.type === "completed")?.turn as MockChatTurn;
       expect(completedTurn.status).toBe("completed");
       expect(completedTurn.answer).toContain("[1]");
       expect(completedTurn.citations?.[0]?.grounding_tier).toBeUndefined();
@@ -287,7 +319,7 @@ describe("mock API", () => {
         body: JSON.stringify({ client_turn_id: "22222222-2222-4222-8222-222222222222", message: "Cancel me" }),
       });
       const events = await readNdjson(streamed);
-      const turn = events.at(-1)?.turn as MockChatTurn;
+      const turn = events.find((event) => event.type === "completed")?.turn as MockChatTurn;
 
       const cancelled = await mockFetch(`http://localhost/api/v1/conversations/${conversation.id}/turns/${turn.id}/cancel`, { method: "POST" });
       expect(await cancelled.json()).toEqual({ status: "completed" });
@@ -324,9 +356,54 @@ describe("mock API", () => {
     it("GET /projects returns the fixture project", async () => {
       resetMockScenario();
       const response = await mockFetch("http://localhost/api/v1/projects");
-      const { data } = await response.json() as { data: { project_id: string }[] };
+      const { data, pagination } = await response.json() as { data: { project_id: string }[]; pagination: { page_size: number; has_more: boolean } };
       expect(data).toHaveLength(1);
       expect(data[0].project_id).toBe(MOCK_PROJECT_ID);
+      // Twenty a page by default, as the server (round 12).
+      expect(pagination).toMatchObject({ page_size: 20, has_more: false });
+    });
+
+    it("archiving a project archives its tasks in no other project, and counts them first (round 14)", async () => {
+      resetMockScenario();
+      const before = await (await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}`)).json() as { solo_task_count: number };
+      expect(before.solo_task_count).toBe(2);
+      const archived = await (await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/archive`, { method: "POST" })).json() as { archived_task_count: number };
+      expect(archived.archived_task_count).toBe(2);
+      const task = await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_LINKABLE_SEARCH_ID}`)).json() as { status: string };
+      expect(task.status).toBe("archived");
+      const again = await (await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/archive`, { method: "POST" })).json() as { archived_task_count: number };
+      expect(again.archived_task_count).toBe(0);
+      resetMockScenario();
+      const restored = await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_LINKABLE_SEARCH_ID}`)).json() as { status: string };
+      expect(restored.status).toBe("active");
+    });
+
+    it("archives a project: it leaves the default list, is listed as archived, and stays readable (round 11)", async () => {
+      resetMockScenario();
+      const archived = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/archive`, { method: "POST" });
+      expect(archived.status).toBe(200);
+      const stamp = (await archived.json() as { archived_at: string | null }).archived_at;
+      expect(stamp).not.toBeNull();
+      const again = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/archive`, { method: "POST" });
+      expect((await again.json() as { archived_at: string | null }).archived_at).toBe(stamp);
+      const ids = async (status?: string) => {
+        const response = await mockFetch(`http://localhost/api/v1/projects${status === undefined ? "" : `?status=${status}`}`);
+        return ((await response.json()) as { data: { project_id: string }[] }).data.map((row) => row.project_id);
+      };
+      expect(await ids()).toEqual([]);
+      expect(await ids("archived")).toEqual([MOCK_PROJECT_ID]);
+      expect(await ids("all")).toEqual([MOCK_PROJECT_ID]);
+      expect((await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}`)).status).toBe(200);
+    });
+
+    it("the saved coverage names its citation pass in words, beside the written queries (round 11)", async () => {
+      resetMockScenario();
+      const response = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/coverage`);
+      const coverage = (await response.json()) as {
+        backends_detail: { backend: string; passes?: { pass: string; query: string; results: number }[] }[];
+      };
+      const openalex = coverage.backends_detail.find((detail) => detail.backend === "OpenAlex")!;
+      expect(openalex.passes).toEqual([{ pass: "citations", query: "Followed citations from 50 sources", results: 184, query_id: 110 }]);
     });
 
     it("GET /projects/{id} resolves the fixture and 404s for an unknown id", async () => {
@@ -343,8 +420,8 @@ describe("mock API", () => {
       resetMockScenario();
       const matching = await mockFetch(`http://localhost/api/v1/tasks?project_id=${MOCK_PROJECT_ID}`);
       const { data: matchingData } = await matching.json() as { data: { task_id: string }[] };
-      expect(matchingData).toHaveLength(1);
-      expect(matchingData[0].task_id).toBe(MOCK_TASK_ID);
+      // The scoping journey's search to start from shares the project (round 13).
+      expect(matchingData.map((task) => task.task_id)).toEqual([MOCK_TASK_ID, MOCK_LINKABLE_SEARCH_ID]);
 
       const nonMatching = await mockFetch(
         "http://localhost/api/v1/tasks?project_id=00000000-0000-4000-8000-000000000000",
@@ -353,8 +430,187 @@ describe("mock API", () => {
       expect(nonMatchingData).toHaveLength(0);
 
       const unfiltered = await mockFetch("http://localhost/api/v1/tasks");
-      const { data: unfilteredData } = await unfiltered.json() as { data: unknown[] };
-      expect(unfilteredData).toHaveLength(1);
+      const { data: unfilteredData } = await unfiltered.json() as { data: { task_id: string }[] };
+      expect(unfilteredData).toHaveLength(20);
+      expect(unfilteredData[0].task_id).toBe(MOCK_TASK_ID);
+    });
+
+    it("GET /tasks pages 20 at a time with has_more, honours scope=mine and status=archived (task 058, rounds 10 and 12)", async () => {
+      resetMockScenario();
+      type ListPage = { data: { task_id: string; is_owner: boolean; status: string }[]; pagination: { page: number; total_items: number; has_more: boolean } };
+      const read = async (query: string) => await (await mockFetch(`http://localhost/api/v1/tasks?${query}`)).json() as ListPage;
+      const first = await read("scope=mine");
+      expect(first.data).toHaveLength(20);
+      expect(first.pagination).toMatchObject({ page: 1, total_items: 57, has_more: true });
+      expect(first.data.every((task) => task.is_owner)).toBe(true);
+      const second = await read("scope=mine&page=2");
+      expect(second.data).toHaveLength(20);
+      expect(second.pagination.has_more).toBe(true);
+      const third = await read("scope=mine&page=3");
+      expect(third.data).toHaveLength(17);
+      expect(third.pagination.has_more).toBe(false);
+      const organisation = await read("scope=all");
+      expect(organisation.pagination.total_items).toBe(63);
+      const archived = await read("status=archived");
+      expect(archived.data).toHaveLength(3);
+      expect(archived.data.every((task) => task.status === "archived")).toBe(true);
+      const opened = await mockFetch(`http://localhost/api/v1/tasks/${archived.data[0].task_id}`);
+      expect(opened.status).toBe(200);
+    });
+
+    it("PATCH /tasks/{id} stores is_public, and refuses a colleague's project change with the server's message", async () => {
+      resetMockScenario();
+      const shared = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_public: true }),
+      });
+      expect((await shared.json() as { is_public: boolean }).is_public).toBe(true);
+      const reread = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}`);
+      expect((await reread.json() as { is_public: boolean }).is_public).toBe(true);
+
+      mockTask.is_owner = false;
+      const refused = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}`, {
+        method: "PATCH",
+        body: JSON.stringify({ project_ids: [] }),
+      });
+      expect(refused.status).toBe(403);
+      expect(await refused.json()).toEqual({
+        error: { code: "forbidden", message: "Only the task's owner can change its projects." },
+      });
+      resetMockScenario();
+      expect(mockTask.is_owner).toBe(true);
+      expect(mockTask.is_public).toBe(false);
+    });
+
+    it("serves a dossier for every id a page links to: an option card's documents and the evidence rows (round 12)", async () => {
+      resetMockScenario();
+      const dossier = async (id: string) => await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/sources/${id}`);
+      const card = await dossier("mock-doc-a1");
+      expect(card.status).toBe(200);
+      expect(await card.json()).toMatchObject({ source_id: "mock-doc-a1", title: "Conditionality and NEET outcomes: a local authority review", country: "United Kingdom" });
+      const several = await (await dossier("mock-doc-a2")).json() as { country: string | null };
+      expect(several.country).toBeNull();
+      const row = await dossier(mockEvidence[0].source_id);
+      expect(row.status).toBe(200);
+      expect((await row.json() as { abstract: string | null }).abstract).toBe(mockEvidence[0].abstract);
+      expect((await dossier("no-such-source")).status).toBe(404);
+    });
+
+    it("GET /evidence?depth= and ?appraised= keep the funnel row's sources (round 13)", async () => {
+      resetMockScenario();
+      const ids = async (query: string) =>
+        ((await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/evidence?${query}`)).json()) as { data: { source_id: string }[] }).data.map((row) => row.source_id);
+      expect(await ids("depth=full_text")).toEqual(mockEvidence.filter((row) => row.read_in_full).map((row) => row.source_id));
+      expect((await ids("depth=abstract")).length).toBeGreaterThan(0);
+      expect(await ids("depth=title")).toEqual([mockEvidence[8].source_id]);
+      expect(await ids("appraised=true")).toEqual(mockEvidence.filter((row) => row.appraisal_tier != null).map((row) => row.source_id));
+    });
+
+    it("GET /evidence pages like the server, honouring page and page_size (round 12)", async () => {
+      resetMockScenario();
+      type EvidencePage = { data: { source_id: string }[]; pagination: { page: number; page_size: number; total_items: number; has_more: boolean } };
+      const read = async (query: string) => await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/evidence?${query}`)).json() as EvidencePage;
+      const whole = await read("");
+      expect(whole.pagination).toMatchObject({ page: 1, page_size: 50, total_items: mockEvidence.length, has_more: false });
+      const first = await read("page_size=4");
+      expect(first.data.map((row) => row.source_id)).toEqual(mockEvidence.slice(0, 4).map((row) => row.source_id));
+      expect(first.pagination).toMatchObject({ page_size: 4, has_more: true });
+      const last = await read("page_size=4&page=3");
+      expect(last.data).toHaveLength(mockEvidence.length - 8);
+      expect(last.pagination.has_more).toBe(false);
+    });
+
+    it("the shortlist note goes stale when places move by hand, and the refresh rewrites it once (round 14)", async () => {
+      resetMockScenario();
+      const shortlist = async () => ((await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/longlist`)).json()) as { shortlist: { note: string | null; note_stale: boolean } }).shortlist;
+      const refresh = async () => (await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/shortlist/note`, { method: "POST" })).json()) as { note: string | null; note_stale: boolean };
+      const before = await shortlist();
+      expect(before.note_stale).toBe(false);
+      expect((await refresh()).note).toBe(before.note);
+      const longlist = (await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/longlist`)).json()) as { options: { option_id: string; shortlist: { state: string } | null }[] };
+      // The reader takes their own place off by hand.
+      const own = longlist.options.find((row) => row.shortlist?.state === "added_by_you")!;
+      await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/options/${own.option_id}/unshortlist`, { method: "POST" });
+      expect((await shortlist()).note_stale).toBe(true);
+      const written = await refresh();
+      expect(written.note_stale).toBe(false);
+      expect(written.note).not.toBe(before.note);
+      expect((await refresh()).note).toBe(written.note);
+    });
+
+    it("GET /evidence?theme=<longlist theme> lists the documents of its options (round 14)", async () => {
+      resetMockScenario();
+      const longlist = await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/longlist`)).json() as { themes: { theme_id: string; option_ids: string[] }[] };
+      const [theme] = longlist.themes as { theme_id: string; option_ids: string[]; document_count: number }[];
+      const rows = (await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/evidence?theme=${theme.theme_id}`)).json() as { data: { source_id: string }[] }).data;
+      // The theme's count is its distinct documents, the rows the filter lists.
+      expect(theme.document_count).toBe(rows.length);
+      expect(rows.map((row) => row.source_id)).toEqual(expect.arrayContaining(["mock-doc-a1", "mock-doc-a2"]));
+      // An Evidence search theme still lists its own sources.
+      const esTheme = (await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/evidence?theme=${MOCK_THEME_ID_SCHOOL_FOOD}`)).json() as { data: { source_id: string }[] }).data;
+      expect(esTheme.map((row) => row.source_id)).toContain(mockEvidence[2].source_id);
+    });
+
+    it("GET /evidence?query= keeps what one coverage row's search returned (task 058, round 12)", async () => {
+      resetMockScenario();
+      const rows = async (query: number) => {
+        const response = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/evidence?query=${query}`);
+        return (await response.json() as { data: { source_id: string }[]; pagination: { total_items: number } });
+      };
+      const coverage = await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/coverage`)).json() as typeof mockCoverage;
+      const openalex = coverage.backends_detail!.find((row) => row.backend === "OpenAlex")!;
+      const first = await rows(openalex.queries![0].query_id);
+      expect(first.data.map((row) => row.source_id)).toEqual([mockEvidence[0].source_id, mockEvidence[4].source_id]);
+      expect((await rows(openalex.passes![0].query_id)).data).toHaveLength(3);
+      // A search from before the ids were kept: the empty page, never an error.
+      const older = await rows(999);
+      expect(older.data).toEqual([]);
+      expect(older.pagination.total_items).toBe(0);
+    });
+
+    it("an evidence row read in full carries where its full text came from (round 12)", async () => {
+      resetMockScenario();
+      const response = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/evidence`);
+      const { data } = await response.json() as { data: { read_in_full: boolean; origin: string; full_text_url?: string | null }[] };
+      expect(data.filter((row) => row.full_text_url != null).every((row) => row.read_in_full)).toBe(true);
+      expect(data.some((row) => row.full_text_url?.startsWith("https://"))).toBe(true);
+    });
+
+    it("GET /evidence?country= keeps a Landscape row's sources, by any spelling (task 058, round 10)", async () => {
+      resetMockScenario();
+      const titles = async (country: string) => {
+        const response = await mockFetch(
+          `http://localhost/api/v1/tasks/${MOCK_TASK_ID}/evidence?country=${encodeURIComponent(country)}`,
+        );
+        return (await response.json() as { data: { country?: string | null }[] }).data;
+      };
+      const uk = await titles("United Kingdom");
+      expect(uk.length).toBeGreaterThan(0);
+      expect(uk.every((row) => row.country === "United Kingdom")).toBe(true);
+      expect(await titles("GB")).toHaveLength(uk.length);
+      expect((await titles("Not reported")).every((row) => row.country === null)).toBe(true);
+      // Round 14: `none` is the same set, the link Landscape's row uses.
+      const none = await titles("none");
+      expect(none.length).toBeGreaterThan(0);
+      expect(none).toEqual(await titles("Not reported"));
+      expect(await titles("France")).toHaveLength(0);
+      expect(Object.keys(mockLandscape.geographies ?? {})).toEqual(
+        expect.arrayContaining(["United Kingdom", "United States", "Netherlands", "Not reported"]),
+      );
+    });
+
+    it("GET /decisions names the step, the chooser and the search terms (task 058, round 10)", async () => {
+      resetMockScenario();
+      const response = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/decisions`);
+      const { data } = await response.json() as { data: { kind: string; summary: string; detail: { queries?: string[] } | null; actor_is_viewer?: boolean }[] };
+      const summaries = data.map((row) => row.summary);
+      expect(summaries).toContain("Screening finished: 118 of 312 relevant.");
+      expect(summaries).toContain("You chose \u201cLooks right, assess these\u201d at the check-in.");
+      expect(summaries).not.toContain("Completed an evidence-search step.");
+      const search = data.find((row) => row.kind === "search.executed");
+      expect(search?.summary).toMatch(/^Searched with 12 queries: .* and 7 more\.$/);
+      expect(search?.detail?.queries).toHaveLength(12);
+      expect(data.find((row) => row.kind === "plan.approved")?.actor_is_viewer).toBe(true);
     });
 
     it("PATCH /tasks/{id} refuses a rename bundled with a visibility conflict all-or-nothing — the name is never assigned before the 409", async () => {
@@ -413,6 +669,29 @@ describe("mock API", () => {
       expect(plan.capability).toBe("options_scoping");
       expect(plan.plan).toBeNull();
       expect(plan.scoping?.ready).toBe(true);
+    });
+
+    it("links each chosen search under its own name (round 13)", async () => {
+      resetMockScenario();
+      const ownName = (await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}`)).json() as { name: string }).name;
+      const response = await mockFetch("http://localhost/api/v1/tasks", {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Cutting NEET numbers",
+          capability: "options_scoping",
+          project_ids: [MOCK_PROJECT_ID],
+          from_task_ids: [MOCK_LINKABLE_SEARCH_ID, MOCK_TASK_ID],
+        }),
+      });
+      const task = await response.json() as { links: { link_id: string; source_task_id: string; source_task_name: string }[] };
+      expect(task.links.map((link) => [link.source_task_id, link.source_task_name])).toEqual([
+        [MOCK_LINKABLE_SEARCH_ID, MOCK_LINKABLE_SEARCH_NAME],
+        [MOCK_TASK_ID, ownName],
+      ]);
+      expect(new Set(task.links.map((link) => link.link_id)).size).toBe(2);
+      // The task as read back carries the same links.
+      const read = await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}`)).json() as { links: { source_task_name: string }[] };
+      expect(read.links.map((link) => link.source_task_name)).toEqual([MOCK_LINKABLE_SEARCH_NAME, ownName]);
     });
 
     it("carries no link when from_task_ids is empty", async () => {
@@ -531,12 +810,12 @@ describe("mock API", () => {
 
     it("refuses every shortlist route with run_active while a walk is running", async () => {
       resetMockScenario();
+      const any = (await longlist()).options[0].option_id;
       const confirm = await mockFetch(`${base}/plan/confirm-baseline`, {
         method: "POST",
         body: JSON.stringify({ artefact_id: "artefact-1", plan_version: 1 }),
       });
       expect(confirm.status).toBe(200);
-      const any = (await longlist()).options[0].option_id;
       for (const path of [`/options/${any}/shortlist`, `/options/${any}/unshortlist`, "/shortlist/suggest"]) {
         const response = await post(path);
         expect(response.status).toBe(409);
@@ -562,6 +841,663 @@ describe("mock API", () => {
       expect(stale.shortlist.stale).toBe(true);
       const longlistBody = (await (await mockFetch(`${base}/longlist`)).json()) as { plan_inputs_changed: boolean };
       expect(longlistBody.plan_inputs_changed).toBe(false);
+    });
+  });
+
+  // Task 058, N26: the mock plays the new frames, fields and routes.
+  describe("task 058 contract (N26)", () => {
+    const base = `http://localhost/api/v1/tasks/${MOCK_TASK_ID}`;
+    type Tick = Extract<SseFrame, { type: "tick" }>;
+    type Frame<T extends SseFrame["type"]> = Extract<SseFrame, { type: T }>;
+    const ofType = <T extends SseFrame["type"]>(frames: SseFrame[], type: T) =>
+      frames.filter((frame): frame is Frame<T> => frame.type === type);
+
+    async function freshTask(capability: "evidence_search" | "options_scoping") {
+      resetMockScenario();
+      await mockFetch("http://localhost/api/v1/tasks", {
+        method: "POST",
+        body: JSON.stringify({ name: "Task 058", capability, question: "What works to raise take-up of free childcare places?" }),
+      });
+    }
+
+    /** Start an Evidence search run, answer its check-in and read every frame. */
+    async function playEvidenceWalk(scenario?: string): Promise<SseFrame[]> {
+      await freshTask("evidence_search");
+      await mockFetch(`${base}/runs`, { method: "POST" });
+      const query = scenario === undefined ? "" : `?mockScenario=${scenario}`;
+      const response = await mockFetch(`${base}/events${query}`);
+      const frames: SseFrame[] = [];
+      const consumed = consumeEventStream(response.body!, 0, (frame) => frames.push(frame));
+      if (scenario !== "reload-mid-section") {
+        await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("checkin.pending"));
+        await mockFetch(`${base}/check-ins/${MOCK_CHECK_IN_ID}/response`, {
+          method: "POST",
+          body: JSON.stringify({ kind: "option", option_id: "continue" }),
+        });
+      }
+      await consumed;
+      return frames;
+    }
+
+    it("uses the server's stage labels and blurbs, rows on the plan steps and the live stage on the task", async () => {
+      const frames = await playEvidenceWalk();
+      const started = new Map(ofType(frames, "stage.started").map((frame) => [frame.stage, frame]));
+      // Search and screen are two rows again (owner round 8).
+      expect(started.get("acquire")).toMatchObject({ label: "Searching", blurb: "Querying the databases and collecting candidates." });
+      expect(started.get("screen")).toMatchObject({ label: "Screening", blurb: "Reading each abstract against the question." });
+      expect(started.get("classify")).toMatchObject({ label: "Classifying", blurb: "Labelling each source by its evidence type." });
+      expect(started.get("synthesise")).toMatchObject({ label: "Writing", blurb: "A cited report, checked claim by claim." });
+      expect(started.get("appraise")?.label).toBe("Classifying");
+
+      const plan = (await (await mockFetch(`${base}/plan`)).json()) as { plan: { steps: { stage: string; row: string }[] } };
+      const rows = Object.fromEntries(plan.plan.steps.map((step) => [step.stage, step.row]));
+      expect(rows).toMatchObject({ acquire: "search", screen: "screen", classify: "categorise", appraise: "categorise", characterise: "characterise", synthesise: "synthesise" });
+      await freshTask("options_scoping");
+      const scoping = (await (await mockFetch(`${base}/plan`)).json()) as { scoping: { steps: { row: string }[] } };
+      expect(scoping.scoping.steps.map((step) => step.row)).toEqual(["baseline", "longlist", "shortlist"]);
+    });
+
+    it("stamps the live run with its stage and the server's label while the walk is paused", async () => {
+      await freshTask("evidence_search");
+      await mockFetch(`${base}/runs`, { method: "POST" });
+      const response = await mockFetch(`${base}/events?mockScenario=paused-strip`);
+      const frames: SseFrame[] = [];
+      void consumeEventStream(response.body!, 0, (frame) => frames.push(frame));
+      await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("checkin.pending"));
+      const task = (await (await mockFetch(base)).json()) as {
+        latest_run: { stage: string; stage_label: string };
+        active_run: { stage: string; stage_label: string };
+      };
+      expect(task.latest_run).toMatchObject({ stage: "screen", stage_label: "Screening" });
+      expect(task.active_run).toMatchObject({ stage: "screen", stage_label: "Screening" });
+    });
+
+    it("sends ticks in the new shape and none of the old ones", async () => {
+      const frames = await playEvidenceWalk();
+      const ticks = ofType(frames, "tick");
+      expect(ticks.length).toBeGreaterThan(10);
+      for (const entry of ticks) {
+        expect(Object.keys(entry).sort()).toEqual(
+          ["activity", "capability_run_id", "done", "dropped", "ephemeral", "heartbeat", "occurred_at", "section", "stage", "total", "type", "unit"],
+        );
+        expect(entry.dropped).toBe(0);
+        expect(entry).not.toHaveProperty("sequence");
+      }
+      const lines = ticks.map((entry) => entry.activity);
+      expect(lines).toEqual(expect.arrayContaining([
+        "Writing search queries",
+        "searching · 34 found · primary school food environment obesity",
+        "searching · 128 found",
+        "following citations · 128 found",
+        "searching · 312 found",
+        "screening 61 abstracts · 107 relevant",
+        "Finding themes",
+        "40 of 118 classified",
+        "Assigning themes · batch 1 of 3",
+        "Looking for: evidence on subsidy uptake among low-income households",
+        "Reading findings",
+        "Writing",
+        "Checking claims",
+        "Revising 1 claim",
+      ]));
+      expect(ticks.find((entry) => entry.activity === "40 of 118 classified")).toMatchObject({ done: 40, total: 118, unit: "documents" });
+      expect(ticks.find((entry) => entry.activity === "Writing")?.section).toBe("Section 2 of 2 · Implications for local action");
+      // One heartbeat per stage with ticks.
+      const heartbeats = ticks.filter((entry): entry is Tick => entry.heartbeat);
+      expect(heartbeats.map((entry) => entry.stage)).toEqual(["acquire", "screen", "classify", "appraise", "characterise"]);
+    });
+
+    it("moves the line through the summaries after the introduction (round 14)", async () => {
+      const frames = await playEvidenceWalk();
+      const lines = ofType(frames, "tick").filter((entry) => entry.stage === "synthesise").map((entry) => entry.activity);
+      const intro = lines.lastIndexOf("Writing the introduction");
+      const after = lines.slice(intro + 1);
+      expect(after[0]).toMatch(/^Summarising the sections · 1 of \d+$/);
+      expect(after).toContain("Checking the summaries");
+      expect(after.at(-1)).toBe("Checking the summaries");
+    });
+
+    it("collects the full texts between appraise and characterise, rows moving to full text (round 14)", async () => {
+      const seen: { during: string[] } = { during: [] };
+      await freshTask("evidence_search");
+      await mockFetch(`${base}/runs`, { method: "POST" });
+      const response = await mockFetch(`${base}/events`);
+      const frames: SseFrame[] = [];
+      let probed = false;
+      const consumed = consumeEventStream(response.body!, 0, (frame) => {
+        frames.push(frame);
+        if (!probed && frame.type === "stage.started" && frame.stage === "ingest") {
+          probed = true;
+          // While the stage runs, the rows it collects read as queued.
+          void mockFetch(`${base}/evidence`).then(async (read) => {
+            const { data } = (await read.json()) as { data: { full_text_status: string }[] };
+            seen.during = data.map((row) => row.full_text_status);
+          });
+        }
+      });
+      await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("checkin.pending"));
+      await mockFetch(`${base}/check-ins/${MOCK_CHECK_IN_ID}/response`, {
+        method: "POST",
+        body: JSON.stringify({ kind: "option", option_id: "continue" }),
+      });
+      await consumed;
+      const order = ofType(frames, "stage.started").map((frame) => frame.stage);
+      expect(order.indexOf("appraise")).toBeLessThan(order.indexOf("ingest"));
+      expect(order.indexOf("ingest")).toBeLessThan(order.indexOf("characterise"));
+      const collected = mockEvidence.filter((row) => row.read_in_full).length;
+      const lines = ofType(frames, "tick").filter((entry) => entry.stage === "ingest").map((entry) => entry.activity);
+      expect(lines).toEqual(Array.from({ length: collected }, (_, index) => `collecting ${index + 1} of ${collected}`));
+      expect(seen.during).toContain("queued");
+      const after = (await (await mockFetch(`${base}/evidence`)).json()) as { data: { read_in_full: boolean; full_text_status: string }[] };
+      expect(after.data.filter((row) => row.full_text_status === "ingested").length).toBe(collected);
+    });
+
+    it("sends each search query out then back, then the citations pass, before the stage completes (round 9)", async () => {
+      const frames = await playEvidenceWalk();
+      const queries = ofType(frames, "search.query");
+      expect(queries).toHaveLength(mockSearchQueries.length * 2);
+      mockSearchQueries.forEach((entry, i) => {
+        expect(queries[2 * i]).toMatchObject({ backend: entry.backend, query: entry.query, kind: entry.kind, results: null, ephemeral: true });
+        expect(queries[2 * i + 1]).toMatchObject({ backend: entry.backend, query: entry.query, kind: entry.kind, results: entry.results });
+        expect(queries[2 * i]).not.toHaveProperty("sequence");
+      });
+      const writing = ofType(frames, "tick").find((entry) => entry.activity === "Writing search queries")!;
+      const done = ofType(frames, "stage.completed").find((entry) => entry.stage === "acquire")!;
+      expect(frames.indexOf(writing)).toBeLessThan(frames.indexOf(queries[0]));
+      expect(frames.indexOf(queries.at(-1)!)).toBeLessThan(frames.indexOf(done));
+      expect(done.summary).toMatchObject({ acquired: mockSearchQueries.at(-1)!.found });
+    });
+
+    it("sends the themes once found, before the assignment batches (round 9)", async () => {
+      const frames = await playEvidenceWalk();
+      const [themes] = ofType(frames, "characterise.themes");
+      expect(themes.themes).toEqual(mockLiveThemes);
+      // The saved landscape names the same four, in the same order, with counts.
+      expect(mockLiveThemes.map((theme) => theme.label)).toEqual(mockLandscape.themes?.map((theme) => theme.name));
+      expect(mockLiveThemes).toHaveLength(4);
+      expect(mockLandscape.themes?.every((theme) => theme.size > 0)).toBe(true);
+      const done = ofType(frames, "stage.completed").find((entry) => entry.stage === "characterise")!;
+      expect(done.summary).toMatchObject({ theme_count: 4 });
+      const firstBatch = ofType(frames, "tick").find((entry) => entry.activity === "Assigning themes · batch 1 of 3")!;
+      expect(frames.indexOf(themes)).toBeLessThan(frames.indexOf(firstBatch));
+    });
+
+    it("streams section 1 as deltas, then the revising span, then the repaired section", async () => {
+      const frames = await playEvidenceWalk();
+      const draft = mockArtefactSectionProse[1];
+      const deltas = ofType(frames, "artefact.section_delta").filter((entry) => entry.index === MOCK_STREAMED_SECTION_INDEX);
+      expect(deltas.length).toBeGreaterThan(3);
+      expect(deltas.every((entry) => entry.mode === "append")).toBe(true);
+      expect(deltas.map((entry) => entry.text).join("")).toBe(draft);
+      for (const entry of deltas) {
+        const words = entry.text.trim().split(/\s+/).length;
+        expect(words).toBeGreaterThanOrEqual(1);
+        expect(words).toBeLessThanOrEqual(6);
+      }
+      const [revising] = ofType(frames, "artefact.section_revising");
+      expect(revising.spans).toEqual([mockSectionOneRevisingSpan]);
+      expect(revising.spans[0].start).toBeGreaterThan(0);
+      expect(revising.spans[0].end).toBeLessThanOrEqual(draft.length);
+      expect(draft.slice(revising.spans[0].start, revising.spans[0].end)).toBe(
+        "Schools that added a walking bus saw 8 more children arrive on foot in every 100.",
+      );
+      const completed = ofType(frames, "artefact.section_completed").find((entry) => entry.index === MOCK_STREAMED_SECTION_INDEX)!;
+      expect(completed.prose).toBe(mockArtefactSectionRepairedProse[1]);
+      expect(completed.prose.slice(0, revising.spans[0].start)).toBe(draft.slice(0, revising.spans[0].start));
+      expect(frames.indexOf(deltas.at(-1)!)).toBeLessThan(frames.indexOf(revising));
+      expect(frames.indexOf(revising)).toBeLessThan(frames.indexOf(completed));
+    });
+
+    it("names the sources read before the prose and the writer's citations after it (evidence shown live)", async () => {
+      const frames = await playEvidenceWalk();
+      const draft = mockArtefactSectionProse[1];
+      const sources = ofType(frames, "artefact.section_sources");
+      expect(sources.map((entry) => entry.sources.length)).toEqual([2, 5]);
+      expect(sources.every((entry) => entry.index === MOCK_STREAMED_SECTION_INDEX)).toBe(true);
+      const claims = ofType(frames, "artefact.section_claim").filter((claim) => claim.index === MOCK_STREAMED_SECTION_INDEX);
+      expect(claims).toHaveLength(2);
+      for (const claim of claims) {
+        expect(claim.end).toBeLessThanOrEqual(Array.from(draft).length);
+        expect(claim.sources.length).toBeGreaterThan(0);
+      }
+      expect(draft.slice(claims[1].start, claims[1].end)).toBe(
+        "Schools that added a walking bus saw 8 more children arrive on foot in every 100.",
+      );
+      const deltas = ofType(frames, "artefact.section_delta").filter((entry) => entry.index === MOCK_STREAMED_SECTION_INDEX);
+      const [revising] = ofType(frames, "artefact.section_revising");
+      expect(frames.indexOf(sources[0])).toBeLessThan(frames.indexOf(deltas[0]));
+      expect(frames.indexOf(deltas.at(-1)!)).toBeLessThan(frames.indexOf(claims[0]));
+      expect(frames.indexOf(claims.at(-1)!)).toBeLessThan(frames.indexOf(revising));
+    });
+
+    it("completes each section with citations numbered as the final report numbers them (round 7)", async () => {
+      const frames = await playEvidenceWalk();
+      const all = ofType(frames, "artefact.section_completed");
+      expect(all.map((entry) => entry.index)).toEqual([0, MOCK_STREAMED_SECTION_INDEX, MOCK_CASE_STUDIES_INDEX, MOCK_INTRO_INDEX]);
+      // The introduction has no citations and no section of its own in the report.
+      expect(all.at(-1)?.citations).toEqual([]);
+      const completed = all.filter((entry) => entry.index !== MOCK_INTRO_INDEX);
+      const [keyFindings] = completed;
+      const finalClaim = mockArtefact.sections![0].blocks![0].claims![0];
+      expect(keyFindings.citations).toHaveLength(1);
+      const [citation] = keyFindings.citations!;
+      expect([citation.start, citation.end]).toEqual(finalClaim.span);
+      expect(citation.n).toBe(finalClaim.citations![0].n);
+      expect(citation.title).toBe(finalClaim.citations![0].source_title);
+      // Round 13: the verdict rides on the claim, live and committed alike.
+      expect(keyFindings.claims).toEqual([
+        { claim_id: finalClaim.claim_id, start: finalClaim.span![0], end: finalClaim.span![1], tier: finalClaim.grounding_tier, rationale: finalClaim.grounding_rationale },
+      ]);
+      expect("tier" in citation).toBe(false);
+      expect(keyFindings.prose.slice(citation.start, citation.end)).toBe(finalClaim.text);
+      // Every section's live citations are the committed report's, span by span.
+      for (const entry of completed) {
+        const section = mockArtefact.sections!.find((candidate) => candidate.title === entry.title)!;
+        const expected = section.blocks!.flatMap((block) =>
+          (block.claims ?? [])
+            .filter((claim) => claim.span != null)
+            .sort((left, right) => left.span![0] - right.span![0])
+            .flatMap((claim) =>
+              (claim.citations ?? []).map((cited) => ({
+                start: claim.span![0],
+                end: claim.span![1],
+                n: cited.n,
+                title: cited.source_title,
+                // Round 8: the committed ids and quote ride on the live citation.
+                citation_id: cited.citation_id,
+                claim_id: claim.claim_id,
+                quote: cited.quote,
+              })),
+            ),
+        );
+        expect(
+          (entry.citations ?? []).map(({ start, end, n, title, citation_id, claim_id, quote }) => ({
+            start,
+            end,
+            n,
+            title,
+            citation_id,
+            claim_id,
+            quote,
+          })),
+        ).toEqual(expected);
+        for (const each of entry.citations ?? []) {
+          expect(entry.prose.slice(each.start, each.end).length).toBeGreaterThan(0);
+        }
+        // Each claim's verdict is the committed claim's.
+        const claimsExpected = section.blocks!.flatMap((block) =>
+          (block.claims ?? [])
+            .filter((claim) => claim.span != null && (claim.citations ?? []).length > 0)
+            .sort((left, right) => left.span![0] - right.span![0])
+            .map((claim) => ({ claim_id: claim.claim_id, start: claim.span![0], end: claim.span![1], tier: claim.grounding_tier, rationale: claim.grounding_rationale })),
+        );
+        expect(entry.claims ?? []).toEqual(claimsExpected);
+      }
+      expect(completed.find((entry) => entry.index === MOCK_STREAMED_SECTION_INDEX)!.citations).toHaveLength(3);
+      expect(completed.find((entry) => entry.index === MOCK_CASE_STUDIES_INDEX)!.citations).toHaveLength(1);
+      const referenceNumbers = new Set((mockArtefact.references ?? []).map((reference) => reference.n));
+      for (const entry of completed) {
+        for (const each of entry.citations ?? []) expect(referenceNumbers.has(each.n)).toBe(true);
+      }
+      expect([...referenceNumbers].sort()).toEqual([1, 2, 3]);
+    });
+
+    it("streams the case studies card by card into their slot, then the checked cards (round 7)", async () => {
+      const frames = await playEvidenceWalk();
+      const order = frames.map((frame) => frame.type);
+      const started = frames.findIndex(
+        (frame) => frame.type === "artefact.section_started" && frame.index === MOCK_CASE_STUDIES_INDEX,
+      );
+      const cards = ofType(frames, "artefact.section_card");
+      expect(cards.map((card) => ({ title: card.title, prose: card.prose }))).toEqual(mockCaseStudyCards);
+      expect(cards.every((card) => card.index === MOCK_CASE_STUDIES_INDEX && card.ephemeral)).toBe(true);
+      expect(cards.every((card) => !("sequence" in card))).toBe(true);
+      const completed = ofType(frames, "artefact.section_completed").find(
+        (entry) => entry.index === MOCK_CASE_STUDIES_INDEX,
+      )!;
+      expect(completed.title).toBe("Case studies");
+      expect(completed.prose).toBe(mockCaseStudiesProse);
+      expect(started).toBeGreaterThan(0);
+      expect(started).toBeLessThan(order.indexOf("artefact.section_card"));
+      expect(order.lastIndexOf("artefact.section_card")).toBeLessThan(frames.indexOf(completed));
+      // The slot follows the body sections and names its role, so body
+      // indexes keep their places; the introduction's slot comes after it.
+      const [skeleton] = ofType(frames, "artefact.skeleton");
+      expect(skeleton.sections.map((slot) => slot.role)).toEqual(["key_findings", "body", "case_studies", "intro"]);
+      expect(skeleton.sections.at(-2)?.index).toBe(MOCK_CASE_STUDIES_INDEX);
+      const line = ofType(frames, "tick").find((entry) => entry.activity === "Writing the case studies");
+      expect(line?.section).toBe("Case studies");
+      const finalSection = mockArtefact.sections!.find((section) => section.role === "case_studies");
+      expect(finalSection?.cards?.map((card) => card.title)).toEqual(mockCaseStudyCards.map((card) => card.title));
+    });
+
+    it("streams the key findings as deltas with a claim mark before they complete (round 8)", async () => {
+      const frames = await playEvidenceWalk();
+      const deltas = ofType(frames, "artefact.section_delta").filter((entry) => entry.index === 0);
+      expect(deltas.length).toBeGreaterThan(3);
+      expect(deltas.map((entry) => entry.text).join("")).toBe(mockArtefactSectionProse[0]);
+      const [claim] = ofType(frames, "artefact.section_claim").filter((entry) => entry.index === 0);
+      expect(claim).toMatchObject(mockKeyFindingsClaim);
+      const completed = ofType(frames, "artefact.section_completed").find((entry) => entry.index === 0)!;
+      expect(frames.indexOf(deltas.at(-1)!)).toBeLessThan(frames.indexOf(claim));
+      expect(frames.indexOf(claim)).toBeLessThan(frames.indexOf(completed));
+      expect(completed.prose.slice(claim.start, claim.end)).toBe(completed.prose.slice(completed.citations![0].start, completed.citations![0].end));
+      const line = ofType(frames, "tick").find((entry) => entry.activity === "Writing the key findings");
+      expect(line?.section).toBe("Key findings");
+    });
+
+    it("sends two source notes after the sections, then streams the introduction into its slot (round 8)", async () => {
+      const frames = await playEvidenceWalk();
+      const notes = ofType(frames, "artefact.source_note");
+      expect(notes.map(({ source_id, title, note }) => ({ source_id, title, note }))).toEqual(
+        mockSourceNotes.map(({ sourceId, title, note }) => ({ source_id: sourceId, title, note })),
+      );
+      expect(notes.every((note) => note.ephemeral && !("sequence" in note))).toBe(true);
+      // The committed report keeps the same notes and the same introduction.
+      expect(mockArtefact.most_relevant_notes).toEqual(notes.map(({ source_id, note }) => ({ source_id, note })));
+      expect(mockArtefact.full_report_intro).toBe(MOCK_FULL_REPORT_INTRO);
+      const lines = ofType(frames, "tick").map((entry) => entry.activity);
+      expect(lines).toEqual(expect.arrayContaining(mockSourceNotes.map((note) => `Writing a source note · ${note.short}`)));
+
+      const casesDone = ofType(frames, "artefact.section_completed").find((entry) => entry.index === MOCK_CASE_STUDIES_INDEX)!;
+      expect(frames.indexOf(casesDone)).toBeLessThan(frames.indexOf(notes[0]));
+      const started = frames.find((frame) => frame.type === "artefact.section_started" && frame.index === MOCK_INTRO_INDEX)!;
+      const deltas = ofType(frames, "artefact.section_delta").filter((entry) => entry.index === MOCK_INTRO_INDEX);
+      const completed = ofType(frames, "artefact.section_completed").find((entry) => entry.index === MOCK_INTRO_INDEX)!;
+      expect(frames.indexOf(notes.at(-1)!)).toBeLessThan(frames.indexOf(started));
+      expect(deltas.map((entry) => entry.text).join("")).toBe(MOCK_FULL_REPORT_INTRO);
+      expect(completed).toMatchObject({ title: "Full report", prose: MOCK_FULL_REPORT_INTRO, citations: [] });
+      expect(frames.indexOf(deltas.at(-1)!)).toBeLessThan(frames.indexOf(completed));
+      const [skeleton] = ofType(frames, "artefact.skeleton");
+      expect(skeleton.sections.at(-1)).toEqual({ index: MOCK_INTRO_INDEX, title: "Full report", focus: "", role: "intro" });
+      const line = ofType(frames, "tick").find((entry) => entry.activity === "Writing the introduction");
+      // The slot keeps its title; the line names the introduction (round 9).
+      expect(line?.section).toBe("Introduction");
+    });
+
+    it("serves the planner turn as a stream: progress, deltas, one completed last", async () => {
+      await freshTask("evidence_search");
+      const post = async (message: string) => {
+        const response = await mockFetch(`${base}/task-agent-turns`, {
+          method: "POST",
+          body: JSON.stringify({ client_turn_id: crypto.randomUUID(), message }),
+        });
+        expect(response.headers.get("Content-Type")).toBe("application/x-ndjson");
+        return readNdjson(response);
+      };
+      const first = await post("What works to raise take-up of free childcare places?");
+      expect(first[0]).toEqual({ type: "progress", label: "Drafting the plan" });
+      expect(first.filter((event) => event.type === "completed")).toHaveLength(1);
+      expect(first.at(-1)?.type).toBe("completed");
+      const deltas = first.filter((event) => event.type === "delta");
+      expect(deltas.length).toBeGreaterThan(2);
+      const turn = (first.at(-1) as { turn: { reply: string; question: string; suggestions: string[]; part: { id: string; options: { id: string; primary: boolean; reason: string | null }[] } } }).turn;
+      expect(deltas.map((event) => event.text).join("")).toBe(turn.reply);
+      expect(turn.question).toBe("Is the question as you want it, or do you want to narrow it?");
+      expect(turn.suggestions).toEqual(["That's my question", "Narrow it"]);
+      expect(turn.part.id).toBe("question");
+      expect(turn.part.options.map((option) => option.primary)).toEqual([true, false]);
+      expect(turn.part.options[0].reason).toBe("It names the outcome, the group and the setting.");
+
+      const second = (await post("That's my question")).at(-1) as { turn: { part: { id: string; chips: unknown[] } } };
+      expect(second.turn.part.id).toBe("scope");
+      expect(second.turn.part.chips).toHaveLength(3);
+      const third = (await post("Looks right")).at(-1) as { turn: { part: { id: string; options: { label: string; primary: boolean; sub: string }[] } } };
+      expect(third.turn.part.id).toBe("thoroughness");
+      // Fastest to slowest, in the planner's order (owner, polish round 3).
+      expect(third.turn.part.options.map((option) => option.label)).toEqual(["Rapid overview", "Standard report", "Detailed report"]);
+      expect(third.turn.part.options[1].primary).toBe(true);
+      expect(third.turn.part.options[1].sub).toContain("~10-20 min");
+
+      const transcript = (await (await mockFetch(`${base}/task-agent-turns`)).json()) as { data: { question: string | null }[] };
+      expect(transcript.data.map((row) => row.question)).toEqual([turn.question, null, null]);
+    });
+
+    it("pauses at a real check-in kind after searching and screening", async () => {
+      expect(mockCheckIn).toMatchObject({ kind: "steer_point", boundary: "after_component", component: "acquire", stage: "acquire" });
+      expect(mockCheckIn.options?.map((option) => option.id)).toEqual(["continue", "deepen_search", "rescope_filters", "guide_queries", "abort"]);
+      expect(mockCheckIn.options?.[0]).toMatchObject({ suggested: true, why: "Coverage matches the plan and the second round added little." });
+      const frames = await playEvidenceWalk();
+      const order = frames.map((frame) => (frame.type === "stage.started" ? `start:${frame.stage}` : frame.type));
+      expect(order.indexOf("checkin.pending")).toBeGreaterThan(order.indexOf("start:screen"));
+      expect(order.indexOf("checkin.pending")).toBeLessThan(order.indexOf("start:classify"));
+      const read = (await (await mockFetch(`${base}/check-ins`)).json()) as { data: { kind: string }[] };
+      expect(read.data[0].kind).toBe("steer_point");
+    });
+
+    it("opens the baseline gate at its own time, after the opening question, with the plan's risk appetite", async () => {
+      const opened = new Date().toISOString();
+      await freshTask("options_scoping");
+      await mockFetch(`${base}/runs`, { method: "POST" });
+      const response = await mockFetch(`${base}/events`);
+      const frames: SseFrame[] = [];
+      void consumeEventStream(response.body!, 0, (frame) => frames.push(frame));
+      await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("checkin.pending"));
+      const pending = frames.at(-1) as Extract<SseFrame, { type: "checkin.pending" }>;
+      expect(pending.check_in.created_at >= opened).toBe(true);
+      expect(pending.check_in.render?.split("\n")[0]).toBe("Does the plan still look right now you have the baseline?");
+      expect((pending.check_in.bundle as { settings: { risk_appetite: string } }).settings.risk_appetite).toBe(
+        "Balanced: mostly evaluated, plus one or two not yet evaluated",
+      );
+      const read = (await (await mockFetch(`${base}/check-ins`)).json()) as { data: { created_at: string }[] };
+      expect(read.data[0].created_at).toBe(pending.check_in.created_at);
+      resetMockScenario();
+    });
+
+    describe("the scoping walk", () => {
+      /** Open the scoping run, confirm the baseline gate and read frames until
+       *  the longlist walk's parent run succeeds. */
+      async function playScopingWalk() {
+        await freshTask("options_scoping");
+        await mockFetch(`${base}/runs`, { method: "POST" });
+        const response = await mockFetch(`${base}/events`);
+        const frames: SseFrame[] = [];
+        void consumeEventStream(response.body!, 0, (frame) => frames.push(frame));
+        await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("checkin.pending"));
+        await mockFetch(`${base}/check-ins/4c1acbe7-c4a1-4e0b-8d5a-bb25ea2ef635/response`, {
+          method: "POST",
+          body: JSON.stringify({ kind: "option", option_id: "confirm_plan" }),
+        });
+        return frames;
+      }
+      const walkDone = (frames: SseFrame[]) =>
+        ofType(frames, "run.status").some(
+          (frame) => frame.status === "succeeded" && ofType(frames, "stage.completed").some((done) => done.stage === "shortlist"),
+        );
+
+      it("walks every stage with server labels and child searches, ten at once then two", async () => {
+        const frames = await playScopingWalk();
+        const optionsBefore = (await (await mockFetch(`${base}/options`)).json()) as { options: unknown[] };
+        expect(optionsBefore.options).toEqual([]);
+        expect((await mockFetch(`${base}/longlist`)).status).toBe(404);
+        await vi.waitFor(() => expect(walkDone(frames)).toBe(true), { timeout: 8000 });
+
+        const parent = ofType(frames, "stage.started").find((frame) => frame.stage === "inherit")!.capability_run_id!;
+        const parentStages = ofType(frames, "stage.started").filter((frame) => frame.capability_run_id === parent);
+        // The walk's own search runs while its option searches do, then the
+        // pooled sources are screened and classified (round 11, as the server).
+        expect(parentStages.map((frame) => frame.stage)).toEqual([
+          "inherit", "suggest", "option_searches", "acquire", "screen", "classify", "appraise",
+          "extract_interventions", "longlist", "option_profile", "constrain", "theme", "shortlist",
+        ]);
+        // Each walk tick names the walk, and none only repeats its row's label
+        // (round 11).
+        const walkTicks = ofType(frames, "tick").filter((frame) => frame.capability_run_id === parent);
+        expect(walkTicks.length).toBeGreaterThan(0);
+        expect(ofType(frames, "tick").every((frame) => frame.capability_run_id === parent || frame.capability_run_id === null)).toBe(true);
+        expect(walkTicks.filter((frame) => frame.stage !== null && frame.activity === STAGE_PRESENTATION[frame.stage][0])).toEqual([]);
+        // The names each clustering found, before its batches (round 11).
+        const names = ofType(frames, "characterise.themes");
+        expect(names.map((frame) => frame.stage)).toEqual(["longlist", "theme"]);
+        expect(names[0]!.themes).toHaveLength(13);
+        expect(names[1]!.themes.map((theme) => theme.label)).toEqual(["Conditionality and support", "A universal offer"]);
+        // The shortlist row counts the shortlist after the step (round 11).
+        const shortlisted = ofType(frames, "stage.completed").find((frame) => frame.stage === "shortlist")!;
+        expect(shortlisted.counts?.[0]?.noun).toBe("shortlisted");
+        // Each walk on the runs read carries its own steps; a child's stay with it.
+        const runs = (await (await mockFetch(`${base}/runs`)).json()) as {
+          data: { capability_run_id: string; stages?: { stage: string; status: string }[] }[];
+        };
+        const walkRun = runs.data.find((run) => run.capability_run_id === parent)!;
+        expect(walkRun.stages?.map((step) => step.stage)).toEqual(parentStages.map((frame) => frame.stage));
+        expect(walkRun.stages?.every((step) => step.status === "completed")).toBe(true);
+        const childRun = runs.data.find((run) => run.capability_run_id !== parent && run.capability_run_id.startsWith("b1000000"))!;
+        expect(childRun.stages?.map((step) => step.stage)).toEqual(["acquire"]);
+        expect(parentStages.find((frame) => frame.stage === "option_searches")?.label).toBe("Searching for each option");
+
+        const childIds = ofType(frames, "run.status")
+          .filter((frame) => frame.status === "running" && frame.capability_run_id.startsWith("b1000000"))
+          .map((frame) => frame.capability_run_id);
+        expect(childIds).toHaveLength(12);
+        expect(new Set(childIds).size).toBe(12);
+        expect(childIds).not.toContain(parent);
+        // Eleven searches succeed; one fails (task 058, round 10), as one can.
+        const failedChild = childIds.find((childId) => childId.endsWith("000000000012"));
+        for (const childId of childIds) {
+          const acquire = frames.filter((frame) => "capability_run_id" in frame && frame.capability_run_id === childId);
+          expect(acquire.map((frame) => (frame.type === "run.status" ? `${frame.type}:${frame.status}` : `${frame.type}:${"stage" in frame ? frame.stage : ""}`))).toEqual(
+            childId === failedChild
+              ? ["run.status:running", "stage.started:acquire", "stage.failed:acquire", "run.status:failed"]
+              : ["run.status:running", "stage.started:acquire", "stage.completed:acquire", "run.status:succeeded"],
+          );
+        }
+        // Ten start before the first one ends; the last two wait for a slot.
+        const order = frames.map((frame) =>
+          frame.type === "run.status" && childIds.includes(frame.capability_run_id) ? frame.status : frame.type === "stage.completed" && childIds.includes(frame.capability_run_id ?? "") ? "done" : "",
+        ).filter(Boolean);
+        expect(order.slice(0, 10)).toEqual(Array(10).fill("running"));
+
+        const searchLines = ofType(frames, "tick").filter((entry) => entry.stage === "option_searches").map((entry) => entry.activity);
+        expect(searchLines).toHaveLength(13);
+        expect(searchLines[0]).toBe("0 of 12 searches done · 0 sources");
+        expect(searchLines[4]).toMatch(/^4 of 12 searches done · [\d,]+ sources$/);
+        expect(searchLines.at(-1)).toMatch(/^11 of 12 searches done · [\d,]+ sources$/);
+        const done = ofType(frames, "stage.completed").find((frame) => frame.stage === "option_searches")!;
+        expect(done.summary).toMatchObject({ total: 12, finished: 11, failed: 1, sources: expect.any(Number) });
+
+        // The options read follows the child walks and the clustering.
+        const options = (await (await mockFetch(`${base}/options`)).json()) as {
+          options: { name: string; origin: string; merged_into_option_id: string | null; search_status: string; found: number | null }[];
+        };
+        expect(options.options).toHaveLength(14);
+        const searched = options.options.slice(0, 11);
+        expect(searched.every((row) => row.search_status === "searched" && row.found !== null)).toBe(true);
+        expect(options.options[11]).toMatchObject({ name: "Conditionality reform for under-25s", search_status: "failed", found: null });
+        expect(searched.reduce((total, row) => total + (row.found ?? 0), 0)).toBe(done.summary?.sources);
+        expect(options.options.filter((row) => row.merged_into_option_id !== null).map((row) => row.name)).toEqual(["Transport subsidies for young job seekers"]);
+        expect(options.options.slice(12).map((row) => row.origin)).toEqual(["clustered", "clustered"]);
+        expect((await mockFetch(`${base}/longlist`)).status).toBe(200);
+
+        // The finished longlist is the build's own options, themed (task 058,
+        // round 10), not the fixture's four; each has a working card.
+        const finished = (await (await mockFetch(`${base}/longlist`)).json()) as {
+          options: { option_id: string; state: string }[];
+          themes: { option_ids: string[] }[];
+        };
+        const live = options.options.filter((row) => row.merged_into_option_id === null) as unknown as { option_id: string }[];
+        expect(finished.options.map((option) => option.option_id)).toEqual(live.map((row) => row.option_id));
+        expect(finished.themes).toHaveLength(2);
+        expect(finished.themes.flatMap((theme) => theme.option_ids).sort()).toEqual(
+          finished.options.filter((option) => option.state === "included").map((option) => option.option_id).sort(),
+        );
+        const card = await mockFetch(`${base}/options/${finished.options[0].option_id}/unshortlist`, { method: "POST" });
+        expect(card.status).toBe(200);
+        resetMockScenario();
+        expect(((await (await mockFetch(`${base}/longlist`)).json()) as { options: unknown[] }).options).toHaveLength(4);
+      });
+
+      it("serves the longlist read over the same option ids as the options read", async () => {
+        const frames = await playScopingWalk();
+        // Poll quickly: the walk-time longlist read ends when the walk does.
+        await vi.waitFor(async () => expect((await mockFetch(`${base}/longlist`)).status).toBe(200), { interval: 1, timeout: 8000 });
+        const longlist = (await (await mockFetch(`${base}/longlist`)).json()) as { options: { option_id: string; name: string; origin: string }[] };
+        const rows = (await (await mockFetch(`${base}/options`)).json()) as {
+          options: { option_id: string; name: string; origin: string; merged_into_option_id: string | null }[];
+        };
+        const live = rows.options.filter((row) => row.merged_into_option_id === null);
+        expect(longlist.options.map((option) => [option.option_id, option.name, option.origin])).toEqual(
+          live.map((row) => [row.option_id, row.name, row.origin]),
+        );
+        expect(rows.options).toHaveLength(14);
+        expect(live).toHaveLength(13);
+        await vi.waitFor(() => expect(walkDone(frames)).toBe(true), { timeout: 8000 });
+      });
+
+      it("grows the longlist read in four steps after the longlist stage", () => {
+        const rows = foldMockOptionRows(seedMockOptionRows()).map((row, index) => ({ ...row, found: row.found ?? 100 + index }));
+        const read = (stage: Parameters<typeof mockWalkLonglist>[1]) => mockWalkLonglist(rows, stage);
+
+        const built = read("longlist");
+        expect(built.options).toHaveLength(13);
+        expect(built.options!.every((option) => option.document_count > 0)).toBe(true);
+        expect(built.options!.every((option) => option.primary_lever_type == null && option.ambition_reason == null)).toBe(true);
+        expect(built.options!.every((option) => option.state === "included" && option.exclusion == null)).toBe(true);
+        expect(built.themes).toEqual([]);
+        expect(built.options!.every((option) => option.shortlist == null)).toBe(true);
+
+        const profiled = read("option_profile");
+        expect(profiled.options!.every((option) => option.primary_lever_type != null && option.ambition_reason != null)).toBe(true);
+        expect(profiled.options!.some((option) => option.state === "excluded")).toBe(false);
+        expect(profiled.themes).toEqual([]);
+
+        const constrained = read("constrain");
+        const excluded = constrained.options!.filter((option) => option.state === "excluded");
+        expect(excluded).toHaveLength(2);
+        expect(excluded.every((option) => (option.exclusion?.reason ?? "") !== "")).toBe(true);
+        expect(constrained.themes).toEqual([]);
+        expect(constrained.options!.every((option) => option.shortlist == null)).toBe(true);
+
+        const themed = read("theme");
+        expect(themed.themes).toHaveLength(2);
+        const themedIds = themed.themes!.flatMap((theme) => theme.option_ids ?? []);
+        expect(themedIds.sort()).toEqual(themed.options!.filter((option) => option.state === "included").map((option) => option.option_id).sort());
+        expect(themed.options!.every((option) => option.shortlist == null)).toBe(true);
+
+        const shortlisted = read("shortlist");
+        expect(shortlisted.options!.filter((option) => option.shortlist != null)).toHaveLength(3);
+      });
+
+      it("shows rows from the end of suggest, queued then searching then searched", async () => {
+        const frames = await playScopingWalk();
+        await vi.waitFor(() => expect(ofType(frames, "run.status").filter((frame) => frame.status === "running").length).toBeGreaterThan(2));
+        const mid = (await (await mockFetch(`${base}/options`)).json()) as { options: { search_status: string; found: number | null }[] };
+        expect(mid.options).toHaveLength(12);
+        expect(mid.options.filter((row) => row.search_status === "searching").length).toBeLessThanOrEqual(10);
+        expect(mid.options.every((row) => (row.search_status === "searched") === (row.found !== null))).toBe(true);
+        expect(mid.options.every((row) => row.search_status !== "failed" || row.found === null)).toBe(true);
+        await vi.waitFor(() => expect(walkDone(frames)).toBe(true), { timeout: 8000 });
+      });
+    });
+
+    it("selects paused-strip, which holds at the check-in even once it is answered", async () => {
+      await freshTask("evidence_search");
+      await mockFetch(`${base}/runs`, { method: "POST" });
+      const response = await mockFetch(`${base}/events?mockScenario=paused-strip`);
+      const frames: SseFrame[] = [];
+      void consumeEventStream(response.body!, 0, (frame) => frames.push(frame));
+      await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("checkin.pending"));
+      await mockFetch(`${base}/check-ins/${MOCK_CHECK_IN_ID}/response`, { method: "POST", body: JSON.stringify({ kind: "option", option_id: "continue" }) });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(frames.at(-1)?.type).toBe("checkin.pending");
+      expect(ofType(frames, "run.status").at(-1)?.status).toBe("paused");
+    });
+
+    it("selects reload-mid-section: replay to section 1, one replace of the first half, then appends", async () => {
+      const frames = await playEvidenceWalk("reload-mid-section");
+      const draft = mockArtefactSectionProse[1];
+      const started = frames.findIndex((frame) => frame.type === "artefact.section_started" && frame.index === MOCK_STREAMED_SECTION_INDEX);
+      expect(started).toBeGreaterThan(0);
+      // The replay is durable frames only; ticks are never replayed.
+      expect(frames.slice(0, started).some((frame) => frame.type === "tick" || frame.type === "artefact.section_delta")).toBe(false);
+      const deltas = ofType(frames, "artefact.section_delta").filter((entry) => entry.index === MOCK_STREAMED_SECTION_INDEX);
+      expect(frames[started + 1]).toBe(deltas[0]);
+      expect(deltas[0].mode).toBe("replace");
+      expect(deltas.slice(1).every((entry) => entry.mode === "append")).toBe(true);
+      expect(deltas[0].text.length).toBeGreaterThan(0);
+      expect(deltas[0].text.length).toBeLessThan(draft.length);
+      expect(draft.startsWith(deltas[0].text)).toBe(true);
+      expect(deltas.map((entry) => entry.text).join("")).toBe(draft);
+      expect(frames.at(-1)).toMatchObject({ type: "run.status", status: "succeeded" });
     });
   });
 });

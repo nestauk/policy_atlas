@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import re
 import uuid
 from collections import Counter
 from collections.abc import Collection, Iterable, Mapping, Sequence
@@ -10,6 +11,7 @@ from dataclasses import asdict, dataclass
 from datetime import date
 from functools import cmp_to_key
 from typing import Any, Literal, cast
+from urllib.parse import urlsplit
 
 import structlog
 from sqlalchemy import func, select
@@ -28,6 +30,7 @@ from policy_atlas.api.contract import (
     ClaimOut,
     CoverageBackendDetailOut,
     CoverageOut,
+    CoveragePassOut,
     CoverageQueryOut,
     CoverageSnapshotOut,
     DecisionOut,
@@ -57,7 +60,10 @@ from policy_atlas.api.contract import (
     OptionDocumentOut,
     OptionOut,
     OptionProfileOut,
+    OptionProgressOut,
     OptionRecordOut,
+    OptionSearchStatus,
+    OptionsOut,
     OptionSummaryOut,
     OutcomeCountOut,
     OutcomeCountsOut,
@@ -79,6 +85,8 @@ from policy_atlas.api.contract import (
 )
 from policy_atlas.api.contract.read_models import EvaluatedCountryOut, PlaceSentenceOut
 from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
+from policy_atlas.api.read_models import history
+from policy_atlas.api.stage_vocabulary import activity
 from policy_atlas.core.schema import (
     GROUPING_FACETS,
     OPTION_SHORTLIST_STATES,
@@ -142,9 +150,11 @@ from policy_atlas.options_scoping.longlist.coverage import (
 )
 from policy_atlas.options_scoping.longlist.maturity import maturity_of
 from policy_atlas.options_scoping.longlist.where_tried import (
+    COUNTRY_DISPLAY_NAMES,
     NOT_STATED,
     country_level,
     document_where,
+    names_country,
     resolve_country,
 )
 from policy_atlas.options_scoping.longlist_intent import longlist_plan_data
@@ -165,6 +175,7 @@ from policy_atlas.options_scoping.option_profile.place_sentences import (
 from policy_atlas.options_scoping.shortlist.shortlist import (
     SHORTLIST_PROPOSED as SHORTLIST_PROPOSED,
 )
+from policy_atlas.options_scoping.shortlist.shortlist_note import PLACE_STATES, note_stale
 from policy_atlas.runtime.capability_registry import (
     OPTIONS_SCOPING,
     expect_scoping_plan,
@@ -184,6 +195,41 @@ from policy_atlas.runtime.steering_history import steering_history
 def _metadata_text(metadata: Mapping[str, Any], key: str) -> str | None:
     value = metadata.get(key)
     return value if isinstance(value, str) and value else None
+
+
+#: Roles saved after the body sections, in the order they are saved.
+_LATE_SAVED_ROLES = ("key_findings", "case_studies")
+
+
+def _save_rank(
+    parsed_specs: Sequence[tuple[Mapping[str, Any], uuid.UUID]],
+) -> dict[uuid.UUID, tuple[int, int]]:
+    """Rank each block by the order synthesis saved it (task 058, round 7).
+
+    The roll-up lists blocks in page order (key findings and case studies
+    first); synthesis saves the body sections first, in that order, then the
+    key findings, then the case studies.
+    """
+    ranks: dict[uuid.UUID, tuple[int, int]] = {}
+    for position, (spec, block_id) in enumerate(parsed_specs):
+        role = spec.get("role")
+        group = _LATE_SAVED_ROLES.index(role) + 1 if role in _LATE_SAVED_ROLES else 0
+        ranks[block_id] = (group, position)
+    return ranks
+
+
+def _annotation_order(
+    row: Any, rank_by_block: Mapping[uuid.UUID, tuple[int, int]]
+) -> tuple[tuple[int, int], int, int, str]:
+    """Sort key for an annotation: its block's save rank, then its span, then its id."""
+    locator = row.locator if isinstance(row.locator, Mapping) else {}
+    start, end = locator.get("start"), locator.get("end")
+    return (
+        rank_by_block.get(row.block_id, (3, 0)),
+        start if isinstance(start, int) else -1,
+        end if isinstance(end, int) else -1,
+        str(row.annotation_id),
+    )
 
 
 def _title(metadata: Mapping[str, Any], locator: str) -> str:
@@ -523,10 +569,83 @@ def _url(metadata: Mapping[str, Any], source_locator: str | None = None) -> str 
     return f"https://doi.org/{doi}" if doi is not None else None
 
 
+#: The full-text snapshot, joined beside the envelope one (same table).
+_full_text_snapshot = source_snapshot.alias("full_text_snapshot")
+
+#: Where a collected full text came from: the per-task fetch address (task
+#: 057), else the shared full-text snapshot's own locator (older rows).
+_FULL_TEXT_LOCATOR = func.coalesce(
+    task_source_snapshot.c.fetched_from, _full_text_snapshot.c.source_locator
+).label("full_text_locator")
+
+#: Europe PMC's full-text XML service address, which a reader is sent to as
+#: the article's own page instead.
+_EUROPE_PMC_XML_PATH = re.compile(r"^/europepmc/webservices/rest/(PMC\d+)/fullTextXML$")
+
+
+def _full_text_url(full_text_status: str | None, locator: str | None) -> str | None:
+    """The link a reader opens for a collected full text (task 058, round 12).
+
+    Only when the text was collected (``ingested``) and the address is an
+    http(s) URL with a host; the Europe PMC XML service maps to the article's
+    reader page.
+
+    Args:
+        full_text_status: The document's ``full_text_status``.
+        locator: Where its bytes came from (:data:`_FULL_TEXT_LOCATOR`).
+
+    Returns:
+        The URL, or ``None``.
+    """
+    if full_text_status != "ingested" or not locator:
+        return None
+    try:
+        parts = urlsplit(locator)
+    except ValueError:
+        return None
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        return None
+    pmc = _EUROPE_PMC_XML_PATH.match(parts.path)
+    if parts.hostname == "www.ebi.ac.uk" and pmc is not None:
+        return f"https://europepmc.org/article/PMC/{pmc.group(1)}"
+    return locator
+
+
 #: Residual bucket for sources whose provider sent no publisher country (task
 #: 031). A stable, public-vocabulary string: the frontend must not rename or
 #: drop it, or the chart stops adding up to the population it draws.
 GEOGRAPHY_NOT_REPORTED = "Not reported"
+
+#: The evidence read's ``country`` value for the rows with no publisher
+#: country, the link Landscape's "Not reported" row uses (task 058, round 14).
+COUNTRY_NONE = "none"
+
+
+def country_name(raw: str | None) -> str | None:
+    """The short English name a publisher country is shown and filtered by.
+
+    One name per country whichever way the provider spelled it (task 058,
+    round 10): OpenAlex's ISO code ``GB``, Overton's ``UK`` and a written
+    "United Kingdom" all read "United Kingdom", so the Landscape chart's row
+    and the All sources filter it links to name the same set. A value the
+    country tables do not know is kept as written.
+
+    Args:
+        raw: The provider's value, as :func:`publication_country` reads it.
+
+    Returns:
+        The country's display name, the value as written, or ``None`` when
+        there is none.
+    """
+    text = raw.strip() if isinstance(raw, str) else ""
+    if not text:
+        return None
+    if len(text) == 2 and text.isalpha() and text.upper() in COUNTRY_DISPLAY_NAMES:
+        return COUNTRY_DISPLAY_NAMES[text.upper()]
+    found = resolve_country(text)
+    if found is not None and names_country(text):
+        return found[1]
+    return text
 
 
 def publication_country(metadata: Mapping[str, Any]) -> str | None:
@@ -682,10 +801,11 @@ def funnel_out(conn: Connection, task_id: uuid.UUID) -> FunnelOut:
     )
     effective = _effective_screens(conn, task_id)
     statuses = [row.status for row in effective.values()]
+    # Distinct documents (task 058, round 13): a redrawn plan appraises a
+    # document once per question; the `appraised=true` filter lists it once.
     appraised = int(
         conn.execute(
-            select(func.count())
-            .select_from(source_appraisal_result)
+            select(func.count(func.distinct(source_appraisal_result.c.task_source_snapshot_id)))
             .where(source_appraisal_result.c.task_id == task_id)
         ).scalar_one()
     )
@@ -823,7 +943,7 @@ def landscape_out(
         # residual always equal the population drawn — at either scope, because
         # base_rows is already narrowed. An authorship country is never
         # substituted here; the slim authorships answer a different question.
-        geography = publication_country(metadata)
+        geography = country_name(publication_country(metadata))
         geographies[geography if geography is not None else GEOGRAPHY_NOT_REPORTED] += 1
     characterisation = conn.execute(
         select(characterisation_result.c.themes)
@@ -979,6 +1099,69 @@ def _expand_evidence_statuses(values: Iterable[str]) -> set[str]:
     return expanded
 
 
+def _read_depth(
+    *, read_in_full: bool, status: str, screen_status: str | None, abstract: str | None
+) -> Literal["full_text", "abstract", "title"] | None:
+    """The read depth the sources table's Status column shows (task 058, round 13).
+
+    The client's ``readDepthLabel``: the full text when it was collected; for
+    a relevant or unavailable source, the abstract when it has one, else the
+    title; no depth for the rest.
+    """
+    if read_in_full:
+        return "full_text"
+    if status == "unavailable" or screen_status == "relevant":
+        return "abstract" if abstract and abstract.strip() else "title"
+    return None
+
+
+def _query_record_ids(
+    conn: Connection, task_id: uuid.UUID, query_id: int
+) -> tuple[str, set[str]] | None:
+    """The backend and record ids one coverage row's search returned (round 12).
+
+    ``query_id`` is a ``search.executed`` event's sequence, as the coverage
+    read names its rows. A written query is that one call; a citations or
+    lookup pass is every call of the same run, backend and verb. Events
+    written before the ids were recorded carry none: an empty set.
+
+    Returns:
+        ``(backend, ids)``, or ``None`` when no search of this task has that key.
+    """
+    head = conn.execute(
+        select(event_log.c.run_id, event_log.c.payload).where(
+            event_log.c.task_id == task_id,
+            event_log.c.sequence == query_id,
+            event_log.c.event_type == "search.executed",
+        )
+    ).one_or_none()
+    if head is None or not isinstance(head.payload, Mapping):
+        return None
+    backend = head.payload.get("backend")
+    if not isinstance(backend, str):
+        return None
+    verb = head.payload.get("verb")
+    payloads: list[Any] = [head.payload]
+    if verb in _PASS_WORDS:
+        payloads = list(
+            conn.execute(
+                select(event_log.c.payload).where(
+                    event_log.c.task_id == task_id,
+                    event_log.c.run_id == head.run_id,
+                    event_log.c.event_type == "search.executed",
+                    event_log.c.payload["backend"].astext == backend,
+                    event_log.c.payload["verb"].astext == verb,
+                )
+            ).scalars()
+        )
+    ids: set[str] = set()
+    for payload in payloads:
+        values = payload.get("record_ids") if isinstance(payload, Mapping) else None
+        if isinstance(values, list):
+            ids.update(value for value in values if isinstance(value, str))
+    return backend, ids
+
+
 def evidence_page(
     conn: Connection,
     task_id: uuid.UUID,
@@ -995,8 +1178,31 @@ def evidence_page(
     strength: str | None = None,
     year_from: int | None = None,
     year_to: int | None = None,
+    country: str | None = None,
+    query: int | None = None,
+    depth: Literal["full_text", "abstract", "title"] | None = None,
+    appraised: bool | None = None,
 ) -> Page[EvidenceItemOut]:
     """Return one evidence page, deriving status task-wide before paging.
+
+    ``country`` keeps the sources whose publisher country is that country,
+    by any spelling (:func:`country_name`); ``"none"`` (round 14) or
+    ``"Not reported"`` keeps those with none, the Landscape chart's own
+    bucket (task 058, round 10).
+
+    ``theme`` keeps a characterisation theme's sources, or on an
+    options-scoping task a longlist theme's: the documents of its options
+    (task 058, round 14).
+
+    ``query`` keeps the sources one search returned, named by the coverage
+    row's ``query_id`` (:func:`_query_record_ids`, task 058, round 12): a
+    row matches by its backend and backend record id. A key no search of this
+    task has, or a search from before the ids were recorded, keeps nothing.
+
+    ``depth`` keeps the rows the table's Status column shows at that read
+    depth (:func:`_read_depth`); ``appraised`` keeps the documents the
+    appraise stage scored (``True``) or did not (``False``), as the funnel's
+    quality-checked row counts them (task 058, round 13).
 
     `status`/`cited`/`theme` filters are collection-true: status is derived for
     every task source (bounded — one task's worth of rows, the
@@ -1007,6 +1213,9 @@ def evidence_page(
     stable tie-breaker.
     """
     target_statuses = _expand_evidence_statuses(statuses) if statuses else None
+    returned = _query_record_ids(conn, task_id, query) if query is not None else None
+    if query is not None and (returned is None or not returned[1]):
+        return Page(data=[], pagination=PageMeta(page=page, page_size=page_size, total_items=0))
     rows = conn.execute(
         select(
             task_source_snapshot.c.task_source_snapshot_id,
@@ -1017,6 +1226,7 @@ def evidence_page(
             task_source_snapshot.c.full_text_error,
             source_snapshot.c.metadata,
             source_snapshot.c.source_locator,
+            _FULL_TEXT_LOCATOR,
         )
         .select_from(
             # Explicit onclause — same two-FK ambiguity as landscape_out.
@@ -1024,6 +1234,10 @@ def evidence_page(
                 source_snapshot,
                 task_source_snapshot.c.source_snapshot_id
                 == source_snapshot.c.source_snapshot_id,
+            ).outerjoin(
+                _full_text_snapshot,
+                task_source_snapshot.c.full_text_snapshot_id
+                == _full_text_snapshot.c.source_snapshot_id,
             )
         )
         .where(task_source_snapshot.c.task_id == task_id)
@@ -1055,6 +1269,17 @@ def evidence_page(
     cited_snapshots = (
         _cited_snapshot_ids(conn, synthesis["artefact_id"]) if synthesis is not None else set()
     )
+    appraised_sources = (
+        set(
+            conn.execute(
+                select(source_appraisal_result.c.task_source_snapshot_id).where(
+                    source_appraisal_result.c.task_id == task_id
+                )
+            ).scalars()
+        )
+        if appraised is not None
+        else None
+    )
     themed_sources = (
         set(
             conn.execute(
@@ -1064,13 +1289,31 @@ def evidence_page(
                 )
             ).scalars()
         )
+        # Round 14: on an options-scoping task a longlist theme's id lists
+        # the documents of its options. The two id spaces never collide.
+        | _longlist_theme_sources(conn, task_id, theme)
         if theme is not None
         else None
+    )
+    wanted_country = (
+        None
+        if country is None
+        else ""
+        if country.strip() in (GEOGRAPHY_NOT_REPORTED, COUNTRY_NONE)
+        else (country_name(country) or "").casefold()
     )
     sortable_items: list[tuple[EvidenceItemOut, int | None]] = []
     for row in rows:
         metadata = row.metadata if isinstance(row.metadata, Mapping) else {}
         screen = screens.get(row.task_source_snapshot_id)
+        item_country = country_name(publication_country(metadata))
+        if wanted_country is not None and (item_country or "").casefold() != wanted_country:
+            continue
+        if returned is not None and (
+            metadata.get("backend") != returned[0]
+            or metadata.get("backend_record_id") not in returned[1]
+        ):
+            continue
         # Python-side membership over an already-fetched row + a precomputed
         # set, not a SQL join — tss_owns_snapshot doesn't fit here (task 029
         # delta-review sweep).
@@ -1130,6 +1373,20 @@ def evidence_page(
         ):
             continue
         abstract, abstract_source = _abstract_fields(metadata)
+        if appraised_sources is not None and (
+            (row.task_source_snapshot_id in appraised_sources) != appraised
+        ):
+            continue
+        if depth is not None and (
+            _read_depth(
+                read_in_full=row.full_text_status == "ingested",
+                status=status,
+                screen_status=screen.status if screen is not None else None,
+                abstract=abstract,
+            )
+            != depth
+        ):
+            continue
         sortable_items.append(
             (
                 EvidenceItemOut(
@@ -1158,6 +1415,11 @@ def evidence_page(
                     read_in_full=row.full_text_status == "ingested",
                     abstract=abstract,
                     abstract_source=abstract_source,
+                    country=item_country,
+                    full_text_url=_full_text_url(
+                        row.full_text_status, row.full_text_locator
+                    ),
+                    full_text_status=cast(Any, row.full_text_status),
                 ),
                 quality_score,
             )
@@ -1529,13 +1791,20 @@ OPTION_INCLUDED = "option.included"
 #: *remove from shortlist*, written by the same module.
 OPTION_SHORTLISTED = "option.shortlisted"
 OPTION_UNSHORTLISTED = "option.unshortlisted"
+#: A reason given after the user's own one-click exclusion (task 058, round
+#: 13): the exclusion stands, its reason is filled in.
+OPTION_EXCLUSION_REASON_ADDED = "option.exclusion_reason_added"
 OPTION_EVENT_KINDS: tuple[str, ...] = (
     OPTION_ADDED,
     OPTION_EXCLUDED,
     OPTION_INCLUDED,
     OPTION_SHORTLISTED,
     OPTION_UNSHORTLISTED,
+    OPTION_EXCLUSION_REASON_ADDED,
 )
+#: The not-covered note rewritten alone for the places as they stand (task
+#: 058, round 14): one History line, Policy Atlas's.
+SHORTLIST_NOTE_UPDATED = "shortlist.note_updated"
 #: Policy Atlas's shortlist proposal (task 055, A7): one event per proposal,
 #: the record of its places, note, appetite and versions. Written by the
 #: ``shortlist`` component; ``SHORTLIST_PROPOSED`` is imported from there (top
@@ -1558,80 +1827,116 @@ _EVENT_KINDS = {
     "plan.approved",
     *OPTION_EVENT_KINDS,
     SHORTLIST_PROPOSED,
+    SHORTLIST_NOTE_UPDATED,
 } | both_generations(*LIFECYCLE_EVENT_KINDS)
 
 
-def _option_event_summary(event_type: str, payload: Mapping[str, Any]) -> str:
-    """One History sentence naming the verb, the option and the reason."""
-    name = str(payload.get("option_name") or "an option")
-    reason = payload.get("reason")
-    if event_type in (OPTION_SHORTLISTED, OPTION_UNSHORTLISTED):
-        verb = "Added" if event_type == OPTION_SHORTLISTED else "Removed"
-        where = "to" if event_type == OPTION_SHORTLISTED else "from"
-        return f"{verb} \u201c{name}\u201d {where} the shortlist."
-    verb = {
-        OPTION_ADDED: "Added the option",
-        OPTION_EXCLUDED: "Excluded the option",
-        OPTION_INCLUDED: "Included the option",
-    }[event_type]
-    again = " again" if event_type == OPTION_INCLUDED else ""
-    sentence = f"{verb} \u201c{name}\u201d{again}."
-    if isinstance(reason, str) and reason.strip():
-        sentence = f"{sentence[:-1]}: {reason.strip()}"
-    return sentence
+#: The verb each option event's History line uses.
+_OPTION_VERBS = {
+    OPTION_ADDED: "added",
+    OPTION_EXCLUDED: "excluded",
+    OPTION_INCLUDED: "included",
+    OPTION_SHORTLISTED: "shortlisted",
+    OPTION_UNSHORTLISTED: "unshortlisted",
+    OPTION_EXCLUSION_REASON_ADDED: "gave a reason",
+}
+
+#: The bare lifecycle kind of each stored lifecycle event type, both
+#: generations (``task.renamed`` and pre-038 ``project.renamed`` alike).
+_LIFECYCLE_KIND = {
+    event_type: kind
+    for kind in LIFECYCLE_EVENT_KINDS
+    for event_type in both_generations(kind)
+}
 
 
-def _event_decision(row: Any, walk_id: uuid.UUID | None = None) -> DecisionOut:
+def _event_decision(
+    row: Any, people: history.People, walk_id: uuid.UUID | None = None
+) -> DecisionOut:
+    """One audit event as its History line (task 058, round 10: what happened, by whom)."""
     payload = row.payload if isinstance(row.payload, Mapping) else {}
-    actor = payload.get("actor") if isinstance(payload.get("actor"), str) else None
-    if row.event_type in OPTION_EVENT_KINDS:
-        return DecisionOut(
-            sequence=int(row.sequence),
-            occurred_at=row.occurred_at,
-            kind=row.event_type,
-            summary=_option_event_summary(row.event_type, payload),
-            decided_by=cast(Any, "user") if actor else None,
-            detail=dict(payload),
-            capability_run_id=walk_id,
+    event_type = row.event_type
+    actor: history.Actor | None = None
+    decided_by: str | None = None
+    if event_type in OPTION_EVENT_KINDS:
+        actor = people.actor(payload.get("actor"))
+        decided_by = "agent" if actor is history.SYSTEM else "user"
+        summary = history.option_sentence(
+            _OPTION_VERBS[event_type],
+            str(payload.get("option_name") or "an option"),
+            payload.get("reason"),
+            actor,
         )
-    if row.event_type == SHORTLIST_PROPOSED:
+    elif event_type == SHORTLIST_NOTE_UPDATED:
+        actor, decided_by = history.SYSTEM, "agent"
+        summary = f"{history.POLICY_ATLAS} updated the shortlist note."
+    elif event_type == SHORTLIST_PROPOSED:
         places = payload.get("places")
         count = len(places) if isinstance(places, list) else 0
-        return DecisionOut(
-            sequence=int(row.sequence),
-            occurred_at=row.occurred_at,
-            kind=row.event_type,
-            summary=f"Policy Atlas proposed {count} place{'' if count == 1 else 's'}.",
-            decided_by=cast(Any, "agent"),
-            detail=dict(payload),
-            capability_run_id=walk_id,
-        )
-    text = {
-        "component.completed": "Completed an evidence-search step.",
-        "component.failed": "An evidence-search step failed.",
-        "component.skipped": "Skipped an evidence-search step.",
-        "search.executed": "Executed a search query.",
-        "run.opened": "Opened an evidence-search run.",
-        "run.parked": "Parked the run for a check-in.",
-        "run.finished": "Finished the run.",
-        "run.interrupted": "Interrupted the run.",
-        "plan.approved": "Approved the plan.",
-        # Both generations read as the same sentence — the words on screen are
-        # today's, whichever word the stored row carries.
-        **dict.fromkeys(both_generations("renamed"), "Renamed the task."),
-        **dict.fromkeys(both_generations("archived"), "Archived the task."),
-        **dict.fromkeys(both_generations("shared_publicly"), "Made the task public."),
-        **dict.fromkeys(both_generations("unshared"), "Made the task private."),
-    }[row.event_type]
+        actor, decided_by = history.SYSTEM, "agent"
+        summary = f"{history.POLICY_ATLAS} proposed {count} place{'' if count == 1 else 's'}."
+    elif event_type in _LIFECYCLE_KIND:
+        actor, decided_by = people.actor(payload.get("actor")), "user"
+        summary = history.lifecycle_sentence(_LIFECYCLE_KIND[event_type], payload, actor)
+    elif event_type == "plan.approved":
+        # Only the task's owner approves its plan; the payload names no one.
+        actor, decided_by = people.actor(None), "user"
+        summary = f"{actor.subject} approved the plan."
+    elif event_type.startswith("component."):
+        summary = history.step_sentence(event_type, payload)
+    else:
+        summary = history.run_sentence(event_type, payload)
+    person = actor if actor is not None and actor is not history.SYSTEM else None
     return DecisionOut(
         sequence=int(row.sequence),
         occurred_at=row.occurred_at,
-        kind=row.event_type,
-        summary=text,
-        decided_by=cast(Any, "user") if actor else None,
+        kind=event_type,
+        summary=summary,
+        decided_by=cast(Any, decided_by),
         detail=dict(payload),
         capability_run_id=walk_id,
+        actor_display=person.display if person is not None else None,
+        actor_is_viewer=person.is_viewer if person is not None else None,
     )
+
+
+def _search_decisions(
+    rows: Sequence[Any], walks: Mapping[uuid.UUID, uuid.UUID]
+) -> list[DecisionOut]:
+    """One History line per run's searches, not one per query (task 058, round 10).
+
+    The line quotes the first few distinct queries and counts the rest; the
+    detail carries every query, in the order sent, so the row can expand to
+    them. Raw search payloads (backends, filters, errors) stay off the page.
+    """
+    grouped: dict[uuid.UUID | None, list[Any]] = {}
+    for row in rows:
+        walk = walks.get(row.run_id) if row.run_id is not None else None
+        grouped.setdefault(walk, []).append(row)
+    out: list[DecisionOut] = []
+    for walk, members in grouped.items():
+        members.sort(key=lambda member: int(member.sequence))
+        queries = list(
+            dict.fromkeys(
+                payload["query"].strip()
+                for member in members
+                if isinstance(payload := member.payload, Mapping)
+                and isinstance(payload.get("query"), str)
+                and payload["query"].strip()
+            )
+        )
+        first = members[0]
+        out.append(
+            DecisionOut(
+                sequence=int(first.sequence),
+                occurred_at=first.occurred_at,
+                kind="search.executed",
+                summary=history.search_sentence(queries),
+                detail={"queries": queries},
+                capability_run_id=walk,
+            )
+        )
+    return out
 
 
 def walks_of_event_runs(
@@ -1671,36 +1976,75 @@ def walks_of_event_runs(
 
 
 def decisions_page(
-    conn: Connection, task_id: uuid.UUID, page: int, page_size: int
+    conn: Connection,
+    task_id: uuid.UUID,
+    page: int,
+    page_size: int,
+    viewer_user_id: str | None = None,
 ) -> Page[DecisionOut]:
-    """Return steering-history decisions plus the explicitly allowlisted audit events."""
-    allowed = (
-        conn.execute(
-            select(event_log).where(
-                event_log.c.task_id == task_id, event_log.c.event_type.in_(_EVENT_KINDS)
-            )
+    """Return the task's History: steering decisions plus the allowlisted audit events.
+
+    Args:
+        conn: Open database connection.
+        task_id: The task.
+        page: 1-indexed page.
+        page_size: Rows per page.
+        viewer_user_id: The reader, so their own acts read "You" (task 058,
+            round 10); ``None`` names everyone.
+
+    Returns:
+        One page, newest first. A run's searches are one row, not one per query.
+    """
+    rows = conn.execute(
+        select(event_log).where(
+            event_log.c.task_id == task_id, event_log.c.event_type.in_(_EVENT_KINDS)
         )
-        .mappings()
-        .all()
+    ).all()
+    walks = walks_of_event_runs(conn, task_id, [row._mapping for row in rows])
+    stories = steering_history(conn, task_id)
+    people = history.People(
+        conn,
+        task_id,
+        viewer_user_id,
+        {
+            row.payload["actor"]
+            for row in rows
+            if isinstance(row.payload, Mapping) and isinstance(row.payload.get("actor"), str)
+        },
     )
-    walks = walks_of_event_runs(conn, task_id, allowed)
     decision_events: list[DecisionOut] = [
-        _event_decision(row, walks.get(row.run_id) if row.run_id is not None else None)
-        for row in allowed
+        _event_decision(row, people, walks.get(row.run_id) if row.run_id is not None else None)
+        for row in rows
+        if row.event_type != "search.executed"
     ]
-    for story in steering_history(conn, task_id):
+    decision_events.extend(
+        _search_decisions([row for row in rows if row.event_type == "search.executed"], walks)
+    )
+    for story in stories:
+        labels: dict[str, str] = {}
         for event in story["events"]:
+            payload = event["payload"] if isinstance(event["payload"], Mapping) else {}
+            if event["event_type"] == "steering.pause":
+                # The card the next decision answers: its options' labels.
+                labels = history.option_labels(payload)
+                continue
             if event["event_type"] != "steering.decision":
                 continue
-            payload = event["payload"] if isinstance(event["payload"], Mapping) else {}
             # Pre-038 rows carry the old actor word; the set would drop them.
             decided_by = canonical_actor(payload.get("decided_by"))
+            actor = people.actor(None) if decided_by == "user" else history.SYSTEM
+            option_id = payload.get("option_id")
+            person = actor if actor is not history.SYSTEM else None
             decision_events.append(
                 DecisionOut(
                     sequence=int(event["sequence"]),
                     occurred_at=event["occurred_at"],
                     kind="steering.decision",
-                    summary="Recorded a steering decision.",
+                    summary=history.check_in_sentence(
+                        payload,
+                        labels.get(option_id) if isinstance(option_id, str) else None,
+                        actor,
+                    ),
                     decided_by=cast(Any, decided_by)
                     if decided_by in {"user", "agent", "standing_default"}
                     else None,
@@ -1708,6 +2052,8 @@ def decisions_page(
                     # A steering event's walk is its story's key, never an
                     # event_log.run_id join (see runtime.steering_history).
                     capability_run_id=story["capability_run_id"],
+                    actor_display=person.display if person is not None else None,
+                    actor_is_viewer=person.is_viewer if person is not None else None,
                 )
             )
     decision_events.sort(key=lambda item: item.sequence, reverse=True)
@@ -1867,6 +2213,17 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
     citations_by_annotation: dict[uuid.UUID, list[Any]] = {}
     for row in citation_rows:
         citations_by_annotation.setdefault(row.annotation_id, []).append(row)
+    # Reference numbers go to documents in order of first citation, so the
+    # walk below must be in one fixed order or a report could renumber between
+    # two loads (task 058, round 7). The order is the order the run saved and
+    # numbered its sections live: body sections in report order, then the key
+    # findings, then the case studies (``_save_rank``); within a block, claims
+    # by their span; within a claim, citations by chunk, quote and id. The live
+    # mirror is ``evidence_search/synthesis/live_citations.py``.
+    rank_by_block = _save_rank(parsed_specs)
+    annotations = sorted(annotations, key=lambda row: _annotation_order(row, rank_by_block))
+    for rows in citations_by_annotation.values():
+        rows.sort(key=lambda row: (row.chunk_id, row.quote, row.citation_id))
     refs: dict[uuid.UUID, int] = {}
     reference_order: list[uuid.UUID] = []
     claims_by_block: dict[uuid.UUID, list[ClaimOut]] = {block_id: [] for block_id in ids}
@@ -1890,7 +2247,6 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                 reference_order.append(doc_key)
             source_meta, locator_text = meta.get(_envelope_id(snapshot_id), ({}, "Unknown source"))
             label = citation_labels.get(tss_id) if tss_id is not None else None
-            payload = row_payload
             claim_citations.append(
                 CitationOut(
                     citation_id=cited.citation_id,
@@ -1898,12 +2254,6 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                     source_id=tss_id,
                     source_title=_title(source_meta, locator_text),
                     quote=cited.quote,
-                    grounding_tier=cast(str | None, payload.get("verdict"))
-                    if isinstance(payload.get("verdict"), str)
-                    else None,
-                    grounding_rationale=cast(str, payload.get("rationale"))
-                    if isinstance(payload.get("rationale"), str)
-                    else None,
                     appraisal_label=appraisal_label(label.quality_score, unrated=label.unrated)
                     if label is not None
                     else None,
@@ -1923,6 +2273,12 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                 text=row.content,
                 span=span,
                 citations=claim_citations,
+                grounding_tier=cast(str, row_payload.get("verdict"))
+                if isinstance(row_payload.get("verdict"), str)
+                else None,
+                grounding_rationale=cast(str, row_payload.get("rationale"))
+                if isinstance(row_payload.get("rationale"), str)
+                else None,
                 weakly_grounded=_weakly_grounded(row.payload),
                 gap=_gap_out(row.payload),
                 theme=_theme_out(row.payload, characterisation_themes, grouping_themes),
@@ -2564,6 +2920,19 @@ def _public_backend_name(value: str) -> str | None:
     return {"openalex": "OpenAlex", "overton": "Overton"}.get(value)
 
 
+#: The search verbs that are passes, not written queries (round 11): the pass
+#: kind and its finished words (``ACTIVITY`` keys, many and one).
+_PASS_WORDS: dict[str, tuple[Literal["citations", "lookup"], str, str]] = {
+    "fetch_citations": (
+        "citations",
+        "search.citations_followed",
+        "search.citations_followed_one",
+    ),
+    "fetch_references": ("lookup", "search.works_looked_up", "search.works_looked_up_one"),
+    "fetch_by_id": ("lookup", "search.documents_looked_up", "search.documents_looked_up_one"),
+}
+
+
 def _acquire_run_ids(
     conn: Connection, task_id: uuid.UUID, evidence_scope_id: uuid.UUID
 ) -> list[uuid.UUID]:
@@ -2645,7 +3014,7 @@ def _backend_details(
     """
     events = (
         conn.execute(
-            select(event_log.c.payload)
+            select(event_log.c.run_id, event_log.c.payload, event_log.c.sequence)
             .where(
                 event_log.c.task_id == task_id,
                 event_log.c.run_id.in_(run_ids),
@@ -2657,13 +3026,18 @@ def _backend_details(
             # between identical requests.
             .order_by(event_log.c.sequence)
         )
-        .scalars()
         .all()
         if run_ids
         else []
     )
     queries: dict[str, list[CoverageQueryOut]] = {name: [] for name in backend_names}
-    for payload in events:
+    # Round 11: a citations or lookup pass is many id calls; it is one row,
+    # named in words, in the order the passes ran (one per run, backend and
+    # verb). Before, its calls were listed as queries, their ids as the text.
+    # Round 12: a row's ``query_id`` is its event's sequence (a pass's: its
+    # first call's), the key the sources filter takes.
+    passes: dict[tuple[Any, str, str], tuple[set[str], int, int]] = {}
+    for run_id, payload, sequence in events:
         if not isinstance(payload, Mapping):
             continue
         backend = payload.get("backend")
@@ -2671,7 +3045,25 @@ def _backend_details(
         query, results = payload.get("query"), payload.get("result_count")
         if name not in queries or not isinstance(query, str) or not isinstance(results, int):
             continue
-        queries[name].append(CoverageQueryOut(query=query, results=results))
+        verb = payload.get("verb")
+        if verb in _PASS_WORDS:
+            key = (run_id, name, verb)
+            ids, total, first = passes.get(key, (set(), 0, sequence))
+            ids.update(part for part in query.split("|") if part)
+            passes[key] = (ids, total + results, first)
+            continue
+        queries[name].append(
+            CoverageQueryOut(query=query, results=results, query_id=sequence)
+        )
+    pass_rows: dict[str, list[CoveragePassOut]] = {name: [] for name in backend_names}
+    for (_run_id, name, verb), (ids, total, first) in passes.items():
+        kind, many, one = _PASS_WORDS[verb]
+        words = activity(one) if len(ids) == 1 else activity(many, count=len(ids))
+        pass_rows[name].append(
+            CoveragePassOut.model_validate(
+                {"pass": kind, "query": words, "results": total, "query_id": first}
+            )
+        )
     effective = effective_screen_rows()
     relevance_rows = (
         conn.execute(
@@ -2701,9 +3093,11 @@ def _backend_details(
     return [
         CoverageBackendDetailOut(
             backend=name,
-            results=sum(query.results for query in queries[name]),
+            results=sum(query.results for query in queries[name])
+            + sum(row.results for row in pass_rows[name]),
             relevant=relevant[name],
             queries=queries[name],
+            passes=pass_rows[name],
         )
         for name in backend_names
     ]
@@ -2724,12 +3118,17 @@ def source_dossier_out(
                 task_source_snapshot.c.full_text_error,
                 source_snapshot.c.metadata,
                 source_snapshot.c.source_locator,
+                _FULL_TEXT_LOCATOR,
             )
             .select_from(
                 task_source_snapshot.join(
                     source_snapshot,
                     task_source_snapshot.c.source_snapshot_id
                     == source_snapshot.c.source_snapshot_id,
+                ).outerjoin(
+                    _full_text_snapshot,
+                    task_source_snapshot.c.full_text_snapshot_id
+                    == _full_text_snapshot.c.source_snapshot_id,
                 )
             )
             .where(
@@ -2832,6 +3231,8 @@ def source_dossier_out(
         read_in_full=row["full_text_status"] == "ingested",
         abstract=abstract,
         abstract_source=abstract_source,
+        full_text_url=_full_text_url(row["full_text_status"], row["full_text_locator"]),
+        full_text_status=cast(Any, row["full_text_status"]),
         publisher=_metadata_text(metadata, "publisher_org"),
         record_type=_metadata_text(metadata, "record_type"),
         language=_metadata_text(metadata, "language"),
@@ -3333,6 +3734,44 @@ def _lever_reason(result: Any | None, option_id: uuid.UUID) -> str | None:
     return reason if isinstance(reason, str) and reason.strip() else None
 
 
+def _longlist_theme_sources(
+    conn: Connection, task_id: uuid.UUID, theme_id: uuid.UUID
+) -> set[uuid.UUID]:
+    """The documents of every option in one longlist theme (task 058, round 14).
+
+    The union of the theme's options' member documents in this task, as the
+    latest longlist names the theme's options; empty when the task has no
+    longlist or no such theme (an Evidence search task's ``theme`` is a
+    characterisation theme instead).
+    """
+    result = _latest_longlist_row(conn, task_id)
+    if result is None or not isinstance(result.themes, list):
+        return set()
+    option_ids: list[uuid.UUID] = []
+    for raw in result.themes:
+        theme = _as_mapping(raw)
+        if str(theme.get("theme_id")) != str(theme_id):
+            continue
+        for value in _string_list(theme.get("option_ids")):
+            try:
+                option_ids.append(uuid.UUID(value))
+            except ValueError:
+                continue
+    if not option_ids:
+        return set()
+    return {
+        tss_id
+        for tss_id in conn.execute(
+            select(option_membership.c.task_source_snapshot_id).where(
+                option_membership.c.task_id == task_id,
+                option_membership.c.option_id.in_(option_ids),
+                option_membership.c.task_source_snapshot_id.is_not(None),
+            )
+        ).scalars()
+        if tss_id is not None
+    }
+
+
 def _latest_longlist_row(conn: Connection, task_id: uuid.UUID) -> Any | None:
     """The task's latest ``longlist_result`` row (a longlist exists iff one does)."""
     return conn.execute(
@@ -3514,7 +3953,13 @@ def _profile_out(entry: Mapping[str, Any], option_id: uuid.UUID) -> OptionProfil
         for value in (setting.get("main"), setting.get("second"))
         if isinstance(value, str) and value.strip()
     ]
-    return OptionProfileOut(lines=lines, settings=settings)
+    stored_acts_on = setting.get("acts_on")
+    acts_on = (
+        [value for value in stored_acts_on if isinstance(value, str) and value.strip()]
+        if isinstance(stored_acts_on, list)
+        else []
+    )
+    return OptionProfileOut(lines=lines, settings=settings, acts_on=acts_on)
 
 
 def _authority_out(record: Mapping[str, Any]) -> AuthorityOut | None:
@@ -3607,7 +4052,9 @@ def _shortlist_state_out(row: Any) -> ShortlistStateOut | None:
     return ShortlistStateOut(state=row.shortlist_state, reason=row.shortlist_reason)
 
 
-def _shortlist_out(stored: object, current: ScopingPlan | None) -> ShortlistOut:
+def _shortlist_out(
+    stored: object, current: ScopingPlan | None, places: Iterable[uuid.UUID] = ()
+) -> ShortlistOut:
     """The latest shortlist proposal, as the longlist serves it (task 055, PG1).
 
     A row written before the shortlist existed holds ``{}``: no note, no
@@ -3618,6 +4065,7 @@ def _shortlist_out(stored: object, current: ScopingPlan | None) -> ShortlistOut:
     Args:
         stored: ``longlist_result.shortlist``.
         current: The current approved plan, or ``None`` when it cannot be read.
+        places: The options now on the shortlist, for ``note_stale``.
 
     Returns:
         The served proposal.
@@ -3629,6 +4077,7 @@ def _shortlist_out(stored: object, current: ScopingPlan | None) -> ShortlistOut:
         note=note if isinstance(note, str) and note.strip() else None,
         provenance=provenance,
         stale=shortlist_proposal_stale(provenance, current),
+        note_stale=note_stale(shortlist, places),
     )
 
 
@@ -3874,6 +4323,19 @@ def _search_labels(
     return labels_for_snapshots(conn, task_id=task_id, tss_ids=tss_ids) if tss_ids else {}
 
 
+def _member_documents(conn: Connection, task_id: uuid.UUID) -> dict[uuid.UUID, set[uuid.UUID]]:
+    """Each option's member documents in this task (task 058, round 14)."""
+    documents: dict[uuid.UUID, set[uuid.UUID]] = {}
+    for option_id, tss_id in conn.execute(
+        select(option_membership.c.option_id, option_membership.c.task_source_snapshot_id).where(
+            option_membership.c.task_id == task_id,
+            option_membership.c.task_source_snapshot_id.is_not(None),
+        )
+    ).all():
+        documents.setdefault(option_id, set()).add(tss_id)
+    return documents
+
+
 def _members_by_option(conn: Connection, task_id: uuid.UUID) -> set[uuid.UUID]:
     """The task's options that hold at least one membership row."""
     return {
@@ -3968,6 +4430,8 @@ def _search_documents(
                     evidence_type=evidence_type,
                     tier=tier,
                     year=metadata_year(metadata),
+                    authors=[author.name for author in _authorships(metadata)],
+                    venue=_venue(metadata),
                 ),
                 label.quality_score if label is not None else None,
                 (unit.study_country, unit.study_geography),
@@ -4033,6 +4497,7 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
 
     themes: list[LonglistThemeOut] = []
     themed: list[uuid.UUID] = []
+    documents_by_option = _member_documents(conn, task_id)
     for raw in result.themes if isinstance(result.themes, list) else []:
         theme = _as_mapping(raw)
         try:
@@ -4054,6 +4519,11 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
                 name=str(theme.get("name") or ""),
                 description=str(theme.get("description") or ""),
                 option_ids=option_ids,
+                # Round 14: each document once, however many of the theme's
+                # options hold it; the count `evidence?theme=` lists.
+                document_count=len(
+                    set().union(*(documents_by_option.get(oid, set()) for oid in option_ids))
+                ),
             )
         )
     themed_set = set(themed)
@@ -4135,7 +4605,15 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
             ]
         },
         taxonomy_version=taxonomy if isinstance(taxonomy, str) else TAXONOMY_VERSION,
-        shortlist=_shortlist_out(result.shortlist, current_plan),
+        shortlist=_shortlist_out(
+            result.shortlist,
+            current_plan,
+            [
+                row.option_id
+                for row in rows
+                if row.shortlist_state in PLACE_STATES and row.merged_into_option_id is None
+            ],
+        ),
         plan_inputs_changed=_plan_inputs_changed(
             current_plan, built_from[1] if built_from else None
         ),
@@ -4394,6 +4872,8 @@ def _option_documents(
                     evidence_type=evidence_type,
                     tier=tier,
                     year=metadata_year(metadata),
+                    authors=[author.name for author in _authorships(metadata)],
+                    venue=_venue(metadata),
                 ),
                 label.quality_score if label is not None else None,
                 (country, geography),
@@ -4477,6 +4957,109 @@ def _place_sentences_out(
         )
         for group in group_places(_place_documents(lines), where_country=where_country)
     ]
+
+
+#: A child walk's status → the option row's search status (task 058, N22).
+_SEARCH_STATUS: dict[str, OptionSearchStatus] = {
+    "running": "searching",
+    "paused": "searching",
+    "succeeded": "searched",
+    "degraded": "searched",
+    "failed": "failed",
+    "aborted": "failed",
+    "interrupted": "failed",
+}
+
+
+def options_out(conn: Connection, task_id: uuid.UUID) -> OptionsOut:
+    """Every option row of the task, each with where its own search stands (task 058, N22).
+
+    Served while the longlist is being built, so it reads the option rows and
+    the option searches only, never the longlist result. An option's search
+    is the most recent walk under a ``targeted`` intent record naming the
+    option (a longlist walk's child, or the walk *add* opened); ``found`` is
+    the acquire count of that walk's latest acquire completion.
+
+    Args:
+        conn: Open database connection. Read-only.
+        task_id: The task. Only its own options are read.
+
+    Returns:
+        The rows oldest first, or an empty list before any option exists.
+    """
+    rows = conn.execute(
+        select(
+            option.c.option_id,
+            option.c.name,
+            option.c.description,
+            option.c.origin,
+            option.c.state,
+            option.c.merged_into_option_id,
+        )
+        .where(option.c.task_id == task_id)
+        .order_by(option.c.created_at, option.c.option_id)
+    ).all()
+    if not rows:
+        return OptionsOut()
+    option_key = evidence_scope.c.context["option_id"].astext
+    walks = conn.execute(
+        select(capability_run.c.capability_run_id, capability_run.c.status, option_key)
+        .select_from(
+            capability_run.join(
+                evidence_scope,
+                (evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
+                & (evidence_scope.c.task_id == capability_run.c.task_id),
+            )
+        )
+        .where(capability_run.c.task_id == task_id)
+        .where(evidence_scope.c.purpose == "targeted")
+        .where(option_key.in_([str(row.option_id) for row in rows]))
+        .order_by(capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc())
+    ).all()
+    latest: dict[str, tuple[uuid.UUID, str]] = {}
+    for walk_id, status, option_id in walks:
+        latest.setdefault(option_id, (walk_id, status))
+    acquired: dict[uuid.UUID, int] = {}
+    if latest:
+        completions = conn.execute(
+            select(runs.c.capability_run_id, event_log.c.payload["acquired"].astext)
+            .select_from(
+                event_log.join(
+                    runs,
+                    (runs.c.run_id == event_log.c.run_id) & (runs.c.task_id == event_log.c.task_id),
+                )
+            )
+            .where(event_log.c.task_id == task_id)
+            .where(event_log.c.event_type == "component.completed")
+            .where(event_log.c.payload["component"].astext == "acquire")
+            .where(runs.c.capability_run_id.in_([walk_id for walk_id, _ in latest.values()]))
+            .order_by(event_log.c.sequence.desc())
+        )
+        for walk_id, value in completions:
+            if walk_id in acquired:
+                continue
+            try:
+                acquired[walk_id] = int(value)
+            except (TypeError, ValueError):
+                continue
+    options: list[OptionProgressOut] = []
+    for row in rows:
+        search = latest.get(str(row.option_id))
+        options.append(
+            OptionProgressOut(
+                option_id=row.option_id,
+                name=row.name,
+                description=row.description,
+                origin=row.origin,
+                state=row.state,
+                merged_into_option_id=row.merged_into_option_id,
+                search_status=(
+                    "queued" if search is None else _SEARCH_STATUS.get(search[1], "searching")
+                ),
+                found=acquired.get(search[0]) if search is not None else None,
+            )
+        )
+    return OptionsOut(options=options)
 
 
 def option_out(conn: Connection, task_id: uuid.UUID, option_id: uuid.UUID) -> OptionOut | None:

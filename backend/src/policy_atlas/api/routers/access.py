@@ -1115,8 +1115,9 @@ def accessible_project(
 ) -> Access:
     """Resolve one project under the caller's grade, or raise 404/403.
 
-    Mirrors :func:`accessible_task` minus the archived leg: ``project``
-    has no ``status`` column, so there is nothing to widen.
+    Mirrors :func:`accessible_task` minus the archived leg: an archived
+    project (``archived_at`` set, task 058 round 11) stays readable and
+    writable by id; only the list hides it by default.
 
     Args:
         conn: Open database connection.

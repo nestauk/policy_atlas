@@ -21,7 +21,7 @@ from fastapi.routing import APIRoute
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api.app import create_app
-from policy_atlas.api.contract import PAGE_SIZE_DEFAULT, TaskOut
+from policy_atlas.api.contract import LIST_PAGE_SIZE_DEFAULT, TaskOut
 from policy_atlas.api.dev_issuer import init
 from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import capability_run, evidence_scope
@@ -51,6 +51,9 @@ _CONDITIONALLY_PUBLIC_GETS = frozenset(
         # Task 045 (S12): the longlist and the option card, public like the artefact.
         "/api/v1/tasks/{task_id}/longlist",
         "/api/v1/tasks/{task_id}/options/{option_id}",
+        # Task 058 (N22): the option rows while the longlist is built, public
+        # like the longlist; an empty list (200) before any option exists.
+        "/api/v1/tasks/{task_id}/options",
         # Task 046, amendment 3 (R67): the dossier's records, public like the dossier.
         "/api/v1/tasks/{task_id}/sources/{source_id}/records",
     }
@@ -75,7 +78,7 @@ _PUBLIC_STRUCTURAL_GETS = _CONDITIONALLY_PUBLIC_GETS - frozenset(
 
 
 def test_pagination_envelope_shape_and_defaults(engine: Engine, tmp_path: Path) -> None:
-    """List routes return exactly `{data, pagination:{page, page_size, total_items}}`."""
+    """List routes return exactly `{data, pagination:{page, page_size, total_items, has_more}}`."""
     del engine  # forces the session migration fixture before any request hits the DB
     with api_client(tmp_path) as (client, owner, _other):
         task_id = create_task(client, owner)
@@ -83,11 +86,15 @@ def test_pagination_envelope_shape_and_defaults(engine: Engine, tmp_path: Path) 
         assert listed.status_code == 200
         body = listed.json()
         assert set(body) == {"data", "pagination"}
-        assert set(body["pagination"]) == {"page", "page_size", "total_items"}
+        assert set(body["pagination"]) == {"page", "page_size", "total_items", "has_more"}
+        assert body["pagination"]["has_more"] is False
         assert body["pagination"]["page"] == 1
-        assert body["pagination"]["page_size"] == PAGE_SIZE_DEFAULT
+        assert body["pagination"]["page_size"] == LIST_PAGE_SIZE_DEFAULT == 20
         assert body["pagination"]["total_items"] == 1
         assert body["data"][0]["task_id"] == task_id
+        # The Projects list pages at the same twenty (task 058, round 12).
+        projects = client.get("/api/v1/projects", headers=owner).json()
+        assert projects["pagination"]["page_size"] == LIST_PAGE_SIZE_DEFAULT
 
 
 def test_pagination_respects_page_size_across_pages(tmp_path: Path) -> None:
@@ -98,12 +105,22 @@ def test_pagination_respects_page_size_across_pages(tmp_path: Path) -> None:
 
         first = client.get("/api/v1/tasks?page=1&page_size=2", headers=owner)
         assert first.status_code == 200
-        assert first.json()["pagination"] == {"page": 1, "page_size": 2, "total_items": 3}
+        assert first.json()["pagination"] == {
+            "page": 1,
+            "page_size": 2,
+            "total_items": 3,
+            "has_more": True,
+        }
         assert len(first.json()["data"]) == 2
 
         second = client.get("/api/v1/tasks?page=2&page_size=2", headers=owner)
         assert second.status_code == 200
-        assert second.json()["pagination"] == {"page": 2, "page_size": 2, "total_items": 3}
+        assert second.json()["pagination"] == {
+            "page": 2,
+            "page_size": 2,
+            "total_items": 3,
+            "has_more": False,
+        }
         assert len(second.json()["data"]) == 1
 
 

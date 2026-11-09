@@ -27,6 +27,7 @@ from policy_atlas.runtime import harness
 from policy_atlas.runtime.baseline_gate import (
     GATE_HEADING,
     KEY_ASSUMPTION_ABSENT,
+    baseline_settings,
     render_baseline_gate,
 )
 from policy_atlas.runtime.capability_registry import (
@@ -179,6 +180,8 @@ def test_a_scoping_walk_pauses_at_the_gate_in_every_attended_mode(
             "where": "United Kingdom",
             "outcomes": ["the NEET rate"],
             "depth": "standard",
+            # Task 058 (N19): the gate card's facts line names the risk appetite.
+            "risk_appetite": "Balanced: mostly evaluated, plus one or two not yet evaluated",
         }
         assert point["bundle"]["artefact_id"] is not None
         assert render.startswith(GATE_HEADING)
@@ -440,3 +443,11 @@ def test_render_shows_the_depth_screen_label_not_the_key() -> None:
     )
     assert "Depth: Standard scoping" in text
     assert "Depth: standard" not in text
+
+
+def test_settings_carry_the_risk_appetite_label() -> None:
+    """Task 058, N19: the gate card shows the plan's risk appetite in the user's words."""
+    from policy_atlas.runtime.scoping_plan import RISK_APPETITE_LABELS
+
+    plan = scoping_plan().model_copy(update={"risk_appetite": "open_to_untested"})
+    assert baseline_settings(plan)["risk_appetite"] == RISK_APPETITE_LABELS["open_to_untested"]

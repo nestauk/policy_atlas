@@ -62,10 +62,10 @@ export function SplashFeatureSteps() {
           >
             <div className={f.flip ? "md:order-2" : undefined}>
               <div className="text-body font-extrabold text-aqua">{f.n}</div>
-              <h2 className="mt-3 max-w-[18em] font-display text-[clamp(28px,3vw,40px)] font-extrabold leading-[1.1] tracking-[-0.02em] text-pretty text-white">
+              <h2 className="mt-3 max-w-[18em] font-display text-hero-2 font-extrabold tracking-[-0.02em] text-pretty text-white">
                 {f.title}
               </h2>
-              <p className="mt-[18px] max-w-[30em] text-lead leading-[29px] text-navy-muted text-pretty">
+              <p className="mt-[18px] max-w-[30em] text-lead text-navy-muted text-pretty">
                 {f.body}
               </p>
             </div>

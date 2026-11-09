@@ -7,15 +7,21 @@ import {
   downloadFilename,
   triggerTextDownload,
 } from "./artefactPresentation";
+import { buttonVariants } from "../ui/brand/Button";
 
 /**
  * Report download: PDF via the existing print stylesheet, markdown as a
  * file. Word is skipped — it needs a library this slice does not add.
+ * The Markdown is headed with the question, as the page is; the generated
+ * title names the file (task 058, round 10, D1).
  */
 export function ArtefactDownload({
   artefact,
+  question = null,
 }: {
   artefact: Parameters<typeof artefactMarkdown>[0];
+  /** The task's question, the page's title; null keeps the artefact's own. */
+  question?: string | null;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -23,7 +29,7 @@ export function ArtefactDownload({
     setOpen(false);
     triggerTextDownload(
       downloadFilename(artefact.title, "md"),
-      artefactMarkdown(artefact),
+      artefactMarkdown(artefact, question),
       "text/markdown",
     );
   };
@@ -43,7 +49,7 @@ export function ArtefactDownload({
             type="button"
             aria-haspopup="menu"
             aria-expanded={open}
-            className="inline-flex cursor-pointer items-center gap-2 border border-navy bg-paper px-3 py-2 text-body font-semibold text-navy hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue"
+            className={buttonVariants({ variant: "outline", size: "md" })}
           >
             Download
             <svg

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -55,6 +55,35 @@ const rowNames = () =>
   screen.getAllByRole("button")
     .map((button) => button.textContent)
     .filter((text): text is string => text !== null && ["Task Agent", "Cost barriers", "Earlier plan", "New chat"].includes(text));
+
+// Round 14: the backend names a chat from its first message; the chat turn's
+// stream carries it and the store writes it into the cached list, which
+// re-renders. The entry reveals the new title as the task's name does.
+describe("ConversationList — a chat named under the reader (round 14)", () => {
+  beforeEach(() => {
+    activeRows = defaultActiveRows();
+    archivedRows = defaultArchivedRows();
+  });
+
+  it("fades the old title out, then reveals the new one, while the row stays", async () => {
+    const view = renderList("c1");
+    expect(screen.getByRole("button", { name: "Cost barriers" })).toBeInTheDocument();
+    activeRows = activeRows.map((row) => (row.id === "c1" ? { ...row, title: "Cost barriers to childcare take-up" } : row));
+    view.rerender(<ConversationList taskId="p1" onOpen={state.onOpen} selectedId="c1" />);
+    expect(screen.getByTestId("chat-title-leaving")).toHaveTextContent("Cost barriers");
+    // The row's button keeps its place and is named by the new title at once.
+    expect(screen.getByRole("button", { name: "Cost barriers to childcare take-up" })).toHaveAttribute("aria-current", "true");
+    await screen.findByTestId("chat-title-revealing");
+    await waitFor(() => expect(screen.queryByTestId("chat-title-revealing")).toBeNull(), { timeout: 2000 });
+    expect(screen.getByRole("button", { name: "Cost barriers to childcare take-up" })).toBeInTheDocument();
+  });
+
+  it("holds still when the list first shows a title", () => {
+    renderList();
+    expect(screen.queryByTestId("chat-title-leaving")).toBeNull();
+    expect(screen.queryByTestId("chat-title-revealing")).toBeNull();
+  });
+});
 
 describe("ConversationList", () => {
   beforeEach(() => {

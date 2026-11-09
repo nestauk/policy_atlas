@@ -125,11 +125,23 @@ def _db_url() -> str:
     return url
 
 
-@pytest.fixture(scope="session")
-def engine() -> Generator[Engine, None, None]:
-    e = create_engine(_db_url())
-    # Apply migration (idempotent — alembic checks current head)
+@pytest.fixture(scope="session", autouse=True)
+def _migrated_database() -> None:
+    """Bring the worker's database to the current schema before any test.
+
+    Tests that build their own client (``api_client``) never ask for the
+    ``engine`` fixture, so they used to depend on an earlier test in the same
+    worker having run the migrations: whichever test landed first on a fresh
+    worker failed with a missing table. Task 058 added enough tests to change
+    the order and expose it; the migration now runs once per worker, first.
+    """
+    # Idempotent: alembic checks the current head.
     command.upgrade(_alembic_cfg(), "head")
+
+
+@pytest.fixture(scope="session")
+def engine(_migrated_database: None) -> Generator[Engine, None, None]:
+    e = create_engine(_db_url())
     yield e
     e.dispose()
 

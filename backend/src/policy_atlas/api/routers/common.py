@@ -11,19 +11,23 @@ from __future__ import annotations
 import uuid
 from typing import Any, Literal, cast
 
-from sqlalchemy import ColumnElement, case, exists, func, select
+from sqlalchemy import ColumnElement, Text, case, exists, func, select
+from sqlalchemy import cast as cast_sql
 from sqlalchemy.engine import Connection, RowMapping
 
-from policy_atlas.api.contract import LatestRun, RunOut, TaskLinkOut, TaskOut
+from policy_atlas.api.contract import LatestRun, RunOut, StageKey, TaskLinkOut, TaskOut
 from policy_atlas.api.identity import owner_display_for
 from policy_atlas.api.routers.access import readable_task_leg
+from policy_atlas.api.stage_vocabulary import presentation, stage_for_payload
 from policy_atlas.core.schema import (
     app_user,
     artefact,
     capability_run,
+    event_log,
     evidence_scope,
     longlist_result,
     project_membership,
+    runs,
     task,
     task_link,
 )
@@ -131,13 +135,71 @@ def _latest_run_row(conn: Connection, row: RowMapping | dict[str, Any]) -> RowMa
     )
 
 
-def _latest_run_out(walk: RowMapping) -> LatestRun:
+def _latest_run_out(walk: RowMapping, stage: StageKey | None = None) -> LatestRun:
     return LatestRun(
         capability_run_id=walk["capability_run_id"],
         status=walk["status"],
         started_at=walk["started_at"],
         ended_at=walk["ended_at"],
+        stage=stage,
+        stage_label=presentation(stage)[0] if stage is not None else None,
     )
+
+
+def _active_stage(conn: Connection, task_id: uuid.UUID, active: RowMapping) -> StageKey | None:
+    """Return the public stage the task's active walk last started (task 058, N15).
+
+    The walk read is the parentless active walk when there is one, else the
+    active row itself: a scoping task whose option searches are running shows
+    the longlist walk's stage ("Searching for each option"), not a child's.
+    The stage is the walk's latest ``run.started`` event, the row the event
+    stream turns into ``stage.started``: either a component run of the walk,
+    or, for the option-search fan-out, a row with no component run that
+    names the walk in its payload. The full-text screen starts no stage of
+    its own, so its rows are skipped. One statement.
+
+    Args:
+        conn: Open database connection.
+        task_id: The task.
+        active: The task's latest running or paused walk, children included.
+
+    Returns:
+        The stage key, or ``None`` when the walk has not started a stage.
+    """
+    parentless = (
+        select(capability_run.c.capability_run_id)
+        .where(capability_run.c.task_id == task_id)
+        .where(capability_run.c.status.in_(ACTIVE_WALK_STATUSES))
+        .where(parentless_walk())
+        .order_by(capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    walk_id = func.coalesce(parentless, active["capability_run_id"])
+    payload = event_log.c.payload
+    row = conn.execute(
+        select(payload)
+        .select_from(
+            event_log.outerjoin(
+                runs,
+                (runs.c.run_id == event_log.c.run_id) & (runs.c.task_id == event_log.c.task_id),
+            )
+        )
+        .where(event_log.c.task_id == task_id)
+        .where(event_log.c.event_type == "run.started")
+        .where(
+            (runs.c.capability_run_id == walk_id)
+            | (
+                event_log.c.run_id.is_(None)
+                & (payload["capability_run_id"].astext == cast_sql(walk_id, Text))
+            )
+        )
+        .where(func.coalesce(payload["component"].astext, "") != "screen_full")
+        .where(func.coalesce(payload["registry_component"].astext, "") != "screen_full")
+        .order_by(event_log.c.sequence.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    return stage_for_payload(row) if isinstance(row, dict) else None
 
 
 def resolve_owner_display(conn: Connection, owner_user_id: str | None) -> str | None:
@@ -383,7 +445,8 @@ def task_out(
     # What exists and what is active (task 045, S15; owner: "scoping readers
     # see what exists and what is active"): one ``SELECT … LIMIT 1`` for any
     # running or paused walk, children included, and one ``EXISTS`` for the
-    # longlist — a fixed two statements per task, whatever it has run.
+    # longlist — a fixed two statements per task, whatever it has run. An
+    # active walk adds one more for its stage (task 058, N15).
     active = conn.execute(
         select(capability_run)
         .where(capability_run.c.task_id == row["task_id"])
@@ -436,7 +499,11 @@ def task_out(
         updated_at=row["updated_at"],
         archived_at=row["archived_at"],
         latest_run=latest_out,
-        active_run=_latest_run_out(active) if active is not None else None,
+        active_run=(
+            _latest_run_out(active, _active_stage(conn, row["task_id"], active))
+            if active is not None
+            else None
+        ),
         has_longlist=has_longlist,
         project_ids=project_ids,
         source_count=source_count,

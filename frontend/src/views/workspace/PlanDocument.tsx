@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { components } from "../../api/gen/types";
 import { usePatchPlan } from "../../api/mutations";
@@ -23,7 +23,7 @@ import {
   screeningOverlayError,
   type PlanOverlay,
 } from "./planOverlay";
-import { START_SEARCH_CLASS, scopingStatusLine, usePlanStart, useScopingPlanStart } from "./planStart";
+import { scopingStatusLine, usePlanStart, useScopingPlanStart } from "./planStart";
 import {
   ANALYSIS_DEPTH_LABEL,
   ANALYSIS_QUESTION,
@@ -47,9 +47,7 @@ import {
   SEARCH_SCOPE_TITLE,
   SOURCES_LABEL,
   STEERING_MODE_LABEL,
-  stepsForAnalysisDepth,
   TAG_ORIGIN_LABEL,
-  timeBandFor,
   vocabLabel,
   YOUR_CONTEXT_TYPE_LABEL,
   YOUR_OPTIONS_ASSUMED_TAG,
@@ -62,6 +60,7 @@ import {
 import { RiskAppetiteSelect } from "../longlist/ShortlistView";
 
 type ScopingPlanDraft = components["schemas"]["ScopingPlanDraft"];
+type PlanDraft = components["schemas"]["PlanDraft"];
 type TaggedOut = components["schemas"]["TaggedOut"];
 type ScopingConstraintOut = components["schemas"]["ScopingConstraintOut"];
 type YourContextOut = components["schemas"]["YourContextOut"];
@@ -72,9 +71,9 @@ const panelLabelClass = "text-lead font-bold text-white";
 const panelEditButtonClass =
   "cursor-pointer border border-white/25 px-3 py-1.5 text-body font-semibold text-white hover:bg-white/10";
 const panelFieldClass =
-  "w-full border border-white/25 bg-[#0a1f38] px-3 py-2.5 text-lead text-white focus-visible:outline-2 focus-visible:outline-blue";
+  "w-full border border-white/25 bg-navy-deep px-3 py-2.5 text-lead text-white";
 const panelValueClass = "mt-0.5 text-lead text-white";
-const panelHintClass = "text-body text-[#c5d0dc]";
+const panelHintClass = "text-body text-on-navy-soft";
 
 function InfoHint({ label, hint }: { label: string; hint: string }) {
   return (
@@ -82,7 +81,7 @@ function InfoHint({ label, hint }: { label: string; hint: string }) {
       <button
         type="button"
         aria-label={`About ${label}`}
-        className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center text-[#97a8bc] hover:text-white focus-visible:outline-2 focus-visible:outline-blue"
+        className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center text-on-navy-muted hover:text-white"
       >
         <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4" fill="none">
           <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.25" />
@@ -148,7 +147,7 @@ function PanelSection({
             </button>
             <button
               type="button"
-              className={cn(panelEditButtonClass, "border-blue bg-blue text-white hover:bg-[#0000d6]")}
+              className={cn(panelEditButtonClass, "border-blue bg-blue text-white hover:bg-blue-pressed")}
               onClick={onSave}
             >
               Save
@@ -203,13 +202,13 @@ function PlanPicker({
             aria-haspopup="listbox"
             aria-expanded={open}
             aria-labelledby={`${id}-label`}
-            className="flex w-full cursor-pointer items-center justify-between gap-3 border border-white/25 bg-[#0a1f38] px-3 py-2.5 text-left text-lead font-normal text-white hover:border-white/50 focus-visible:outline-2 focus-visible:outline-blue"
+            className="flex w-full cursor-pointer items-center justify-between gap-3 border border-white/25 bg-navy-deep px-3 py-2.5 text-left text-lead font-normal text-white hover:border-white/50"
           >
             <span className="min-w-0 flex-1 text-pretty">{selected}</span>
             <svg
               aria-hidden="true"
               viewBox="0 0 24 24"
-              className="h-4 w-4 shrink-0 text-[#97a8bc]"
+              className="h-4 w-4 shrink-0 text-on-navy-muted"
               fill="none"
               stroke="currentColor"
               strokeWidth={2}
@@ -231,7 +230,7 @@ function PlanPicker({
                   onClick={() => pick(key)}
                   className={cn(
                     "block w-full cursor-pointer px-3 py-2.5 text-left text-lead font-normal text-pretty text-navy hover:bg-blue-tint-2 hover:text-blue",
-                    value === key && "bg-blue-tint-2 font-medium",
+                    value === key && "bg-blue-tint-2 font-semibold",
                   )}
                 >
                   {optionLabel}
@@ -289,7 +288,7 @@ function PlanChrome({
   className?: string;
 }) {
   const controlClass =
-    "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center p-0 text-[#97a8bc] hover:text-white focus-visible:outline-2 focus-visible:outline-blue";
+    "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center p-0 text-on-navy-muted hover:text-white";
   return (
     <div className={cn("flex h-8 items-center", className)}>
       {showDock && onDock !== undefined && (
@@ -351,7 +350,7 @@ function ScopingSection({
 
 /** The grey "Not decided yet" an unset field shows. */
 function NotDecided() {
-  return <span className="text-[#97a8bc] italic">{COPY.notDecided}</span>;
+  return <span className="text-on-navy-muted italic">{COPY.notDecided}</span>;
 }
 
 /** One provenance-tagged field, rendered with its origin words. */
@@ -531,7 +530,7 @@ function ConstraintsSection({
   return (
     <ScopingSection label="Constraints and preferences" onEdit={onEdit} readOnly={readOnly}>
       {constraints.length === 0 ? (
-        <p className="text-lead text-[#97a8bc] italic">{COPY.notDecided}</p>
+        <p className="text-lead text-on-navy-muted italic">{COPY.notDecided}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-lead text-white">
@@ -570,7 +569,7 @@ function ConstraintsSection({
                       </button>
                     )}
                   </td>
-                  <td className="py-2 pr-3 text-[#e8edf2]">
+                  <td className="py-2 pr-3 text-on-navy">
                     {constraintEffectLines(constraint).map((line) => (
                       <span key={line} className="block">
                         {line}
@@ -607,7 +606,7 @@ function YourOptionsSection({
   return (
     <ScopingSection label={YOUR_OPTIONS_TITLE} onEdit={onEdit} readOnly={readOnly}>
       {options.length === 0 ? (
-        <p className="text-lead text-[#97a8bc] italic">{YOUR_OPTIONS_NONE}</p>
+        <p className="text-lead text-on-navy-muted italic">{YOUR_OPTIONS_NONE}</p>
       ) : (
         <ul className="space-y-4 text-lead text-white">
           {options.map((option, index) => (
@@ -618,7 +617,7 @@ function YourOptionsSection({
                   <p className={panelHintClass}>
                     {YOUR_OPTIONS_DESIGN_LABEL}: {scrub(option.design.name)}
                   </p>
-                  <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[#e8edf2]">
+                  <ul className="mt-1 list-disc space-y-0.5 pl-5 text-on-navy">
                     {option.design.design_features.map((feature, featureIndex) => (
                       <li key={`${feature}-${featureIndex}`}>
                         {scrub(feature)}
@@ -679,7 +678,7 @@ function ScopingStepsSection({ steps }: { steps: ScopingPlanDraft["steps"] }) {
   if (list.length === 0) return null;
   return (
     <ScopingSection label="Steps and check-ins">
-      <ol className="list-none space-y-2 pl-1 text-lead text-[#e8edf2]">
+      <ol className="list-none space-y-2 pl-1 text-lead text-on-navy">
         {list.map((step, index) => (
           <li key={step.stage} className="flex gap-1.5">
             <span aria-hidden="true" className="w-4 shrink-0 tabular-nums">
@@ -724,7 +723,7 @@ function ScopingStartActions({
     return (
       <div className="space-y-3">
         {lineElement}
-        <Button className={cn(START_SEARCH_CLASS)} disabled={state.action.disabled} onClick={state.action.onClick}>
+        <Button variant="start" size="entry" disabled={state.action.disabled} onClick={state.action.onClick}>
           {state.action.label}
         </Button>
         {state.notice != null && (
@@ -739,11 +738,11 @@ function ScopingStartActions({
   if (state.kind === "build") {
     return (
       <div>
-        <Button className={cn(START_SEARCH_CLASS)} disabled={state.action.disabled} onClick={state.action.onClick}>
+        <Button variant="start" size="entry" disabled={state.action.disabled} onClick={state.action.onClick}>
           {state.action.label}
         </Button>
         {state.timeBand != null && state.timeBand !== "" && (
-          <p className="mt-2 text-body text-[#97a8bc]">{scrub(state.timeBand)}</p>
+          <p className="mt-2 text-body text-on-navy-muted">{scrub(state.timeBand)}</p>
         )}
         {state.notice != null && (
           <p role="alert" className="mt-2 text-body text-red-tint">
@@ -756,7 +755,7 @@ function ScopingStartActions({
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Button className={cn(START_SEARCH_CLASS)} disabled={state.rebuild.disabled} onClick={state.rebuild.onClick}>
+      <Button variant="start" size="entry" disabled={state.rebuild.disabled} onClick={state.rebuild.onClick}>
         {state.rebuild.label}
       </Button>
       <Button variant="secondary" disabled={state.confirm.disabled} onClick={state.confirm.onClick}>
@@ -851,15 +850,53 @@ function ScopingPlanSections({
   );
 }
 
+/** The plan's steps as the run card shows them: one per card row, with the
+ *  server's label and its first step's blurb (task 058, N17). */
+function planStepRows(steps: PlanDraft["steps"]): { row: string; label: string; blurb: string }[] {
+  const rows: { row: string; label: string; blurb: string }[] = [];
+  for (const step of steps ?? []) {
+    if (!rows.some((row) => row.row === step.row)) rows.push({ row: step.row, label: step.label, blurb: step.blurb });
+  }
+  return rows;
+}
+
+/** Whether an Escape keypress belongs to something inside the plan (an open
+ *  menu, a field being edited) rather than to the plan itself. */
+function escapeTakenElsewhere(event: KeyboardEvent): boolean {
+  if (event.defaultPrevented) return true;
+  const target = event.target;
+  if (target instanceof HTMLElement && target.closest("input, textarea, select, [contenteditable='true']")) return true;
+  return document.querySelector("[data-radix-popper-content-wrapper]") !== null;
+}
+
+/** Marks a control that opens the plan ("See plan", "Review the plan"): a
+ *  press on it while the plan is open is not a press outside it. */
+export const PLAN_OPENER_ATTR = "data-plan-opener";
+
+/** Whether a press lands outside the plan: not in it, not in an overlay it
+ *  opened (a popover or menu portalled out of it), not on a control that
+ *  opens it. */
+function pressedOutside(target: EventTarget | null, plan: HTMLElement | null): boolean {
+  if (!(target instanceof Node) || plan === null) return false;
+  if (plan.contains(target)) return false;
+  const element = target instanceof Element ? target : target.parentElement;
+  if (element === null) return false;
+  return element.closest(`[data-radix-popper-content-wrapper], [${PLAN_OPENER_ATTR}]`) === null;
+}
+
 /**
  * The search plan, edited in place. Saves stay local until Start search —
  * a task_agent round-trip on every field would rewrite the whole plan.
+ * Escape closes it (task 058, N15), and so does a press anywhere outside it
+ * (owner, round 13; the shared Sheet's outside press). Closed, focus goes
+ * back to what opened it ("See plan") unless the reader moved it elsewhere.
  */
 export function PlanDocument({
   taskId,
   placement = "side",
   runActive = false,
   readOnly = false,
+  closing = false,
   onClose,
   onDock,
   onStarted,
@@ -870,6 +907,9 @@ export function PlanDocument({
   /** Centre overlay vs docked side panel. */
   placement?: "center" | "side";
   runActive?: boolean;
+  /** True while the plan leaves (`usePlanPanel().closing`): it plays its
+   *  exit, the way it came, before the caller unmounts it. */
+  closing?: boolean;
   /** After Start search the plan is a record — visible, not editable. */
   readOnly?: boolean;
   onClose: () => void;
@@ -901,6 +941,45 @@ export function PlanDocument({
     onOverlayApplied: () => onOverlayChange({}),
     onDiscardOverlay: () => onOverlayChange({}),
   });
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || escapeTakenElsewhere(event)) return;
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  // A press anywhere outside the plan closes it (owner, round 13).
+  const planRef = useRef<HTMLElement>(null);
+  // Every open starts at the plan's top, its title in view (owner, round 14),
+  // and again when its content first arrives, so a late load never leaves
+  // the pane part-way down.
+  const paneRef = useRef<HTMLDivElement>(null);
+  const loaded = planQuery.data !== undefined;
+  useLayoutEffect(() => {
+    if (paneRef.current !== null) paneRef.current.scrollTop = 0;
+  }, [loaded]);
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      if (pressedOutside(event.target, planRef.current)) onClose();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [onClose]);
+
+  // Focus goes back to the control that opened the plan when it closes,
+  // unless the reader has put it somewhere else (pressed another control).
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const plan = planRef.current;
+    return () => {
+      const focused = document.activeElement;
+      const lost = focused === null || focused === document.body || (plan !== null && plan.contains(focused));
+      if (lost && opener !== null && opener.isConnected) opener.focus();
+    };
+  }, []);
 
   const [editingQuestion, setEditingQuestion] = useState(false);
   const [editingSettings, setEditingSettings] = useState(false);
@@ -976,23 +1055,31 @@ export function PlanDocument({
     draft !== undefined ? displayedEnum(overlay.analysis_depth, draft.analysis_depth) : "";
   const sources = draft !== undefined ? displayedEnum(overlay.backend_scope, draft.backend_scope) : "";
   const checkIns = draft !== undefined ? displayedEnum(overlay.steering_mode, draft.steering_mode) : "";
-  const previewEffort = editingSettings ? settingsDraft.search_effort : searchEffort;
-  const previewDepth = editingSettings ? settingsDraft.analysis_depth : analysisDepth;
-  const previewSources = editingFilters ? filterDraft.backend_scope : sources;
-  const expectedRunTime = timeBandFor(previewEffort, previewDepth) ?? draft?.time_band ?? null;
-  const agreedSteps = stepsForAnalysisDepth(previewDepth, previewSources);
+  // The plan draft's own band (task 058, N20): one table, on the server.
+  const expectedRunTime = draft?.time_band ?? null;
+  const agreedSteps = planStepRows(draft?.steps);
   const closeLabel = scopingPlan ? "Close the scoping plan" : "Close the search plan";
 
   return (
     <aside
+      ref={planRef}
       role="dialog"
       aria-modal={placement === "center"}
       aria-label={scopingPlan ? "Scoping plan" : "Search plan"}
+      data-state={closing ? "closed" : "open"}
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden bg-navy text-white",
+        // It arrives (task 058, round 9; the lead's ruling on the animation
+        // sweep's proposal 3): docked, from the edge it docks to; centred,
+        // rising in place. It leaves the way it came, faster, as a sheet
+        // does (owner, 2026-11-09). A cut under reduced motion.
         placement === "side"
-          ? cn("min-w-0 flex-1 border-l border-[#1a3a5c]", READING_COLUMN_MAX_W)
-          : "w-full",
+          ? cn(
+              "anim-dock-in min-w-0 flex-1 border-l border-navy-line",
+              "data-[state=closed]:animate-[dock-out_200ms_var(--ease-drawer)_forwards]",
+              READING_COLUMN_MAX_W,
+            )
+          : "anim-centre-in w-full data-[state=closed]:animate-[sink-out_200ms_var(--ease-out-strong)_forwards]",
       )}
     >
       {placement === "center" && (
@@ -1009,7 +1096,7 @@ export function PlanDocument({
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={paneRef} data-testid="plan-pane" className="min-h-0 flex-1 overflow-y-auto">
         <div className={cn("mx-auto w-full px-5 py-8", READING_COLUMN_MAX_W)}>
           <div className="mb-6 flex items-start justify-between gap-3 border-b border-white/15 pb-6">
             <header className="min-w-0 flex-1">
@@ -1017,7 +1104,7 @@ export function PlanDocument({
                 {scopingPlan ? "Scoping plan" : "Search plan"}
               </h2>
               {!scopingPlan && expectedRunTime != null && expectedRunTime !== "" && (
-                <p className="mt-1 text-body text-[#97a8bc]">
+                <p className="mt-1 text-body text-on-navy-muted">
                   Expected run time: {scrub(expectedRunTime)}
                 </p>
               )}
@@ -1032,7 +1119,7 @@ export function PlanDocument({
             )}
           </div>
 
-          {planQuery.isPending && <p className="text-body text-[#c5d0dc]">Loading the plan…</p>}
+          {planQuery.isPending && <p className="text-body text-on-navy-soft">Loading the plan…</p>}
           {planQuery.isError && (
             <p role="alert" className="text-body text-red-tint">
               The plan couldn't be loaded.
@@ -1193,7 +1280,7 @@ export function PlanDocument({
                   </div>
                   <div>
                     <dt className={panelHintClass}>Publication years</dt>
-                    <dd className={`${panelValueClass} text-[#e8edf2]`}>
+                    <dd className={`${panelValueClass} text-on-navy`}>
                       {yearAfter === "" && yearBefore === ""
                         ? "No preference"
                         : yearAfter !== "" && yearBefore !== ""
@@ -1205,7 +1292,7 @@ export function PlanDocument({
                   </div>
                   <div>
                     <dt className={panelHintClass}>Source geography</dt>
-                    <dd className={`${panelValueClass} text-[#e8edf2]`}>
+                    <dd className={`${panelValueClass} text-on-navy`}>
                       {geography !== "" ? scrub(geography) : "None selected"}
                     </dd>
                   </div>
@@ -1288,13 +1375,13 @@ export function PlanDocument({
               }}
               view={
                 screening.length > 0 ? (
-                  <ul className="list-disc space-y-1.5 pl-5 text-lead text-[#e8edf2]">
+                  <ul className="list-disc space-y-1.5 pl-5 text-lead text-on-navy">
                     {screening.map((criterion) => (
                       <li key={criterion}>{scrub(criterion)}</li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-lead text-[#97a8bc] italic">{COPY.notDecided}</p>
+                  <p className="text-lead text-on-navy-muted italic">{COPY.notDecided}</p>
                 )
               }
             >
@@ -1332,9 +1419,9 @@ export function PlanDocument({
             {agreedSteps.length > 0 && (
               <section className="border-b border-white/15 pb-6 last:border-b-0">
                 <h3 className={panelLabelClass}>Plan steps</h3>
-                <ol className="mt-3 list-none space-y-2 pl-1 text-lead text-[#e8edf2]">
+                <ol className="mt-3 list-none space-y-2 pl-1 text-lead text-on-navy">
                   {agreedSteps.map((step, index) => (
-                    <li key={step.stage} className="flex gap-1.5">
+                    <li key={step.row} className="flex gap-1.5">
                       <span aria-hidden="true" className="w-4 shrink-0 tabular-nums">
                         {index + 1}.
                       </span>
@@ -1352,7 +1439,7 @@ export function PlanDocument({
 
           {!scopingPlan && !readOnly && (
           <div className="pt-8">
-            <Button className={cn(START_SEARCH_CLASS)} disabled={startDisabled} onClick={start}>
+            <Button variant="start" size="entry" disabled={startDisabled} onClick={start}>
               {startLabel}
             </Button>
             {startNotice != null && (

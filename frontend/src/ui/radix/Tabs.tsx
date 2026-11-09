@@ -31,7 +31,7 @@ export function TabsTrigger({
     <TabsPrimitive.Trigger
       className={cn(
         "-mb-px cursor-pointer border-b-2 border-transparent pb-2 text-meta font-semibold text-grey",
-        "hover:text-navy focus-visible:outline-2 focus-visible:outline-blue",
+        "hover:text-navy",
         "data-[state=active]:border-blue data-[state=active]:font-extrabold data-[state=active]:text-navy",
         className,
       )}

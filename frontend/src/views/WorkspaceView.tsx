@@ -5,9 +5,11 @@ import { useArtefact, useConversations, useTask } from "../api/queries";
 import { useDocumentTitle } from "../lib/title";
 import { LIFECYCLE_LABELS } from "../lib/vocabulary";
 import { useRunStream } from "../store";
+import { usePlanEdits } from "../store/planEdits";
 import { cn } from "../ui/brand/cn";
 import { NotFoundView } from "../ui/feedback/NotFoundView";
 import { AppFooter } from "./AppFooter";
+import { usePlanPanel } from "./planPanel";
 import { isScoping } from "./scopingActivity";
 import { useChatsEnabled } from "./taskResult";
 import { ChatPane } from "./workspace/chat/ChatPane";
@@ -16,7 +18,6 @@ import { ConversationSidebar } from "./workspace/chat/ConversationSidebar";
 import { DRAFT_CHAT_ID, isTaskAgentConversation, taskAgentConversationId, useActiveConversation } from "./workspace/chat/conversationState";
 import { PlanDocument } from "./workspace/PlanDocument";
 import { TaskAgentPane } from "./workspace/TaskAgentPane";
-import type { PlanOverlay } from "./workspace/planOverlay";
 
 /**
  * The Agent tab: the Task's conversations in a sidebar, the selected one in
@@ -39,7 +40,11 @@ export function WorkspaceView() {
   // A task_agent id in the URL (a deep link, or the overlay's own selection
   // carried over) reads as the Task Agent: the pane renders the Task's
   // task_agent thread, never one lineage on its own.
-  const onTaskAgent = activeConversationId === null || isTaskAgentConversation(activeConversationId, rows);
+  // Closed Task Agent conversations count too (round 12): a walk that ends
+  // closes the open one, and the URL may still name it.
+  const taskAgentRows = useConversations(taskId, { kind: "task_agent" }).data?.data ?? [];
+  const onTaskAgent =
+    activeConversationId === null || isTaskAgentConversation(activeConversationId, [...rows, ...taskAgentRows]);
   const chatId = onTaskAgent ? null : activeConversationId;
   const sectionTitles = (artefact.data?.sections ?? []).map((section) => section.title);
   const chatsEnabled = useChatsEnabled(taskId);
@@ -55,10 +60,16 @@ export function WorkspaceView() {
     setFooterOpen(false);
   }
   const hasRun = stream.run !== null;
-  const [planOpen, setPlanOpen] = useState(false);
-  const [planPlacement, setPlanPlacement] = useState<"center" | "side">("center");
-  const [planOverlay, setPlanOverlay] = useState<PlanOverlay>({});
-  useDocumentTitle(task.data?.name, LIFECYCLE_LABELS.agent);
+  // Shared with the card's "See plan" and the sidebar (task 058, N15): one
+  // open state, and the side panel by default.
+  const { open: planOpen, closing: planClosing, openPlan: showPlan, closePlan } = usePlanPanel();
+  const [planPlacement, setPlanPlacement] = useState<"center" | "side">("side");
+  // Plan edits live in the store (task 058, N20): leaving the tab keeps them.
+  const [planOverlay, setPlanOverlay] = usePlanEdits(taskId);
+  // With a chat open, the tab names it, following its title as the backend
+  // names it (round 14: the cached read carries the new title).
+  const openChatTitle = rows.find((row) => row.id === chatId)?.title ?? "";
+  useDocumentTitle(task.data?.name, openChatTitle !== "" && chatId !== null && chatId !== DRAFT_CHAT_ID ? openChatTitle : LIFECYCLE_LABELS.agent);
 
   const runActive = stream.run?.status === "running" || stream.run?.status === "paused";
   // Task 033 phase 10c (contract § 11 / rubric 37) — the Plan route (this
@@ -70,14 +81,15 @@ export function WorkspaceView() {
   const isOwner = task.data?.is_owner === true;
   const scoping = isScoping(task.data);
   const openPlan = () => {
-    setPlanPlacement("center");
-    setPlanOpen(true);
+    setPlanPlacement("side");
+    showPlan();
   };
   const planDocument = (
     <PlanDocument
       taskId={taskId}
       placement={planPlacement}
       runActive={runActive}
+      closing={planClosing}
       // The plan-start card (contract § 11 / rubric 37): folds `!isOwner`
       // into the same `readOnly` prop that already hides Edit/Start once a
       // run has consumed the plan — one mechanism, not a second gate.
@@ -89,11 +101,11 @@ export function WorkspaceView() {
       // ever run, leaving that state unreachable. Only an ACTIVE walk locks
       // a scoping plan; ownership still gates both.
       readOnly={(scoping ? runActive : hasRun) || !isOwner}
-      onClose={() => setPlanOpen(false)}
+      onClose={closePlan}
       onDock={() => setPlanPlacement("side")}
       onStarted={() => {
         setPlanOverlay({});
-        setPlanOpen(false);
+        closePlan();
       }}
       overlay={planOverlay}
       onOverlayChange={setPlanOverlay}
@@ -171,7 +183,7 @@ export function WorkspaceView() {
           grid-row transition animates height without a layout property. */}
       <div
         className={cn(
-          "grid shrink-0 transition-[grid-template-rows] duration-200 ease-out",
+          "grid shrink-0 transition-[grid-template-rows] duration-200 ease-[var(--ease-out-strong)]",
           footerOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
         )}
         aria-hidden={!footerOpen}

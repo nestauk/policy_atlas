@@ -113,7 +113,10 @@ precedent). Targets: unstated assumptions, missed requirements, contradictions w
 specs, simpler alternatives. Decisions the human settled in review are *context, not
 targets* (challenge only on contradiction). The lead adjudicates findings into the
 contract; a material change reopens the 🛑 for re-approval, minor ones are folded in and
-noted. Rationale: in this repo the contract fixes the design (schema, interfaces, tests) —
+noted. **Do not commit the review record** (owner, 2026-11-04): the findings and their
+adjudication live in the contract's status line and items; the raw review stays under the
+task's gitignored `research/` folder. (Tasks 026 to 057 committed `adversarial-review-*.md`
+files by copying the previous slice's folder; that was never a rule.) Rationale: in this repo the contract fixes the design (schema, interfaces, tests) —
 attack it at its own gate, not after a plan is built on it.
 
 ## Step 2 — Rubric
@@ -173,6 +176,7 @@ names the reading list (contract, plan, the specs they cite, AGENTS.md, `docs/de
 and scopes the targets: plan↔contract/spec fit, sequencing risks, 🟡/❓ items, missed
 requirements, simpler alternatives. If it can't critique from the files alone, the
 artifacts aren't the self-sufficient handoff conversation B needs — fix that first.
+The same rule as step 1: fold the findings into the plan, keep the review record local.
 (Distinct from the high-stakes two-independent-takes rule, which generates alternatives
 *before* the design call; this attacks the chosen plan *after* drafting.)
 

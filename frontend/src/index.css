@@ -75,6 +75,14 @@
   --text-display: 36px; /* the one statement per page: report and entry titles */
   --text-display--line-height: 1.15;
 
+  /* The splash page's two responsive headline sizes (task 058 consistency
+     pass, lead ruling P5): named so no view writes a size by hand. The splash
+     persuades rather than operates, so these two scale with the viewport. */
+  --text-hero: clamp(40px, 5.4vw, 68px); /* the splash h1 */
+  --text-hero--line-height: 1.02;
+  --text-hero-2: clamp(28px, 3vw, 40px); /* the splash feature-step headings */
+  --text-hero-2--line-height: 1.1;
+
   /* Prose line-length cap. Retuned from 72ch to the prototype's 44em (032
      G15): at the 16px floor, 72ch runs wider than a comfortable read. */
   --container-prose-measure: 44em;
@@ -84,6 +92,8 @@
 
   /* Nesta core palette */
   --color-blue: #0000ff; /* hero — one hero colour per layout */
+  --color-blue-pressed: #0000d6; /* the primary's hover and press */
+  --color-green-pressed: #147a6c; /* the start button's hover */
   --color-navy: #0f294a; /* structural text */
   --color-navy-muted: #c8d6e6; /* body on navy (splash) */
   --color-grey: #646363; /* secondary text (AAA on white) */
@@ -110,6 +120,24 @@
   --color-green-tint: #e7f5f2;
   --color-yellow-tint: #fff6e3;
   --color-red-tint: #fde8ed;
+  /* The dark plan panel (task 058 consistency pass): the Navy sheet the
+     plan document docks as, and the text and rules that sit on it. */
+  --color-navy-deep: #0a1f38; /* inputs and wells sunk into the navy panel */
+  --color-navy-line: #1a3a5c; /* hairlines on the navy panel */
+  --color-on-navy: #e8edf2; /* primary text on the navy panel */
+  --color-on-navy-soft: #c5d0dc; /* secondary text on the navy panel */
+  --color-on-navy-muted: #97a8bc; /* labels and meta on the navy panel */
+
+  /* Defined once (design lane review; owner round 12): the values the
+     components used to write inline. */
+  --color-hover-fill: #f0f0f3; /* secondary, outline and idle-chip hover */
+  --color-green-deep: #0c6b5a; /* text on Green Tint; a settled choice's words */
+  --color-yellow-deep: #8a5a00; /* text on Yellow Tint */
+  --color-blue-tint-edge: #c7c7ff; /* the blue chip's border */
+  --color-green-tint-edge: #b7e0d8; /* the green chip's border */
+  --color-yellow-tint-edge: #f3d99a; /* the yellow chip's border */
+  --color-red-tint-edge: #f4b8c6; /* the red chip's border */
+
   --color-violet-tint: #efedfc; /* the higher level word on a profile line (046) */
   --color-aqua-tint: #e6f5f7; /* the lower level word on a profile line (046) */
 
@@ -134,6 +162,15 @@
   &:active:not(:disabled) {
     transform: scale(0.97);
   }
+}
+
+/* The sidebar's conversation pane (task 058, owner 2026-11-05): Lead-size
+   text renders at Body size there (16 px, the floor), so the Task Agent and
+   the chats read at the narrow column's size. Body and Meta are unchanged.
+   The Lead utility reads these two variables, so the scope redefines them. */
+@utility compact-pane {
+  --text-lead: var(--text-body);
+  --text-lead--line-height: var(--text-body--line-height);
 }
 
 /* The Nesta signature: 0 radius with a 45° cut top-right corner.
@@ -196,28 +233,69 @@
     transform: translateY(0);
   }
 }
+/* The one arrival (task 058, round 9): a block that appears after the view's
+   first paint rises 8 px and fades in over 300 ms on the strong ease-out,
+   while the thread around it makes room on the same curve. History and a
+   view opening hold still (`ui/motion/arrivals.tsx`). */
 @utility anim-rise {
-  animation: rise 300ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  animation: rise 300ms var(--ease-out-strong) both;
   @media (prefers-reduced-motion: reduce) {
     animation-duration: 1ms;
   }
 }
 
+/* A menu under its trigger (task 058 consistency pass, the account menu):
+   it arrives from the trigger, 4 px above its place, fading and settling
+   over 200 ms on the strong ease-out, and leaves the same way in 150 ms.
+   Radix holds the closed menu mounted until the exit animation ends. Under
+   reduced motion the base layer's 0.01 ms rule makes both a cut. */
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes menu-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+@utility anim-menu {
+  transform-origin: var(--radix-popover-content-transform-origin);
+  &[data-state="open"] {
+    animation: menu-in 200ms var(--ease-out-strong) both;
+  }
+  &[data-state="closed"] {
+    animation: menu-out 150ms var(--ease-out-strong) both;
+  }
+}
+
+/* The "waiting on you" glow is orange, the one colour of a check-in that
+   waits (task 058, D15): one 900 ms ring as the card arrives. The ring only
+   (round 9): the card's entrance is the arrival rise, and the ring blooms
+   150 ms after it starts, once the card has landed. */
 @keyframes glow-in {
   0% {
-    opacity: 0;
-    box-shadow: 0 0 0 0 rgb(253 182 51 / 0);
+    box-shadow: 0 0 0 0 rgb(255 110 71 / 0);
   }
   50% {
-    box-shadow: 0 0 0 6px rgb(253 182 51 / 0.25);
+    box-shadow: 0 0 0 6px rgb(255 110 71 / 0.25);
   }
   100% {
-    opacity: 1;
-    box-shadow: 0 0 0 0 rgb(253 182 51 / 0);
+    box-shadow: 0 0 0 0 rgb(255 110 71 / 0);
   }
 }
 @utility anim-glow {
-  animation: glow-in 900ms ease-out both;
+  animation: glow-in 900ms ease-out 150ms both;
   @media (prefers-reduced-motion: reduce) {
     animation-duration: 1ms;
   }
@@ -229,13 +307,92 @@
     opacity: 1;
   }
   50% {
-    opacity: 0.35;
+    /* 0.25 trough (owner, round 11: the 0.5 pulse was too subtle to read
+       as live); the blue square and the Line 2 bars both stay visible. */
+    opacity: 0.25;
   }
 }
 @utility anim-breathe {
   animation: breathe 1.6s ease-in-out infinite;
   @media (prefers-reduced-motion: reduce) {
     animation: none;
+  }
+}
+
+/* The live status mark (task 058, owner round 11): the 6 px blue square
+   breathes on the same 1.6 s rhythm and to the same 0.25 trough, and alone
+   also shrinks to 0.8 of its size at the trough, so a mark that small reads
+   as alive. The words beside it keep `anim-breathe-soft`; placeholder bars
+   and skeletons keep `breathe`. Still under reduced motion. */
+@keyframes breathe-mark {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.25;
+    transform: scale(0.8);
+  }
+}
+@utility anim-breathe-mark {
+  animation: breathe-mark 1.6s ease-in-out infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* The words beside a breathing mark breathe with it, more softly (task 058,
+   owner round 8): the same 1.6 s rhythm, down to 0.6 so the line stays
+   readable at its trough. Started in the same render as the mark's, so the
+   two keep time. Still under reduced motion. */
+@keyframes breathe-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+@utility anim-breathe-soft {
+  animation: breathe-soft 1.6s ease-in-out infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* A value that is on its way (task 058, owner round 8): a short grey bar in
+   the cell or row it will fill, breathing on the mark's 1.6 s rhythm while
+   the stage that fills it runs, a step darker than the Result tab's
+   placeholder lines (Line 2): a short bar in a table cell needs the extra
+   weight to read at the breathe's trough. Shown only while that stage is
+   live and only where the value is absent. Still under reduced motion. */
+@utility placeholder-bar {
+  display: block;
+  background-color: var(--color-line-2);
+  animation: breathe 1.6s ease-in-out infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* What leaves as a decision settles (task 058, owner round 8): the options
+   and controls fade out over 150 ms while the card eases to its settled
+   height. The view skips it under reduced motion (a cut). */
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@utility anim-fade-out {
+  animation: fade-out 150ms var(--ease-out-strong) both;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    opacity: 0;
   }
 }
 
@@ -284,6 +441,28 @@
     color: #000 !important;
     text-decoration: none !important;
   }
+  /* Markers print as plain numbers after the words, not boxed chips
+     (DESIGN.md § Report and citations; round 10, finding 3). */
+  .citation-number {
+    border: 0 !important;
+    padding: 0 !important;
+    margin: 0 0 0 2px !important;
+  }
+  /* The key findings' square bullet: print drops backgrounds, so it prints
+     as a border, which survives. */
+  .artefact-page [data-bullet] {
+    border: 3px solid #000 !important;
+  }
+  /* Headings stay with what follows them; an entry (a finding, a case
+     study, a source, a reference) is not split across pages. */
+  .artefact-page h2,
+  .artefact-page h3,
+  .artefact-page h4 {
+    break-after: avoid;
+  }
+  .artefact-page li {
+    break-inside: avoid;
+  }
   @page {
     margin: 2cm;
   }
@@ -292,6 +471,11 @@
 @layer base {
   html {
     background: var(--color-ground);
+    /* The page keeps its scrollbar's gutter whether or not it scrolls, so a
+       view that fits the screen does not shift the layout sideways against
+       one that does (owner, round 13: the Tasks / Projects and Mine /
+       Organisation switches). */
+    scrollbar-gutter: stable;
   }
   body,
   #root {
@@ -304,6 +488,16 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
   }
+  /* The house focus ring (task 058 consistency pass; DESIGN.md § Shapes): a
+     2px Electric Blue outline offset 2px on every control reached from the
+     keyboard, so no control falls back to the browser's own ring. It sits in
+     the base layer, so a control that must draw its ring inside its box (a
+     cut-corner button, whose clip-path clips anything outside it; a row flush
+     against its frame) overrides it with a utility. */
+  :where(a[href], button, summary, input, textarea, select, [role="tab"], [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline: 2px solid var(--color-blue);
+    outline-offset: 2px;
+  }
   /* Motion budget: everything quiets under prefers-reduced-motion. */
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -315,4 +509,221 @@
       scroll-behavior: auto !important;
     }
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * Task 058, brief P: the report while it is written.
+ *
+ * - shadow-paper: the Card's navy ambient shadow as a token, so the report
+ *   sheet wears the same paper weight as every card (it dropped Tailwind's
+ *   grey shadow-sm).
+ * - draft-revising: a sentence the checker failed blurs in place while the
+ *   writer revises it (2px, dimmed, eased over 300ms). Under reduced motion
+ *   it only dims.
+ * - anim-settle-out: the draft layer fading off the settled prose over 400ms,
+ *   so the revised sentence resolves out of its blur and nothing else moves.
+ *   The view skips the layer entirely under reduced motion (instant swap).
+ * The placeholder lines reuse anim-breathe (the dot's 1.6s opacity rhythm).
+ * ------------------------------------------------------------------------- */
+@theme {
+  --shadow-paper: 0 1px 3px rgba(15, 41, 74, 0.05), 0 8px 24px rgba(15, 41, 74, 0.04);
+  /* Overlay lift: popovers, sheets, toasts, the docked sidebar, jump to end. */
+  --shadow-overlay: 0 10px 30px rgba(15, 41, 74, 0.14);
+  /* Tooltip lift: tooltips only. */
+  --shadow-tooltip: 0 4px 16px rgba(15, 41, 74, 0.12);
+}
+
+@keyframes revise-in {
+  from {
+    filter: blur(0);
+    opacity: 1;
+  }
+  to {
+    filter: blur(2px);
+    opacity: 0.55;
+  }
+}
+@utility draft-revising {
+  filter: blur(2px);
+  opacity: 0.55;
+  animation: revise-in 300ms var(--ease-out-strong) both;
+  @media (prefers-reduced-motion: reduce) {
+    filter: none;
+    animation: none;
+  }
+}
+
+@keyframes settle-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@utility anim-settle-out {
+  animation: settle-out 400ms ease both;
+}
+
+/* The swap from the live report to the committed one (task 058, owner round
+   7): the page updates in place, and only what the committed report adds
+   (the download, the facts strip, the most relevant sources, the expand
+   controls, the chips, the reference details, a renumbered marker) fades in
+   once over 300 ms on the strong ease-out. Under reduced motion it is a cut. */
+@keyframes swap-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* Streamed prose (task 058, owner round 7): the words each frame reveals in
+   the live paragraph fade in over 150 ms, opacity only, so it never clashes
+   with the revision blur. Under reduced motion they appear at once (the
+   pacing stays: it is not motion). */
+@keyframes word-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@utility anim-word-in {
+  animation: word-in 150ms var(--ease-out-strong) both;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@utility anim-swap-in {
+  animation: swap-in 300ms var(--ease-out-strong) both;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* A step's new contents in a card that eases to its new height (task 058,
+   round 9: the check-in's "Confirm your steer"): 150 ms, opacity only. */
+@utility anim-swap-in-fast {
+  animation: swap-in 150ms var(--ease-out-strong) both;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* An arriving decision card lays itself out (task 058, round 9; the
+   animation sweep's entry 5): its chip groups and radio rows fade up 4 px
+   in turn over 200 ms on the strong ease-out, 80 ms after the card and 40 ms
+   apart, capped at the sixth (`--i` is the row's place). Never blocks a
+   click. None under reduced motion. */
+@keyframes cascade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@utility anim-cascade {
+  animation: cascade-in 200ms var(--ease-out-strong) both;
+  animation-delay: calc(80ms + 40ms * min(var(--i, 0), 5));
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* The sheet leaves the way it came (task 058, round 9): along its own edge
+   (a bottom sheet downwards) over 200 ms on the drawer curve, the scrim
+   fading with it. The global reduced-motion rule makes both a cut. */
+@keyframes sheet-out-right {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes sheet-out-left {
+  to {
+    transform: translateX(-100%);
+  }
+}
+@keyframes sheet-out-down {
+  to {
+    transform: translateY(100%);
+  }
+}
+@keyframes scrim-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* The plan document arrives (task 058, round 9): docked at the side it comes
+   16 px in from that edge over 260 ms on the drawer curve; centred it rises
+   8 px in place over 200 ms on the strong ease-out. Both fade in. A cut
+   under reduced motion. */
+@keyframes dock-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@utility anim-dock-in {
+  animation: dock-in 260ms var(--ease-drawer) both;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+@utility anim-centre-in {
+  animation: rise 200ms var(--ease-out-strong) both;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* The plan document leaves the way it came (owner, 2026-11-09), faster, as a
+   sheet does: docked, 16 px back to its edge over 200 ms on the drawer
+   curve; centred, sinking 8 px over 200 ms on the strong ease-out. Both
+   fade. The global reduced-motion rule makes both a cut. */
+@keyframes dock-out {
+  to {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+@keyframes sink-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* A value that is a link to the document (round 12; one home 2026-11-09):
+   the word in Navy over a Line 2 underline that turns Navy on hover, as the
+   report's addresses do. "Full text" in the Sources table and the source
+   dossier takes it. */
+@utility text-link {
+  text-decoration: underline;
+  text-decoration-color: var(--color-line-2);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 150ms ease;
+  &:hover {
+    text-decoration-color: var(--color-navy);
+  }
+}
+
+/* A value with a reason behind it (rounds 11 and 12): a dotted Grey
+   underline under the word, with the help cursor on its trigger, so the
+   hover is found. One class for the Sources table and the report. */
+@utility reason-word {
+  text-decoration: underline dotted var(--color-grey);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }

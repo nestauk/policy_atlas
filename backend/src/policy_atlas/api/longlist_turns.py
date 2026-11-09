@@ -112,12 +112,12 @@ _VERB_PHRASE: dict[str, str] = {
 
 def exclude_proposal(name: str, reason: str | None) -> str:
     """The sorting turn's words for a proposed *exclude*."""
-    return f"Exclude *{name}*? Reason: *{reason or 'none given'}*. Confirm to apply."
+    return f"Exclude {name}? Reason: {reason or 'none given'}. Confirm to apply."
 
 
 def include_proposal(name: str) -> str:
     """The sorting turn's words for a proposed *include again*."""
-    return f"Include *{name}* again? Confirm to apply."
+    return f"Include {name} again? Confirm to apply."
 
 
 def add_proposal(design: OptionDesign) -> str:
@@ -125,7 +125,7 @@ def add_proposal(design: OptionDesign) -> str:
     description = design.description.rstrip(" .")
     features = "; ".join(feature.rstrip(" .;") for feature in design.design_features)
     return (
-        f"Add *{design.name}* — {description}? Design: {features}. "
+        f"Add {design.name} — {description}? Design: {features}. "
         "Confirm to add it and search for it."
     )
 
@@ -146,19 +146,19 @@ def still_waiting(pending: PendingAction) -> str:
 
 def _applied_reply(verb: Verb, name: str) -> str:
     if verb == "exclude":
-        return f"Excluded *{name}*."
+        return f"Excluded {name}."
     if verb == "include_again":
-        return f"Included *{name}* again."
-    return f"Added *{name}*. Searching for its evidence now."
+        return f"Included {name} again."
+    return f"Added {name}. Searching for its evidence now."
 
 
 def _already_reply(name: str, state: str) -> str:
-    return f"*{name}* is already {state}."
+    return f"{name} is already {state}."
 
 
 def _replaced_prefix(previous: PendingAction) -> str:
     return (
-        f"This replaces the earlier proposal to {_VERB_PHRASE[previous.verb]} *{previous.label}*."
+        f"This replaces the earlier proposal to {_VERB_PHRASE[previous.verb]} {previous.label}."
     )
 
 

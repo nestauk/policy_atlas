@@ -1,26 +1,31 @@
-import { useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { Link } from "react-router";
 
 import { useAnswerCheckIn } from "../../api/mutations";
 import { conflictSentences, isConflictCode } from "../../lib/errors";
 import { scrub } from "../../lib/scrub";
-import { recordSessionAnsweredCheckIn } from "../../store/thread";
 import type { CheckInOut, StageEntry } from "../../store/types";
 import { Button } from "../../ui/brand/Button";
 import { Card } from "../../ui/brand/Card";
-import { Chip } from "../../ui/brand/Chip";
+import { Select } from "../../ui/brand/Select";
+import { cn } from "../../ui/brand/cn";
+import { DisclosureChevron } from "../../ui/brand/Disclosure";
+import { LABEL_CLASS } from "../../ui/brand/label";
+import { useArrives } from "../../ui/motion/arrivals";
+import { ARRIVE_MS, EASE_OUT_STRONG, prefersReducedMotion } from "../../ui/motion/motion";
 import { useToast } from "../../ui/radix/Toast";
+import { useEasedHeight } from "../streamPacing";
 import { CheckInBundle, type SectionRow, type ThemeRename } from "./CheckInBundle";
 import {
-  BASELINE_GATE_HEADING,
   BASELINE_GATE_KIND,
-  BASELINE_KEY_ASSUMPTION_ABSENT,
-  BASELINE_KEY_ASSUMPTION_LABEL,
-  BASELINE_SETTINGS_HEADING,
+  STOP_THE_RUN,
   baselineGateCard,
-  presentCheckInRender,
+  checkInHeadline,
   triggerCopy,
 } from "./checkInPresentation";
+import { ChoiceRow, WordsInput } from "./PartCard";
 import { STEERING_MODE_LABEL, vocabLabel } from "./planVocabulary";
+import { LINK_CLASS } from "../../ui/brand/inlineActions";
 
 interface CompiledSteer {
   render: string;
@@ -30,16 +35,67 @@ interface CompiledSteer {
 const CHANGE_MODE_VALUES = ["frequent", "moderate", "minimal", "unattended"] as const;
 type ChangeModeValue = (typeof CHANGE_MODE_VALUES)[number];
 
-/** Look up the most recent stage-entry label for `stage` — the chip must
- *  show the server-supplied label, never the raw stage key, and must not
- *  render at all when no label is known for it. */
-function findStageLabel(stages: StageEntry[], stage: string | null): string | null {
-  if (stage === null) return null;
-  for (let index = stages.length - 1; index >= 0; index--) {
-    if (stages[index].stage === stage) return stages[index].label;
-  }
-  return null;
+/** The stages whose check-in is about what the search found: its facts line
+ *  links to the Sources tab (annex scene 12). */
+const SOURCES_CHECK_IN_STAGES = new Set(["acquire", "screen"]);
+
+/** The baseline gate's question, its card's title (round 10, C9: the gate
+ *  reads as this week's check-ins do, the question as the title). The
+ *  backend's render leads with the same words
+ *  (`runtime/baseline_gate.GATE_HEADING`), so the card and the content of
+ *  record say the same thing. */
+export const BASELINE_GATE_QUESTION = "Does the plan still look right now you have the baseline?";
+
+/** The settled gate's grey label, as a settled part card names its part. */
+export const BASELINE_GATE_SETTLED_LABEL = "Baseline";
+
+/**
+ * The gate's one facts line (round 10, finding 8): the settings the walk ran
+ * from, in the plan document's order, each value as the bundle gives it, the
+ * outcomes as a count ("2 outcomes").
+ */
+export function baselineGateFacts(bundle: Record<string, unknown> | null): string[] {
+  const settings = baselineGateCard(bundle).settings;
+  const raw = bundle?.["settings"];
+  const outcomes =
+    raw !== null && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)["outcomes"]
+      : undefined;
+  const outcomeCount = Array.isArray(outcomes)
+    ? outcomes.filter((item) => typeof item === "string" && item !== "").length
+    : 0;
+  return settings.map(({ label, value }) =>
+    label === "Outcomes" && outcomeCount > 0 ? (outcomeCount === 1 ? "1 outcome" : `${outcomeCount} outcomes`) : value,
+  );
 }
+
+/**
+ * The gate once decided, in the settled part card's language (round 10,
+ * finding 8): the user's side of the thread (Blue Wash, a Blue Tint border,
+ * the 32 px indent) with the 2 px Green rule on its right edge, the grey
+ * label "Baseline" and the chosen option in deep green bold. The decision is
+ * said once: this card replaces the user bubble and the "recorded · plan
+ * version" line for the gate.
+ *
+ * Args:
+ *   label: The chosen option's label, as the check-in offered it.
+ */
+export function SettledGateCard({ label }: { label: string }) {
+  return (
+    <div
+      data-testid="settled-gate"
+      className="ml-8 border border-r-2 border-blue-tint border-r-green bg-blue-tint-2 px-3.5 py-2.5"
+    >
+      <p className={cn(LABEL_CLASS, "text-grey")}>{BASELINE_GATE_SETTLED_LABEL}</p>
+      <p className="mt-0.5 max-w-prose-measure text-lead font-bold text-green-deep">{scrub(label)}</p>
+    </div>
+  );
+}
+
+/** The waiting-on-you card: the one orange rule, and one 900 ms orange ring
+ *  that blooms 150 ms after it arrives (task 058, D15; round 9; reduce
+ *  motion honoured by `anim-glow`). */
+const WAITING_CARD_CLASS = "anim-glow border-l-2 border-l-orange";
 
 /**
  * The steering check-in card: the deterministic render is the content of
@@ -53,28 +109,92 @@ function findStageLabel(stages: StageEntry[], stage: string | null): string | nu
  * `VisibilityControl`'s idiom, rather than a read-only render of a form
  * whose every control is a mutation.
  */
-export function CheckInCard({
-  taskId,
-  checkIn,
-  stages,
-  isOwner,
-}: {
+type CheckInCardProps = {
   taskId: string;
   checkIn: CheckInOut;
   stages: StageEntry[];
   isOwner: boolean;
+  /** The sidebar's reduced-width card: no facts line (annex scene 13). */
+  compact?: boolean;
+};
+
+/**
+ * The check-in card's motion (task 058, round 9; the animation sweep's
+ * entry 3 and the lead's ruling on it). It rises in when it arrives after
+ * the thread's first paint, its ring blooming once it has landed. It settles
+ * the moment the user chooses, as the part cards do: its contents fade out
+ * over 150 ms while its box eases to nothing over 300 ms on the strong
+ * ease-out, and the answered line rises in its place in the run block when
+ * the run records the choice. If the answer fails the card comes back open
+ * with its notice. The "Confirm your steer" step eases the card's height to
+ * its new contents, which fade in over 150 ms. Under reduced motion every
+ * step is a cut.
+ */
+export function CheckInCard(props: CheckInCardProps) {
+  const arrives = useArrives(`checkin:${props.checkIn.check_in_id}`);
+  const [leaving, setLeaving] = useState(false);
+  const reduced = prefersReducedMotion();
+  const [box, content] = useEasedHeight(!leaving && !reduced);
+  const shell = useRef<HTMLDivElement>(null);
+
+  // The shell eases to nothing while the contents fade; it holds there until
+  // the stream clears the check-in (the card unmounts) or the answer fails.
+  useEffect(() => {
+    const outer = shell.current;
+    if (!leaving || outer === null || reduced || typeof outer.animate !== "function") return undefined;
+    outer.style.overflow = "clip";
+    const animation = outer.animate([{ height: `${outer.offsetHeight}px` }, { height: "0px" }], {
+      duration: ARRIVE_MS,
+      easing: EASE_OUT_STRONG,
+      fill: "forwards",
+    });
+    return () => {
+      animation.cancel();
+      outer.style.overflow = "";
+    };
+  }, [leaving, reduced]);
+
+  if (!props.isOwner) return null;
+  return (
+    <div
+      ref={shell}
+      data-testid="check-in-shell"
+      data-leaving={leaving || undefined}
+      className={cn(arrives && "anim-rise", leaving && reduced && "hidden")}
+    >
+      <div ref={box}>
+        <div ref={content} inert={leaving} className={cn(leaving && "anim-fade-out")}>
+          <CheckInCardBody {...props} onChosen={() => setLeaving(true)} onFailed={() => setLeaving(false)} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CheckInCardBody({
+  taskId,
+  checkIn,
+  stages,
+  isOwner,
+  compact = false,
+  onChosen,
+  onFailed,
+}: CheckInCardProps & {
+  /** The user chose: the card settles at once. */
+  onChosen: () => void;
+  /** The answer failed: the card comes back open. */
+  onFailed: () => void;
 }) {
   const answer = useAnswerCheckIn(taskId);
   const toast = useToast();
   const [freeText, setFreeText] = useState("");
-  const [changeModeOpen, setChangeModeOpen] = useState(false);
   const [changeModeValue, setChangeModeValue] = useState<ChangeModeValue>("moderate");
   const [compiled, setCompiled] = useState<CompiledSteer | null>(null);
   const [steerWords, setSteerWords] = useState<string | null>(null);
   const [stagedRenames, setStagedRenames] = useState<ThemeRename[]>([]);
   const [editedSections, setEditedSections] = useState<SectionRow[] | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const freeTextRef = useRef<HTMLInputElement>(null);
+  const [pickedId, setPickedId] = useState<string | null>(null);
 
   if (!isOwner) return null;
 
@@ -87,12 +207,13 @@ export function CheckInCard({
       ? conflictSentences[code]
       : "That couldn't be applied. The check-in is still waiting.";
     setNotice(message);
+    onFailed();
     toast.toast({ title: "Check-in update failed", description: message, tone: "error" });
   };
 
   const sendOption = (optionId: string, params?: Record<string, unknown>) => {
     setNotice(null);
-    const selected = (checkIn.options ?? []).find((option) => option.id === optionId);
+    onChosen();
     // Staged P2 theme renames ride the SINGLE response as validated params on
     // whichever option answers the card (028 strand 14 — no second response).
     const withRenames =
@@ -102,31 +223,33 @@ export function CheckInCard({
         checkInId: checkIn.check_in_id,
         body: { kind: "option", option_id: optionId, params: withRenames ?? null },
       },
+      { onError: conflictNotice },
+    );
+  };
+
+  /** Free text goes through the router's compile → confirm gate: nothing
+   *  applies until the user confirms the compiled change. */
+  const compileSteer = (text: string) => {
+    setNotice(null);
+    answer.mutate(
+      { checkInId: checkIn.check_in_id, body: { kind: "free_text", text } },
       {
-        onSuccess: () => {
-          if (selected === undefined) return;
-          recordSessionAnsweredCheckIn(
-            checkIn.check_in_id,
-            selected.label,
-            (checkIn.options ?? [])
-              .filter((option) => option.id !== optionId)
-              .map((option) => option.label),
-          );
+        onSuccess: (result) => {
+          if (result.kind === "compiled") {
+            setCompiled(result.compiled);
+            setSteerWords(text);
+            setFreeText("");
+          }
         },
         onError: conflictNotice,
       },
     );
   };
 
-  const stageLabel = findStageLabel(stages, checkIn.stage);
-  const presentedRender = presentCheckInRender(checkIn.render, checkIn.stage, stages);
-
   if (compiled !== null) {
     return (
-      <Card aria-live="polite" className="border-l-2 border-l-blue p-5">
-        <div className="flex items-center gap-2">
-          <Chip tone="blue">Confirm your steer</Chip>
-        </div>
+      <Card aria-live="polite" className="anim-swap-in-fast border-l-2 border-l-orange p-5">
+        <h3 className="text-lead font-bold text-navy">Confirm your steer</h3>
         {steerWords !== null && (
           <div className="mt-2 ml-8 border border-blue-tint bg-blue-tint-2 px-3 py-2">
             <p className="text-body text-ink">{scrub(steerWords)}</p>
@@ -135,7 +258,7 @@ export function CheckInCard({
         <p className="mt-2 text-body font-semibold text-navy">
           Here's what that would change — apply it?
         </p>
-        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-body leading-relaxed text-ink">
+        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-body text-ink">
           {scrub(compiled.render)}
         </pre>
         <p className="mt-1.5 text-body text-grey">
@@ -147,6 +270,7 @@ export function CheckInCard({
             disabled={answer.isPending}
             onClick={() => {
               setNotice(null);
+              onChosen();
               answer.mutate(
                 {
                   checkInId: checkIn.check_in_id,
@@ -191,118 +315,106 @@ export function CheckInCard({
     );
   }
 
+
   const bundleRecord =
     checkIn.bundle !== null && typeof checkIn.bundle === "object" && !Array.isArray(checkIn.bundle)
       ? (checkIn.bundle as Record<string, unknown>)
       : null;
+  const noticeLine =
+    notice === null ? null : (
+      <p role="alert" className="mt-3 text-body text-red">
+        {notice}
+      </p>
+    );
 
   // The options-scoping baseline gate (task 044, D12) is a decision, not a
   // steer: two server-supplied options end the walk one way or the other,
   // neither carries a delta, and there is nothing here to compile free text
-  // into. Its card is therefore the gate's own quiet read — the baseline's
-  // key assumption and the settings the walk ran from — over the same
-  // `sendOption` path every other option uses. Questions about the baseline
-  // go to the Task Agent composer, which stays open at this pause.
+  // into. Its card is the gate's own read — the settings the walk ran from,
+  // risk appetite included (N19) — over
+  // the same `sendOption` path every other option uses. Questions about the
+  // baseline go to the Task Agent composer, which stays open at this pause.
+  // Since round 10 (finding 8) it reads as the other check-ins: the question
+  // as the title, one facts line with the way to the baseline, no labels;
+  // no key assumption (round 12, owner).
   if (checkIn.kind === BASELINE_GATE_KIND) {
-    const card = baselineGateCard(bundleRecord);
+    const facts = baselineGateFacts(bundleRecord);
     return (
-      <Card aria-live="polite" className="anim-glow border-l-2 border-l-orange p-5">
-        <h3 className="font-display text-lead font-bold text-navy">{BASELINE_GATE_HEADING}</h3>
-        {card.keyAssumption === null ? (
-          <p className="mt-3 text-body text-grey">{BASELINE_KEY_ASSUMPTION_ABSENT}</p>
-        ) : (
-          <>
-            <p className="mt-3 text-meta font-bold uppercase tracking-[0.06em] text-grey">
-              {BASELINE_KEY_ASSUMPTION_LABEL}
-            </p>
-            <blockquote className="mt-1 max-w-prose-measure border-l-2 border-l-line pl-2.5 text-body italic text-ink">
-              {scrub(card.keyAssumption)}
-            </blockquote>
-          </>
-        )}
-        {card.settings.length > 0 && (
-          <>
-            <p className="mt-4 text-meta font-bold uppercase tracking-[0.06em] text-grey">
-              {BASELINE_SETTINGS_HEADING}
-            </p>
-            <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
-              {card.settings.map(({ label, value }) => (
-                <div key={label} className="contents">
-                  <dt className="text-caption text-grey">{label}</dt>
-                  <dd className="text-body text-ink">{scrub(value)}</dd>
-                </div>
-              ))}
-            </dl>
-          </>
-        )}
-        <div className="mt-4 flex flex-col gap-2">
-          {(checkIn.options ?? []).map((option, index) => (
-            <div key={option.id} className="flex flex-col gap-1">
-              <div>
-                <Button
-                  variant={index === 0 ? "primary" : "secondary"}
-                  size="sm"
-                  disabled={answer.isPending}
-                  onClick={() => sendOption(option.id)}
-                >
-                  {scrub(option.label)}
-                </Button>
-              </div>
-              {option.description.length > 0 && (
-                <p className="text-body leading-relaxed text-grey">{scrub(option.description)}</p>
-              )}
-            </div>
-          ))}
-        </div>
-        {notice !== null && (
-          <p role="alert" className="mt-3 text-body text-red">
-            {notice}
+      <Card aria-live="polite" data-testid="check-in-card" className={cn(WAITING_CARD_CLASS, compact ? "p-4" : "p-5")}>
+        <h3 className="max-w-prose-measure text-lead font-bold text-navy">{BASELINE_GATE_QUESTION}</h3>
+        {!compact && (
+          <p data-testid="check-in-facts" className="mt-1 max-w-prose-measure text-meta text-grey">
+            {facts.map((fact) => (
+              <Fragment key={fact}>
+                <span className="inline-block max-w-full">
+                  {scrub(fact)}
+                  <span aria-hidden="true">{" ·"}</span>
+                  <span className="sr-only">,</span>
+                </span>{" "}
+              </Fragment>
+            ))}
+            <Link to={`/tasks/${taskId}/result?view=baseline`} className={LINK_CLASS}>
+              Baseline →
+            </Link>
           </p>
         )}
+        <div role="radiogroup" aria-label={BASELINE_GATE_QUESTION} className="mt-3 flex max-w-prose-measure flex-col gap-1">
+          {(checkIn.options ?? []).map((option) => (
+            <ChoiceRow
+              key={option.id}
+              label={option.label}
+              sentences={[option.description]}
+              selected={pickedId === option.id}
+              disabled={answer.isPending}
+              data-option-id={option.id}
+              onChoose={() => {
+                setPickedId(option.id);
+                sendOption(option.id);
+              }}
+            />
+          ))}
+        </div>
+        {noticeLine}
       </Card>
     );
   }
 
+  const headline = checkInHeadline(checkIn.render, checkIn.stage, stages);
   const triggerLines = triggerCopy(checkIn.triggers);
-  // Suggested options (authored from this run's results) get their own block;
-  // the edit_sections channel renders as the bundle's inline row editing, not
-  // a button (028 strand 14 — the retype-everything button retired).
+  // One radio list (annex scene 12): the steering's suggested option first
+  // with its `why` under it, then the rest in the server's order. The stop
+  // option is the card's one "Stop the run" link, and the edit_sections
+  // channel is the bundle's own row editing, so neither is a choice here.
   const allOptions = checkIn.options ?? [];
-  const canonicalOptions = allOptions.filter(
-    (option) => !option.suggested && option.id !== "edit_sections",
-  );
-  const suggestedOptions = allOptions.filter((option) => option.suggested);
+  const choices = [
+    ...allOptions.filter((option) => option.suggested),
+    ...allOptions.filter((option) => !option.suggested),
+  ].filter((option) => option.id !== "abort" && option.id !== "edit_sections");
   const editChannel = allOptions.find((option) => option.id === "edit_sections");
   const sectionsEdited = editedSections !== null && editChannel !== undefined;
+  const linksToSources = checkIn.stage !== null && SOURCES_CHECK_IN_STAGES.has(checkIn.stage);
 
   return (
-    <Card aria-live="polite" className="anim-glow border-l-2 border-l-orange p-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Chip tone="yellow">Waiting on your input</Chip>
-        {stageLabel !== null && <Chip tone="soft">{scrub(stageLabel)}</Chip>}
-      </div>
-      {triggerLines.length > 0 && (
-        <p className="mt-2 max-w-prose-measure text-body leading-relaxed text-grey">{triggerLines.join(" ")}</p>
-      )}
-      {presentedRender === null ? (
-        <pre className="mt-3 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-body leading-relaxed text-ink">
-          {scrub(checkIn.render)}
-        </pre>
-      ) : (
-        <div className="mt-3 border border-line bg-paper-2 p-3">
-          {/* No decimal completion time, no raw-render disclosure (owner,
-              2026-08-05) — the stage label and counts carry the story. */}
-          <p className="text-body font-semibold text-navy">{scrub(presentedRender.stageLabel)}</p>
-          {presentedRender.counts.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {presentedRender.counts.map(({ label, value }) => (
-                <Chip key={label} tone="soft">
-                  {label}: {value}
-                </Chip>
-              ))}
-            </div>
+    <Card aria-live="polite" data-testid="check-in-card" className={cn(WAITING_CARD_CLASS, compact ? "p-4" : "p-5")}>
+      <h3 className="max-w-prose-measure text-lead font-bold text-navy">{scrub(headline.title)}</h3>
+      {!compact && headline.facts !== null && (
+        <p data-testid="check-in-facts" className="mt-1 max-w-prose-measure text-body text-grey">
+          {scrub(headline.facts)}
+          {linksToSources && (
+            <>
+              {" · "}
+              <Link
+                to={`/tasks/${taskId}/sources`}
+                className={LINK_CLASS}
+              >
+                Sources →
+              </Link>
+            </>
           )}
-        </div>
+        </p>
+      )}
+      {triggerLines.length > 0 && (
+        <p className="mt-2 max-w-prose-measure text-body text-grey">{triggerLines.join(" ")}</p>
       )}
 
       <CheckInBundle
@@ -331,197 +443,127 @@ export function CheckInCard({
           >
             Write the report with the edited sections
           </Button>
-          <p className="text-body text-grey">
-            Untouched rows carry over exactly as displayed.
-          </p>
+          <p className="text-body text-grey">Untouched rows carry over exactly as displayed.</p>
         </div>
       )}
 
-      <div className="mt-4 flex flex-col gap-2">
-        {canonicalOptions.map((option) => (
-          <div key={option.id} className="flex flex-col gap-2">
-            <div className="flex items-start gap-2.5">
-              <Button
-                variant={
-                  (option.id === "continue" || option.id === "as_proposed") && !sectionsEdited
-                    ? "primary"
-                    : "secondary"
-                }
-                size="sm"
+      <div role="radiogroup" aria-label={headline.title} className="mt-3 flex max-w-prose-measure flex-col gap-1">
+        {choices.map((option) => {
+          const selected = pickedId === option.id;
+          // `change_mode` opens its own select; any other option that needs
+          // words opens a line inside the card and compiles like free text.
+          const opensForm = option.id === "change_mode" || option.requires_user_input;
+          return (
+            <div key={option.id}>
+              <ChoiceRow
+                label={option.label}
+                sentences={[option.description, option.suggested ? option.why : null, option.endorsement]}
+                selected={selected}
                 disabled={answer.isPending}
-                onClick={() => {
-                  if (option.id === "change_mode") {
-                    setChangeModeOpen((open) => !open);
-                    return;
-                  }
-                  if (option.requires_user_input) {
-                    // Parameterised options beyond `change_mode` don't have
-                    // a server-shaped params form — steer them honestly
-                    // through the free-text compile→confirm path instead
-                    // of sending a made-up `{ value }` params body.
-                    setFreeText(`${option.label}: `);
-                    freeTextRef.current?.focus();
-                    return;
-                  }
-                  sendOption(option.id);
+                data-option-id={option.id}
+                data-suggested={option.suggested ? "true" : "false"}
+                onChoose={() => {
+                  setPickedId(option.id);
+                  if (!opensForm) sendOption(option.id);
                 }}
-              >
-                {scrub(option.label)}
-              </Button>
-            </div>
-            {option.endorsement != null && option.endorsement !== "" && (
-              // The run's reviewer endorsed this option: its reason renders
-              // here, under the option — never a duplicate button.
-              <p className="text-body leading-relaxed text-blue">
-                {scrub(option.endorsement)}
-              </p>
-            )}
-            {option.description.length > 0 && (
-              <p className="text-body leading-relaxed text-grey">{scrub(option.description)}</p>
-            )}
-            {option.id === "change_mode" && changeModeOpen && (
-              <form
-                className="flex items-center gap-2"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  sendOption("change_mode", { new_mode: changeModeValue });
-                  setChangeModeOpen(false);
-                }}
-              >
-                <label className="sr-only" htmlFor="change-mode-select">
-                  New steering mode
-                </label>
-                <select
-                  id="change-mode-select"
-                  value={changeModeValue}
-                  onChange={(event) => setChangeModeValue(event.target.value as ChangeModeValue)}
-                  className="flex-1 border border-line-2 bg-paper px-2.5 py-1.5 text-meta focus-visible:outline-2 focus-visible:outline-blue"
+              />
+              {selected && option.id === "change_mode" && (
+                <form
+                  className="mt-2 flex items-center gap-2 pl-7"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    sendOption("change_mode", { new_mode: changeModeValue });
+                  }}
                 >
-                  {CHANGE_MODE_VALUES.flatMap((value) => {
-                    const label = vocabLabel(STEERING_MODE_LABEL, value);
-                    return label === null
-                      ? []
-                      : [
-                          <option key={value} value={value}>
-                            {label}
-                          </option>,
-                        ];
-                  })}
-                </select>
-                <Button type="submit" size="sm" disabled={answer.isPending}>
-                  Send
-                </Button>
-              </form>
-            )}
-          </div>
-        ))}
+                  <Select
+                    id={`change-mode-${checkIn.check_in_id}`}
+                    label="New steering mode"
+                    value={changeModeValue}
+                    options={CHANGE_MODE_VALUES.flatMap((value) => {
+                      const label = vocabLabel(STEERING_MODE_LABEL, value);
+                      return label === null ? [] : [{ value, label }];
+                    })}
+                    onChange={setChangeModeValue}
+                    className="flex-1"
+                  />
+                  <Button type="submit" size="sm" variant="outline" disabled={answer.isPending}>
+                    Send
+                  </Button>
+                </form>
+              )}
+              {selected && option.id !== "change_mode" && option.requires_user_input && (
+                <div className="pl-7 max-sm:pl-0">
+                  <WordsInput
+                    label={option.label}
+                    disabled={answer.isPending}
+                    onSend={(text) => compileSteer(`${option.label}: ${text}`)}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      {suggestedOptions.length > 0 && (
-        <div className="mt-4 border border-blue-tint bg-blue-tint/40 px-3 py-2.5">
-          <p className="text-meta font-bold uppercase tracking-[0.06em] text-blue">
-            Suggested from this run's results
-          </p>
-          <div className="mt-2 flex flex-col gap-2">
-            {suggestedOptions.map((option) => (
-              <div key={option.id} className="flex flex-col gap-1">
-                <div>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={answer.isPending}
-                    onClick={() => sendOption(option.id)}
-                  >
-                    {scrub(option.label)}
-                  </Button>
-                </div>
-                {option.why != null && option.why !== "" && (
-                  <p className="text-body leading-relaxed text-grey">{scrub(option.why)}</p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <form
-        className="mt-4 border-t border-line pt-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const text = freeText.trim();
-          if (text.length === 0) return;
-          setNotice(null);
-          answer.mutate(
-            { checkInId: checkIn.check_in_id, body: { kind: "free_text", text } },
-            {
-              onSuccess: (result) => {
-                if (result.kind === "compiled") {
-                  setCompiled(result.compiled);
-                  setSteerWords(text);
-                  setFreeText("");
-                }
-              },
-              onError: conflictNotice,
-            },
-          );
-        }}
-      >
-        <label className="text-body font-semibold text-navy" htmlFor="check-in-free-text">
+      <details className="group/steer mt-3 border-t border-line pt-3">
+        <summary className="group flex cursor-pointer list-none items-center gap-1.5 text-body font-semibold text-grey hover:text-navy [&::-webkit-details-marker]:hidden">
+          <DisclosureChevron className="group-open/steer:rotate-90" />
           Or steer in your own words
-        </label>
-        <div className="mt-1.5 flex items-center gap-2">
-          <input
-            id="check-in-free-text"
-            ref={freeTextRef}
-            value={freeText}
-            onChange={(event) => setFreeText(event.target.value)}
-            placeholder="e.g. prioritise UK school-based studies"
-            className="flex-1 border border-line-2 bg-paper px-3 py-2 text-body focus-visible:outline-2 focus-visible:outline-blue"
-          />
-          <Button
-            type="submit"
-            variant="secondary"
-            size="sm"
-            disabled={answer.isPending || freeText.trim().length === 0}
-          >
-            Compile
-          </Button>
-        </div>
-        <p className="mt-1.5 text-body text-grey">
-          Your words compile into plan changes you confirm before they apply.
-        </p>
-      </form>
+        </summary>
+        <form
+          className="mt-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const text = freeText.trim();
+            if (text.length === 0) return;
+            compileSteer(text);
+          }}
+        >
+          <label className="sr-only" htmlFor={`check-in-free-text-${checkIn.check_in_id}`}>
+            Or steer in your own words
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id={`check-in-free-text-${checkIn.check_in_id}`}
+              value={freeText}
+              onChange={(event) => setFreeText(event.target.value)}
+              placeholder="e.g. prioritise UK school-based studies"
+              className="min-w-0 flex-1 border border-line-2 bg-paper px-3 py-2 text-body"
+            />
+            <Button
+              type="submit"
+              variant="outline"
+              size="sm"
+              disabled={answer.isPending || freeText.trim().length === 0}
+            >
+              Compile
+            </Button>
+          </div>
+          <p className="mt-1.5 text-body text-grey">
+            Your words compile into plan changes you confirm before they apply.
+          </p>
+        </form>
+      </details>
 
-      <div className="mt-3 flex justify-end">
+      <div className="mt-2 flex justify-end">
         <Button
           variant="ghost"
           size="sm"
           disabled={answer.isPending}
           onClick={() => {
             setNotice(null);
+            onChosen();
             answer.mutate(
               { checkInId: checkIn.check_in_id, body: { kind: "abort" } },
-              {
-                onSuccess: () =>
-                  recordSessionAnsweredCheckIn(
-                    checkIn.check_in_id,
-                    "Stop the analysis",
-                    (checkIn.options ?? []).map((option) => option.label),
-                  ),
-                onError: conflictNotice,
-              },
+              { onError: conflictNotice },
             );
           }}
         >
-          Stop the analysis
+          {STOP_THE_RUN}
         </Button>
       </div>
 
-      {notice !== null && (
-        <p role="alert" className="mt-3 text-caption text-red">
-          {notice}
-        </p>
-      )}
+      {noticeLine}
     </Card>
   );
 }

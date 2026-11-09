@@ -710,9 +710,18 @@ OPTIONS_SCOPING_TASK_AGENT = TaskAgentProfile(
     seed_draft=lambda plan: _seed_draft(expect_scoping_plan(plan)),
     stub_turn=_stub_turn,
     # Closed per capability: a scoping card keyed 'thoroughness' would render
-    # an Evidence search control on a plan that has no such dial.
+    # an Evidence search control on a plan that has no such dial. The last two
+    # ids are ones the planner proposes (task 058, N18).
     part_ids=frozenset(
-        {"question", "settings", "constraints", "depth", "appetite"}
+        {
+            "question",
+            "settings",
+            "constraints",
+            "depth",
+            "appetite",
+            "who_can_act",
+            "your_options",
+        }
     ),
     # OS ruling 25: neither depth is a recommendation.
     no_primary_parts=frozenset({"depth"}),

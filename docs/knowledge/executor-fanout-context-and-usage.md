@@ -19,6 +19,12 @@ workers *return* their usage payloads; the submitting thread accumulates them in
 order (see the finding-vetter parallelization in `extract.py` — workers judge, the
 parent applies verdicts and adds usage).
 
+A `Future` **done-callback is not covered by the submit copy**: the pool thread runs it in
+an empty context, so a callback that reads a contextvar (the bound task, stage or walk for a
+live tick) publishes nothing in production and everything in a test that runs inline. Wrap
+the callback with the submitting thread's context (`core/done_callbacks.py`, task 058) or
+have the worker return what the callback needs.
+
 # Why
 
 019 items 4 + 7a composed for free once the submit seam owned context propagation —

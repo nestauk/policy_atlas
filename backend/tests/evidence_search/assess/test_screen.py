@@ -36,6 +36,9 @@ from policy_atlas.evidence_search.assess.screen import (
     _load_stage2_docs,
     _next_screen_generation,
     _parse_screen_directive,
+    _run_stage1_calls,
+    _run_stage2_reps,
+    _Stage1Doc,
     _stage2_payload,
     effective_screen_rows,
     screen_sources,
@@ -54,6 +57,7 @@ from policy_atlas.evidence_search.corpus.characterise import (
 )
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.run_spec import Plan, compile
+from tests import progress_recorder
 from tests.helpers import (
     now,
     seed_ingested_full_text,
@@ -1591,3 +1595,98 @@ def test_consumer_stage2_skip_advances_doc_at_new_generation(conn: Connection) -
     assert skipped == 0
     assert [doc.tss_id for doc in docs] == [tss_id]
     assert docs[0].stage1_generation == 1
+
+
+# --- Live progress (task 058, N2) ---
+
+
+class _FailsOnceBackend:
+    """The deterministic stub, except one call per listed title fails once."""
+
+    mode = "stub"
+
+    def __init__(self, fail_once: set[str]) -> None:
+        self._stub = StubScreeningBackend()
+        self._fail_once = set(fail_once)
+
+    def screen_envelope(
+        self, payload: ScreenEnvelopePayload, *, rep_index: int = 0
+    ) -> UsageResult[ScreenRepWire]:
+        if payload.title in self._fail_once:
+            self._fail_once.discard(payload.title)
+            raise RuntimeError("one transient failure")
+        return self._stub.screen_envelope(payload, rep_index=rep_index)
+
+    def screen_fulltext(self, payload: ScreenFullTextPayload) -> UsageResult[ScreenRepWire]:
+        if payload.title in self._fail_once:
+            self._fail_once.discard(payload.title)
+            raise RuntimeError("one transient failure")
+        return self._stub.screen_fulltext(payload)
+
+
+def _stage1_doc(title: str, *, relevant: bool) -> _Stage1Doc:
+    metadata: dict[str, Any] = {"abstract": "Text."}
+    if not relevant:
+        metadata["_stub_not_relevant"] = True
+    return _Stage1Doc(
+        tss_id=uuid.uuid4(),
+        source_snapshot_id=uuid.uuid4(),
+        metadata=metadata,
+        basis="title_abstract",
+        payload=ScreenEnvelopePayload(
+            tss_id=title,
+            title=title,
+            abstract="Text.",
+            abstract_source=None,
+            intent="Test",
+            metadata=metadata,
+        ),
+    )
+
+
+def test_stage1_publishes_screened_and_relevant_so_far(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = progress_recorder.install(monkeypatch)
+    docs = [
+        _stage1_doc("a", relevant=True),
+        _stage1_doc("b", relevant=True),
+        _stage1_doc("c", relevant=False),
+        _stage1_doc("d", relevant=False),
+    ]
+    _run_stage1_calls(docs, screening_backend=_FailsOnceBackend(set()))
+
+    assert calls[0]["done"] == 0
+    assert all(c["total"] is None and c["unit"] == "abstracts" for c in calls)
+    last = max(calls, key=lambda c: c["done"])
+    assert last["done"] == 4
+    assert last["activity"] == "screening 0 abstracts · 2 relevant"
+
+
+def test_stage1_retry_does_not_move_the_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = progress_recorder.install(monkeypatch)
+    docs = [_stage1_doc("a", relevant=True), _stage1_doc("b", relevant=True)]
+    _, retries, _ = _run_stage1_calls(docs, screening_backend=_FailsOnceBackend({"a"}))
+
+    assert retries == 1
+    # The failed first call still counts the document once; the serial retry
+    # publishes nothing, so the count never passes the document total.
+    assert max(c["done"] for c in calls) == 2
+    assert len(calls) == 1 + 2
+
+
+def test_stage2_publishes_documents_read_of_total(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = progress_recorder.install(monkeypatch)
+    payloads = {
+        i: ScreenFullTextPayload(
+            tss_id=f"t{i}", title=f"t{i}", intent="Test", window_index=0, segments=[]
+        )
+        for i in range(3)
+    }
+    _, retries, _ = _run_stage2_reps(payloads, screening_backend=_FailsOnceBackend({"t1"}))
+
+    assert retries == 1
+    assert all(c["total"] == 3 and c["unit"] == "documents" for c in calls)
+    assert [c["done"] for c in sorted(calls, key=lambda c: c["done"])] == [0, 1, 2, 3]
+    final = max(calls, key=lambda c: c["done"])
+    assert final["activity"] == "reading 3 of 3 full texts for relevance"

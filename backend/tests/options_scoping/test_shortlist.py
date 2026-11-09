@@ -34,6 +34,8 @@ from policy_atlas.options_scoping.shortlist.shortlist import (
     shortlist_scope,
     shuffled,
 )
+from policy_atlas.options_scoping.shortlist.shortlist_note import note_stale
+from policy_atlas.options_scoping.shortlist.shortlist_note_prompt import ShortlistNoteWire
 from policy_atlas.options_scoping.shortlist.shortlist_prompt import (
     SHORTLIST_PROMPT_VERSION,
     ShortlistPickWire,
@@ -116,10 +118,9 @@ def _name_of(text: str, short_id: str) -> str:
     return lines[lines.index(f"id: {short_id}") + 1].removeprefix("## ")
 
 
-def _wire(picks: list[tuple[str, str]], note: str = "A note.") -> ShortlistWire:
+def _wire(picks: list[tuple[str, str]]) -> ShortlistWire:
     return ShortlistWire(
         picks=[ShortlistPickWire(option_id=oid, reason=reason) for oid, reason in picks],
-        note=note,
     )
 
 
@@ -160,6 +161,8 @@ def test_with_two_user_places_three_are_filled(conn: Connection) -> None:
     backend = StubLonglistBackend()
     _, summary = _shortlist(walk, backend)
     assert summary["filled"] == 3 and summary["kept"] == 2
+    # The run page's count is the shortlist after the step, not the places kept.
+    assert summary["shortlisted"] == 5
     states = _states(walk)
     assert states["A"] == states["B"] == ("added_by_you", None)  # user places untouched
     picked = [name for name, (state, _) in states.items() if state == "proposed"]
@@ -314,6 +317,8 @@ def test_suggest_more_fills_up_to_five_or_one_more(
     backend = StubLonglistBackend()
     _, summary = _shortlist(walk, backend, suggest=True)
     assert summary["filled"] == filled
+    # Suggest more keeps the earlier picks, so they count too.
+    assert summary["shortlisted"] == places + filled
     states = _states(walk)
     # The earlier picks stay; the candidates were only the options without a place.
     for i, name in enumerate(names[:places]):
@@ -373,13 +378,41 @@ def test_each_failed_check_re_asks_once_naming_it_then_fails(
     assert _states(walk) == before  # nothing written
 
 
-def test_a_note_with_a_link_re_asks_naming_it(conn: Connection) -> None:
-    walk, _ = _check_walk(conn)
-    picks = [("o1", "r"), ("o2", "r"), ("o3", "r")]
-    backend = StubLonglistBackend(shortlist_responses=_wire(picks, note="See www.example.org."))
-    with pytest.raises(ShortlistFailure, match="The note contains a link."):
-        _shortlist(walk, backend)
-    assert backend.calls["shortlist"] == 2
+def test_the_step_writes_its_picks_then_the_note_with_their_changes(conn: Connection) -> None:
+    """Round 14 (owner): the note has one writer, run after the picks with the
+    places as they now stand and the proposal's changes; it stores the places."""
+    walk = _Walk(conn)
+    ids = _listed(walk, ["A", "B", "C"])
+    _set(walk, ids["A"], shortlist_state="added_by_you")
+    backend = StubLonglistBackend(shortlist_note_responses=ShortlistNoteWire(note="Leaves out C."))
+    _shortlist(walk, backend)
+    assert backend.calls["shortlist"] == 1 and backend.calls["shortlist_note"] == 1
+    [note_call] = backend.inputs["shortlist_note"]
+    by_short = {entry["id"]: entry["name"] for entry in note_call["options"]}
+    assert sorted(by_short[place] for place in note_call["places"]) == ["A", "B", "C"]
+    assert sorted((change["name"], change["change"]) for change in note_call["changes"]) == [
+        ("B", "added"),
+        ("C", "added"),
+    ]
+    assert all(change["reason"] == "stub reason" for change in note_call["changes"])
+    row = walk.conn.execute(
+        select(longlist_result.c.shortlist).where(longlist_result.c.task_id == walk.task_id)
+    ).scalar_one()
+    assert row["note"] == "Leaves out C."
+    assert sorted(row["places_at"]) == sorted(str(ids[name]) for name in "ABC")
+
+
+def test_a_failed_note_keeps_the_picks(conn: Connection) -> None:
+    walk = _Walk(conn)
+    ids = _listed(walk, ["A", "B"])
+    backend = StubLonglistBackend(shortlist_note_responses=RuntimeError("note down"))
+    _, summary = _shortlist(walk, backend)
+    assert summary["filled"] == 2
+    row = walk.conn.execute(
+        select(longlist_result.c.shortlist).where(longlist_result.c.task_id == walk.task_id)
+    ).scalar_one()
+    assert "note" not in row and row["provenance"]
+    assert note_stale(row, [ids["A"], ids["B"]])
 
 
 def test_a_good_second_answer_is_written_and_attempts_are_recorded(conn: Connection) -> None:
@@ -482,6 +515,7 @@ def test_the_event_carries_the_whole_proposal(conn: Connection) -> None:
     assert summary == {
         "filled": 1,
         "kept": 1,
+        "shortlisted": 2,
         "set_aside": 0,
         "cleared": 0,
         "input_chars": summary["input_chars"],

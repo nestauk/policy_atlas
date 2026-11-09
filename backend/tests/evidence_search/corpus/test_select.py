@@ -1720,8 +1720,8 @@ def test_summary_payload_shape_is_frozen(conn: Connection) -> None:
     )
 
     assert set(summary.keys()) == {
-        "strata", "selected", "excluded", "base", "characterisation_run_id",
-        "flags", "provenance", "usage_totals",
+        "strata", "selected_count", "selected", "excluded", "base",
+        "characterisation_run_id", "flags", "provenance", "usage_totals",
     }
     assert summary["strata"], "fixture must produce at least one stratum"
     for stratum in summary["strata"]:
@@ -1865,3 +1865,22 @@ def test_select_writes_no_artefact_or_block_and_leaves_screening_untouched(
         .order_by(source_screening_result.c.task_source_snapshot_id)
     ).fetchall()
     assert screening_after == screening_before
+
+
+# --- Summary count (task 058, N2) ---
+
+
+def test_summary_carries_the_selected_count(conn: Connection) -> None:
+    pid, characterise_run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    theme_a = _docs(conn, pid, characterise_run_id, scope_id, "A", 10)
+    theme_b = _docs(conn, pid, characterise_run_id, scope_id, "B", 6)
+    seed_characterisation(
+        conn, pid, scope_id, characterise_run_id, themes={"A": theme_a, "B": theme_b}
+    )
+
+    summary, _row, _ = run_select(
+        conn, pid, scope_id, characterise_run_id, context={"selection": {"budget": 5}}
+    )
+
+    assert summary["selected_count"] == summary["selected"]["count"] == 5

@@ -123,7 +123,6 @@ export function RailToggle({
       className={cn(
         "inline-flex h-8 w-8 cursor-pointer items-center justify-center text-grey",
         "hover:bg-ground hover:text-navy",
-        "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue",
         className,
       )}
     >

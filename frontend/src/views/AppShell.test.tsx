@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,7 +8,18 @@ import { AppShell } from "./AppShell";
 import { SITE_DISCLAIMER } from "./AppFooter";
 import { PrivacyView } from "./legal/PrivacyView";
 import { TermsView } from "./legal/TermsView";
+import { useDocumentTitle } from "../lib/title";
 import { TASK } from "../lib/vocabulary";
+import { usePlanPanel } from "./planPanel";
+
+// Round 12: the shell forgets a task's report expand state when the reader
+// leaves the task; the hook is watched here, its rule is ArtefactOutline's.
+const forgetOnLeave = vi.hoisted(() => vi.fn());
+vi.mock("./ArtefactOutline", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./ArtefactOutline")>()),
+  useForgetReportExpandOnLeave: forgetOnLeave,
+}));
+import type { SseFrame } from "../api/sseFrame";
 import { BETA_CHIP_HINT } from "../ui/brand/Nav";
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
@@ -36,6 +47,15 @@ const taskState = vi.hoisted(() => ({
   latestRun: null as { status: string } | null,
   activeRun: null as { status: string } | null,
   hasLonglist: false,
+  // Round 12: the header's "Add to project" reads the task's projects.
+  projectIds: [] as string[],
+}));
+
+// Round 12: the projects the header's "Add to project" offers, and its change.
+const projectsState = vi.hoisted(() => ({
+  rows: [] as { project_id: string; name: string }[],
+  update: vi.fn(),
+  createProject: vi.fn(),
 }));
 
 // Both mocked as spies (task 037 review fix) so a describe block below can
@@ -43,7 +63,18 @@ const taskState = vi.hoisted(() => ({
 // conversations fetch or a real SSE connect would mean access was assumed
 // before it was known.
 const useConversationsState = vi.hoisted(() => ({ mock: vi.fn(() => ({ data: { data: [] } })) }));
-const sseState = vi.hoisted(() => ({ connect: vi.fn(() => ({ close: vi.fn() })) }));
+type StreamHandlers = {
+  onConnected?: () => void;
+  onDisconnected?: () => void;
+  onFrame?: (frame: SseFrame) => void;
+};
+const sseState = vi.hoisted(() => ({
+  handlers: null as StreamHandlers | null,
+  connect: vi.fn((options: StreamHandlers) => {
+    sseState.handlers = options;
+    return { close: vi.fn() };
+  }),
+}));
 
 vi.mock("../api/queries", () => ({
   useMe: () => ({ data: meState.data }),
@@ -59,12 +90,16 @@ vi.mock("../api/queries", () => ({
           latest_run: taskState.latestRun,
           active_run: taskState.activeRun,
           has_longlist: taskState.hasLonglist,
+          project_ids: taskState.projectIds,
         }
       : undefined,
   }),
+  useProjects: () => ({ data: { data: projectsState.rows } }),
+  // Round 14: the capability line names the task's first project.
+  useProject: (projectId: string) => ({
+    data: projectsState.rows.find((row) => row.project_id === projectId),
+  }),
   useCheckIns: () => ({ data: { data: [{ check_in_id: "pending-1" }] } }),
-  // The nav logo checks all tasks for an active run outside a task.
-  useTasks: () => ({ data: { data: [] } }),
   // The chat side panel (029 rev 3.4) mounts on non-workspace task routes.
   useConversations: useConversationsState.mock,
   useArtefact: () => ({ data: undefined }),
@@ -74,8 +109,20 @@ vi.mock("../api/queries", () => ({
   useApiClient: () => ({}),
 }));
 
+// The plan document reads its own queries; here only its opening matters.
+vi.mock("./workspace/PlanDocument", () => ({
+  PlanDocument: ({ onClose, readOnly }: { onClose: () => void; readOnly?: boolean }) => (
+    <aside aria-label="Search plan" data-readonly={String(readOnly)}>
+      <button type="button" onClick={onClose}>
+        Close the search plan
+      </button>
+    </aside>
+  ),
+}));
+
 vi.mock("../api/mutations", () => ({
-  useUpdateTask: () => ({ mutate: vi.fn(), isPending: false }),
+  useUpdateTask: () => ({ mutate: projectsState.update, isPending: false }),
+  useCreateProject: () => ({ mutate: projectsState.createProject, isPending: false }),
   useArchiveTask: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }));
 
@@ -96,6 +143,20 @@ vi.mock("../api/sse", () => ({
   connectEventStream: sseState.connect,
 }));
 
+/** A task page that sets its title the way every task view does. */
+function TitledTask() {
+  useDocumentTitle("Acme task", "Sources");
+  const plan = usePlanPanel();
+  return (
+    <div>
+      task
+      <button type="button" onClick={plan.openPlan}>
+        Open the plan (test)
+      </button>
+    </div>
+  );
+}
+
 function renderShell(initialPath: string) {
   // The header's task-settings popover (028 F.5) wires rename/archive
   // mutations, which resolve useQueryClient — a real QueryClient is needed
@@ -111,7 +172,7 @@ function renderShell(initialPath: string) {
             <Route path="/projects" element={<div>tasks</div>} />
             <Route path="/privacy" element={<PrivacyView />} />
             <Route path="/terms" element={<TermsView />} />
-            <Route path="/tasks/:taskId/*" element={<div>task</div>} />
+            <Route path="/tasks/:taskId/*" element={<TitledTask />} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -138,6 +199,17 @@ describe("AppShell — pending check-in nav badge (027 strand 14)", () => {
   });
 });
 
+describe("AppShell — the report's expand state (round 12)", () => {
+  it("hands the route's task to the hook that forgets it on leaving, and nothing off a task", () => {
+    forgetOnLeave.mockClear();
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    expect(forgetOnLeave).toHaveBeenCalledWith(TASK_ID);
+    forgetOnLeave.mockClear();
+    renderShell("/projects");
+    expect(forgetOnLeave).toHaveBeenCalledWith(undefined);
+  });
+});
+
 describe("AppShell — mobile bottom tab bar (040 D2)", () => {
   it("renders all five lifecycle tabs in the bottom bar on a task route", () => {
     renderShell(`/tasks/${TASK_ID}/sources`);
@@ -153,24 +225,280 @@ describe("AppShell — mobile bottom tab bar (040 D2)", () => {
   });
 });
 
-describe("AppShell — the check-in banner is owner-scoped (task 033 phase 10b, rubric 38)", () => {
+const RUN_ID = "22222222-2222-2222-2222-222222222222";
+let sequence = 0;
+const now = () => new Date().toISOString();
+const runStatus = (status: "running" | "paused" | "succeeded"): SseFrame =>
+  ({ type: "run.status", capability_run_id: RUN_ID, status, occurred_at: now(), sequence: ++sequence }) as SseFrame;
+const stageFrame = (type: "stage.started" | "stage.completed", stage: string, label: string): SseFrame =>
+  ({
+    type,
+    capability_run_id: RUN_ID,
+    stage,
+    label,
+    blurb: "",
+    summary: {},
+    seconds: 4,
+    occurred_at: now(),
+    sequence: ++sequence,
+  }) as SseFrame;
+const tickFrame = (stage: string, activity: string): SseFrame =>
+  ({
+    type: "tick",
+    stage,
+    activity,
+    done: null,
+    total: null,
+    unit: null,
+    section: null,
+    heartbeat: false,
+    dropped: 0,
+    ephemeral: true,
+    occurred_at: now(),
+  }) as SseFrame;
+
+/** Feed frames to the shell's one stream, as the server would. */
+function feed(...frames: SseFrame[]) {
+  act(() => {
+    for (const frame of frames) sseState.handlers?.onFrame?.(frame);
+  });
+}
+
+function connect() {
+  act(() => {
+    sseState.handlers?.onConnected?.();
+  });
+}
+
+/** Let the replay window pass, so what lands next is news. */
+function settle() {
+  act(() => {
+    vi.advanceTimersByTime(3_000);
+  });
+}
+
+describe("AppShell — the live layer without a status bar (task 058; owner 2026-11-05, the run trace)", () => {
   beforeEach(() => {
-    authState.signOut.mockClear();
-  });
-
-  it("shows the cross-tab pause banner for the Task's owner", () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     taskState.isOwner = true;
-    renderShell(`/tasks/${TASK_ID}/sources`);
-    expect(
-      screen.getByText(/a check-in is waiting on you/),
-    ).toBeInTheDocument();
+    taskState.access = "full";
+    taskState.latestRun = { status: "running" };
+    sseState.handlers = null;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    taskState.latestRun = null;
   });
 
-  it("a colleague reading a non-owned Task is never told a check-in is waiting on them", () => {
+  it("shows the run status bar at the top of the page's column on Sources: the step and what it is doing, as the way to the Task Agent", () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    connect();
+    feed(runStatus("running"), stageFrame("stage.started", "acquire", "Searching"), tickFrame("acquire", "searching · 184 found so far"));
+    const statusBar = screen.getByTestId("run-status-bar");
+    expect(statusBar).toHaveAttribute("data-open", "true");
+    expect(statusBar).toHaveTextContent(/Searching.*184 found so far/);
+    // Owner, round 9: after the time, the running step's view, while the
+    // reader is elsewhere (here the Themes subtab, Sources' index).
+    expect(within(statusBar).getByRole("link", { name: "Sources →" })).toHaveAttribute(
+      "href",
+      `/tasks/${TASK_ID}/sources/all`,
+    );
+    // Owner, round 8: the status bar opens the Task Agent (it starts after the
+    // rail, in the column the routed view scrolls in).
+    expect(within(statusBar).getByRole("button", { name: /^Open the Task Agent: Searching/ })).toBeInTheDocument();
+    expect(statusBar.parentElement?.querySelector(":scope > [data-testid='task-scroll-pane']")).not.toBeNull();
+  });
+
+  it("shows the paused status bar and no paused banner while a check-in waits", () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    connect();
+    feed(runStatus("running"), runStatus("paused"));
+    const statusBar = screen.getByTestId("run-status-bar");
+    expect(statusBar).toHaveAttribute("data-open", "true");
+    expect(statusBar.querySelector("[data-tone='paused']")).not.toBeNull();
+    expect(statusBar).toHaveTextContent(/^Paused/);
+    expect(screen.queryByText(/Go to the check-in/)).toBeNull();
+  });
+
+  it("never tells a colleague a check-in is waiting on them", () => {
     taskState.isOwner = false;
     renderShell(`/tasks/${TASK_ID}/sources`);
+    connect();
+    feed(runStatus("running"), stageFrame("stage.completed", "acquire", "Searching and screening"), runStatus("paused"));
     expect(screen.queryByText("Check-in pending")).not.toBeInTheDocument();
     expect(screen.queryByText(/a check-in is waiting on you/)).not.toBeInTheDocument();
+  });
+
+  it("says the run finished in the title, with no link under the tabs", () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    connect();
+    feed(runStatus("running"));
+    settle();
+    feed(runStatus("succeeded"));
+    expect(screen.queryByRole("link", { name: "Read it →" })).toBeNull();
+    expect(document.title).toBe("● Report ready · Acme task · Policy Atlas");
+  });
+
+  it("does not announce an old finish replayed when the page opens", () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    connect();
+    feed(runStatus("running"), runStatus("succeeded"));
+    settle();
+    expect(screen.queryByRole("link", { name: "Read it →" })).toBeNull();
+    expect(document.title).not.toContain("Report ready");
+  });
+
+  it("mounts the reconnecting banner while the live connection is lapsed", () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    connect();
+    act(() => {
+      sseState.handlers?.onDisconnected?.();
+    });
+    // Owner, round 11: in the run status bar's frame, after the rail, never
+    // a full-width band over it.
+    expect(within(screen.getByTestId("run-status-bar")).getByText(/Reconnecting to live updates/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Reconnecting to live updates/)).toHaveLength(1);
+  });
+
+  it("is not in the public task view", () => {
+    taskState.access = "public";
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    expect(sseState.handlers).toBeNull();
+    expect(screen.queryByRole("button", { name: "Plan" })).toBeNull();
+  });
+});
+
+describe("AppShell — new content marks its tab (task 058, N14)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    taskState.isOwner = true;
+    taskState.access = "full";
+    taskState.latestRun = { status: "running" };
+    sseState.handlers = null;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    taskState.latestRun = null;
+  });
+
+  it("dots Result when a section lands while the user is on Sources, and not Sources itself", () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    connect();
+    feed(runStatus("running"));
+    settle();
+    feed(
+      stageFrame("stage.completed", "acquire", "Searching and screening"),
+      { type: "artefact.skeleton", sections: [{ index: 0, title: "Why take-up matters", focus: "" }], occurred_at: now(), sequence: ++sequence } as SseFrame,
+      { type: "artefact.section_completed", index: 0, prose: "Take-up is lowest among the families it was designed for.", occurred_at: now(), sequence: ++sequence } as SseFrame,
+    );
+    const taskNav = screen.getByRole("navigation", { name: TASK.one });
+    expect(within(taskNav).getByRole("link", { name: /Result/ })).toHaveTextContent("New content");
+    expect(within(taskNav).getByRole("link", { name: /Sources/ })).not.toHaveTextContent("New content");
+    // One mark shape in the app: a 6 px navy square, no radius.
+    const mark = within(within(taskNav).getByRole("link", { name: /Result/ })).getByTestId("new-content-mark");
+    expect(mark).toHaveClass("size-1.5", "bg-navy");
+    expect(mark.className).not.toMatch(/rounded/);
+  });
+
+  it("never dots Sources, whatever lands (owner, round 8: the mark was not useful)", () => {
+    renderShell(`/tasks/${TASK_ID}/history`);
+    connect();
+    feed(runStatus("running"));
+    settle();
+    feed(stageFrame("stage.completed", "screen", "Screening"));
+    const taskNav = screen.getByRole("navigation", { name: TASK.one });
+    expect(within(taskNav).getByRole("link", { name: /Sources/ })).not.toHaveTextContent("New content");
+  });
+});
+
+describe("AppShell — the Sources tab opens on the step that has landed (owner, 2026-11-05)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    taskState.isOwner = true;
+    taskState.access = "full";
+    taskState.latestRun = { status: "running" };
+    sseState.handlers = null;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    taskState.latestRun = null;
+  });
+
+  const sourcesLink = () =>
+    within(screen.getByRole("navigation", { name: TASK.one })).getByRole("link", { name: /Sources/ });
+
+  it("opens All sources, then Landscape once classified, then Themes once mapped", () => {
+    renderShell(`/tasks/${TASK_ID}/history`);
+    connect();
+    feed(runStatus("running"), stageFrame("stage.started", "acquire", "Searching and screening"));
+    expect(sourcesLink()).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/all`);
+    feed(
+      stageFrame("stage.completed", "acquire", "Searching and screening"),
+      stageFrame("stage.completed", "screen", "Searching and screening"),
+      stageFrame("stage.started", "classify", "Classifying"),
+    );
+    expect(sourcesLink()).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/all`);
+    feed(stageFrame("stage.completed", "classify", "Classifying"));
+    expect(sourcesLink()).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/landscape`);
+    feed(stageFrame("stage.started", "characterise", "Mapping"), stageFrame("stage.completed", "characterise", "Mapping"));
+    expect(sourcesLink()).toHaveAttribute("href", `/tasks/${TASK_ID}/sources`);
+  });
+
+  it("opens Themes once the run has ended", () => {
+    renderShell(`/tasks/${TASK_ID}/history`);
+    connect();
+    feed(runStatus("running"), stageFrame("stage.started", "acquire", "Searching and screening"));
+    feed(runStatus("succeeded"));
+    expect(sourcesLink()).toHaveAttribute("href", `/tasks/${TASK_ID}/sources`);
+  });
+
+  it("stays the current tab on every Sources view", () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    connect();
+    feed(runStatus("running"), stageFrame("stage.started", "acquire", "Searching and screening"));
+    // The link opens All sources, and the reader is on Themes: still Sources.
+    expect(sourcesLink()).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/all`);
+    expect(sourcesLink()).toHaveAttribute("aria-current", "page");
+    expect(sourcesLink()).toHaveClass("after:scale-x-100");
+  });
+});
+
+describe("AppShell — the rail's Task Agent holds still (owner, round 8)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    taskState.isOwner = true;
+    taskState.access = "full";
+    taskState.latestRun = { status: "running" };
+    sseState.handlers = null;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    taskState.latestRun = null;
+  });
+
+  // Owner, round 8: the rail's mark is the still fold mark, its name "Task
+  // Agent", with no hover status and no timer, whatever the run is doing.
+  it("keeps the still mark and the plain name on Sources and Result while a run is live", () => {
+    const sources = renderShell(`/tasks/${TASK_ID}/sources`);
+    connect();
+    feed(runStatus("running"), stageFrame("stage.started", "acquire", "Searching"));
+    const mark = screen.getByRole("button", { name: "Task Agent" });
+    expect(mark.querySelector("[data-live-mark]")).toBeNull();
+    expect(screen.queryByTestId("rail-elapsed")).toBeNull();
+    sources.unmount();
+    sseState.handlers = null;
+    renderShell(`/tasks/${TASK_ID}/result`);
+    connect();
+    feed(runStatus("running"));
+    expect(screen.getByRole("button", { name: "Task Agent" }).querySelector("[data-live-mark]")).toBeNull();
+  });
+});
+
+describe("AppShell — the plan's links (task 058; owner, polish round 2)", () => {
+  it("puts no Plan control in the task nav: the card and the Result tab carry the plan's links", async () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    await screen.findByRole("navigation", {}, { timeout: 3000 }).catch(() => undefined);
+    expect(screen.queryByRole("button", { name: "Plan" })).toBeNull();
   });
 });
 
@@ -189,8 +517,63 @@ describe("AppShell — the task-settings popover (task 033 phase 10c, contract �
   it("owner: shows Rename and Archive", async () => {
     taskState.isOwner = true;
     await openTaskSettings();
-    expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Archive" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Rename" })).toHaveFocus();
+    expect(screen.getByRole("menuitem", { name: "Archive" })).toBeInTheDocument();
+  });
+
+  // Owner, round 11: the capability is plain Grey text after the name, no chip.
+  it("sets the capability after the name in plain grey, not as a chip", () => {
+    taskState.isOwner = true;
+    renderShell(`/tasks/${TASK_ID}`);
+    const bar = screen.getByRole("navigation", { name: "Task" });
+    const kind = within(bar).getByText(/Evidence search|Options scoping/);
+    expect(kind).toHaveClass("text-grey", "text-meta");
+    expect(kind.className).not.toMatch(/border|bg-|uppercase/);
+  });
+
+  // Owner, round 12: the header's menu has the rows' "Add to project".
+  it("owner: adds the task to a project from the header's menu, as on a row", async () => {
+    taskState.isOwner = true;
+    taskState.projectIds = ["p-1"];
+    projectsState.rows = [
+      { project_id: "p-1", name: "Child health" },
+      { project_id: "p-2", name: "Net zero homes" },
+    ];
+    projectsState.update.mockReset();
+    projectsState.update.mockImplementation((_body: unknown, options: { onSuccess: () => void }) => options.onSuccess());
+    const user = await openTaskSettings();
+    await user.click(screen.getByRole("menuitem", { name: "Add to project" }));
+    await user.click(screen.getByRole("combobox", { name: "Add to a project" }));
+    // Only the projects it is not in yet.
+    expect(screen.queryByRole("option", { name: "Child health" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: "Net zero homes" }));
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    expect(projectsState.update).toHaveBeenCalledWith({ project_ids: ["p-1", "p-2"] }, expect.anything());
+    expect(screen.queryByRole("button", { name: "Add" })).not.toBeInTheDocument();
+  });
+
+  // Round 13: never disabled; a task in every project still has New project….
+  it("owner: offers New project… in the header's step when the task is in every project", async () => {
+    taskState.isOwner = true;
+    taskState.projectIds = ["p-1"];
+    projectsState.rows = [{ project_id: "p-1", name: "Child health" }];
+    projectsState.update.mockReset();
+    projectsState.update.mockImplementation((_body: unknown, options: { onSuccess: () => void }) => options.onSuccess());
+    projectsState.createProject.mockReset();
+    projectsState.createProject.mockImplementation(
+      (_body: unknown, options: { onSuccess: (project: { project_id: string; name: string }) => void }) =>
+        options.onSuccess({ project_id: "p-new", name: "Coastal towns" }),
+    );
+    const user = await openTaskSettings();
+    await user.click(screen.getByRole("menuitem", { name: "Add to project" }));
+    await user.click(screen.getByRole("combobox", { name: "Add to a project" }));
+    await user.click(screen.getByRole("option", { name: "New project…" }));
+    await user.type(screen.getByRole("textbox", { name: "New project name" }), "Coastal towns{Enter}");
+    expect(projectsState.createProject).toHaveBeenCalledWith({ name: "Coastal towns" }, expect.anything());
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    expect(projectsState.update).toHaveBeenCalledWith({ project_ids: ["p-1", "p-new"] }, expect.anything());
+    taskState.projectIds = [];
+    projectsState.rows = [];
   });
 
   it("non-owner: hides the settings gear itself, not just the items inside it — an empty popover is not a fix", () => {
@@ -198,8 +581,8 @@ describe("AppShell — the task-settings popover (task 033 phase 10c, contract �
     renderShell(`/tasks/${TASK_ID}`);
     expect(screen.queryByRole("button", { name: "Task settings" })).not.toBeInTheDocument();
     // With the trigger gone, Rename and Archive can never be reached either.
-    expect(screen.queryByRole("button", { name: "Rename" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Archive" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Rename" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Archive" })).not.toBeInTheDocument();
   });
 });
 
@@ -215,7 +598,7 @@ describe("AppShell — global chrome", () => {
     expect(screen.getByRole("link", { name: TASK.many })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Projects" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Account" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Sign out" })).not.toBeInTheDocument();
   });
 
   it("explains the BETA chip on hover", async () => {
@@ -227,17 +610,63 @@ describe("AppShell — global chrome", () => {
 
   it("underlines the active global nav item", () => {
     renderShell("/projects");
-    expect(screen.getByRole("link", { name: "Projects" }).className).toContain("border-blue");
-    expect(screen.getByRole("link", { name: "New" }).className).not.toContain("border-blue");
-    expect(screen.getByRole("link", { name: TASK.many }).className).not.toContain("border-blue");
+    expect(screen.getByRole("link", { name: "Projects" })).toHaveClass("after:scale-x-100");
+    expect(screen.getByRole("link", { name: "New" })).not.toHaveClass("after:scale-x-100");
+    expect(screen.getByRole("link", { name: TASK.many })).not.toHaveClass("after:scale-x-100");
   });
 
   it("opens Sign out from the account icon", async () => {
     const user = userEvent.setup();
     renderShell("/");
     await user.click(screen.getByRole("button", { name: "Account" }));
-    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    await user.click(screen.getByRole("menuitem", { name: "Sign out" }));
     expect(authState.signOut).toHaveBeenCalledOnce();
+  });
+
+  it("opens the account menu with focus on its first item and the trigger pressed", async () => {
+    const user = userEvent.setup();
+    renderShell("/");
+    const trigger = screen.getByRole("button", { name: "Account" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(trigger).toHaveAttribute("data-state", "open");
+    expect(trigger).toHaveClass("data-[state=open]:bg-blue-tint-2");
+    const menu = screen.getByRole("menu", { name: "Account" });
+    const signOut = screen.getByRole("menuitem", { name: "Sign out" });
+    expect(menu).toContainElement(signOut);
+    expect(signOut).toHaveFocus();
+    expect(signOut).toHaveClass("h-10", "text-meta", "hover:bg-blue-tint-2");
+  });
+
+  it("moves between items with the arrow keys and Home and End", async () => {
+    const user = userEvent.setup();
+    renderShell("/");
+    await user.click(screen.getByRole("button", { name: "Account" }));
+    const signOut = screen.getByRole("menuitem", { name: "Sign out" });
+    await user.keyboard("{ArrowDown}");
+    expect(signOut).toHaveFocus();
+    await user.keyboard("{ArrowUp}{End}{Home}");
+    expect(signOut).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(authState.signOut).toHaveBeenCalledOnce();
+  });
+
+  it("closes on Escape and on an outside press, giving focus back to the button", async () => {
+    const user = userEvent.setup();
+    renderShell("/");
+    const trigger = screen.getByRole("button", { name: "Account" });
+    await user.click(trigger);
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(trigger);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    await user.click(document.body);
+    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
   });
 
   it("puts the task name and lifecycle tabs on a second bar, not the global one", () => {
@@ -283,7 +712,7 @@ describe("AppShell — global chrome", () => {
   it("does not pin the site footer under the Plan tab (it scrolls with the chat)", () => {
     renderShell(`/tasks/${TASK_ID}`);
     // AppShell stubs the Plan outlet — the real footer mounts inside
-    // TaskAgentPane's transcript scroll, not as a shell chrome strip.
+    // TaskAgentPane's transcript scroll, not as a shell chrome status bar.
     expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
   });
 
@@ -346,6 +775,9 @@ describe("AppShell — the account menu (task 033 phase 10b, contract § 11 / ru
     };
     await openAccountMenu();
     expect(screen.getByText("Administrator")).toBeInTheDocument();
+    // Blue is the one pen (owner, round 10): the role is Grey, not Electric Blue.
+    expect(screen.getByText("Administrator")).toHaveClass("text-grey");
+    expect(screen.getByText("Administrator")).not.toHaveClass("text-blue");
   });
 
   it("truncates a long email with CSS rather than breaking the popover layout", async () => {
@@ -465,10 +897,10 @@ describe("AppShell — gates the run stream and chat panel until access is known
   });
 });
 
-// Task 045 (S15): a scoping task reads `active_run` for "running" — an option
-// search (a child walk) animates the logo — while the tabs stay on its
-// `latest_run` and the longlist's existence, so the child never opens or
-// locks one. An Evidence search keeps reading `latest_run` alone.
+// Task 045 (S15): a scoping task's tabs stay on its `latest_run` and the
+// longlist's existence, so a running child walk never opens or locks one.
+// Task 058 (owner, 2026-11-05): the nav wordmark holds still during a run;
+// the run's own live mark is the one turning logo on the screen.
 describe("AppShell — the scoping readers (task 045)", () => {
   afterEach(() => {
     taskState.capability = "evidence_search";
@@ -489,7 +921,7 @@ describe("AppShell — the scoping readers (task 045)", () => {
     );
   }
 
-  it("a running child animates the logo but opens and locks no tab", () => {
+  it("a running child opens and locks no tab, and the nav logo holds still", () => {
     taskState.capability = "options_scoping";
     taskState.latestRun = { status: "succeeded" };
     taskState.hasLonglist = true;
@@ -501,14 +933,65 @@ describe("AppShell — the scoping readers (task 045)", () => {
 
     taskState.activeRun = { status: "running" };
     renderShell(`/tasks/${TASK_ID}/sources`);
-    expect(logoAnimates()).toBe(true);
+    expect(logoAnimates()).toBe(false);
     expect(tabLocks()).toEqual(before);
   });
 
-  it("an Evidence search ignores active_run: latest_run alone drives the logo", () => {
-    taskState.latestRun = { status: "succeeded" };
-    taskState.activeRun = { status: "running" };
-    renderShell(`/tasks/${TASK_ID}/sources`);
+  it("holds the nav logo still while an Evidence search runs, inside the task and outside it", () => {
+    taskState.latestRun = { status: "running" };
+    const inside = renderShell(`/tasks/${TASK_ID}/sources`);
     expect(logoAnimates()).toBe(false);
+    inside.unmount();
+    renderShell("/");
+    expect(logoAnimates()).toBe(false);
+  });
+});
+
+describe("AppShell — round 14 (owner)", () => {
+  beforeEach(() => {
+    taskState.isOwner = true;
+    taskState.capability = "evidence_search";
+    taskState.projectIds = [];
+    projectsState.rows = [];
+  });
+
+  it("names the task's project after its kind, linking to it, and counts the others", () => {
+    projectsState.rows = [
+      { project_id: "p1", name: "Child health, Tower Hamlets" },
+      { project_id: "p2", name: "Food environments" },
+    ];
+    taskState.projectIds = ["p1", "p2"];
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    const task = screen.getByRole("navigation", { name: TASK.one });
+    expect(within(task).getByText(/^Evidence search · in/)).toHaveTextContent(
+      "Evidence search · in Child health, Tower Hamlets and 1 more",
+    );
+    expect(within(task).getByRole("link", { name: "Child health, Tower Hamlets" })).toHaveAttribute("href", "/projects/p1");
+  });
+
+  it("says only the kind for a task in no project", () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    const task = screen.getByRole("navigation", { name: TASK.one });
+    expect(within(task).getByText("Evidence search")).toBeInTheDocument();
+    expect(within(task).queryByText(/· in/)).toBeNull();
+  });
+
+  it("dims the page with the sheets' scrim while the plan is open over a tab", async () => {
+    const user = userEvent.setup();
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    expect(screen.queryByTestId("plan-scrim")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Open the plan (test)" }));
+    expect(screen.getByRole("complementary", { name: "Search plan" })).toBeInTheDocument();
+    expect(screen.getByTestId("plan-scrim")).toHaveClass("bg-navy/40");
+  });
+
+  it("opens a lifecycle tab at its top", async () => {
+    const user = userEvent.setup();
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    const pane = screen.getByTestId("task-scroll-pane");
+    pane.scrollTop = 480;
+    const nav = screen.getByRole("navigation", { name: TASK.one });
+    await user.click(within(nav).getByRole("link", { name: /^Share/ }));
+    expect(screen.getByTestId("task-scroll-pane").scrollTop).toBe(0);
   });
 });

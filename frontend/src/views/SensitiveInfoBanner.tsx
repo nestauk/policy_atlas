@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { useAuth } from "../auth";
+import { CloseButton } from "../ui/brand/CloseButton";
 
 export const SENSITIVE_INFO_BANNER_KEY = "policy-atlas.dismiss-sensitive-banner";
 
@@ -30,20 +31,19 @@ export function SensitiveInfoBanner() {
   return (
     <div
       role="status"
-      className="flex shrink-0 items-center justify-between gap-3 bg-red px-5 py-1.5 text-body text-white"
+      // A screen warning, not part of a printed report (round 10, finding 3).
+      className="print-hide flex shrink-0 items-center justify-between gap-3 bg-red px-5 py-1.5 text-body text-white"
     >
       <p>Do not enter sensitive or confidential information.</p>
-      <button
-        type="button"
+      <CloseButton
         aria-label="Dismiss warning"
-        className="cursor-pointer px-1 text-lead font-bold leading-none text-white"
+        tone="onRed"
+        className="-my-1.5"
         onClick={() => {
           persistDismissed();
           setDismissed(true);
         }}
-      >
-        ×
-      </button>
+      />
     </div>
   );
 }

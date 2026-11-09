@@ -11,6 +11,89 @@ const MOCK_ORGANISATION_ID = "90000000-0000-4000-8000-000000000001";
 
 const now = "2026-07-21T09:30:00Z";
 
+type StageKey = components["schemas"]["StageStartedFrame"]["stage"];
+
+/**
+ * The server's stage copy, copied from `api/stage_vocabulary.py`
+ * (`STAGE_PRESENTATION`, `STAGE_ROW`). There is no runtime import across the
+ * boundary, so a change there is made here by hand (task 058, N26).
+ */
+export const STAGE_PRESENTATION: Record<StageKey, readonly [label: string, blurb: string]> = {
+  acquire: ["Searching", "Querying the databases and collecting candidates."],
+  screen: ["Screening", "Reading each abstract against the question."],
+  classify: ["Classifying", "Labelling each source by its evidence type."],
+  appraise: ["Classifying", "Scoring how much weight each source can bear."],
+  ingest: ["Collecting the full texts", "Fetching each full text and making it searchable."],
+  characterise: ["Mapping", "What the evidence covers, and where it is thin."],
+  select: ["Shortlisting", "The strongest, most varied set for close reading."],
+  extract: ["Extracting findings", "Each finding is pulled out with its exact quote."],
+  group: ["Grouping findings", "Findings that answer the same question, together."],
+  synthesise: ["Writing", "A cited report, checked claim by claim."],
+  inherit: ["Reading the linked search", "Its documents and report join this task."],
+  suggest: ["Suggesting options", "From your plan, the baseline and any linked report."],
+  option_searches: ["Searching for each option", "One search per option."],
+  extract_interventions: ["Reading the abstracts", "Which interventions each source covers."],
+  longlist: ["Clustering into options", "Sources grouped into options. Options may be combined or added."],
+  option_profile: ["Estimating what each option would take", "Cost, time, workforce and who decides, for each option."],
+  constrain: ["Applying your constraints", "Each option checked against the plan's limits."],
+  theme: ["Grouping into themes", "Included options grouped into themes."],
+  shortlist: ["Shortlisting", "Proposing options for close reading."],
+};
+
+/** The server's `STAGE_COUNTS` (task 058, N17): the done row's counts, each
+ *  with its noun, copied here so the mock's frames carry what the server's do. */
+export const STAGE_COUNTS: Record<StageKey, ReadonlyArray<readonly [string, string]>> = {
+  acquire: [["acquired", "found"]],
+  screen: [["relevant", "relevant"]],
+  classify: [["classified", "classified"]],
+  appraise: [],
+  ingest: [["ingested", "collected"]],
+  characterise: [["theme_count", "themes"]],
+  select: [["selected_count", "selected"]],
+  extract: [["finding_count", "findings"]],
+  group: [["group_count", "groups"]],
+  synthesise: [["section_count", "sections"]],
+  inherit: [["documents", "documents"]],
+  suggest: [["suggested", "suggested"]],
+  option_searches: [["total", "searches"], ["sources", "sources"]],
+  extract_interventions: [["documents", "abstracts"]],
+  longlist: [["options", "options"]],
+  option_profile: [["profiled", "profiled"]],
+  constrain: [["excluded", "excluded"]],
+  theme: [["themes", "themes"]],
+  shortlist: [["shortlisted", "shortlisted"]],
+};
+
+/** The card row each stage belongs to: classify and appraise share one row;
+ *  search and screen are two rows (owner round 8, 2026-11-05). */
+export const STAGE_ROW: Record<StageKey, string> = {
+  acquire: "search",
+  screen: "screen",
+  classify: "categorise",
+  appraise: "categorise",
+  ingest: "ingest",
+  characterise: "characterise",
+  select: "select",
+  extract: "extract",
+  group: "group",
+  synthesise: "synthesise",
+  inherit: "inherit",
+  suggest: "suggest",
+  option_searches: "option_searches",
+  extract_interventions: "extract_interventions",
+  longlist: "longlist",
+  option_profile: "option_profile",
+  constrain: "constrain",
+  theme: "theme",
+  shortlist: "shortlist",
+};
+
+/** One plan step in the server's words: its label, blurb and row. */
+function planStep(stage: StageKey): components["schemas"]["PlanStep"] {
+  const [label, blurb] = STAGE_PRESENTATION[stage];
+  return { stage, label, blurb, row: STAGE_ROW[stage] };
+}
+
 // The mock task starts with NO run (`latest_run: null`): the 027 journey
 // begins at the plan pane, not mid-analysis. `mock/api.ts` mutates
 // `latest_run` in place once a run actually starts, so every read of this
@@ -46,18 +129,99 @@ export const mockTask: components["schemas"]["TaskOut"] = {
   has_longlist: false,
 };
 
+/**
+ * Task 058, round 10: the rest of the mock's task list, so the Tasks page has
+ * more than one page (50 a page) and "Show more" shows. Fifty-five are the
+ * signed-in owner's, six a colleague's (Organisation only), three archived
+ * (the archived filter). All older than `mockTask`, which stays first. Only
+ * their rows are served: opening one reads its row and nothing else.
+ */
+const OTHER_TASK_TOPICS = [
+  "School streets and air quality",
+  "Free school meals auto-enrolment",
+  "Holiday activities and food",
+  "Sugar levy reinvestment",
+  "Healthy start voucher uptake",
+  "Takeaway planning restrictions",
+  "Family hubs and early years",
+  "Active travel to secondary school",
+];
+export const mockOtherTasks: components["schemas"]["TaskOut"][] = Array.from({ length: 64 }, (_, index) => {
+  const colleague = index >= 55 && index < 61;
+  const archived = index >= 61;
+  const day = new Date(Date.UTC(2026, 6, 17) - index * 86_400_000).toISOString();
+  return {
+    task_id: `20000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    name: `${OTHER_TASK_TOPICS[index % OTHER_TASK_TOPICS.length]} ${Math.floor(index / OTHER_TASK_TOPICS.length) + 1}`,
+    question: null,
+    status: archived ? "archived" : "active",
+    created_at: day,
+    updated_at: day,
+    archived_at: archived ? day : null,
+    latest_run: null,
+    visibility: "org",
+    is_owner: !colleague,
+    owner_display: colleague ? "Grace Hopper" : "Ada Lovelace",
+    is_public: false,
+    access: "full",
+    project_ids: [],
+    capability: "evidence_search",
+    links: [],
+    active_run: null,
+    has_longlist: false,
+  };
+});
+
+/** A finished Evidence search in the mock project (round 13): the New page's
+ *  "Evidence search to start from" offers only these, so the scoping journey
+ *  can link one. Listed with the other tasks and readable by id. */
+export const MOCK_LINKABLE_SEARCH_ID = "30000000-0000-4000-8000-000000000001";
+export const MOCK_LINKABLE_SEARCH_NAME = "Youth employment programmes: what works";
+mockOtherTasks.unshift({
+  task_id: MOCK_LINKABLE_SEARCH_ID,
+  name: MOCK_LINKABLE_SEARCH_NAME,
+  question: "Which programmes help young people not in education, employment or training into work?",
+  status: "active",
+  created_at: "2026-07-16T09:00:00Z",
+  updated_at: "2026-07-16T11:30:00Z",
+  archived_at: null,
+  latest_run: {
+    capability_run_id: "30000000-0000-4000-8000-0000000000a1",
+    status: "succeeded",
+    started_at: "2026-07-16T09:05:00Z",
+    ended_at: "2026-07-16T11:30:00Z",
+  },
+  visibility: "org",
+  is_owner: true,
+  owner_display: "Ada Lovelace",
+  is_public: false,
+  access: "full",
+  project_ids: [MOCK_PROJECT_ID],
+  capability: "evidence_search",
+  links: [],
+  active_run: null,
+  has_longlist: false,
+});
+
 /** Task 033 phase 10a: the one project the mock serves. `task_count`
  *  mirrors the real read model's own derivation (never cached on the row) —
- *  it counts `mockTask`, the fixture's only member. */
+ *  it counts `mockTask` and the finished search a scoping task can start
+ *  from (round 13). */
 export const mockProject: components["schemas"]["ProjectOut"] = {
   project_id: MOCK_PROJECT_ID,
   name: "Child health, Tower Hamlets",
   description: `${TASK.many} assessing childhood health policy levers for the borough.`,
   created_at: "2026-07-15T09:00:00Z",
-  task_count: 1,
+  task_count: 2,
   visibility: "org",
   is_owner: true,
   owner_display: "Ada Lovelace",
+  archived_at: null,
+  // Its newest member's update, or its own creation (round 12).
+  last_activity_at: "2026-07-15T09:00:00Z",
+  // Its tasks in no other project, which archiving it archives (round 14);
+  // the mock serves the live count.
+  solo_task_count: 2,
 };
 
 /**
@@ -91,37 +255,50 @@ export const mockFunnel: components["schemas"]["FunnelOut"] = {
   read_in_full: 29,
   selected: 18,
   findings: 34,
-  cited: 12,
+  // The report's three references (`mockArtefact.references`), so the
+  // method's Cited row, the facts line and the References agree.
+  cited: 3,
 };
 
 export const MOCK_THEME_ID_SCHOOL_FOOD = "30000000-0000-4000-8000-000000000001";
 export const MOCK_THEME_ID_ACTIVE_TRAVEL = "30000000-0000-4000-8000-000000000002";
+export const MOCK_THEME_ID_HIGH_STREETS = "30000000-0000-4000-8000-000000000003";
 
 /** Every landscape distribution totals 46: the screened-in, not found, count.
  *  "Family support" carries no `theme_id` on purpose — a legacy
  *  characterisation predating 028 strand 8, which the sources theme filter
  *  must omit rather than offer a selection that can never round-trip. */
 export const mockLandscape: components["schemas"]["LandscapeOut"] = {
-  evidence_types: { "Systematic review": 20, "Local evaluation": 14, "Policy analysis": 12 },
+  evidence_types: {
+    "Systematic Review and Meta-Analysis": 20,
+    "Observational Research Studies": 14,
+    "Policy Syntheses & Guidance Documents": 12,
+  },
   years: { "2019": 6, "2020": 7, "2021": 9, "2022": 10, "2023": 8, "2024": 6 },
   themes: [
     { name: "School food environments", size: 19, description: "Meal standards, free breakfast, and food access.", theme_id: MOCK_THEME_ID_SCHOOL_FOOD },
     { name: "Active travel", size: 15, description: "Safer walking and cycling for the school journey.", theme_id: MOCK_THEME_ID_ACTIVE_TRAVEL },
-    { name: "Family support", size: 12, description: "Affordable cooking and community referral support." },
+    { name: "Family support", size: 6, description: "Affordable cooking and community referral support." },
+    // Round 9 (lead ruling): the four themes the live `characterise.themes`
+    // frame names, in its order, so the handover neither reorders nor drops one.
+    { name: "Healthy high streets", size: 6, description: "Food outlets and advertising around schools.", theme_id: MOCK_THEME_ID_HIGH_STREETS },
   ],
-  geographies: { "Tower Hamlets": 22, "London": 14, "Comparable UK cities": 10 },
+  // Publisher countries by the one name the server gives them (task 058,
+  // round 10): each row links to All sources filtered by that value, and the
+  // mock sources carry the same countries.
+  geographies: { "United Kingdom": 30, "United States": 8, Netherlands: 3, "Not reported": 5 },
 };
 
 export const mockEvidence: components["schemas"]["EvidenceItemOut"][] = [
-  { source_id: "10000000-0000-4000-8000-000000000001", title: "Childhood obesity prevention in urban primary schools", year: 2024, venue: "Public Health Nutrition", origin: "OpenAlex", status: "found", cited: false, read_in_full: false },
-  { source_id: "10000000-0000-4000-8000-000000000002", title: "Borough food strategy consultation", year: 2023, venue: "Tower Hamlets Council", origin: "Overton", status: "screened_out", screen_status: "excluded_retracted", screen_confidence: 1, status_reason: "The record was retracted", cited: false, read_in_full: false },
-  { source_id: "10000000-0000-4000-8000-000000000003", title: "Universal breakfast clubs and diet quality", year: 2022, venue: "BMJ Open", origin: "OpenAlex", status: "relevant", evidence_type: "Cohort study", appraisal_tier: "Moderate confidence", screen_status: "relevant", screen_confidence: 0.91, screen_basis: "title_abstract", screen_stage: 2, screen_reason: "Universal breakfast provision is a primary-school food-environment exposure in scope.", classification_reason: "Prospective cohort following ten schools over two academic years.", url: "https://example.org/universal-breakfast", cited: false, read_in_full: false },
-  { source_id: "10000000-0000-4000-8000-000000000004", title: "Healthy High Streets programme review", year: 2023, venue: "London Assembly", origin: "Overton", status: "not_selected", status_reason: "Lower transferability", evidence_type: "Unknown / Insufficient information", appraisal_tier: "Unrated", screen_status: "relevant", screen_confidence: 0.72, screen_reason: "Covers food-environment levers around schools, though at borough rather than school level.", cited: false, read_in_full: false },
-  { source_id: "10000000-0000-4000-8000-000000000005", title: "School meals and child weight outcomes", year: 2021, venue: "The Lancet Child & Adolescent Health", origin: "OpenAlex", status: "selected", evidence_type: "Systematic review", screen_status: "relevant", screen_confidence: 0.88, screen_reason: "Directly evaluates school-meal policies against child weight outcomes.", classification_reason: "Explicit systematic search and synthesis across 42 trials.", cited: false, read_in_full: false },
-  { source_id: "10000000-0000-4000-8000-000000000006", title: "Neighbourhood food access and family choices", year: 2020, venue: "Health & Place", origin: "OpenAlex", status: "read_in_full", evidence_type: "Qualitative study", screen_status: "relevant", screen_confidence: 0.81, screen_reason: "Family food-choice mechanisms around primary schools are in scope.", cited: false, read_in_full: true },
-  { source_id: "10000000-0000-4000-8000-000000000007", title: "Active travel incentives: implementation findings", year: 2024, venue: "Local Government Studies", origin: "OpenAlex", status: "findings_extracted", evidence_type: "Mixed methods", screen_status: "relevant", screen_confidence: 0.86, screen_reason: "Implementation evidence for an in-scope active-travel lever.", cited: false, read_in_full: true },
-  { source_id: "10000000-0000-4000-8000-000000000008", title: "Making healthy choices easier near schools", year: 2023, venue: "Nesta", origin: "Uploaded", status: "cited", evidence_type: "Policy analysis", appraisal_tier: "Moderate", screen_status: "relevant", screen_confidence: 0.95, screen_reason: "Uploaded by the task owner; directly addresses the question.", classification_reason: "Argument-led policy analysis rather than primary data collection.", cited: true, read_in_full: true },
-  { source_id: "10000000-0000-4000-8000-000000000009", title: "Children's food environment survey", year: null, venue: null, origin: "Uploaded", status: "unavailable", status_reason: "Full text could not be obtained", screen_status: "relevant", screen_confidence: 0.79, screen_reason: "Survey coverage of children's food environments matches the scope.", cited: false, read_in_full: false },
+  { source_id: "10000000-0000-4000-8000-000000000001", title: "Childhood obesity prevention in urban primary schools", year: 2024, venue: "Public Health Nutrition", origin: "OpenAlex", status: "found", cited: false, read_in_full: false, abstract: "A cluster trial of classroom activity and school-meal changes in urban primary schools, measuring BMI z-score over two years.", abstract_source: "provider", full_text_status: "not_attempted", country: "United States" },
+  { source_id: "10000000-0000-4000-8000-000000000002", title: "Borough food strategy consultation", year: 2023, venue: "Tower Hamlets Council", origin: "Overton", status: "screened_out", screen_status: "excluded_retracted", screen_confidence: 1, status_reason: "The record was retracted", cited: false, read_in_full: false, abstract: "The council's consultation on a borough food strategy, covering school food, takeaways near schools and community growing.", abstract_source: "provider", full_text_status: "not_attempted", country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000003", title: "Universal breakfast clubs and diet quality", year: 2022, venue: "BMJ Open", origin: "OpenAlex", status: "relevant", evidence_type: "Cohort study", appraisal_tier: "Moderate confidence", screen_status: "relevant", screen_confidence: 0.91, screen_basis: "title_abstract", screen_stage: 2, screen_reason: "Universal breakfast provision is a primary-school food-environment exposure in scope.", classification_reason: "Prospective cohort following ten schools over two academic years.", url: "https://example.org/universal-breakfast", cited: false, read_in_full: false, abstract: "A cohort study of universal breakfast provision and regular breakfast consumption.", abstract_source: "provider", full_text_status: "queued", country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000004", title: "Healthy High Streets programme review", year: 2023, venue: "London Assembly", origin: "Overton", status: "not_selected", status_reason: "Lower transferability", evidence_type: "Unknown / Insufficient information", appraisal_tier: "Unrated", screen_status: "relevant", screen_confidence: 0.72, screen_reason: "Covers food-environment levers around schools, though at borough rather than school level.", cited: false, read_in_full: false, abstract: "A review of the Healthy High Streets programme: food outlets near schools, signage and local planning levers.", abstract_source: "provider", full_text_status: "not_attempted", country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000005", title: "School meals and child weight outcomes", year: 2021, venue: "The Lancet Child & Adolescent Health", origin: "OpenAlex", status: "selected", evidence_type: "Systematic review", screen_status: "relevant", screen_confidence: 0.88, screen_reason: "Directly evaluates school-meal policies against child weight outcomes.", classification_reason: "Explicit systematic search and synthesis across 42 trials.", cited: false, read_in_full: false, abstract: "A systematic review of 42 trials of school-meal standards and their effect on child weight.", abstract_source: "provider", full_text_status: "not_attempted", country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000006", title: "Neighbourhood food access and family choices", year: 2020, venue: "Health & Place", origin: "OpenAlex", status: "read_in_full", evidence_type: "Qualitative study", screen_status: "relevant", screen_confidence: 0.81, screen_reason: "Family food-choice mechanisms around primary schools are in scope.", cited: false, read_in_full: true, full_text_url: "https://example.org/neighbourhood-food-access.pdf", abstract: "Interviews with families on how food outlets near primary schools shape everyday food choices.", abstract_source: "provider", full_text_status: "ingested", country: "Netherlands" },
+  { source_id: "10000000-0000-4000-8000-000000000007", title: "Active travel incentives: implementation findings", year: 2024, venue: "Local Government Studies", origin: "OpenAlex", status: "findings_extracted", evidence_type: "Mixed methods", screen_status: "relevant", screen_confidence: 0.86, screen_reason: "Implementation evidence for an in-scope active-travel lever.", cited: false, read_in_full: true, full_text_url: "https://europepmc.org/article/PMC/PMC1234567", abstract: "A mixed-methods study of how councils implemented active-travel incentives for school journeys.", abstract_source: "provider", full_text_status: "ingested", country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000008", title: "Making healthy choices easier near schools", year: 2023, venue: "Nesta", origin: "Uploaded", status: "cited", evidence_type: "Policy analysis", appraisal_tier: "Moderate", screen_status: "relevant", screen_confidence: 0.95, screen_reason: "Uploaded by the task owner; directly addresses the question.", classification_reason: "Argument-led policy analysis rather than primary data collection.", cited: true, read_in_full: true, abstract: "An AI-generated summary: measures near the school gate that make the healthy choice the easy choice.", abstract_source: "llm_description", full_text_status: "ingested", country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000009", title: "Children's food environment survey", year: null, venue: null, origin: "Uploaded", status: "unavailable", status_reason: "Full text could not be obtained", screen_status: "relevant", screen_confidence: 0.79, screen_reason: "Survey coverage of children's food environments matches the scope.", cited: false, read_in_full: false, full_text_status: "fetch_failed", country: null },
 ];
 
 /** Theme membership for the mock evidence rows, keyed by theme id — the
@@ -134,6 +311,19 @@ export const mockEvidenceThemeIds: Record<string, string[]> = {
   [mockEvidence[4].source_id]: [MOCK_THEME_ID_SCHOOL_FOOD],
   [mockEvidence[7].source_id]: [MOCK_THEME_ID_SCHOOL_FOOD],
   [mockEvidence[6].source_id]: [MOCK_THEME_ID_ACTIVE_TRAVEL],
+  [mockEvidence[3].source_id]: [MOCK_THEME_ID_HIGH_STREETS],
+};
+
+/** What each coverage row's search returned, by its `query_id` (round 12):
+ *  the mock's `GET /evidence?query=` keeps these rows. A key not listed
+ *  stands for a search from before the ids were kept: an empty page. */
+export const mockEvidenceByQuery: Record<number, string[]> = {
+  101: [mockEvidence[0].source_id, mockEvidence[4].source_id],
+  102: [mockEvidence[2].source_id, mockEvidence[5].source_id],
+  103: [mockEvidence[6].source_id],
+  104: [mockEvidence[1].source_id],
+  105: [mockEvidence[3].source_id],
+  110: [mockEvidence[2].source_id, mockEvidence[4].source_id, mockEvidence[6].source_id],
 };
 
 /** Shared + distinct institutions: markers 1, 1-2 — the D5 numbering path.
@@ -266,28 +456,83 @@ export const mockGroups: components["schemas"]["GroupsOut"] = {
   ],
 };
 
+/**
+ * The History read model as the server writes it (task 058, round 10): each
+ * line says what happened, to what, and who did it. The mock signs in as the
+ * owner, so the owner's acts read "You"; Policy Atlas's acts name it; a
+ * step's line needs no subject. A run's searches are one row whose detail
+ * lists every query. Newest first, as the server pages it.
+ */
+const ADA = { actor_display: "Ada Lovelace", actor_is_viewer: true } as const;
+const SYSTEM_ACT = { actor_display: null, actor_is_viewer: null } as const;
+const mockSearchTerms = [
+  "school food environment childhood obesity",
+  "universal free school meals BMI",
+  "breakfast clubs diet quality primary school",
+  "active travel primary school children",
+  "healthy high streets fast food outlets schools",
+  "sugar-sweetened beverages school policy",
+  "family cooking skills programme obesity",
+  "local authority planning hot food takeaways",
+  "school food standards evaluation",
+  "whole-systems approach childhood obesity",
+  "after-school physical activity provision",
+  "children's food advertising restrictions",
+];
 export const mockDecisions: components["schemas"]["DecisionOut"][] = [
-  { sequence: 5, occurred_at: "2026-07-21T09:31:10Z", kind: "search.executed", summary: "Searched OpenAlex for school-food intervention studies.", decided_by: null, detail: { openalex: 12 } },
-  { sequence: 6, occurred_at: "2026-07-21T09:31:40Z", kind: "search.executed", summary: "Searched Overton for local policy documents.", decided_by: null, detail: { overton: 8 } },
-  { sequence: 17, occurred_at: "2026-07-21T09:34:00Z", kind: "scope", summary: "Kept the focus on primary-school children and local policy levers.", decided_by: "user", detail: null },
-  { sequence: 20, occurred_at: "2026-07-21T09:36:00Z", kind: "component.completed", summary: "Appraisal completed.", decided_by: null, detail: { appraised: 31 } },
-  { sequence: 24, occurred_at: "2026-07-21T09:38:00Z", kind: "component.skipped", summary: "Landscape mapping was skipped — no themes requested for this run.", decided_by: null, detail: null },
-  { sequence: 31, occurred_at: "2026-07-21T09:41:00Z", kind: "steering", summary: "Accepted the suggested evidence balance for the synthesis.", decided_by: "user", detail: { option_id: "suggested-balanced" } },
+  { sequence: 31, occurred_at: "2026-07-21T10:12:00Z", kind: "task.renamed", summary: "You renamed the task to \u201cHealthier childhoods in Tower Hamlets\u201d.", decided_by: "user", detail: { actor: "mock-policy-lead", name_from: "Childhood obesity", name_to: "Healthier childhoods in Tower Hamlets" }, ...ADA },
+  { sequence: 30, occurred_at: "2026-07-21T10:06:00Z", kind: "run.finished", summary: "Policy Atlas finished the run.", decided_by: null, detail: { status: "succeeded" }, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  { sequence: 29, occurred_at: "2026-07-21T10:05:30Z", kind: "component.completed", summary: "Writing finished: 7 sections.", decided_by: null, detail: { component: "synthesise", section_count: 7 }, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  { sequence: 27, occurred_at: "2026-07-21T09:58:00Z", kind: "component.skipped", summary: "Grouping findings skipped.", decided_by: null, detail: { component: "group" }, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  { sequence: 25, occurred_at: "2026-07-21T09:52:00Z", kind: "component.completed", summary: "Mapping finished: 7 themes.", decided_by: null, detail: { component: "characterise", theme_count: 7 }, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  { sequence: 23, occurred_at: "2026-07-21T09:47:00Z", kind: "component.completed", summary: "Collecting the full texts finished: 38 collected, 5 failed.", decided_by: null, detail: { component: "ingest_full_text", ingested: 38, fetch_failed: 4, parse_failed: 1 }, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  { sequence: 21, occurred_at: "2026-07-21T09:41:00Z", kind: "component.completed", summary: "Classifying finished: 118 sources.", decided_by: null, detail: { component: "classify", classified: 118 }, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  { sequence: 20, occurred_at: "2026-07-21T09:36:00Z", kind: "steering.decision", summary: "You chose \u201cLooks right, assess these\u201d at the check-in.", decided_by: "user", detail: { option_id: "continue", response: "continue" }, capability_run_id: MOCK_RUN_ID, ...ADA },
+  { sequence: 19, occurred_at: "2026-07-21T09:34:10Z", kind: "run.parked", summary: "Policy Atlas paused for a check-in.", decided_by: null, detail: {}, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  { sequence: 18, occurred_at: "2026-07-21T09:34:00Z", kind: "component.completed", summary: "Screening finished: 118 of 312 relevant.", decided_by: null, detail: { component: "screen", screened: 312, relevant: 118, not_relevant: 194 }, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  { sequence: 17, occurred_at: "2026-07-21T09:32:30Z", kind: "component.completed", summary: "Searching finished: 312 sources found.", decided_by: null, detail: { component: "acquire", acquired: 312 }, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  {
+    sequence: 5,
+    occurred_at: "2026-07-21T09:31:10Z",
+    kind: "search.executed",
+    summary: `Searched with ${mockSearchTerms.length} queries: ${mockSearchTerms.slice(0, 5).map((term) => `\u201c${term}\u201d`).join(", ")} and ${mockSearchTerms.length - 5} more.`,
+    decided_by: null,
+    detail: { queries: mockSearchTerms },
+    capability_run_id: MOCK_RUN_ID,
+    ...SYSTEM_ACT,
+  },
+  { sequence: 2, occurred_at: "2026-07-21T09:30:05Z", kind: "run.opened", summary: "Policy Atlas started the run.", decided_by: null, detail: {}, capability_run_id: MOCK_RUN_ID, ...SYSTEM_ACT },
+  { sequence: 1, occurred_at: "2026-07-21T09:30:00Z", kind: "plan.approved", summary: "You approved the plan.", decided_by: "user", detail: { version: 1 }, ...ADA },
 ];
 
+/**
+ * The Evidence search check-in after searching and screening: the real
+ * `search_review` steer point (the runner pauses after `acquire` and writes
+ * kind `steer_point`). Its options are the server's five, in the server's ids,
+ * with the suggested one first and its reason in `why`. No floor trigger
+ * fired, so `triggers` is empty, as it is on a pause the mode always takes
+ * (task 058, N26; annex scene 12).
+ */
 export const mockCheckIn: components["schemas"]["CheckInOut"] = {
   check_in_id: MOCK_CHECK_IN_ID,
-  kind: "evidence_balance",
-  boundary: "before_component",
-  component: "synthesise",
-  stage: "synthesise",
-  render: "The screened-in set has strong school-food coverage but fewer local active-travel evaluations. Choose how the synthesis should handle that balance, or add your own free-text steer.",
+  kind: "steer_point",
+  boundary: "after_component",
+  component: "acquire",
+  stage: "acquire",
+  render: "Does this look right before I assess the sources?\n312 sources · 118 relevant · 2 rounds",
   options: [
-    { id: "add-local-context", label: "Add local context", description: "Tell us which local programme or neighbourhood context to prioritise.", requires_user_input: true, suggested: false, why: null, endorsement: null },
-    { id: "suggested-balanced", label: "Use the balanced synthesis", description: "Lead with the strongest evidence and name the local evidence gap.", requires_user_input: false, suggested: true, why: null, endorsement: null },
+    { id: "continue", label: "Looks right, assess these", description: "Screening starts on what came back.", requires_user_input: false, suggested: true, why: "Coverage matches the plan and the second round added little.", endorsement: null },
+    { id: "deepen_search", label: "Search deeper", description: "One more round on the thin themes.", requires_user_input: false, suggested: false, why: null, endorsement: null },
+    { id: "rescope_filters", label: "Change the search scope", description: "Opens a line to say what to change.", requires_user_input: true, suggested: false, why: null, endorsement: null },
+    { id: "guide_queries", label: "Guide the queries", description: "Tell me what to search for.", requires_user_input: true, suggested: false, why: null, endorsement: null },
+    { id: "abort", label: "Stop the run", description: "Abort the remaining walk; prior component work is preserved.", requires_user_input: false, suggested: false, why: null, endorsement: null },
   ],
-  triggers: [{ trigger: "thin_local_evidence", detail: { local_sources: 5, screened_in: 46 } }],
-  bundle: null,
+  triggers: [],
+  bundle: {
+    backends: ["openalex", "overton"],
+    queries: ["free childcare take-up low-income families", "childcare entitlement outreach evaluation"],
+    sample_titles: [mockEvidence[0].title, mockEvidence[1].title],
+  },
   segment_reentry_allowed: true,
   rerun_component: "acquire",
   status: "pending",
@@ -295,11 +540,247 @@ export const mockCheckIn: components["schemas"]["CheckInOut"] = {
   sequence: 42,
 };
 
+/** The sentence the judge fails in section 1, and its repaired wording: one
+ *  number differs (task 058, N26). */
+const MOCK_SECTION_ONE_LEAD =
+  "Pair school food action with safer active-travel routes and practical family support, while monitoring local reach.";
+const MOCK_SECTION_ONE_FAILED = "Schools that added a walking bus saw 8 more children arrive on foot in every 100.";
+const MOCK_SECTION_ONE_REPAIRED = "Schools that added a walking bus saw 6 more children arrive on foot in every 100.";
+
+/** What the writer streams: section 1 as drafted, before the check. */
+export const mockArtefactSectionProse: Record<number, string> = {
+  0: "Universal breakfast provision can support more consistent breakfast consumption when access is non-stigmatising.",
+  1: `${MOCK_SECTION_ONE_LEAD} ${MOCK_SECTION_ONE_FAILED}`,
+};
+
+/** Section 1 as stored once the repair lands: the same text with the failed
+ *  sentence's number changed. */
+export const mockArtefactSectionRepairedProse: Record<number, string> = {
+  ...mockArtefactSectionProse,
+  1: `${MOCK_SECTION_ONE_LEAD} ${MOCK_SECTION_ONE_REPAIRED}`,
+};
+
+/** The code-point span `[start, end)` of the failed sentence in the drafted
+ *  section 1, as `artefact.section_revising` carries it. */
+export const mockSectionOneRevisingSpan: { start: number; end: number } = (() => {
+  const start = mockArtefactSectionProse[1].indexOf(MOCK_SECTION_ONE_FAILED);
+  return { start, end: start + MOCK_SECTION_ONE_FAILED.length };
+})();
+
+/** The sources the writer reads for section 1, as `artefact.section_sources`
+ *  carries them (task 058, evidence shown live): the first read returns two,
+ *  the second adds three more. Short names where the source has an author or
+ *  publisher and a year; one long title the page cuts. */
+export const mockSectionOneSources: { source_id: string; title: string }[][] = [
+  [
+    { source_id: "00000000-0000-4000-8000-0000000051a1", title: "Smith 2023" },
+    { source_id: "00000000-0000-4000-8000-0000000051a2", title: "DfE 2022" },
+  ],
+  [
+    { source_id: "00000000-0000-4000-8000-0000000051a1", title: "Smith 2023" },
+    { source_id: "00000000-0000-4000-8000-0000000051a2", title: "DfE 2022" },
+    { source_id: "00000000-0000-4000-8000-0000000051a3", title: "Nesta 2021" },
+    {
+      source_id: "00000000-0000-4000-8000-0000000051a4",
+      title: "Walking school buses and active travel to school: a mixed-methods evaluation",
+    },
+    { source_id: "00000000-0000-4000-8000-0000000051a5", title: "Sustrans 2020" },
+  ],
+];
+
+/** The writer's own citations in the drafted section 1, as
+ *  `artefact.section_claim` carries them: the lead sentence and the sentence
+ *  the judge later fails, each with the sources it cites. */
+export const mockSectionOneClaims: { start: number; end: number; sources: { source_id: string; title: string }[] }[] = [
+  {
+    start: 0,
+    end: MOCK_SECTION_ONE_LEAD.length,
+    sources: [
+      { source_id: "00000000-0000-4000-8000-0000000051a1", title: "Smith 2023" },
+      { source_id: "00000000-0000-4000-8000-0000000051a2", title: "DfE 2022" },
+    ],
+  },
+  {
+    ...mockSectionOneRevisingSpan,
+    sources: [{ source_id: "00000000-0000-4000-8000-0000000051a5", title: "Sustrans 2020" }],
+  },
+];
+
+/** The case-study cards the writer streams (task 058, round 7), as
+ *  `artefact.section_card` carries them, and as the committed report keeps
+ *  them. */
+export const mockCaseStudyCards: { title: string; prose: string }[] = [
+  {
+    title: "Leeds — Breakfast in every primary",
+    prose: "Leeds offered a free breakfast in all primary schools from 2019. More pupils ate breakfast at school in the first year.",
+  },
+  {
+    title: "Bristol — Walking bus pilots",
+    prose: "Bristol ran walking buses at twelve schools for two terms. Parents reported calmer mornings and more children arriving on foot.",
+  },
+];
+
+/** The case-studies block's prose as `artefact.section_completed` carries it:
+ *  each card as its bold title line and text, cards a blank line apart. */
+export const mockCaseStudiesProse = mockCaseStudyCards
+  .map((card) => `**${card.title}**\n${card.prose}`)
+  .join("\n\n");
+
+/** One citation claim of the mock report, with the span and reference number
+ *  the live page shows before the swap (task 058, round 7). */
+interface MockCitedClaim {
+  claimId: string;
+  text: string;
+  span: [number, number];
+  cites: { citationId: string; n: number; source: components["schemas"]["EvidenceItemOut"]; quote: string }[];
+}
+
+function mockSpan(prose: string, text: string): [number, number] {
+  const start = prose.indexOf(text);
+  if (start < 0) throw new Error(`mock span not found: ${text}`);
+  return [start, start + text.length];
+}
+
+/** The streamed body section's citations: the end of the lead sentence cites
+ *  reference 2; the repaired sentence cites references 2 and 3. */
+const MOCK_BODY_CITED: MockCitedClaim[] = [
+  {
+    claimId: "40000000-0000-4000-8000-000000000003",
+    text: "while monitoring local reach",
+    span: mockSpan(mockArtefactSectionRepairedProse[1], "while monitoring local reach"),
+    cites: [{ citationId: "50000000-0000-4000-8000-000000000002", n: 2, source: mockEvidence[4], quote: "Effects depended on how many eligible children took the meal up." }],
+  },
+  {
+    claimId: "40000000-0000-4000-8000-000000000004",
+    text: MOCK_SECTION_ONE_REPAIRED,
+    span: mockSpan(mockArtefactSectionRepairedProse[1], MOCK_SECTION_ONE_REPAIRED),
+    cites: [
+      { citationId: "50000000-0000-4000-8000-000000000003", n: 2, source: mockEvidence[4], quote: "Walking-bus schools reported six more pupils in every hundred arriving on foot." },
+      { citationId: "50000000-0000-4000-8000-000000000004", n: 3, source: mockEvidence[3], quote: "Safer routes raised the share of children walking to school." },
+    ],
+  },
+];
+
+/** The case studies' one citation: the first card's result cites reference 2. */
+const MOCK_CASE_STUDY_RESULT = "More pupils ate breakfast at school in the first year.";
+const MOCK_CASE_STUDIES_CITED: MockCitedClaim = {
+  claimId: "40000000-0000-4000-8000-000000000005",
+  text: MOCK_CASE_STUDY_RESULT,
+  span: mockSpan(mockCaseStudiesProse, MOCK_CASE_STUDY_RESULT),
+  cites: [{ citationId: "50000000-0000-4000-8000-000000000005", n: 2, source: mockEvidence[4], quote: "Breakfast uptake rose in the first year of universal provision." }],
+};
+
+/** The checker's reason the mock gives every checked claim (round 13). */
+const MOCK_GROUNDING_RATIONALE = "The quote states the result the sentence reports.";
+
+function mockClaimOut(claim: MockCitedClaim, span: [number, number] = claim.span): components["schemas"]["ClaimOut"] {
+  return {
+    claim_id: claim.claimId,
+    claim_type: "citation",
+    text: claim.text,
+    span,
+    citations: claim.cites.map((cite) => ({
+      citation_id: cite.citationId,
+      n: cite.n,
+      source_id: cite.source.source_id,
+      source_title: cite.source.title,
+      quote: cite.quote,
+    })),
+    // Round 13: the checker's verdict is the claim's.
+    grounding_tier: "tier_2",
+    grounding_rationale: MOCK_GROUNDING_RATIONALE,
+  };
+}
+
+function mockLiveCitations(claims: MockCitedClaim[]): components["schemas"]["SectionCitation"][] {
+  return claims.flatMap((claim) =>
+    claim.cites.map((cite) => ({
+      start: claim.span[0],
+      end: claim.span[1],
+      n: cite.n,
+      source_id: cite.source.source_id,
+      title: cite.source.title,
+      // Round 8: the committed report's ids (the mock answers the chunk
+      // context for any citation id) and the checked quote; 2026-11-09: the
+      // cited chunk, which the live page reads the passage by (the mock
+      // answers any chunk id).
+      citation_id: cite.citationId,
+      claim_id: claim.claimId,
+      chunk_id: "70000000-0000-4000-8000-000000000001",
+      quote: cite.quote,
+    })),
+  );
+}
+
+/** The checked claims a completed section carries, each with its verdict
+ *  (`artefact.section_completed.claims`, round 13). */
+function mockLiveClaims(claims: MockCitedClaim[]): components["schemas"]["SectionClaim"][] {
+  return claims.map((claim) => ({
+    claim_id: claim.claimId,
+    start: claim.span[0],
+    end: claim.span[1],
+    tier: "tier_2",
+    rationale: MOCK_GROUNDING_RATIONALE,
+  }));
+}
+
+/** The full report's introduction as the writer streams it into the `intro`
+ *  slot and as the committed report keeps it (task 058, round 8). */
+export const MOCK_FULL_REPORT_INTRO =
+  "The report first sets out what local action the evidence supports, then turns to the programmes that show it working in practice.";
+
+/** The search's queries as `search.query` carries them (task 058, round 9):
+ *  the five topic queries the coverage record lists after the stage, each
+ *  sent then back with its count, then one citations pass described in
+ *  words. `found` is the activity line's running count once each is back. */
+export const mockSearchQueries: {
+  backend: "openalex" | "overton";
+  query: string;
+  kind: "topic" | "semantic" | "citations" | "lookup";
+  results: number;
+  found: number;
+}[] = [
+  { backend: "openalex", query: "childhood obesity school intervention UK", kind: "topic", results: 34, found: 34 },
+  { backend: "openalex", query: "primary school food environment obesity", kind: "topic", results: 28, found: 62 },
+  { backend: "overton", query: "Tower Hamlets school food policy", kind: "topic", results: 19, found: 81 },
+  { backend: "openalex", query: "active travel school children obesity", kind: "topic", results: 24, found: 105 },
+  { backend: "overton", query: "UK childhood obesity local strategy", kind: "topic", results: 23, found: 128 },
+  { backend: "openalex", query: "Following citations from 50 sources", kind: "citations", results: 184, found: 312 },
+];
+
+/** The themes as `characterise.themes` carries them once found, before the
+ *  sources are assigned (task 058, round 9): the saved landscape's four, in
+ *  its order and with its words, so the handover to the saved themes (with
+ *  their counts) neither reorders nor drops one. */
+export const mockLiveThemes: { label: string; description: string | null }[] = (mockLandscape.themes ?? []).map(
+  (theme) => ({ label: theme.name, description: theme.description ?? null }),
+);
+
+/** The most-relevant-source notes as `artefact.source_note` carries them, in
+ *  the order written, and as the committed report keeps them (round 8). Each
+ *  `short` is the source's name on the activity line. */
+export const mockSourceNotes: { sourceId: string; title: string; short: string; note: string }[] = [
+  {
+    sourceId: mockEvidence[4].source_id,
+    title: mockEvidence[4].title,
+    short: "Lancet 2021",
+    note: "A systematic review of 42 trials linking school-meal policies to child weight outcomes.",
+  },
+  {
+    sourceId: mockEvidence[3].source_id,
+    title: mockEvidence[3].title,
+    short: "London Assembly 2023",
+    note: "A borough-level review of food-environment levers around schools, including safer routes.",
+  },
+];
+
 export const mockArtefact: components["schemas"]["ArtefactOut"] = {
   artefact_id: "00000000-0000-4000-8000-00000000a001",
   title: "Policy options for healthier childhoods",
   question: mockTask.question ?? "",
-  coverage_snapshot: { source_count: 46, included: 46, screened_out: 82, study_types: { review: 20, evaluation: 14, analysis: 12 }, year_range: [2019, 2024] },
+  // `source_count` is the sources the report cites, its References (the
+  // server's `len(refs_out)`), never the included set.
+  coverage_snapshot: { source_count: 3, included: 46, screened_out: 82, study_types: { review: 20, evaluation: 14, analysis: 12 }, year_range: [2019, 2024] },
   sections: [
     {
       title: "What appears to help",
@@ -307,17 +788,36 @@ export const mockArtefact: components["schemas"]["ArtefactOut"] = {
       blocks: [{
         block_id: "30000000-0000-4000-8000-000000000001",
         prose: "Universal breakfast provision can support more consistent breakfast consumption when access is non-stigmatising.",
-        claims: [{ claim_id: "40000000-0000-4000-8000-000000000001", claim_type: "citation", text: "support more consistent breakfast consumption", span: [34, 79], citations: [{ citation_id: "50000000-0000-4000-8000-000000000001", n: 1, source_title: mockEvidence[2].title, quote: "Breakfast participation increased when provision was universal.", grounding_tier: "tier_2", appraisal_label: "moderate" }] }],
+        claims: [{ claim_id: "40000000-0000-4000-8000-000000000001", claim_type: "citation", text: "support more consistent breakfast consumption", span: [34, 79], citations: [{ citation_id: "50000000-0000-4000-8000-000000000001", n: 1, source_title: mockEvidence[2].title, quote: "Breakfast participation increased when provision was universal.", appraisal_label: "moderate" }], grounding_tier: "tier_2", grounding_rationale: MOCK_GROUNDING_RATIONALE }],
         gaps: ["Few evaluations report outcomes for recently arrived families."],
       }],
+    },
+    {
+      title: "Case studies",
+      role: "case_studies",
+      blocks: [{
+        block_id: "30000000-0000-4000-8000-000000000003",
+        prose: mockCaseStudiesProse,
+        claims: [mockClaimOut(MOCK_CASE_STUDIES_CITED)],
+      }],
+      cards: mockCaseStudyCards.map((card, position) => ({
+        card_id: `60000000-0000-4000-8000-00000000000${position + 1}`,
+        title: card.title,
+        prose: card.prose,
+        claims:
+          position === 0
+            ? [mockClaimOut(MOCK_CASE_STUDIES_CITED, mockSpan(card.prose, MOCK_CASE_STUDY_RESULT))]
+            : [],
+        result_claim_id: position === 0 ? MOCK_CASE_STUDIES_CITED.claimId : null,
+      })),
     },
     {
       title: "Implications for local action",
       role: "conclusions",
       blocks: [{
         block_id: "30000000-0000-4000-8000-000000000002",
-        prose: "Pair school food action with safer active-travel routes and practical family support, while monitoring local reach.",
-        claims: [{ claim_id: "40000000-0000-4000-8000-000000000002", claim_type: "pattern", text: "Pair school food action with safer active-travel routes", span: [0, 56], theme: { source: "grouping", base: "Co-occurrence across the screened-in corpus", items: [{ name: "Active-travel offers", description: "Route-safety and arrival-routine measures that families adopt alongside food provision.", size: 5, facet: "Intervention type", sources: [{ source_id: mockEvidence[0].source_id, title: mockEvidence[0].title }, { source_id: mockEvidence[1].source_id, title: mockEvidence[1].title }] }] } }],
+        prose: mockArtefactSectionRepairedProse[1],
+        claims: [{ claim_id: "40000000-0000-4000-8000-000000000002", claim_type: "pattern", text: "Pair school food action with safer active-travel routes", span: [0, 56], theme: { source: "grouping", base: "Co-occurrence across the screened-in corpus", items: [{ name: "Active-travel offers", description: "Route-safety and arrival-routine measures that families adopt alongside food provision.", size: 5, facet: "Intervention type", sources: [{ source_id: mockEvidence[0].source_id, title: mockEvidence[0].title }, { source_id: mockEvidence[1].source_id, title: mockEvidence[1].title }] }] } }, ...MOCK_BODY_CITED.map((claim) => mockClaimOut(claim))],
       }],
     },
   ],
@@ -328,21 +828,89 @@ export const mockArtefact: components["schemas"]["ArtefactOut"] = {
     venue: "BMJ Open",
     url: null,
     authorships: mockAuthorships,
+  }, {
+    n: 2,
+    title: mockEvidence[4].title,
+    year: mockEvidence[4].year,
+    venue: mockEvidence[4].venue,
+    url: null,
+  }, {
+    n: 3,
+    title: mockEvidence[3].title,
+    year: mockEvidence[3].year,
+    venue: mockEvidence[3].venue,
+    url: null,
   }],
+  full_report_intro: MOCK_FULL_REPORT_INTRO,
+  most_relevant_notes: mockSourceNotes.map(({ sourceId, note }) => ({ source_id: sourceId, note })),
 };
 
 /** The live-artefact skeleton (contract strand 13), display-index ordered —
  *  same titles/prose as `mockArtefact` so the streamed and committed pages
- *  read as one continuous document. */
-export const mockArtefactSkeleton: Array<{ index: number; title: string; focus: string }> = [
-  { index: 0, title: "What appears to help", focus: "What the evidence shows helps, headline first." },
-  { index: 1, title: "Implications for local action", focus: "What this means for local decisions." },
+ *  read as one continuous document. Each slot names its role; the
+ *  case-studies slot follows the body sections and the introduction's slot
+ *  comes last, as the server numbers them (task 058, rounds 7 and 8). The
+ *  page shows the introduction by its role, before the body sections. */
+export const mockArtefactSkeleton: components["schemas"]["ArtefactSectionSkeleton"][] = [
+  { index: 0, title: "What appears to help", focus: "What the evidence shows helps, headline first.", role: "key_findings" },
+  { index: 1, title: "Implications for local action", focus: "What this means for local decisions.", role: "body" },
+  { index: 2, title: "Case studies", focus: "Relevant examples from the cited evidence.", role: "case_studies" },
+  { index: 3, title: "Full report", focus: "", role: "intro" },
 ];
 
-export const mockArtefactSectionProse: Record<number, string> = {
-  0: "Universal breakfast provision can support more consistent breakfast consumption when access is non-stigmatising.",
-  1: "Pair school food action with safer active-travel routes and practical family support, while monitoring local reach.",
+/** The case-studies slot's display index in the mock skeleton. */
+export const MOCK_CASE_STUDIES_INDEX = 2;
+/** The introduction slot's display index in the mock skeleton (round 8). */
+export const MOCK_INTRO_INDEX = 3;
+/** The key findings' writer's citation as `artefact.section_claim` carries it
+ *  while the block streams (round 8): the span the judge later keeps. */
+export const mockKeyFindingsClaim = {
+  start: 34,
+  end: 79,
+  sources: [{ source_id: mockEvidence[2].source_id, title: "BMJ Open 2022" }],
 };
+/** The display index of the section the mock writer streams (its prose is
+ *  `mockArtefactSectionProse[1]`). */
+export const MOCK_STREAMED_SECTION_INDEX = 1;
+
+/** Each completed section's checked citations, as `artefact.section_completed`
+ *  carries them (task 058, round 7), keyed by display index. The numbers and
+ *  spans match `mockArtefact`: the key findings cite reference 1; the
+ *  implications cite 2, then 2 and 3; the case studies cite 2. */
+export const mockSectionCitations: Record<number, components["schemas"]["SectionCitation"][]> = {
+  0: [
+    {
+      start: 34,
+      end: 79,
+      n: 1,
+      source_id: mockEvidence[2].source_id,
+      title: mockEvidence[2].title,
+      citation_id: "50000000-0000-4000-8000-000000000001",
+      claim_id: "40000000-0000-4000-8000-000000000001",
+      chunk_id: "70000000-0000-4000-8000-000000000001",
+      quote: "Breakfast participation increased when provision was universal.",
+    },
+  ],
+  [MOCK_STREAMED_SECTION_INDEX]: mockLiveCitations(MOCK_BODY_CITED),
+  [MOCK_CASE_STUDIES_INDEX]: mockLiveCitations([MOCK_CASE_STUDIES_CITED]),
+};
+
+/** Each completed section's checked claims with their verdicts, keyed by
+ *  display index like {@link mockSectionCitations} (round 13). */
+export const mockSectionClaims: Record<number, components["schemas"]["SectionClaim"][]> = {
+  0: [
+    {
+      claim_id: "40000000-0000-4000-8000-000000000001",
+      start: 34,
+      end: 79,
+      tier: "tier_2",
+      rationale: MOCK_GROUNDING_RATIONALE,
+    },
+  ],
+  [MOCK_STREAMED_SECTION_INDEX]: mockLiveClaims(MOCK_BODY_CITED),
+  [MOCK_CASE_STUDIES_INDEX]: mockLiveClaims([MOCK_CASE_STUDIES_CITED]),
+};
+
 
 /**
  * The options-scoping baseline (task 044, deliverable 9) the mock serves as
@@ -481,22 +1049,27 @@ export const mockCoverage: components["schemas"]["CoverageOut"] = {
       // The real coverage read model serves PUBLIC backend names — the
       // fixture matches so the label mapping is exercised as shipped.
       backend: "OpenAlex",
-      results: 86,
+      results: 270,
       relevant: 30,
+      // `query_id` (round 12): the key `GET /evidence?query=` takes.
       queries: [
-        { query: "childhood obesity school intervention UK", results: 34 },
-        { query: "primary school food environment obesity", results: 28 },
-        { query: "active travel school children obesity", results: 24 },
+        { query: "childhood obesity school intervention UK", results: 34, query_id: 101 },
+        { query: "primary school food environment obesity", results: 28, query_id: 102 },
+        { query: "active travel school children obesity", results: 24, query_id: 103 },
       ],
+      // The live search's citations pass, worded for a finished search
+      // (round 11): the saved coverage names its passes in the order run.
+      passes: [{ pass: "citations", query: "Followed citations from 50 sources", results: 184, query_id: 110 }],
     },
     {
       backend: "Overton",
       results: 42,
       relevant: 16,
       queries: [
-        { query: "Tower Hamlets school food policy", results: 19 },
-        { query: "UK childhood obesity local strategy", results: 23 },
+        { query: "Tower Hamlets school food policy", results: 19, query_id: 104 },
+        { query: "UK childhood obesity local strategy", results: 23, query_id: 105 },
       ],
+      passes: [],
     },
   ],
 };
@@ -568,14 +1141,9 @@ export const mockPlanReady: components["schemas"]["PlanDraft"] = {
   expected_artefact_shape: "standard",
   time_band: "10-15 minutes",
   section_budget: null,
-  steps: [
-    { stage: "acquire", label: "Searching sources", blurb: "Queries out to academic and policy databases." },
-    { stage: "screen", label: "Screening sources", blurb: "Checking relevance to primary-school children." },
-    { stage: "classify", label: "Classifying evidence", blurb: "Labelling evidence types and settings." },
-    { stage: "appraise", label: "Appraising quality", blurb: "Reviewing the strength of selected evidence." },
-    { stage: "characterise", label: "Characterising findings", blurb: "Extracting implementation conditions." },
-    { stage: "synthesise", label: "Writing the report", blurb: "Preparing a decision-ready evidence base." },
-  ],
+  // The server's order (`task_plan.py`): the full texts are collected after
+  // classifying, before mapping.
+  steps: (["acquire", "screen", "classify", "appraise", "ingest", "characterise", "synthesise"] as const).map(planStep),
   ready: true,
 };
 
@@ -702,18 +1270,21 @@ export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
   steps: [
     {
       stage: "synthesise",
+      row: "baseline",
       label: "Baseline",
       blurb:
         "What is in place, the trend, who is affected and what is contested, from Overton and OpenAlex. The run pauses for you to question it and confirm the plan.",
     },
     {
       stage: "acquire",
+      row: "longlist",
       label: "Longlist",
       blurb:
         "Suggest options, search widely, read every abstract for the interventions it covers, cluster them into options, apply your constraints.",
     },
     {
       stage: "shortlist",
+      row: "shortlist",
       label: "Shortlist",
       blurb:
         "Policy Atlas proposes about five places for close reading, one reason each, mixed to your risk appetite. Add, remove, ask for more. Assessment of the shortlisted options is not in this release.",
@@ -745,7 +1316,8 @@ export function seedTaskAgentTurns(): components["schemas"]["TaskAgentTranscript
       turn_index: 1,
       user_message: "Which local policy approaches reduce childhood obesity for primary-school children?",
       reply: "Here's how I've read your question.",
-      suggestions: [],
+      question: "Is the question as you want it, or do you want to narrow it?",
+      suggestions: ["That's my question", "Narrow it"],
       part: {
         id: "question",
         step_label: "Plan · 1 of 3 · the question",
@@ -766,6 +1338,7 @@ export function seedTaskAgentTurns(): components["schemas"]["TaskAgentTranscript
       turn_index: 2,
       user_message: "That's my question\n\n[confirm part=question option=confirm]",
       reply: "What counts as in-scope? Edit any chip directly. I'll search from 2016 onward. UK as the primary setting is judged from each document.",
+      question: null,
       suggestions: [],
       part: {
         id: "scope",
@@ -790,6 +1363,7 @@ export function seedTaskAgentTurns(): components["schemas"]["TaskAgentTranscript
       turn_index: 3,
       user_message: "Also fold in whether family-support programmes should be a separate lever.",
       reply: null,
+      question: null,
       suggestions: [],
       part: null,
       status: "failed",
@@ -797,6 +1371,351 @@ export function seedTaskAgentTurns(): components["schemas"]["TaskAgentTranscript
       completed_at: "2026-07-21T08:58:03Z",
     },
   ];
+}
+
+// --- The planner's scripted conversation (task 058, N10; annex scene 11) ---
+
+/** One scripted planner turn: the reply the stream types out, plus the
+ *  structured part, question and quick replies the finished turn carries. */
+export interface MockPlannerTurn {
+  reply: string;
+  question: string | null;
+  suggestions: string[];
+  part: components["schemas"]["PartProposalOut"] | null;
+}
+
+/**
+ * The planner's reply for the nth turn of a fresh Evidence search task:
+ * the question, then the scope, then the thoroughness. Any later turn is a
+ * plain reply with no part. The time bands are the plan document's own.
+ */
+export function mockPlannerTurn(turnIndex: number): MockPlannerTurn {
+  if (turnIndex <= 1) {
+    const reply = "I can search for this. First, is the question as you want it, or do you want to narrow it?";
+    return {
+      reply,
+      question: "Is the question as you want it, or do you want to narrow it?",
+      suggestions: ["That's my question", "Narrow it"],
+      part: {
+        id: "question",
+        step_label: "Plan · step 1 of 3 · Question",
+        title: "Your question",
+        body: mockTask.question ?? null,
+        chips: null,
+        options: [
+          { id: "confirm", label: "That's my question", sub: null, primary: true, reason: "It names the outcome, the group and the setting." },
+          { id: "refine", label: "Narrow it", sub: "Tell me what to add or leave out.", primary: false, reason: null },
+        ],
+      },
+    };
+  }
+  if (turnIndex === 2) {
+    return {
+      reply: "Here is the scope I would use. Change any chip, or add one.",
+      question: null,
+      suggestions: [],
+      part: {
+        id: "scope",
+        step_label: "Plan · step 2 of 3 · Scope",
+        title: "Scope",
+        body: null,
+        chips: [
+          { label: "Since 2016", kind: "date_range", value: '{"after": "2016-01-01", "before": null}' },
+          { label: "UK", kind: "country_list", value: '["GB"]' },
+          { label: "Low-income families", kind: "text", value: "Low-income families" },
+        ],
+        options: [
+          { id: "confirm", label: "Looks right", sub: null, primary: true, reason: "These match your question and the usual evidence base." },
+          { id: "change", label: "Add or change a constraint", sub: "Opens a line to type the change.", primary: false, reason: null },
+        ],
+      },
+    };
+  }
+  if (turnIndex === 3) {
+    return {
+      reply: "How thorough should the search be?",
+      question: null,
+      suggestions: [],
+      part: {
+        id: "thoroughness",
+        step_label: "Plan · step 3 of 3 · Thoroughness",
+        title: "Thoroughness",
+        body: null,
+        chips: null,
+        options: [
+          { id: "rapid", label: "Rapid overview", sub: "Up to 150 documents. A short report of 3 sections. · ~5-10 min", primary: false, reason: null },
+          { id: "standard", label: "Standard report", sub: "Up to 300 documents, about 15 read in full. A report of up to 8 sections. · ~10-20 min", primary: true, reason: null },
+          { id: "detailed", label: "Detailed report", sub: "Up to 600 documents, about 25 read in full with their findings extracted. A report of up to 8 sections. · ~20-30 min", primary: false, reason: null },
+        ],
+      },
+    };
+  }
+  return { reply: "Noted — I'll keep that in mind for the analysis.", question: null, suggestions: [], part: null };
+}
+
+// --- The options read while the longlist builds (task 058, N22; scene 15) ---
+
+type OptionProgress = components["schemas"]["OptionProgressOut"];
+
+/** The twelve suggested options, in scene 15's order. `foldedInto` names the
+ *  option (by index) the clustering stage folds this one into. */
+const MOCK_OPTION_SEEDS: ReadonlyArray<{
+  name: string;
+  description: string;
+  origin: OptionProgress["origin"];
+  foldedInto?: number;
+}> = [
+  { name: "Youth guarantee with a job or training offer within four months", description: "Every young person out of work for four months is offered a job, training or education.", origin: "from_evidence_search" },
+  { name: "Wage subsidies for employers hiring under-25s", description: "Employers are paid towards the wages of a young person they take on.", origin: "from_evidence_search" },
+  { name: "Expanded apprenticeship incentives", description: "Payments that make it cheaper for employers to offer apprenticeships.", origin: "suggested" },
+  { name: "Careers advice in every secondary school", description: "A named careers adviser in each school, from year 9.", origin: "suggested" },
+  { name: "Sector-based work academies", description: "Short training tied to a guaranteed interview in one sector.", origin: "suggested" },
+  { name: "Mental health support in job centres", description: "A trained worker on site for young people who are out of work.", origin: "suggested" },
+  { name: "Transport subsidies for young job seekers", description: "Free or cheaper travel to interviews and the first weeks of work.", origin: "suggested", foldedInto: 9 },
+  { name: "Intermediate labour market programmes", description: "Paid, time-limited jobs with support, run by the local authority.", origin: "suggested" },
+  { name: "Digital skills bootcamps", description: "Short, intensive courses in the digital skills employers ask for.", origin: "suggested" },
+  { name: "Youth hubs co-located with Jobcentre Plus", description: "One local place for advice, training and work coaching.", origin: "suggested" },
+  { name: "Enterprise allowance for young founders", description: "A weekly allowance while a young person starts a business.", origin: "added_by_you" },
+  { name: "Conditionality reform for under-25s", description: "Changes to what young people on benefits must do to keep them.", origin: "added_by_you" },
+];
+
+/** The two options the clustering stage adds, found in the evidence. */
+const MOCK_OPTION_ADDED: ReadonlyArray<{ name: string; description: string }> = [
+  { name: "Employer-led pre-apprenticeship traineeships", description: "Employers run short placements that lead to an apprenticeship offer." },
+  { name: "Benefit run-ons when a young person starts work", description: "Benefits keep being paid for a few weeks after a job starts." },
+];
+
+/** How many sources each option's search finds (140 to 410). */
+const MOCK_OPTION_FOUND = [312, 240, 186, 405, 148, 270, 332, 160, 215, 380, 140, 296];
+
+export function mockOptionId(index: number): string {
+  return `b0000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
+}
+
+/** Child search run ids, distinct from the parent walk and from each other. */
+export function mockChildRunId(index: number): string {
+  return `b1000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
+}
+
+export const MOCK_OPTION_COUNT = MOCK_OPTION_SEEDS.length;
+
+export function mockOptionFound(index: number): number {
+  return MOCK_OPTION_FOUND[index];
+}
+
+/** Fresh rows as suggest writes them: all queued, none folded. */
+export function seedMockOptionRows(): OptionProgress[] {
+  return MOCK_OPTION_SEEDS.map((seed, index) => ({
+    option_id: mockOptionId(index),
+    name: seed.name,
+    description: seed.description,
+    origin: seed.origin,
+    state: "included",
+    merged_into_option_id: null,
+    search_status: "queued",
+    found: null,
+  }));
+}
+
+/** The clustering stage's one change: a suggestion folds into a wider option,
+ *  and two options found in the evidence join the end of the list. */
+export function foldMockOptionRows(rows: OptionProgress[]): OptionProgress[] {
+  const folded = rows.map((row, index) => {
+    const into = MOCK_OPTION_SEEDS[index]?.foldedInto;
+    return into === undefined ? row : { ...row, merged_into_option_id: mockOptionId(into) };
+  });
+  const added = MOCK_OPTION_ADDED.map((entry, offset): OptionProgress => ({
+    option_id: mockOptionId(MOCK_OPTION_SEEDS.length + offset),
+    name: entry.name,
+    description: entry.description,
+    origin: "clustered",
+    state: "included",
+    merged_into_option_id: null,
+    search_status: "searched",
+    found: null,
+  }));
+  return [...folded, ...added];
+}
+
+/** The stages after which the longlist read gains something, in order. */
+export const MOCK_WALK_LONGLIST_STAGES = ["longlist", "option_profile", "constrain", "theme", "shortlist"] as const;
+export type MockWalkLonglistStage = (typeof MOCK_WALK_LONGLIST_STAGES)[number];
+
+/** Lever types handed to the walk's options in turn once they are profiled. */
+const MOCK_WALK_LEVERS = ["provide a service", "subsidise", "regulate", "inform", "convene", "invest in infrastructure"];
+/** Positions (among the live rows) of the two options the constrain stage excludes. */
+const MOCK_WALK_EXCLUDED_AT = [5, 7];
+/** Positions of the options the shortlist stage picks. */
+const MOCK_WALK_SHORTLIST_AT = [0, 1, 3];
+
+/** The documents of a walk option that evaluated it: one in eight of those
+ *  its search found. */
+function mockWalkEvaluatedCount(found: number): number {
+  return Math.floor(found / 8);
+}
+
+/** A walk theme's distinct documents: its options' documents, which no two
+ *  walk options share (`mockWalkDocuments`), so the theme counts what its
+ *  cards list. */
+function mockWalkThemeDocumentCount(options: readonly { document_count: number }[]): number {
+  return options.reduce((total, option) => total + option.document_count, 0);
+}
+
+/** The kinds of document a walk option's card lists, in turn. */
+const MOCK_WALK_DOCUMENT_KINDS = [
+  { evidence_type: "Systematic review", tier: "Strong", venue: "Campbell Systematic Reviews" },
+  { evidence_type: "Local evaluation", tier: "Moderate", venue: "Local Government Studies" },
+  { evidence_type: "Policy analysis", tier: null, venue: null },
+] as const;
+
+/**
+ * The documents behind a walk option's card (design lane review): as many as
+ * its row counts, the first `evaluated` of them evaluating it, the rest
+ * describing it, each with its own id, so the card, the row and the theme
+ * agree.
+ */
+function mockWalkDocuments(
+  optionId: string,
+  name: string,
+  count: number,
+  evaluated: number,
+): components["schemas"]["OptionDocumentOut"][] {
+  return Array.from({ length: count }, (_, n) => {
+    const kind = MOCK_WALK_DOCUMENT_KINDS[n % MOCK_WALK_DOCUMENT_KINDS.length];
+    const evaluates = n < evaluated;
+    return {
+      task_source_snapshot_id: `mock-walk-doc-${optionId}-${n + 1}`,
+      title: `${name}: ${evaluates ? "an evaluation" : "a review of practice"} (${n + 1})`,
+      role: evaluates ? "evaluated" : "described",
+      evidence_type: kind.evidence_type,
+      tier: kind.tier,
+      year: 2014 + (n % 11),
+      authors: ["A. Sampleton", "C. Mockford"],
+      venue: kind.venue,
+      place: "United Kingdom",
+      programme_name: null,
+      tried_on_kind: null,
+      measured: null,
+      place_detail: null,
+      records_count: 1,
+    };
+  });
+}
+
+/**
+ * `GET /longlist` while the walk builds: the same option ids as the options
+ * read (folded rows left out, as the API leaves them), growing stage by stage.
+ * `stage` is the last stage that completed. After `longlist` each row has its
+ * document count only; `option_profile` adds the lever lines; `constrain`
+ * excludes two options with a one-line reason; `theme` groups the included
+ * options; `shortlist` marks the picks.
+ */
+export function mockWalkLonglist(
+  rows: readonly OptionProgress[],
+  stage: MockWalkLonglistStage,
+): components["schemas"]["LonglistOut"] {
+  const reached = (target: MockWalkLonglistStage) =>
+    MOCK_WALK_LONGLIST_STAGES.indexOf(stage) >= MOCK_WALK_LONGLIST_STAGES.indexOf(target);
+  const live = rows.filter((row) => row.merged_into_option_id == null);
+  const options = live.map((row, position): OptionSummaryOutFixture => {
+    const excluded = reached("constrain") && MOCK_WALK_EXCLUDED_AT.includes(position);
+    const picked = reached("shortlist") && !excluded && MOCK_WALK_SHORTLIST_AT.includes(position);
+    const profiled = reached("option_profile");
+    return {
+      option_id: row.option_id,
+      name: row.name,
+      description: row.description,
+      outcomes_served: [],
+      origin: row.origin,
+      state: excluded ? "excluded" : "included",
+      exclusion: excluded
+        ? { by: "constrain", constraint: MOCK_LONGLIST_FUNDING_CONSTRAINT, reason: "A local authority cannot fund this directly." }
+        : null,
+      no_in_scope_evidence: false,
+      primary_lever_type: profiled ? MOCK_WALK_LEVERS[position % MOCK_WALK_LEVERS.length] : null,
+      lever_none_fits_reason: null,
+      lever_reason: null,
+      secondary_lever_types: [],
+      ambition: profiled && position % 4 === 1 ? "more" : null,
+      ambition_reason: profiled ? "Builds on what local teams already run rather than adding a new body." : null,
+      profile: null,
+      authority: null,
+      taxonomy_version: "lever-types-v1",
+      document_count: row.found ?? 0,
+      evaluated_count: mockWalkEvaluatedCount(row.found ?? 0),
+      relations: [],
+      search_pending: false,
+      evaluated_countries:
+        mockWalkEvaluatedCount(row.found ?? 0) > 0
+          ? [{ country: "United Kingdom", documents: mockWalkEvaluatedCount(row.found ?? 0) }]
+          : [],
+      outcomes_evaluated: 0,
+      outcomes_total: 2,
+      shortlist: picked ? { state: "proposed", reason: "Mock reason: names a fact on the card." } : null,
+      maturity: null,
+    };
+  });
+  const included = options.filter((option) => option.state === "included");
+  const half = Math.ceil(included.length / 2);
+  const themes = reached("theme")
+    ? [
+        {
+          theme_id: MOCK_LONGLIST_THEME_ID_CONDITIONALITY,
+          name: "Conditionality and support",
+          description: "Options that attach an obligation or targeted help to the existing offer.",
+          option_ids: included.slice(0, half).map((option) => option.option_id),
+          document_count: mockWalkThemeDocumentCount(included.slice(0, half)),
+        },
+        {
+          theme_id: MOCK_LONGLIST_THEME_ID_UNIVERSAL_OFFER,
+          name: "A universal offer",
+          description: "A single, non-conditional offer replacing today's patchwork.",
+          option_ids: included.slice(half).map((option) => option.option_id),
+          document_count: mockWalkThemeDocumentCount(included.slice(half)),
+        },
+      ]
+    : [];
+  const base = mockLonglist();
+  return {
+    ...base,
+    counts: {
+      options: options.length,
+      themes: themes.length,
+      included: included.length,
+      excluded: options.length - included.length,
+      no_in_scope: 0,
+      none_fits: 0,
+    },
+    themes,
+    unthemed_option_ids: reached("theme") ? [] : options.map((option) => option.option_id),
+    options,
+  };
+}
+
+/**
+ * The finished longlist after a mock walk (task 058, round 10): the same
+ * options the build showed, themed, as working cards (a card per option, so
+ * the verbs and Suggest more act on them). Built from the build's last read.
+ */
+export function mockWalkOptionCards(
+  built: components["schemas"]["LonglistOut"],
+): components["schemas"]["OptionOut"][] {
+  return (built.options ?? []).map((summary) => ({
+    ...buildMockAddedOption(summary.name),
+    ...summary,
+    design: {
+      name: summary.name,
+      description: summary.description,
+      design_features: [summary.name],
+      outcomes_served: [],
+      assumed: [],
+      version: 1,
+    },
+    design_features: [summary.name],
+    shortlist: summary.shortlist ?? null,
+    maturity: summary.maturity ?? null,
+    documents: mockWalkDocuments(summary.option_id, summary.name, summary.document_count, summary.evaluated_count),
+  }));
 }
 
 // --- The options-scoping baseline gate (task 044, Phase 5.5) -------------
@@ -825,7 +1744,7 @@ export const mockBaselineGateCheckIn: components["schemas"]["CheckInOut"] = {
   component: "synthesise",
   stage: "synthesise",
   render: [
-    "Confirm the plan against the baseline",
+    "Does the plan still look right now you have the baseline?",
     `Key assumption: ${MOCK_KEY_ASSUMPTION}`,
     "Settings",
     "Target unit: 16-24 year-olds at risk of becoming NEET",
@@ -861,6 +1780,9 @@ export const mockBaselineGateCheckIn: components["schemas"]["CheckInOut"] = {
       where: "United Kingdom",
       outcomes: ["NEET rate at 6 months", "Sustained employment or training at 12 months"],
       depth: "standard",
+      // The label the user sees, as the server sends it (N19); the mock
+      // plan's appetite is `mostly_tried`.
+      risk_appetite: "Balanced: mostly evaluated, plus one or two not yet evaluated",
     },
   },
   segment_reentry_allowed: false,
@@ -981,6 +1903,7 @@ type ProfileFixture = NonNullable<OptionOutFixture["profile"]>;
 function mockProfile(
   marks: Partial<Record<"cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "coordination" | "delivery_complexity" | "potential_impact", "less" | "more">>,
   settings: string[],
+  actsOn: string[] = [],
 ): ProfileFixture {
   const line = (key: ProfileFixture["lines"][number]["key"], sentence: string) => ({
     key,
@@ -1000,6 +1923,8 @@ function mockProfile(
       line("potential_impact", "Moderate if it works: it targets late referral, a main driver of the baseline; would apply to 16 to 24 year olds, tried on 18 to 24 year olds; the records describe proposals only."),
     ],
     settings,
+    // Whom it acts on directly, the setting call's words (round 12).
+    acts_on: actsOn,
   };
 }
 
@@ -1039,7 +1964,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     secondary_lever_types: ["regulate"],
     ambition: "more",
     ambition_reason: "Changes who is entitled to a national benefit, not just how it is delivered.",
-    profile: mockProfile({ cost: "less", time_to_effect: "more", coordination: "more", potential_impact: "more" }, ["Jobcentre", "Secondary school"]),
+    profile: mockProfile({ cost: "less", time_to_effect: "more", coordination: "more", potential_impact: "more" }, ["Jobcentre", "Secondary school"], ["young jobseekers", "work coaches", "councils"]),
     authority: {
       label: "needs_action_by",
       body: "the Department for Work and Pensions",
@@ -1058,7 +1983,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     outcomes_total: 2,
     place_sentences: [
       { place: "United Kingdom", sentence: "One moderate local evaluation of the Benefit sanctions pilot in England measured the NEET rate at 6 months in 18-24 year-olds.", generated: true, where: true },
-      { place: "No single place", sentence: "1 strong systematic review with 18-24 year-olds, measuring NEET rate at 6 months.", generated: false, where: false },
+      { place: "Several countries", sentence: "1 strong systematic review with 18-24 year-olds, measuring NEET rate at 6 months.", generated: false, where: false },
     ],
     evidence: {
       outcome_counts: {
@@ -1077,9 +2002,9 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     ],
     in_scope: null,
     documents: [
-      { task_source_snapshot_id: "mock-doc-a1", title: "Conditionality and NEET outcomes: a local authority review", role: "evaluated", evidence_type: "Local evaluation", tier: "Moderate", place: "United Kingdom", programme_name: "Benefit sanctions pilot", tried_on_kind: "18-24 year-olds", measured: "NEET rate at 6 months", place_detail: "England", records_count: 1 },
-      { task_source_snapshot_id: "mock-doc-a2", title: "Benefit sanctions for young jobseekers: a systematic review", role: "evaluated", evidence_type: "Systematic review", tier: "Strong", place: "multiple countries", programme_name: null, tried_on_kind: "18-24 year-olds", measured: "NEET rate at 6 months", place_detail: null, records_count: 2 },
-      { task_source_snapshot_id: null, title: "National activation policy briefing", role: "mentioned", evidence_type: "Policy analysis", tier: null, place: "United Kingdom", programme_name: null, tried_on_kind: null, measured: null, place_detail: null, records_count: 0 },
+      { task_source_snapshot_id: "mock-doc-a1", title: "Conditionality and NEET outcomes: a local authority review", role: "evaluated", evidence_type: "Local evaluation", tier: "Moderate", year: 2022, authors: ["R. Hollis", "M. Okafor"], venue: "Local Government Studies", place: "United Kingdom", programme_name: "Benefit sanctions pilot", tried_on_kind: "18-24 year-olds", measured: "NEET rate at 6 months", place_detail: "England", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-a2", title: "Benefit sanctions for young jobseekers: a systematic review", role: "evaluated", evidence_type: "Systematic review", tier: "Strong", year: 2020, authors: ["J. Fenwick", "L. Garcia", "P. Shah"], venue: "Campbell Systematic Reviews", place: "multiple countries", programme_name: null, tried_on_kind: "18-24 year-olds", measured: "NEET rate at 6 months", place_detail: null, records_count: 2 },
+      { task_source_snapshot_id: null, title: "National activation policy briefing", role: "mentioned", evidence_type: "Policy analysis", tier: null, year: 2023, authors: ["Department for Work and Pensions"], venue: null, place: "United Kingdom", programme_name: null, tried_on_kind: null, measured: null, place_detail: null, records_count: 0 },
     ],
   },
   [MOCK_OPTION_ID_NO_IN_SCOPE]: {
@@ -1105,7 +2030,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     secondary_lever_types: [],
     ambition: null,
     ambition_reason: "Adds support alongside the existing offer rather than changing who runs it.",
-    profile: mockProfile({ workforce: "more", time_to_set_up: "less" }, ["Secondary school"]),
+    profile: mockProfile({ workforce: "more", time_to_set_up: "less" }, ["Secondary school"], ["pupils", "mentors"]),
     authority: {
       label: "within_your_power",
       body: null,
@@ -1142,10 +2067,10 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     ],
     in_scope: { restriction: MOCK_LONGLIST_RESTRICTION_TEXT, in_scope_documents: 0, documents: 4 },
     documents: [
-      { task_source_snapshot_id: "mock-doc-b1", title: "Peer mentoring for at-risk pupils in Ontario schools", role: "evaluated", evidence_type: "Local evaluation", tier: "Moderate", place: "Canada", programme_name: null, tried_on_kind: "pupils at risk of becoming NEET", measured: "NEET rate at 6 months", place_detail: "Ontario", records_count: 1 },
-      { task_source_snapshot_id: "mock-doc-b2", title: "School mentoring and NEET risk: an Australian cohort study", role: "evaluated", evidence_type: "Local evaluation", tier: "Limited", place: "Australia", programme_name: null, tried_on_kind: "secondary school pupils", measured: "school engagement", place_detail: "Victoria", records_count: 1 },
-      { task_source_snapshot_id: "mock-doc-b3", title: "Mentoring programmes for disengaged youth: a scoping review", role: "described", evidence_type: "Policy analysis", tier: null, place: "other", programme_name: null, tried_on_kind: "young people", measured: null, place_detail: "English-speaking countries", records_count: 1 },
-      { task_source_snapshot_id: "mock-doc-b4", title: "Youth mentoring outcomes: unclear geography", role: "recommended", evidence_type: "Local evaluation", tier: "Moderate", place: "not stated", programme_name: null, tried_on_kind: "young people", measured: null, place_detail: null, records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-b1", title: "Peer mentoring for at-risk pupils in Ontario schools", role: "evaluated", evidence_type: "Local evaluation", tier: "Moderate", year: 2019, authors: ["K. Tremblay"], venue: "Canadian Journal of Education", place: "Canada", programme_name: null, tried_on_kind: "pupils at risk of becoming NEET", measured: "NEET rate at 6 months", place_detail: "Ontario", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-b2", title: "School mentoring and NEET risk: an Australian cohort study", role: "evaluated", evidence_type: "Local evaluation", tier: "Limited", year: 2021, authors: ["S. Nguyen", "D. Walsh"], venue: "Journal of Adolescence", place: "Australia", programme_name: null, tried_on_kind: "secondary school pupils", measured: "school engagement", place_detail: "Victoria", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-b3", title: "Mentoring programmes for disengaged youth: a scoping review", role: "described", evidence_type: "Policy analysis", tier: null, year: 2018, authors: ["H. Price"], venue: "Youth Studies Review", place: "other", programme_name: null, tried_on_kind: "young people", measured: null, place_detail: "English-speaking countries", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-b4", title: "Youth mentoring outcomes: unclear geography", role: "recommended", evidence_type: "Local evaluation", tier: "Moderate", year: null, authors: [], venue: null, place: "not stated", programme_name: null, tried_on_kind: "young people", measured: null, place_detail: null, records_count: 1 },
     ],
   },
   [MOCK_OPTION_ID_ADDED_BY_YOU]: {
@@ -1222,7 +2147,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     secondary_lever_types: ["provide a service"],
     ambition: "less",
     ambition_reason: "Reorganises the existing offer into one application rather than adding anything new.",
-    profile: mockProfile({ cost: "less", delivery_complexity: "more", time_to_set_up: "less", potential_impact: "less" }, ["Jobcentre", "Community centre"]),
+    profile: mockProfile({ cost: "less", delivery_complexity: "more", time_to_set_up: "less", potential_impact: "less" }, ["Jobcentre", "Community centre"], ["young people", "employers", "councils"]),
     authority: { label: "unclear", body: null, reason: "The sources do not say who could merge the application routes." },
     taxonomy_version: "lever-types-v1",
     document_count: 9,
@@ -1230,7 +2155,7 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     evaluated_countries: [{ country: "United Kingdom", documents: 3 }],
     place_sentences: [
       { place: "United Kingdom", sentence: "One very strong systematic review of the Youth Guarantee in England measured the NEET rate at 6 months in 18-24 year-olds.", generated: true, where: true },
-      { place: "No single place", sentence: "One strong local evaluation measured sustained employment or training at 12 months in 16-24 year-olds.", generated: true, where: false },
+      { place: "Place not stated", sentence: "One strong local evaluation measured sustained employment or training at 12 months in 16-24 year-olds.", generated: true, where: false },
     ],
     outcomes_evaluated: 2,
     outcomes_total: 2,
@@ -1252,16 +2177,16 @@ export const mockLonglistOptionCards: Record<string, OptionOutFixture> = {
     ],
     in_scope: null,
     documents: [
-      { task_source_snapshot_id: "mock-doc-d1", title: "Single-application youth guarantees: a systematic review", role: "evaluated", evidence_type: "Systematic review", tier: "Very strong", place: "United Kingdom", programme_name: "Youth Guarantee", tried_on_kind: "18-24 year-olds", measured: "NEET rate at 6 months", place_detail: "England", records_count: 1 },
-      { task_source_snapshot_id: "mock-doc-d2", title: "Combining careers advice and apprenticeships: a local evaluation", role: "evaluated", evidence_type: "Local evaluation", tier: "Strong", place: "multiple countries", programme_name: null, tried_on_kind: "16-24 year-olds", measured: "Sustained employment or training at 12 months", place_detail: null, records_count: 2 },
-      { task_source_snapshot_id: "mock-doc-d3", title: "One-stop youth offers outside the UK: a policy analysis", role: "described", evidence_type: "Policy analysis", tier: "Moderate", place: "Germany", programme_name: "Jugendberufsagentur", tried_on_kind: "young people", measured: "apprenticeship starts", place_detail: "Hamburg", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-d1", title: "Single-application youth guarantees: a systematic review", role: "evaluated", evidence_type: "Systematic review", tier: "Very strong", year: 2024, authors: ["A. Brennan", "T. Iqbal"], venue: "Campbell Systematic Reviews", place: "United Kingdom", programme_name: "Youth Guarantee", tried_on_kind: "18-24 year-olds", measured: "NEET rate at 6 months", place_detail: "England", records_count: 1 },
+      { task_source_snapshot_id: "mock-doc-d2", title: "Combining careers advice and apprenticeships: a local evaluation", role: "evaluated", evidence_type: "Local evaluation", tier: "Strong", year: 2021, authors: ["C. Morgan"], venue: "Learning and Work Institute", place: "multiple countries", programme_name: null, tried_on_kind: "16-24 year-olds", measured: "Sustained employment or training at 12 months", place_detail: null, records_count: 2 },
+      { task_source_snapshot_id: "mock-doc-d3", title: "One-stop youth offers outside the UK: a policy analysis", role: "described", evidence_type: "Policy analysis", tier: "Moderate", year: 2017, authors: ["F. Becker", "U. Klein"], venue: null, place: "Germany", programme_name: "Jugendberufsagentur", tried_on_kind: "young people", measured: "apprenticeship starts", place_detail: "Hamburg", records_count: 1 },
     ],
   },
 };
 
 /** Project one option card down to the list/grid's summary shape (the same
  *  fields `GET /longlist` returns for each option). */
-function toLonglistOptionSummary(option: OptionOutFixture): OptionSummaryOutFixture {
+export function toLonglistOptionSummary(option: OptionOutFixture): OptionSummaryOutFixture {
   return {
     option_id: option.option_id,
     name: option.name,
@@ -1295,11 +2220,30 @@ function toLonglistOptionSummary(option: OptionOutFixture): OptionSummaryOutFixt
 /** The shortlist's in-memory state (task 055, A17): the note, whether the
  *  proposal is stale against the plan's appetite, and the appetite the
  *  mock's plan holds. The shortlist routes in `api.ts` change it. */
-export const mockShortlistState: { note: string | null; stale: boolean; inputsChanged: boolean } = {
+export const mockShortlistState: { note: string | null; stale: boolean; inputsChanged: boolean; placesAt: string[] } = {
   note: null,
   stale: false,
   inputsChanged: false,
+  // The places the note was written against (round 14): `note_stale` once
+  // the places now held differ.
+  placesAt: [],
 };
+
+/** The option ids holding a place now (proposed or added by you), sorted. */
+export function mockCurrentPlaces(): string[] {
+  return Object.values(mockLonglistOptionCards)
+    .filter((card) => card.shortlist?.state === "proposed" || card.shortlist?.state === "added_by_you")
+    .map((card) => card.option_id)
+    .sort();
+}
+
+/** Whether the note was written against other places than these (round 14). */
+export function mockNoteStale(): boolean {
+  if (mockShortlistState.note == null) return false;
+  const now = mockCurrentPlaces();
+  const at = [...mockShortlistState.placesAt].sort();
+  return now.length !== at.length || now.some((id, index) => id !== at[index]);
+}
 
 /** Places the shortlist fills up to. */
 export const MOCK_SHORTLIST_PLACES_TARGET = 5;
@@ -1346,6 +2290,7 @@ export function resetMockShortlist() {
   mockShortlistState.note = "Mock note: nothing here tackles the wider labour market.";
   mockShortlistState.stale = false;
   mockShortlistState.inputsChanged = false;
+  mockShortlistState.placesAt = mockCurrentPlaces();
 }
 
 /** Option ids added by hand or by chat verb since the walk built the four
@@ -1409,6 +2354,18 @@ export function buildMockAddedOption(text: string): OptionOutFixture {
  *  option), built from `mockLonglistOptionCards` so the summary and the
  *  card never drift apart. Any option added since (`mockLonglistExtraOptionIds`)
  *  appends unthemed, like a real rebuild's new entrants. */
+/** A longlist theme's distinct documents across its options, each once
+ *  (round 14), as the server counts them. */
+export function mockThemeDocumentCount(optionIds: string[]): number {
+  return new Set(
+    optionIds.flatMap((optionId) =>
+      (mockLonglistOptionCards[optionId]?.documents ?? [])
+        .map((document) => document.task_source_snapshot_id)
+        .filter((id): id is string => id != null),
+    ),
+  ).size;
+}
+
 export function mockLonglist(): components["schemas"]["LonglistOut"] {
   const options = [
     MOCK_OPTION_ID_EXCLUDED,
@@ -1435,12 +2392,14 @@ export function mockLonglist(): components["schemas"]["LonglistOut"] {
         name: "Conditionality and support",
         description: "Options that attach an obligation or targeted help to the existing offer.",
         option_ids: [MOCK_OPTION_ID_EXCLUDED, MOCK_OPTION_ID_NO_IN_SCOPE],
+        document_count: mockThemeDocumentCount([MOCK_OPTION_ID_EXCLUDED, MOCK_OPTION_ID_NO_IN_SCOPE]),
       },
       {
         theme_id: MOCK_LONGLIST_THEME_ID_UNIVERSAL_OFFER,
         name: "A universal offer",
         description: "A single, non-conditional offer replacing today's patchwork.",
         option_ids: [MOCK_OPTION_ID_PACKAGE],
+        document_count: mockThemeDocumentCount([MOCK_OPTION_ID_PACKAGE]),
       },
     ],
     unthemed_option_ids: [MOCK_OPTION_ID_ADDED_BY_YOU, ...mockLonglistExtraOptionIds],
@@ -1538,6 +2497,7 @@ export function mockLonglist(): components["schemas"]["LonglistOut"] {
       provenance: {},
       places_target: MOCK_SHORTLIST_PLACES_TARGET,
       stale: mockShortlistState.stale,
+      note_stale: mockNoteStale(),
     },
     plan_inputs_changed: mockShortlistState.inputsChanged,
   };

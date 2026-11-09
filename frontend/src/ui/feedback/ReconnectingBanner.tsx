@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { cn } from "../brand/cn";
 import type { RunStreamState } from "../../store/types";
 
 /** Live-stream disconnect signal, with a stale-data warning after 30
@@ -8,14 +9,24 @@ import type { RunStreamState } from "../../store/types";
  *  succeeds) is not a reconnect and stays silent. */
 export function ReconnectingBanner({
   connectionStatus,
+  className,
 }: {
   connectionStatus: RunStreamState["connectionStatus"];
+  className?: string;
 }) {
   if (connectionStatus !== "reconnecting") return null;
-  return <ReconnectingContent />;
+  return <ReconnectingContent className={className} />;
 }
 
-function ReconnectingContent() {
+/**
+ * The reconnecting line (task 058, owner round 11): it takes the run status
+ * bar's frame, so it starts after the rail and never runs under it: one line
+ * at Meta size with the bar's 10 px vertical padding, its words where the
+ * bar's words start (after the mark's column), on the Yellow Tint with a
+ * Yellow hairline under it. Exported for the bar itself,
+ * which shows it in place of its words while the stream reconnects.
+ */
+export function ReconnectingContent({ className }: { className?: string }) {
   const [stale, setStale] = useState(false);
 
   useEffect(() => {
@@ -24,7 +35,13 @@ function ReconnectingContent() {
   }, []);
 
   return (
-    <div role="status" className="border-b border-yellow bg-yellow-tint px-4 py-2 text-body text-navy">
+    <div
+      role="status"
+      className={cn(
+        "border-b border-yellow bg-yellow-tint py-2.5 pr-6 pl-[46px] text-meta leading-[1.55rem] text-navy max-md:pr-4 max-md:pl-[38px]",
+        className,
+      )}
+    >
       Reconnecting to live updates…{stale ? " Updates may be stale." : ""}
     </div>
   );

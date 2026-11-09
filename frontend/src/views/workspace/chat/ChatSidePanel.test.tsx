@@ -1,4 +1,7 @@
-import { render, screen, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -16,7 +19,15 @@ const state = vi.hoisted(() => ({
   navigate: vi.fn(),
   chatsResolved: true,
   rows: [] as unknown[],
+  /** The `kind: "task_agent"` read (closed ones included); null reads the
+   *  task_agent rows of `rows`. */
+  taskAgentRows: null as unknown[] | null,
   runStatus: undefined as string | undefined,
+  pendingCheckIn: null as { check_in_id: string; kind: string } | null,
+  openPlan: vi.fn(),
+}));
+vi.mock("../../planPanel", () => ({
+  usePlanPanel: () => ({ open: false, openPlan: state.openPlan, closePlan: vi.fn() }),
 }));
 
 vi.mock("react-router", () => ({
@@ -29,8 +40,13 @@ vi.mock("react-router", () => ({
   ),
 }));
 vi.mock("../../../api/queries", () => ({
-  useConversations: () => ({
-    data: { data: state.rows },
+  useConversations: (_taskId: string, query?: { kind?: string }) => ({
+    data: {
+      data:
+        query?.kind === "task_agent"
+          ? (state.taskAgentRows ?? state.rows.filter((row) => (row as { kind: string }).kind === "task_agent"))
+          : state.rows,
+    },
     isSuccess: state.chatsResolved,
   }),
   useArtefact: () => ({ data: { sections: [{ title: "Key findings" }] } }),
@@ -38,10 +54,18 @@ vi.mock("../../../api/queries", () => ({
   // stream mock carries the run state these tests vary.
   useTask: () => ({ data: undefined }),
 }));
-vi.mock("../../../store", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../../store")>()),
-  useRunStream: () => ({ run: state.runStatus === undefined ? null : { status: state.runStatus }, stages: [] }),
-}));
+vi.mock("../../../store", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../store")>();
+  return {
+    ...actual,
+    // The panel reads the task's one run stream (task 058, N13).
+    useRunStream: () => ({
+      ...actual.createInitialRunStreamState(),
+      run: state.runStatus === undefined ? null : { id: "run-1", status: state.runStatus, startedAt: "2026-11-05T09:00:00Z" },
+      pendingCheckIn: state.pendingCheckIn,
+    }),
+  };
+});
 vi.mock("./conversationState", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./conversationState")>();
   return {
@@ -69,8 +93,27 @@ vi.mock("../TaskAgentPane", () => ({
   // the "ChatSidePanel duplicate" the rubric names can be checked for
   // threading `isOwner` through to the task_agent surface without re-testing
   // TaskAgentPane's own read-only rendering here (that's TaskAgentPane.test.tsx).
-  TaskAgentPane: ({ isOwner }: { isOwner: boolean }) => (
-    <div data-testid="task_agent-pane" data-is-owner={String(isOwner)} />
+  TaskAgentPane: ({
+    isOwner,
+    runStatus,
+    stream,
+    onReviewPlan,
+  }: {
+    isOwner: boolean;
+    runStatus: string | undefined;
+    stream: { run: { id: string } | null };
+    onReviewPlan?: () => void;
+  }) => (
+    <div
+      data-testid="task_agent-pane"
+      data-is-owner={String(isOwner)}
+      data-run-status={runStatus ?? "none"}
+      data-run-id={stream.run?.id ?? "none"}
+    >
+      <button type="button" onClick={onReviewPlan}>
+        Review the plan
+      </button>
+    </div>
   ),
 }));
 
@@ -78,8 +121,11 @@ describe("ChatSidePanel", () => {
   beforeEach(() => {
     state.chatsResolved = true;
     state.rows = [CHAT_ROW];
+    state.taskAgentRows = null;
     state.runStatus = "succeeded";
+    state.pendingCheckIn = null;
     state.draftEntryArtefactId = null;
+    state.navigate.mockClear();
     state.setActiveConversation.mockClear();
     state.openDraftChat.mockClear();
     state.create.mockClear();
@@ -138,6 +184,20 @@ describe("ChatSidePanel", () => {
     expect(state.setActiveConversation).toHaveBeenCalledWith("plan-1");
   });
 
+  // Round 14: the backend names the open chat and the cached read carries
+  // it; the header reveals it at once, no tab switch needed.
+  it("reveals the open chat's new title in the header as soon as the read carries it", async () => {
+    state.activeConversationId = "c1";
+    const view = render(<ChatSidePanel taskId="p1" isOwner />);
+    expect(screen.getByText("Cost barriers")).toBeInTheDocument();
+    state.rows = [{ ...CHAT_ROW, title: "Cost barriers to childcare take-up" }];
+    view.rerender(<ChatSidePanel taskId="p1" isOwner />);
+    expect(screen.getByTestId("chat-title-leaving")).toHaveTextContent("Cost barriers");
+    expect(screen.getByRole("link", { name: "View in Agent tab: Cost barriers to childcare take-up" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTestId("chat-title-revealing")).toBeNull(), { timeout: 2000 });
+    expect(screen.getByText("Cost barriers to childcare take-up")).toBeInTheDocument();
+  });
+
   it("renders the open panel with the header naming the chat, toggles the shared list, and closes", async () => {
     state.activeConversationId = "c1";
     const user = userEvent.setup();
@@ -159,6 +219,29 @@ describe("ChatSidePanel", () => {
     state.rows = [PLAN_ROW, CHAT_ROW];
     render(<ChatSidePanel taskId="p1" isOwner />);
     expect(screen.getByTestId("task_agent-pane")).toBeInTheDocument();
+    expect(screen.getByText("Task Agent")).toBeInTheDocument();
+    expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
+  });
+
+  it("keeps the Task Agent's thread after the baseline check-in is answered from the sidebar (round 12)", () => {
+    // The sidebar shows the Task Agent, parked on the scoping walk's
+    // baseline check-in.
+    state.activeConversationId = "plan-1";
+    state.rows = [PLAN_ROW, CHAT_ROW];
+    state.runStatus = "paused";
+    state.pendingCheckIn = { check_in_id: "gate-1", kind: "baseline_confirm" };
+    const view = render(<ChatSidePanel taskId="p1" isOwner />);
+    expect(screen.getByTestId("task_agent-pane")).toBeInTheDocument();
+
+    // Answered: the baseline walk ends, the server closes its Task Agent
+    // conversation (it leaves the active list) and the longlist walk runs.
+    state.pendingCheckIn = null;
+    state.runStatus = "running";
+    state.rows = [CHAT_ROW];
+    state.taskAgentRows = [{ ...PLAN_ROW, status: "closed", closed_at: new Date().toISOString() }];
+    view.rerender(<ChatSidePanel taskId="p1" isOwner />);
+
+    expect(screen.getByTestId("task_agent-pane")).toHaveAttribute("data-run-status", "running");
     expect(screen.getByText("Task Agent")).toBeInTheDocument();
     expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
   });
@@ -223,5 +306,97 @@ describe("ChatSidePanel", () => {
     expect(screen.getByTestId("draft-chat-pane")).toBeInTheDocument();
     expect(screen.getByText("New chat")).toBeInTheDocument();
     expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
+  });
+
+  // Owner, 2026-11-05: in the sidebar's pane, Lead-size text reads at Body
+  // size (16 px, the floor), for the Task Agent and the chats alike.
+  it.each([
+    ["the Task Agent", "plan-1", "task_agent-pane"],
+    ["a chat", "c1", "chat-pane"],
+    ["a draft chat", "new", "draft-chat-pane"],
+  ])("sets %s in the compact pane, where Lead reads at Body size", (_name, conversationId, testId) => {
+    state.activeConversationId = conversationId;
+    state.rows = [PLAN_ROW, CHAT_ROW];
+    render(<ChatSidePanel taskId="p1" isOwner />);
+    expect(screen.getByTestId(testId).parentElement).toHaveClass("compact-pane");
+  });
+
+  it("scopes the compact pane's rule to Lead alone, at the Body size and leading", () => {
+    // `index.css` is the rule's one home; Body and Meta are left as they are.
+    const css = readFileSync(join(__dirname, "../../../index.css"), "utf8");
+    const start = css.indexOf("@utility compact-pane {");
+    const rule = css.slice(start, css.indexOf("\n}", start));
+    expect(rule).toContain("--text-lead: var(--text-body);");
+    expect(rule).toContain("--text-lead--line-height: var(--text-body--line-height);");
+    expect(rule).not.toMatch(/--text-(body|meta|caption):/);
+  });
+
+  // Owner and lead, 2026-11-05: wherever a run is live its mark is the fold
+  // mark turning, in the rail at the rail's own size (no jump), on every tab
+  // that mounts the sidebar (owner, round 6: the Result tab's exception went).
+  it("keeps the rail's Task Agent mark still and plainly named, whatever the run is doing (owner, round 8)", () => {
+    state.activeConversationId = null;
+    for (const status of ["running", "paused", "succeeded"]) {
+      state.runStatus = status;
+      const view = render(<ChatSidePanel taskId="p1" isOwner />);
+      const button = screen.getByRole("button", { name: "Task Agent" });
+      expect(button.querySelector("[data-live-mark]")).toBeNull();
+      expect(button.querySelector("svg")).toHaveAttribute("width", "11");
+      expect(screen.queryByTestId("rail-elapsed")).toBeNull();
+      view.unmount();
+    }
+  });
+
+  describe("the same agent as the Agent tab (task 058, N13)", () => {
+    it("mounts the Task Agent on the task's real stream and run status", () => {
+      state.activeConversationId = "plan-1";
+      state.rows = [PLAN_ROW, CHAT_ROW];
+      render(<ChatSidePanel taskId="p1" isOwner />);
+      const pane = screen.getByTestId("task_agent-pane");
+      expect(pane).toHaveAttribute("data-run-status", "succeeded");
+      expect(pane).toHaveAttribute("data-run-id", "run-1");
+    });
+
+    // Owner, 2026-11-05: the run trace in the thread is the sidebar's run
+    // view; there is no separate run line or compact run view.
+    it.each(["running", "paused"])("keeps the same Task Agent thread while the run is %s", (status) => {
+      state.activeConversationId = "plan-1";
+      state.rows = [PLAN_ROW, CHAT_ROW];
+      state.runStatus = status;
+      render(<ChatSidePanel taskId="p1" isOwner />);
+      expect(screen.getByTestId("task_agent-pane")).toHaveAttribute("data-run-status", status);
+      expect(screen.queryByText(/a check-in is waiting on you/)).toBeNull();
+    });
+
+    it("keeps the full pane at the scoping gate, whose composer takes a question", () => {
+      state.activeConversationId = "plan-1";
+      state.rows = [PLAN_ROW, CHAT_ROW];
+      state.runStatus = "paused";
+      state.pendingCheckIn = { check_in_id: "g1", kind: "baseline_confirm" };
+      render(<ChatSidePanel taskId="p1" isOwner />);
+      expect(screen.getByTestId("task_agent-pane")).toBeInTheDocument();
+    });
+
+    it("opens on the Task Agent from the rail while a check-in waits, even with chats", async () => {
+      state.activeConversationId = null;
+      state.rows = [PLAN_ROW, CHAT_ROW];
+      state.runStatus = "paused";
+      state.pendingCheckIn = { check_in_id: "k1", kind: "steer_point" };
+      const user = userEvent.setup();
+      render(<ChatSidePanel taskId="p1" isOwner />);
+      await user.click(screen.getByRole("button", { name: "Open the Agent" }));
+      expect(state.setActiveConversation).toHaveBeenCalledWith("plan-1");
+    });
+
+    it("opens the shell's plan document from Review the plan, staying on the tab", async () => {
+      state.activeConversationId = "plan-1";
+      state.rows = [PLAN_ROW, CHAT_ROW];
+      state.openPlan.mockClear();
+      const user = userEvent.setup();
+      render(<ChatSidePanel taskId="p1" isOwner />);
+      await user.click(screen.getByRole("button", { name: "Review the plan" }));
+      expect(state.openPlan).toHaveBeenCalledTimes(1);
+      expect(state.navigate).not.toHaveBeenCalled();
+    });
   });
 });

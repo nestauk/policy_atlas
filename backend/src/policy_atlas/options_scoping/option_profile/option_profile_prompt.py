@@ -33,7 +33,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.options_scoping.suggest.suggest_prompt import render_baseline_blocks
 
-OPTION_PROFILE_PROMPT_VERSION = "option_profile_v4"
+OPTION_PROFILE_PROMPT_VERSION = "option_profile_v5"
 
 OPTION_PROFILE_MAX_OUTPUT_TOKENS = 16_384
 
@@ -292,6 +292,16 @@ class SettingWire(BaseModel):
             "null. Always null when main_setting is null."
         )
     )
+    acts_on: list[str] = Field(
+        default_factory=list,
+        description=(
+            "The people or bodies the option acts on directly to reach the "
+            "people or bodies it is for: each one to three plain words, lower "
+            "case, plural; at most four, the most acted on first; the same "
+            "word for the same kind across the whole list. Empty only for an "
+            "instrument that acts on a whole system."
+        ),
+    )
 
 
 class SettingResponse(BaseModel):
@@ -537,6 +547,12 @@ Rules:
   singular.
 - second_setting: one more kind of place, only when the option is
   delivered through two kinds of place as a rule. Otherwise null.
+- acts_on: the people or bodies the option acts on directly to reach the
+  people or bodies it is for. A planning rule for outlets near schools
+  acts on outlets and councils to reach children. Each one to three plain
+  words, lower case, plural; at most four, the most acted on first; the
+  SAME word for the same kind across the whole list. Empty only for an
+  instrument that acts on a whole system.
 - Use the SAME word for the same kind of place across the whole list. Read
   the list first, choose your words for its kinds of place, then answer.
   Prefer the wider everyday word to a narrow one, so that the list has few

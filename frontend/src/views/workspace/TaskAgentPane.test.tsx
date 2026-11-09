@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
 
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,10 +9,10 @@ import type { components } from "../../api/gen/types";
 import * as mutations from "../../api/mutations";
 import * as queries from "../../api/queries";
 import { createInitialRunStreamState } from "../../store";
-import type { TaskAgentThreadDecision, TaskAgentThreadRun, TaskAgentThreadTurn } from "../../store";
+import type { RunStreamState, StageEntry, TaskAgentThreadDecision, TaskAgentThreadRun, TaskAgentThreadTurn } from "../../store";
 import { ToastProvider } from "../../ui/radix/Toast";
 import { TooltipProvider } from "../../ui/radix/Tooltip";
-import { Composer, TaskAgentPane, taskAgentComposerPlaceholder, presentRunDecisions, threadInputs } from "./TaskAgentPane";
+import { Composer, TaskAgentPane, taskAgentComposerPlaceholder, threadInputs } from "./TaskAgentPane";
 
 type CheckInOut = components["schemas"]["CheckInOut"];
 
@@ -44,6 +44,13 @@ vi.mock("../../api/mutations", async (importOriginal) => {
     useAnswerCheckIn: vi.fn(),
   };
 });
+
+// The scoping start state reads runs, the task and the longlist; the pane's
+// tests only need it to say "nothing to start".
+vi.mock("./planStart", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./planStart")>()),
+  useScopingPlanStart: vi.fn(() => ({ kind: "none", buildingLonglist: false })),
+}));
 
 function turn(index: number, createdAt: string): TaskAgentThreadTurn {
   return {
@@ -90,6 +97,17 @@ describe("threadInputs", () => {
     const { boundaries, runDecisions } = threadInputs(turns, runs, decisions);
     expect(boundaries).toEqual([{ run: runs[0], afterTurnIndex: 1 }]);
     expect(runDecisions).toEqual([{ decision: decisions[0], capabilityRunId: "r1" }]);
+  });
+
+  // Round 15: refreshing the shortlist note writes a History event with no
+  // walk; it must not land in the thread by its time.
+  it("places a run-less housekeeping event nowhere, whatever its time", () => {
+    const runs = [run("shortlist", "2026-11-07T10:00:00Z", null)];
+    const note = { ...decision(4, "2026-11-07T10:05:00Z"), kind: "shortlist.note_updated" };
+    const proposed = { ...decision(5, "2026-11-07T10:06:00Z"), kind: "shortlist.proposed" };
+    const own = { ...decision(6, "2026-11-07T10:07:00Z"), kind: "component.completed" };
+    const { runDecisions } = threadInputs([], runs, [note, proposed, own]);
+    expect(runDecisions).toEqual([{ decision: own, capabilityRunId: "shortlist" }]);
   });
 
   it("gives a run with no preceding turn a null boundary", () => {
@@ -141,22 +159,6 @@ describe("threadInputs", () => {
     const parentSearch = { ...decision(5, "2026-09-22T10:08:00Z"), kind: "search.executed", capability_run_id: "longlist" };
     const { runDecisions } = threadInputs([], [child, parent], [childSearch, parentSearch]);
     expect(runDecisions).toEqual([{ decision: parentSearch, capabilityRunId: "longlist" }]);
-  });
-});
-
-describe("presentRunDecisions", () => {
-  it("collapses consecutive search echoes with a counter and stage-labels completed components", () => {
-    const entries: TaskAgentThreadDecision[] = [
-      { kind: "search.executed", sequence: 1, occurred_at: "2026-07-28T10:00:00Z", summary: "Executed a search query." },
-      { kind: "search.executed", sequence: 2, occurred_at: "2026-07-28T10:00:01Z", summary: "Executed a search query." },
-      { kind: "component.completed", sequence: 3, occurred_at: "2026-07-28T10:00:02Z", summary: "Completed an evidence-search step.", detail: { component: "screen_full" } },
-      { kind: "component.completed", sequence: 4, occurred_at: "2026-07-28T10:00:03Z", summary: "Completed an evidence-search step.", detail: { component: "unknown" } },
-    ];
-
-    expect(presentRunDecisions(entries, [])).toEqual([
-      { sequence: 1, summary: "Executed a search query", count: 2 },
-      { sequence: 3, summary: "Completed: Screening for relevance", count: 1 },
-    ]);
   });
 });
 
@@ -375,22 +377,22 @@ describe("TaskAgentPane — non-owner read-only (task 033 phase 10c, contract §
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   });
 
-  it("hides Start search from the plan-ready card but keeps Review the plan", () => {
+  it("hides Start the search from the plan card but keeps Review the plan", () => {
     renderPane();
     expect(screen.getByRole("button", { name: "Review the plan" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Start search" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start the search" })).not.toBeInTheDocument();
   });
 
   it("never mounts the check-in card for a pending check-in", () => {
     renderPane({ stream: { ...createInitialRunStreamState(), pendingCheckIn: checkIn() } });
-    expect(screen.queryByText("Waiting on your input")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Continue" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("check-in-card")).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /Continue/ })).not.toBeInTheDocument();
   });
 
-  it("renders the check-in card and Start search for the owner, by contrast", () => {
+  it("renders the check-in card and Start the search for the owner, by contrast", () => {
     renderPane({ isOwner: true, stream: { ...createInitialRunStreamState(), pendingCheckIn: checkIn() } });
-    expect(screen.getByText("Waiting on your input")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start search" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Screening paused for review." })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start the search" })).toBeInTheDocument();
     expect(screen.getByLabelText("Message the Task Agent")).not.toBeDisabled();
   });
 });
@@ -415,7 +417,7 @@ describe("TaskAgentPane — the options-scoping baseline gate", () => {
         { id: "confirm_plan", label: "Confirm plan and build longlist", description: "", requires_user_input: false, suggested: false, why: null, endorsement: null },
         { id: "change_plan", label: "Change the plan", description: "", requires_user_input: false, suggested: false, why: null, endorsement: null },
       ],
-      render: "Confirm the plan against the baseline",
+      render: "Does the plan still look right now you have the baseline?",
       rerun_component: null,
       segment_reentry_allowed: false,
       sequence: 40,
@@ -535,20 +537,26 @@ describe("TaskAgentPane — the options-scoping baseline gate", () => {
     mockPane({ turns: [answerTurn(), decisionTurn()] });
     const { container } = renderPane();
 
-    expect(screen.getByRole("heading", { name: "Confirm the plan against the baseline" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Confirm plan and build longlist" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Change the plan" })).toBeInTheDocument();
+    // The gate's question is its title (round 10, C9).
+    expect(
+      screen.getByRole("heading", { name: "Does the plan still look right now you have the baseline?" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Confirm plan and build longlist/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Change the plan/ })).toBeInTheDocument();
     // The chat's own citation renderer, reused: the References footer and the
     // `[n]` marker button come from `ChatAnswer`, not from a second copy.
     expect(screen.getByText("References (1)")).toBeInTheDocument();
-    expect(screen.getByText("Change the plan", { selector: "span" })).toBeInTheDocument();
-    expect(screen.getByText(/plan version 2/)).toBeInTheDocument();
+    // The decision is said once, in the settled part card's language
+    // (round 10, finding 8): no "recorded · plan version" line.
+    const settled = screen.getByTestId("settled-gate");
+    expect(settled).toHaveTextContent(/^BaselineChange the plan$/);
+    expect(screen.queryByText(/plan version 2/)).not.toBeInTheDocument();
 
     const text = container.textContent ?? "";
-    expect(text.indexOf("Confirm the plan against the baseline")).toBeLessThan(
+    expect(text.indexOf("Does the plan still look right now you have the baseline?")).toBeLessThan(
       text.indexOf("Does the baseline cover young people"),
     );
-    expect(text.indexOf("Does the baseline cover young people")).toBeLessThan(text.indexOf("recorded"));
+    expect(text.indexOf("Does the baseline cover young people")).toBeLessThan(text.indexOf("BaselineChange the plan"));
   });
 
   // Task 045 (deliverable 10): a confirmed longlist verb is an `action` turn,
@@ -594,8 +602,10 @@ describe("TaskAgentPane — the options-scoping baseline gate", () => {
       data: { data: [longlistWalk] },
     } as unknown as ReturnType<typeof queries.useRuns>);
     renderPane({ runStatus: "succeeded", stream: createInitialRunStreamState() });
-    expect(screen.getByText(/The longlist is built/)).toBeInTheDocument();
-    expect(screen.queryByText(/The baseline is written/)).not.toBeInTheDocument();
+    // A past run folds to its own walk's finish words and its wall time.
+    expect(screen.getByText("The longlist is ready")).toBeInTheDocument();
+    expect(screen.getByTestId("past-run")).toHaveTextContent(/^The longlist is ready30 min\s·Read it →$/);
+    expect(screen.queryByText(/The baseline is ready/)).not.toBeInTheDocument();
   });
 
   it("keeps the composer open at the gate, with the baseline question placeholder", () => {
@@ -645,25 +655,387 @@ describe("TaskAgentPane — the options-scoping baseline gate", () => {
 
   // Task 044 review, C3: the walk is `paused` (so `runActive` is true) but
   // the composer stays open at the gate — the suggestion chips must gate on
-  // that same fence, not on `runActive`, or an ask-back turn's suggestions
-  // never render while parked on the gate.
-  it("renders an ask-back turn's suggestions as chips at the gate", async () => {
-    mockPane({ turns: [] });
-    vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({
-      mutateAsync: vi.fn().mockResolvedValue({ suggestions: ["Does this cover care leavers?"] }),
+  // that same fence, not on `runActive`. Task 058 (N10): the question and
+  // its chips come from the stored turn, so a reload keeps them.
+  it("renders an ask-back turn's question and chips from the stored turn at the gate", () => {
+    const askBack: TaskAgentThreadTurn = {
+      turn_index: 5,
+      client_turn_id: "00000000-0000-0000-0000-0000000000a5",
+      user_message: "Does the baseline cover care leavers?",
+      reply: "It covers school leavers only.",
+      question: "Should I widen it to care leavers?",
+      suggestions: ["Yes, widen it", "No, keep it"],
+      part: null,
+      status: "completed",
+      created_at: "2026-07-28T10:20:00Z",
+      completed_at: "2026-07-28T10:20:04Z",
+    };
+    mockPane({ turns: [askBack] });
+    renderPane();
+    expect(screen.getByText("Should I widen it to care leavers?")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Yes, widen it" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "No, keep it" })).toBeInTheDocument();
+  });
+});
+
+/** Task 058 (N9, N10, N18): the planner's turn streams into the Agent tab. */
+describe("TaskAgentPane — the streaming planner turn", () => {
+  const TASK_ID = "11111111-1111-1111-1111-111111111111";
+
+  function plannerTurn(overrides: Partial<TaskAgentThreadTurn> = {}): TaskAgentThreadTurn {
+    return {
+      turn_index: 1,
+      client_turn_id: "00000000-0000-0000-0000-0000000000b1",
+      user_message: "What works to raise take-up of free childcare?",
+      reply: "I can search for this.",
+      question: null,
+      suggestions: [],
+      part: null,
+      status: "completed",
+      capability: "evidence_search",
+      created_at: "2026-11-05T10:00:00Z",
+      completed_at: "2026-11-05T10:00:04Z",
+      ...overrides,
+    };
+  }
+
+  function mockQueries(turns: TaskAgentThreadTurn[]) {
+    vi.mocked(queries.useTaskAgentTurns).mockReturnValue({
+      data: { data: turns },
       isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof queries.useTaskAgentTurns>);
+  }
+
+  beforeEach(() => {
+    mockQueries([]);
+    vi.mocked(queries.usePlan).mockReturnValue({
+      data: { capability: "evidence_search", plan: { question: "Q", ready: true }, status: "approved", version: 1 },
+    } as unknown as ReturnType<typeof queries.usePlan>);
+    vi.mocked(queries.useRuns).mockReturnValue({ data: { data: [] } } as unknown as ReturnType<typeof queries.useRuns>);
+    vi.mocked(queries.useDecisions).mockReturnValue({ data: { data: [] } } as unknown as ReturnType<typeof queries.useDecisions>);
+    vi.mocked(queries.useCheckIns).mockReturnValue({ data: { data: [] } } as unknown as ReturnType<typeof queries.useCheckIns>);
+    vi.mocked(queries.useFunnel).mockReturnValue({ data: undefined } as unknown as ReturnType<typeof queries.useFunnel>);
+    vi.mocked(queries.useTask).mockReturnValue({ data: undefined } as unknown as ReturnType<typeof queries.useTask>);
+    vi.mocked(mutations.useStartRun).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useStartRun>);
+    vi.mocked(mutations.usePatchPlan).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.usePatchPlan>);
+    vi.mocked(mutations.useAnswerCheckIn).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useAnswerCheckIn>);
+  });
+
+  function renderPane(initialEntry: string | { pathname: string; state: unknown } = `/tasks/${TASK_ID}`) {
+    return render(
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <ToastProvider>
+          <TaskAgentPane taskId={TASK_ID} runStatus={undefined} stream={createInitialRunStreamState()} isOwner />
+        </ToastProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  it("fills the pending turn from deltas under the action line, then the card follows", async () => {
+    mockQueries([plannerTurn()]);
+    let finish: (value: unknown) => void = () => undefined;
+    const mutateAsync = vi.fn(
+      (input: { onEvent?: (event: mutations.TaskAgentStreamEvent) => void }) => {
+        input.onEvent?.({ type: "progress", label: "Drafting the plan" });
+        input.onEvent?.({ type: "delta", text: "Here is the scope " });
+        input.onEvent?.({ type: "delta", text: "I would use." });
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      },
+    );
+    vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({
+      mutateAsync,
+      isPending: true,
     } as unknown as ReturnType<typeof mutations.useTaskAgentTurn>);
     const user = userEvent.setup();
     renderPane();
 
-    await user.type(
-      screen.getByLabelText("Message the Task Agent"),
-      "Does the baseline cover care leavers?",
-    );
+    // The composer is fenced while a turn streams; it is open while typing.
+    vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof mutations.useTaskAgentTurn>);
+    await user.type(screen.getByLabelText("Message the Task Agent"), "Narrow it to England");
+    vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({
+      mutateAsync,
+      isPending: true,
+    } as unknown as ReturnType<typeof mutations.useTaskAgentTurn>);
     await user.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(
-      await screen.findByRole("button", { name: "Does this cover care leavers?" }),
-    ).toBeInTheDocument();
+    // The reply comes at a steady pace (round 9), its words fading in batches.
+    await waitFor(() => expect(document.body.textContent).toContain("Here is the scope I would use."));
+    expect(screen.getByText("Drafting the plan")).toHaveAttribute("role", "status");
+    // Start is disabled while the turn streams (N9).
+    expect(screen.getByRole("button", { name: "Start the search" })).toBeDisabled();
+
+    const clientTurnId = (mutateAsync.mock.calls[0][0] as unknown as { clientTurnId: string }).clientTurnId;
+    mockQueries([
+      plannerTurn(),
+      plannerTurn({
+        turn_index: 2,
+        client_turn_id: clientTurnId,
+        user_message: "Narrow it to England",
+        reply: "Here is the scope I would use.",
+        part: {
+          id: "scope",
+          step_label: "Plan · step 2 of 3 · Scope",
+          title: "Scope",
+          body: null,
+          chips: null,
+          options: [
+            { id: "confirm", label: "Looks right", sub: null, primary: true, reason: "These match your question." },
+            { id: "change", label: "Add or change a constraint", sub: null, primary: false, reason: null },
+          ],
+        },
+      }),
+    ]);
+    vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof mutations.useTaskAgentTurn>);
+    await act(async () => finish({ reply: "Here is the scope I would use." }));
+
+    expect(screen.queryByText("Drafting the plan")).toBeNull();
+    expect(screen.getByTestId("part-card")).toBeInTheDocument();
+    expect(screen.getByTestId("plan-stepper")).toHaveTextContent("Plan · decision 2 of 3 · Scope");
+    expect(screen.getByRole("button", { name: "Start the search" })).not.toBeDisabled();
+  });
+
+  it("streams the opening turn the New Task screen handed over, once", async () => {
+    const mutateAsync = vi.fn<(input: { message: string; clientTurnId: string }) => Promise<unknown>>(
+      () => new Promise(() => undefined),
+    );
+    vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({
+      mutateAsync,
+      isPending: true,
+    } as unknown as ReturnType<typeof mutations.useTaskAgentTurn>);
+    const opening = { message: "What works to raise take-up?", clientTurnId: "00000000-0000-0000-0000-0000000000c1" };
+    renderPane({ pathname: `/tasks/${TASK_ID}`, state: { openingTurn: opening } });
+
+    expect(await screen.findByText("What works to raise take-up?")).toBeInTheDocument();
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
+    expect(mutateAsync.mock.calls[0][0]).toMatchObject(opening);
+    // No landing prompt flashes while the opening turn is on its way.
+    expect(screen.queryByText("What do you need evidence on?")).toBeNull();
+  });
+
+  it("keeps the opening turn's question and chips: they come from the stored turn", () => {
+    mockQueries([
+      plannerTurn({
+        question: "Is the question as you want it?",
+        suggestions: ["That's my question", "Narrow it"],
+      }),
+    ]);
+    vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
+    } as unknown as ReturnType<typeof mutations.useTaskAgentTurn>);
+    renderPane();
+    expect(screen.getByText("Is the question as you want it?")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "That's my question" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Narrow it" })).toBeInTheDocument();
+  });
+
+  /** The question card as the planner proposes it. */
+  function questionCard(): TaskAgentThreadTurn {
+    return plannerTurn({
+      part: {
+        id: "question",
+        step_label: "Plan · step 1 of 3 · Question",
+        title: "What works to raise take-up of free childcare?",
+        body: null,
+        chips: null,
+        options: [
+          { id: "confirm", label: "That's my question", sub: null, primary: true, reason: null },
+          { id: "refine", label: "Refine it", sub: null, primary: false, reason: null },
+        ],
+      },
+    });
+  }
+
+  it("settles a part card the moment the user chooses, before the reply lands (owner, 2026-11-05)", async () => {
+    mockQueries([questionCard()]);
+    vi.mocked(queries.usePlan).mockReturnValue({
+      data: { capability: "evidence_search", plan: { question: "What works to raise take-up of free childcare?" }, status: "draft", version: 1 },
+    } as unknown as ReturnType<typeof queries.usePlan>);
+    // The reply never lands in this test: only the choice is on its way.
+    const mutateAsync = vi.fn(() => new Promise(() => undefined));
+    vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof mutations.useTaskAgentTurn>);
+    const user = userEvent.setup();
+    renderPane();
+    await user.click(screen.getByRole("radio", { name: /That's my question/ }));
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
+    const settled = screen.getByTestId("part-settled");
+    expect(settled).toHaveTextContent(/Question.*What works to raise take-up of free childcare\?/);
+    expect(screen.queryByTestId("part-card")).toBeNull();
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+  });
+
+  it("settles on the user's words while they are on their way", async () => {
+    mockQueries([questionCard()]);
+    const mutateAsync = vi.fn(() => new Promise(() => undefined));
+    vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof mutations.useTaskAgentTurn>);
+    const user = userEvent.setup();
+    renderPane();
+    await user.click(screen.getByRole("radio", { name: /Refine it/ }));
+    await user.type(screen.getByRole("textbox", { name: "Refine it" }), "Only rural areas");
+    await user.click(within(screen.getByTestId("part-card")).getByRole("button", { name: "Send" }));
+    expect(screen.getByTestId("part-settled")).toHaveTextContent("Refine it: Only rural areas");
+  });
+
+  it("opens the card again when the choice could not be sent", async () => {
+    mockQueries([questionCard()]);
+    const mutateAsync = vi.fn(() => Promise.reject(new Error("boom")));
+    vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof mutations.useTaskAgentTurn>);
+    const user = userEvent.setup();
+    renderPane();
+    await user.click(screen.getByRole("radio", { name: /That's my question/ }));
+    expect(await screen.findByText("That turn couldn't be processed. Your draft so far is unchanged.")).toBeInTheDocument();
+    expect(screen.getByTestId("part-card")).toBeInTheDocument();
+    expect(screen.queryByTestId("part-settled")).toBeNull();
+  });
+});
+
+/**
+ * Task 058 (owner, 2026-11-05): the run trace is the one progress surface.
+ * It sits at the run's place in the thread, in the Agent tab and the
+ * sidebar alike; the card, its minimised state, the dock and the separate
+ * run-finished notice are gone.
+ */
+describe("TaskAgentPane — the run trace", () => {
+  const TASK_ID = "11111111-1111-1111-1111-111111111111";
+  const LIVE = "live-walk";
+
+  function pendingCheckIn(): CheckInOut {
+    return {
+      boundary: "after_component",
+      check_in_id: "55555555-5555-5555-5555-555555555555",
+      component: "screen",
+      created_at: "2026-11-05T10:05:00Z",
+      kind: "pause",
+      options: [{ id: "continue", label: "Continue", description: "", requires_user_input: false, suggested: false, why: null, endorsement: null }],
+      render: "Does this look right before I assess the sources?",
+      rerun_component: null,
+      segment_reentry_allowed: false,
+      sequence: 3,
+      stage: "screen",
+      status: "pending",
+      triggers: [],
+      bundle: null,
+    };
+  }
+
+  beforeEach(() => {
+    vi.mocked(queries.useTaskAgentTurns).mockReturnValue({
+      data: { data: [turn(0, "2026-11-05T09:00:00Z")] },
+      isPending: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof queries.useTaskAgentTurns>);
+    vi.mocked(queries.usePlan).mockReturnValue({
+      data: { capability: "evidence_search", plan: { question: "Q", ready: true }, status: "approved", version: 1 },
+    } as unknown as ReturnType<typeof queries.usePlan>);
+    vi.mocked(queries.useRuns).mockReturnValue({
+      data: {
+        data: [
+          { ...run("old-walk", "2026-11-05T09:01:00Z", "2026-11-05T09:15:30Z"), status: "succeeded" },
+          run(LIVE, "2026-11-05T09:30:00Z", null),
+        ],
+      },
+    } as unknown as ReturnType<typeof queries.useRuns>);
+    vi.mocked(queries.useDecisions).mockReturnValue({ data: { data: [] } } as unknown as ReturnType<typeof queries.useDecisions>);
+    vi.mocked(queries.useCheckIns).mockReturnValue({ data: { data: [] } } as unknown as ReturnType<typeof queries.useCheckIns>);
+    vi.mocked(queries.useFunnel).mockReturnValue({ data: undefined } as unknown as ReturnType<typeof queries.useFunnel>);
+    vi.mocked(queries.useTask).mockReturnValue({ data: undefined } as unknown as ReturnType<typeof queries.useTask>);
+    vi.mocked(mutations.useTaskAgentTurn).mockReturnValue({ mutateAsync: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useTaskAgentTurn>);
+    vi.mocked(mutations.useStartRun).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useStartRun>);
+    vi.mocked(mutations.usePatchPlan).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.usePatchPlan>);
+    vi.mocked(mutations.useAnswerCheckIn).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useAnswerCheckIn>);
+  });
+
+  function liveStream(overrides: Partial<RunStreamState> = {}): RunStreamState {
+    const searching: StageEntry = { stage: "acquire", label: "Searching and screening", status: "started", startedAt: "2026-11-05T09:30:01Z" };
+    return {
+      ...createInitialRunStreamState(),
+      run: { id: LIVE, status: "running", startedAt: "2026-11-05T09:30:00Z" },
+      stages: [searching],
+      ...overrides,
+    };
+  }
+
+  function renderPane(overrides: Partial<ComponentProps<typeof TaskAgentPane>> = {}) {
+    return render(
+      <MemoryRouter>
+        <ToastProvider>
+          <TaskAgentPane taskId={TASK_ID} runStatus="running" stream={liveStream()} isOwner {...overrides} />
+        </ToastProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  it("shows the live run as the trace at its place, with no card, no Minimise and no dock", () => {
+    renderPane();
+    const trace = screen.getByRole("region", { name: "Analysis run" });
+    expect(trace).toHaveTextContent("Searching and screening");
+    // Live, the header's mark is the fold mark turning (owner, 2026-11-05),
+    // and it is the block's one turning mark (lead, round 6).
+    expect(trace.querySelectorAll("[data-live-mark]")).toHaveLength(1);
+    expect(trace.querySelector('[data-testid="trace-header"] [data-tone]')).toBeNull();
+    expect(screen.queryByRole("button", { name: "Minimise" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show the analysis run" })).toBeNull();
+    expect(screen.queryByText("RUNNING")).toBeNull();
+  });
+
+  it("folds a past run to its status word, wall time and Read it", () => {
+    renderPane();
+    // Owner, round 8: the same card as a run that ended in view, folded;
+    // round 11: with the link its walk ended with.
+    const past = screen.getByTestId("past-run");
+    expect(past).toHaveTextContent(/^Report ready14 min\s·Read it →$/);
+    expect(past.querySelector("a")).toHaveAttribute("href", expect.stringMatching(/\/result$/));
+    expect(past.querySelector("button")).toBeNull();
+    expect(screen.queryByText(/Analysis run —/)).toBeNull();
+  });
+
+  it("shows the same trace in the sidebar's compact pane", () => {
+    renderPane({ compact: true });
+    expect(screen.getByRole("region", { name: "Analysis run" })).toHaveTextContent("Searching and screening");
+  });
+
+  it("sits the waiting check-in under the trace, which reads paused", () => {
+    renderPane({ runStatus: "paused", stream: liveStream({ pendingCheckIn: pendingCheckIn() }) });
+    const trace = screen.getByRole("region", { name: "Analysis run" });
+    const card = screen.getByTestId("check-in-card");
+    expect(trace.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(trace).toHaveTextContent("Paused · waiting on you");
+    expect(trace.querySelector("[data-tone]")).toHaveClass("bg-orange");
+  });
+
+  it("folds the ended run to its one destination, with no separate finished notice", () => {
+    renderPane({
+      runStatus: "succeeded",
+      stream: liveStream({
+        run: { id: LIVE, status: "succeeded", startedAt: "2026-11-05T09:30:00Z", endedAt: "2026-11-05T09:44:10Z" },
+        stages: [{ stage: "synthesise", label: "Writing", status: "completed", startedAt: "2026-11-05T09:40:00Z", seconds: 250 } as StageEntry],
+      }),
+    });
+    const trace = screen.getByRole("region", { name: "Analysis run" });
+    expect(trace).toHaveTextContent("Report ready14 min ·Read it →");
+    expect(within(trace).getByRole("link", { name: "Read it →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/result`);
+    expect(screen.queryByText(/Evidence search is finished/)).toBeNull();
   });
 });

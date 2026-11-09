@@ -69,6 +69,7 @@ card's order) and counted in ``provenance.option_profile.place_sentences``.
 from __future__ import annotations
 
 import re
+import threading
 import time
 import uuid
 from collections import Counter
@@ -84,7 +85,9 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core import tracing
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import liveness, tracing
+from policy_atlas.core.done_callbacks import add_done_callback_in_context
 from policy_atlas.core.schema import (
     intervention_profile_record,
     longlist_result,
@@ -304,9 +307,31 @@ def _type_options(
     typings: dict[uuid.UUID, _Typing] = {}
     answered: set[uuid.UUID] = set()
     failed_batches = 0
+
+    # Task 058, N2: one count per typing batch, on the pool's own future.
+    typing_done = 0
+    typing_lock = threading.Lock()
+    typing_total = len(batches)
+
+    def publish_typing(finished: Future[Any] | None) -> None:
+        nonlocal typing_done
+        with typing_lock:
+            if finished is not None:
+                typing_done += 1
+            n = typing_done
+        liveness.publish_progress(
+            activity=activity("option_profile.typing", done=n, total=typing_total),
+            done=n,
+            total=typing_total,
+            unit="batches",
+        )
+
+    publish_typing(None)
+
     with ThreadPoolExecutor(max_workers=TYPING_MAX_CONCURRENT) as pool:
-        futures = [
-            tracing.submit_with_context(
+        futures = []
+        for batch in batches:
+            future = tracing.submit_with_context(
                 pool,
                 backend.type_options,
                 options=[
@@ -321,8 +346,8 @@ def _type_options(
                 plan=plan,
                 baseline_sections=baseline,
             )
-            for batch in batches
-        ]
+            add_done_callback_in_context(future, publish_typing)
+            futures.append(future)
         results: list[UsageResult[LeverTypingResponse] | None] = []
         for future in futures:
             try:
@@ -449,6 +474,31 @@ class _Setting:
 
     main: str | None
     second: str | None
+    #: Whom the option acts on directly (task 058, round 12, owner): the
+    #: model's words, lower case, at most :data:`ACTS_ON_MAX`.
+    acts_on: tuple[str, ...] = ()
+
+
+#: The most "acts on" words one option may carry (the prompt's own limit).
+ACTS_ON_MAX = 4
+
+
+def _acts_on_words(values: Sequence[str]) -> tuple[str, ...] | None:
+    """The setting call's ``acts_on``, cleaned; ``None`` when malformed.
+
+    Each item is folded onto one line (whitespace runs become one space),
+    trimmed and lower-cased; a blank item, a repeat or more than
+    :data:`ACTS_ON_MAX` items makes the answer malformed.
+    """
+    if len(values) > ACTS_ON_MAX:
+        return None
+    words: list[str] = []
+    for value in values:
+        word = " ".join(value.split()).lower()
+        if word == "" or word in words:
+            return None
+        words.append(word)
+    return tuple(words)
 
 
 def _evidence_records(
@@ -650,7 +700,8 @@ def _checked_setting(
     """The setting response, checked fail-closed; ``None`` when malformed (R41).
 
     A setting is null or a non-blank word, lower-cased; the second setting is
-    null when the main one is.
+    null when the main one is. ``acts_on`` is at most :data:`ACTS_ON_MAX`
+    distinct non-blank phrases, lower-cased (:func:`_acts_on_words`).
     """
     pairs = _answered(response, SettingResponse, short_ids)
     if pairs is None:
@@ -659,9 +710,15 @@ def _checked_setting(
     for short_id, wire in pairs:
         main = None if wire.main_setting is None else wire.main_setting.strip().lower()
         second = None if wire.second_setting is None else wire.second_setting.strip().lower()
-        if main == "" or second == "" or (main is None and second is not None):
+        acts_on = _acts_on_words(wire.acts_on)
+        if (
+            main == ""
+            or second == ""
+            or (main is None and second is not None)
+            or acts_on is None
+        ):
             return None
-        settings[short_id] = _Setting(main=main, second=second)
+        settings[short_id] = _Setting(main=main, second=second, acts_on=acts_on)
     return settings
 
 
@@ -1336,9 +1393,32 @@ def _place_sentence_wave(
     def _place_ids(o: _ProfiledOption) -> frozenset[str]:
         return frozenset(group.place_id for group in groups[str(o.option_id)])
 
+    # Task 058, N2: one count per option with documents, on the pool's own
+    # future. Retries happen inside ``call_with_retry`` and never move it.
+    places_done = 0
+    places_lock = threading.Lock()
+    places_total = len(called)
+
+    def publish_places(finished: Future[Any] | None) -> None:
+        nonlocal places_done
+        with places_lock:
+            if finished is not None:
+                places_done += 1
+            n = places_done
+        liveness.publish_progress(
+            activity=activity("option_profile.places", done=n, total=places_total),
+            done=n,
+            total=places_total,
+            unit="options",
+        )
+
+    if places_total:
+        publish_places(None)
+
     with ThreadPoolExecutor(max_workers=OPTION_PROFILE_MAX_CONCURRENT) as pool:
-        futures = {
-            str(o.option_id): tracing.submit_with_context(
+        futures = {}
+        for o in called:
+            future = tracing.submit_with_context(
                 pool,
                 call_with_retry,
                 f"place sentences {o.option_id}",
@@ -1347,8 +1427,8 @@ def _place_sentence_wave(
                 final_check=partial(_checked_places, known=_place_ids(o)),
                 event="option_profile",
             )
-            for o in called
-        }
+            add_done_callback_in_context(future, publish_places)
+            futures[str(o.option_id)] = future
         answers = {option_id: future.result() for option_id, future in futures.items()}
     stats: dict[str, Any] = {
         "calls": len(called),
@@ -1443,7 +1523,7 @@ def _profile_column(
     """The ``longlist_result.option_profile`` value (S17; final § 2.10).
 
     ``{option_id: {design_version: {"lines": {line key: {"sentence",
-    "mark"}}, "setting": {"main", "second"}}}}`` for every option of the list,
+    "mark"}}, "setting": {"main", "second", "acts_on"}}}}`` for every option of the list,
     the lines in :data:`~policy_atlas.runtime.scoping_plan.PROFILE_LINE_KEYS`
     order.
     """
@@ -1458,7 +1538,11 @@ def _profile_column(
         column[str(o.option_id)] = {
             str(o.design_version): {
                 "lines": lines,
-                "setting": {"main": setting.main, "second": setting.second},
+                "setting": {
+                    "main": setting.main,
+                    "second": setting.second,
+                    "acts_on": list(setting.acts_on),
+                },
             }
         }
     return column

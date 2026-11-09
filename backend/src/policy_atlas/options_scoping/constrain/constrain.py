@@ -95,10 +95,11 @@ task 046 items 5, 7, 10, 11, 12, R4, R21, R38, AM6, AM7.
 
 from __future__ import annotations
 
+import threading
 import uuid
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from itertools import batched
@@ -109,7 +110,9 @@ from pydantic import ValidationError
 from sqlalchemy import exists, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core import tracing
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import liveness, tracing
+from policy_atlas.core.done_callbacks import add_done_callback_in_context
 from policy_atlas.core.schema import longlist_result, option, option_membership, option_relation
 from policy_atlas.core.usage import TokenUsage, UsageAccumulator
 from policy_atlas.options_scoping.constrain.constrain_prompt import (
@@ -470,9 +473,32 @@ def _judge(
     """
     requirement_ids = [r["id"] for r in requirements]
     batches = [list(batch) for batch in batched(options, CONSTRAIN_BATCH_SIZE)]
+
+    # Task 058, N2: one count per batch, on the pool's own future. A batch's
+    # retries happen inside ``_judge_batch``, so they never move the count.
+    done = 0
+    lock = threading.Lock()
+    total = len(batches)
+
+    def publish_done(finished: Future[Any] | None) -> None:
+        nonlocal done
+        with lock:
+            if finished is not None:
+                done += 1
+            n = done
+        liveness.publish_progress(
+            activity=activity("constrain.batches", done=n, total=total),
+            done=n,
+            total=total,
+            unit="batches",
+        )
+
+    publish_done(None)
+
     with ThreadPoolExecutor(max_workers=CONSTRAIN_MAX_CONCURRENT) as pool:
-        futures = [
-            tracing.submit_with_context(
+        futures = []
+        for batch in batches:
+            future = tracing.submit_with_context(
                 pool,
                 _judge_batch,
                 backend,
@@ -482,8 +508,8 @@ def _judge(
                 preferences=preferences,
                 batch=batch,
             )
-            for batch in batches
-        ]
+            add_done_callback_in_context(future, publish_done)
+            futures.append(future)
         outcomes = [future.result() for future in futures]
     judged: dict[str, _Judged] = {}
     failed: set[str] = set()

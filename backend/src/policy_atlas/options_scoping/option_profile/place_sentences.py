@@ -11,9 +11,9 @@ that is code, so the profile step and the read side share it:
   fields of its first record, built from the membership read
   (:func:`from_membership`) or, on the read side, from the document lines;
 - :func:`group_places` — the documents grouped by top-level place: the
-  plan's Where country first, then by document count, then name, then one
-  last group "No single place" for "multiple countries", "not stated" and
-  "other";
+  plan's Where country first, then by document count, then name, then
+  "Several countries", "Place not stated" and "Other" for the documents with
+  no one country (task 058, round 12);
 - :func:`call_input` — the call's four data blocks, places ``p1 … pN`` and
   documents ``d1 … dM`` across the option;
 - :func:`template_sentence` — the code-built sentence for a place the answer
@@ -60,11 +60,17 @@ from policy_atlas.options_scoping.option_profile.place_sentences_prompt import (
 )
 from policy_atlas.options_scoping.text import clean_text
 
-#: The last group's name: the documents with no one country (PA4-3).
-NO_SINGLE_PLACE = "No single place"
+#: The groups after the countries, in the card's order, by the top level
+#: they hold: the documents with no one country (PA4-3), each named for what
+#: it is (owner, task 058, round 12; it replaced one "No single place").
+NO_COUNTRY_GROUPS: tuple[tuple[str, str], ...] = (
+    (MULTIPLE_COUNTRIES, "Several countries"),
+    (NOT_STATED, "Place not stated"),
+    (OTHER_PLACE, "Other"),
+)
 
-#: The top levels that hold no one country and go under :data:`NO_SINGLE_PLACE`.
-NO_SINGLE_PLACE_TOPS: frozenset[str] = frozenset({MULTIPLE_COUNTRIES, NOT_STATED, OTHER_PLACE})
+#: The top levels that hold no one country (:data:`NO_COUNTRY_GROUPS`).
+NO_COUNTRY_TOPS: frozenset[str] = frozenset(top for top, _name in NO_COUNTRY_GROUPS)
 
 #: The classifier's evidence types in plain words for the template (the
 #: prompt's own words: "a systematic review", "a trial", ...); Unknown and
@@ -197,7 +203,7 @@ class PlaceGroup:
 
     Attributes:
         place_id: ``p1 … pN`` in group order.
-        place: The place's display name, or :data:`NO_SINGLE_PLACE`.
+        place: The place's display name, or a :data:`NO_COUNTRY_GROUPS` name.
         is_where: The place is the plan's Where country.
         documents: Every document of the place, in send order.
         documents_total: Their count (the call sends at most
@@ -238,7 +244,7 @@ def place_name(top: str) -> str:
         top level as written ("multiple countries", "not stated", "other"
         and an unknown country stay as they are).
     """
-    if top in NO_SINGLE_PLACE_TOPS:
+    if top in NO_COUNTRY_TOPS:
         return top
     resolved = resolve_country(top)
     return resolved[1] if resolved is not None else top
@@ -410,9 +416,10 @@ def group_places(docs: Iterable[PlaceDocument], *, where_country: str | None) ->
     """The evaluating documents grouped by place, in the card's order (R80; S31; PA4-3).
 
     One group per country (its display name): the plan's Where country
-    first, then by document count descending, then name; then one last group
-    :data:`NO_SINGLE_PLACE` holding every document whose top level is
-    "multiple countries", "not stated" or "other" (absent when empty). Only
+    first, then by document count descending, then name; then "Several
+    countries", "Place not stated" and "Other", the documents whose top level
+    is "multiple countries", "not stated" or "other" (:data:`NO_COUNTRY_GROUPS`,
+    each absent when empty). Only
     ``evaluated`` documents count. Inside a group the documents are ordered
     by role, then quality score descending (unrated last), then title.
 
@@ -426,12 +433,12 @@ def group_places(docs: Iterable[PlaceDocument], *, where_country: str | None) ->
     """
     countries: dict[str, list[PlaceDocument]] = {}
     shown: dict[str, str] = {}
-    no_single: list[PlaceDocument] = []
+    no_country: dict[str, list[PlaceDocument]] = {}
     for doc in docs:
         if doc.role != "evaluated":
             continue
-        if doc.place in NO_SINGLE_PLACE_TOPS:
-            no_single.append(doc)
+        if doc.place in NO_COUNTRY_TOPS:
+            no_country.setdefault(doc.place, []).append(doc)
             continue
         key = place_key(doc.place)
         countries.setdefault(key, []).append(doc)
@@ -445,8 +452,9 @@ def group_places(docs: Iterable[PlaceDocument], *, where_country: str | None) ->
     entries: list[tuple[str, bool, list[PlaceDocument]]] = [
         (shown[key], key == where_key, countries[key]) for key in ordered
     ]
-    if no_single:
-        entries.append((NO_SINGLE_PLACE, False, no_single))
+    entries.extend(
+        (name, False, no_country[top]) for top, name in NO_COUNTRY_GROUPS if top in no_country
+    )
     return [
         PlaceGroup(
             place_id=f"p{index}",

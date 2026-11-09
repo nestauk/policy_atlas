@@ -913,7 +913,9 @@ def test_evidence_search_skeleton_still_leads_with_key_findings(conn: Connection
     )
     titles = [entry["title"] for entry in skeleton["sections"]]
     assert titles[0] == "Key findings"
-    assert titles[-1] == CONCLUSIONS_TITLE
+    # Conclusions ends the body; the case-studies slot follows (task 058, round 7)
+    # and the introduction's slot comes last (round 8).
+    assert titles[-3:] == [CONCLUSIONS_TITLE, "Case studies", "Full report"]
     assert SOURCES_SECTION_TITLE not in titles
     row = _rollup(conn, task_id)
     assert row.synthesis_provenance["directive"]["template"] is None

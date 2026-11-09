@@ -7,10 +7,6 @@ import { countOf } from "../../lib/vocabulary";
 import { activeRun, hasLonglist } from "../scopingActivity";
 import { overlayIsDirty, overlayToPlanPatch, type PlanOverlay } from "./planOverlay";
 
-/** Green Start search — Nesta green, not the blue primary. */
-export const START_SEARCH_CLASS =
-  "bg-green px-6 py-3.5 text-body font-bold text-white hover:bg-[#147a6c]";
-
 const APPLY_FAILED_FALLBACK = "The plan edits couldn't be applied. Try again.";
 
 /**

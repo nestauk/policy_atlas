@@ -583,6 +583,7 @@ def test_happy_path_writes_rollup_summary_and_provenance(conn: Connection) -> No
         "facet",
         "facets",
         "facet_source",
+        "group_count",
         "groups",
         "residuals",
         "counts",
@@ -1975,3 +1976,27 @@ def test_claim_cluster_units_bound_untrusted_surfaces() -> None:
     assert len(payload["context"]["context_label"]) <= CONTEXT_LABEL_SURFACE_MAX
     # Control characters (incl. newlines) are replaced with spaces, never kept.
     assert payload["context"]["intervention"] == "heat pumps rollout"
+
+
+# --- Summary count (task 058, N2) ---
+
+
+def test_summary_carries_the_group_count_across_facets() -> None:
+    from policy_atlas.evidence_search.group.group import _build_summary
+
+    summary = _build_summary(
+        facets=["intervention", "outcome"],
+        facet_source="default",
+        groups={
+            "intervention": [{"group_id": "a"}, {"group_id": "b"}],
+            "outcome": [{"group_id": "c"}],
+        },
+        residuals={"intervention": {}, "outcome": {}},
+        counts={"intervention": {}, "outcome": {}},
+        flags={"intervention": {}, "outcome": {}},
+        extraction_run_id=uuid.uuid4(),
+        provenance={},
+        usage_totals={},
+    )
+
+    assert summary["group_count"] == 3

@@ -200,6 +200,8 @@ export interface paths {
          *             `tasks.list_tasks`.
          *         page: 1-indexed page number.
          *         page_size: Rows per page, server-capped.
+         *         status_filter: `active` (default: not archived), `archived` or `all`
+         *             (task 058, round 11), as `GET /tasks` takes it.
          *
          *     Returns:
          *         One page of projects.
@@ -308,6 +310,47 @@ export interface paths {
          *             readable but not owned.
          */
         patch: operations["update_project_api_v1_projects__project_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Project
+         * @description Archive a project (task 058, round 11), and the tasks only it holds (round 14).
+         *
+         *     Owner only. The project leaves the default list (`status=active`) and is
+         *     listed under `status=archived`; it stays readable by id. In the same
+         *     transaction, each of the caller's own active tasks in this project that
+         *     is in no other active project is archived too (owner, 2026-11-07), each
+         *     task's History saying so; a task also in another project, or a
+         *     colleague's, or one whose latest run is still running, paused or about to
+         *     start, is left as it is. Archiving an archived project changes
+         *     nothing and keeps its first time.
+         *
+         *     Args:
+         *         project_id: The project to archive.
+         *         user: The authenticated caller.
+         *         conn: Open database connection.
+         *
+         *     Returns:
+         *         The project with its `archived_at` and `archived_task_count`.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the project is unreadable, 403 when it is
+         *             readable but not owned.
+         */
+        post: operations["archive_project_api_v1_projects__project_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/tasks": {
@@ -816,7 +859,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Get Options
+         * @description Return the task's option rows with each option's search (task 058, N22).
+         *
+         *     Readable from the end of the suggest stage, before the longlist exists,
+         *     under the same graded-or-public check as the longlist read. Empty before
+         *     any option exists; never a 404 for a readable task.
+         */
+        get: operations["get_options_api_v1_tasks__task_id__options_get"];
         put?: never;
         /**
          * Post Option
@@ -1065,6 +1116,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{task_id}/shortlist/note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Shortlist Note
+         * @description Rewrite the shortlist's not-covered note for the places as they stand (round 14).
+         *
+         *     Owner only. Only when the note is stale (written against other places,
+         *     or missing beside a proposal); otherwise the shortlist comes back as it
+         *     is. The note's one writer (:func:`write_shortlist_note`) runs with no
+         *     changes: it reads the plan's outcomes, the option list and the places,
+         *     never a document line. History says "Policy Atlas updated the shortlist
+         *     note".
+         *
+         *     Raises:
+         *         HTTPException: 404 with no longlist, 409 while a walk runs, 503 when
+         *             the call fails (nothing is written).
+         */
+        post: operations["post_shortlist_note_api_v1_tasks__task_id__shortlist_note_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{task_id}/shortlist/suggest": {
         parameters: {
             query?: never;
@@ -1173,6 +1255,17 @@ export interface paths {
          *     any planner call (task 044, S5). One shape crosses back into the ordinary
          *     path: "change the plan" carrying an instruction commits the decision and
          *     then continues, on the *same* reserved row, as an ordinary planning turn.
+         *
+         *     The response is a stream of NDJSON lines with the chat route's rules
+         *     (task 058, N9). Everything up to the planner call happens before the
+         *     response headers are sent, so a refusal (an unknown task, a turn already
+         *     running, a run in progress) is the usual JSON error. A turn settled there
+         *     (a replay, a gate answer or decision, a longlist action) is one
+         *     ``completed`` line. A planner turn runs in its own thread: one
+         *     ``progress`` line, the reply as ``delta`` lines while it is written, then
+         *     exactly one ``completed`` or ``failed`` line. The thread finishes and
+         *     stores the turn even if the caller stops reading, and it holds the task's
+         *     turn lock until it ends.
          */
         post: operations["create_task_agent_turn_api_v1_tasks__task_id__task_agent_turns_post"];
         delete?: never;
@@ -1364,10 +1457,89 @@ export interface components {
             title: string;
         };
         /**
+         * ArtefactSectionCardFrame
+         * @description Ephemeral: one case-study card as it closes in the streamed reply (task 058).
+         *
+         *     Cards arrive in order and add to the ones before; a `replace`
+         *     `artefact.section_delta` for the same section clears them (the reply is
+         *     being written again). `artefact.section_completed` brings the checked
+         *     section. Display-only: never persisted, no `id:` line, no `sequence`.
+         */
+        ArtefactSectionCardFrame: {
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Index */
+            index: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Prose */
+            prose: string;
+            /** Title */
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.section_card";
+        };
+        /**
+         * ArtefactSectionClaimFrame
+         * @description Ephemeral: one of the writer's citations, bound to the draft (task 058).
+         *
+         *     The span `[start, end)` counts code points of the section draft, as
+         *     `artefact.section_revising` does. The citation is still to be checked;
+         *     `artefact.section_completed` brings the checked section. Display-only:
+         *     never persisted, no `id:` line, no `sequence`.
+         */
+        ArtefactSectionClaimFrame: {
+            /** End */
+            end: number;
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Index */
+            index: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Sources */
+            sources: components["schemas"]["SectionSourceRef"][];
+            /** Start */
+            start: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.section_claim";
+        };
+        /**
          * ArtefactSectionCompletedFrame
          * @description A live-artefact section's whole prose is available.
+         *
+         *     Args:
+         *         citations: The section's checked citations over `prose` (task 058,
+         *             round 7); empty when it has none, and on frames recorded before
+         *             the field existed.
+         *         claims: The section's checked claims with their verdicts (task 058,
+         *             round 13); empty on frames recorded before the field existed.
          */
         ArtefactSectionCompletedFrame: {
+            /** Citations */
+            citations?: components["schemas"]["SectionCitation"][];
+            /** Claims */
+            claims?: components["schemas"]["SectionClaim"][];
             /** Index */
             index: number;
             /**
@@ -1388,16 +1560,133 @@ export interface components {
             type: "artefact.section_completed";
         };
         /**
+         * ArtefactSectionDeltaFrame
+         * @description Ephemeral: prose appended to the section being written (task 058, N7).
+         *
+         *     Display-only. `artefact.section_completed` stays the record; a replay
+         *     carries no deltas. Never persisted, no `id:` line, no `sequence`.
+         *
+         *     Args:
+         *         index: The skeleton display index of the section.
+         *         text: The prose delta.
+         *         mode: `append` adds `text` to the client's draft; `replace` resets
+         *             the draft to `text` (a reconnect mid-section, or the streamed
+         *             turn's fallback resetting an abandoned draft with empty text).
+         */
+        ArtefactSectionDeltaFrame: {
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Index */
+            index: number;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "append" | "replace";
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Text */
+            text: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.section_delta";
+        };
+        /**
+         * ArtefactSectionRevisingFrame
+         * @description Ephemeral: the sentences the judge failed, sent before the repair (N7).
+         *
+         *     Display-only: the client blurs these spans of its draft until
+         *     `artefact.section_completed` brings the repaired prose. Never persisted,
+         *     no `id:` line, no `sequence`.
+         */
+        ArtefactSectionRevisingFrame: {
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Index */
+            index: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Spans */
+            spans: components["schemas"]["SectionSpan"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.section_revising";
+        };
+        /**
          * ArtefactSectionSkeleton
-         * @description One planned live-artefact section in presentation order.
+         * @description One planned live-artefact section.
+         *
+         *     Args:
+         *         index: The section's display identity (the key findings at 0 when the
+         *             report has them, the body sections next, then the case studies,
+         *             then the introduction). The index is identity, not reading
+         *             order: the page orders by `role`.
+         *         title: The section's title.
+         *         focus: What the section covers.
+         *         role: `key_findings`, `case_studies`, `body` or `intro`; skeletons
+         *             recorded before the field existed read as `body`.
          */
         ArtefactSectionSkeleton: {
             /** Focus */
             focus: string;
             /** Index */
             index: number;
+            /**
+             * Role
+             * @default body
+             * @enum {string}
+             */
+            role: "key_findings" | "case_studies" | "body" | "intro";
             /** Title */
             title: string;
+        };
+        /**
+         * ArtefactSectionSourcesFrame
+         * @description Ephemeral: the sources the writer has read so far for a section (task 058).
+         *
+         *     Each frame carries the whole set, in the order the sources were first
+         *     read; it replaces the one before. Display-only: never persisted, no
+         *     `id:` line, no `sequence`. A reconnect mid-section gets the current set.
+         */
+        ArtefactSectionSourcesFrame: {
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Index */
+            index: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Sources */
+            sources: components["schemas"]["SectionSourceRef"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.section_sources";
         };
         /**
          * ArtefactSectionStartedFrame
@@ -1438,6 +1727,43 @@ export interface components {
              * @enum {string}
              */
             type: "artefact.skeleton";
+        };
+        /**
+         * ArtefactSourceNoteFrame
+         * @description Ephemeral: one most-relevant-source note as it is written (task 058, round 8).
+         *
+         *     The notes arrive one at a time, in the order the saved report lists
+         *     them; each adds to the ones before. A reconnect gets the run's notes so
+         *     far. Display-only: never persisted, no `id:` line, no `sequence`.
+         *
+         *     Args:
+         *         source_id: The source's id in this task.
+         *         title: The source's title as the committed report's references name it.
+         *         note: The note's text.
+         */
+        ArtefactSourceNoteFrame: {
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Note */
+            note: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Source Id */
+            source_id: string;
+            /** Title */
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.source_note";
         };
         /**
          * AuthorityOut
@@ -1574,6 +1900,43 @@ export interface components {
             strength?: string | null;
             /** Title */
             title: string;
+        };
+        /**
+         * CharacteriseThemesFrame
+         * @description Ephemeral: the names a clustering found, before units are assigned (rounds 9, 11).
+         *
+         *     Sent once a clustering stage has found its names, in the order found:
+         *     `characterise` its themes (sources into themes), `longlist` its options
+         *     (sources into options; the residual pass sends the whole list again) and
+         *     `theme` its themes (options into themes). The saved result brings them
+         *     with their counts when the stage ends. A reconnect gets each stage's
+         *     latest again. Display-only: never persisted, no `id:` line, no
+         *     `sequence`.
+         */
+        CharacteriseThemesFrame: {
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "characterise" | "longlist" | "theme";
+            /** Themes */
+            themes: components["schemas"]["LiveTheme"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "characterise.themes";
         };
         /**
          * ChatTurnCreate
@@ -1891,9 +2254,6 @@ export interface components {
          *             citation resolves to one (joins to the sources/dossier surface).
          *         source_title: Cited source's title (envelope metadata).
          *         quote: The quoted span from the source.
-         *         grounding_tier: Optional grounding-judge tier label.
-         *         grounding_rationale: The grounding judge's recorded reason for the
-         *             tier, when one was persisted with the verdict.
          *         appraisal_label: Optional appraisal label.
          *         evidence_type: The cited document's classified evidence type — the
          *             input the appraisal rubric scores from.
@@ -1910,10 +2270,6 @@ export interface components {
             citation_id: string;
             /** Evidence Type */
             evidence_type?: string | null;
-            /** Grounding Rationale */
-            grounding_rationale?: string | null;
-            /** Grounding Tier */
-            grounding_tier?: string | null;
             /** N */
             n: number;
             /** Quote */
@@ -1948,6 +2304,9 @@ export interface components {
          *         span: Character offsets `[start, end]` into the block's `prose`, or
          *             `None`.
          *         citations: Citations attached to this claim (citation-type only).
+         *         grounding_tier: The grounding judge's verdict on the claim, when it
+         *             was checked (task 058, round 13: the claim's, not each citation's).
+         *         grounding_rationale: The judge's recorded reason for the verdict.
          *         theme: Named themes or groups referenced by a theme claim.
          */
         ClaimOut: {
@@ -1964,6 +2323,10 @@ export interface components {
              */
             claim_type: "citation" | "gap" | "reasoning" | "pattern" | "theme" | "unspanned_assertion";
             gap?: components["schemas"]["GapOut"] | null;
+            /** Grounding Rationale */
+            grounding_rationale?: string | null;
+            /** Grounding Tier */
+            grounding_tier?: string | null;
             /** Span */
             span?: [
                 number,
@@ -2110,6 +2473,32 @@ export interface components {
             title: string;
         };
         /**
+         * ConversationTitledEvent
+         * @description The chat's title written from its first message (task 058, round 14).
+         *
+         *     Sent once, while the first turn's stream is open, when the ``chat_title``
+         *     step's line replaces the message's cut; never terminal.
+         *
+         *     Args:
+         *         conversation_id: The chat.
+         *         title: Its new title.
+         */
+        ConversationTitledEvent: {
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /** Title */
+            title: string;
+            /**
+             * Type
+             * @default conversation.titled
+             * @constant
+             */
+            type: "conversation.titled";
+        };
+        /**
          * ConversationUpdate
          * @description Partial update for an existing chat conversation.
          *
@@ -2158,11 +2547,15 @@ export interface components {
          * @description Post-run source counts for one public backend.
          *
          *     ``relevant`` is deliberately task-wide in C.1; per-query relevance
-         *     was not recorded and is therefore absent.
+         *     was not recorded and is therefore absent. ``queries`` are the written
+         *     searches (topic and semantic); ``passes`` the citations and lookup passes
+         *     in the order they ran (round 11). ``results`` counts both.
          */
         CoverageBackendDetailOut: {
             /** Backend */
             backend: string;
+            /** Passes */
+            passes?: components["schemas"]["CoveragePassOut"][];
             /** Queries */
             queries?: components["schemas"]["CoverageQueryOut"][];
             /** Relevant */
@@ -2191,12 +2584,49 @@ export interface components {
             sentence: string;
         };
         /**
+         * CoveragePassOut
+         * @description One citations or lookup pass of a finished search (task 058, round 11).
+         *
+         *     Args:
+         *         pass_: `citations` (the works citing the best-connected sources) or
+         *             `lookup` (cited works or documents fetched by id). Serialised as
+         *             `pass`.
+         *         query: The pass in words, as a finished search names it: "Followed
+         *             citations from 40 sources", "Looked up 120 cited works",
+         *             "Looked up 30 cited documents". Never its ids.
+         *         results: The records the pass's calls returned.
+         *         query_id: The pass's key for the sources filter
+         *             (`GET /tasks/{id}/evidence?query=`; task 058, round 12): the
+         *             records every call of the pass returned.
+         */
+        CoveragePassOut: {
+            /**
+             * Pass
+             * @enum {string}
+             */
+            pass: "citations" | "lookup";
+            /** Query */
+            query: string;
+            /** Query Id */
+            query_id: number;
+            /** Results */
+            results: number;
+        };
+        /**
          * CoverageQueryOut
          * @description One completed query and its result count for a public backend.
+         *
+         *     Args:
+         *         query: The query as written.
+         *         results: The records the call returned.
+         *         query_id: The query's key for the sources filter
+         *             (`GET /tasks/{id}/evidence?query=`; task 058, round 12).
          */
         CoverageQueryOut: {
             /** Query */
             query: string;
+            /** Query Id */
+            query_id: number;
             /** Results */
             results: number;
         };
@@ -2242,8 +2672,17 @@ export interface components {
          *         capability_run_id: The walk the underlying event belongs to, when
          *             the event carries a run (task 045) — lets the thread tell a
          *             hidden child walk's lines from its parent's. Null otherwise.
+         *         actor_display: The display name of the person who acted (task 058,
+         *             round 10), never an email; null for Policy Atlas's own acts. The
+         *             summary already names them ("You" for the reader).
+         *         actor_is_viewer: Whether the person who acted is the reader; null
+         *             when no person acted (Policy Atlas's acts, a step's line).
          */
         DecisionOut: {
+            /** Actor Display */
+            actor_display?: string | null;
+            /** Actor Is Viewer */
+            actor_is_viewer?: boolean | null;
             /** Capability Run Id */
             capability_run_id?: string | null;
             /** Decided By */
@@ -2313,6 +2752,11 @@ export interface components {
          *         appraisal_tier: Optional appraisal tier label.
          *         cited: Whether this source is cited in the artefact.
          *         url: Optional source URL.
+         *         full_text_url: The address the full text was collected from (an
+         *             http(s) link a reader can open), or `None` when no full text was
+         *             collected.
+         *         full_text_status: Where the full text's fetch stands: `queued`
+         *             while the ingest is pending (task 058, round 14).
          */
         EvidenceItemOut: {
             /** Abstract */
@@ -2325,8 +2769,18 @@ export interface components {
             cited: boolean;
             /** Classification Reason */
             classification_reason?: string | null;
+            /** Country */
+            country?: string | null;
             /** Evidence Type */
             evidence_type?: string | null;
+            /**
+             * Full Text Status
+             * @default not_attempted
+             * @enum {string}
+             */
+            full_text_status: "not_attempted" | "queued" | "ingested" | "fetch_failed" | "parse_failed";
+            /** Full Text Url */
+            full_text_url?: string | null;
             /**
              * Origin
              * @enum {string}
@@ -2849,6 +3303,12 @@ export interface components {
          *         started_at: When that run started executing.
          *         ended_at: When that run reached a terminal status, or `None` while
          *             still running or paused.
+         *         stage: On `TaskOut.active_run` only: the public stage the task's
+         *             parentless active walk last started, so a scoping task shows the
+         *             parent's stage rather than a child's (task 058, N15). `None` before
+         *             the walk starts a stage, and on every other use of this shape.
+         *         stage_label: The server's label for `stage` (the stage vocabulary),
+         *             or `None` with it.
          */
         LatestRun: {
             /**
@@ -2858,6 +3318,10 @@ export interface components {
             capability_run_id: string;
             /** Ended At */
             ended_at?: string | null;
+            /** Stage */
+            stage?: ("acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist") | null;
+            /** Stage Label */
+            stage_label?: string | null;
             /**
              * Started At
              * Format: date-time
@@ -2899,6 +3363,20 @@ export interface components {
             definition: string;
             /** Key */
             key: string;
+        };
+        /**
+         * LiveTheme
+         * @description One theme as the characterise stage found it (task 058, round 9).
+         *
+         *     Args:
+         *         label: The theme's name.
+         *         description: Its one-line description, or null.
+         */
+        LiveTheme: {
+            /** Description */
+            description: string | null;
+            /** Label */
+            label: string;
         };
         /**
          * LonglistCountsOut
@@ -3006,10 +3484,18 @@ export interface components {
          *         name: Theme name.
          *         description: One-line description.
          *         option_ids: The theme's options, in display order.
+         *         document_count: The theme's distinct documents across its options,
+         *             each counted once (task 058, round 14): the rows
+         *             `GET /tasks/{id}/evidence?theme=` lists.
          */
         LonglistThemeOut: {
             /** Description */
             description: string;
+            /**
+             * Document Count
+             * @default 0
+             */
+            document_count: number;
             /** Name */
             name: string;
             /** Option Ids */
@@ -3171,6 +3657,10 @@ export interface components {
          *         evidence_type: Its evidence type, when classified.
          *         tier: Its quality tier label, when appraised.
          *         year: Its publication year, when the metadata has one.
+         *         authors: Its authors' names, in order, as the reference line names
+         *             them (task 058, round 12); empty when unknown.
+         *         venue: Where it was published, as the evidence row's `venue`
+         *             (task 058, round 12), or `None`.
          *         place: Where it was studied: its where-tried top level.
          *         programme_name: The programme name of its first member record under
          *             the option (by role order); `null` when none is given or the
@@ -3185,6 +3675,8 @@ export interface components {
          *             a linked finding).
          */
         OptionDocumentOut: {
+            /** Authors */
+            authors?: string[];
             /** Evidence Type */
             evidence_type?: string | null;
             /** Measured */
@@ -3213,6 +3705,8 @@ export interface components {
             title: string;
             /** Tried On Kind */
             tried_on_kind?: string | null;
+            /** Venue */
+            venue?: string | null;
             /** Year */
             year?: number | null;
         };
@@ -3367,12 +3861,63 @@ export interface components {
          *         lines: The eight lines, in display order.
          *         settings: The delivery setting, main first, then the second; empty
          *             when none is named (R41).
+         *         acts_on: Whom the option acts on directly, the model's words in its
+         *             order (task 058, round 12); empty for a whole-system instrument and
+         *             for a profile written before round 12.
          */
         OptionProfileOut: {
+            /** Acts On */
+            acts_on?: string[];
             /** Lines */
             lines: components["schemas"]["ProfileLineOut"][];
             /** Settings */
             settings: string[];
+        };
+        /**
+         * OptionProgressOut
+         * @description One option row while the longlist is being built (task 058, N22).
+         *
+         *     Args:
+         *         option_id: The option's identity.
+         *         name: Its name.
+         *         description: Its one-line description.
+         *         origin: Where it came from.
+         *         state: Included or excluded.
+         *         merged_into_option_id: The kept option a duplicate was folded into,
+         *             or `None`.
+         *         search_status: Where the option's own search stands.
+         *         found: How many sources that search found (its acquire count), or
+         *             `None` until the search has finished acquiring.
+         */
+        OptionProgressOut: {
+            /** Description */
+            description: string;
+            /** Found */
+            found?: number | null;
+            /** Merged Into Option Id */
+            merged_into_option_id?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Option Id
+             * Format: uuid
+             */
+            option_id: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "clustered" | "suggested" | "from_evidence_search" | "added_by_you";
+            /**
+             * Search Status
+             * @enum {string}
+             */
+            search_status: "queued" | "searching" | "searched" | "failed";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "included" | "excluded";
         };
         /**
          * OptionRecordOut
@@ -3582,6 +4127,20 @@ export interface components {
             taxonomy_version?: string | null;
         };
         /**
+         * OptionsOut
+         * @description The `options` read: every option row of the task, with its search (N22).
+         *
+         *     Served from the end of the suggest stage, before the longlist exists; an
+         *     empty list before suggest has written any option.
+         *
+         *     Args:
+         *         options: The task's options, oldest first.
+         */
+        OptionsOut: {
+            /** Options */
+            options?: components["schemas"]["OptionProgressOut"][];
+        };
+        /**
          * OrganisationRef
          * @description The organisation the caller belongs to.
          *
@@ -3644,8 +4203,16 @@ export interface components {
          *         page_size: Number of items requested per page (server-capped at
          *             `PAGE_SIZE_MAX`).
          *         total_items: Total number of items across all pages.
+         *         has_more: Whether a later page holds more items (task 058, round 10):
+         *             ``page * page_size < total_items``. Derived, never set by a route,
+         *             so a "Show more" control needs no arithmetic of its own.
          */
         PageMeta: {
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
             /** Page */
             page: number;
             /** Page Size */
@@ -3787,7 +4354,8 @@ export interface components {
          * @description One place of an option's evaluating documents and its sentence (task 046, amendment 4, R80).
          *
          *     Args:
-         *         place: The place: a country's short English name, or "No single place".
+         *         place: The place: a country's short English name, or after the
+         *             countries "Several countries", "Place not stated" or "Other".
          *         sentence: What the evaluations in that place are.
          *         generated: The sentence was generated and passed the trace check;
          *             ``false`` for the code-built template.
@@ -4014,12 +4582,17 @@ export interface components {
          *         blurb: Longer user-visible step description (presentation; may
          *             change).
          *         stage: Composed-chain stage name the step corresponds to.
+         *         row: The card row the step belongs to (task 058, N17). Steps that
+         *             share a row key render as one row, with the row's label; the
+         *             client groups by this key and decides nothing about rows.
          */
         PlanStep: {
             /** Blurb */
             blurb: string;
             /** Label */
             label: string;
+            /** Row */
+            row: string;
             /**
              * Stage
              * @enum {string}
@@ -4088,6 +4661,58 @@ export interface components {
             type: "progress";
         };
         /**
+         * ProjectArchiveOut
+         * @description A project just archived (task 058, round 14).
+         *
+         *     Args:
+         *         archived_task_count: How many of its tasks this archive archived: the
+         *             caller's own active tasks that are in no other active project.
+         */
+        ProjectArchiveOut: {
+            /** Archived At */
+            archived_at?: string | null;
+            /**
+             * Archived Task Count
+             * @default 0
+             */
+            archived_task_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description?: string | null;
+            /** Is Owner */
+            is_owner: boolean;
+            /**
+             * Last Activity At
+             * Format: date-time
+             */
+            last_activity_at: string;
+            /** Name */
+            name: string;
+            /** Owner Display */
+            owner_display: string | null;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /**
+             * Solo Task Count
+             * @default 0
+             */
+            solo_task_count: number;
+            /** Task Count */
+            task_count: number;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "org" | "private";
+        };
+        /**
          * ProjectCreate
          * @description Inbound body for `POST /api/v1/projects`.
          *
@@ -4133,8 +4758,19 @@ export interface components {
          *             name, or a rendering derived from their subject when they have no
          *             identity row yet. **Never an email** (contract § 3b). `None` when
          *             the row has no owner at all.
+         *         archived_at: When the owner archived the project, or `None` while it
+         *             is in use (task 058, round 11). Archiving leaves its tasks as
+         *             they are.
+         *         solo_task_count: The caller's own active tasks here that are in no
+         *             other active project: what archiving the project archives with it
+         *             (task 058, round 14).
+         *         last_activity_at: The newest of `created_at` and the `updated_at` of
+         *             the members `task_count` counts (task 058, round 12). `GET
+         *             /projects` lists newest activity first by it.
          */
         ProjectOut: {
+            /** Archived At */
+            archived_at?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -4144,6 +4780,11 @@ export interface components {
             description?: string | null;
             /** Is Owner */
             is_owner: boolean;
+            /**
+             * Last Activity At
+             * Format: date-time
+             */
+            last_activity_at: string;
             /** Name */
             name: string;
             /** Owner Display */
@@ -4153,6 +4794,11 @@ export interface components {
              * Format: uuid
              */
             project_id: string;
+            /**
+             * Solo Task Count
+             * @default 0
+             */
+            solo_task_count: number;
             /** Task Count */
             task_count: number;
             /**
@@ -4281,6 +4927,8 @@ export interface components {
          *             walk's option search), or `None` for a parentless walk (task 045).
          *         purpose: The walk's intent-record purpose (`baseline`, `longlist`,
          *             `targeted`, ...), or `None` for an Evidence search walk.
+         *         stages: The walk's own steps in the order started (task 058, round
+         *             11), on the list and the one-run reads; empty elsewhere.
          */
         RunOut: {
             /** Artefact Id */
@@ -4303,6 +4951,8 @@ export interface components {
             plan_version: number;
             /** Purpose */
             purpose?: string | null;
+            /** Stages */
+            stages?: components["schemas"]["RunStageOut"][];
             /**
              * Started At
              * Format: date-time
@@ -4318,6 +4968,54 @@ export interface components {
              * Format: uuid
              */
             task_id: string;
+        };
+        /**
+         * RunStageOut
+         * @description One step of a walk, as its stage frames told it (task 058, round 11).
+         *
+         *     The walk's own steps only: an option search's steps belong to that child
+         *     walk, not to the longlist walk that dispatched it. The same words the
+         *     `stage.started` and `stage.completed` frames carry, so a walk that has
+         *     ended renders its rows as the live one did.
+         *
+         *     Args:
+         *         stage: The public stage key.
+         *         label: The row's label.
+         *         status: `started` (no end recorded), `completed`, `failed` or
+         *             `skipped`.
+         *         started_at: When the step started, or `None` when only its end is
+         *             recorded.
+         *         ended_at: When it ended, or `None` while started.
+         *         summary: The done row's scalar counts (`stage.completed.summary`),
+         *             or `{"reason": ...}` for a failed or skipped step.
+         *         counts: The counts the done row shows, each with its noun.
+         *         seconds: The step's wall time, when recorded.
+         */
+        RunStageOut: {
+            /** Counts */
+            counts?: components["schemas"]["StageCount"][];
+            /** Ended At */
+            ended_at?: string | null;
+            /** Label */
+            label: string;
+            /** Seconds */
+            seconds?: number | null;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist";
+            /** Started At */
+            started_at?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "started" | "completed" | "failed" | "skipped";
+            /** Summary */
+            summary?: {
+                [key: string]: number | string;
+            };
         };
         /**
          * RunStatusFrame
@@ -4655,6 +5353,152 @@ export interface components {
             steer_point: string;
         };
         /**
+         * SearchQueryFrame
+         * @description Ephemeral: one search query as it goes out, and again when it comes back (round 9).
+         *
+         *     A query is identified by `(backend, query, kind)`: the frame sent when it
+         *     comes back (with `results`) replaces the one sent when it went out
+         *     (`results` null). A reconnect gets the run's queries so far, each in its
+         *     latest state. Display-only: never persisted, no `id:` line, no
+         *     `sequence`; the saved search record lists the queries after the stage.
+         *
+         *     Args:
+         *         backend: The database searched, `openalex` or `overton`.
+         *         query: The query text for a `topic` or `semantic` query; for a
+         *             `citations` or `lookup` pass a short description ("Following
+         *             citations from 50 sources"), never the ids.
+         *         kind: `topic`, `semantic`, `citations` or `lookup`.
+         *         results: Null while the query is out; the number of records it
+         *             returned once it is back.
+         */
+        SearchQueryFrame: {
+            /** Backend */
+            backend: string;
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "topic" | "semantic" | "citations" | "lookup";
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Query */
+            query: string;
+            /** Results */
+            results: number | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "search.query";
+        };
+        /**
+         * SectionCitation
+         * @description One checked citation on a completed live section (task 058, round 7).
+         *
+         *     One entry per citation row of the section's judged claims, so a claim
+         *     citing two sources gives two entries over the same span.
+         *
+         *     Args:
+         *         start: First code point of the cited claim's text in `prose`.
+         *         end: One past its last code point.
+         *         n: The report-wide reference number, numbered as the committed
+         *             report numbers its references (by source, in order of first
+         *             citation).
+         *         source_id: The source's id in this task, or `null` when the cited
+         *             text is not one of the task's sources.
+         *         title: The source's title as the committed report's references name it.
+         *         citation_id: The saved citation's id, the one the committed report's
+         *             citation carries, so the page can ask for its chunk context while
+         *             the run is live (round 8); `null` on frames recorded before the
+         *             field existed.
+         *         claim_id: The saved claim's id, the one the committed report's claim
+         *             carries; `null` on older frames.
+         *         chunk_id: The cited chunk. The citation rows commit with the whole
+         *             report, so `citation_id` cannot be read until then; the chunks
+         *             are committed long before, so the page reads the passage by chunk
+         *             and quote (`GET .../chunks/{chunk_id}/context?quote=`) while the
+         *             report is still being written (owner, 2026-11-09). `null` on
+         *             frames recorded before the field existed.
+         *         quote: The checked quote the citation rests on; empty on older frames.
+         */
+        SectionCitation: {
+            /**
+             * Chunk Id
+             * @default null
+             */
+            chunk_id: string | null;
+            /**
+             * Citation Id
+             * @default null
+             */
+            citation_id: string | null;
+            /**
+             * Claim Id
+             * @default null
+             */
+            claim_id: string | null;
+            /** End */
+            end: number;
+            /** N */
+            n: number;
+            /**
+             * Quote
+             * @default
+             */
+            quote: string;
+            /** Source Id */
+            source_id: string | null;
+            /** Start */
+            start: number;
+            /** Title */
+            title: string;
+        };
+        /**
+         * SectionClaim
+         * @description One checked claim on a completed live section (task 058, round 13).
+         *
+         *     The checker's verdict belongs to the claim, not to each of its citations.
+         *
+         *     Args:
+         *         claim_id: The saved claim's id, the one the committed report's claim
+         *             carries; `null` without a saved row to match.
+         *         start: First code point of the claim's text in `prose`.
+         *         end: One past its last code point.
+         *         tier: The checker's verdict (`tier_1` ... `tier_4`,
+         *             `unsupported_mis_cited`), or `null` when it was not checked.
+         *         rationale: The checker's reason for the verdict, when recorded.
+         */
+        SectionClaim: {
+            /**
+             * Claim Id
+             * @default null
+             */
+            claim_id: string | null;
+            /** End */
+            end: number;
+            /**
+             * Rationale
+             * @default null
+             */
+            rationale: string | null;
+            /** Start */
+            start: number;
+            /**
+             * Tier
+             * @default null
+             */
+            tier: string | null;
+        };
+        /**
          * SectionOut
          * @description One artefact section.
          *
@@ -4691,6 +5535,31 @@ export interface components {
             title: string;
         };
         /**
+         * SectionSourceRef
+         * @description One source as the page names it while a section is written.
+         *
+         *     Args:
+         *         source_id: The source's id in this task (display identity only).
+         *         title: The source's short name: first author or publisher and year
+         *             when both are known, else its title, else where it came from.
+         */
+        SectionSourceRef: {
+            /** Source Id */
+            source_id: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * SectionSpan
+         * @description A code-point span `[start, end)` of the section draft.
+         */
+        SectionSpan: {
+            /** End */
+            end: number;
+            /** Start */
+            start: number;
+        };
+        /**
          * ShortlistOut
          * @description The latest shortlist proposal on a longlist (task 055).
          *
@@ -4703,10 +5572,18 @@ export interface components {
          *         stale: The proposal does not match the plan's current risk appetite,
          *             or a built longlist has no proposal yet. The view then asks the
          *             user to press Suggest more to re-propose.
+         *         note_stale: The note was written against other places than the
+         *             shortlist now holds (task 058, round 14): `POST
+         *             /tasks/{id}/shortlist/note` rewrites it. `false` with no note.
          */
         ShortlistOut: {
             /** Note */
             note?: string | null;
+            /**
+             * Note Stale
+             * @default false
+             */
+            note_stale: boolean;
             /**
              * Places Target
              * @default 5
@@ -4758,10 +5635,20 @@ export interface components {
             cited_in?: components["schemas"]["CitedInOut"][];
             /** Classification Reason */
             classification_reason?: string | null;
+            /** Country */
+            country?: string | null;
             /** Doi */
             doi?: string | null;
             /** Evidence Type */
             evidence_type?: string | null;
+            /**
+             * Full Text Status
+             * @default not_attempted
+             * @enum {string}
+             */
+            full_text_status: "not_attempted" | "queued" | "ingested" | "fetch_failed" | "parse_failed";
+            /** Full Text Url */
+            full_text_url?: string | null;
             /** Fwci */
             fwci?: number | null;
             /** Language */
@@ -4846,10 +5733,15 @@ export interface components {
             /** Tag Type */
             tag_type: string;
         };
-        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["TaskUpdatedFrame"] | components["schemas"]["TickFrame"];
+        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["TaskUpdatedFrame"] | components["schemas"]["TickFrame"] | components["schemas"]["ArtefactSectionDeltaFrame"] | components["schemas"]["ArtefactSectionRevisingFrame"] | components["schemas"]["ArtefactSectionSourcesFrame"] | components["schemas"]["ArtefactSectionClaimFrame"] | components["schemas"]["ArtefactSectionCardFrame"] | components["schemas"]["ArtefactSourceNoteFrame"] | components["schemas"]["SearchQueryFrame"] | components["schemas"]["CharacteriseThemesFrame"];
         /**
          * StageCompletedFrame
          * @description A component reached its terminal (successful) outcome.
+         *
+         *     Args:
+         *         counts: The counts the done row shows, in order, each with the
+         *             server's noun (task 058, N17: the client keeps no copy of which
+         *             summary keys a stage shows). Empty when the stage names none.
          */
         StageCompletedFrame: {
             /**
@@ -4857,6 +5749,8 @@ export interface components {
              * @default null
              */
             capability_run_id: string | null;
+            /** Counts */
+            counts?: components["schemas"]["StageCount"][];
             /** Label */
             label: string;
             /**
@@ -4885,6 +5779,16 @@ export interface components {
              * @enum {string}
              */
             type: "stage.completed";
+        };
+        /**
+         * StageCount
+         * @description One count a done row shows, with its noun: `312 found` (task 058, N17).
+         */
+        StageCount: {
+            /** Noun */
+            noun: string;
+            /** Value */
+            value: number;
         };
         /**
          * StageFailedFrame
@@ -4970,6 +5874,91 @@ export interface components {
             text: string;
         };
         /**
+         * TaskAgentCompletedEvent
+         * @description The one successful last event: the finished, stored turn.
+         *
+         *     Args:
+         *         turn: The turn exactly as a read of it returns it.
+         */
+        TaskAgentCompletedEvent: {
+            turn: components["schemas"]["TaskAgentTurnOut"];
+            /**
+             * Type
+             * @default completed
+             * @constant
+             */
+            type: "completed";
+        };
+        /**
+         * TaskAgentDeltaEvent
+         * @description One new piece of the planner's reply; the pieces joined are the reply.
+         *
+         *     Args:
+         *         text: The next piece of reply text.
+         */
+        TaskAgentDeltaEvent: {
+            /** Text */
+            text: string;
+            /**
+             * Type
+             * @default delta
+             * @constant
+             */
+            type: "delta";
+        };
+        /**
+         * TaskAgentFailedEvent
+         * @description The one failed last event, sent after the response has started.
+         *
+         *     Args:
+         *         error: What went wrong, in public-safe terms.
+         *         turn_index: The failed turn's place in the conversation; the stored
+         *             row is marked failed and may be retried with the same client turn id.
+         */
+        TaskAgentFailedEvent: {
+            error: components["schemas"]["TaskAgentFailedEventError"];
+            /** Turn Index */
+            turn_index: number;
+            /**
+             * Type
+             * @default failed
+             * @constant
+             */
+            type: "failed";
+        };
+        /**
+         * TaskAgentFailedEventError
+         * @description Failure details that are safe to show the caller.
+         *
+         *     Args:
+         *         code: A stable error code (``task_agent_turn_failed``, or a conflict
+         *             or capacity code such as ``run_active``).
+         *         message: A short plain explanation.
+         */
+        TaskAgentFailedEventError: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * TaskAgentProgressEvent
+         * @description What the planner is doing now, sent before its reply starts (task 058, N9).
+         *
+         *     Args:
+         *         label: The user-facing activity line, such as "Drafting the plan".
+         */
+        TaskAgentProgressEvent: {
+            /** Label */
+            label: string;
+            /**
+             * Type
+             * @default progress
+             * @constant
+             */
+            type: "progress";
+        };
+        /**
          * TaskAgentTranscriptTurnOut
          * @description One durable task_agent-transcript turn shown in chronological order.
          *
@@ -4980,6 +5969,8 @@ export interface components {
          *             so a reloaded client can retry its own incomplete latest turn.
          *         user_message: Submitted user message.
          *         reply: Task Agent reply, absent until a pending turn completes.
+         *         question: The planner's clarifying question, read back off the stored
+         *             turn (task 058, N10). Null when the turn asked none.
          *         suggestions: Task Agent quick-reply suggestions, if the turn completed.
          *         part: Structured sequential-task_agent proposal, absent for legacy turns.
          *         capability: The owning task's capability, absent on legacy turns.
@@ -5015,6 +6006,8 @@ export interface components {
             /** Kind */
             kind?: ("reply" | "answer" | "decision" | "action") | null;
             part?: components["schemas"]["PartProposalOut"] | null;
+            /** Question */
+            question?: string | null;
             /** Reply */
             reply: string | null;
             /**
@@ -5062,6 +6055,8 @@ export interface components {
          *     Args:
          *         reply: The task_agent's conversational reply for this turn.
          *         plan: The full current draft plan.
+         *         question: The planner's clarifying question, when this turn asks one
+         *             (task 058, N10); the ``suggestions`` answer it. Null otherwise.
          *         suggestions: The task_agent's suggested answers to its clarifying
          *             question, rendered as tappable quick replies. Empty when none.
          *         part: Structured sequential-task_agent proposal, when this turn carries one.
@@ -5089,6 +6084,8 @@ export interface components {
             kind?: ("reply" | "answer" | "decision" | "action") | null;
             part?: components["schemas"]["PartProposalOut"] | null;
             plan?: components["schemas"]["PlanDraft"] | null;
+            /** Question */
+            question?: string | null;
             /** Reply */
             reply: string;
             scoping_plan?: components["schemas"]["ScopingPlanDraft"] | null;
@@ -5452,12 +6449,51 @@ export interface components {
         };
         /**
          * TickFrame
-         * @description Ephemeral heartbeat/progress-note frame.
+         * @description Ephemeral activity frame (task 058, D2): what the model is doing now.
          *
          *     Never persisted, never state-bearing, carries no `id:` line — so it has
-         *     no `sequence` field at all (unlike every other frame type).
+         *     no `sequence` field at all (unlike every other frame type). One set of
+         *     fields for every stage.
+         *
+         *     Args:
+         *         stage: The stage the activity belongs to.
+         *         activity: The activity line, in the server's plain voice; the client
+         *             shows it as it is.
+         *         done: Items finished so far, or null when the stage has no honest
+         *             count (no total known before its loop started).
+         *         total: The total known before the loop started, or null.
+         *         unit: What `done` and `total` count (`documents`, `batches`,
+         *             `searches`, `sections`), or null with no count.
+         *         section: The writer's section line ("Section 3 of 7 · Costs"), or
+         *             null outside writing.
+         *         heartbeat: True when the hub repeated the current tick because a
+         *             model call is still in flight (every 10 s), not because anything
+         *             changed.
+         *         dropped: The hub's dropped-tick counter for this task (slow
+         *             subscriber evictions), for the silent-gap measure (N25).
+         *         capability_run_id: The walk the line belongs to (round 11): a
+         *             longlist walk's option searches are walks of their own and run
+         *             the same stages, so the page keeps the tracked walk's lines only.
+         *             Null when the server could not tell.
          */
         TickFrame: {
+            /** Activity */
+            activity: string;
+            /**
+             * Capability Run Id
+             * @default null
+             */
+            capability_run_id: string | null;
+            /**
+             * Done
+             * @default null
+             */
+            done: number | null;
+            /**
+             * Dropped
+             * @default 0
+             */
+            dropped: number;
             /**
              * Ephemeral
              * @default true
@@ -5465,22 +6501,20 @@ export interface components {
              */
             ephemeral: true;
             /**
-             * Fetched
-             * @default null
+             * Heartbeat
+             * @default false
              */
-            fetched: number | null;
-            /** Note */
-            note: string;
+            heartbeat: boolean;
             /**
              * Occurred At
              * Format: date-time
              */
             occurred_at: string;
             /**
-             * Parsed
+             * Section
              * @default null
              */
-            parsed: number | null;
+            section: string | null;
             /**
              * Stage
              * @default null
@@ -5496,6 +6530,11 @@ export interface components {
              * @enum {string}
              */
             type: "tick";
+            /**
+             * Unit
+             * @default null
+             */
+            unit: string | null;
         };
         /**
          * TurnActionOut
@@ -5944,6 +6983,7 @@ export interface operations {
                 owner_email?: string | null;
                 page?: number;
                 page_size?: number;
+                status?: "active" | "archived" | "all";
             };
             header?: never;
             path?: never;
@@ -6057,6 +7097,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_project_api_v1_projects__project_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectArchiveOut"];
                 };
             };
             /** @description Validation Error */
@@ -6582,12 +7653,21 @@ export interface operations {
                 cited?: boolean | null;
                 sort?: ("title" | "year" | "type" | "strength" | "status" | "relevance") | null;
                 order?: ("asc" | "desc") | null;
+                /** @description A theme's id: a characterisation theme's sources, or on an options-scoping task a longlist theme's, the documents of its options (task 058, round 14). */
                 theme?: string | null;
                 origin?: ("OpenAlex" | "Overton" | "Uploaded") | null;
                 evidence_type?: string | null;
                 strength?: ("Very strong" | "Strong" | "Moderate" | "Limited" | "Weak" | "Unrated") | null;
                 year_from?: number | null;
                 year_to?: number | null;
+                /** @description A publisher country, by any spelling; `none` for the sources with no country (Landscape's Not reported row; task 058, round 14). */
+                country?: string | null;
+                /** @description A coverage row's `query_id`: only the sources that search returned (task 058, round 12). Empty for a search run before the ids were kept. */
+                query?: number | null;
+                /** @description The read depth the Status column shows: the full text, the abstract only, or the title only (task 058, round 13). */
+                depth?: ("full_text" | "abstract" | "title") | null;
+                /** @description `true`: the documents the appraise stage scored, the funnel's quality-checked row; `false`: the rest (task 058, round 13). */
+                appraised?: boolean | null;
             };
             header?: never;
             path: {
@@ -6769,6 +7849,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LonglistOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_options_api_v1_tasks__task_id__options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptionsOut"];
                 };
             };
             /** @description Validation Error */
@@ -7188,6 +8299,37 @@ export interface operations {
             };
         };
     };
+    post_shortlist_note_api_v1_tasks__task_id__shortlist_note_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShortlistOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_suggest_more_api_v1_tasks__task_id__shortlist_suggest_post: {
         parameters: {
             query?: never;
@@ -7334,13 +8476,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Successful Response */
+            /** @description `application/x-ndjson`: progress/delta events followed by exactly one completed or failed terminal event. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TaskAgentTurnOut"];
+                    "application/x-ndjson": string;
                 };
             };
             /** @description Validation Error */
