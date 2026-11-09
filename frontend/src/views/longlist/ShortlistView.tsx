@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router";
 
 import type { components } from "../../api/gen/types";
@@ -25,6 +25,8 @@ import { Select } from "../../ui/brand/Select";
 import { ShortlistToggle, useOptionActions } from "./optionActions";
 import { usePublicView } from "../publicView";
 import { useOpenAtTop } from "../../lib/openAtTop";
+import { NOTE_REVIEWING_WORDS, useNoteRefresh, useRefreshShortlistNote } from "./shortlistNote";
+import { ActionLine } from "../workspace/ActionLine";
 
 type LonglistOut = components["schemas"]["LonglistOut"];
 type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
@@ -139,6 +141,23 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
   const canSuggest = hasOpenOption || shortlist.stale;
   const suggestOff = walkActive ? "A walk is running." : !canSuggest ? "Nothing left to propose." : null;
   const hasNote = shortlist.note != null && shortlist.note !== "";
+  // The note kept current (owner, 2026-11-08): rewritten on opening when
+  // stale, and once 3 s after the last change on the page if still stale.
+  // ponytail: `note_stale` typed here until the generated types carry it.
+  const noteStale = (shortlist as typeof shortlist & { note_stale?: boolean }).note_stale === true;
+  const noteRefresh = useRefreshShortlistNote(taskId);
+  const placesSignature = placed.map((option) => `${option.option_id}:${option.shortlist?.state}`).join(",");
+  useNoteRefresh(
+    () => {
+      if (!noteRefresh.isPending) noteRefresh.mutate();
+    },
+    noteStale,
+    placesSignature,
+    !publicView,
+  );
+  // A note that changes while the page is open fades in; the one it opened with does not.
+  const [openingNote] = useState(shortlist.note ?? "");
+  const noteSwapped = (shortlist.note ?? "") !== openingNote;
 
   const renderPlaceRow = (option: OptionSummaryOut) => {
     const state = option.shortlist?.state;
@@ -250,11 +269,24 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
                   : "No picks beside your places. Suggest more asks Policy Atlas for some."}
           </p>
         )}
-        {hasNote && (
+        {(hasNote || noteRefresh.isPending) && (
           <div className="mt-4">
-            <p className="max-w-[62ch] text-body text-ink">
-              <LeadIn>Not covered:</LeadIn> {scrub(shortlist.note ?? "")}
-            </p>
+            {noteRefresh.isPending ? (
+              // While the note is rewritten, the Task Agent's working line in
+              // its place: the turning fold mark and what it is doing (owner,
+              // 2026-11-08); the new note replaces it with the arrivals' fade.
+              <ActionLine label={NOTE_REVIEWING_WORDS} live arrivalId={`shortlist-note-${taskId}`} />
+            ) : (
+              <p
+                key={shortlist.note ?? ""}
+                className={cn("max-w-[62ch] text-body text-ink", noteSwapped && "anim-swap-in")}
+              >
+                <LeadIn>Not covered:</LeadIn> {scrub(shortlist.note ?? "")}
+              </p>
+            )}
+            {noteStale && !publicView && !noteRefresh.isPending && (
+              <p className="mt-1 text-meta text-grey">Written before your latest changes.</p>
+            )}
             {footerLines.map((line) => (
               <p key={line} className="mt-1 text-meta text-grey">
                 {line}

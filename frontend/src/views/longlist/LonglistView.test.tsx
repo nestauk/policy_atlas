@@ -176,13 +176,26 @@ describe("LonglistView", () => {
     await user.click(within(screen.getByRole("group", { name: "View as" })).getByRole("button", { name: "List" }));
     expect(controls.lastElementChild?.contains(screen.getByRole("group", { name: "View as" }))).toBe(true);
     await user.click(within(screen.getByRole("group", { name: "Group by" })).getByRole("button", { name: "Lever" }));
-    // The lever grouping's last heading, the names one Grey line under it.
-    // Round 13 (owner): the words a Body Grey line, not a heading.
+    // Round 13 (owner): the list's lever view ends with the grid's foot, the
+    // same component: the words a Body Grey line, not a heading, then each
+    // lever on its own line in the row heads' style.
     expect(screen.queryByRole("heading", { name: "No options found for" })).not.toBeInTheDocument();
-    const words = within(screen.getByRole("region", { name: "No options found for" })).getByTestId("no-options-for");
+    const listFoot = screen.getByRole("group", { name: "No options found for" });
+    expect(listFoot).toHaveClass("w-44", "space-y-2");
+    const [words, ...names] = Array.from(listFoot.children);
     expect(words).toHaveClass("text-body", "text-grey");
     expect(words).not.toHaveClass("uppercase");
-    expect(words.nextElementSibling).toHaveClass("uppercase", "text-grey");
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) {
+      expect(name).toHaveClass("uppercase", "text-grey");
+      expect(name.textContent).not.toContain(" · ");
+    }
+    // Round 14 (owner): the same hairline above it as in the grid, 24 px over the foot.
+    expect(listFoot.parentElement).toHaveClass("border-t", "border-line", "pt-6");
+    expect(listFoot.parentElement?.className).toContain(absent.parentElement?.className ?? "missing");
+    // The same lines as the grid's foot.
+    expect(words.className).toBe(absent.firstElementChild?.className);
+    expect(names[0].className).toBe(absent.children[1]?.className);
   });
 
   it("shows the excluded part as plain text in grid mode", async () => {
@@ -522,6 +535,29 @@ describe("LonglistView", () => {
     expect(within(row).getByText(/^Excluded by you/)).toHaveTextContent(/^Excluded by you · Too costly$/);
     expect(within(row).queryByRole("button", { name: "Add a reason" })).not.toBeInTheDocument();
     expect(within(row).queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  // Round 14 (owner): a lever excluded whole was still found; it never joins
+  // "No options found for", in the list or the grid.
+  it("keeps a lever excluded whole out of No options found for, in both views", async () => {
+    const user = userEvent.setup();
+    renderLonglist({}, (longlist) => {
+      for (const option of longlist.options ?? []) {
+        if (option.primary_lever_type === "regulate") {
+          option.state = "excluded";
+          option.exclusion = { by: "user", constraint: "your decision", reason: "with the lever Regulate" };
+        }
+      }
+    });
+    const foot = () => screen.queryByRole("group", { name: "No options found for" });
+    await user.click(within(screen.getByRole("group", { name: "Group by" })).getByRole("button", { name: "Lever" }));
+    // The lever is a group under Excluded, and not in the foot.
+    expect(within(screen.getByRole("region", { name: "Excluded" })).getByRole("button", { name: /^Regulate/ })).toBeInTheDocument();
+    expect(foot()).not.toBeNull();
+    expect(foot()).not.toHaveTextContent(/Regulate/i);
+    await user.click(within(screen.getByRole("group", { name: "View as" })).getByRole("button", { name: "Grid" }));
+    expect(foot()).not.toBeNull();
+    expect(foot()).not.toHaveTextContent(/Regulate/i);
   });
 
   it("disables a group's Exclude while a walk is active", () => {

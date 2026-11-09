@@ -25,7 +25,7 @@ import { ChevronIcon } from "../../ui/brand/icons";
 import { useOpenAtTop } from "../../lib/openAtTop";
 import { InfoHint } from "../../ui/brand/InfoHint";
 import { usePublicView } from "../publicView";
-import { LonglistGrid, type GridLine } from "./LonglistGrid";
+import { LonglistGrid, NoOptionsFoot, type GridLine } from "./LonglistGrid";
 import { Select } from "../../ui/brand/Select";
 import { useRegroupTransition } from "./regroupTransition";
 import {
@@ -34,7 +34,6 @@ import {
   LINE_NAMES,
   groupCountWords,
   uncoveredLevers,
-  NO_OPTIONS_FOR,
   themeSummary,
   EXCLUDE_GROUP_FROM_SHORTLISTING,
   INCLUDE_GROUP_AGAIN,
@@ -586,14 +585,8 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
   // In the lever grouping, the last heading names them (round 13, owner).
   const uncoveredGroup =
     uncovered.length === 0 ? null : (
-      <section aria-label={NO_OPTIONS_FOR} className="mb-8">
-        {/* A Body Grey line, not a group heading (round 13, owner); the
-            lever names keep the heads' style, 8 px under it. */}
-        <p data-testid="no-options-for" className="text-body text-grey">
-          {NO_OPTIONS_FOR}
-        </p>
-        <p className={cn(LABEL_CLASS, "mt-2 max-w-prose-measure text-grey")}>{uncovered.join(" · ")}</p>
-      </section>
+      // The grid's foot, the same component (round 13, owner).
+      <NoOptionsFoot names={uncovered} className="mb-8" />
     );
 
   // Whole groups (round 13, owner): a theme or lever heading excludes every

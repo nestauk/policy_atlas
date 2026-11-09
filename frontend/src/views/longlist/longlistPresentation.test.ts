@@ -563,13 +563,15 @@ describe("groupCountWords and uncoveredLevers", () => {
     expect(groupCountWords(1, 1)).toBe("1 option · 1 shortlisted");
     expect(groupCountWords(12, 0)).toBe("12 options");
   });
-  it("lists the lever types no included option uses, never Other", () => {
+  // Round 14 (owner): an excluded option still covers its lever; only the
+  // lever types no option carries at all are listed.
+  it("lists the lever types no option carries, included or excluded, never Other", () => {
     expect(
       uncoveredLevers(["regulate", "inform", "devolve"], [
-        { state: "included", primary_lever_type: "regulate" },
-        { state: "excluded", primary_lever_type: "inform" },
-        { state: "included", primary_lever_type: null },
+        { primary_lever_type: "regulate" },
+        { primary_lever_type: "inform" },
+        { primary_lever_type: null },
       ]),
-    ).toEqual(["inform", "devolve"]);
+    ).toEqual(["devolve"]);
   });
 });

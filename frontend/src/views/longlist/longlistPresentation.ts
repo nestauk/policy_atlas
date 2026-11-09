@@ -623,15 +623,15 @@ export const EXCLUDE_OPTION_TOOLTIP =
 /** The heading for the lever types no option uses (round 13, owner). */
 export const NO_OPTIONS_FOR = "No options found for";
 
-/** The lever types with no included option, in the taxonomy's order (round
- *  13, owner: shown prominently in both views). */
+/** The lever types no option carries at all, included or excluded, in the
+ *  taxonomy's order: the search found none for them (round 14, owner: an
+ *  excluded lever was found, so it is not listed). One rule for the grid
+ *  and the list. */
 export function uncoveredLevers(
   leverTypes: readonly string[],
-  options: readonly Pick<OptionSummaryOut, "state" | "primary_lever_type">[],
+  options: readonly Pick<OptionSummaryOut, "primary_lever_type">[],
 ): string[] {
-  return leverTypes.filter(
-    (lever) => !options.some((option) => option.state !== "excluded" && option.primary_lever_type === lever),
-  );
+  return leverTypes.filter((lever) => !options.some((option) => option.primary_lever_type === lever));
 }
 
 /** The documents disclosure's words (round 12, owner): closed, the count

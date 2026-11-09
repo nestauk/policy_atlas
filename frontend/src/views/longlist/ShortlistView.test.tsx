@@ -13,6 +13,7 @@ import {
 } from "../../mock/fixtures";
 import * as queries from "../../api/queries";
 import * as mutations from "../../api/mutations";
+import * as shortlistNote from "./shortlistNote";
 
 vi.mock("../../api/queries", () => ({
   useTask: vi.fn(),
@@ -37,6 +38,13 @@ vi.mock("../../api/mutations", () => ({
   useShortlistVerb: vi.fn(),
   useSuggestMore: vi.fn(),
   usePatchPlan: vi.fn(),
+}));
+
+const noteMutate = vi.fn();
+let notePending = false;
+vi.mock("./shortlistNote", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./shortlistNote")>()),
+  useRefreshShortlistNote: vi.fn(),
 }));
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
@@ -83,6 +91,9 @@ function renderShortlist(
   vi.mocked(mutations.useAddOption).mockReturnValue(
     { mutate: addMutate, isPending: false } as unknown as ReturnType<typeof mutations.useAddOption>,
   );
+  vi.mocked(shortlistNote.useRefreshShortlistNote).mockImplementation(
+    () => ({ mutate: noteMutate, isPending: notePending }) as unknown as ReturnType<typeof shortlistNote.useRefreshShortlistNote>,
+  );
   const longlist = mockLonglist();
   adjust?.(longlist);
   return render(
@@ -109,6 +120,8 @@ beforeEach(() => {
   excludeMutate.mockClear();
   includeMutate.mockClear();
   addMutate.mockClear();
+  noteMutate.mockClear();
+  notePending = false;
 });
 
 describe("ShortlistView — the Shortlist result view (task 055)", () => {
@@ -361,4 +374,102 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     expect(within(notice).getByText("Excluded:")).toHaveClass("text-red");
   });
 
+});
+
+// Owner, 2026-11-08: the "Not covered" note kept current without a call per
+// change: once on opening when stale; after changes, one call 3 s after the
+// last; none when fresh; never on the public link.
+describe("ShortlistView, the note kept current", () => {
+  type Longlist = ReturnType<typeof mockLonglist>;
+  const staleNote = (stale: boolean) => (longlist: Longlist) => {
+    longlist.shortlist = { ...longlist.shortlist, note: "Nothing on housing.", note_stale: stale } as Longlist["shortlist"];
+  };
+  const tree = (longlist: Longlist) => (
+    <PublicViewProvider value={false}>
+      <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/result`]}>
+        <Routes>
+          <Route path="/tasks/:taskId/result" element={<ShortlistView taskId={TASK_ID} longlist={longlist} />} />
+        </Routes>
+      </MemoryRouter>
+    </PublicViewProvider>
+  );
+
+  it("rewrites a stale note once on opening, and says it is behind until then", () => {
+    renderShortlist({}, staleNote(true));
+    expect(noteMutate).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Written before your latest changes.")).toHaveClass("text-meta", "text-grey");
+  });
+
+  it("asks nothing when the note is fresh, then or later", () => {
+    vi.useFakeTimers();
+    try {
+      renderShortlist({}, staleNote(false));
+      vi.advanceTimersByTime(10_000);
+      expect(noteMutate).not.toHaveBeenCalled();
+      expect(screen.queryByText("Written before your latest changes.")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("waits 3 s after the last change, one timer reset by each change, then rewrites once", () => {
+    vi.useFakeTimers();
+    try {
+      const { rerender, unmount } = renderShortlist({}, staleNote(false));
+      const changed = (held: string[]) => {
+        const next = mockLonglist();
+        staleNote(true)(next);
+        for (const option of next.options ?? []) {
+          if (held.includes(option.option_id)) option.shortlist = { state: "added_by_you", reason: null };
+        }
+        return next;
+      };
+      rerender(tree(changed([MOCK_OPTION_ID_NO_IN_SCOPE])));
+      vi.advanceTimersByTime(2000);
+      rerender(tree(changed([MOCK_OPTION_ID_NO_IN_SCOPE, MOCK_OPTION_ID_PACKAGE])));
+      vi.advanceTimersByTime(2900);
+      expect(noteMutate).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(100);
+      expect(noteMutate).toHaveBeenCalledTimes(1);
+      // A later change, then leaving the page: the timer is cancelled.
+      rerender(tree(changed([MOCK_OPTION_ID_PACKAGE])));
+      unmount();
+      vi.advanceTimersByTime(5000);
+      expect(noteMutate).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Owner, 2026-11-08: no breathing words; the Task Agent's working line in
+  // the note's place, then the new note fades in.
+  it("shows the turning mark and Reviewing the shortlist for gaps in the note's place while it is rewritten", () => {
+    notePending = true;
+    const { rerender } = renderShortlist({}, staleNote(true));
+    const line = screen.getByRole("status");
+    expect(line).toHaveTextContent(/^Reviewing the shortlist for gaps$/);
+    expect(line.querySelector("svg")).not.toBeNull();
+    expect(screen.queryByText(/Nothing on housing\./)).not.toBeInTheDocument();
+    expect(document.querySelector(".anim-breathe-soft")).toBeNull();
+    expect(screen.queryByText("Written before your latest changes.")).not.toBeInTheDocument();
+    // The new note lands: it replaces the line with the arrivals' fade.
+    notePending = false;
+    const next = mockLonglist();
+    next.shortlist = { ...next.shortlist, note: "Nothing on transport.", note_stale: false } as Longlist["shortlist"];
+    rerender(tree(next));
+    expect(screen.queryByText("Reviewing the shortlist for gaps")).not.toBeInTheDocument();
+    expect(screen.getByText(/Nothing on transport\./).closest("p")).toHaveClass("anim-swap-in");
+  });
+
+  it("does not fade the note the page opened with", () => {
+    renderShortlist({}, staleNote(false));
+    expect(screen.getByText(/Nothing on housing\./).closest("p")).not.toHaveClass("anim-swap-in");
+  });
+
+  it("asks nothing on the public link", () => {
+    publicLink = true;
+    renderShortlist({}, staleNote(true));
+    expect(noteMutate).not.toHaveBeenCalled();
+    expect(screen.queryByText("Written before your latest changes.")).not.toBeInTheDocument();
+  });
 });

@@ -22,6 +22,7 @@ import {
   OTHER_LEVER,
   shortlistedFirst,
   exclusionLine,
+  uncoveredLevers,
 } from "./longlistPresentation";
 import { useRegroupTransition } from "./regroupTransition";
 import { GroupHeading } from "./GroupHeading";
@@ -107,7 +108,7 @@ export function LonglistGrid({
   const rows = [...leverTypes, ...(hasNoneFits ? [NONE_FITS_KEY] : [])].filter(leverHas);
   // The lever types no option in the grid uses, listed under it (round
   // 13, owner); never "Other".
-  const emptyLevers = leverTypes.filter((lever) => !leverHas(lever)).map(capitalise);
+  const emptyLevers = uncoveredLevers(leverTypes, longlist.options ?? []).map(capitalise);
   const columns: { key: string; label: string }[] = [
     { key: "less", label: LEVEL_WORDS[line].less ?? "" },
     { key: MIDDLE_KEY, label: MIDDLE_WORD },
@@ -265,23 +266,7 @@ export function LonglistGrid({
           heads' column only, each a head with nothing under it (round 13,
           owner); never "Other". */}
       {emptyLevers.length > 0 && (
-        // A Line hairline across the grid's width under its last row, the
-        // rows' own rule, then the foot 24 px below it (round 13, owner).
-        <div data-testid="grid-foot" className="border-t border-line pt-6">
-          <div aria-label={NO_OPTIONS_FOR} role="group" className="w-44 space-y-2">
-            {/* The words as a Body Grey line in sentence case, so they never
-                read as one more lever; the names keep the heads' style, 8 px
-                apart (round 13, owner). */}
-            <p data-testid="no-options-for" className="text-body text-grey">
-              {NO_OPTIONS_FOR}
-            </p>
-            {emptyLevers.map((name) => (
-              <p key={name} className={cn(LABEL_CLASS, "text-grey")}>
-                {name}
-              </p>
-            ))}
-          </div>
-        </div>
+        <NoOptionsFoot names={emptyLevers} />
       )}
     </div>
   );
@@ -302,5 +287,30 @@ function ExcludedMark({ line }: { line: string }) {
         <ExcludeIcon size={GRID_TOGGLE_GLYPH} />
       </span>
     </WithTooltip>
+  );
+}
+
+/**
+ * "No options found for" and the lever types no option carries, one per
+ * line in the row heads' style, 8 px apart, under a full-width hairline:
+ * the grid's foot and the list's lever view alike (round 13/14, owner). The words a Body Grey sentence-case
+ * line, so they never read as one more lever.
+ */
+export function NoOptionsFoot({ names, className }: { names: readonly string[]; className?: string }) {
+  // A Line hairline across the full width above it, the rows' own rule,
+  // then the foot 24 px below it, in both views (round 13/14, owner).
+  return (
+    <div data-testid="no-options-foot" className={cn("border-t border-line pt-6", className)}>
+      <div aria-label={NO_OPTIONS_FOR} role="group" className="w-44 space-y-2">
+        <p data-testid="no-options-for" className="text-body text-grey">
+          {NO_OPTIONS_FOR}
+        </p>
+        {names.map((name) => (
+          <p key={name} className={cn(LABEL_CLASS, "text-grey")}>
+            {name}
+          </p>
+        ))}
+      </div>
+    </div>
   );
 }
