@@ -70,6 +70,9 @@ TOC_STARTED_BY_KEY = "started_by"
 #: On a draft walk of an uploaded theory (increment 5): stop after the draft, so
 #: the user compares the canvas with their diagram before the evidence check.
 TOC_REVIEW_FIRST_KEY = "review_first"
+#: On a check walk the server started after a draft: the draft walk's id (the
+#: duplicate guard, and the follow-on the run read exposes; task 054).
+TOC_DRAFT_WALK_KEY = "draft_capability_run_id"
 
 #: The event a Stop writes; the runner ends the walk before its next step (C48).
 TOC_STOP_EVENT = "toc.stop_requested"

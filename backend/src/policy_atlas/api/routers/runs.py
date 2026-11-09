@@ -32,6 +32,7 @@ from policy_atlas.api.routers.common import (
     run_artefact_id_column,
     run_out,
     run_purpose_column,
+    run_scope_context_column,
 )
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
@@ -305,7 +306,12 @@ def _await_new_run(
     while time.monotonic() < deadline:
         with engine.connect() as conn:
             rows = conn.execute(
-                select(capability_run, run_artefact_id_column(), run_purpose_column())
+                select(
+                    capability_run,
+                    run_artefact_id_column(),
+                    run_purpose_column(),
+                    run_scope_context_column(),
+                )
                 .where(capability_run.c.task_id == task_id)
                 .order_by(
                     capability_run.c.started_at.desc(),
@@ -422,7 +428,12 @@ def list_runs(
             select(func.count()).select_from(capability_run).where(*where)
         ).scalar_one()
         rows = conn.execute(
-            select(capability_run, run_artefact_id_column(), run_purpose_column())
+            select(
+                capability_run,
+                run_artefact_id_column(),
+                run_purpose_column(),
+                run_scope_context_column(),
+            )
             .where(*where)
             .order_by(capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc())
             .offset((page - 1) * page_size)
@@ -449,7 +460,12 @@ def get_run(
     with engine.connect() as conn:
         accessible_task(conn, task_id=task_id, user_id=user.user_id, write=False)
         row = conn.execute(
-            select(capability_run, run_artefact_id_column(), run_purpose_column())
+            select(
+                capability_run,
+                run_artefact_id_column(),
+                run_purpose_column(),
+                run_scope_context_column(),
+            )
             .where(capability_run.c.task_id == task_id)
             .where(capability_run.c.capability_run_id == run_id)
         ).mappings().one_or_none()

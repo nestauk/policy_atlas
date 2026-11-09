@@ -56,6 +56,12 @@ _SINGULAR = {
     "abstracts": "abstract",
     "places": "place",
     "queries": "query",
+    # Task 054: the theory of change's done counts.
+    "boxes": "box",
+    "connections": "connection",
+    "pathways": "pathway",
+    "figures": "figure",
+    "routes found": "route found",
 }
 
 

@@ -20,6 +20,7 @@ from langfuse import Langfuse
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.contract import StageKey
 from policy_atlas.api.lifecycle import touch_task
 from policy_atlas.core import events, tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
@@ -167,6 +168,7 @@ from policy_atlas.runtime.toc_plan import (
     TOC_CHECK_MODE_KEY,
     TOC_LINKS_KEY,
     TOC_PURPOSE,
+    TOC_REVIEW_FIRST_KEY,
     TOC_STUDIES_KEY,
     TOC_WALK_CHECK,
     TOC_WALK_KEY,
@@ -6007,6 +6009,13 @@ def _run_step_attempt(
     )
 
     with engine.begin() as conn:
+        stamped = _stamped_stage(
+            conn,
+            task_id=task_id,
+            evidence_scope_id=evidence_scope_id,
+            registry_component=registry_component,
+        )
+        stamp: dict[str, Any] = {"stage": stamped} if stamped is not None else {}
         conn.execute(
             runs.insert().values(
                 run_id=run_id,
@@ -6030,6 +6039,7 @@ def _run_step_attempt(
                 # straight to its trace session (018 A2; None on session-less
                 # paths, e.g. replay drivers).
                 "session_id": str(session_id) if session_id is not None else None,
+                **stamp,
             },
         )
         events.append(
@@ -6050,7 +6060,7 @@ def _run_step_attempt(
             task_id=task_id,
             run_id=run_id,
             event_type="component.started",
-            payload={"component": registry_component},
+            payload={"component": registry_component, **stamp},
         )
     log.info(
         "component.started",
@@ -6127,6 +6137,7 @@ def _run_step_attempt(
                         if registry_component == "synthesise"
                         else None
                     ),
+                    stage=stamped,
                 )
                 summary = harness_outcome.get("summary")
                 component_summary = summary if isinstance(summary, dict) else None
@@ -6197,6 +6208,7 @@ def _run_step_attempt(
                         "component": registry_component,
                         "wall_clock_s": completed_wall_clock_s,
                         **component_summary,
+                        **stamp,
                     },
                 )
             log.info(
@@ -6222,6 +6234,7 @@ def _run_step_attempt(
             run_id=run_id,
             registry_component=registry_component,
             error=error,
+            stamp=stamp,
         )
         with engine.connect() as conn:
             log_entries = events.read_for_run(conn, task_id, run_id)
@@ -6336,6 +6349,39 @@ def _bounded_error(exc: Exception) -> str:
     return f"{type(exc).__name__}: {str(exc)[:200]}"
 
 
+def _stamped_stage(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    evidence_scope_id: uuid.UUID,
+    registry_component: str,
+) -> StageKey | None:
+    """The public stage a component run reports under when its walk names one (task 054, S1).
+
+    An uploaded theory's read is the ``toc_draft`` component in a
+    ``review_first`` draft walk: its lifecycle payloads carry ``"stage":
+    "toc_read"``, which :func:`stage_for_payload` reads first. Every other run
+    reports under its component's own key and carries no stamp.
+
+    Args:
+        conn: Open connection.
+        task_id: The task.
+        evidence_scope_id: The walk's intent record.
+        registry_component: The run's registry component.
+
+    Returns:
+        The stamped stage, or ``None``.
+    """
+    if registry_component != "toc_draft":
+        return None
+    context = conn.execute(
+        select(evidence_scope.c.context)
+        .where(evidence_scope.c.evidence_scope_id == evidence_scope_id)
+        .where(evidence_scope.c.task_id == task_id)
+    ).scalar_one_or_none()
+    return "toc_read" if (context or {}).get(TOC_REVIEW_FIRST_KEY) else None
+
+
 def _record_failure_backstop(
     engine: Engine,
     *,
@@ -6343,6 +6389,7 @@ def _record_failure_backstop(
     run_id: uuid.UUID,
     registry_component: str,
     error: str,
+    stamp: dict[str, Any] | None = None,
 ) -> None:
     with engine.begin() as conn:
         run_row = conn.execute(
@@ -6366,7 +6413,7 @@ def _record_failure_backstop(
                 task_id=task_id,
                 run_id=run_id,
                 event_type="component.failed",
-                payload={"component": registry_component, "error": error},
+                payload={"component": registry_component, "error": error, **(stamp or {})},
             )
 
         run_failed_exists = (

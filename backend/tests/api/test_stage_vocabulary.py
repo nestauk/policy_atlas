@@ -136,3 +136,111 @@ def test_the_search_and_screening_lines_round_9() -> None:
     assert activity("search.lookup_works_one") == "Looking up 1 cited work"
     counted = ("acquire.", "screen.", "search.")
     assert all("so far" not in line for key, line in ACTIVITY.items() if key.startswith(counted))
+
+
+#: Task 054, the 058 alignment (S1, § 9): the theory of change's fifteen keys.
+TOC_KEYS: tuple[StageKey, ...] = (
+    "toc_draft",
+    "toc_read",
+    "toc_item_searches",
+    "toc_select",
+    "toc_discover",
+    "toc_merge",
+    "toc_search_new",
+    "toc_new_link_searches",
+    "toc_judge",
+    "toc_search_again",
+    "toc_retry_searches",
+    "toc_figures",
+    "toc_choose",
+    "toc_summarise",
+    "toc_report",
+)
+
+
+def test_the_theory_of_change_keys_join_the_vocabulary() -> None:
+    """A1: 15 ToC keys, 34 in all, in every mirror and table."""
+    assert STAGE_KEYS[-len(TOC_KEYS) :] == TOC_KEYS
+    assert len(STAGE_KEYS) == 34
+    assert set(TOC_KEYS) <= set(get_args(PlanStageKey))
+    for key in TOC_KEYS:
+        assert key in STAGE_PRESENTATION and key in STAGE_ROW and key in STAGE_COUNTS
+
+
+def test_the_theory_of_change_labels_are_the_owners() -> None:
+    """A1: the labels of § 8, the fan-outs with their step's label and row."""
+    labels = {key: STAGE_PRESENTATION[key][0] for key in TOC_KEYS}
+    assert labels == {
+        "toc_draft": "Drafting the theory",
+        "toc_read": "Reading your diagram",
+        "toc_item_searches": "Searching for each connection",
+        "toc_select": "Screening",
+        "toc_discover": "Looking for other routes",
+        "toc_merge": "Merging similar steps",
+        "toc_search_new": "Searching for the new connections",
+        "toc_new_link_searches": "Searching for the new connections",
+        "toc_judge": "Judging the evidence",
+        "toc_search_again": "Searching again for thin connections",
+        "toc_retry_searches": "Searching again for thin connections",
+        "toc_figures": "Finding the size of change",
+        "toc_choose": "Choosing pathways",
+        "toc_summarise": "Writing titles and summaries",
+        "toc_report": "Writing the report",
+    }
+    assert STAGE_ROW["toc_new_link_searches"] == STAGE_ROW["toc_search_new"]
+    assert STAGE_ROW["toc_retry_searches"] == STAGE_ROW["toc_search_again"]
+    # This pass has no claim check and no per-section call.
+    assert STAGE_PRESENTATION["toc_report"][1] == "The report, as it is written."
+    assert all(STAGE_PRESENTATION[key][1] for key in TOC_KEYS)
+
+
+def test_the_theory_of_change_done_counts() -> None:
+    """S2: the § 9 table's done counts, each from an integer summary key."""
+    nouns = {key: [noun for _, noun in STAGE_COUNTS[key]] for key in TOC_KEYS}
+    assert nouns == {
+        "toc_draft": ["boxes", "connections", "pathways"],
+        "toc_read": ["boxes", "connections", "pathways"],
+        "toc_item_searches": ["searches", "found"],
+        "toc_select": ["read", "relevant"],
+        "toc_discover": ["routes found"],
+        "toc_merge": ["merged"],
+        "toc_search_new": ["connections"],
+        "toc_new_link_searches": ["searches", "found"],
+        "toc_judge": ["judged", "test them"],
+        "toc_search_again": ["connections", "judged"],
+        "toc_retry_searches": ["searches", "found"],
+        "toc_figures": ["figures"],
+        "toc_choose": ["kept", "set aside"],
+        "toc_summarise": [],
+        "toc_report": [],
+    }
+
+
+def test_every_theory_of_change_component_maps_to_its_stage() -> None:
+    """A1: the registry names map onto their keys; the upload's read is stamped."""
+    for key in TOC_KEYS:
+        if key != "toc_read":
+            assert STAGE_BY_REGISTRY[key] == key
+            assert stage_for_payload({"component": key}) == key
+    assert "toc_read" not in STAGE_BY_REGISTRY
+
+
+def test_a_stamped_stage_is_read_first() -> None:
+    """A21: a payload's stamped ``stage`` wins over its component's own key."""
+    assert stage_for_payload({"component": "toc_draft"}) == "toc_draft"
+    assert stage_for_payload({"component": "toc_draft", "stage": "toc_read"}) == "toc_read"
+    # Only a public key counts as a stamp; anything else falls back to the component.
+    assert stage_for_payload({"component": "toc_draft", "stage": 2}) == "toc_draft"
+    assert stage_for_payload({"component": "toc_draft", "stage": "nope"}) == "toc_draft"
+
+
+def test_the_theory_of_change_activity_lines() -> None:
+    """A4: the fan-outs, screening and the judge, with no "so far"."""
+    assert activity("toc_searches.progress", done=9, total=17, found=1214) == (
+        "9 of 17 searches done · 1,214 found"
+    )
+    assert activity("toc_select.progress", done=120, total=187, relevant=41) == (
+        "120 of 187 read · 41 relevant"
+    )
+    assert activity("toc_judge.progress", done=30, total=64) == "30 of 64 documents"
+    assert all("so far" not in line for key, line in ACTIVITY.items() if key.startswith("toc_"))

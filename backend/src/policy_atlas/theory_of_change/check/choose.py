@@ -261,6 +261,8 @@ def toc_choose_scope(
     store.record(conn, task_id=task_id, run_id=run_id, step="toc_choose", log=log_, changes=changes)
     summary = {
         "called_model": called,
+        # The done row's "kept" (task 054, S2): the pathways still kept after this step.
+        "kept": len(kept_paths) - set_aside,
         "set_aside": set_aside,
         "conditions_added": conditions_added,
         "conditions_skipped": conditions_skipped,

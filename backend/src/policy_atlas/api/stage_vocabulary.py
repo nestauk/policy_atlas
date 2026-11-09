@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from policy_atlas.api.contract import StageKey
+from policy_atlas.api.contract import STAGE_KEYS, StageKey
 
 #: ``(label, blurb)`` per public stage. Stages that share a card row (see
 #: :data:`STAGE_ROW`) share the label: the row is what the user sees.
@@ -52,6 +52,47 @@ STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
     # Task 055 (PG3): its own key, so the Evidence search's "select" blurb (a
     # ranking claim) never describes the shortlist proposal.
     "shortlist": ("Shortlisting", "Proposing options for close reading."),
+    # Task 054, the 058 alignment (S1, § 8): the theory of change. A fan-out of
+    # item searches has its own key and its step's label, so the two read as
+    # one row.
+    "toc_draft": ("Drafting the theory", "Boxes, connections and pathways from the plan."),
+    "toc_read": ("Reading your diagram", "Boxes, connections and pathways from your diagram."),
+    "toc_item_searches": ("Searching for each connection", "One search per connection."),
+    "toc_select": ("Screening", "Reading each abstract against its connection."),
+    "toc_discover": (
+        "Looking for other routes",
+        "Routes in the evidence the theory does not show.",
+    ),
+    "toc_merge": (
+        "Merging similar steps",
+        "Boxes and pathways that say the same thing, folded together.",
+    ),
+    "toc_search_new": (
+        "Searching for the new connections",
+        "One search per connection that discovery added.",
+    ),
+    "toc_new_link_searches": (
+        "Searching for the new connections",
+        "One search per connection that discovery added.",
+    ),
+    "toc_judge": ("Judging the evidence", "Each document against its connection."),
+    "toc_search_again": (
+        "Searching again for thin connections",
+        "A second search, in the words of the research.",
+    ),
+    "toc_retry_searches": (
+        "Searching again for thin connections",
+        "A second search, in the words of the research.",
+    ),
+    "toc_figures": ("Finding the size of change", "The figures each document reports."),
+    "toc_choose": ("Choosing pathways", "The best-evidenced routes kept."),
+    "toc_summarise": (
+        "Writing titles and summaries",
+        "Plain titles and one sentence per connection.",
+    ),
+    # One call writes the whole report in this pass: no claim check, no
+    # section-by-section writing (plan § 3, decision 4).
+    "toc_report": ("Writing the report", "The report, as it is written."),
 }
 
 #: The card row each stage belongs to (D5, direction C). Stages with the same
@@ -79,6 +120,22 @@ STAGE_ROW: dict[StageKey, str] = {
     "constrain": "constrain",
     "theme": "theme",
     "shortlist": "shortlist",
+    "toc_draft": "toc_draft",
+    "toc_read": "toc_read",
+    "toc_item_searches": "toc_item_searches",
+    "toc_select": "toc_select",
+    "toc_discover": "toc_discover",
+    "toc_merge": "toc_merge",
+    # A fan-out shares its step's row (S1).
+    "toc_search_new": "toc_search_new",
+    "toc_new_link_searches": "toc_search_new",
+    "toc_judge": "toc_judge",
+    "toc_search_again": "toc_search_again",
+    "toc_retry_searches": "toc_search_again",
+    "toc_figures": "toc_figures",
+    "toc_choose": "toc_choose",
+    "toc_summarise": "toc_summarise",
+    "toc_report": "toc_report",
 }
 
 #: The ``stage.completed.summary`` keys a done row shows, in order, each with
@@ -104,6 +161,23 @@ STAGE_COUNTS: dict[StageKey, tuple[tuple[str, str], ...]] = {
     "constrain": (("excluded", "excluded"),),
     "theme": (("themes", "themes"),),
     "shortlist": (("shortlisted", "shortlisted"),),
+    # Task 054 (S2): the counts the theory-of-change trace once worked out in
+    # the browser ("test them", "kept") are summary keys of their own.
+    "toc_draft": (("boxes", "boxes"), ("links", "connections"), ("pathways", "pathways")),
+    "toc_read": (("boxes", "boxes"), ("links", "connections"), ("pathways", "pathways")),
+    "toc_item_searches": (("total", "searches"), ("sources", "found")),
+    "toc_select": (("screened", "read"), ("relevant", "relevant")),
+    "toc_discover": (("accepted", "routes found"),),
+    "toc_merge": (("merged", "merged"),),
+    "toc_search_new": (("links", "connections"),),
+    "toc_new_link_searches": (("total", "searches"), ("sources", "found")),
+    "toc_judge": (("judgements", "judged"), ("test_them", "test them")),
+    "toc_search_again": (("links", "connections"), ("judgements", "judged")),
+    "toc_retry_searches": (("total", "searches"), ("sources", "found")),
+    "toc_figures": (("figures", "figures"),),
+    "toc_choose": (("kept", "kept"), ("set_aside", "set aside")),
+    "toc_summarise": (),
+    "toc_report": (),
 }
 
 #: The plain verb shown while a model call of this route step is in flight and
@@ -264,6 +338,11 @@ ACTIVITY: dict[str, str] = {
     # round 14: the summaries pass, section by section, and its checks
     "synthesise.summary_section": "Summarising the sections · {done} of {total}",
     "synthesise.summary_check": "Checking the summaries",
+    # Task 054, the 058 alignment (A4): the theory of change's loops. The
+    # three fan-outs of item searches share one line.
+    "toc_searches.progress": "{done} of {total} searches done · {found:,} found",
+    "toc_select.progress": "{done:,} of {total:,} read · {relevant:,} relevant",
+    "toc_judge.progress": "{done:,} of {total:,} documents",
 }
 
 
@@ -301,6 +380,23 @@ STAGE_BY_REGISTRY: dict[str, StageKey] = {
     "constrain": "constrain",
     "theme": "theme",
     "shortlist": "shortlist",
+    # Task 054: every theory-of-change step and fan-out by its own name. The
+    # upload's read (``toc_read``) is the ``toc_draft`` component: the runner
+    # stamps it on the payload (:func:`stage_for_payload`).
+    "toc_draft": "toc_draft",
+    "toc_item_searches": "toc_item_searches",
+    "toc_select": "toc_select",
+    "toc_discover": "toc_discover",
+    "toc_merge": "toc_merge",
+    "toc_search_new": "toc_search_new",
+    "toc_new_link_searches": "toc_new_link_searches",
+    "toc_judge": "toc_judge",
+    "toc_search_again": "toc_search_again",
+    "toc_retry_searches": "toc_retry_searches",
+    "toc_figures": "toc_figures",
+    "toc_choose": "toc_choose",
+    "toc_summarise": "toc_summarise",
+    "toc_report": "toc_report",
 }
 
 
@@ -313,7 +409,14 @@ def stage_for_payload(payload: dict[str, Any]) -> StageKey | None:
     because the full-text screen's ``run.started`` payload carries
     ``registry_component = "screen"`` (the duplicate Screening row seen on
     staging and production, owner 2026-11-04).
+
+    A payload the runner stamped with a public ``stage`` reports under it
+    first: an uploaded theory's read is the ``toc_draft`` component, reported
+    as ``toc_read`` (task 054, S1).
     """
+    stamped = payload.get("stage")
+    if isinstance(stamped, str) and stamped in STAGE_KEYS:
+        return stamped
     from policy_atlas.runtime.steering import BASELINE_CONFIRM
     from policy_atlas.runtime.task_plan import canonical_steer_point, registry_component_for
 

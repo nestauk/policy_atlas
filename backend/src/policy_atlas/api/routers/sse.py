@@ -549,6 +549,8 @@ def _summary(payload: dict[str, Any]) -> dict[str, int | float | str]:
     hidden = {
         "component", "registry_component", "plan_id", "plan_version", "session_id",
         "already_in_store", "capability_run_id",
+        # The runner's stamp (task 054, S1) names the frame's stage; it is no count.
+        "stage",
     }
     summary: dict[str, int | float | str] = {
         key: value

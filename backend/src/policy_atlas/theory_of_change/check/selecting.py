@@ -20,7 +20,8 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core import events
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import events, liveness
 from policy_atlas.core.embeddings import (
     EMBEDDING_PROFILE,
     UNIT_POLICY,
@@ -457,7 +458,45 @@ def toc_select_scope(
             lambda: backend.pick(item_text=texts[key], candidates=shown, n=n),
         )
 
-    outcomes = dict(zip(called, _map_traced(run_pick, called, PICK_WORKERS), strict=True))
+    # The live count (task 054, A4): "n of M read · R relevant", over the
+    # documents the links choose from. A link with no call keeps them all at
+    # once; a called link counts when its pick lands. The done row's counts
+    # are the screen's own.
+    read_so_far: set[uuid.UUID] = set()
+    relevant_so_far: set[uuid.UUID] = set()
+    to_read = len({c.tss_id for key in targets for c in candidates[key]})
+
+    def publish() -> None:
+        liveness.publish_progress(
+            activity=activity(
+                "toc_select.progress",
+                done=len(read_so_far),
+                total=to_read,
+                relevant=len(relevant_so_far),
+            ),
+            done=len(read_so_far),
+            total=to_read,
+            unit="abstracts",
+        )
+
+    def on_pick(key: str, outcome: CallOutcome[Any]) -> None:
+        docs = candidates[key]
+        read_so_far.update(c.tss_id for c in docs)
+        relevant_so_far.update(
+            picked_ids(outcome.value.ids, docs, n)
+            if outcome.value is not None
+            else select_for_link(docs, n)
+        )
+        publish()
+
+    for key in targets - set(called):
+        read_so_far.update(c.tss_id for c in candidates[key])
+        relevant_so_far.update(c.tss_id for c in candidates[key])
+    if to_read:
+        publish()
+    outcomes = dict(
+        zip(called, _map_traced(run_pick, called, PICK_WORKERS, on_done=on_pick), strict=True)
+    )
     usage = UsageAccumulator()
     failed = 0
     per_link: dict[str, list[uuid.UUID]] = {}

@@ -18,6 +18,7 @@ from langgraph.graph import END, StateGraph
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.api.contract import StageKey
 from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY
 from policy_atlas.core import events, liveness
 from policy_atlas.core.embeddings import EmbeddingBackend, StubEmbeddingBackend
@@ -166,6 +167,14 @@ class HarnessState(TypedDict):
     summary: dict[str, Any] | None
     progress_emitter: ProgressEmitter | None
     error: str | None
+    #: The public stage the runner stamped on this run (task 054, S1), or None.
+    stage: StageKey | None
+
+
+def _stamp(state: HarnessState) -> dict[str, Any]:
+    """The runner's stage stamp for a lifecycle payload (task 054, S1), if any."""
+    stage = state.get("stage")
+    return {"stage": stage} if stage is not None else {}
 
 
 def _run_scope_component(
@@ -192,7 +201,7 @@ def _run_scope_component(
         events.append(
             conn, task_id=task_id, run_id=run_id,
             event_type="component.failed",
-            payload={"component": config.component, "error": err},
+            payload={"component": config.component, "error": err, **_stamp(state)},
         )
         return {**state, "error": err}
 
@@ -211,7 +220,7 @@ def _run_scope_component(
         # the 013 rule: a persisted rejection must persist its reason, or the
         # halt-and-re-gate is undiagnosable from the record.
         reason = getattr(exc, "reason", None)
-        payload: dict[str, Any] = {"component": config.component, "error": err}
+        payload: dict[str, Any] = {"component": config.component, "error": err, **_stamp(state)}
         if reason is not None:
             payload["reason"] = reason
         events.append(
@@ -859,6 +868,7 @@ def run_harness(
     longlist_backend: LonglistBackend | None = None,
     toc_backend: TocBackend | None = None,
     progress_emitter: ProgressEmitter | None = None,
+    stage: StageKey | None = None,
 ) -> dict[str, Any]:
     """Run the compiled harness graph for one run, persisting its output.
 
@@ -934,6 +944,9 @@ def run_harness(
             defaults to ``StubLonglistBackend()`` — no default egress.
         toc_backend: Model seam for every theory-of-change step (task 054);
             defaults to ``StubTocBackend()`` — no default egress.
+        stage: The public stage the runner stamped on this run, when its walk
+            names one other than the component's own (an uploaded theory's
+            read, task 054); ``None`` uses the component's.
 
     Returns:
         Harness outcome with ``summary`` populated only after successful
@@ -1040,6 +1053,7 @@ def run_harness(
         "summary": None,
         "progress_emitter": progress_emitter,
         "error": None,
+        "stage": stage,
     }
     # Bind run/component correlation once for every log call this component
     # execution makes (structlog's merge_contextvars processor picks these up),
@@ -1047,7 +1061,9 @@ def run_harness(
     # the innermost boundary that sees exactly one component execution: each
     # run_harness call dispatches to exactly one node (routed by config.component),
     # and it is the direct caller of node-level component work.
-    stage = STAGE_BY_REGISTRY.get(registry_component_for(config.component))
+    bound = stage if stage is not None else STAGE_BY_REGISTRY.get(
+        registry_component_for(config.component)
+    )
     # The walk this component run belongs to, so its ticks name it (round 11):
     # a longlist walk's option searches run the same stages as the walk.
     walk_id = conn.execute(
@@ -1055,12 +1071,12 @@ def run_harness(
     ).scalar_one_or_none()
     try:
         with liveness.task_liveness(
-            task_id, stage=stage, run_id=walk_id
+            task_id, stage=bound, run_id=walk_id
         ), structlog.contextvars.bound_contextvars(
             task_id=str(task_id), run_id=str(run_id), component=config.component,
         ):
             final: HarnessState = graph.invoke(initial)
     finally:
-        if stage is not None:
-            liveness.tick_hub.end_stage(task_id, stage, walk_id)
+        if bound is not None:
+            liveness.tick_hub.end_stage(task_id, bound, walk_id)
     return {"summary": final.get("summary"), "error": final.get("error")}

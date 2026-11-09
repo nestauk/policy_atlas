@@ -27,6 +27,10 @@ RunStatus = Literal[
     "interrupted",
 ]
 
+#: A theory-of-change walk's kind (task 054's 058 alignment, S3): the draft, an
+#: uploaded theory's read, a check, or "Update the report".
+TocWalkKind = Literal["draft", "read", "check", "report_update"]
+
 
 class StageCount(BaseModel):
     """One count a done row shows, with its noun: `312 found` (task 058, N17)."""
@@ -100,6 +104,11 @@ class RunOut(BaseModel):
             `targeted`, ...), or `None` for an Evidence search walk.
         stages: The walk's own steps in the order started (task 058, round
             11), on the list and the one-run reads; empty elsewhere.
+        toc_walk: A theory-of-change walk's kind, or `None` for any other
+            walk (task 054, S3).
+        follows_capability_run_id: For a check the server started by itself
+            after a draft, that draft walk's id; `None` otherwise (task 054,
+            S3).
     """
 
     capability_run_id: uuid.UUID
@@ -113,3 +122,5 @@ class RunOut(BaseModel):
     parent_capability_run_id: uuid.UUID | None = None
     purpose: str | None = None
     stages: list[RunStageOut] = Field(default_factory=list)
+    toc_walk: TocWalkKind | None = None
+    follows_capability_run_id: uuid.UUID | None = None

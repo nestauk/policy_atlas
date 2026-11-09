@@ -15,8 +15,10 @@ Restart rule: Start on a task that already has a graph mints a full check
 walk instead of drafting again (:func:`start_scope`), so a check that failed
 or was cut off always has a way forward.
 
-The Task Agent speaks twice, in code-authored lines with no model call (J3,
-J5): when the draft lands and when the check ends.
+The Task Agent speaks in code-authored lines with no model call (J5): when
+the check ends, and when an uploaded theory's read lands for the reader to
+review. When the check follows the draft by itself, the draft's landing is not
+announced: the two walks read as one run (task 054's 058 alignment, decision 13).
 """
 
 from __future__ import annotations
@@ -51,6 +53,7 @@ from policy_atlas.runtime.conversation_lifecycle import ensure_active_task_agent
 from policy_atlas.runtime.runner import RunnerBackends, RunPlanOutcome, run_plan
 from policy_atlas.runtime.toc_plan import (
     TOC_CHECK_MODE_KEY,
+    TOC_DRAFT_WALK_KEY,
     TOC_LINKS_KEY,
     TOC_PURPOSE,
     TOC_REVIEW_FIRST_KEY,
@@ -66,10 +69,9 @@ from policy_atlas.theory_of_change.store import has_graph
 
 log = structlog.get_logger()
 
-#: The context key naming the draft walk a check walk follows (the duplicate guard).
-DRAFT_WALK_KEY = "draft_capability_run_id"
-
-#: J3: the Task Agent's line when the draft lands.
+#: J3: the Task Agent's line when a draft lands with no check after it (an
+#: uploaded theory whose reading could not be found). Not posted when the
+#: check follows the draft by itself (decision 13).
 DRAFT_LANDED_MESSAGE = (
     "The draft is on the canvas. Policy Atlas is now checking each step against research "
     "and policy documents; you can read it while the check runs."
@@ -154,7 +156,7 @@ def mint_scope(
     if links:
         context[TOC_LINKS_KEY] = links
     if draft_run_id is not None:
-        context[DRAFT_WALK_KEY] = str(draft_run_id)
+        context[TOC_DRAFT_WALK_KEY] = str(draft_run_id)
     if mode is not None:
         context |= {TOC_CHECK_MODE_KEY: mode, TOC_STARTED_BY_KEY: started_by}
     if studies:
@@ -276,7 +278,7 @@ def _check_follows(conn: Connection, *, task_id: uuid.UUID, draft_run_id: uuid.U
             select(evidence_scope.c.evidence_scope_id)
             .where(evidence_scope.c.task_id == task_id)
             .where(evidence_scope.c.purpose == TOC_PURPOSE)
-            .where(evidence_scope.c.context[DRAFT_WALK_KEY].astext == str(draft_run_id))
+            .where(evidence_scope.c.context[TOC_DRAFT_WALK_KEY].astext == str(draft_run_id))
             .limit(1)
         ).first()
         is not None
@@ -292,9 +294,10 @@ def run_toc_sequence(
 ) -> RunPlanOutcome | None:
     """Follow a finished theory-of-change walk: draft → check, one hop.
 
-    After a successful draft walk: post the J3 line, mint the check walk
-    (unless one already follows this draft) and run it inline. After a check
-    walk (this one or a Start that restarted one): post the change list.
+    After a successful draft walk: mint the check walk (unless one already
+    follows this draft) and run it inline, with no line of its own between
+    the two (decision 13). After a check walk (this one or a Start that
+    restarted one): post the change list.
 
     Args:
         engine: Database engine.
@@ -327,7 +330,6 @@ def run_toc_sequence(
         # An uploaded theory (increment 5): the user checks the reading first.
         post_agent_message(engine, task_id=task_id, text=_review_text(engine, task_id))
         return None
-    post_agent_message(engine, task_id=task_id, text=DRAFT_LANDED_MESSAGE)
     with engine.connect() as conn:
         if _check_follows(conn, task_id=task_id, draft_run_id=walk_id):
             log.info("toc.check_already_follows", task_id=str(task_id))

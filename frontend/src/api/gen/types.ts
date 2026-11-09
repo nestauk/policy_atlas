@@ -3868,7 +3868,7 @@ export interface components {
             /** Ended At */
             ended_at?: string | null;
             /** Stage */
-            stage?: ("acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist") | null;
+            stage?: ("acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist" | "toc_draft" | "toc_read" | "toc_item_searches" | "toc_select" | "toc_discover" | "toc_merge" | "toc_search_new" | "toc_new_link_searches" | "toc_judge" | "toc_search_again" | "toc_retry_searches" | "toc_figures" | "toc_choose" | "toc_summarise" | "toc_report") | null;
             /** Stage Label */
             stage_label?: string | null;
             /**
@@ -5151,7 +5151,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist" | "toc_draft" | "toc_read" | "toc_item_searches" | "toc_select" | "toc_discover" | "toc_merge" | "toc_search_new" | "toc_new_link_searches" | "toc_judge" | "toc_search_again" | "toc_retry_searches" | "toc_figures" | "toc_choose" | "toc_summarise" | "toc_report";
         };
         /**
          * PlanUpdatedFrame
@@ -5485,6 +5485,11 @@ export interface components {
          *             `targeted`, ...), or `None` for an Evidence search walk.
          *         stages: The walk's own steps in the order started (task 058, round
          *             11), on the list and the one-run reads; empty elsewhere.
+         *         toc_walk: A theory-of-change walk's kind, or `None` for any other
+         *             walk (task 054, S3).
+         *         follows_capability_run_id: For a check the server started by itself
+         *             after a draft, that draft walk's id; `None` otherwise (task 054,
+         *             S3).
          */
         RunOut: {
             /** Artefact Id */
@@ -5496,6 +5501,8 @@ export interface components {
             capability_run_id: string;
             /** Ended At */
             ended_at?: string | null;
+            /** Follows Capability Run Id */
+            follows_capability_run_id?: string | null;
             /** Parent Capability Run Id */
             parent_capability_run_id?: string | null;
             /**
@@ -5524,6 +5531,8 @@ export interface components {
              * Format: uuid
              */
             task_id: string;
+            /** Toc Walk */
+            toc_walk?: ("draft" | "read" | "check" | "report_update") | null;
         };
         /**
          * RunStageOut
@@ -5560,7 +5569,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist" | "toc_draft" | "toc_read" | "toc_item_searches" | "toc_select" | "toc_discover" | "toc_merge" | "toc_search_new" | "toc_new_link_searches" | "toc_judge" | "toc_search_again" | "toc_retry_searches" | "toc_figures" | "toc_choose" | "toc_summarise" | "toc_report";
             /** Started At */
             started_at?: string | null;
             /**
@@ -6325,7 +6334,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist" | "toc_draft" | "toc_read" | "toc_item_searches" | "toc_select" | "toc_discover" | "toc_merge" | "toc_search_new" | "toc_new_link_searches" | "toc_judge" | "toc_search_again" | "toc_retry_searches" | "toc_figures" | "toc_choose" | "toc_summarise" | "toc_report";
             /** Summary */
             summary?: {
                 [key: string]: number | string;
@@ -6373,7 +6382,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist" | "toc_draft" | "toc_read" | "toc_item_searches" | "toc_select" | "toc_discover" | "toc_merge" | "toc_search_new" | "toc_new_link_searches" | "toc_judge" | "toc_search_again" | "toc_retry_searches" | "toc_figures" | "toc_choose" | "toc_summarise" | "toc_report";
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -6405,7 +6414,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist" | "toc_draft" | "toc_read" | "toc_item_searches" | "toc_select" | "toc_discover" | "toc_merge" | "toc_search_new" | "toc_new_link_searches" | "toc_judge" | "toc_search_again" | "toc_retry_searches" | "toc_figures" | "toc_choose" | "toc_summarise" | "toc_report";
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -7086,7 +7095,7 @@ export interface components {
              * Stage
              * @default null
              */
-            stage: ("acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist") | null;
+            stage: ("acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist" | "toc_draft" | "toc_read" | "toc_item_searches" | "toc_select" | "toc_discover" | "toc_merge" | "toc_search_new" | "toc_new_link_searches" | "toc_judge" | "toc_search_again" | "toc_retry_searches" | "toc_figures" | "toc_choose" | "toc_summarise" | "toc_report") | null;
             /**
              * Total
              * @default null

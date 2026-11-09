@@ -428,7 +428,7 @@ def test_memory_holds_one_tick_per_stage_and_one_draft() -> None:
     async def body() -> None:
         hub, clock = _hub()
         stages = get_args(StageKey)
-        assert len(stages) == 19
+        assert len(stages) == 34
         for round_ in range(20):
             clock.now = round_ * 1.0
             for stage in stages:
@@ -443,7 +443,7 @@ def test_memory_holds_one_tick_per_stage_and_one_draft() -> None:
         assert {t.activity for t in ticks} == {f"{stage} 19" for stage in stages}
         assert len(drafts) == 1
         memory = hub._tasks[TASK]
-        assert len(memory.stages) == 19
+        assert len(memory.stages) == 34
         assert all(entry.pending is None for entry in memory.stages.values())
 
     _run(body)

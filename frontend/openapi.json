@@ -3776,7 +3776,22 @@
                   "option_profile",
                   "constrain",
                   "theme",
-                  "shortlist"
+                  "shortlist",
+                  "toc_draft",
+                  "toc_read",
+                  "toc_item_searches",
+                  "toc_select",
+                  "toc_discover",
+                  "toc_merge",
+                  "toc_search_new",
+                  "toc_new_link_searches",
+                  "toc_judge",
+                  "toc_search_again",
+                  "toc_retry_searches",
+                  "toc_figures",
+                  "toc_choose",
+                  "toc_summarise",
+                  "toc_report"
                 ],
                 "type": "string"
               },
@@ -6285,7 +6300,22 @@
               "option_profile",
               "constrain",
               "theme",
-              "shortlist"
+              "shortlist",
+              "toc_draft",
+              "toc_read",
+              "toc_item_searches",
+              "toc_select",
+              "toc_discover",
+              "toc_merge",
+              "toc_search_new",
+              "toc_new_link_searches",
+              "toc_judge",
+              "toc_search_again",
+              "toc_retry_searches",
+              "toc_figures",
+              "toc_choose",
+              "toc_summarise",
+              "toc_report"
             ],
             "title": "Stage",
             "type": "string"
@@ -6799,7 +6829,7 @@
         "type": "object"
       },
       "RunOut": {
-        "description": "A capability run resource.\n\nArgs:\n    capability_run_id: The run's identity.\n    task_id: Owning task.\n    plan_id: Identity of the plan the run executes.\n    plan_version: Plan version current at run creation.\n    status: Current run status.\n    started_at: When the run started executing.\n    ended_at: When the run reached a terminal status, or `None` while\n        still running or paused.\n    artefact_id: The artefact this walk wrote, or `None` when it wrote\n        none (it has not reached synthesise, or ended before it). A\n        scoping walk that carries one produced a baseline, whatever its\n        terminal status (task 044 review, C5/C6).\n    parent_capability_run_id: The walk that dispatched this one (a longlist\n        walk's option search), or `None` for a parentless walk (task 045).\n    purpose: The walk's intent-record purpose (`baseline`, `longlist`,\n        `targeted`, ...), or `None` for an Evidence search walk.\n    stages: The walk's own steps in the order started (task 058, round\n        11), on the list and the one-run reads; empty elsewhere.",
+        "description": "A capability run resource.\n\nArgs:\n    capability_run_id: The run's identity.\n    task_id: Owning task.\n    plan_id: Identity of the plan the run executes.\n    plan_version: Plan version current at run creation.\n    status: Current run status.\n    started_at: When the run started executing.\n    ended_at: When the run reached a terminal status, or `None` while\n        still running or paused.\n    artefact_id: The artefact this walk wrote, or `None` when it wrote\n        none (it has not reached synthesise, or ended before it). A\n        scoping walk that carries one produced a baseline, whatever its\n        terminal status (task 044 review, C5/C6).\n    parent_capability_run_id: The walk that dispatched this one (a longlist\n        walk's option search), or `None` for a parentless walk (task 045).\n    purpose: The walk's intent-record purpose (`baseline`, `longlist`,\n        `targeted`, ...), or `None` for an Evidence search walk.\n    stages: The walk's own steps in the order started (task 058, round\n        11), on the list and the one-run reads; empty elsewhere.\n    toc_walk: A theory-of-change walk's kind, or `None` for any other\n        walk (task 054, S3).\n    follows_capability_run_id: For a check the server started by itself\n        after a draft, that draft walk's id; `None` otherwise (task 054,\n        S3).",
         "properties": {
           "artefact_id": {
             "anyOf": [
@@ -6829,6 +6859,18 @@
               }
             ],
             "title": "Ended At"
+          },
+          "follows_capability_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Follows Capability Run Id"
           },
           "parent_capability_run_id": {
             "anyOf": [
@@ -6891,6 +6933,23 @@
             "format": "uuid",
             "title": "Task Id",
             "type": "string"
+          },
+          "toc_walk": {
+            "anyOf": [
+              {
+                "enum": [
+                  "draft",
+                  "read",
+                  "check",
+                  "report_update"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Toc Walk"
           }
         },
         "required": [
@@ -6961,7 +7020,22 @@
               "option_profile",
               "constrain",
               "theme",
-              "shortlist"
+              "shortlist",
+              "toc_draft",
+              "toc_read",
+              "toc_item_searches",
+              "toc_select",
+              "toc_discover",
+              "toc_merge",
+              "toc_search_new",
+              "toc_new_link_searches",
+              "toc_judge",
+              "toc_search_again",
+              "toc_retry_searches",
+              "toc_figures",
+              "toc_choose",
+              "toc_summarise",
+              "toc_report"
             ],
             "title": "Stage",
             "type": "string"
@@ -8684,7 +8758,22 @@
               "option_profile",
               "constrain",
               "theme",
-              "shortlist"
+              "shortlist",
+              "toc_draft",
+              "toc_read",
+              "toc_item_searches",
+              "toc_select",
+              "toc_discover",
+              "toc_merge",
+              "toc_search_new",
+              "toc_new_link_searches",
+              "toc_judge",
+              "toc_search_again",
+              "toc_retry_searches",
+              "toc_figures",
+              "toc_choose",
+              "toc_summarise",
+              "toc_report"
             ],
             "title": "Stage",
             "type": "string"
@@ -8798,7 +8887,22 @@
               "option_profile",
               "constrain",
               "theme",
-              "shortlist"
+              "shortlist",
+              "toc_draft",
+              "toc_read",
+              "toc_item_searches",
+              "toc_select",
+              "toc_discover",
+              "toc_merge",
+              "toc_search_new",
+              "toc_new_link_searches",
+              "toc_judge",
+              "toc_search_again",
+              "toc_retry_searches",
+              "toc_figures",
+              "toc_choose",
+              "toc_summarise",
+              "toc_report"
             ],
             "title": "Stage",
             "type": "string"
@@ -8874,7 +8978,22 @@
               "option_profile",
               "constrain",
               "theme",
-              "shortlist"
+              "shortlist",
+              "toc_draft",
+              "toc_read",
+              "toc_item_searches",
+              "toc_select",
+              "toc_discover",
+              "toc_merge",
+              "toc_search_new",
+              "toc_new_link_searches",
+              "toc_judge",
+              "toc_search_again",
+              "toc_retry_searches",
+              "toc_figures",
+              "toc_choose",
+              "toc_summarise",
+              "toc_report"
             ],
             "title": "Stage",
             "type": "string"
@@ -10009,7 +10128,22 @@
                   "option_profile",
                   "constrain",
                   "theme",
-                  "shortlist"
+                  "shortlist",
+                  "toc_draft",
+                  "toc_read",
+                  "toc_item_searches",
+                  "toc_select",
+                  "toc_discover",
+                  "toc_merge",
+                  "toc_search_new",
+                  "toc_new_link_searches",
+                  "toc_judge",
+                  "toc_search_again",
+                  "toc_retry_searches",
+                  "toc_figures",
+                  "toc_choose",
+                  "toc_summarise",
+                  "toc_report"
                 ],
                 "type": "string"
               },

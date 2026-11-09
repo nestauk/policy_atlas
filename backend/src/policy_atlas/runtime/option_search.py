@@ -761,7 +761,9 @@ def _fan_out[T](
         total=len(child_ids),
         **(extra or {}),
     )
-    _start_progress_poll(engine, task_id=task_id, parent_id=parent_id, child_ids=child_ids)
+    _start_progress_poll(
+        engine, task_id=task_id, parent_id=parent_id, child_ids=child_ids, stage=stage
+    )
     return child_ids
 
 
@@ -907,7 +909,7 @@ def join_option_searches(
     _stop_progress_poll(parent_id)
     while True:
         statuses, sources = _publish_progress(
-            engine, task_id=task_id, parent_id=parent_id, child_ids=child_ids
+            engine, task_id=task_id, parent_id=parent_id, child_ids=child_ids, stage=stage
         )
         pending = [child for child in child_ids if not _ended(child, statuses.get(child))]
         if not pending or time.monotonic() >= deadline:
@@ -958,11 +960,21 @@ def _publish_progress(
     task_id: uuid.UUID,
     parent_id: uuid.UUID,
     child_ids: list[uuid.UUID],
+    stage: str = OPTION_SEARCHES_STAGE,
 ) -> tuple[dict[uuid.UUID, str], int]:
     """Read the children once and publish the stage's progress tick.
 
-    The one body of the join's loop and the fan-out's progress poll: "n of M
-    searches done · S sources", on the walk's ``option_searches`` row.
+    The one body of the join's loop and the fan-out's progress poll, on the
+    walk's fan-out row: "n of M searches done · S sources" for the option
+    searches, "n of M searches done · S found" for a theory of change's item
+    searches (task 054, A3).
+
+    Args:
+        engine: Database engine.
+        task_id: The task.
+        parent_id: The walk that fanned out.
+        child_ids: The children the fan-out dispatched.
+        stage: The fan-out's stage, which the tick is published under.
 
     Returns:
         The children's statuses and the sources they have acquired.
@@ -973,12 +985,18 @@ def _publish_progress(
     finished = sum(1 for child in child_ids if statuses.get(child) in _FINISHED)
     tick_hub.publish_tick(
         task_id,
-        stage=OPTION_SEARCHES_STAGE,
-        activity=activity(
-            "option_searches.progress",
-            done=finished,
-            total=len(child_ids),
-            sources=sources,
+        stage=stage,
+        activity=(
+            activity(
+                "option_searches.progress",
+                done=finished,
+                total=len(child_ids),
+                sources=sources,
+            )
+            if stage == OPTION_SEARCHES_STAGE
+            else activity(
+                "toc_searches.progress", done=finished, total=len(child_ids), found=sources
+            )
         ),
         done=finished,
         total=len(child_ids),
@@ -994,6 +1012,7 @@ def _start_progress_poll(
     task_id: uuid.UUID,
     parent_id: uuid.UUID,
     child_ids: list[uuid.UUID],
+    stage: str = OPTION_SEARCHES_STAGE,
 ) -> None:
     """Keep the stage's count current from the fan-out until the join.
 
@@ -1012,6 +1031,7 @@ def _start_progress_poll(
         task_id: The task.
         parent_id: The longlist walk.
         child_ids: The children the fan-out dispatched.
+        stage: The fan-out's stage, which the ticks are published under.
     """
     if not child_ids:
         return
@@ -1023,7 +1043,7 @@ def _start_progress_poll(
         """Publish once; whether the poll should go on."""
         try:
             statuses, _ = _publish_progress(
-                engine, task_id=task_id, parent_id=parent_id, child_ids=child_ids
+                engine, task_id=task_id, parent_id=parent_id, child_ids=child_ids, stage=stage
             )
         except Exception:
             log.warning(

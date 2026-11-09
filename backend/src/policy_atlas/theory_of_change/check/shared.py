@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable, Iterable, Mapping
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Any
 
@@ -378,14 +378,36 @@ def _outcome_value[T](outcome: CallOutcome[T], usage: UsageAccumulator) -> T | N
     return outcome.value
 
 
-def _map_traced[A, R](fn: Callable[[A], R], items: list[A], workers: int) -> list[R]:
+def _map_traced[A, R](
+    fn: Callable[[A], R],
+    items: list[A],
+    workers: int,
+    on_done: Callable[[A, R], None] | None = None,
+) -> list[R]:
     """Run ``fn`` over ``items`` in a thread pool, in order, each under the caller's context.
 
     The context carries the run's Langfuse trace and session (the task id), so
     every model call in the pool is traced under the task's session (C30).
+
+    Args:
+        fn: The work for one item.
+        items: The items.
+        workers: Calls in flight at once.
+        on_done: Called with each item and its result as it finishes, in the
+            order they finish, on the calling thread (where the run's live
+            progress is bound; task 054, A4). An item whose work raised is
+            not passed to it.
+
+    Returns:
+        The results, in the order of ``items``.
     """
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = [tracing.submit_with_context(executor, fn, item) for item in items]
+        if on_done is not None:
+            item_of = dict(zip(futures, items, strict=True))
+            for future in as_completed(futures):
+                if future.exception() is None:
+                    on_done(item_of[future], future.result())
         return [future.result() for future in futures]
 
 

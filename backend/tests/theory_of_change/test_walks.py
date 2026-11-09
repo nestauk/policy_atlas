@@ -322,7 +322,8 @@ def test_start_drafts_then_checks_and_the_thread_stays_open(
         )
     assert statuses and set(statuses) == {"relevant"}
     replies = _replies(engine, task_id)
-    assert replies[0] == DRAFT_LANDED_MESSAGE
+    # The check follows by itself: no line when the draft lands (058 alignment, A8).
+    assert DRAFT_LANDED_MESSAGE not in replies
     assert replies[-1].endswith(STRESS_TEST_MESSAGE)
     order = [c for c in _component_events(engine, task_id) if c.startswith("toc_")]
     assert order == [

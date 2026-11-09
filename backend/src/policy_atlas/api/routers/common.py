@@ -16,6 +16,7 @@ from sqlalchemy import cast as cast_sql
 from sqlalchemy.engine import Connection, RowMapping
 
 from policy_atlas.api.contract import LatestRun, RunOut, StageKey, TaskLinkOut, TaskOut
+from policy_atlas.api.contract.runs import TocWalkKind
 from policy_atlas.api.identity import owner_display_for
 from policy_atlas.api.routers.access import readable_task_leg
 from policy_atlas.api.stage_vocabulary import presentation, stage_for_payload
@@ -33,6 +34,15 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, THEORY_OF_CHANGE
+from policy_atlas.runtime.toc_plan import (
+    TOC_CHECK_MODE_KEY,
+    TOC_DRAFT_WALK_KEY,
+    TOC_PURPOSE,
+    TOC_REVIEW_FIRST_KEY,
+    TOC_WALK_CHECK,
+    TOC_WALK_DRAFT,
+    TOC_WALK_KEY,
+)
 
 #: Sentinel for "resolve the owner's display name yourself". Distinct from
 #: ``None``, which is a legitimate resolved value (an ownerless row).
@@ -263,13 +273,56 @@ def run_purpose_column() -> Any:
     )
 
 
+def run_scope_context_column() -> Any:
+    """The walk's intent-record context, as a labelled scalar subquery.
+
+    Selected beside ``capability_run`` so :func:`run_out` can name a theory of
+    change walk's kind and the draft a check follows (task 054, S3).
+    """
+    return (
+        select(evidence_scope.c.context)
+        .where(evidence_scope.c.evidence_scope_id == capability_run.c.evidence_scope_id)
+        .where(evidence_scope.c.task_id == capability_run.c.task_id)
+        .limit(1)
+        .scalar_subquery()
+        .label("scope_context")
+    )
+
+
+def _toc_walk(row: RowMapping | dict[str, Any]) -> tuple[TocWalkKind | None, uuid.UUID | None]:
+    """A theory-of-change walk's kind and the draft walk a check follows (task 054, S3).
+
+    Args:
+        row: A capability-run row selected with :func:`run_purpose_column` and
+            :func:`run_scope_context_column`.
+
+    Returns:
+        ``(kind, follows)``: ``draft``, ``read`` (an uploaded theory's draft
+        walk), ``check`` or ``report_update``, and the draft walk's id for a
+        check the server started after it; ``(None, None)`` for any other walk.
+    """
+    context = row.get("scope_context")
+    if row.get("purpose") != TOC_PURPOSE or not isinstance(context, dict):
+        return None, None
+    walk = context.get(TOC_WALK_KEY)
+    kind: TocWalkKind | None = None
+    if walk == TOC_WALK_DRAFT:
+        kind = "read" if context.get(TOC_REVIEW_FIRST_KEY) else "draft"
+    elif walk == TOC_WALK_CHECK:
+        kind = "report_update" if context.get(TOC_CHECK_MODE_KEY) == "report" else "check"
+    draft = context.get(TOC_DRAFT_WALK_KEY)
+    return kind, uuid.UUID(draft) if isinstance(draft, str) else None
+
+
 def run_out(row: RowMapping | dict[str, Any]) -> RunOut:
     """Project one capability-run row into its public contract shape.
 
-    ``artefact_id`` and ``purpose`` are read when the row was selected with
-    :func:`run_artefact_id_column` / :func:`run_purpose_column`; a bare
+    ``artefact_id``, ``purpose`` and the theory-of-change walk fields are read
+    when the row was selected with :func:`run_artefact_id_column`,
+    :func:`run_purpose_column` and :func:`run_scope_context_column`; a bare
     ``capability_run`` row reports none.
     """
+    toc_walk, follows = _toc_walk(row)
     return RunOut(
         capability_run_id=row["capability_run_id"],
         task_id=row["task_id"],
@@ -281,6 +334,8 @@ def run_out(row: RowMapping | dict[str, Any]) -> RunOut:
         artefact_id=row.get("artefact_id"),
         parent_capability_run_id=row.get("parent_capability_run_id"),
         purpose=row.get("purpose"),
+        toc_walk=toc_walk,
+        follows_capability_run_id=follows,
     )
 
 

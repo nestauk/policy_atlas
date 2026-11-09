@@ -15,7 +15,8 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core import events
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import events, liveness
 from policy_atlas.core.embeddings import (
     EmbeddingBackend,
 )
@@ -249,9 +250,28 @@ def toc_judge_scope(
             ),
         )
 
-    outcomes = _map_traced(run_job, jobs, JUDGE_WORKERS)
+    # The live count (task 054, A4): "n of M documents", one tick per finished
+    # call, coalesced by the hub as every stage's ticks are.
+    judged_so_far = 0
 
-    stored = unverified = failed = 0
+    def publish() -> None:
+        liveness.publish_progress(
+            activity=activity("toc_judge.progress", done=judged_so_far, total=len(jobs)),
+            done=judged_so_far,
+            total=len(jobs),
+            unit="documents",
+        )
+
+    def on_judged(_job: _JudgeJob, _outcome: CallOutcome[Any]) -> None:
+        nonlocal judged_so_far
+        judged_so_far += 1
+        publish()
+
+    if jobs:
+        publish()
+    outcomes = _map_traced(run_job, jobs, JUDGE_WORKERS, on_done=on_judged)
+
+    stored = unverified = failed = test_them = 0
     started_by = context.context.get(TOC_STARTED_BY_KEY)
     find_more = context.context.get(TOC_CHECK_MODE_KEY) == "find_more"
     study_links = set(context.context.get(TOC_STUDIES_KEY) or {})
@@ -339,6 +359,8 @@ def toc_judge_scope(
             },
         )
         stored += 1
+        # The done row's "test them" (task 054, S2): judgements about the step.
+        test_them += int(about)
 
     # Every covered link now counts the judgements of its current wording (C19).
     # Find more evidence leaves that alone: what it found waits as pending (C44).
@@ -399,6 +421,7 @@ def toc_judge_scope(
         "calls": len(jobs),
         "failed_calls": failed,
         "judgements": stored,
+        "test_them": test_them,
         "programme_judgements": len(programme),
         "unverified_dropped": unverified,
         "backend_mode": backend.mode,

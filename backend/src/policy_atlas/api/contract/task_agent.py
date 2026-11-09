@@ -83,6 +83,21 @@ PlanStageKey = Literal[
     "constrain",
     "theme",
     "shortlist",
+    "toc_draft",
+    "toc_read",
+    "toc_item_searches",
+    "toc_select",
+    "toc_discover",
+    "toc_merge",
+    "toc_search_new",
+    "toc_new_link_searches",
+    "toc_judge",
+    "toc_search_again",
+    "toc_retry_searches",
+    "toc_figures",
+    "toc_choose",
+    "toc_summarise",
+    "toc_report",
 ]
 
 #: Country-group membership provenance. Mirrors

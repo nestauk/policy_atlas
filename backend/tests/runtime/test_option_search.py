@@ -1394,3 +1394,60 @@ def test_a_late_finish_never_overwrites_an_ended_option_search(
         assert _terminal_events(engine, task_id, child) == ["run.finished"]
     finally:
         _cleanup(engine, task_id)
+
+
+# --- the fan-out's stage (task 054's 058 alignment, A3) ---------------------
+
+
+@pytest.mark.parametrize(
+    ("stage", "line"),
+    [
+        (option_search.OPTION_SEARCHES_STAGE, "1 of 2 searches done · 1,234 sources"),
+        (option_search.TOC_ITEM_SEARCHES_STAGE, "1 of 2 searches done · 1,234 found"),
+        (option_search.TOC_NEW_LINK_SEARCHES_STAGE, "1 of 2 searches done · 1,234 found"),
+        (option_search.TOC_RETRY_SEARCHES_STAGE, "1 of 2 searches done · 1,234 found"),
+    ],
+)
+def test_the_progress_tick_names_the_fan_outs_stage(
+    monkeypatch: pytest.MonkeyPatch, stage: str, line: str
+) -> None:
+    """A theory of change's fan-outs tick under their own key, Options scoping's as before."""
+    from contextlib import nullcontext
+    from typing import cast
+
+    ticks: list[dict[str, Any]] = []
+    done, running = uuid.uuid4(), uuid.uuid4()
+
+    class FakeHub:
+        def publish_tick(self, task_id: uuid.UUID, **payload: Any) -> None:
+            ticks.append(payload)
+
+    class FakeEngine:
+        def connect(self) -> Any:
+            return nullcontext(None)
+
+    monkeypatch.setattr(option_search, "tick_hub", FakeHub())
+    monkeypatch.setattr(
+        option_search, "child_walks", lambda conn, **_: {done: "succeeded", running: "running"}
+    )
+    monkeypatch.setattr(option_search, "child_acquired_total", lambda conn, **_: 1234)
+    parent = uuid.uuid4()
+    # Options scoping passes no stage: its call is unchanged.
+    options = stage == option_search.OPTION_SEARCHES_STAGE
+    kwargs: dict[str, Any] = {} if options else {"stage": stage}
+    option_search._publish_progress(
+        cast(Any, FakeEngine()),
+        task_id=uuid.uuid4(),
+        parent_id=parent,
+        child_ids=[done, running],
+        **kwargs,
+    )
+    [tick] = ticks
+    assert tick == {
+        "stage": stage,
+        "activity": line,
+        "done": 1,
+        "total": 2,
+        "unit": "searches",
+        "run_id": parent,
+    }
