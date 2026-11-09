@@ -146,7 +146,8 @@ function renderReport({
   landscape = { isError: false, data: { years: { 2019: 1, 2024: 2 }, evidence_types: { "Systematic Review and Meta-Analysis": 2 } } },
   publicView = false,
   funnel,
-}: { landscape?: Landscape; publicView?: boolean; funnel?: Record<string, number> } = {}) {
+  plan = null,
+}: { landscape?: Landscape; publicView?: boolean; funnel?: Record<string, number>; plan?: unknown } = {}) {
   vi.mocked(queries.useTask).mockReturnValue({
     data: {
       task_id: TASK_ID,
@@ -166,7 +167,7 @@ function renderReport({
   vi.mocked(queries.useLandscape).mockReturnValue(landscape as unknown as ReturnType<typeof queries.useLandscape>);
   vi.mocked(queries.useFunnel).mockReturnValue({ data: funnel } as unknown as ReturnType<typeof queries.useFunnel>);
   vi.mocked(queries.useApiClient).mockReturnValue({} as ReturnType<typeof queries.useApiClient>);
-  vi.mocked(queries.usePlan).mockReturnValue({ data: null } as unknown as ReturnType<typeof queries.usePlan>);
+  vi.mocked(queries.usePlan).mockReturnValue({ data: plan } as unknown as ReturnType<typeof queries.usePlan>);
   vi.mocked(queries.useRuns).mockReturnValue({ data: undefined } as unknown as ReturnType<typeof queries.useRuns>);
   vi.mocked(store.useRunStream).mockReturnValue(createInitialRunStreamState());
   vi.mocked(conversationState.useActiveConversation).mockReturnValue({
@@ -405,6 +406,68 @@ describe("the committed report page (task 058, round 10)", () => {
     const boxes = sheet.querySelectorAll("[data-citation-block]");
     expect(boxes).toHaveLength(2);
     for (const box of boxes) expect(box.querySelector("[data-judge-block]")).toBeNull();
+  });
+
+  it("titles the report with the plan's refined question, the task's question without one (round 14)", () => {
+    const view = renderReport({
+      plan: { plan: { question: "What raises take-up of free school meals among eligible families?" } },
+    });
+    expect(
+      screen.getByRole("heading", { level: 1, name: "What raises take-up of free school meals among eligible families?" }),
+    ).toBeInTheDocument();
+    view.unmount();
+    renderReport();
+    expect(screen.getByRole("heading", { level: 1, name: QUESTION })).toBeInTheDocument();
+  });
+
+  it("sets the boxes' marks line under the title: type, strength with its square, then the facts at Meta Grey (round 14)", () => {
+    renderReport();
+    const card = screen.getByRole("heading", { level: 4, name: "Leeds pilot" }).closest("li") as HTMLElement;
+    const sources = screen.getByRole("heading", { name: "Most relevant sources" }).closest("section") as HTMLElement;
+    const entry = within(sources).getAllByRole("listitem")[0];
+    for (const box of [card, entry]) {
+      // No chips: one marks line.
+      expect(box.querySelector(".text-\\[11\\.5px\\]")).toBeNull();
+      const line = box.querySelector("[data-marks-line]") as HTMLElement;
+      expect(line).toHaveClass("text-meta", "text-grey");
+      expect(within(line).getByTestId("strength-mark")).toBeInTheDocument();
+    }
+    expect(card.querySelector("[data-marks-line]")).toHaveTextContent(
+      /^RCTs and quasi-experimental studies\s*·\s*Very strong$/,
+    );
+    // Under the title, before the prose.
+    const title = within(card).getByRole("heading", { level: 4 });
+    expect(title.nextElementSibling).toHaveAttribute("data-marks-line");
+    expect(entry.querySelector("[data-marks-line]")).toHaveTextContent(
+      /^Systematic review and meta-analysis\s*·\s*Very strong\s*·\s*Cited by 2 claims$/,
+    );
+  });
+
+  it("sets the method as one column: every table at the prose measure, one figure column, figures alone (round 14)", async () => {
+    const user = userEvent.setup();
+    renderReport({
+      funnel: { found: 312, relevant: 118, read_in_full: 64, selected: 40, cited: 12 },
+      landscape: {
+        isError: false,
+        data: { years: { 2019: 1 }, evidence_types: { "Systematic Review and Meta-Analysis": 2 }, themes: [{ theme_id: "t-1", name: "School food", size: 2 }] },
+      },
+    });
+    const method = screen.getByRole("heading", { level: 2, name: "How the evidence was gathered" });
+    const section = method.closest("section") as HTMLElement;
+    await user.click(within(method).getByRole("button"));
+    const tables = within(section).getAllByRole("table");
+    expect(tables.length).toBe(4);
+    for (const table of tables) {
+      expect(table).toHaveClass("w-full", "max-w-prose-measure", "table-fixed");
+      expect(table.className).not.toMatch(/32rem/);
+      for (const cell of within(table).getAllByRole("cell")) {
+        expect(cell).toHaveClass("w-20", "text-right", "tabular-nums", "text-navy");
+        expect(cell.textContent).toMatch(/^\d+$/);
+      }
+    }
+    // One spacing between the parts, and the sentence once.
+    expect(tables[0].parentElement).toHaveClass("space-y-8");
+    expect(within(section).getAllByText(/covers only the cited sources/)).toHaveLength(1);
   });
 
   it("sets the appraisal chip in the soft tone and evidence types in sentence case", () => {

@@ -167,6 +167,17 @@ describe("ArtefactView around a run", () => {
     expect(screen.queryByText(/Preparing your results/)).toBeNull();
   });
 
+  it("titles the live page with the plan's refined question (round 14)", () => {
+    vi.mocked(queries.usePlan).mockReturnValue({
+      data: { plan: { question: "What raises take-up of funded childcare among eligible families?" } },
+    } as unknown as ReturnType<typeof queries.usePlan>);
+    world.stream = streamOf("running", SECTIONS);
+    render(page());
+    expect(
+      screen.getByRole("heading", { level: 1, name: "What raises take-up of funded childcare among eligible families?" }),
+    ).toBeInTheDocument();
+  });
+
   it("keeps the live body while the run is paused on a check-in", () => {
     world.stream = streamOf("paused", SECTIONS);
     render(page());

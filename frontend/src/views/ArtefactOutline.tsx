@@ -698,11 +698,16 @@ export function gatheredSectionShows(landscape: {
 /** The method's tables (owner, round 11): ruled rows at Body, the label
  *  left and the figure right-aligned in one column of tabular figures, every
  *  table one width so the figures line up down the section. */
-const GATHERED_TABLE_CLASS = "w-full max-w-[32rem] border-t border-line text-body";
-const GATHERED_CAPTION_CLASS = "pb-1.5 text-left font-semibold text-navy";
+/* The method's tables (owner, round 14): one width, the report's prose
+   measure, so the section reads as one column; one figure column at the
+   right of every table, the same width in each, the numbers Navy in
+   tabular figures, so they line up down the whole section; the rows ruled
+   by Line hairlines; 32px between tables. */
+const GATHERED_TABLE_CLASS = "w-full max-w-prose-measure table-fixed border-collapse border-t border-line text-body";
+const GATHERED_CAPTION_CLASS = "pb-2 text-left font-semibold text-navy";
 const GATHERED_ROW_CLASS = "border-b border-line";
-const GATHERED_LABEL_CELL_CLASS = "py-1.5 pr-6 text-left align-top font-normal text-ink";
-const GATHERED_COUNT_CELL_CLASS = "whitespace-nowrap py-1.5 text-right align-top text-navy";
+const GATHERED_LABEL_CELL_CLASS = "py-2 pr-6 text-left align-top font-normal text-ink";
+const GATHERED_COUNT_CELL_CLASS = "w-20 whitespace-nowrap py-2 text-right align-top tabular-nums text-navy";
 
 /**
  * The run's stages from the search to the report, in the Landscape funnel's
@@ -802,13 +807,6 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
 
   if (!gatheredSectionShows(landscape)) return null;
 
-  // The figure alone takes tabular figures: under them some faces widen the
-  // space before the word as well.
-  const countCell = (count: number) => (
-    <>
-      <span className="tabular-nums">{count}</span> {count === 1 ? "document" : "documents"}
-    </>
-  );
   return (
     <section id={id} className="mt-12 border-t border-line pt-6">
       <DisclosureHeading level={2} open={open} onToggle={() => setOpen((value) => !value)}>
@@ -820,7 +818,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
       )}
       {!open && <MobileDisclosureToggle expanded={false} onToggle={() => setOpen(true)} />}
       {open && (
-        <div className="mt-4 space-y-6">
+        <div className="mt-4 space-y-8">
           {/* The search to the report, one stage a row, the numbers in one
               column (owner, round 11); the stages carry the Landscape
               funnel's names. */}
@@ -832,12 +830,14 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
                     <th scope="row" className={GATHERED_LABEL_CELL_CLASS}>
                       <GatheredLabel href={gatheredCountHref(allSources, label)}>{label}</GatheredLabel>
                     </th>
-                    <td className={cn(GATHERED_COUNT_CELL_CLASS, "tabular-nums")}>{count}</td>
+                    <td className={GATHERED_COUNT_CELL_CLASS}>{count}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
+          {/* The one sentence, between the search's counts and the cited
+              sources' tables it introduces. */}
           <p className="max-w-prose-measure text-body text-grey">
             The rest of this section covers only the cited sources;{" "}
             <Link to={`/tasks/${taskId}/sources/landscape`} className={LINK_CLASS}>
@@ -855,13 +855,13 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
                       <th scope="row" className={GATHERED_LABEL_CELL_CLASS}>
                         <GatheredLabel href={href}>{scrub(label)}</GatheredLabel>
                       </th>
-                      <td className={cn(GATHERED_COUNT_CELL_CLASS, "text-grey")}>{countCell(count)}</td>
+                      <td className={GATHERED_COUNT_CELL_CLASS}>{count}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
               {row.label === "Where published" && (
-                <p className="mt-2 max-w-prose-measure text-body text-grey">
+                <p className="mt-2 max-w-prose-measure text-meta text-grey">
                   {/* Task 031: the read model reads the publishing venue's country only —
                       never the authors' affiliations, and never where the study was set. */}
                   The country of the publishing venue, when the database reports it — not where
@@ -881,9 +881,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
                         {scrub(theme.name)}
                       </GatheredLabel>
                     </th>
-                    {/* The counts at the list's size, one style beside the
-                        distributions' (round 10, finding 11). */}
-                    <td className={cn(GATHERED_COUNT_CELL_CLASS, "text-grey")}>{countCell(theme.size)}</td>
+                    <td className={GATHERED_COUNT_CELL_CLASS}>{theme.size}</td>
                   </tr>
                 ))}
               </tbody>

@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
-import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useLonglist, useRuns, useTask, useSourceDossier } from "../api/queries";
+import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useLonglist, usePlan, useRuns, useTask, useSourceDossier } from "../api/queries";
 import { useQuery } from "@tanstack/react-query";
 import {
   cardEvidenceMeta,
@@ -439,6 +439,44 @@ export function CitationQuote({
   );
 }
 
+/** A source's marks line (owner, round 14): the evidence type (dotted,
+ *  its classifier's reasoning on hover), then the strength with its tone
+ *  square (its appraisal on hover), then any plain facts ("Since 2019",
+ *  "Cited by 3 claims"), at Meta Grey, joined by middots. One line for the
+ *  citation sheet, the case studies and the most relevant sources. Nothing
+ *  when there is nothing to say. */
+function EvidenceMarksLine({
+  taskId,
+  sourceId,
+  evidenceType,
+  strength,
+  facts = [],
+  className,
+}: {
+  taskId: string;
+  sourceId: string | null;
+  evidenceType: string | null;
+  strength: string | null;
+  facts?: readonly string[];
+  className?: string;
+}) {
+  const parts: ReactNode[] = [];
+  if (evidenceType !== null) parts.push(<ClassificationHint key="type" taskId={taskId} sourceId={sourceId} type={evidenceType} />);
+  if (strength !== null) parts.push(<StrengthHint key="strength" label={strength} evidenceType={evidenceType} />);
+  for (const fact of facts) parts.push(<span key={fact}>{fact}</span>);
+  if (parts.length === 0) return null;
+  return (
+    <p data-marks-line="" className={cn("flex flex-wrap items-center gap-x-1.5 text-meta text-grey", className)}>
+      {parts.map((part, at) => (
+        <Fragment key={at}>
+          {at > 0 && <span aria-hidden="true">·</span>}
+          {part}
+        </Fragment>
+      ))}
+    </p>
+  );
+}
+
 /** One source's provenance block (owner, round 13): its own box (a Line
  *  hairline, no coloured rule: that is the Claim's). The report's sheet
  *  groups a claim's citations by source, one box each, and shows the
@@ -525,13 +563,13 @@ export function CitationProvenanceBlock({
         {byline.length > 0 && (
           <p className="mt-0.5 text-body text-grey">{byline.map((part) => scrub(String(part))).join(" · ")}</p>
         )}
-        {(evidenceType !== null || strength !== null) && (
-          <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-meta text-grey">
-            {evidenceType !== null && <ClassificationHint taskId={taskId} sourceId={sourceId} type={evidenceType} />}
-            {evidenceType !== null && strength !== null && <span aria-hidden="true">·</span>}
-            {strength !== null && <StrengthHint label={strength} evidenceType={evidenceType} />}
-          </p>
-        )}
+        <EvidenceMarksLine
+          taskId={taskId}
+          sourceId={sourceId}
+          evidenceType={evidenceType}
+          strength={strength}
+          className="mt-1"
+        />
       </div>
       {/* Each quote under its own "Quote" label (owner, round 13). */}
       <div className="space-y-3">
@@ -555,35 +593,6 @@ function StrengthHint({ label, evidenceType }: { label: string; evidenceType?: s
       </span>
     </Tooltip>
   );
-}
-
-/** The appraisal chip (soft `ChipWithTooltip`) + its evidence-type-aware
- *  tooltip wording — shared by the reader's `CitationContext` and chat's
- *  citation-sheet block (030 parity fold) so the wording can never drift.
- *  Renders unconditionally; callers gate on `appraisal_label` presence
- *  themselves (honest absence — no chip when the citation carries none). */
-export function AppraisalChip({ label, evidenceType }: { label: string; evidenceType?: string | null }) {
-  // The soft tone (round 10, D4): blue is for capability tags and "checked".
-  // The strength's tone square before the word, the Sources table's
-  // (round 12).
-  return (
-    <ChipWithTooltip
-      tone="soft"
-      label={<StrengthMark tier={label} />}
-      content={<p>{scrub(strengthHint(label, evidenceType))}</p>}
-    />
-  );
-}
-
-/** The evidence type's chip, its hover the classifier's reasoning (owner,
- *  round 12). The artefact carries no reasoning (`CitationOut` has no
- *  `classification_reason`), so the hover reads the cited source's dossier
- *  when it first opens; the read is cached for the task. Without a source
- *  to ask, the chip is the type alone. */
-function ClassificationChip({ taskId, sourceId, type }: { taskId: string; sourceId: string | null; type: string }) {
-  const label = scrub(evidenceTypeLabel(type));
-  if (taskId === "" || sourceId === null) return <Chip tone="soft">{label}</Chip>;
-  return <ChipWithTooltip tone="soft" label={label} content={<ClassificationReason taskId={taskId} sourceId={sourceId} />} />;
 }
 
 /** The reasoning behind a source's evidence type, read on first hover. */
@@ -3126,21 +3135,20 @@ function CaseStudiesSection({
             return (
               <li key={`${at}:${card.title}`} className={`${REPORT_CARD_CLASS} ${live ? "anim-rise" : ""}`}>
                 <CardHeading className="text-lead font-bold text-navy max-md:text-body">{scrub(card.title)}</CardHeading>
+                {/* The marks line under the title (owner, round 14): type,
+                    strength, then "Since 2019"; it arrives with the
+                    committed report. */}
+                {!live && (
+                  <EvidenceMarksLine
+                    taskId={taskId}
+                    sourceId={cardEvidenceSourceId(card, design)}
+                    evidenceType={design}
+                    strength={strength}
+                    facts={sinceYear != null ? [`Since ${sinceYear}`] : []}
+                    className={cn("mt-1", arriving)}
+                  />
+                )}
                 <CaseStudyCardProse card={card} onOpenClaim={onOpenClaim} live={live} />
-                {/* Empty while live; the chips fade in with the committed
-                    report. Hidden while empty, so the card's foot is its
-                    16 px padding. */}
-                <div className={`mt-2 flex flex-wrap gap-1.5 empty:hidden ${arriving}`}>
-                  {/* The classification, then the strength it was
-                      appraised from (owner, round 12). */}
-                  {design != null && (
-                    <ClassificationChip taskId={taskId} sourceId={cardEvidenceSourceId(card, design)} type={design} />
-                  )}
-                  {strength != null && (
-                    <AppraisalChip label={strength} evidenceType={design} />
-                  )}
-                  {sinceYear != null && <Chip tone="soft">Since {sinceYear}</Chip>}
-                </div>
               </li>
             );
           })}
@@ -3200,22 +3208,20 @@ function MostRelevantSources({
                 {source.authors.map((a) => scrub(a)).join(", ")}
               </p>
             )}
+            {/* The marks line under the title and authors (owner, round
+                14): type, strength, then "Cited by 3 claims". */}
+            {!live && (
+              <EvidenceMarksLine
+                taskId={taskId}
+                sourceId={source.sourceId}
+                evidenceType={source.evidenceType}
+                strength={source.appraisalLabel}
+                facts={[source.citationCount === 1 ? "Cited by 1 claim" : `Cited by ${source.citationCount} claims`]}
+                className={cn("mt-1", arrivingClass)}
+              />
+            )}
             {source.note != null && source.note !== "" && (
               <p className={`mt-1 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{scrub(source.note)}</p>
-            )}
-            {!live && (
-              <div className={`mt-2 flex flex-wrap gap-1.5 ${arrivingClass}`}>
-                {/* The classification, then the strength (owner, round 12). */}
-                {source.evidenceType != null && (
-                  <ClassificationChip taskId={taskId} sourceId={source.sourceId} type={source.evidenceType} />
-                )}
-                {source.appraisalLabel != null && (
-                  <AppraisalChip label={source.appraisalLabel} evidenceType={source.evidenceType} />
-                )}
-                <Chip tone="soft">
-                  {source.citationCount === 1 ? "Cited by 1 claim" : `Cited by ${source.citationCount} claims`}
-                </Chip>
-              </div>
             )}
           </li>
         ))}
@@ -3365,7 +3371,13 @@ function ArtefactReport() {
   const baseline = isBaselineArtefact(artefact.data);
   useDocumentTitle(task.data?.name, baseline ? "Baseline" : "Report");
   const latestRun = statusRun(task.data);
-  const question = task.data?.question ?? stream.task.question ?? task.data?.name ?? null;
+  // The title is the refined research question from the plan (owner, round
+  // 14), live and committed; the task's question when the plan has none. The
+  // plan read is not on the public surface, so a public link reads the
+  // task's question.
+  const plan = usePlan(isPublicView ? "" : taskId);
+  const question =
+    nonEmpty(plan.data?.plan?.question) ?? task.data?.question ?? stream.task.question ?? task.data?.name ?? null;
   const showLive = showLiveArtefact(stream, latestRun);
   // A run watched while it wrote keeps its page when it finishes until the
   // committed report for that run has loaded; then the report takes its
@@ -3929,7 +3941,21 @@ export function ReferencesSection({
         <ol className="mt-3 space-y-2 text-body text-ink">
           {references.map((reference) => (
             <li key={reference.n} className="flex gap-3">
-              <span className="w-9 shrink-0 text-right font-semibold tabular-nums text-grey">[{reference.n}]</span>
+              {/* The number opens the source's sheet, in Electric Blue
+                  (owner, round 14); while the report is written it is
+                  the number alone. */}
+              {onOpenReference !== undefined ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenReference(reference.title)}
+                  aria-label={`Source ${reference.n}: ${scrub(reference.title)}`}
+                  className="w-9 shrink-0 cursor-pointer self-start text-right font-semibold tabular-nums text-blue hover:underline"
+                >
+                  [{reference.n}]
+                </button>
+              ) : (
+                <span className="w-9 shrink-0 text-right font-semibold tabular-nums text-grey">[{reference.n}]</span>
+              )}
               <ReferenceEntry reference={reference} onOpen={onOpenReference} arrivingClass={arriving} />
             </li>
           ))}

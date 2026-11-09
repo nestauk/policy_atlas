@@ -1327,6 +1327,19 @@ describe("ReferencesSection (042 item 1; round 10, C5)", () => {
     { n: 12, title: "Uploaded evidence note", year: null, venue: null, authorships: [] },
   ];
 
+  it("opens a reference's source from its number, and leaves the number plain while the report is written (round 14)", async () => {
+    const user = userEvent.setup();
+    const open = vi.fn();
+    const view = render(<ReferencesSection references={references} onOpenReference={open} />);
+    await user.click(screen.getByRole("button", { name: "References" }));
+    await user.click(screen.getByRole("button", { name: "Source 12: Uploaded evidence note" }));
+    expect(open).toHaveBeenCalledWith("Uploaded evidence note");
+    view.unmount();
+    render(<ReferencesSection references={references} defaultOpen />);
+    expect(screen.queryByRole("button", { name: /^Source 1:/ })).toBeNull();
+    expect(screen.getByText("[1]")).toHaveClass("text-grey");
+  });
+
   it("sets each reference in the citation form, authors and year first, nothing invented when absent", async () => {
     const user = userEvent.setup();
     render(<ReferencesSection references={references} onOpenReference={() => {}} />);
@@ -1340,10 +1353,11 @@ describe("ReferencesSection (042 item 1; round 10, C5)", () => {
     expect(items[2].textContent).not.toContain("()");
     // Names only in the list (D4) — superscript markers belong to the sheets.
     expect(items[0].querySelector("sup")).toBeNull();
-    // The number sits in its own Grey column, not in Electric Blue.
-    const number = within(items[0]).getByText("[1]");
-    expect(number).toHaveClass("w-9", "text-right", "tabular-nums", "text-grey");
-    expect(number).not.toHaveClass("text-blue");
+    // The number sits in its own column in Electric Blue and opens the
+    // source's sheet (owner, round 14).
+    const number = within(items[0]).getByRole("button", { name: "Source 1: Universal breakfast clubs and diet quality" });
+    expect(number).toHaveTextContent("[1]");
+    expect(number).toHaveClass("w-9", "text-right", "tabular-nums", "text-blue");
   });
 
   it("links the title to its dossier and the address out, the scheme only in print", async () => {
