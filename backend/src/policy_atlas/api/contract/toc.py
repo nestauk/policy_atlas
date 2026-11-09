@@ -296,6 +296,10 @@ class TocReportOut(BaseModel):
     sources: list[TocReportSourceOut]
     #: How it was made: written by code, with the date and the judge's model.
     method: str
+    #: Written before the reader's latest changes: a content edit, an evidence
+    #: decision or an Undo after the report's walk started; moving a box does
+    #: not count (task 054, S9). Set on the read, never stored.
+    stale: bool = False
 
 
 class TocGradeRuleOut(BaseModel):

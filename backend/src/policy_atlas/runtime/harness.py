@@ -521,6 +521,8 @@ def _toc_node(name: str) -> Any:
             # (C5), and picks a searchless link's documents by embedding (C27).
             kwargs["ranker"] = state["ranking_backend"]
             kwargs["embedder"] = state["embedding_backend"]
+            # Each link's judgements commit as it is judged (task 054, S8).
+            kwargs["connect"] = state["ingest_connect"]
         if name == "toc_report":
             # The report's live frames (task 054's 058 alignment, S6).
             kwargs["progress"] = state["progress_emitter"]
@@ -895,6 +897,8 @@ def run_harness(
             ``None`` runs every document inline on ``conn`` (each in a savepoint).
         ingest_connect: Opens one short committed transaction for that stage's
             own writes (``engine.begin``); ``None`` uses savepoints on ``conn``.
+            The ToC judge commits each link's judgements through it too
+            (task 054, S8).
         screening_backend: Screening backend for the screen component;
             defaults to ``StubScreeningBackend()`` — no default egress, the
             extraction backend pattern (approved gated change 2, task 014).

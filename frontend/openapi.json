@@ -12774,6 +12774,11 @@
             "title": "Sources",
             "type": "array"
           },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          },
           "summary": {
             "$ref": "#/components/schemas/TocReportSummaryOut"
           },

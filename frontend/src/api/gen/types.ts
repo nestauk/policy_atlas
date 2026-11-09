@@ -8054,6 +8054,11 @@ export interface components {
             pathways: components["schemas"]["TocReportPathwayOut"][];
             /** Sources */
             sources: components["schemas"]["TocReportSourceOut"][];
+            /**
+             * Stale
+             * @default false
+             */
+            stale: boolean;
             summary: components["schemas"]["TocReportSummaryOut"];
             /** Summary Text */
             summary_text?: string | null;

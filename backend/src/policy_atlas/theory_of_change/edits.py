@@ -88,7 +88,13 @@ def _stale(row: Any, expected_revision: int) -> None:
 
 
 def _record(
-    conn: Connection, *, task_id: uuid.UUID, actor: str, log: store.ChangeLog, change: str
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    actor: str,
+    log: store.ChangeLog,
+    change: str,
+    layout: bool = False,
 ) -> None:
     store.record(
         conn,
@@ -98,6 +104,7 @@ def _record(
         log=log,
         changes=[change],
         actor=actor,
+        layout=layout,
     )
 
 
@@ -457,7 +464,7 @@ def move_box(
         values={"position": {"x": float(position["x"]), "y": float(position["y"])}},
     ):
         _raise_stale()
-    _record(conn, task_id=task_id, actor=actor, log=log, change=f"Moved {row.code}")
+    _record(conn, task_id=task_id, actor=actor, log=log, change=f"Moved {row.code}", layout=True)
     return int(row.revision) + 1
 
 
@@ -480,7 +487,9 @@ def reset_layout(conn: Connection, *, task_id: uuid.UUID, actor: str) -> int:
             values={"position": None},
         )
     if moved:
-        _record(conn, task_id=task_id, actor=actor, log=log, change="Reset the layout")
+        _record(
+            conn, task_id=task_id, actor=actor, log=log, change="Reset the layout", layout=True
+        )
     return moved
 
 
@@ -789,6 +798,8 @@ def undo(conn: Connection, *, task_id: uuid.UUID, actor: str, event_id: uuid.UUI
         changes=[f"Undid: {', '.join(payload.get('changes') or ['an edit'])}"],
         actor=actor,
         undoes=str(event_id),
+        # Undoing a move moves boxes only (task 054, S9).
+        layout=bool(payload.get(store.LAYOUT_KEY)),
     )
     return skipped
 

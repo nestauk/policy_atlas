@@ -8,7 +8,8 @@ verified quote and relevance are stored. Insert-only, keyed by item hash.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, field
 from typing import Any
 
 import structlog
@@ -18,11 +19,14 @@ from sqlalchemy.engine import Connection
 from policy_atlas.api.stage_vocabulary import activity
 from policy_atlas.core import events, liveness
 from policy_atlas.core.embeddings import (
+    ConnectFactory,
     EmbeddingBackend,
 )
 from policy_atlas.core.schema import (
     capability_run,
+    event_log,
     evidence_scope,
+    runs,
     toc_item_evidence,
     toc_link,
 )
@@ -31,6 +35,7 @@ from policy_atlas.evidence_search.assess.screen import ScreenContext, screen_in
 from policy_atlas.evidence_search.corpus.ranking import (
     RankingBackend,
 )
+from policy_atlas.evidence_search.sourcing.ingest_queue import inline_connect
 from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.options_scoping.model_calls import CallOutcome
 from policy_atlas.runtime.toc_plan import (
@@ -147,8 +152,15 @@ def toc_judge_scope(
     ranker: RankingBackend | None = None,
     embedder: EmbeddingBackend | None = None,
     only: set[str] | None = None,
+    connect: ConnectFactory | None = None,
 ) -> dict[str, Any]:
     """Judge each link against its top documents, both questions at once (C5).
+
+    Each link's evidence rows are written as soon as its last judge call
+    finishes, in a short transaction of their own (task 054, S8), so the canvas
+    colours the link while the other links are still being judged. The step's
+    one ``toc.changed`` event, the whole programme's judgements and the
+    screening of documents no link found on topic still wait for the end.
 
     Args:
         conn: Open connection inside the component transaction.
@@ -159,6 +171,10 @@ def toc_judge_scope(
         ranker: The rerank backend ``select`` uses, or ``None`` to keep order.
         embedder: The embedding backend that picks the closest pool documents
             for a link with no search of its own (C27), or ``None``.
+        only: The links the second search covers (C44), or ``None``.
+        connect: Opens one short committed transaction for a link's rows
+            (``engine.begin``); ``None`` writes them inside ``conn``, as one
+            transaction with the rest of the step.
 
     Returns:
         Link, call and judgement counts, ``unverified_dropped`` and the usage.
@@ -188,7 +204,16 @@ def toc_judge_scope(
     for key in link_keys:
         link = graph.links[key]
         source, target = graph.boxes[link.source], graph.boxes[link.target]
-        current = hashes[key] = item_hash(link, source.text, target.text)
+        hashes[key] = item_hash(link, source.text, target.text)
+    # A retried step leaves alone the links an earlier attempt already wrote (S8).
+    done = _written_by_this_step(
+        conn, task_id=task_id, run_id=run_id, walk_id=walk_id, hashes=hashes
+    )
+    for key in link_keys:
+        if key in done:
+            continue
+        link = graph.links[key]
+        current = hashes[key]
         text = _link_item_text(graph, key, plan)
         judged = set(
             conn.execute(
@@ -250,6 +275,25 @@ def toc_judge_scope(
             ),
         )
 
+    find_more = context.context.get(TOC_CHECK_MODE_KEY) == "find_more"
+    writer = _LinkWriter(
+        task_id=task_id,
+        walk_id=walk_id,
+        rows=rows,
+        hashes=hashes,
+        find_more=find_more,
+        started_by=context.context.get(TOC_STARTED_BY_KEY),
+        study_links=set(context.context.get(TOC_STUDIES_KEY) or {}),
+        carried=_user_decisions(
+            conn, task_id, {job.link_key for job in jobs if job.link_key != PROGRAMME_KEY}
+        ),
+        usage=usage,
+        connect=connect if connect is not None else inline_connect(conn),
+    )
+    # A link's rows go in once its last call is back (S8).
+    waiting = Counter(job.link_key for job in jobs if job.link_key != PROGRAMME_KEY)
+    answered: dict[str, list[tuple[_JudgeJob, CallOutcome[Any]]]] = {}
+
     # The live count (task 054, A4): "n of M documents", one tick per finished
     # call, coalesced by the hub as every stage's ticks are.
     judged_so_far = 0
@@ -262,110 +306,54 @@ def toc_judge_scope(
             unit="documents",
         )
 
-    def on_judged(_job: _JudgeJob, _outcome: CallOutcome[Any]) -> None:
+    def on_judged(job: _JudgeJob, outcome: CallOutcome[Any]) -> None:
+        # Runs on the calling thread (``_map_traced``), so the writes never
+        # share a connection across the pool's threads.
         nonlocal judged_so_far
         judged_so_far += 1
+        if job.link_key != PROGRAMME_KEY:
+            answered.setdefault(job.link_key, []).append((job, outcome))
+            waiting[job.link_key] -= 1
+            if waiting[job.link_key] == 0:
+                writer.write(job.link_key, answered.pop(job.link_key))
         publish()
 
     if jobs:
         publish()
     outcomes = _map_traced(run_job, jobs, JUDGE_WORKERS, on_done=on_judged)
 
-    stored = unverified = failed = test_them = 0
-    started_by = context.context.get(TOC_STARTED_BY_KEY)
-    find_more = context.context.get(TOC_CHECK_MODE_KEY) == "find_more"
-    study_links = set(context.context.get(TOC_STUDIES_KEY) or {})
-    carried = _user_decisions(
-        conn, task_id, {job.link_key for job in jobs if job.link_key != PROGRAMME_KEY}
-    )
     programme: list[dict[str, Any]] = []
     for job, outcome in zip(jobs, outcomes, strict=True):
+        if job.link_key != PROGRAMME_KEY:
+            continue
         response = _outcome_value(outcome, usage)
         if response is None:
-            failed += 1
+            writer.failed += 1
             continue
-        text = job.document.text
         support, quote = response.support, response.quote
         # A quote not in the text drops the answer to not_about (counted).
-        if support != "not_about" and not quote_found(text, quote):
-            unverified += 1
+        if support != "not_about" and not quote_found(job.document.text, quote):
+            writer.unverified += 1
             support = "not_about"
         about = support != "not_about"
-        if job.link_key == PROGRAMME_KEY:
-            programme.append(
-                {
-                    "tss": str(job.document.tss_id),
-                    "support": support,
-                    "quote": quote if about else None,
-                    "relevance": response.relevance if about else 0,
-                    "relevance_reason": response.relevance_reason if about else None,
-                    "robust_model": response.robust_model,
-                }
-            )
-            continue
-        # A case study only from a document about the step, with a quote in its text.
-        case = response.case_study if about else None
-        if case is not None and not quote_found(text, case.quote):
-            case = None
-        indicator = response.indicator
-        # One box per judgement row: the case study's box wins; an indicator
-        # naming the other end of the link is dropped.
-        if case is not None and indicator is not None and indicator.box != case.box:
-            indicator = None
-        box_end = case.box if case is not None else (indicator.box if indicator else None)
-        supports = support in ("strong", "weak")
-        store.insert(
-            conn,
-            store.ChangeLog(),
-            toc_item_evidence,
+        programme.append(
             {
-                "evidence_id": uuid.uuid4(),
-                "task_id": task_id,
-                "link_id": uuid.UUID(job.link_key),
-                "case_box_id": (
-                    uuid.UUID(job.source_key if box_end == "source" else job.target_key)
-                    if box_end
-                    else None
-                ),
-                "task_source_snapshot_id": job.document.tss_id,
-                "capability_run_id": walk_id,
+                "tss": str(job.document.tss_id),
                 "support": support,
                 "quote": quote if about else None,
                 "relevance": response.relevance if about else 0,
                 "relevance_reason": response.relevance_reason if about else None,
-                "condition": response.condition if supports else None,
-                "case_study": (
-                    {
-                        "programme": case.programme,
-                        "place": case.place,
-                        "note": case.note,
-                        "quote": case.quote,
-                    }
-                    if case is not None
-                    else None
-                ),
-                "indicator": indicator.text if indicator is not None else None,
-                # Stored as the judge said it; it counts only when classify,
-                # which now runs after the judge, also calls it a modelling study (C31).
                 "robust_model": response.robust_model,
-                "item_hash": job.item_hash,
-                # A study the user added (C42) and their earlier decisions on this
-                # document for this link, carried to the new wording (C43).
-                "added_by": started_by if job.link_key in study_links else None,
-                # What Find more evidence found waits for the user's Accept (C44); a
-                # document not about the step changes nothing, so it does not wait.
-                "status": "pending" if find_more and about else "counted",
-                **carried.get((job.link_key, job.document.tss_id), {}),
-            },
+            }
         )
-        stored += 1
-        # The done row's "test them" (task 054, S2): judgements about the step.
-        test_them += int(about)
 
-    # Every covered link now counts the judgements of its current wording (C19).
-    # Find more evidence leaves that alone: what it found waits as pending (C44).
-    log_ = store.ChangeLog()
+    # Every covered link now counts the judgements of its current wording (C19);
+    # a link with no call to make is moved here, the others moved with their
+    # rows. Find more evidence leaves that alone: what it found waits as pending (C44).
+    log_ = writer.log
     for key in link_keys if not find_more else []:
+        if key in writer.written or key in done:
+            continue
         row = rows.links[key]
         store.update(
             conn,
@@ -375,9 +363,11 @@ def toc_judge_scope(
             observed_revision=row.revision,
             values={"counted_hash": hashes[key], "kept_hash": None, "kept_by": None},
         )
+    # One change record for the whole step, whatever the links committed (S8).
     store.record(conn, task_id=task_id, run_id=run_id, step="toc_judge", log=log_)
     # Classify and appraise run after the judge, on what it found on topic (C31):
-    # every other document is screened out here.
+    # every other document is screened out here. The links' rows are committed
+    # by now, so this read (read committed) sees them.
     on_topic = set(
         conn.execute(
             select(toc_item_evidence.c.task_source_snapshot_id)
@@ -399,8 +389,12 @@ def toc_judge_scope(
     # Only the documents this call read can be screened out: a judge on named
     # links or on the second search (C40, C44) does not read the whole programme's
     # documents, whose on-topic judgements live in the programme event, not in
-    # the evidence rows, and must stay in for classify and appraise.
-    off_topic = {job.document.tss_id for job in jobs} - on_topic
+    # the evidence rows, and must stay in for classify and appraise. A retried
+    # step also counts what its earlier attempt read.
+    read = {job.document.tss_id for job in jobs} | {
+        tss for written in done.values() for tss, _ in written
+    }
+    off_topic = read - on_topic
     if off_topic:
         screen_in(
             conn,
@@ -414,21 +408,210 @@ def toc_judge_scope(
             reason=NOT_ABOUT_REASON,
             rescreen=True,
         )
+    earlier = [support for written in done.values() for _, support in written]
     summary = {
         "links": len(link_keys),
         "screened_out_not_about": len(off_topic),
         "links_left_out": left_out,
         "calls": len(jobs),
-        "failed_calls": failed,
-        "judgements": stored,
-        "test_them": test_them,
+        "failed_calls": writer.failed,
+        "judgements": writer.stored + len(earlier),
+        # The done row's "test them" (task 054, S2): judgements about the step.
+        "test_them": writer.test_them + sum(support != "not_about" for support in earlier),
         "programme_judgements": len(programme),
-        "unverified_dropped": unverified,
+        "unverified_dropped": writer.unverified,
+        "links_already_written": len(done),
         "backend_mode": backend.mode,
         "usage_totals": usage.payload(),
     }
     log.info("toc_judge.done", **{k: v for k, v in summary.items() if k != "usage_totals"})
     return summary
+
+
+@dataclass
+class _LinkWriter:
+    """Writes one link's judgements in a short transaction of its own (task 054, S8).
+
+    The insert of its ``toc_item_evidence`` rows and, outside Find more
+    evidence, the move of its ``counted_hash`` to the current wording commit
+    together, so a graph read sees the link's verdict as soon as it is judged.
+    """
+
+    task_id: uuid.UUID
+    walk_id: uuid.UUID
+    rows: store.GraphRows
+    hashes: dict[str, str]
+    find_more: bool
+    started_by: Any
+    study_links: set[str]
+    carried: dict[tuple[str, uuid.UUID], dict[str, Any]]
+    usage: UsageAccumulator
+    connect: ConnectFactory
+    #: The step's change log: the links' before-states, recorded once at the end.
+    log: store.ChangeLog = field(default_factory=store.ChangeLog)
+    written: set[str] = field(default_factory=set)
+    stored: int = 0
+    failed: int = 0
+    unverified: int = 0
+    test_them: int = 0
+
+    def write(self, key: str, answered: list[tuple[_JudgeJob, CallOutcome[Any]]]) -> None:
+        """Commit one link's rows and its counted hash.
+
+        Args:
+            key: The link.
+            answered: Each of its jobs with the call's outcome.
+        """
+        values: list[dict[str, Any]] = []
+        for job, outcome in answered:
+            response = _outcome_value(outcome, self.usage)
+            if response is None:
+                self.failed += 1
+                continue
+            row = self._row(job, response)
+            values.append(row)
+            self.test_them += int(row["support"] != "not_about")
+        with self.connect() as conn:
+            for row in values:
+                store.insert(conn, store.ChangeLog(), toc_item_evidence, row)
+            if not self.find_more:
+                link_row = self.rows.links[key]
+                store.update(
+                    conn,
+                    self.log,
+                    toc_link,
+                    link_row.link_id,
+                    observed_revision=link_row.revision,
+                    values={"counted_hash": self.hashes[key], "kept_hash": None, "kept_by": None},
+                )
+        self.stored += len(values)
+        self.written.add(key)
+
+    def _row(self, job: _JudgeJob, response: Any) -> dict[str, Any]:
+        text = job.document.text
+        support, quote = response.support, response.quote
+        # A quote not in the text drops the answer to not_about (counted).
+        if support != "not_about" and not quote_found(text, quote):
+            self.unverified += 1
+            support = "not_about"
+        about = support != "not_about"
+        # A case study only from a document about the step, with a quote in its text.
+        case = response.case_study if about else None
+        if case is not None and not quote_found(text, case.quote):
+            case = None
+        indicator = response.indicator
+        # One box per judgement row: the case study's box wins; an indicator
+        # naming the other end of the link is dropped.
+        if case is not None and indicator is not None and indicator.box != case.box:
+            indicator = None
+        box_end = case.box if case is not None else (indicator.box if indicator else None)
+        supports = support in ("strong", "weak")
+        return {
+            "evidence_id": uuid.uuid4(),
+            "task_id": self.task_id,
+            "link_id": uuid.UUID(job.link_key),
+            "case_box_id": (
+                uuid.UUID(job.source_key if box_end == "source" else job.target_key)
+                if box_end
+                else None
+            ),
+            "task_source_snapshot_id": job.document.tss_id,
+            "capability_run_id": self.walk_id,
+            "support": support,
+            "quote": quote if about else None,
+            "relevance": response.relevance if about else 0,
+            "relevance_reason": response.relevance_reason if about else None,
+            "condition": response.condition if supports else None,
+            "case_study": (
+                {
+                    "programme": case.programme,
+                    "place": case.place,
+                    "note": case.note,
+                    "quote": case.quote,
+                }
+                if case is not None
+                else None
+            ),
+            "indicator": indicator.text if indicator is not None else None,
+            # Stored as the judge said it; it counts only when classify,
+            # which now runs after the judge, also calls it a modelling study (C31).
+            "robust_model": response.robust_model,
+            "item_hash": job.item_hash,
+            # A study the user added (C42) and their earlier decisions on this
+            # document for this link, carried to the new wording (C43).
+            "added_by": self.started_by if job.link_key in self.study_links else None,
+            # What Find more evidence found waits for the user's Accept (C44); a
+            # document not about the step changes nothing, so it does not wait.
+            "status": "pending" if self.find_more and about else "counted",
+            **self.carried.get((job.link_key, job.document.tss_id), {}),
+        }
+
+
+def _written_by_this_step(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    walk_id: uuid.UUID,
+    hashes: dict[str, str],
+) -> dict[str, list[tuple[uuid.UUID, str]]]:
+    """The links an earlier attempt of this step already wrote, at their current wording.
+
+    A link's rows commit as it is judged (S8), so a component retry finds the
+    rows the failed attempt wrote. They are this walk's rows at the link's
+    current hash, written since this step's first attempt started: rows the
+    walk's first judge wrote before the second search (C44) are older, so the
+    second search still judges its links.
+
+    Args:
+        conn: Open connection.
+        task_id: The task.
+        run_id: This attempt's run.
+        walk_id: The walk.
+        hashes: Link → its current item hash.
+
+    Returns:
+        Link → ``(document, support)`` of each row already written.
+    """
+    if not hashes:
+        return {}
+    component = conn.execute(
+        select(event_log.c.payload["component"].astext)
+        .where(event_log.c.task_id == task_id)
+        .where(event_log.c.run_id == run_id)
+        .where(event_log.c.event_type == "run.started")
+    ).scalar_one_or_none()
+    if component is None:
+        return {}
+    first_start = conn.execute(
+        select(runs.c.started_at)
+        .join(event_log, (event_log.c.run_id == runs.c.run_id) & (event_log.c.task_id == task_id))
+        .where(runs.c.task_id == task_id)
+        .where(runs.c.capability_run_id == walk_id)
+        .where(event_log.c.event_type == "run.started")
+        .where(event_log.c.payload["component"].astext == component)
+        .order_by(runs.c.started_at)
+        .limit(1)
+    ).scalar_one_or_none()
+    if first_start is None:
+        return {}
+    out: dict[str, list[tuple[uuid.UUID, str]]] = {}
+    for row in conn.execute(
+        select(
+            toc_item_evidence.c.link_id,
+            toc_item_evidence.c.item_hash,
+            toc_item_evidence.c.task_source_snapshot_id,
+            toc_item_evidence.c.support,
+        )
+        .where(toc_item_evidence.c.task_id == task_id)
+        .where(toc_item_evidence.c.capability_run_id == walk_id)
+        .where(toc_item_evidence.c.link_id.in_([uuid.UUID(key) for key in hashes]))
+        .where(toc_item_evidence.c.created_at >= first_start)
+    ):
+        key = str(row.link_id)
+        if hashes.get(key) == row.item_hash:
+            out.setdefault(key, []).append((row.task_source_snapshot_id, row.support))
+    return out
 
 
 def toc_search_again_scope(
@@ -440,6 +623,7 @@ def toc_search_again_scope(
     backend: TocBackend,
     ranker: RankingBackend | None = None,
     embedder: EmbeddingBackend | None = None,
+    connect: ConnectFactory | None = None,
 ) -> dict[str, Any]:
     """One more search for the links the judge left thin, then judge what it found (C44).
 
@@ -458,6 +642,7 @@ def toc_search_again_scope(
         backend: The ToC model seam.
         ranker: The rerank backend, or ``None`` to keep order.
         embedder: The embedding backend for the shared pool, or ``None``.
+        connect: Opens the judge's short per-link transactions (S8), or ``None``.
 
     Returns:
         The links searched again, the select counts and the judge counts.
@@ -489,6 +674,7 @@ def toc_search_again_scope(
         ranker=ranker,
         embedder=embedder,
         only=retried,
+        connect=connect,
     )
     return {
         "links": len(retried),

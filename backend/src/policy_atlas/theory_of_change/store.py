@@ -38,6 +38,10 @@ from policy_atlas.theory_of_change.graph import Box, Graph, Link, Pathway
 #: The event every graph write records (History; C1).
 TOC_CHANGED_EVENT = "toc.changed"
 
+#: Marks a ``toc.changed`` event that only moved boxes: it leaves the report
+#: current (task 054, S9).
+LAYOUT_KEY = "layout"
+
 _PRIMARY_KEY: dict[str, str] = {
     "toc_box": "box_id",
     "toc_link": "link_id",
@@ -309,6 +313,7 @@ def record(
     changes: list[Change] | None = None,
     actor: str | None = None,
     undoes: str | None = None,
+    layout: bool = False,
 ) -> None:
     """Write one ``toc.changed`` event for everything a step wrote.
 
@@ -324,8 +329,10 @@ def record(
         actor: The user who made the change (a user edit or Undo), or ``None``
             for Policy Atlas's own steps.
         undoes: The event an Undo reverses.
+        layout: The change moves boxes only, so the report still describes
+            the theory (task 054, S9).
     """
-    payload = _payload(step, log, changes or [], actor, undoes)
+    payload = _payload(step, log, changes or [], actor, undoes, layout)
     batch = _BATCH.get()
     if batch is not None and step == "user_edit":
         batch.append(payload)
@@ -341,6 +348,7 @@ def _payload(
     changes: list[Change],
     actor: str | None = None,
     undoes: str | None = None,
+    layout: bool = False,
 ) -> dict[str, Any]:
     """One ``toc.changed`` event's payload."""
     return {
@@ -351,6 +359,7 @@ def _payload(
         "changes": changes,
         **({"actor": actor} if actor else {}),
         **({"undoes": undoes} if undoes else {}),
+        **({LAYOUT_KEY: True} if layout else {}),
     }
 
 

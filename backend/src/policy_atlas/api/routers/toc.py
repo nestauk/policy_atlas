@@ -138,6 +138,7 @@ from policy_atlas.theory_of_change.review import (
     REVIEW_STARTED,
     edits_since_review,
     latest_report,
+    report_stale,
     reviewing,
     run_review,
 )
@@ -198,7 +199,11 @@ def check_status(walk: Row[Any] | None) -> CheckStatus:
 def _report(conn: Connection, task_id: uuid.UUID) -> TocReportOut | None:
     """The latest check walk's narrative report (C38), from its step payload."""
     report = latest_report(conn, task_id)
-    return None if report is None else report_out(report)
+    if report is None:
+        return None
+    out = report_out(report)
+    out.stale = report_stale(conn, task_id)
+    return out
 
 
 def report_out(report: dict[str, Any]) -> TocReportOut:

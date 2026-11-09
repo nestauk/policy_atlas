@@ -14,10 +14,10 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.core.schema import event_log, toc_proposal
+from policy_atlas.core.schema import event_log, runs, toc_proposal
 from policy_atlas.runtime.capability_registry import (
     THEORY_OF_CHANGE,
     expect_toc_plan,
@@ -134,6 +134,62 @@ def latest_report(conn: Connection, task_id: uuid.UUID) -> dict[str, Any] | None
     ).scalar_one_or_none()
     report = payload.get("report") if isinstance(payload, dict) else None
     return report if isinstance(report, dict) else None
+
+
+#: The ``toc.changed`` steps a reader makes: an edit (content, evidence or a
+#: suggestion accepted) and an Undo.
+_READER_STEPS = (edits.USER_EDIT, "user_undo")
+
+
+def report_stale(conn: Connection, task_id: uuid.UUID) -> bool:
+    """Whether the reader changed the theory after the latest report's walk started (S9).
+
+    A content edit, an evidence decision (remove, restore, rescore, accept or
+    reject new documents, keep the evidence), an accepted suggestion or an
+    Undo made after the walk's first ``run.started`` makes the report stale.
+    A change that only moved boxes (:data:`store.LAYOUT_KEY`) does not.
+
+    Args:
+        conn: Open connection.
+        task_id: The task.
+
+    Returns:
+        ``False`` when there is no report.
+    """
+    report_run = conn.execute(
+        select(event_log.c.run_id)
+        .where(event_log.c.task_id == task_id)
+        .where(event_log.c.event_type == "component.completed")
+        .where(event_log.c.payload["component"].astext == "toc_report")
+        .order_by(event_log.c.sequence.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if report_run is None:
+        return False
+    walk = (
+        select(runs.c.capability_run_id)
+        .where(runs.c.run_id == report_run, runs.c.task_id == task_id)
+        .scalar_subquery()
+    )
+    started = conn.execute(
+        select(func.min(event_log.c.sequence))
+        .select_from(event_log.join(runs, runs.c.run_id == event_log.c.run_id))
+        .where(event_log.c.task_id == task_id)
+        .where(event_log.c.event_type == "run.started")
+        .where(runs.c.capability_run_id == walk)
+    ).scalar_one_or_none()
+    if started is None:
+        return False
+    changed = conn.execute(
+        select(event_log.c.event_id)
+        .where(event_log.c.task_id == task_id)
+        .where(event_log.c.event_type == store.TOC_CHANGED_EVENT)
+        .where(event_log.c.sequence > started)
+        .where(event_log.c.payload["step"].astext.in_(_READER_STEPS))
+        .where(event_log.c.payload[store.LAYOUT_KEY].as_boolean().is_not(True))
+        .limit(1)
+    ).first()
+    return changed is not None
 
 
 def _report(conn: Connection, task_id: uuid.UUID) -> dict[str, Any] | None:

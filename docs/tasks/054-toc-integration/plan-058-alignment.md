@@ -114,11 +114,11 @@ Task 058 (perceived latency) merged into `dev` on 2026-11-09 and was merged into
 - **S8. Per-connection commits.**
   - The judge writes each connection's evidence rows through its own database connection (a `ConnectFactory`, as ingest does), in a short transaction per connection.
   - Each commit updates the `counted_hash` that the canvas read uses, so the canvas sees the change.
-  - Idempotent under a component retry: a retry skips the connections already written by the same `capability_run_id` at the current graph hash.
+  - Idempotent under a component retry: a retry skips the connections that this step's earlier attempt wrote (rows at the current hash created since the step's first attempt started). Changed at build: "written by the same run" would make the second search (`toc_search_again`, same walk) skip every link it must judge. The unique key `uq_toc_evidence_link_doc_hash` also blocks duplicates.
   - The step still sends one `toc.changed` at its end, so History gets one change record.
   - The canvas refetches at most once per finished connection batch, on a ToC `stage.completed`, and on the 5 s poll while the judge runs.
   - Each connection takes its verdict tone as soon as it is judged (owner decision 9). The grade shown before classify and appraise finish is provisional. It may shift once more when they land.
-- **S9. Stale report.** The report read carries `stale`. It is true when a content edit, an undo or an evidence decision was made after the report's walk started (`run.started`). Moving a box does not count. The page shows "Written before your latest changes." with "Update the report", and the `ActionLine` while the update runs.
+- **S9. Stale report.** The report read carries `stale`. It is true when a content edit, an undo or an evidence decision was made after the report's walk started (`run.started`). Moving a box, resetting the layout, and undoing either do not count (a `layout` flag on the change event). The page shows "Written before your latest changes." with "Update the report", and the `ActionLine` while the update runs.
 - **S10. Between the walks.** In the automatic chain, the card shows the draft row as done and stays "Running" until the check's first frame. If the check is refused (for example by the cost guard), the card ends with the draft's finish words and the refusal message from today.
 - **S11. Not built in this pass: including a set-aside pathway again.** The spec lists it as not built and `docs/deferred.md` records the seam. It needs a new edit with undo and maybe a migration. The set-aside line stays as text.
 
