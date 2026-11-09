@@ -38,13 +38,22 @@ function queryIdOf(item: object): string | null {
   return (typeof id === "number" && Number.isInteger(id)) || (typeof id === "string" && id !== "") ? String(id) : null;
 }
 
-/** The block's rows grouped by backend, in the order each backend first
- *  appears; within a group, in the order the queries went out. */
+/** The block's rows grouped by backend, Overton first, then OpenAlex, then
+ *  any other in the order it first appears (owner, 2026-11-09); within a
+ *  group, in the order the queries went out. */
 export type QueryGroup = { backend: string; rows: QueryRow[] };
 
 /** The search backends' public names (the stream sends their keys; the
  *  committed coverage already says "OpenAlex"). */
 const BACKEND_NAMES: Record<string, string> = { openalex: "OpenAlex", overton: "Overton" };
+
+/** The groups' order: the policy database first (owner, 2026-11-09). */
+const BACKEND_ORDER = ["Overton", "OpenAlex"];
+
+function backendRank(backend: string): number {
+  const rank = BACKEND_ORDER.indexOf(backend);
+  return rank === -1 ? BACKEND_ORDER.length : rank;
+}
 
 function backendName(backend: string): string {
   return BACKEND_NAMES[backend.toLowerCase()] ?? backend;
@@ -116,7 +125,8 @@ export function queryGroups(
     if (group === undefined) groups.push({ backend: row.backend, rows: [row] });
     else group.rows.push(row);
   }
-  return groups;
+  // A stable sort: groups of the same rank keep their order of appearance.
+  return groups.sort((a, b) => backendRank(a.backend) - backendRank(b.backend));
 }
 
 /** "Found with 12 queries and 3 citation passes": the folded line's words

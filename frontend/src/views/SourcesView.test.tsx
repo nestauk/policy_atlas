@@ -548,6 +548,8 @@ describe("SourcesView — the search as it runs (owner, round 9)", () => {
     expect(within(block).getByRole("heading", { name: "Search queries" })).toBeInTheDocument();
     const table = within(block).getByRole("table");
     expect(within(table).getByRole("rowheader", { name: "OpenAlex" })).toBeInTheDocument();
+    // Overton's group comes first, whichever database queried first (owner, 2026-11-09).
+    expect(within(table).getAllByRole("rowheader").map((th) => th.textContent)).toEqual(["Overton", "OpenAlex"]);
     expect(within(table).getAllByTestId("query-results-pulse")).toHaveLength(1);
     expect(within(table).getByText("1,184")).toBeInTheDocument();
     // A citation pass reads in grey; a topic query in navy.

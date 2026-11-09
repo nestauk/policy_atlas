@@ -2641,3 +2641,4 @@ Owner notes on the live app after the review stack, applied in the review conver
 - **The plan over a results tab runs the full height of the viewport**, as the citation and
   document sheets do (owner: "currently it stops at the task header"): fixed to the viewport's
   right edge over the headers, under the same scrim.
+- **Overton's group above OpenAlex's** in the search queries table, live and finished (owner).
