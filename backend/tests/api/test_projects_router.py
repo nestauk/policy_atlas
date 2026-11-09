@@ -5,6 +5,10 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
+from sqlalchemy.engine import Engine
+
+from policy_atlas.api.read_models import history
+from policy_atlas.core import events
 from tests.api.resource_support import api_client, create_task
 
 
@@ -301,30 +305,40 @@ def test_omitting_project_ids_leaves_membership_unchanged(tmp_path: Path) -> Non
         assert renamed.json()["project_ids"] == [project_id]
 
 
-def test_an_archived_project_leaves_the_default_list_and_keeps_its_tasks(
-    tmp_path: Path,
+def test_an_archived_project_leaves_the_default_list_and_archives_its_solo_tasks(
+    tmp_path: Path, engine: Engine
 ) -> None:
-    """Task 058, round 11: archive hides a project by default; its tasks stay."""
+    """Task 058, round 11: archive hides a project by default. Round 14 (owner):
+    its tasks in no other project are archived with it; one also in another
+    project stays; each archived task's History says so."""
     with api_client(tmp_path) as (client, owner, other):
         kept = client.post("/api/v1/projects", headers=owner, json={"name": "Kept"}).json()
         gone = client.post("/api/v1/projects", headers=owner, json={"name": "Gone"}).json()
         assert gone["archived_at"] is None
-        task_id = create_task(client, owner)
-        patched = client.patch(
-            f"/api/v1/tasks/{task_id}",
-            headers=owner,
-            json={"project_ids": [gone["project_id"]]},
-        )
-        assert patched.status_code == 200, patched.text
+        solo = create_task(client, owner)
+        shared = create_task(client, owner)
+        for task_id, project_ids in (
+            (solo, [gone["project_id"]]),
+            (shared, [gone["project_id"], kept["project_id"]]),
+        ):
+            patched = client.patch(
+                f"/api/v1/tasks/{task_id}", headers=owner, json={"project_ids": project_ids}
+            )
+            assert patched.status_code == 200, patched.text
+        # The confirm sentence's count, before archiving.
+        before = client.get(f"/api/v1/projects/{gone['project_id']}", headers=owner).json()
+        assert (before["task_count"], before["solo_task_count"]) == (2, 1)
 
         archived = client.post(f"/api/v1/projects/{gone['project_id']}/archive", headers=owner)
         assert archived.status_code == 200, archived.text
         stamp = archived.json()["archived_at"]
         assert stamp is not None
+        assert archived.json()["archived_task_count"] == 1
         assert archived.json()["task_count"] == 1
-        # Again: nothing changes, the first time stands.
+        # Again: nothing changes, the first time stands, nothing more archived.
         again = client.post(f"/api/v1/projects/{gone['project_id']}/archive", headers=owner)
         assert again.status_code == 200 and again.json()["archived_at"] == stamp
+        assert again.json()["archived_task_count"] == 0
 
         def names(status: str | None) -> list[str]:
             params = {} if status is None else {"status": status}
@@ -338,13 +352,31 @@ def test_an_archived_project_leaves_the_default_list_and_keeps_its_tasks(
         assert names("all") == ["Gone", "Kept"]
         assert kept["archived_at"] is None
 
-        # Still readable by id, and its task is untouched.
+        # Still readable by id; the solo task is archived and keeps its
+        # membership, the shared one is untouched.
         assert client.get(f"/api/v1/projects/{gone['project_id']}", headers=owner).json()[
             "archived_at"
         ] == stamp
-        task = client.get(f"/api/v1/tasks/{task_id}", headers=owner).json()
-        assert task["status"] == "active"
-        assert task["project_ids"] == [gone["project_id"]]
+        archived_tasks = client.get(
+            "/api/v1/tasks", headers=owner, params={"status": "archived"}
+        ).json()["data"]
+        [solo_read] = [row for row in archived_tasks if row["task_id"] == solo]
+        assert solo_read["status"] == "archived"
+        assert solo_read["project_ids"] == [gone["project_id"]]
+        assert client.get(f"/api/v1/tasks/{shared}", headers=owner).json()["status"] == "active"
+        # The task's History records it, naming the project.
+        with engine.connect() as conn:
+            [archive_event] = [
+                entry["payload"]
+                for entry in events.read(conn, uuid.UUID(solo))
+                if entry["event_type"] == "task.archived"
+            ]
+        assert archive_event["project_id"] == gone["project_id"]
+        assert archive_event["project_name"] == "Gone"
+        assert (
+            history.lifecycle_sentence("archived", archive_event, history.SYSTEM)
+            == "Policy Atlas archived the project “Gone”, and this task with it."
+        )
 
         # Someone who cannot read it gets the opaque 404 and changes nothing.
         refused = client.post(f"/api/v1/projects/{kept['project_id']}/archive", headers=other)

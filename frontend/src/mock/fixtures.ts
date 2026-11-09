@@ -219,6 +219,9 @@ export const mockProject: components["schemas"]["ProjectOut"] = {
   archived_at: null,
   // Its newest member's update, or its own creation (round 12).
   last_activity_at: "2026-07-15T09:00:00Z",
+  // Its tasks in no other project, which archiving it archives (round 14);
+  // the mock serves the live count.
+  solo_task_count: 2,
 };
 
 /**
@@ -285,15 +288,15 @@ export const mockLandscape: components["schemas"]["LandscapeOut"] = {
 };
 
 export const mockEvidence: components["schemas"]["EvidenceItemOut"][] = [
-  { source_id: "10000000-0000-4000-8000-000000000001", title: "Childhood obesity prevention in urban primary schools", year: 2024, venue: "Public Health Nutrition", origin: "OpenAlex", status: "found", cited: false, read_in_full: false, abstract: "A cluster trial of classroom activity and school-meal changes in urban primary schools, measuring BMI z-score over two years.", abstract_source: "provider", country: "United States" },
-  { source_id: "10000000-0000-4000-8000-000000000002", title: "Borough food strategy consultation", year: 2023, venue: "Tower Hamlets Council", origin: "Overton", status: "screened_out", screen_status: "excluded_retracted", screen_confidence: 1, status_reason: "The record was retracted", cited: false, read_in_full: false, abstract: "The council's consultation on a borough food strategy, covering school food, takeaways near schools and community growing.", abstract_source: "provider", country: "United Kingdom" },
-  { source_id: "10000000-0000-4000-8000-000000000003", title: "Universal breakfast clubs and diet quality", year: 2022, venue: "BMJ Open", origin: "OpenAlex", status: "relevant", evidence_type: "Cohort study", appraisal_tier: "Moderate confidence", screen_status: "relevant", screen_confidence: 0.91, screen_basis: "title_abstract", screen_stage: 2, screen_reason: "Universal breakfast provision is a primary-school food-environment exposure in scope.", classification_reason: "Prospective cohort following ten schools over two academic years.", url: "https://example.org/universal-breakfast", cited: false, read_in_full: false, abstract: "A cohort study of universal breakfast provision and regular breakfast consumption.", abstract_source: "provider", country: "United Kingdom" },
-  { source_id: "10000000-0000-4000-8000-000000000004", title: "Healthy High Streets programme review", year: 2023, venue: "London Assembly", origin: "Overton", status: "not_selected", status_reason: "Lower transferability", evidence_type: "Unknown / Insufficient information", appraisal_tier: "Unrated", screen_status: "relevant", screen_confidence: 0.72, screen_reason: "Covers food-environment levers around schools, though at borough rather than school level.", cited: false, read_in_full: false, abstract: "A review of the Healthy High Streets programme: food outlets near schools, signage and local planning levers.", abstract_source: "provider", country: "United Kingdom" },
-  { source_id: "10000000-0000-4000-8000-000000000005", title: "School meals and child weight outcomes", year: 2021, venue: "The Lancet Child & Adolescent Health", origin: "OpenAlex", status: "selected", evidence_type: "Systematic review", screen_status: "relevant", screen_confidence: 0.88, screen_reason: "Directly evaluates school-meal policies against child weight outcomes.", classification_reason: "Explicit systematic search and synthesis across 42 trials.", cited: false, read_in_full: false, abstract: "A systematic review of 42 trials of school-meal standards and their effect on child weight.", abstract_source: "provider", country: "United Kingdom" },
-  { source_id: "10000000-0000-4000-8000-000000000006", title: "Neighbourhood food access and family choices", year: 2020, venue: "Health & Place", origin: "OpenAlex", status: "read_in_full", evidence_type: "Qualitative study", screen_status: "relevant", screen_confidence: 0.81, screen_reason: "Family food-choice mechanisms around primary schools are in scope.", cited: false, read_in_full: true, full_text_url: "https://example.org/neighbourhood-food-access.pdf", abstract: "Interviews with families on how food outlets near primary schools shape everyday food choices.", abstract_source: "provider", country: "Netherlands" },
-  { source_id: "10000000-0000-4000-8000-000000000007", title: "Active travel incentives: implementation findings", year: 2024, venue: "Local Government Studies", origin: "OpenAlex", status: "findings_extracted", evidence_type: "Mixed methods", screen_status: "relevant", screen_confidence: 0.86, screen_reason: "Implementation evidence for an in-scope active-travel lever.", cited: false, read_in_full: true, full_text_url: "https://europepmc.org/article/PMC/PMC1234567", abstract: "A mixed-methods study of how councils implemented active-travel incentives for school journeys.", abstract_source: "provider", country: "United Kingdom" },
-  { source_id: "10000000-0000-4000-8000-000000000008", title: "Making healthy choices easier near schools", year: 2023, venue: "Nesta", origin: "Uploaded", status: "cited", evidence_type: "Policy analysis", appraisal_tier: "Moderate", screen_status: "relevant", screen_confidence: 0.95, screen_reason: "Uploaded by the task owner; directly addresses the question.", classification_reason: "Argument-led policy analysis rather than primary data collection.", cited: true, read_in_full: true, abstract: "An AI-generated summary: measures near the school gate that make the healthy choice the easy choice.", abstract_source: "llm_description", country: "United Kingdom" },
-  { source_id: "10000000-0000-4000-8000-000000000009", title: "Children's food environment survey", year: null, venue: null, origin: "Uploaded", status: "unavailable", status_reason: "Full text could not be obtained", screen_status: "relevant", screen_confidence: 0.79, screen_reason: "Survey coverage of children's food environments matches the scope.", cited: false, read_in_full: false, country: null },
+  { source_id: "10000000-0000-4000-8000-000000000001", title: "Childhood obesity prevention in urban primary schools", year: 2024, venue: "Public Health Nutrition", origin: "OpenAlex", status: "found", cited: false, read_in_full: false, abstract: "A cluster trial of classroom activity and school-meal changes in urban primary schools, measuring BMI z-score over two years.", abstract_source: "provider", full_text_status: "not_attempted", country: "United States" },
+  { source_id: "10000000-0000-4000-8000-000000000002", title: "Borough food strategy consultation", year: 2023, venue: "Tower Hamlets Council", origin: "Overton", status: "screened_out", screen_status: "excluded_retracted", screen_confidence: 1, status_reason: "The record was retracted", cited: false, read_in_full: false, abstract: "The council's consultation on a borough food strategy, covering school food, takeaways near schools and community growing.", abstract_source: "provider", full_text_status: "not_attempted", country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000003", title: "Universal breakfast clubs and diet quality", year: 2022, venue: "BMJ Open", origin: "OpenAlex", status: "relevant", evidence_type: "Cohort study", appraisal_tier: "Moderate confidence", screen_status: "relevant", screen_confidence: 0.91, screen_basis: "title_abstract", screen_stage: 2, screen_reason: "Universal breakfast provision is a primary-school food-environment exposure in scope.", classification_reason: "Prospective cohort following ten schools over two academic years.", url: "https://example.org/universal-breakfast", cited: false, read_in_full: false, abstract: "A cohort study of universal breakfast provision and regular breakfast consumption.", abstract_source: "provider", full_text_status: "queued", country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000004", title: "Healthy High Streets programme review", year: 2023, venue: "London Assembly", origin: "Overton", status: "not_selected", status_reason: "Lower transferability", evidence_type: "Unknown / Insufficient information", appraisal_tier: "Unrated", screen_status: "relevant", screen_confidence: 0.72, screen_reason: "Covers food-environment levers around schools, though at borough rather than school level.", cited: false, read_in_full: false, abstract: "A review of the Healthy High Streets programme: food outlets near schools, signage and local planning levers.", abstract_source: "provider", full_text_status: "not_attempted", country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000005", title: "School meals and child weight outcomes", year: 2021, venue: "The Lancet Child & Adolescent Health", origin: "OpenAlex", status: "selected", evidence_type: "Systematic review", screen_status: "relevant", screen_confidence: 0.88, screen_reason: "Directly evaluates school-meal policies against child weight outcomes.", classification_reason: "Explicit systematic search and synthesis across 42 trials.", cited: false, read_in_full: false, abstract: "A systematic review of 42 trials of school-meal standards and their effect on child weight.", abstract_source: "provider", full_text_status: "not_attempted", country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000006", title: "Neighbourhood food access and family choices", year: 2020, venue: "Health & Place", origin: "OpenAlex", status: "read_in_full", evidence_type: "Qualitative study", screen_status: "relevant", screen_confidence: 0.81, screen_reason: "Family food-choice mechanisms around primary schools are in scope.", cited: false, read_in_full: true, full_text_url: "https://example.org/neighbourhood-food-access.pdf", abstract: "Interviews with families on how food outlets near primary schools shape everyday food choices.", abstract_source: "provider", full_text_status: "ingested", country: "Netherlands" },
+  { source_id: "10000000-0000-4000-8000-000000000007", title: "Active travel incentives: implementation findings", year: 2024, venue: "Local Government Studies", origin: "OpenAlex", status: "findings_extracted", evidence_type: "Mixed methods", screen_status: "relevant", screen_confidence: 0.86, screen_reason: "Implementation evidence for an in-scope active-travel lever.", cited: false, read_in_full: true, full_text_url: "https://europepmc.org/article/PMC/PMC1234567", abstract: "A mixed-methods study of how councils implemented active-travel incentives for school journeys.", abstract_source: "provider", full_text_status: "ingested", country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000008", title: "Making healthy choices easier near schools", year: 2023, venue: "Nesta", origin: "Uploaded", status: "cited", evidence_type: "Policy analysis", appraisal_tier: "Moderate", screen_status: "relevant", screen_confidence: 0.95, screen_reason: "Uploaded by the task owner; directly addresses the question.", classification_reason: "Argument-led policy analysis rather than primary data collection.", cited: true, read_in_full: true, abstract: "An AI-generated summary: measures near the school gate that make the healthy choice the easy choice.", abstract_source: "llm_description", full_text_status: "ingested", country: "United Kingdom" },
+  { source_id: "10000000-0000-4000-8000-000000000009", title: "Children's food environment survey", year: null, venue: null, origin: "Uploaded", status: "unavailable", status_reason: "Full text could not be obtained", screen_status: "relevant", screen_confidence: 0.79, screen_reason: "Survey coverage of children's food environments matches the scope.", cited: false, read_in_full: false, full_text_status: "fetch_failed", country: null },
 ];
 
 /** Theme membership for the mock evidence rows, keyed by theme id — the
@@ -1594,12 +1597,14 @@ export function mockWalkLonglist(
           name: "Conditionality and support",
           description: "Options that attach an obligation or targeted help to the existing offer.",
           option_ids: included.slice(0, half).map((option) => option.option_id),
+          document_count: mockThemeDocumentCount(included.slice(0, half).map((option) => option.option_id)),
         },
         {
           theme_id: MOCK_LONGLIST_THEME_ID_UNIVERSAL_OFFER,
           name: "A universal offer",
           description: "A single, non-conditional offer replacing today's patchwork.",
           option_ids: included.slice(half).map((option) => option.option_id),
+          document_count: mockThemeDocumentCount(included.slice(half).map((option) => option.option_id)),
         },
       ]
     : [];
@@ -2147,11 +2152,30 @@ export function toLonglistOptionSummary(option: OptionOutFixture): OptionSummary
 /** The shortlist's in-memory state (task 055, A17): the note, whether the
  *  proposal is stale against the plan's appetite, and the appetite the
  *  mock's plan holds. The shortlist routes in `api.ts` change it. */
-export const mockShortlistState: { note: string | null; stale: boolean; inputsChanged: boolean } = {
+export const mockShortlistState: { note: string | null; stale: boolean; inputsChanged: boolean; placesAt: string[] } = {
   note: null,
   stale: false,
   inputsChanged: false,
+  // The places the note was written against (round 14): `note_stale` once
+  // the places now held differ.
+  placesAt: [],
 };
+
+/** The option ids holding a place now (proposed or added by you), sorted. */
+export function mockCurrentPlaces(): string[] {
+  return Object.values(mockLonglistOptionCards)
+    .filter((card) => card.shortlist?.state === "proposed" || card.shortlist?.state === "added_by_you")
+    .map((card) => card.option_id)
+    .sort();
+}
+
+/** Whether the note was written against other places than these (round 14). */
+export function mockNoteStale(): boolean {
+  if (mockShortlistState.note == null) return false;
+  const now = mockCurrentPlaces();
+  const at = [...mockShortlistState.placesAt].sort();
+  return now.length !== at.length || now.some((id, index) => id !== at[index]);
+}
 
 /** Places the shortlist fills up to. */
 export const MOCK_SHORTLIST_PLACES_TARGET = 5;
@@ -2198,6 +2222,7 @@ export function resetMockShortlist() {
   mockShortlistState.note = "Mock note: nothing here tackles the wider labour market.";
   mockShortlistState.stale = false;
   mockShortlistState.inputsChanged = false;
+  mockShortlistState.placesAt = mockCurrentPlaces();
 }
 
 /** Option ids added by hand or by chat verb since the walk built the four
@@ -2261,6 +2286,18 @@ export function buildMockAddedOption(text: string): OptionOutFixture {
  *  option), built from `mockLonglistOptionCards` so the summary and the
  *  card never drift apart. Any option added since (`mockLonglistExtraOptionIds`)
  *  appends unthemed, like a real rebuild's new entrants. */
+/** A longlist theme's distinct documents across its options, each once
+ *  (round 14), as the server counts them. */
+export function mockThemeDocumentCount(optionIds: string[]): number {
+  return new Set(
+    optionIds.flatMap((optionId) =>
+      (mockLonglistOptionCards[optionId]?.documents ?? [])
+        .map((document) => document.task_source_snapshot_id)
+        .filter((id): id is string => id != null),
+    ),
+  ).size;
+}
+
 export function mockLonglist(): components["schemas"]["LonglistOut"] {
   const options = [
     MOCK_OPTION_ID_EXCLUDED,
@@ -2287,12 +2324,14 @@ export function mockLonglist(): components["schemas"]["LonglistOut"] {
         name: "Conditionality and support",
         description: "Options that attach an obligation or targeted help to the existing offer.",
         option_ids: [MOCK_OPTION_ID_EXCLUDED, MOCK_OPTION_ID_NO_IN_SCOPE],
+        document_count: mockThemeDocumentCount([MOCK_OPTION_ID_EXCLUDED, MOCK_OPTION_ID_NO_IN_SCOPE]),
       },
       {
         theme_id: MOCK_LONGLIST_THEME_ID_UNIVERSAL_OFFER,
         name: "A universal offer",
         description: "A single, non-conditional offer replacing today's patchwork.",
         option_ids: [MOCK_OPTION_ID_PACKAGE],
+        document_count: mockThemeDocumentCount([MOCK_OPTION_ID_PACKAGE]),
       },
     ],
     unthemed_option_ids: [MOCK_OPTION_ID_ADDED_BY_YOU, ...mockLonglistExtraOptionIds],
@@ -2390,6 +2429,7 @@ export function mockLonglist(): components["schemas"]["LonglistOut"] {
       provenance: {},
       places_target: MOCK_SHORTLIST_PLACES_TARGET,
       stale: mockShortlistState.stale,
+      note_stale: mockNoteStale(),
     },
     plan_inputs_changed: mockShortlistState.inputsChanged,
   };

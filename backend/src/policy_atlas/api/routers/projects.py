@@ -23,6 +23,7 @@ from policy_atlas.api.contract import (
     PAGE_SIZE_MAX,
     Page,
     PageMeta,
+    ProjectArchiveOut,
     ProjectCreate,
     ProjectOut,
     ProjectUpdate,
@@ -30,6 +31,7 @@ from policy_atlas.api.contract import (
 )
 from policy_atlas.api.deps import get_conn, get_current_user
 from policy_atlas.api.identity import owner_display_for
+from policy_atlas.api.lifecycle import archive_task
 from policy_atlas.api.routers.access import (
     OWNER_EMAIL_MAX,
     accessible_project,
@@ -146,6 +148,9 @@ class _Members(NamedTuple):
 
     total: int
     newest_update: datetime | None
+    #: The caller's own active members in no other active project: what
+    #: archiving the project would archive with it (round 14).
+    solo: int = 0
 
 
 def _member_estate(user_id: str) -> list[ColumnElement[bool]]:
@@ -192,7 +197,42 @@ def _task_counts(
         .where(*_member_estate(user_id))
         .group_by(project_membership.c.project_id)
     ).all()
-    return {row[0]: _Members(int(row[1]), row[2]) for row in rows}
+    solo = {
+        row[0]: int(row[1])
+        for row in conn.execute(
+            select(project_membership.c.project_id, func.count())
+            .select_from(
+                project_membership.join(task, task.c.task_id == project_membership.c.task_id)
+            )
+            .where(project_membership.c.project_id.in_(project_ids))
+            .where(*_solo_members(user_id))
+            .group_by(project_membership.c.project_id)
+        ).all()
+    }
+    return {row[0]: _Members(int(row[1]), row[2], solo.get(row[0], 0)) for row in rows}
+
+
+def _solo_members(user_id: str) -> list[ColumnElement[bool]]:
+    """A membership row's task is the caller's, active, and in no other active project.
+
+    Used inside a select over ``project_membership`` joined to ``task``: the
+    tasks archiving this project archives with it (task 058, round 14).
+    """
+    other = project_membership.alias("other_membership")
+    other_project = project.alias("other_project")
+    in_another = (
+        select(other.c.task_id)
+        .select_from(
+            other.join(other_project, other_project.c.project_id == other.c.project_id)
+        )
+        .where(
+            other.c.task_id == task.c.task_id,
+            other.c.project_id != project_membership.c.project_id,
+            other_project.c.archived_at.is_(None),
+        )
+        .exists()
+    )
+    return [task.c.status == "active", task.c.owner_user_id == user_id, ~in_another]
 
 
 def _last_activity_at(user_id: str) -> ColumnElement[Any]:
@@ -231,6 +271,7 @@ def _project_out(
         description=row["description"],
         created_at=row["created_at"],
         task_count=members.total if members is not None else 0,
+        solo_task_count=members.solo if members is not None else 0,
         last_activity_at=max(row["created_at"], members.newest_update)
         if members is not None and members.newest_update is not None
         else row["created_at"],
@@ -431,18 +472,21 @@ def get_project(
     )
 
 
-@router.post("/{project_id}/archive", response_model=ProjectOut)
+@router.post("/{project_id}/archive", response_model=ProjectArchiveOut)
 def archive_project(
     project_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
-) -> ProjectOut:
-    """Archive a project (task 058, round 11), as `POST /tasks/{id}/archive` does a task.
+) -> ProjectArchiveOut:
+    """Archive a project (task 058, round 11), and the tasks only it holds (round 14).
 
     Owner only. The project leaves the default list (`status=active`) and is
-    listed under `status=archived`; it stays readable by id. Its tasks are
-    left as they are: they keep their membership and stay on the Tasks list.
-    Archiving an archived project changes nothing and keeps its first time.
+    listed under `status=archived`; it stays readable by id. In the same
+    transaction, each of the caller's own active tasks in this project that
+    is in no other active project is archived too (owner, 2026-11-07), each
+    task's History saying so; a task also in another project, or a
+    colleague's, is left as it is. Archiving an archived project changes
+    nothing and keeps its first time.
 
     Args:
         project_id: The project to archive.
@@ -450,7 +494,7 @@ def archive_project(
         conn: Open database connection.
 
     Returns:
-        The project with its `archived_at`.
+        The project with its `archived_at` and `archived_task_count`.
 
     Raises:
         HTTPException: 404 when the project is unreadable, 403 when it is
@@ -459,22 +503,56 @@ def archive_project(
     access = accessible_project(
         conn, project_id=project_id, user_id=user.user_id, write=True, for_update=True
     )
+    archived_tasks = 0
     if access.row["archived_at"] is None:
         conn.execute(
             update(project)
             .where(project.c.project_id == project_id)
             .values(archived_at=datetime.now(UTC))
         )
-        log.info("project.archived", project_id=str(project_id), actor=user.user_id)
+        for task_id in _tasks_only_here(conn, project_id=project_id, user_id=user.user_id):
+            if archive_task(
+                conn,
+                task_id,
+                user.user_id,
+                extra={
+                    "project_id": str(project_id),
+                    "project_name": access.row["name"],
+                },
+            ):
+                archived_tasks += 1
+        log.info(
+            "project.archived",
+            project_id=str(project_id),
+            actor=user.user_id,
+            archived_tasks=archived_tasks,
+        )
     row = conn.execute(
         select(project).where(project.c.project_id == project_id)
     ).mappings().one()
     counts = _task_counts(conn, [project_id], user_id=user.user_id)
-    return _project_out(
+    out = _project_out(
         row,
         counts.get(project_id),
         user_id=user.user_id,
         owner_display=resolve_owner_display(conn, row["owner_user_id"]),
+    )
+    return ProjectArchiveOut(**out.model_dump(), archived_task_count=archived_tasks)
+
+
+def _tasks_only_here(
+    conn: Connection, *, project_id: uuid.UUID, user_id: str
+) -> list[uuid.UUID]:
+    """The caller's own active tasks in the project that no other active project holds."""
+    return list(
+        conn.execute(
+            select(task.c.task_id)
+            .select_from(
+                project_membership.join(task, task.c.task_id == project_membership.c.task_id)
+            )
+            .where(project_membership.c.project_id == project_id, *_solo_members(user_id))
+            .order_by(task.c.task_id)
+        ).scalars()
     )
 
 

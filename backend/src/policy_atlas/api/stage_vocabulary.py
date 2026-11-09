@@ -245,6 +245,9 @@ ACTIVITY: dict[str, str] = {
     "synthesise.source_note_named": "Writing a source note · {name}",
     "synthesise.intro": "Writing the introduction",
     "synthesise.summaries": "Summarising the sections",
+    # round 14: the summaries pass, section by section, and its checks
+    "synthesise.summary_section": "Summarising the sections · {done} of {total}",
+    "synthesise.summary_check": "Checking the summaries",
 }
 
 

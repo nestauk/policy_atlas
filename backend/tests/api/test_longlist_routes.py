@@ -2113,3 +2113,66 @@ def test_plan_inputs_changed_is_true_when_the_pinned_version_cannot_be_read(
     listed = repository.longlist_out(conn, walk.task_id)
     assert listed is not None
     assert listed.plan_inputs_changed is True
+
+
+def test_a_longlist_theme_lists_the_documents_of_its_options(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Task 058, round 14: on a scoping task ``evidence?theme=<longlist theme>``
+    lists the union of its options' documents; an unknown theme lists none."""
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
+        built = _org_build(engine, owner, colleague)
+        guarantee = built.options["Youth guarantee"]
+        mentoring = built.options["Mentoring"]
+        theme_id = uuid.uuid4()
+        with engine.begin() as conn:
+            conn.execute(
+                update(longlist_result)
+                .where(longlist_result.c.task_id == built.task_id)
+                .values(
+                    themes=[
+                        {
+                            "theme_id": str(theme_id),
+                            "name": "Guarantees",
+                            "description": "Offers made to every young person.",
+                            "option_ids": [str(guarantee), str(mentoring)],
+                        }
+                    ]
+                )
+            )
+        body = _longlist(client, built.task_id, owner.headers).json()
+        themes = [theme for theme in body["themes"] if theme["option_ids"]]
+        assert [theme["theme_id"] for theme in themes] == [str(theme_id)]
+        listed_count = None
+        with engine.connect() as conn:
+            for theme in themes:
+                expected = {
+                    str(tss)
+                    for tss in conn.execute(
+                        select(option_membership.c.task_source_snapshot_id).where(
+                            option_membership.c.task_id == built.task_id,
+                            option_membership.c.option_id.in_(
+                                [uuid.UUID(oid) for oid in theme["option_ids"]]
+                            ),
+                            option_membership.c.task_source_snapshot_id.is_not(None),
+                        )
+                    ).scalars()
+                }
+                listed = client.get(
+                    f"/api/v1/tasks/{built.task_id}/evidence",
+                    params={"theme": theme["theme_id"], "page_size": 200},
+                    headers=owner.headers,
+                )
+                assert listed.status_code == 200, listed.text
+                assert {row["source_id"] for row in listed.json()["data"]} == expected
+                assert expected
+                # Round 14: the theme's count is these documents, each once.
+                listed_count = theme["document_count"]
+                assert listed_count == len(expected)
+        assert listed_count is not None
+        unknown = client.get(
+            f"/api/v1/tasks/{built.task_id}/evidence",
+            params={"theme": str(uuid.uuid4())},
+            headers=owner.headers,
+        ).json()
+        assert unknown["data"] == []

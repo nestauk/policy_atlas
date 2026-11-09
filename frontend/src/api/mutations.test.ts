@@ -121,6 +121,7 @@ describe("cross-family cache invalidation (task 033 phase 10a)", () => {
           is_owner: true,
           owner_display: "Ada Lovelace",
           archived_at: "2026-11-06T10:00:00Z",
+          archived_task_count: 1,
         }),
         { headers: { "Content-Type": "application/json" } },
       );
@@ -138,6 +139,9 @@ describe("cross-family cache invalidation (task 033 phase 10a)", () => {
     expect(new URL(request.url).pathname).toBe("/api/v1/projects/p1/archive");
     expect(result.current.data?.archived_at).toBe("2026-11-06T10:00:00Z");
     expect(invalidateSpy.mock.calls.map((call) => call[0]?.queryKey)).toContainEqual(["projects"]);
+    // Round 14: its solo tasks were archived with it.
+    expect(invalidateSpy.mock.calls.map((call) => call[0]?.queryKey)).toContainEqual(["tasks"]);
+    expect(result.current.data?.archived_task_count).toBe(1);
   });
 
   it("useUpdateTask invalidates both the task and project families", async () => {

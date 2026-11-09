@@ -1881,6 +1881,32 @@
         "title": "ConversationOut",
         "type": "object"
       },
+      "ConversationTitledEvent": {
+        "description": "The chat's title written from its first message (task 058, round 14).\n\nSent once, while the first turn's stream is open, when the ``chat_title``\nstep's line replaces the message's cut; never terminal.\n\nArgs:\n    conversation_id: The chat.\n    title: Its new title.",
+        "properties": {
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "conversation.titled",
+            "default": "conversation.titled",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "title"
+        ],
+        "title": "ConversationTitledEvent",
+        "type": "object"
+      },
       "ConversationUpdate": {
         "additionalProperties": false,
         "description": "Partial update for an existing chat conversation.\n\nOmitted fields remain unchanged. An explicitly null ``entry_artefact_id``\nclears its entry-context chip.\n\nArgs:\n    title: Replacement user-visible chat title.\n    entry_artefact_id: Replacement task-local entry context, or null to clear it.",
@@ -2292,7 +2318,7 @@
         "type": "object"
       },
       "EvidenceItemOut": {
-        "description": "One row of the paginated evidence/source list.\n\nArgs:\n    source_id: The source's identity.\n    title: Source title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    origin: Acquisition backend.\n    status: Position on the evidence status ladder.\n    status_reason: Optional human-readable reason for the current status\n        (e.g. why screened out).\n    evidence_type: Optional evidence type label.\n    appraisal_tier: Optional appraisal tier label.\n    cited: Whether this source is cited in the artefact.\n    url: Optional source URL.\n    full_text_url: The address the full text was collected from (an\n        http(s) link a reader can open), or `None` when no full text was\n        collected.",
+        "description": "One row of the paginated evidence/source list.\n\nArgs:\n    source_id: The source's identity.\n    title: Source title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    origin: Acquisition backend.\n    status: Position on the evidence status ladder.\n    status_reason: Optional human-readable reason for the current status\n        (e.g. why screened out).\n    evidence_type: Optional evidence type label.\n    appraisal_tier: Optional appraisal tier label.\n    cited: Whether this source is cited in the artefact.\n    url: Optional source URL.\n    full_text_url: The address the full text was collected from (an\n        http(s) link a reader can open), or `None` when no full text was\n        collected.\n    full_text_status: Where the full text's fetch stands: `queued`\n        while the ingest is pending (task 058, round 14).",
         "properties": {
           "abstract": {
             "anyOf": [
@@ -2367,6 +2393,18 @@
               }
             ],
             "title": "Evidence Type"
+          },
+          "full_text_status": {
+            "default": "not_attempted",
+            "enum": [
+              "not_attempted",
+              "queued",
+              "ingested",
+              "fetch_failed",
+              "parse_failed"
+            ],
+            "title": "Full Text Status",
+            "type": "string"
           },
           "full_text_url": {
             "anyOf": [
@@ -3972,11 +4010,16 @@
         "type": "object"
       },
       "LonglistThemeOut": {
-        "description": "One theme: a generated grouping of options in the problem's own words.\n\nArgs:\n    theme_id: Stable theme identity.\n    name: Theme name.\n    description: One-line description.\n    option_ids: The theme's options, in display order.",
+        "description": "One theme: a generated grouping of options in the problem's own words.\n\nArgs:\n    theme_id: Stable theme identity.\n    name: Theme name.\n    description: One-line description.\n    option_ids: The theme's options, in display order.\n    document_count: The theme's distinct documents across its options,\n        each counted once (task 058, round 14): the rows\n        `GET /tasks/{id}/evidence?theme=` lists.",
         "properties": {
           "description": {
             "title": "Description",
             "type": "string"
+          },
+          "document_count": {
+            "default": 0,
+            "title": "Document Count",
+            "type": "integer"
           },
           "name": {
             "title": "Name",
@@ -6309,6 +6352,102 @@
         "title": "ProgressEvent",
         "type": "object"
       },
+      "ProjectArchiveOut": {
+        "description": "A project just archived (task 058, round 14).\n\nArgs:\n    archived_task_count: How many of its tasks this archive archived: the\n        caller's own active tasks that are in no other active project.",
+        "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "archived_task_count": {
+            "default": 0,
+            "title": "Archived Task Count",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_owner": {
+            "title": "Is Owner",
+            "type": "boolean"
+          },
+          "last_activity_at": {
+            "format": "date-time",
+            "title": "Last Activity At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner_display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Display"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "solo_task_count": {
+            "default": 0,
+            "title": "Solo Task Count",
+            "type": "integer"
+          },
+          "task_count": {
+            "title": "Task Count",
+            "type": "integer"
+          },
+          "visibility": {
+            "enum": [
+              "org",
+              "private"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "name",
+          "created_at",
+          "task_count",
+          "visibility",
+          "is_owner",
+          "owner_display",
+          "last_activity_at"
+        ],
+        "title": "ProjectArchiveOut",
+        "type": "object"
+      },
       "ProjectCreate": {
         "additionalProperties": false,
         "description": "Inbound body for `POST /api/v1/projects`.\n\nArgs:\n    name: Project display name, 1-200 characters. Outer whitespace is\n        stripped before the length constraint is applied.\n    description: Optional free-text description.\n    from_task_id: Seed the new project from an existing task the\n        caller **owns**: the project inherits that task's\n        `visibility` and organisation and takes it as its first member,\n        in one transaction (contract \u00a7 6, i.1). Omit to create an empty\n        project. This amends ADR 0031 decision 4 (\"assignment is a\n        PATCH, not a field on create\"); ADR 0033 records the amendment.",
@@ -6350,7 +6489,7 @@
         "type": "object"
       },
       "ProjectOut": {
-        "description": "A project resource.\n\nArgs:\n    project_id: The project's identity.\n    name: Current display name.\n    description: Current description, or `None` if not set.\n    created_at: When the project was created.\n    task_count: How many active tasks **the caller may read, in the\n        caller's own organisation** are assigned to this project,\n        derived per request and never cached on the row (contract \u00a7 8).\n        A colleague's private member is not counted, and an\n        administrator's count stays their own organisation's count rather\n        than a cross-organisation sum.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all.\n    archived_at: When the owner archived the project, or `None` while it\n        is in use (task 058, round 11). Archiving leaves its tasks as\n        they are.\n    last_activity_at: The newest of `created_at` and the `updated_at` of\n        the members `task_count` counts (task 058, round 12). `GET\n        /projects` lists newest activity first by it.",
+        "description": "A project resource.\n\nArgs:\n    project_id: The project's identity.\n    name: Current display name.\n    description: Current description, or `None` if not set.\n    created_at: When the project was created.\n    task_count: How many active tasks **the caller may read, in the\n        caller's own organisation** are assigned to this project,\n        derived per request and never cached on the row (contract \u00a7 8).\n        A colleague's private member is not counted, and an\n        administrator's count stays their own organisation's count rather\n        than a cross-organisation sum.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all.\n    archived_at: When the owner archived the project, or `None` while it\n        is in use (task 058, round 11). Archiving leaves its tasks as\n        they are.\n    solo_task_count: The caller's own active tasks here that are in no\n        other active project: what archiving the project archives with it\n        (task 058, round 14).\n    last_activity_at: The newest of `created_at` and the `updated_at` of\n        the members `task_count` counts (task 058, round 12). `GET\n        /projects` lists newest activity first by it.",
         "properties": {
           "archived_at": {
             "anyOf": [
@@ -6408,6 +6547,11 @@
             "format": "uuid",
             "title": "Project Id",
             "type": "string"
+          },
+          "solo_task_count": {
+            "default": 0,
+            "title": "Solo Task Count",
+            "type": "integer"
           },
           "task_count": {
             "title": "Task Count",
@@ -7838,7 +7982,7 @@
         "type": "object"
       },
       "ShortlistOut": {
-        "description": "The latest shortlist proposal on a longlist (task 055).\n\nArgs:\n    note: The proposal's short \"what this leaves out\" note; `null` before\n        the first proposal.\n    provenance: How the proposal was made (prompt version, model,\n        appetite, plan version, \u2026); empty before the first proposal.\n    places_target: How many places a proposal fills to.\n    stale: The proposal does not match the plan's current risk appetite,\n        or a built longlist has no proposal yet. The view then asks the\n        user to press Suggest more to re-propose.",
+        "description": "The latest shortlist proposal on a longlist (task 055).\n\nArgs:\n    note: The proposal's short \"what this leaves out\" note; `null` before\n        the first proposal.\n    provenance: How the proposal was made (prompt version, model,\n        appetite, plan version, \u2026); empty before the first proposal.\n    places_target: How many places a proposal fills to.\n    stale: The proposal does not match the plan's current risk appetite,\n        or a built longlist has no proposal yet. The view then asks the\n        user to press Suggest more to re-propose.\n    note_stale: The note was written against other places than the\n        shortlist now holds (task 058, round 14): `POST\n        /tasks/{id}/shortlist/note` rewrites it. `false` with no note.",
         "properties": {
           "note": {
             "anyOf": [
@@ -7850,6 +7994,11 @@
               }
             ],
             "title": "Note"
+          },
+          "note_stale": {
+            "default": false,
+            "title": "Note Stale",
+            "type": "boolean"
           },
           "places_target": {
             "default": 5,
@@ -8014,6 +8163,18 @@
               }
             ],
             "title": "Evidence Type"
+          },
+          "full_text_status": {
+            "default": "not_attempted",
+            "enum": [
+              "not_attempted",
+              "queued",
+              "ingested",
+              "fetch_failed",
+              "parse_failed"
+            ],
+            "title": "Full Text Status",
+            "type": "string"
           },
           "full_text_url": {
             "anyOf": [
@@ -10772,7 +10933,7 @@
     },
     "/api/v1/projects/{project_id}/archive": {
       "post": {
-        "description": "Archive a project (task 058, round 11), as `POST /tasks/{id}/archive` does a task.\n\nOwner only. The project leaves the default list (`status=active`) and is\nlisted under `status=archived`; it stays readable by id. Its tasks are\nleft as they are: they keep their membership and stay on the Tasks list.\nArchiving an archived project changes nothing and keeps its first time.\n\nArgs:\n    project_id: The project to archive.\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The project with its `archived_at`.\n\nRaises:\n    HTTPException: 404 when the project is unreadable, 403 when it is\n        readable but not owned.",
+        "description": "Archive a project (task 058, round 11), and the tasks only it holds (round 14).\n\nOwner only. The project leaves the default list (`status=active`) and is\nlisted under `status=archived`; it stays readable by id. In the same\ntransaction, each of the caller's own active tasks in this project that\nis in no other active project is archived too (owner, 2026-11-07), each\ntask's History saying so; a task also in another project, or a\ncolleague's, is left as it is. Archiving an archived project changes\nnothing and keeps its first time.\n\nArgs:\n    project_id: The project to archive.\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The project with its `archived_at` and `archived_task_count`.\n\nRaises:\n    HTTPException: 404 when the project is unreadable, 403 when it is\n        readable but not owned.",
         "operationId": "archive_project_api_v1_projects__project_id__archive_post",
         "parameters": [
           {
@@ -10791,7 +10952,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProjectOut"
+                  "$ref": "#/components/schemas/ProjectArchiveOut"
                 }
               }
             },
@@ -11986,6 +12147,7 @@
             }
           },
           {
+            "description": "A theme's id: a characterisation theme's sources, or on an options-scoping task a longlist theme's, the documents of its options (task 058, round 14).",
             "in": "query",
             "name": "theme",
             "required": false,
@@ -11999,6 +12161,7 @@
                   "type": "null"
                 }
               ],
+              "description": "A theme's id: a characterisation theme's sources, or on an options-scoping task a longlist theme's, the documents of its options (task 058, round 14).",
               "title": "Theme"
             }
           },
@@ -12101,6 +12264,7 @@
             }
           },
           {
+            "description": "A publisher country, by any spelling; `none` for the sources with no country (Landscape's Not reported row; task 058, round 14).",
             "in": "query",
             "name": "country",
             "required": false,
@@ -12115,6 +12279,7 @@
                   "type": "null"
                 }
               ],
+              "description": "A publisher country, by any spelling; `none` for the sources with no country (Landscape's Not reported row; task 058, round 14).",
               "title": "Country"
             }
           },
@@ -13377,6 +13542,55 @@
         "summary": "Get Run",
         "tags": [
           "runs"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/shortlist/note": {
+      "post": {
+        "description": "Rewrite the shortlist's not-covered note for the places as they stand (round 14).\n\nOwner only. Only when the note is stale (written against other places,\nor missing beside a proposal); otherwise the shortlist comes back as it\nis. The note's one writer (:func:`write_shortlist_note`) runs with no\nchanges: it reads the plan's outcomes, the option list and the places,\nnever a document line. History says \"Policy Atlas updated the shortlist\nnote\".\n\nRaises:\n    HTTPException: 404 with no longlist, 409 while a walk runs, 503 when\n        the call fails (nothing is written).",
+        "operationId": "post_shortlist_note_api_v1_tasks__task_id__shortlist_note_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShortlistOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Post Shortlist Note",
+        "tags": [
+          "longlist"
         ]
       }
     },

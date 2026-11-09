@@ -24,7 +24,7 @@ from policy_atlas.api.lifecycle import touch_task
 from policy_atlas.core import events, tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.inference import StubEchoProvider
-from policy_atlas.core.liveness import tick_hub
+from policy_atlas.core.liveness import task_liveness, tick_hub
 from policy_atlas.core.schema import (
     capability_run,
     event_log,
@@ -5944,16 +5944,22 @@ def _run_step_attempt(
                     # failure must not fail the run) but inside its run span, so
                     # the summaries trace as the tail of the run, not as root
                     # traces of their own.
-                    summary_accounting = write_summaries_after_commit(
-                        engine,
-                        task_id=task_id,
-                        run_id=run_id,
-                        synthesis_backend=(
-                            backends.synthesis
-                            if backends.synthesis is not None
-                            else StubSynthesisBackend()
-                        ),
-                    )
+                    # Bound to the task, the stage and the walk (round 14): the
+                    # harness's binding has ended by now, and without this the
+                    # pass's lines reach nobody.
+                    with task_liveness(
+                        task_id, stage="synthesise", run_id=capability_run_id
+                    ):
+                        summary_accounting = write_summaries_after_commit(
+                            engine,
+                            task_id=task_id,
+                            run_id=run_id,
+                            synthesis_backend=(
+                                backends.synthesis
+                                if backends.synthesis is not None
+                                else StubSynthesisBackend()
+                            ),
+                        )
                     component_usage = component_summary.get("usage_totals")
                     if isinstance(component_usage, dict):
                         merged_usage = UsageAccumulator()

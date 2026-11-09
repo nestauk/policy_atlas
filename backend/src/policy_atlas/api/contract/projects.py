@@ -132,6 +132,9 @@ class ProjectOut(BaseModel):
         archived_at: When the owner archived the project, or `None` while it
             is in use (task 058, round 11). Archiving leaves its tasks as
             they are.
+        solo_task_count: The caller's own active tasks here that are in no
+            other active project: what archiving the project archives with it
+            (task 058, round 14).
         last_activity_at: The newest of `created_at` and the `updated_at` of
             the members `task_count` counts (task 058, round 12). `GET
             /projects` lists newest activity first by it.
@@ -147,3 +150,15 @@ class ProjectOut(BaseModel):
     owner_display: str | None
     archived_at: datetime | None = None
     last_activity_at: datetime
+    solo_task_count: int = 0
+
+
+class ProjectArchiveOut(ProjectOut):
+    """A project just archived (task 058, round 14).
+
+    Args:
+        archived_task_count: How many of its tasks this archive archived: the
+            caller's own active tasks that are in no other active project.
+    """
+
+    archived_task_count: int = 0

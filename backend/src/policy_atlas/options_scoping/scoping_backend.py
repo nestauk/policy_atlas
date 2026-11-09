@@ -133,6 +133,12 @@ from policy_atlas.options_scoping.option_profile.place_sentences_prompt import (
     PlaceSentenceWire,
     build_place_sentences_messages,
 )
+from policy_atlas.options_scoping.shortlist.shortlist_note_prompt import (
+    SHORTLIST_NOTE_MAX_OUTPUT_TOKENS,
+    SHORTLIST_NOTE_PROMPT_VERSION,
+    ShortlistNoteWire,
+    build_shortlist_note_messages,
+)
 from policy_atlas.options_scoping.shortlist.shortlist_prompt import (
     SHORTLIST_MAX_OUTPUT_TOKENS,
     SHORTLIST_PROMPT_VERSION,
@@ -448,6 +454,30 @@ class LonglistBackend(Protocol):
 
         Returns:
             The parsed proposal and token usage.
+        """
+        ...
+
+    def shortlist_note(
+        self,
+        *,
+        outcomes: list[str],
+        options: list[dict[str, object]],
+        places: list[str],
+        changes: list[dict[str, object]],
+    ) -> UsageResult[ShortlistNoteWire]:
+        """Write the shortlist's not-covered note (task 058, round 14).
+
+        The note's one writer: after a proposal (with its changes) and on a
+        refresh when the reader has moved places by hand (none).
+
+        Args:
+            outcomes: The plan's outcomes.
+            options: The option list as data (short ids).
+            places: The short ids now placed.
+            changes: The proposal's changes, or none.
+
+        Returns:
+            The parsed note and token usage.
         """
         ...
 
@@ -770,6 +800,25 @@ class OpenAILonglistBackend:
             prompt_version=SHORTLIST_PROMPT_VERSION,
         )
 
+    def shortlist_note(
+        self,
+        *,
+        outcomes: list[str],
+        options: list[dict[str, object]],
+        places: list[str],
+        changes: list[dict[str, object]],
+    ) -> UsageResult[ShortlistNoteWire]:
+        """The note call (see :class:`LonglistBackend`); step ``shortlist_note``."""
+        return self._call(
+            build_shortlist_note_messages(
+                outcomes=outcomes, options=options, places=places, changes=changes
+            ),
+            response_format=ShortlistNoteWire,
+            max_output_tokens=SHORTLIST_NOTE_MAX_OUTPUT_TOKENS,
+            name="shortlist:note",
+            prompt_version=SHORTLIST_NOTE_PROMPT_VERSION,
+        )
+
 
 #: The stub's one discovered option.
 STUB_DISCOVERED_LABEL = "Stub discovered option"
@@ -864,6 +913,9 @@ class StubLonglistBackend:
         shortlist_responses: Canned proposal answers (a
             :class:`ShortlistWire`, or an exception to raise), or ``None``
             for the deterministic default.
+        shortlist_note_responses: Canned note answers (a
+            :class:`ShortlistNoteWire`, or an exception to raise), or
+            ``None`` for the stub note.
     """
 
     mode = "stub"
@@ -883,6 +935,7 @@ class StubLonglistBackend:
         | list[PotentialImpactResponse]
         | None = None,
         shortlist_responses: Any = None,
+        shortlist_note_responses: Any = None,
     ) -> None:
         self._queues: dict[str, list[Any]] = {
             "constrain": _as_queue(constrain_responses),
@@ -893,6 +946,7 @@ class StubLonglistBackend:
             "place_sentence": _as_queue(place_sentence_responses),
             "potential_impact": _as_queue(potential_impact_responses),
             "shortlist": _as_queue(shortlist_responses),
+            "shortlist_note": _as_queue(shortlist_note_responses),
             **{f"line:{k}": _as_queue(v) for k, v in (line_responses or {}).items()},
             **{f"fold:{k}": _as_queue(v) for k, v in (fold_responses or {}).items()},
         }
@@ -1188,6 +1242,24 @@ class StubLonglistBackend:
             raise response
         return response, None
 
+    def shortlist_note(
+        self,
+        *,
+        outcomes: list[str],
+        options: list[dict[str, object]],
+        places: list[str],
+        changes: list[dict[str, object]],
+    ) -> UsageResult[ShortlistNoteWire]:
+        """Answer from the queue (an exception is raised), else a stub note."""
+        response: Any = self._answer(
+            "shortlist_note",
+            {"outcomes": outcomes, "options": options, "places": places, "changes": changes},
+            lambda: ShortlistNoteWire(note="stub note"),
+        )
+        if isinstance(response, BaseException):
+            raise response
+        return response, None
+
 
 #: The first user message's "Places to fill" line and its candidate id lines.
 _STUB_TO_FILL = re.compile(r"^Places to fill \(data\): (\d+)$", re.MULTILINE)
@@ -1205,7 +1277,6 @@ def _stub_shortlist(messages: list[ChatCompletionMessageParam]) -> ShortlistWire
     ids = _STUB_CANDIDATE_ID.findall(text[candidates_at:] if candidates_at >= 0 else "")
     return ShortlistWire(
         picks=[ShortlistPickWire(option_id=oid, reason="stub reason") for oid in ids[:to_fill]],
-        note="stub note",
     )
 
 

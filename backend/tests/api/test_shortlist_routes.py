@@ -466,3 +466,72 @@ def test_the_shortlist_routes_are_the_owner_s(engine: Engine, tmp_path: Path) ->
         assert _row(engine, foreign).shortlist_state is None
         assert _row(engine, oid).shortlist_state is None
         assert executor.submitted == []
+
+
+def test_the_note_is_rewritten_only_when_the_places_have_moved(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Task 058, round 14: ``note_stale`` once the places differ from the ones
+    the note was written against; the refresh writes the note through its one
+    writer with the places, logs one History line, and is a no-op when fresh."""
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
+        built = _org_build(engine, owner, colleague, linked=False)
+        guarantee = built.options["Youth guarantee"]
+        with engine.begin() as conn:
+            conn.execute(
+                longlist_result.update()
+                .where(longlist_result.c.task_id == built.task_id)
+                .values(
+                    shortlist={
+                        "note": "Old note.",
+                        "provenance": {"appetite": "mostly_tried"},
+                        "places_at": [],
+                    }
+                )
+            )
+
+        def shortlist() -> dict[str, Any]:
+            body = client.get(
+                f"/api/v1/tasks/{built.task_id}/longlist", headers=owner.headers
+            ).json()
+            return dict(body["shortlist"])
+
+        def note_lines() -> list[str]:
+            response = client.get(
+                f"/api/v1/tasks/{built.task_id}/decisions?page_size=200", headers=owner.headers
+            )
+            return [
+                row["summary"]
+                for row in response.json()["data"]
+                if row["kind"] == "shortlist.note_updated"
+            ]
+
+        url = f"/api/v1/tasks/{built.task_id}/shortlist/note"
+        # Fresh: no places then, none now. The refresh changes nothing.
+        assert shortlist()["note_stale"] is False
+        fresh = client.post(url, headers=owner.headers)
+        assert fresh.status_code == 200, fresh.text
+        assert fresh.json()["note"] == "Old note." and note_lines() == []
+
+        # The reader adds a place by hand: the note is stale.
+        assert _post(client, built, guarantee, "shortlist", owner.headers).status_code == 200
+        assert shortlist()["note_stale"] is True
+        # A colleague cannot rewrite it.
+        assert client.post(url, headers=colleague.headers).status_code in (403, 404)
+
+        written = client.post(url, headers=owner.headers)
+        assert written.status_code == 200, written.text
+        assert written.json()["note"] == "stub note"
+        assert written.json()["note_stale"] is False
+        assert note_lines() == ["Policy Atlas updated the shortlist note."]
+        with engine.connect() as conn:
+            stored = conn.execute(
+                select(longlist_result.c.shortlist).where(
+                    longlist_result.c.task_id == built.task_id
+                )
+            ).scalar_one()
+        assert stored["places_at"] == [str(guarantee)]
+        assert stored["provenance"] == {"appetite": "mostly_tried"}
+        # Fresh again: a second press writes nothing.
+        assert client.post(url, headers=owner.headers).json()["note"] == "stub note"
+        assert note_lines() == ["Policy Atlas updated the shortlist note."]

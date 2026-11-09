@@ -1401,3 +1401,47 @@ def test_walk_lifecycle_registers_top_level_and_child_runs_with_the_tick_hub(
         assert ended == [(task_id, child_id), (task_id, parent_id)]
     finally:
         _cleanup(engine, task_id)
+
+
+def test_the_summaries_pass_runs_bound_to_the_task_and_the_walk(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Task 058, round 14: the post-commit summaries pass runs after the
+    harness's binding has ended; the runner binds the task, the synthesise
+    stage and the walk around it, so its lines reach the hub."""
+    from policy_atlas.core import liveness
+
+    seen: list[tuple[Any, Any, Any]] = []
+    original = runner_module.write_summaries_after_commit  # type: ignore[attr-defined]
+
+    def recording(engine_: Engine, **kwargs: Any) -> Any:
+        seen.append((liveness._task_id.get(), liveness._stage.get(), liveness._run_id.get()))
+        return original(engine_, **kwargs)
+
+    monkeypatch.setattr(runner_module, "write_summaries_after_commit", recording)
+    task_id: uuid.UUID | None = None
+    try:
+        task_id, scope_id = _seed_task(engine)
+        plan = _base_plan(
+            search_effort="standard",
+            analysis_depth="standard",
+            components=["screen_full", "characterise", "select"],
+            grouping_facets=None,
+        )
+        outcome = run_plan(
+            engine,
+            task_id=task_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=uuid.uuid4(),
+            plan_version=1,
+            backends=_runner_backends(),
+            io=RecordingIO(),
+        )
+        assert outcome.status == "succeeded"
+        assert len(seen) == 1
+        bound_task, bound_stage, bound_walk = seen[0]
+        assert (bound_task, bound_stage) == (task_id, "synthesise")
+        assert bound_walk is not None
+    finally:
+        _cleanup(engine, task_id)

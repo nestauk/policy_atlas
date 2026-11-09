@@ -166,8 +166,11 @@ export function useArchiveProject(projectId: string) {
       if (data === undefined) raise(error, response.status);
       return data;
     },
+    // Round 14: the archive also archives the project's tasks that are in no
+    // other project, so the task lists refetch too.
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
 }

@@ -49,10 +49,9 @@ from policy_atlas.options_scoping.scoping_backend import (
     LonglistBackend,
 )
 from policy_atlas.options_scoping.shortlist.cards import fit_option_cards, option_cards
+from policy_atlas.options_scoping.shortlist.shortlist_note import write_shortlist_note
 from policy_atlas.options_scoping.shortlist.shortlist_prompt import (
     NONE_LINE,
-    SHORTLIST_NOTE_MAX_CHARS,
-    SHORTLIST_NOTE_MIN_CHARS,
     SHORTLIST_PROMPT_VERSION,
     SHORTLIST_REASON_MAX_CHARS,
     ShortlistWire,
@@ -242,16 +241,9 @@ def _checks(
                 f"The reason for {pick.option_id} is longer than "
                 f"{SHORTLIST_REASON_MAX_CHARS} characters."
             )
-    note = wire.note.strip()
-    if len(note) < SHORTLIST_NOTE_MIN_CHARS:
-        failures.append("The note is empty.")
-    elif len(note) > SHORTLIST_NOTE_MAX_CHARS:
-        failures.append(f"The note is longer than {SHORTLIST_NOTE_MAX_CHARS} characters.")
     for pick in wire.picks:
         if any(mark in pick.reason.lower() for mark in _LINK_MARKS):
             failures.append(f"The reason for {pick.option_id} contains a link.")
-    if any(mark in note.lower() for mark in _LINK_MARKS):
-        failures.append("The note contains a link.")
     return failures
 
 
@@ -481,6 +473,18 @@ def shortlist_scope(
         raise ShortlistFailure("shortlist: places changed")
 
     now = datetime.now(UTC)
+    # The places a re-proposal clears, for the note's changes (round 14).
+    cleared_places = (
+        []
+        if suggest
+        else list(
+            conn.execute(
+                select(option.c.option_id, option.c.name)
+                .where(option.c.task_id == task_id)
+                .where(option.c.shortlist_state == "proposed")
+            )
+        )
+    )
     if not suggest:
         conn.execute(
             option.update()
@@ -494,7 +498,6 @@ def shortlist_scope(
             .where(option.c.task_id == task_id, option.c.option_id == row.option_id)
             .values(shortlist_state="proposed", shortlist_reason=reason, updated_at=now)
         )
-    note = wire.note.strip()
     model = LONGLIST_JUDGMENT_MODEL if backend.mode == "live" else "stub"
     provenance = {
         "prompt_version": SHORTLIST_PROMPT_VERSION,
@@ -517,8 +520,30 @@ def shortlist_scope(
             longlist_result.c.longlist_result_id == result_row.longlist_result_id,
             longlist_result.c.task_id == task_id,
         )
-        .values(shortlist={"note": note, "provenance": provenance})
+        .values(shortlist={"provenance": provenance})
     )
+    # The note, from its one writer (owner, 2026-11-08): the places as they
+    # now stand and this proposal's changes. A failed note leaves the picks.
+    picked = {row.option_id for row, _ in picks}
+    changes: list[dict[str, object]] = [
+        {"option_id": str(row.option_id), "name": row.name, "change": "added", "reason": reason}
+        for row, reason in picks
+    ] + [
+        {"option_id": str(place.option_id), "name": place.name, "change": "removed", "reason": None}
+        for place in cleared_places
+        if place.option_id not in picked
+    ]
+    try:
+        note: str | None = write_shortlist_note(
+            conn,
+            task_id,
+            backend,
+            outcomes=[outcome.text for outcome in plan.outcomes],
+            changes=changes,
+        )
+    except Exception:
+        log.warning("shortlist.note_failed", task_id=str(task_id), exc_info=True)
+        note = None
     current_places = list(
         conn.execute(
             select(

@@ -58,6 +58,7 @@ from policy_atlas.api.deps import (
     get_executor,
     get_runner_backends,
     get_task_agent_backend,
+    get_title_backend,
 )
 from policy_atlas.api.gate_turns import PausedGate, read_paused_gate
 from policy_atlas.api.longlist_start import (
@@ -82,6 +83,7 @@ from policy_atlas.api.routers.common import (
     active_parentless_walk,
 )
 from policy_atlas.api.stage_vocabulary import STAGE_PRESENTATION, STAGE_ROW, STEP_VERBS
+from policy_atlas.api.titles import TitleWriter, in_background, name_task_from_question
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import (
@@ -1020,6 +1022,7 @@ def create_task_agent_turn(
     embedding_backend: Annotated[EmbeddingBackend, Depends(get_chat_embedding_backend)],
     executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
     runner_backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
+    titles: Annotated[TitleWriter, Depends(get_title_backend)],
 ) -> StreamingResponse:
     """Advance one task's durable task_agent conversation once per client turn id.
 
@@ -1166,6 +1169,7 @@ def create_task_agent_turn(
                     carried_decision=carried_decision,
                     task_agent=task_agent,
                     agent=agent,
+                    titles=titles,
                     on_delta=lambda text: events.put(TaskAgentDeltaEvent(text=text)),
                 )
                 terminal = TaskAgentCompletedEvent(turn=result)
@@ -1232,6 +1236,7 @@ def _planner_turn(
     carried_decision: TurnDecisionOut | None,
     task_agent: TaskAgentTurnBackend,
     agent: AgentBackend,
+    titles: TitleWriter,
     on_delta: Callable[[str], None],
 ) -> TaskAgentTurnOut:
     """Call the planner, then store the turn and any plan it approved.
@@ -1344,7 +1349,38 @@ def _planner_turn(
             "a run started while this turn was being planned; "
             "finish or stop it, then retry the turn",
         )
+    # Round 14 (owner): at the step 1 decision itself, the question part
+    # answered, Policy Atlas names the task from the refined question unless
+    # the user has named it. After the commit, in this worker, before the
+    # stream's completed line, so the header changes with the decision.
+    confirmed = _confirmed_question(turns, draft)
+    if confirmed is not None:
+        try:
+            # Under the turn's own user scope; the call carries the task's
+            # session, as the turn's planner call does.
+            with tracing.trace_scope(user_id=user_id):
+                name_task_from_question(engine, titles, task_id=task_id, question=confirmed)
+        except Exception:
+            # The turn is committed; a naming failure never fails it.
+            log.warning("task.title_hook_failed", task_id=str(task_id), exc_info=True)
     return result
+
+
+#: The confirm marker the question part's card sends (``PartCard.tsx``).
+_QUESTION_CONFIRMED = "[confirm part=question "
+
+
+def _confirmed_question(turns: list[dict[str, str]], draft: object) -> str | None:
+    """The refined question the user has just confirmed, if this turn confirmed one.
+
+    The draft's question when the user's message answers the question part
+    (its confirm marker, sent for a pick and for accepted, edited words).
+    """
+    last_user = next((turn["text"] for turn in reversed(turns) if turn["role"] == "user"), "")
+    if _QUESTION_CONFIRMED not in last_user:
+        return None
+    question = getattr(draft, "question", None)
+    return question if isinstance(question, str) and question.strip() else None
 
 
 @router.get("/{task_id}/task-agent-turns", response_model=Page[TaskAgentTranscriptTurnOut])
@@ -1675,6 +1711,7 @@ def patch_plan(
     agent: Annotated[AgentBackend, Depends(get_agent_backend)],
     executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
     backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
+    titles: Annotated[TitleWriter, Depends(get_title_backend)],
 ) -> PlanOut:
     """Apply typed edits to the current plan and persist a new approved version.
 
@@ -1685,6 +1722,7 @@ def patch_plan(
     """
     designs: dict[str, OptionDesign] = {}
     scoped: tuple[ScopingPlan, ScopingPlan] | None = None
+    edited_question: str | None = None
     if payload.scoping is not None and payload.scoping.your_options is not None:
         # Model calls stay outside the locked transaction below (review
         # finding I2): propose designs for the new or reworded options first.
@@ -1743,6 +1781,16 @@ def patch_plan(
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
             row = _persist_version(conn, task_id, patched, conversation_id)
             out = _plan_out(EVIDENCE_SEARCH, patched, row)
+            if "question" in payload.model_fields_set:
+                edited_question = patched.question
+    if edited_question is not None:
+        # Round 14: an edited, approved question names the task too.
+        in_background(
+            lambda: name_task_from_question(
+                engine, titles, task_id=task_id, question=edited_question
+            ),
+            name=f"policy-atlas-task-title-{task_id}",
+        )
     if scoped is None:
         return out
     # Committed. The opener takes the dispatch lock and the task row itself.

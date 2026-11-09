@@ -6950,7 +6950,14 @@ def write_summaries_after_commit(
     provider_disabled = False
     disabled_logged = False
 
-    for spec in block_specs:
+    for index, spec in enumerate(block_specs, start=1):
+        # Round 14: the line moves section by section.
+        liveness.publish_progress(
+            activity=activity("synthesise.summary_section", done=index, total=len(block_specs)),
+            done=index,
+            total=len(block_specs),
+            unit="sections",
+        )
         if provider_disabled:
             records.append(
                 {
@@ -7265,6 +7272,7 @@ def _write_and_judge_summary(
                     "judge_calls": judge_calls,
                     "usage_totals": totals.payload(),
                 }
+            liveness.publish_progress(activity=activity("synthesise.summary_check"))
             verdict, usage = synthesis_backend.judge_summary(
                 summary=emitted.summary, detail=detail
             )

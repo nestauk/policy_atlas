@@ -386,3 +386,48 @@ def test_artefact_summary_seed_is_anchored_on_key_findings_and_conclusions(engin
         if task_id is not None:
             with engine.begin() as conn:
                 delete_task_data(conn, task_id)
+
+
+
+def test_the_summaries_pass_moves_its_line_section_by_section(engine: Engine) -> None:
+    """Task 058, round 14: under a bound task, one line per section ("n of N"),
+    then "Checking the summaries" for each judge call."""
+    from policy_atlas.core import liveness
+
+    task_id: uuid.UUID | None = None
+    ticks: list[dict[str, Any]] = []
+    try:
+        task_id, run_id, block_ids = _seed_summary_source(engine)
+        original = liveness.tick_hub.publish_tick
+
+        def capture(task: uuid.UUID, **payload: Any) -> None:
+            ticks.append(payload)
+            original(task, **payload)
+
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(liveness.tick_hub, "publish_tick", capture)
+            walk = uuid.uuid4()
+            with liveness.task_liveness(task_id, stage="synthesise", run_id=walk):
+                write_summaries_after_commit(
+                    engine,
+                    task_id=task_id,
+                    run_id=run_id,
+                    synthesis_backend=StubSynthesisBackend(),
+                )
+        lines = [tick["activity"] for tick in ticks]
+        sections = [line for line in lines if line.startswith("Summarising the sections · ")]
+        total = len(block_ids)
+        expected = [f"Summarising the sections · {n} of {total}" for n in range(1, total + 1)]
+        assert sections == expected
+        assert "Checking the summaries" in lines
+        assert all(tick["stage"] == "synthesise" for tick in ticks)
+        counted = [tick for tick in ticks if tick["activity"] in sections]
+        assert [(t["done"], t["total"], t["unit"]) for t in counted][0] == (
+            1,
+            len(block_ids),
+            "sections",
+        )
+    finally:
+        if task_id is not None:
+            with engine.begin() as conn:
+                delete_task_data(conn, task_id)

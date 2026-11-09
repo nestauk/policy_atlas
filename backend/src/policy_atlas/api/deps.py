@@ -13,6 +13,7 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.auth import get_current_user, get_optional_user
 from policy_atlas.api.settings import IngestMode, Settings
+from policy_atlas.api.titles import TitleWriter
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import (
     EmbeddingBackend,
@@ -208,6 +209,18 @@ def get_agent_backend() -> AgentBackend:
         The live OpenAI agent (the 024 router/watch — free-text
         compilation must go through the real router in live deployments) when
         the route's key is configured, else the deterministic stub.
+    """
+    if _live():
+        return OpenAIAgentBackend(langfuse_client=tracing.get_langfuse())
+    return StubAgentBackend()
+
+
+def get_title_backend() -> TitleWriter:
+    """Return the backend that writes task and chat titles (task 058, round 14).
+
+    Returns:
+        The live OpenAI agent backend when the route's key is configured,
+        else the deterministic stub (which writes no title).
     """
     if _live():
         return OpenAIAgentBackend(langfuse_client=tracing.get_langfuse())

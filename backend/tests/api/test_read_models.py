@@ -1608,6 +1608,8 @@ def test_landscape_geography_residual_makes_every_scope_add_up(
                 assert titles(spelling) == ["Reported country"]
             assert "Reported country" not in titles("Not reported")
             assert titles("Not reported")
+            # Round 14: `none` is the sentinel for the same set.
+            assert titles("none") == titles("Not reported")
             assert titles("France") == []
             every = client.get(f"/api/v1/tasks/{task_id}/evidence", headers=owner).json()
             countries = {row["title"]: row["country"] for row in every["data"]}
@@ -2802,6 +2804,12 @@ def test_a_source_with_a_collected_full_text_links_to_it(
                 _, older = seed_source(conn, task_id, {"title": "Older, no address"})
                 seed_ingested_full_text(conn, tss_id=older, chunks=["Body."])
                 seed_source(conn, task_id, {"title": "Not collected"})
+                _, queued = seed_source(conn, task_id, {"title": "Collecting"})
+                conn.execute(
+                    update(task_source_snapshot)
+                    .where(task_source_snapshot.c.task_source_snapshot_id == queued)
+                    .values(full_text_status="queued")
+                )
                 conn.execute(
                     update(task_source_snapshot)
                     .where(task_source_snapshot.c.task_source_snapshot_id == fetched)
@@ -2822,7 +2830,13 @@ def test_a_source_with_a_collected_full_text_links_to_it(
                 # The fixture's own locator is no http(s) address.
                 "Older, no address": None,
                 "Not collected": None,
+                "Collecting": None,
             }
+            # Round 14: the fetch's state, so a pending one reads "Collecting…".
+            states = {row["title"]: row["full_text_status"] for row in rows}
+            assert states["Fetched"] == "ingested"
+            assert states["Not collected"] == "not_attempted"
+            assert states["Collecting"] == "queued"
             dossier = client.get(
                 f"/api/v1/tasks/{task_id}/sources/{fetched}", headers=owner
             ).json()

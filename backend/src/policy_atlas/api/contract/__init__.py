@@ -23,6 +23,7 @@ from .chat import (
     ConversationListItemOut,
     ConversationOut,
     ConversationStatus,
+    ConversationTitledEvent,
     ConversationUpdate,
     DeltaEvent,
     FailedEvent,
@@ -56,6 +57,7 @@ from .common import (
 )
 from .projects import (
     PROJECT_NAME_MAX,
+    ProjectArchiveOut,
     ProjectCreate,
     ProjectOut,
     ProjectUpdate,
@@ -329,6 +331,7 @@ __all__ = [
     "CancelledEvent",
     "CancelTurnOut",
     "ChatStreamEvent",
+    "ConversationTitledEvent",
     "ChatTurnCreate",
     "AnswerPayloadOut",
     "ChatTurnOut",
@@ -427,6 +430,7 @@ __all__ = [
     "TurnActionOut",
     "TurnDecisionOut",
     "ProjectCreate",
+    "ProjectArchiveOut",
     "ProjectOut",
     "ProjectUpdate",
     "Capability",

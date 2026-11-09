@@ -175,6 +175,7 @@ from policy_atlas.options_scoping.option_profile.place_sentences import (
 from policy_atlas.options_scoping.shortlist.shortlist import (
     SHORTLIST_PROPOSED as SHORTLIST_PROPOSED,
 )
+from policy_atlas.options_scoping.shortlist.shortlist_note import PLACE_STATES, note_stale
 from policy_atlas.runtime.capability_registry import (
     OPTIONS_SCOPING,
     expect_scoping_plan,
@@ -614,6 +615,10 @@ def _full_text_url(full_text_status: str | None, locator: str | None) -> str | N
 #: 031). A stable, public-vocabulary string: the frontend must not rename or
 #: drop it, or the chart stops adding up to the population it draws.
 GEOGRAPHY_NOT_REPORTED = "Not reported"
+
+#: The evidence read's ``country`` value for the rows with no publisher
+#: country, the link Landscape's "Not reported" row uses (task 058, round 14).
+COUNTRY_NONE = "none"
 
 
 def country_name(raw: str | None) -> str | None:
@@ -1181,8 +1186,13 @@ def evidence_page(
     """Return one evidence page, deriving status task-wide before paging.
 
     ``country`` keeps the sources whose publisher country is that country,
-    by any spelling (:func:`country_name`); ``"Not reported"`` keeps those
-    with none, the Landscape chart's own bucket (task 058, round 10).
+    by any spelling (:func:`country_name`); ``"none"`` (round 14) or
+    ``"Not reported"`` keeps those with none, the Landscape chart's own
+    bucket (task 058, round 10).
+
+    ``theme`` keeps a characterisation theme's sources, or on an
+    options-scoping task a longlist theme's: the documents of its options
+    (task 058, round 14).
 
     ``query`` keeps the sources one search returned, named by the coverage
     row's ``query_id`` (:func:`_query_record_ids`, task 058, round 12): a
@@ -1279,6 +1289,9 @@ def evidence_page(
                 )
             ).scalars()
         )
+        # Round 14: on an options-scoping task a longlist theme's id lists
+        # the documents of its options. The two id spaces never collide.
+        | _longlist_theme_sources(conn, task_id, theme)
         if theme is not None
         else None
     )
@@ -1286,7 +1299,7 @@ def evidence_page(
         None
         if country is None
         else ""
-        if country.strip() == GEOGRAPHY_NOT_REPORTED
+        if country.strip() in (GEOGRAPHY_NOT_REPORTED, COUNTRY_NONE)
         else (country_name(country) or "").casefold()
     )
     sortable_items: list[tuple[EvidenceItemOut, int | None]] = []
@@ -1406,6 +1419,7 @@ def evidence_page(
                     full_text_url=_full_text_url(
                         row.full_text_status, row.full_text_locator
                     ),
+                    full_text_status=cast(Any, row.full_text_status),
                 ),
                 quality_score,
             )
@@ -1788,6 +1802,9 @@ OPTION_EVENT_KINDS: tuple[str, ...] = (
     OPTION_UNSHORTLISTED,
     OPTION_EXCLUSION_REASON_ADDED,
 )
+#: The not-covered note rewritten alone for the places as they stand (task
+#: 058, round 14): one History line, Policy Atlas's.
+SHORTLIST_NOTE_UPDATED = "shortlist.note_updated"
 #: Policy Atlas's shortlist proposal (task 055, A7): one event per proposal,
 #: the record of its places, note, appetite and versions. Written by the
 #: ``shortlist`` component; ``SHORTLIST_PROPOSED`` is imported from there (top
@@ -1810,6 +1827,7 @@ _EVENT_KINDS = {
     "plan.approved",
     *OPTION_EVENT_KINDS,
     SHORTLIST_PROPOSED,
+    SHORTLIST_NOTE_UPDATED,
 } | both_generations(*LIFECYCLE_EVENT_KINDS)
 
 
@@ -1849,6 +1867,9 @@ def _event_decision(
             payload.get("reason"),
             actor,
         )
+    elif event_type == SHORTLIST_NOTE_UPDATED:
+        actor, decided_by = history.SYSTEM, "agent"
+        summary = f"{history.POLICY_ATLAS} updated the shortlist note."
     elif event_type == SHORTLIST_PROPOSED:
         places = payload.get("places")
         count = len(places) if isinstance(places, list) else 0
@@ -3211,6 +3232,7 @@ def source_dossier_out(
         abstract=abstract,
         abstract_source=abstract_source,
         full_text_url=_full_text_url(row["full_text_status"], row["full_text_locator"]),
+        full_text_status=cast(Any, row["full_text_status"]),
         publisher=_metadata_text(metadata, "publisher_org"),
         record_type=_metadata_text(metadata, "record_type"),
         language=_metadata_text(metadata, "language"),
@@ -3712,6 +3734,44 @@ def _lever_reason(result: Any | None, option_id: uuid.UUID) -> str | None:
     return reason if isinstance(reason, str) and reason.strip() else None
 
 
+def _longlist_theme_sources(
+    conn: Connection, task_id: uuid.UUID, theme_id: uuid.UUID
+) -> set[uuid.UUID]:
+    """The documents of every option in one longlist theme (task 058, round 14).
+
+    The union of the theme's options' member documents in this task, as the
+    latest longlist names the theme's options; empty when the task has no
+    longlist or no such theme (an Evidence search task's ``theme`` is a
+    characterisation theme instead).
+    """
+    result = _latest_longlist_row(conn, task_id)
+    if result is None or not isinstance(result.themes, list):
+        return set()
+    option_ids: list[uuid.UUID] = []
+    for raw in result.themes:
+        theme = _as_mapping(raw)
+        if str(theme.get("theme_id")) != str(theme_id):
+            continue
+        for value in _string_list(theme.get("option_ids")):
+            try:
+                option_ids.append(uuid.UUID(value))
+            except ValueError:
+                continue
+    if not option_ids:
+        return set()
+    return {
+        tss_id
+        for tss_id in conn.execute(
+            select(option_membership.c.task_source_snapshot_id).where(
+                option_membership.c.task_id == task_id,
+                option_membership.c.option_id.in_(option_ids),
+                option_membership.c.task_source_snapshot_id.is_not(None),
+            )
+        ).scalars()
+        if tss_id is not None
+    }
+
+
 def _latest_longlist_row(conn: Connection, task_id: uuid.UUID) -> Any | None:
     """The task's latest ``longlist_result`` row (a longlist exists iff one does)."""
     return conn.execute(
@@ -3992,7 +4052,9 @@ def _shortlist_state_out(row: Any) -> ShortlistStateOut | None:
     return ShortlistStateOut(state=row.shortlist_state, reason=row.shortlist_reason)
 
 
-def _shortlist_out(stored: object, current: ScopingPlan | None) -> ShortlistOut:
+def _shortlist_out(
+    stored: object, current: ScopingPlan | None, places: Iterable[uuid.UUID] = ()
+) -> ShortlistOut:
     """The latest shortlist proposal, as the longlist serves it (task 055, PG1).
 
     A row written before the shortlist existed holds ``{}``: no note, no
@@ -4003,6 +4065,7 @@ def _shortlist_out(stored: object, current: ScopingPlan | None) -> ShortlistOut:
     Args:
         stored: ``longlist_result.shortlist``.
         current: The current approved plan, or ``None`` when it cannot be read.
+        places: The options now on the shortlist, for ``note_stale``.
 
     Returns:
         The served proposal.
@@ -4014,6 +4077,7 @@ def _shortlist_out(stored: object, current: ScopingPlan | None) -> ShortlistOut:
         note=note if isinstance(note, str) and note.strip() else None,
         provenance=provenance,
         stale=shortlist_proposal_stale(provenance, current),
+        note_stale=note_stale(shortlist, places),
     )
 
 
@@ -4259,6 +4323,19 @@ def _search_labels(
     return labels_for_snapshots(conn, task_id=task_id, tss_ids=tss_ids) if tss_ids else {}
 
 
+def _member_documents(conn: Connection, task_id: uuid.UUID) -> dict[uuid.UUID, set[uuid.UUID]]:
+    """Each option's member documents in this task (task 058, round 14)."""
+    documents: dict[uuid.UUID, set[uuid.UUID]] = {}
+    for option_id, tss_id in conn.execute(
+        select(option_membership.c.option_id, option_membership.c.task_source_snapshot_id).where(
+            option_membership.c.task_id == task_id,
+            option_membership.c.task_source_snapshot_id.is_not(None),
+        )
+    ).all():
+        documents.setdefault(option_id, set()).add(tss_id)
+    return documents
+
+
 def _members_by_option(conn: Connection, task_id: uuid.UUID) -> set[uuid.UUID]:
     """The task's options that hold at least one membership row."""
     return {
@@ -4420,6 +4497,7 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
 
     themes: list[LonglistThemeOut] = []
     themed: list[uuid.UUID] = []
+    documents_by_option = _member_documents(conn, task_id)
     for raw in result.themes if isinstance(result.themes, list) else []:
         theme = _as_mapping(raw)
         try:
@@ -4441,6 +4519,11 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
                 name=str(theme.get("name") or ""),
                 description=str(theme.get("description") or ""),
                 option_ids=option_ids,
+                # Round 14: each document once, however many of the theme's
+                # options hold it; the count `evidence?theme=` lists.
+                document_count=len(
+                    set().union(*(documents_by_option.get(oid, set()) for oid in option_ids))
+                ),
             )
         )
     themed_set = set(themed)
@@ -4522,7 +4605,15 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
             ]
         },
         taxonomy_version=taxonomy if isinstance(taxonomy, str) else TAXONOMY_VERSION,
-        shortlist=_shortlist_out(result.shortlist, current_plan),
+        shortlist=_shortlist_out(
+            result.shortlist,
+            current_plan,
+            [
+                row.option_id
+                for row in rows
+                if row.shortlist_state in PLACE_STATES and row.merged_into_option_id is None
+            ],
+        ),
         plan_inputs_changed=_plan_inputs_changed(
             current_plan, built_from[1] if built_from else None
         ),

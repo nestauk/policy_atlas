@@ -297,6 +297,13 @@ def lifecycle_sentence(kind: str, payload: Mapping[str, Any], actor: Actor) -> s
         if isinstance(name, str) and name.strip():
             return f"{actor.subject} renamed the task to “{name.strip()}”."
         return f"{actor.subject} renamed the task."
+    project_name = payload.get("project_name")
+    if kind == "archived" and isinstance(project_name, str) and project_name.strip():
+        # Round 14: archived with its project, the task in no other one.
+        return (
+            f"{actor.subject} archived the project “{project_name.strip()}”, "
+            "and this task with it."
+        )
     return {
         "archived": f"{actor.subject} archived the task.",
         "shared_publicly": f"{actor.subject} made the task public.",

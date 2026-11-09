@@ -77,6 +77,8 @@ import {
   toLonglistOptionSummary,
   type MockWalkLonglistStage,
   mockShortlistState,
+  mockCurrentPlaces,
+  mockNoteStale,
   MOCK_SHORTLIST_PLACES_TARGET,
   resetMockShortlist,
 } from "./fixtures";
@@ -289,6 +291,39 @@ function scopingPlanOut(version: number) {
 // that need the enrolled/org-scoped journeys call `setMockMe(mockMeEnrolled)`.
 let currentMe: MeOut = { ...mockMeUnenrolled };
 let mockProjects: ProjectOut[] = [{ ...mockProject }];
+/** The full-text state the mock's ingest stage moves rows through (round 14),
+ *  by source id, over the fixture's own; reset with the scenario. */
+let mockIngestState = new Map<string, components["schemas"]["EvidenceItemOut"]["full_text_status"]>();
+
+/** An evidence row as the mock serves it, with the ingest stage's state. */
+function mockEvidenceRow(item: components["schemas"]["EvidenceItemOut"]): components["schemas"]["EvidenceItemOut"] {
+  const state = mockIngestState.get(item.source_id);
+  return state === undefined ? item : { ...item, full_text_status: state, read_in_full: state === "ingested" };
+}
+
+/** Tasks archived with their project (round 14), by id, with when; reset with the scenario. */
+let mockArchivedWithProject = new Map<string, string>();
+
+/** A task as the mock serves it: archived when its project's archive took it. */
+function mockTaskState(task: TaskOut): TaskOut {
+  const when = mockArchivedWithProject.get(task.task_id);
+  return when === undefined ? task : { ...task, status: "archived", archived_at: when, updated_at: when };
+}
+
+/** The caller's own active tasks in the project that no other active project
+ *  holds: what archiving it archives (round 14, as the server counts them). */
+function mockSoloTasks(projectId: string): TaskOut[] {
+  const activeProjects = new Set(mockProjects.filter((project) => project.archived_at == null).map((project) => project.project_id));
+  return [mockTask, ...mockOtherTasks]
+    .map(mockTaskState)
+    .filter((task) => task.status === "active" && task.is_owner && task.project_ids?.includes(projectId) === true)
+    .filter((task) => (task.project_ids ?? []).every((other) => other === projectId || !activeProjects.has(other)));
+}
+
+/** A project as the mock serves it, with its solo-task count (round 14). */
+function mockProjectOut(project: ProjectOut): ProjectOut {
+  return { ...project, solo_task_count: mockSoloTasks(project.project_id).length };
+}
 const mockWaitlistEmails = new Set<string>();
 
 /** Test helper: switch the mock's `/me` identity (e.g. to `mockMeEnrolled`). */
@@ -317,6 +352,8 @@ export function resetMockScenario() {
   currentScopingPlan = { ...mockScopingPlanReady };
   currentMe = { ...mockMeUnenrolled };
   mockProjects = [{ ...mockProject }];
+  mockArchivedWithProject = new Map();
+  mockIngestState = new Map();
   mockTask.is_owner = true;
   mockTask.is_public = false;
   // Options added by hand belong to one scenario, not the next.
@@ -766,22 +803,27 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       .sort((left, right) =>
         right.last_activity_at.localeCompare(left.last_activity_at) || right.project_id.localeCompare(left.project_id),
       );
-    return json(pageOf(listed, url, 20));
+    return json(pageOf(listed.map(mockProjectOut), url, 20));
   }
   const projectArchiveMatch = /\/api\/v1\/projects\/([^/]+)\/archive$/.exec(path);
   if (method === "POST" && projectArchiveMatch) {
     const found = mockProjects.find((project) => project.project_id === projectArchiveMatch[1]);
     if (found === undefined) return json({ detail: "resource not found" }, 404);
     if (!found.is_owner) return json({ error: { code: "forbidden", message: "action is not permitted" } }, 403);
-    // Again changes nothing; the first time stands. Its tasks are untouched.
-    const archived = { ...found, archived_at: found.archived_at ?? new Date().toISOString() };
+    // Again changes nothing; the first time stands. Round 14: the first time
+    // archives the caller's tasks that are in no other project.
+    if (found.archived_at != null) return json({ ...mockProjectOut(found), archived_task_count: 0 });
+    const when = new Date().toISOString();
+    const solo = mockSoloTasks(found.project_id);
+    for (const task of solo) mockArchivedWithProject.set(task.task_id, when);
+    const archived = { ...found, archived_at: when };
     mockProjects = mockProjects.map((project) => (project.project_id === archived.project_id ? archived : project));
-    return json(archived);
+    return json({ ...mockProjectOut(archived), archived_task_count: solo.length });
   }
   const projectDetailMatch = /\/api\/v1\/projects\/([^/]+)$/.exec(path);
   if (method === "GET" && projectDetailMatch) {
     const found = mockProjects.find((project) => project.project_id === projectDetailMatch[1]);
-    return found !== undefined ? json(found) : json({ detail: "resource not found" }, 404);
+    return found !== undefined ? json(mockProjectOut(found)) : json({ detail: "resource not found" }, 404);
   }
   // Task 033 phase 10b: the visibility control's cascade (i.4) — the mock's
   // one task is the project's only member, so "every member follows"
@@ -813,19 +855,20 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     const status = url.searchParams.get("status") ?? "active";
     const scope = url.searchParams.get("scope") ?? "all";
     const rows = [mockTask, ...mockOtherTasks]
+      .map(mockTaskState)
       .filter((task) => projectId === null || task.project_ids?.includes(projectId) === true)
       .filter((task) => status === "all" || task.status === status)
       .filter((task) => scope !== "mine" || task.is_owner)
       .sort((left, right) => right.updated_at.localeCompare(left.updated_at));
     return json(pageOf(rows, url, 20));
   }
-  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}`)) return json(mockTask);
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}`)) return json(mockTaskState(mockTask));
   const otherTaskMatch = path.match(/\/api\/v1\/tasks\/([^/]+)$/);
   const otherTask =
     method === "GET" && otherTaskMatch !== null
       ? mockOtherTasks.find((task) => task.task_id === otherTaskMatch[1])
       : undefined;
-  if (otherTask !== undefined) return json(otherTask);
+  if (otherTask !== undefined) return json(mockTaskState(otherTask));
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/funnel`)) return json(mockFunnel);
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/landscape`)) return json(mockLandscape);
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/evidence`)) {
@@ -845,10 +888,13 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     const appraised = url.searchParams.get("appraised");
     const sort = url.searchParams.get("sort") as EvidenceSortField | null;
     const order = url.searchParams.get("order") as "asc" | "desc" | null;
-    let rows = mockEvidence.filter((item) => {
+    // Round 14: on the scoping task a longlist theme's id lists the
+    // documents of its options (their card documents, as the dossier serves them).
+    const longlistTheme = theme === null ? undefined : mockLonglistThemeDocuments(theme);
+    let rows = (longlistTheme ?? mockEvidence.map(mockEvidenceRow)).filter((item) => {
       const included = ["relevant", "not_selected", "selected", "read_in_full", "findings_extracted", "cited", "unavailable"];
       const statusMatches = statuses.length === 0 || statuses.some((status) => status === item.status || (status === "Included" && included.includes(item.status)));
-      const themeMatches = theme === null || (mockEvidenceThemeIds[item.source_id] ?? []).includes(theme);
+      const themeMatches = theme === null || longlistTheme !== undefined || (mockEvidenceThemeIds[item.source_id] ?? []).includes(theme);
       const yearFrom = url.searchParams.get("year_from");
       const yearTo = url.searchParams.get("year_to");
       const yearMatches =
@@ -1079,6 +1125,18 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     }
     return json(option);
   }
+  // Round 14: the note rewritten for the places as they now stand, only
+  // when stale; otherwise the shortlist comes back as it is.
+  if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/shortlist/note`)) {
+    if (mockTask.active_run != null) return mockConflict("run_active", "A walk is already running.");
+    if (mockNoteStale()) {
+      await pace(800);
+      const places = mockCurrentPlaces().length;
+      mockShortlistState.note = `Mock note, refreshed: ${places} place${places === 1 ? "" : "s"}; nothing here tackles the wider labour market.`;
+      mockShortlistState.placesAt = mockCurrentPlaces();
+    }
+    return json(mockLonglist().shortlist);
+  }
   if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/shortlist/suggest`)) {
     if (mockTask.active_run != null) return mockConflict("run_active", "A walk is already running.");
     // The proposal takes a moment on the server; a short wait lets the
@@ -1102,6 +1160,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     }
     mockShortlistState.note = "Mock note: nothing here tackles the wider labour market.";
     mockShortlistState.stale = false;
+    mockShortlistState.placesAt = mockCurrentPlaces();
     const startedAt = new Date().toISOString();
     const walk: RunOut = {
       capability_run_id: crypto.randomUUID(),
@@ -1321,9 +1380,26 @@ function createMockChatTurnStream(conversationId: string, clientTurnId: string, 
       };
       chatTurnsByConversation.set(conversationId, [...existing, turn]);
       emit({ type: "completed", turn });
+      // Round 14: the first message's chat is titled a second after the
+      // answer, as the server's background `chat_title` call lands.
+      const conversation = chatConversations.find((candidate) => candidate.id === conversationId);
+      if (existing.length === 0 && conversation !== undefined && conversation.title === "New chat") {
+        await pace(MOCK_CHAT_TITLE_DELAY_MS);
+        conversation.title = mockChatTitle(message);
+        emit({ type: "conversation.titled", conversation_id: conversationId, title: conversation.title });
+      }
       controller.close();
     },
   });
+}
+
+/** How long after the first answer the mock's chat title lands (round 14). */
+export const MOCK_CHAT_TITLE_DELAY_MS = 1000;
+
+/** The mock's chat title: the first few words of the first message. */
+function mockChatTitle(message: string): string {
+  const words = message.trim().replace(/[?!.]+$/, "").split(/\s+/).slice(0, 5).join(" ");
+  return words.length > 0 ? words.charAt(0).toUpperCase() + words.slice(1) : "New chat";
 }
 
 /** Install the client-level fetch interceptor only after VITE_MOCK is selected. */
@@ -1455,6 +1531,19 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
       await walkStage(emit, emitTick, nextSequence, "appraise", wait, [
         { activity: "Classifying" },
       ], { quality_checked: 118 });
+      // Round 14: the full texts are collected, as the server's ingest stage
+      // does; the rows read "Collecting…" while queued, then full text.
+      const collected = mockEvidence.filter((item) => item.read_in_full).map((item) => item.source_id);
+      for (const id of collected) mockIngestState.set(id, "queued");
+      emit(stageStarted("ingest", nextSequence()));
+      setLiveStage("ingest");
+      for (const [index, id] of collected.entries()) {
+        const entry = { activity: `collecting ${index + 1} of ${collected.length}`, done: index + 1, total: collected.length, unit: "documents" };
+        await wait(MOCK_TICK_MS);
+        mockIngestState.set(id, "ingested");
+        emitTick(tick("ingest", entry.activity, entry));
+      }
+      emit(stageCompleted("ingest", { ingested: collected.length }, nextSequence()));
       // The themes show once found, while the sources are assigned (round 9).
       emit(stageStarted("characterise", nextSequence()));
       setLiveStage("characterise");
@@ -1652,6 +1741,15 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
         occurred_at: FRAME_TIME,
         sequence: nextSequence(),
       });
+      // Round 14: the summaries pass after the introduction, as the server
+      // runs it once the report is saved: the line moves section by section.
+      const summarised = mockArtefactSkeleton.filter((slot) => slot.index !== MOCK_INTRO_INDEX).length;
+      for (let done = 1; done <= summarised; done += 1) {
+        emitTick(tick("synthesise", `Summarising the sections · ${done} of ${summarised}`, { done, total: summarised, unit: "sections" }));
+        await pace(MOCK_TICK_MS);
+        emitTick(tick("synthesise", "Checking the summaries"));
+        await pace(MOCK_TICK_MS);
+      }
       emit(stageCompleted("synthesise", { section_count: 2 }, nextSequence()));
       setRunArtefact(mockArtefact.artefact_id);
       finishRun("succeeded");
@@ -1849,6 +1947,21 @@ function mockReadDepth(item: components["schemas"]["EvidenceItemOut"]): "full_te
   return null;
 }
 
+/** The documents of every option in one longlist theme, as evidence rows
+ *  (round 14); `undefined` when the id is no longlist theme. */
+function mockLonglistThemeDocuments(themeId: string): components["schemas"]["EvidenceItemOut"][] | undefined {
+  const theme = mockLonglist().themes?.find((candidate) => candidate.theme_id === themeId);
+  if (theme === undefined) return undefined;
+  const ids = new Set(
+    (theme.option_ids ?? []).flatMap((optionId) =>
+      (mockLonglistOptionCards[optionId]?.documents ?? [])
+        .map((document) => document.task_source_snapshot_id)
+        .filter((id): id is string => id != null),
+    ),
+  );
+  return [...ids].map((id) => mockDossierFor(id)).filter((row) => row !== undefined);
+}
+
 /**
  * The dossier the mock serves for one source id (round 12): a written
  * dossier when the fixtures hold one, else the evidence row's own fields, else
@@ -1871,6 +1984,7 @@ function mockDossierFor(sourceId: string): components["schemas"]["SourceDossierO
       status: "relevant",
       cited: false,
       read_in_full: false,
+      full_text_status: "not_attempted",
       evidence_type: document.evidence_type ?? null,
       appraisal_tier: document.tier ?? null,
       country: document.place != null && !noCountry.includes(document.place) ? document.place : null,
@@ -1910,7 +2024,8 @@ const MOCK_COUNTRY_ALIASES: Record<string, string> = {
 
 /** Mirror of the server's `country` filter: any spelling; "Not reported" is none. */
 function mockCountryMatches(itemCountry: string | null, wanted: string): boolean {
-  if (wanted.trim() === "Not reported") return itemCountry === null;
+  // `none` (round 14) and "Not reported" both keep the rows with no country.
+  if (wanted.trim() === "none" || wanted.trim() === "Not reported") return itemCountry === null;
   const key = wanted.trim().toLowerCase();
   return itemCountry !== null && itemCountry.toLowerCase() === (MOCK_COUNTRY_ALIASES[key] ?? key);
 }

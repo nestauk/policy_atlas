@@ -195,6 +195,8 @@ class EvidenceItemOut(BaseModel):
         full_text_url: The address the full text was collected from (an
             http(s) link a reader can open), or `None` when no full text was
             collected.
+        full_text_status: Where the full text's fetch stands: `queued`
+            while the ingest is pending (task 058, round 14).
     """
 
     source_id: uuid.UUID
@@ -229,6 +231,11 @@ class EvidenceItemOut(BaseModel):
     # Task 058, round 12: where the full text came from, for the All sources
     # "Full text" link; null unless the text was collected.
     full_text_url: str | None = None
+    # Task 058, round 14: where the full text's fetch stands. `queued` is a
+    # fetch handed to the ingest queue and not yet back ("Collecting…").
+    full_text_status: Literal[
+        "not_attempted", "queued", "ingested", "fetch_failed", "parse_failed"
+    ] = "not_attempted"
 
 
 class FindingBaseOut(BaseModel):
@@ -827,12 +834,16 @@ class LonglistThemeOut(BaseModel):
         name: Theme name.
         description: One-line description.
         option_ids: The theme's options, in display order.
+        document_count: The theme's distinct documents across its options,
+            each counted once (task 058, round 14): the rows
+            `GET /tasks/{id}/evidence?theme=` lists.
     """
 
     theme_id: uuid.UUID
     name: str
     description: str
     option_ids: list[uuid.UUID] = Field(default_factory=list)
+    document_count: int = 0
 
 
 class ExclusionOut(BaseModel):
@@ -1112,12 +1123,16 @@ class ShortlistOut(BaseModel):
         stale: The proposal does not match the plan's current risk appetite,
             or a built longlist has no proposal yet. The view then asks the
             user to press Suggest more to re-propose.
+        note_stale: The note was written against other places than the
+            shortlist now holds (task 058, round 14): `POST
+            /tasks/{id}/shortlist/note` rewrites it. `false` with no note.
     """
 
     note: str | None = None
     provenance: dict[str, Any] = Field(default_factory=dict)
     places_target: int = 5
     stale: bool
+    note_stale: bool = False
 
 
 class LonglistOut(BaseModel):

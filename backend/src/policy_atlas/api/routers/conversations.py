@@ -23,6 +23,7 @@ from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.chat_enrichment import enrich_chat_turn
 from policy_atlas.api.chat_turns import (
     ChatTurnResult,
+    _first_question_title,
     _phase_one_turn,
     run_chat_turn,
 )
@@ -40,6 +41,7 @@ from policy_atlas.api.contract import (
     ConversationListItemOut,
     ConversationOut,
     ConversationStatus,
+    ConversationTitledEvent,
     ConversationUpdate,
     DeltaEvent,
     FailedEvent,
@@ -56,6 +58,7 @@ from policy_atlas.api.deps import (
     get_current_user,
     get_engine,
     get_grounding_judge_backend,
+    get_title_backend,
 )
 from policy_atlas.api.routers.access import (
     accessible_task,
@@ -66,6 +69,7 @@ from policy_atlas.api.routers.access import (
     own_estate,
     trace_admin_read,
 )
+from policy_atlas.api.titles import TitleWriter, in_background, name_chat_from_message
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import (
@@ -672,6 +676,7 @@ async def create_chat_turn_stream(
     chat_backend: Annotated[ChatBackend, Depends(get_chat_backend)],
     embedding_backend: Annotated[EmbeddingBackend, Depends(get_chat_embedding_backend)],
     judge_backend: Annotated[GroundingJudgeBackend, Depends(get_grounding_judge_backend)],
+    titles: Annotated[TitleWriter, Depends(get_title_backend)],
 ) -> StreamingResponse:
     """Reserve a chat turn and stream its provider-neutral NDJSON lifecycle.
 
@@ -744,7 +749,44 @@ async def create_chat_turn_stream(
         return StreamingResponse(replay(), media_type="application/x-ndjson")
 
     turn_id = phase_one
+    with engine.connect() as conn:
+        first_turn = (
+            conn.execute(select(chat_turn.c.turn_index).where(chat_turn.c.id == turn_id))
+            .scalar_one_or_none()
+            == 0
+        )
     events: queue.Queue[Any] = queue.Queue()
+    # Whether the stream still reads ``events``: a title that lands after the
+    # terminal line is not sent (the list's next read shows it).
+    stream_open = threading.Event()
+    stream_open.set()
+    stream_lock = threading.Lock()
+    if first_turn:
+        # Round 14: the reservation titled the chat with a cut of the
+        # message; the chat_title step's line replaces it, off this request,
+        # and the stream says so while it is open (`conversation.titled`).
+        message = body.message
+        subject = user.user_id
+
+        def title_chat() -> None:
+            # Opened in the thread (context variables do not cross a thread
+            # start); the call carries the chat's session, the conversation.
+            with tracing.trace_scope(user_id=subject):
+                title = name_chat_from_message(
+                    engine,
+                    titles,
+                    conversation_id=conversation_id,
+                    message=message,
+                    placeholder=_first_question_title(message),
+                )
+            if title is not None:
+                with stream_lock:
+                    if stream_open.is_set():
+                        events.put(
+                            ConversationTitledEvent(conversation_id=conversation_id, title=title)
+                        )
+
+        in_background(title_chat, name=f"policy-atlas-chat-title-{conversation_id}")
 
     def worker() -> None:
         """Complete persistence independently of a consumer disconnect."""
@@ -801,7 +843,9 @@ async def create_chat_turn_stream(
             )
         finally:
             _deregister_cancel(turn_id)
-            events.put(None)
+            with stream_lock:
+                stream_open.clear()
+                events.put(None)
 
         # Kept outside the try/except/finally above (contract-verifier
         # finding, 2026-08-11): a thread-start failure here must only be

@@ -90,7 +90,15 @@ def evidence(
         Literal["title", "year", "type", "strength", "status", "relevance"] | None, Query()
     ] = None,
     order: Annotated[Literal["asc", "desc"] | None, Query()] = None,
-    theme: Annotated[uuid.UUID | None, Query()] = None,
+    theme: Annotated[
+        uuid.UUID | None,
+        Query(
+            description=(
+                "A theme's id: a characterisation theme's sources, or on an options-scoping "
+                "task a longlist theme's, the documents of its options (task 058, round 14)."
+            ),
+        ),
+    ] = None,
     origin: Annotated[Literal["OpenAlex", "Overton", "Uploaded"] | None, Query()] = None,
     evidence_type: Annotated[str | None, Query(max_length=200)] = None,
     strength: Annotated[
@@ -98,7 +106,17 @@ def evidence(
     ] = None,
     year_from: Annotated[int | None, Query(ge=1000, le=3000)] = None,
     year_to: Annotated[int | None, Query(ge=1000, le=3000)] = None,
-    country: Annotated[str | None, Query(min_length=1, max_length=200)] = None,
+    country: Annotated[
+        str | None,
+        Query(
+            min_length=1,
+            max_length=200,
+            description=(
+                "A publisher country, by any spelling; `none` for the sources with no "
+                "country (Landscape's Not reported row; task 058, round 14)."
+            ),
+        ),
+    ] = None,
     query: Annotated[
         int | None,
         Query(

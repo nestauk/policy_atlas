@@ -323,12 +323,15 @@ export interface paths {
         put?: never;
         /**
          * Archive Project
-         * @description Archive a project (task 058, round 11), as `POST /tasks/{id}/archive` does a task.
+         * @description Archive a project (task 058, round 11), and the tasks only it holds (round 14).
          *
          *     Owner only. The project leaves the default list (`status=active`) and is
-         *     listed under `status=archived`; it stays readable by id. Its tasks are
-         *     left as they are: they keep their membership and stay on the Tasks list.
-         *     Archiving an archived project changes nothing and keeps its first time.
+         *     listed under `status=archived`; it stays readable by id. In the same
+         *     transaction, each of the caller's own active tasks in this project that
+         *     is in no other active project is archived too (owner, 2026-11-07), each
+         *     task's History saying so; a task also in another project, or a
+         *     colleague's, is left as it is. Archiving an archived project changes
+         *     nothing and keeps its first time.
          *
          *     Args:
          *         project_id: The project to archive.
@@ -336,7 +339,7 @@ export interface paths {
          *         conn: Open database connection.
          *
          *     Returns:
-         *         The project with its `archived_at`.
+         *         The project with its `archived_at` and `archived_task_count`.
          *
          *     Raises:
          *         HTTPException: 404 when the project is unreadable, 403 when it is
@@ -1106,6 +1109,37 @@ export interface paths {
         get: operations["get_run_api_v1_tasks__task_id__runs__run_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/shortlist/note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Shortlist Note
+         * @description Rewrite the shortlist's not-covered note for the places as they stand (round 14).
+         *
+         *     Owner only. Only when the note is stale (written against other places,
+         *     or missing beside a proposal); otherwise the shortlist comes back as it
+         *     is. The note's one writer (:func:`write_shortlist_note`) runs with no
+         *     changes: it reads the plan's outcomes, the option list and the places,
+         *     never a document line. History says "Policy Atlas updated the shortlist
+         *     note".
+         *
+         *     Raises:
+         *         HTTPException: 404 with no longlist, 409 while a walk runs, 503 when
+         *             the call fails (nothing is written).
+         */
+        post: operations["post_shortlist_note_api_v1_tasks__task_id__shortlist_note_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2438,6 +2472,32 @@ export interface components {
             title: string;
         };
         /**
+         * ConversationTitledEvent
+         * @description The chat's title written from its first message (task 058, round 14).
+         *
+         *     Sent once, while the first turn's stream is open, when the ``chat_title``
+         *     step's line replaces the message's cut; never terminal.
+         *
+         *     Args:
+         *         conversation_id: The chat.
+         *         title: Its new title.
+         */
+        ConversationTitledEvent: {
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /** Title */
+            title: string;
+            /**
+             * Type
+             * @default conversation.titled
+             * @constant
+             */
+            type: "conversation.titled";
+        };
+        /**
          * ConversationUpdate
          * @description Partial update for an existing chat conversation.
          *
@@ -2694,6 +2754,8 @@ export interface components {
          *         full_text_url: The address the full text was collected from (an
          *             http(s) link a reader can open), or `None` when no full text was
          *             collected.
+         *         full_text_status: Where the full text's fetch stands: `queued`
+         *             while the ingest is pending (task 058, round 14).
          */
         EvidenceItemOut: {
             /** Abstract */
@@ -2710,6 +2772,12 @@ export interface components {
             country?: string | null;
             /** Evidence Type */
             evidence_type?: string | null;
+            /**
+             * Full Text Status
+             * @default not_attempted
+             * @enum {string}
+             */
+            full_text_status: "not_attempted" | "queued" | "ingested" | "fetch_failed" | "parse_failed";
             /** Full Text Url */
             full_text_url?: string | null;
             /**
@@ -3415,10 +3483,18 @@ export interface components {
          *         name: Theme name.
          *         description: One-line description.
          *         option_ids: The theme's options, in display order.
+         *         document_count: The theme's distinct documents across its options,
+         *             each counted once (task 058, round 14): the rows
+         *             `GET /tasks/{id}/evidence?theme=` lists.
          */
         LonglistThemeOut: {
             /** Description */
             description: string;
+            /**
+             * Document Count
+             * @default 0
+             */
+            document_count: number;
             /** Name */
             name: string;
             /** Option Ids */
@@ -4584,6 +4660,58 @@ export interface components {
             type: "progress";
         };
         /**
+         * ProjectArchiveOut
+         * @description A project just archived (task 058, round 14).
+         *
+         *     Args:
+         *         archived_task_count: How many of its tasks this archive archived: the
+         *             caller's own active tasks that are in no other active project.
+         */
+        ProjectArchiveOut: {
+            /** Archived At */
+            archived_at?: string | null;
+            /**
+             * Archived Task Count
+             * @default 0
+             */
+            archived_task_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description?: string | null;
+            /** Is Owner */
+            is_owner: boolean;
+            /**
+             * Last Activity At
+             * Format: date-time
+             */
+            last_activity_at: string;
+            /** Name */
+            name: string;
+            /** Owner Display */
+            owner_display: string | null;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /**
+             * Solo Task Count
+             * @default 0
+             */
+            solo_task_count: number;
+            /** Task Count */
+            task_count: number;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "org" | "private";
+        };
+        /**
          * ProjectCreate
          * @description Inbound body for `POST /api/v1/projects`.
          *
@@ -4632,6 +4760,9 @@ export interface components {
          *         archived_at: When the owner archived the project, or `None` while it
          *             is in use (task 058, round 11). Archiving leaves its tasks as
          *             they are.
+         *         solo_task_count: The caller's own active tasks here that are in no
+         *             other active project: what archiving the project archives with it
+         *             (task 058, round 14).
          *         last_activity_at: The newest of `created_at` and the `updated_at` of
          *             the members `task_count` counts (task 058, round 12). `GET
          *             /projects` lists newest activity first by it.
@@ -4662,6 +4793,11 @@ export interface components {
              * Format: uuid
              */
             project_id: string;
+            /**
+             * Solo Task Count
+             * @default 0
+             */
+            solo_task_count: number;
             /** Task Count */
             task_count: number;
             /**
@@ -5424,10 +5560,18 @@ export interface components {
          *         stale: The proposal does not match the plan's current risk appetite,
          *             or a built longlist has no proposal yet. The view then asks the
          *             user to press Suggest more to re-propose.
+         *         note_stale: The note was written against other places than the
+         *             shortlist now holds (task 058, round 14): `POST
+         *             /tasks/{id}/shortlist/note` rewrites it. `false` with no note.
          */
         ShortlistOut: {
             /** Note */
             note?: string | null;
+            /**
+             * Note Stale
+             * @default false
+             */
+            note_stale: boolean;
             /**
              * Places Target
              * @default 5
@@ -5485,6 +5629,12 @@ export interface components {
             doi?: string | null;
             /** Evidence Type */
             evidence_type?: string | null;
+            /**
+             * Full Text Status
+             * @default not_attempted
+             * @enum {string}
+             */
+            full_text_status: "not_attempted" | "queued" | "ingested" | "fetch_failed" | "parse_failed";
             /** Full Text Url */
             full_text_url?: string | null;
             /** Fwci */
@@ -6965,7 +7115,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectOut"];
+                    "application/json": components["schemas"]["ProjectArchiveOut"];
                 };
             };
             /** @description Validation Error */
@@ -7491,12 +7641,14 @@ export interface operations {
                 cited?: boolean | null;
                 sort?: ("title" | "year" | "type" | "strength" | "status" | "relevance") | null;
                 order?: ("asc" | "desc") | null;
+                /** @description A theme's id: a characterisation theme's sources, or on an options-scoping task a longlist theme's, the documents of its options (task 058, round 14). */
                 theme?: string | null;
                 origin?: ("OpenAlex" | "Overton" | "Uploaded") | null;
                 evidence_type?: string | null;
                 strength?: ("Very strong" | "Strong" | "Moderate" | "Limited" | "Weak" | "Unrated") | null;
                 year_from?: number | null;
                 year_to?: number | null;
+                /** @description A publisher country, by any spelling; `none` for the sources with no country (Landscape's Not reported row; task 058, round 14). */
                 country?: string | null;
                 /** @description A coverage row's `query_id`: only the sources that search returned (task 058, round 12). Empty for a search run before the ids were kept. */
                 query?: number | null;
@@ -8122,6 +8274,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_shortlist_note_api_v1_tasks__task_id__shortlist_note_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShortlistOut"];
                 };
             };
             /** @description Validation Error */
