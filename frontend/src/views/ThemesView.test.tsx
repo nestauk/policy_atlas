@@ -212,12 +212,12 @@ describe("ThemesView — the themes while documents are assigned (owner, round 9
 describe("ThemesView — an options-scoping task's themes (round 13)", () => {
   const longlist = {
     themes: [
-      { theme_id: "t1", name: "Earlier support", description: "Help before young people leave school.", option_ids: ["o2", "o1", "gone"] },
+      { theme_id: "t1", name: "Earlier support", description: "Help before young people leave school.", option_ids: ["o2", "o1", "gone"], document_count: 9 },
       { theme_id: "t2", name: "Empty theme", description: "", option_ids: [] },
     ],
     options: [
-      { option_id: "o1", name: "Youth guarantee", state: "included" },
-      { option_id: "o2", name: "Careers advice in schools", state: "excluded" },
+      { option_id: "o1", name: "Youth guarantee", state: "included", document_count: 12 },
+      { option_id: "o2", name: "Careers advice in schools", state: "excluded", document_count: 1 },
     ],
   };
 
@@ -228,9 +228,11 @@ describe("ThemesView — an options-scoping task's themes (round 13)", () => {
         name: "Earlier support",
         description: "Help before young people leave school.",
         options: [
-          { id: "o2", name: "Careers advice in schools", excluded: true },
-          { id: "o1", name: "Youth guarantee", excluded: false },
+          { id: "o2", name: "Careers advice in schools", excluded: true, documents: 1 },
+          { id: "o1", name: "Youth guarantee", excluded: false, documents: 12 },
         ],
+        // The theme's own distinct count, not the options' sum (13).
+        documents: 9,
       },
     ]);
   });
@@ -250,13 +252,21 @@ describe("ThemesView — an options-scoping task's themes (round 13)", () => {
     expect(vi.mocked(queries.useLonglist)).toHaveBeenLastCalledWith(TASK_ID);
     const section = screen.getByRole("region", { name: "Earlier support" });
     expect(within(section).getByText("Help before young people leave school.")).toBeInTheDocument();
-    expect(within(section).getByText("2 options")).toBeInTheDocument();
-    const links = within(section).getAllByRole("link");
-    expect(links.map((link) => link.textContent)).toEqual(["Careers advice in schools", "Youth guarantee"]);
+    // Round 14 (owner): the theme's documents at Meta Grey beside its name,
+    // each option's own count at the right of its row.
+    expect(within(section).getByText("9 documents")).toHaveClass("text-meta", "text-grey");
+    const links = within(within(section).getByRole("list")).getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual(["Careers advice in schools1 document", "Youth guarantee12 documents"]);
+    expect(within(links[1]).getByText("12 documents")).toHaveClass("text-meta", "text-grey");
     expect(links[1]).toHaveAttribute("href", `/tasks/${TASK_ID}/options/o1`);
     // An excluded option reads in Grey, as the longlist sets it.
-    expect(links[0]).toHaveClass("text-grey");
+    expect(within(links[0]).getByText("Careers advice in schools")).toHaveClass("text-grey");
     expect(screen.queryByRole("region", { name: "Empty theme" })).toBeNull();
+    // Round 14: the theme's name opens All sources filtered to it.
+    expect(within(section).getByRole("link", { name: "Earlier support" })).toHaveAttribute(
+      "href",
+      `/tasks/${TASK_ID}/sources/all?theme=t1`,
+    );
   });
 
   it("does not read the longlist on an Evidence search task", () => {

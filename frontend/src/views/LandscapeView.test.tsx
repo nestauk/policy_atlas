@@ -182,7 +182,7 @@ describe("LandscapeView — finished", () => {
     expect(modelling.closest("tr")).not.toHaveAttribute("data-link");
   });
 
-  it("makes each country a link to All sources filtered to it; Not reported and the folded tail lead nowhere", () => {
+  it("makes each country a link to All sources filtered to it, Not reported to country=none (round 14)", () => {
     reads({ landscape: { ...mockLandscape, geographies: { "Not reported": 49, GB: 37, US: 12 } } });
     renderLandscape();
     const table = screen.getByRole("table", { name: "Where sources were published" });
@@ -190,8 +190,11 @@ describe("LandscapeView — finished", () => {
       "href",
       `/tasks/${TASK_ID}/sources/all?country=United+Kingdom`,
     );
-    expect(within(table).getAllByRole("link")).toHaveLength(2);
-    expect(within(within(table).getByRole("rowheader", { name: "Not reported" })).queryByRole("link")).toBeNull();
+    expect(within(table).getAllByRole("link")).toHaveLength(3);
+    expect(within(table).getByRole("link", { name: "Not reported" })).toHaveAttribute(
+      "href",
+      `/tasks/${TASK_ID}/sources/all?country=none`,
+    );
   });
 
   it("orders evidence types by the classifier's vocabulary, zeros shown, Unknown last", () => {

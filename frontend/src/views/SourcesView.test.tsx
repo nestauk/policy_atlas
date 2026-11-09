@@ -19,6 +19,7 @@ vi.mock("../api/queries", () => ({
   useSourceDossier: vi.fn(),
   useSourceRecords: vi.fn(),
   useFunnel: vi.fn(),
+  useLonglist: vi.fn(() => ({ data: undefined, isPending: false, isError: false })),
 }));
 
 // The shell's run stream: idle by default, set per test for the default
@@ -204,16 +205,19 @@ describe("SourcesView — pulsing cells while a stage runs (owner, round 8)", ()
     expect(pulseIn("Off-topic source", "Evidence type")).toBeNull();
   });
 
-  it("pulses Status on a relevant source not yet read while the full texts are read, in place of its label", () => {
+  it("says Collecting… on a source queued for its full text while the full texts are collected, in place of its label (round 14)", () => {
     streamState = running("ingest");
     rows([
-      row({ source_id: "a", title: "Unread source", screen_status: "relevant", read_in_full: false, status: "relevant" }),
+      row({ source_id: "a", title: "Unread source", screen_status: "relevant", read_in_full: false, status: "relevant", full_text_status: "queued" }),
       row({ source_id: "b", title: "Read source", screen_status: "relevant", read_in_full: true, status: "read_in_full" }),
     ]);
     renderSources();
-    expect(pulseIn("Unread source", "Status")).not.toBeNull();
+    const collecting = screen.getByTestId("status-collecting");
+    expect(collecting).toHaveTextContent("Collecting…");
+    expect(collecting).toHaveClass("anim-breathe-soft", "text-grey");
+    expect(screen.getByText("Unread source").closest("tr")).toContainElement(collecting);
     expect(screen.queryByText("Abstract only")).toBeNull();
-    expect(pulseIn("Read source", "Status")).toBeNull();
+    expect(screen.getAllByTestId("status-collecting")).toHaveLength(1);
     expect(screen.getByText("Full text")).toBeInTheDocument();
   });
 
@@ -392,14 +396,18 @@ describe("SourcesView — sortable table (028 strand 7)", () => {
     expect(block.parentElement).toHaveClass("mb-6");
     // One line: the Label heading at the left, the Body Ink sentence at the
     // right, the hairline under them.
-    const heading = within(block).getByRole("heading", { name: "Search queries" });
     // One region by that name: the folded live block no longer names itself.
     expect(screen.getAllByRole("region", { name: "Search queries" })).toHaveLength(1);
-    const sentence = within(block).getByRole("button", { name: /^Found with/ }).closest("p") as HTMLElement;
-    expect(sentence).toHaveClass("text-body", "text-ink");
-    expect(heading.parentElement).toBe(sentence.parentElement);
-    expect(heading.parentElement).toHaveClass("justify-between", "flex-wrap", "border-b");
-    const toggle = within(block).getByRole("button", { name: "Found with 5 queries and 1 citation pass · Show" });
+    // Round 14 (owner): the whole line is the one button, inside the
+    // heading: the Label at the left, the Body Ink sentence and Show at the
+    // right, the hairline under them.
+    const line = within(block).getByRole("button", { name: /^Search queries: Found with/ });
+    expect(line.closest("h2")).not.toBeNull();
+    expect(line).toHaveClass("w-full", "justify-between", "flex-wrap", "border-b");
+    expect(within(line).getByText("Search queries")).toBeInTheDocument();
+    expect(within(line).getByText(/^Found with/).closest(".text-body")).toHaveClass("text-ink");
+    expect(within(block).getAllByRole("button")).toHaveLength(1);
+    const toggle = within(block).getByRole("button", { name: "Search queries: Found with 5 queries and 1 citation pass · Show" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(within(toggle).getByText("Show")).toHaveClass("font-semibold", "text-grey", "underline");
     expect(within(block).queryByRole("table")).toBeNull();
@@ -407,10 +415,17 @@ describe("SourcesView — sortable table (028 strand 7)", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(toggle).toHaveTextContent(/Hide$/);
     const table = within(block).getByRole("table");
-    // Ruled rows: the query, the database in Grey, the count; no visible
-    // header band and no row-group labels.
+    // Ruled rows: the query, the database in Grey, the count; no row-group
+    // labels.
     expect(within(table).queryByRole("rowheader")).toBeNull();
-    expect(within(table).getByRole("columnheader", { name: "Query" }).closest("thead")).toHaveClass("sr-only");
+    // Round 14 (owner): visible column headings in the Sources table's
+    // header style, once, Results over the counts at the right.
+    const head = within(table).getByRole("columnheader", { name: "Query" }).closest("thead") as HTMLElement;
+    expect(head).not.toHaveClass("sr-only");
+    expect(head).toHaveClass("border-b");
+    expect(within(table).getAllByRole("columnheader").map((th) => th.textContent)).toEqual(["Query", "Database", "Results"]);
+    expect(within(table).getByRole("columnheader", { name: "Results" })).toHaveClass("text-right");
+    expect(table.querySelectorAll("thead")).toHaveLength(1);
     expect(within(table).getAllByText("Overton")[0]).toHaveClass("text-grey");
     expect(table).toHaveClass("text-meta");
     // The saved pass is its own Grey row, worded by the server.
@@ -447,7 +462,7 @@ describe("SourcesView — a query's results (round 12)", { timeout: 20_000 }, ()
   it("links each query and pass to the table filtered on it, every screening choice shown", async () => {
     const user = userEvent.setup();
     renderSources();
-    await user.click(screen.getByRole("button", { name: /^Found with 1 query and 1 citation pass/ }));
+    await user.click(screen.getByRole("button", { name: /^Search queries: Found with 1 query and 1 citation pass/ }));
     const link = screen.getByRole("link", { name: "primary school food environment and childhood obesity in England" });
     expect(link.getAttribute("href")).toContain("query=11");
     expect(screen.getByRole("link", { name: "Followed citations from 20 sources" }).getAttribute("href")).toContain("query=12");
@@ -557,7 +572,7 @@ describe("SourcesView — the search as it runs (owner, round 9)", () => {
       "completed",
     );
     renderSources();
-    expect(screen.getByRole("button", { name: "Found with 2 queries · Show" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Search queries: Found with 2 queries · Show" })).toBeInTheDocument();
   });
 
   it("words a live pass in the past tense once the search ends, before the saved coverage lands", async () => {
@@ -571,7 +586,7 @@ describe("SourcesView — the search as it runs (owner, round 9)", () => {
       "completed",
     );
     renderSources();
-    const toggle = screen.getByRole("button", { name: "Found with 1 query and 1 citation pass · Show" });
+    const toggle = screen.getByRole("button", { name: "Search queries: Found with 1 query and 1 citation pass · Show" });
     await user.click(toggle);
     const table = within(screen.getByTestId("search-queries-summary")).getByRole("table");
     expect(within(table).getByText("Followed citations from 40 sources").closest("td")).toHaveClass("text-grey");
@@ -601,7 +616,7 @@ describe("SourcesView — the search as it runs (owner, round 9)", () => {
       "completed",
     );
     renderSources();
-    expect(screen.getByRole("button", { name: "Found with 1 query and 2 citation passes · Show" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Search queries: Found with 1 query and 2 citation passes · Show" })).toBeInTheDocument();
   });
 
   it("fades in a source that lands while a stage runs, and holds the page it opened on still", () => {
@@ -1039,10 +1054,35 @@ describe("SourcesView — the filter row (round 10)", { timeout: 20_000 }, () =>
     renderSources();
     await user.click(screen.getByRole("button", { name: /^Country/ }));
     const countries = await screen.findByRole("listbox", { name: "Country" });
-    expect(within(countries).getAllByRole("option").map((option) => option.textContent)).toEqual(["All", "United Kingdom", "United States"]);
+    // Round 14: the sources without one, last, as the Landscape pins them.
+    expect(within(countries).getAllByRole("option").map((option) => option.textContent)).toEqual(["All", "United Kingdom", "United States", "Not reported"]);
     await user.click(within(countries).getByRole("option", { name: "United Kingdom" }));
     expect(screen.getByTestId("location")).toHaveTextContent("country=United+Kingdom");
     expect(lastEvidenceQuery()).toMatchObject({ country: "United Kingdom" });
+  });
+
+  it("names a scoping task's theme filter Theme, its choices the longlist's themes (round 14)", () => {
+    vi.mocked(queries.useTask).mockReturnValue(
+      { data: { name: "NEET task", capability: "options_scoping" } } as unknown as ReturnType<typeof queries.useTask>,
+    );
+    vi.mocked(queries.useLonglist).mockReturnValue({
+      data: { themes: [{ theme_id: "lt-1", name: "Earlier support", description: "", option_ids: [] }], options: [] },
+      isPending: false,
+      isError: false,
+    } as unknown as ReturnType<typeof queries.useLonglist>);
+    renderSources(undefined, "?theme=lt-1");
+    expect(vi.mocked(queries.useLonglist)).toHaveBeenLastCalledWith(TASK_ID);
+    expect(lastEvidenceQuery()).toMatchObject({ theme: "lt-1" });
+    expect(screen.getByRole("group", { name: "Filter sources" })).toHaveTextContent("Theme: Earlier support");
+  });
+
+  it("names the sources with no country Not reported when the Landscape's row opens them (round 14)", () => {
+    vi.mocked(queries.useLandscape).mockReturnValue(
+      { data: { ...mockLandscape, geographies: { GB: 30, "Not reported": 5 } } } as unknown as ReturnType<typeof queries.useLandscape>,
+    );
+    renderSources(undefined, "?country=none");
+    expect(lastEvidenceQuery()).toMatchObject({ country: "none" });
+    expect(screen.getByRole("group", { name: "Filter sources" })).toHaveTextContent("Country: Not reported");
   });
 
   it("shows Clear filters once a filter narrows the view, and clears every filter but the screening choice", async () => {

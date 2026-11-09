@@ -15,6 +15,7 @@ import { ArrivalProvider, useArrives, useFirstPaintDone } from "../ui/motion/arr
 import { feedsSources, liveStages, useLiveRefetch } from "./sourcesPresentation";
 import { RetryCard } from "../ui/feedback/RetryCard";
 import { isScoping } from "./scopingActivity";
+import { GroupCount } from "./longlist/GroupHeading";
 
 /** One row of the list: a committed theme, or a discovered one whose count
  *  is on its way (`size` null). */
@@ -261,7 +262,9 @@ export type ScopingTheme = {
   themeId: string;
   name: string;
   description: string;
-  options: Array<{ id: string; name: string; excluded: boolean }>;
+  options: Array<{ id: string; name: string; excluded: boolean; documents: number }>;
+  /** The theme's distinct documents, as the longlist read counts them. */
+  documents: number;
 };
 
 /**
@@ -282,16 +285,19 @@ export function scopingThemes(longlist: Pick<LonglistOut, "themes" | "options">)
       themeId: theme.theme_id,
       name: theme.name,
       description: theme.description ?? "",
+      documents: theme.document_count ?? 0,
       options: (theme.option_ids ?? []).flatMap((id) => {
         const option = byId.get(id);
-        return option === undefined ? [] : [{ id, name: option.name, excluded: option.state === "excluded" }];
+        return option === undefined
+          ? []
+          : [{ id, name: option.name, excluded: option.state === "excluded", documents: option.document_count ?? 0 }];
       }),
     }))
     .filter((theme) => theme.options.length > 0);
 }
 
-function optionCount(count: number): string {
-  return count === 1 ? "1 option" : `${count} options`;
+function documentWords(count: number): string {
+  return count === 1 ? "1 document" : `${count.toLocaleString("en-GB")} documents`;
 }
 
 /**
@@ -342,9 +348,19 @@ function ScopingThemeSection({ taskId, theme }: { taskId: string; theme: Scoping
     <section aria-labelledby={headingId}>
       <div className="flex items-baseline justify-between gap-3">
         <h2 id={headingId} className="min-w-0 text-lead font-bold text-navy">
-          {scrub(theme.name)}
+          {/* The theme opens All sources filtered to it (owner, round 14), in
+              the Landscape rows' quiet link form: its own colour, underlined
+              on hover. */}
+          <Link
+            to={`/tasks/${taskId}/sources/all?${new URLSearchParams({ theme: theme.themeId }).toString()}`}
+            className="text-inherit no-underline underline-offset-4 hover:underline"
+          >
+            {scrub(theme.name)}
+          </Link>
         </h2>
-        <p className="shrink-0 text-body text-grey">{optionCount(theme.options.length)}</p>
+        {/* Its documents at Meta Grey, as the longlist's group headings carry
+            their counts (owner, round 14). */}
+        <GroupCount count={documentWords(theme.documents)} className="shrink-0" />
       </div>
       {theme.description !== "" && <p className="mt-1 max-w-[44em] text-body text-grey">{scrub(theme.description)}</p>}
       <ul className="mt-3 border-t border-line">
@@ -352,12 +368,17 @@ function ScopingThemeSection({ taskId, theme }: { taskId: string; theme: Scoping
           <li key={option.id} className="border-b border-line">
             <Link
               to={`/tasks/${taskId}/options/${option.id}`}
-              className={cn(
-                "block py-3 text-body underline-offset-[3px] hover:bg-paper-2 hover:underline",
-                option.excluded ? "text-grey" : "text-navy",
-              )}
+              className="group flex items-baseline justify-between gap-4 py-3 hover:bg-paper-2"
             >
-              {scrub(option.name)}
+              <span
+                className={cn(
+                  "min-w-0 text-body underline-offset-[3px] group-hover:underline",
+                  option.excluded ? "text-grey" : "text-navy",
+                )}
+              >
+                {scrub(option.name)}
+              </span>
+              <GroupCount count={documentWords(option.documents)} className="shrink-0" />
             </Link>
           </li>
         ))}

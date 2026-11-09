@@ -259,28 +259,29 @@ export function QueriesSummary({
 }) {
   const [open, setOpen] = useState(false);
   const tableId = useId();
-  const headingId = useId();
   if (groups.length === 0) return null;
   const rows = groups.flatMap((group) => group.rows);
   return (
-    <section aria-labelledby={headingId} data-testid="search-queries-summary" className="min-w-0">
-      {/* The Landscape section's heading row (LandscapeSection), without its
-          content padding, so the section ends at its hairline when shut. */}
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-0.5 border-b border-line pt-3.5 pb-2">
-        <h2 id={headingId} className={PANE_LABEL_CLASS}>
-          {SEARCH_QUERIES_TITLE}
-        </h2>
-        <p className="text-body text-ink">
-          <button
-            type="button"
-            aria-expanded={open}
-            aria-controls={open ? tableId : undefined}
-            // The visible separator holds with a no-break space; the name
-            // keeps plain spaces.
-            aria-label={`${queryTotals(groups)} · ${open ? "Hide" : "Show"}`}
-            onClick={() => setOpen((value) => !value)}
-            className="group cursor-pointer text-left"
-          >
+    <section aria-label={SEARCH_QUERIES_TITLE} data-testid="search-queries-summary" className="min-w-0">
+      {/* The whole line is the disclosure (owner, round 14): one button
+          spanning the Landscape section's heading row (LandscapeSection, its
+          content padding left out so the section ends at its hairline when
+          shut), the Label heading at the left, the sentence and Show / Hide
+          at the right. */}
+      <h2 className="m-0">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={open ? tableId : undefined}
+          // The name carries the visible words, heading first (lead, round
+          // 14: Label in Name); the visible separator holds with a no-break
+          // space, the name keeps plain spaces.
+          aria-label={`${SEARCH_QUERIES_TITLE}: ${queryTotals(groups)} · ${open ? "Hide" : "Show"}`}
+          onClick={() => setOpen((value) => !value)}
+          className="group flex w-full cursor-pointer flex-wrap items-center justify-between gap-x-4 gap-y-0.5 border-b border-line pt-3.5 pb-2 text-left"
+        >
+          <span className={PANE_LABEL_CLASS}>{SEARCH_QUERIES_TITLE}</span>
+          <span className="text-body text-ink">
             <Figures text={queryTotals(groups)} />
             {/* The dot holds to the sentence's last word, so a wrapped line
                 starts with the control, never with the dot. */}
@@ -297,9 +298,9 @@ export function QueriesSummary({
                 {open ? "Hide" : "Show"}
               </span>
             </span>
-          </button>
-        </p>
-      </div>
+          </span>
+        </button>
+      </h2>
       <Collapse show={open} durationMs={200}>
         <div id={tableId}>
           <table className="w-full table-fixed text-left text-meta">
@@ -308,11 +309,13 @@ export function QueriesSummary({
               <col className="w-28 max-md:w-24" />
               <col className="w-16" />
             </colgroup>
-            <thead className="sr-only">
+            {/* Column headings in the Sources table's header style (owner,
+                round 14), once: the rows are one table. */}
+            <thead className={cn("border-b border-line", TABLE_HEADER_TEXT_CLASS)}>
               <tr>
-                <th scope="col">Query</th>
-                <th scope="col">Database</th>
-                <th scope="col">Results</th>
+                <th scope="col" className="py-2 pr-4 align-bottom">Query</th>
+                <th scope="col" className="py-2 pr-4 align-bottom">Database</th>
+                <th scope="col" className="py-2 text-right align-bottom">Results</th>
               </tr>
             </thead>
             <tbody>

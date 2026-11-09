@@ -1,7 +1,7 @@
 import { forwardRef, useRef, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 
-import { useApiClient, useCoverage, useEvidence, useFindings, useLandscape, useTask, useSourceDossier, useSourceRecords } from "../api/queries";
+import { useApiClient, useCoverage, useLonglist, useEvidence, useFindings, useLandscape, useTask, useSourceDossier, useSourceRecords } from "../api/queries";
 import type { components } from "../api/gen/types";
 import { errorCode } from "../lib/errors";
 import { Figures } from "../lib/figures";
@@ -11,6 +11,7 @@ import { useDocumentTitle } from "../lib/title";
 import { useRunStream } from "../store";
 import { Button, buttonVariants } from "../ui/brand/Button";
 import { Select } from "../ui/brand/Select";
+import { APPLIED_CHIP_CLASS, APPLIED_CHIP_PART_CLASS } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { cn } from "../ui/brand/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
@@ -30,6 +31,7 @@ import {
   yearRangeLabel,
   DEFAULT_SOURCES_PAGE_SIZE,
   FACET_PARAMS,
+  NO_COUNTRY,
   ORIGIN_FILTER_OPTIONS,
   sourcesPageSizeChoice,
   SOURCES_PAGE_SIZES,
@@ -38,8 +40,6 @@ import {
   PHONE_SORT_OPTIONS,
   SOURCE_SORT_COLUMNS,
   TABLE_HEADER_TEXT_CLASS,
-  FILTER_CHIP_APPLIED,
-  FILTER_CHIP_PART,
   FILTER_CONTROL_IDLE,
   switchChoiceClass,
   type CellPulses,
@@ -140,9 +140,16 @@ export function SourcesView() {
   // Themes without a stable id predate 028 strand 8 and can't be filtered
   // on (the `theme` param binds to `ThemeOut.theme_id`) — omit them rather
   // than offer a selection that can never round-trip.
-  const themeOptions = (landscape.data?.themes ?? []).filter(
+  // An options-scoping task's themes are the longlist's option clusters
+  // (round 14): the evidence read takes their ids, and the filter names them.
+  const scoping = isScoping(task.data);
+  const longlist = useLonglist(scoping ? taskId : "");
+  const landscapeThemeOptions = (landscape.data?.themes ?? []).filter(
     (theme): theme is typeof theme & { theme_id: string } => Boolean(theme.theme_id),
   );
+  const themeOptions = scoping
+    ? (longlist.data?.themes ?? []).map((theme) => ({ value: theme.theme_id, label: scrub(theme.name) }))
+    : landscapeThemeOptions.map((theme) => ({ value: theme.theme_id, label: scrub(theme.name) }));
   // Evidence-type filter options come from the landscape distribution — the
   // same closed set the classification wrote for this task.
   const evidenceTypeOptions = Object.keys(landscape.data?.evidence_types ?? {}).sort();
@@ -151,6 +158,7 @@ export function SourcesView() {
   const countryOptions = Object.keys(normaliseGeographies(landscape.data?.geographies ?? {}))
     .filter((country) => country !== "Not reported")
     .sort();
+  const notReportedCount = normaliseGeographies(landscape.data?.geographies ?? {})["Not reported"] ?? 0;
   // No explicit sort → the relevance spectrum, descending (owner default:
   // confidently relevant → uncertain → confidently irrelevant).
   const effectiveSort = sortField ?? "relevance";
@@ -332,12 +340,12 @@ export function SourcesView() {
         </div>
         <div data-testid="sources-facets" className="flex flex-wrap items-center gap-3">
         {citedFilter ? (
-          <span className={FILTER_CHIP_APPLIED}>
+          <span className={APPLIED_CHIP_CLASS}>
             <button
               type="button"
               aria-pressed
               onClick={() => setFacet("cited", undefined)}
-              className={cn(FILTER_CHIP_PART, "pl-2.5 pr-2")}
+              className={cn(APPLIED_CHIP_PART_CLASS, "pl-2.5 pr-2")}
             >
               Cited
               <CloseIcon size={12} />
@@ -349,10 +357,10 @@ export function SourcesView() {
           </button>
         )}
         <FilterSelect
-          label="Key theme"
+          label={scoping ? "Theme" : "Key theme"}
           allLabel="All themes"
           value={themeFilter ?? ""}
-          options={themeOptions.map((theme) => ({ value: theme.theme_id, label: scrub(theme.name) }))}
+          options={themeOptions}
           onChange={(value) => setFacet("theme", value)}
         />
         <FilterSelect
@@ -380,7 +388,12 @@ export function SourcesView() {
           label="Country"
           allLabel="All"
           value={countryFilter ?? ""}
-          options={[...new Set([...countryOptions, ...(countryFilter ? [countryFilter] : [])])].map((value) => ({ value, label: scrub(value) }))}
+          options={[
+            ...[...new Set([...countryOptions, ...(countryFilter && countryFilter !== NO_COUNTRY ? [countryFilter] : [])])].map((value) => ({ value, label: scrub(value) })),
+            // The sources with no publisher country (round 14), last, as the
+            // Landscape pins them.
+            ...(notReportedCount > 0 || countryFilter === NO_COUNTRY ? [{ value: NO_COUNTRY, label: "Not reported" }] : []),
+          ]}
           onChange={(value) => setFacet("country", value)}
         />
         <YearFilter
@@ -397,8 +410,8 @@ export function SourcesView() {
         {/* One search query's results (round 12): set from the query's link,
             shown as the Country chip is, its × clearing it. */}
         {queryFilter !== undefined && (
-          <span className={FILTER_CHIP_APPLIED}>
-            <span className={cn(FILTER_CHIP_PART, "cursor-default pl-2.5 pr-2 hover:bg-transparent")}>
+          <span className={APPLIED_CHIP_CLASS}>
+            <span className={cn(APPLIED_CHIP_PART_CLASS, "cursor-default pl-2.5 pr-2 hover:bg-transparent")}>
               <span className="truncate max-md:max-w-52">
                 {`Query: ${appliedQuery !== undefined ? queryChipLabel(scrub(appliedQuery.query)) : "…"}`}
               </span>
@@ -407,7 +420,7 @@ export function SourcesView() {
               type="button"
               aria-label="Clear the query filter"
               onClick={() => setFacet("query", undefined)}
-              className={cn(FILTER_CHIP_PART, "border-l border-navy-line px-2")}
+              className={cn(APPLIED_CHIP_PART_CLASS, "border-l border-navy-line px-2")}
             >
               <CloseIcon size={12} />
             </button>
@@ -671,7 +684,9 @@ function SourceRow({
         )}
       </td>
       <td role="cell" className="sources-cell sources-value sources-cell-status">
-        {pulses.status && <CellPulse width="w-16" />}
+        {/* While the full texts are collected a source not yet read says so
+            (owner, round 14), settling to its depth when the fetch ends. */}
+        {pulses.status && <Collecting />}
         {!pulses.status && depth !== null && (
           <span className={cn("sources-nowrap", fade("status"))}>
             <DepthValue item={item} depth={depth} />
@@ -731,11 +746,23 @@ function DepthValue({ item, depth }: { item: EvidenceItem; depth: ReadDepth }) {
  *  its × clearing it, as Cited is. */
 function SetChip({ words, onClear }: { words: string; onClear: () => void }) {
   return (
-    <span className={FILTER_CHIP_APPLIED}>
-      <button type="button" aria-pressed onClick={onClear} className={cn(FILTER_CHIP_PART, "pl-2.5 pr-2")}>
+    <span className={APPLIED_CHIP_CLASS}>
+      <button type="button" aria-pressed onClick={onClear} className={cn(APPLIED_CHIP_PART_CLASS, "pl-2.5 pr-2")}>
         {words}
         <CloseIcon size={12} />
       </button>
+    </span>
+  );
+}
+
+/** The Status of a source whose full text is being collected (round 14):
+ *  "Collecting…" in Grey on the soft breathe, a Line 2 square in the tone
+ *  square's slot, one rhythm; still under reduced motion. */
+function Collecting() {
+  return (
+    <span data-testid="status-collecting" className="sources-nowrap anim-breathe-soft text-grey">
+      <span aria-hidden="true" data-tone="pending" className="sources-tone inline-block size-1.5 shrink-0 bg-line-2" />
+      Collecting…
     </span>
   );
 }
@@ -1122,8 +1149,8 @@ const FilterTrigger = forwardRef<
     );
   }
   return (
-    <span className={cn(FILTER_CHIP_APPLIED, className)}>
-      <button ref={ref} type="button" aria-label={name} className={cn(FILTER_CHIP_PART, "pl-2.5 pr-2")} {...props}>
+    <span className={cn(APPLIED_CHIP_CLASS, className)}>
+      <button ref={ref} type="button" aria-label={name} className={cn(APPLIED_CHIP_PART_CLASS, "pl-2.5 pr-2")} {...props}>
         <span className="truncate max-md:max-w-52">
           <Figures text={`${label}: ${value}`} />
         </span>
@@ -1132,7 +1159,7 @@ const FilterTrigger = forwardRef<
         type="button"
         aria-label={clearName ?? `Clear the ${label.toLowerCase()} filter`}
         onClick={onClear}
-        className={cn(FILTER_CHIP_PART, "border-l border-navy-line px-2")}
+        className={cn(APPLIED_CHIP_PART_CLASS, "border-l border-navy-line px-2")}
       >
         <CloseIcon size={12} />
       </button>

@@ -68,13 +68,6 @@ export const FILTER_CONTROL_BASE =
 /** An idle filter control: the outline button at the bar's height. */
 export const FILTER_CONTROL_IDLE = `${FILTER_CONTROL_BASE} border-line-2 bg-paper text-navy hover:bg-[#f0f0f3]`;
 
-/** An applied filter: the filled Navy chip (its × sits inside it). */
-export const FILTER_CHIP_APPLIED = "inline-flex h-8 min-w-0 max-w-full shrink-0 items-stretch border border-navy bg-navy text-meta font-semibold text-paper";
-
-/** One part of an applied chip (its words, its ×): Navy Line on hover. */
-export const FILTER_CHIP_PART =
-  "inline-flex min-w-0 cursor-pointer items-center gap-1.5 whitespace-nowrap transition-colors duration-150 hover:bg-navy-line focus-visible:outline-offset-[-4px] focus-visible:outline-paper";
-
 /** A choice of the screening switch, chosen or not. */
 export function switchChoiceClass(chosen: boolean): string {
   return `${FILTER_CONTROL_BASE} bg-paper ${
@@ -131,6 +124,11 @@ export const sourcesPageSizeChoice = rememberedChoice<SourcesPageSize>("sources-
   write: String,
   read: sourcesPageSize,
 });
+
+/** The evidence read's `country` value for the sources with no publisher
+ *  country, the Landscape's "Not reported" (round 14, the backend's
+ *  sentinel). */
+export const NO_COUNTRY = "none";
 
 /** The URL params the filter row sets, besides the screening toggles:
  *  "Clear filters" removes these and keeps the screening choice. */
@@ -275,9 +273,9 @@ export type CellPulses = { relevant: boolean; type: boolean; strength: boolean; 
  * The cells of one source that show a pulsing placeholder (owner, round 8):
  * only where the value is absent, and only while the stage that fills it
  * runs. Screening fills Relevant for every source; classifying fills the
- * evidence type and strength of the relevant ones; reading the full texts
- * decides the Status of the relevant ones not yet read in full, whatever
- * they read now (owner, round 13: the value may still change). Once the stage ends
+ * evidence type and strength of the relevant ones; collecting the full
+ * texts settles the Status of the sources queued for it (the row's
+ * `full_text_status` "queued", round 14). Once the stage ends
  * nothing pulses, whatever the cell holds.
  *
  * Args:
@@ -288,7 +286,7 @@ export type CellPulses = { relevant: boolean; type: boolean; strength: boolean; 
  *   One flag per cell that may pulse.
  */
 export function cellPulses(
-  item: Pick<EvidenceItem, "screen_status" | "evidence_type" | "appraisal_tier" | "read_in_full" | "status">,
+  item: Pick<EvidenceItem, "screen_status" | "evidence_type" | "appraisal_tier" | "read_in_full" | "status" | "full_text_status">,
   live: ReadonlySet<string>,
 ): CellPulses {
   const relevant = item.screen_status === "relevant";
@@ -297,9 +295,10 @@ export function cellPulses(
     relevant: live.has("screen") && item.screen_status == null,
     type: classifying && relevant && !item.evidence_type,
     strength: classifying && relevant && !item.appraisal_tier,
-    // While the full texts are fetched a relevant source's depth may still
-    // change, whatever it reads now (owner, round 13).
-    status: live.has("ingest") && relevant && !item.read_in_full,
+    // A source whose full text is queued for collection reads "Collecting…"
+    // (lead, round 14: the row's own pending state), only while the stage
+    // that collects it runs.
+    status: live.has("ingest") && item.full_text_status === "queued" && !item.read_in_full,
   };
 }
 

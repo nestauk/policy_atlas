@@ -31,7 +31,7 @@ const GEOGRAPHY_VIEWS = [
   { key: "map", label: "Map" },
 ] as const;
 import { LandscapeSkeleton } from "./LandscapeViewSkeleton";
-import { feedsSources, liveStages, useLiveRefetch } from "./sourcesPresentation";
+import { feedsSources, liveStages, useLiveRefetch, NO_COUNTRY } from "./sourcesPresentation";
 import { CAPTION_LABEL_CLASS } from "../ui/brand/label";
 import { cn } from "../ui/brand/cn";
 import { RetryCard } from "../ui/feedback/RetryCard";
@@ -126,9 +126,16 @@ export function LandscapeView() {
   // A row leads somewhere only when it has sources to show.
   const linkTypes = typeRows.map((row) => (row.count ? { ...row, href: typeHref(row.key) } : row));
   // A country leads to All sources filtered to it (`country=`, round 10);
-  // the folded tail and "Not reported" lead nowhere.
+  // "Not reported" to the sources without one (`country=none`, the evidence
+  // read's sentinel, round 14); the folded tail leads nowhere.
   const linkCountries = geographyRows(geographies).map((row) =>
-    row.count && row.tone !== "grey" ? { ...row, href: countryHref(row.key) } : row,
+    !row.count
+      ? row
+      : row.key === "Not reported"
+        ? { ...row, href: countryHref(NO_COUNTRY) }
+        : row.tone !== "grey"
+          ? { ...row, href: countryHref(row.key) }
+          : row,
   );
 
   // The map draws every country (no folded tail); "Not reported" is no place.
