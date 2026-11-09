@@ -303,23 +303,24 @@ describe("NewTaskView — project selector", () => {
 // plain optional fields replace it, each a label and one Body Grey sentence:
 // "Project" on both capabilities, and on options scoping "Evidence search to
 // start from", both the app's dropdown with "None" first and chosen.
-describe("NewTaskView — the optional fields (round 13)", () => {
+describe("NewTaskView — the optional fields (rounds 13 and 14)", () => {
   const PROJECTS = [
     { project_id: "project-1", name: "Housing", description: null, created_at: "2026-01-01T00:00:00Z", task_count: 1, is_owner: true },
     { project_id: "project-2", name: "Child health", description: null, created_at: "2026-01-01T00:00:00Z", task_count: 1, is_owner: true },
   ];
   const done = { status: "succeeded" };
   const SEARCHES = [
-    { task_id: "es-1", name: "Childhood obesity", capability: "evidence_search", project_ids: ["project-2"], latest_run: done },
-    { task_id: "es-2", name: "Housing supply", capability: "evidence_search", project_ids: ["project-1"], latest_run: done },
-    { task_id: "es-5", name: "Housing costs", capability: "evidence_search", project_ids: ["project-1"], latest_run: done },
-    // Not offered: unfinished, in no project, or not an Evidence search.
-    { task_id: "es-3", name: "Still running", capability: "evidence_search", project_ids: ["project-1"], latest_run: { status: "running" } },
-    { task_id: "es-4", name: "In no project", capability: "evidence_search", project_ids: [], latest_run: done },
-    { task_id: "os-1", name: "A scoping task", capability: "options_scoping", project_ids: ["project-1"], latest_run: done },
+    { task_id: "es-1", name: "Childhood obesity", capability: "evidence_search", is_owner: true, project_ids: ["project-2"], latest_run: done },
+    { task_id: "es-2", name: "Housing supply", capability: "evidence_search", is_owner: true, project_ids: ["project-1"], latest_run: done },
+    // Round 14: a search in no project is offered too.
+    { task_id: "es-4", name: "In no project", capability: "evidence_search", is_owner: true, project_ids: [], latest_run: done },
+    // Not offered: unfinished, a colleague's, or not an Evidence search.
+    { task_id: "es-3", name: "Still running", capability: "evidence_search", is_owner: true, project_ids: [], latest_run: { status: "running" } },
+    { task_id: "es-5", name: "A colleague's search", capability: "evidence_search", is_owner: false, project_ids: [], latest_run: done },
+    { task_id: "os-1", name: "A scoping task", capability: "options_scoping", is_owner: true, project_ids: [], latest_run: done },
   ];
   const project = () => screen.getByRole("combobox", { name: "Project" });
-  const check = (name: string) => screen.getByRole("checkbox", { name: new RegExp(`^${name}`) });
+  const from = () => screen.getByRole("button", { name: /^Evidence search to start from:/ });
 
   beforeEach(() => {
     vi.mocked(queries.useProjects).mockReturnValue(
@@ -330,71 +331,106 @@ describe("NewTaskView — the optional fields (round 13)", () => {
     );
   });
 
-  it("gives the Evidence search the Project field alone, its sentence under the label and None chosen", () => {
+  it("gives the Evidence search the Project field alone, its help line without 'later too'", () => {
     renderNewTask("/new?capability=evidence_search");
     expect(project()).toHaveTextContent("None");
-    expect(screen.getByText("Add this task to a project. You can do this later too.")).toHaveClass("text-body", "text-grey");
-    expect(screen.queryByRole("group", { name: "Evidence search to start from" })).not.toBeInTheDocument();
-    expect(screen.queryByText(/Starts from/)).not.toBeInTheDocument();
+    expect(screen.getByText(/^Add this task to a project\.$/)).toHaveClass("text-body", "text-grey");
+    expect(screen.queryByText(/later too/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Evidence search to start from/ })).not.toBeInTheDocument();
   });
 
-  it("gives options scoping a checklist of the finished searches in a project, none checked, 24 px under Project", () => {
-    renderNewTask("/new?capability=options_scoping");
-    const group = screen.getByRole("group", { name: "Evidence search to start from" });
-    expect(group).toHaveClass("mt-6");
+  it("puts the primary alone on the last row, right-aligned, after the fields (round 14)", () => {
+    const { container } = renderNewTask("/new?capability=options_scoping");
+    const primary = screen.getByRole("button", { name: "Prepare plan" });
+    const row = primary.parentElement as HTMLElement;
+    expect(row).toHaveClass("flex", "justify-end");
+    expect(row.children).toHaveLength(1);
+    // Nothing after it in the form, and not inside the question's box.
+    expect(row.nextElementSibling).toBeNull();
+    expect(container.querySelector("form")?.lastElementChild).toBe(row);
+    expect(screen.getByLabelText("Your question").parentElement).not.toContainElement(primary);
+    // The search field sits 24 px under Project.
+    expect(from().closest("div.max-w-md")).toHaveClass("mt-6");
+    // Its one help line, in the owner's words (round 14).
     expect(
-      within(group).getByText(
-        "Optional. An evidence search you have already run gives the scoping its sources and report; without one it searches for each option.",
+      screen.getByText(
+        /^Optional\. Start from a completed evidence search in the same project to draw from its sources and report\.$/,
       ),
     ).toHaveClass("text-body", "text-grey");
-    const boxes = within(group).getAllByRole("checkbox");
-    expect(boxes.map((box) => box.textContent)).toEqual([
-      "Childhood obesityChild health",
-      "Housing supplyHousing",
-      "Housing costsHousing",
-    ]);
-    for (const box of boxes) expect(box).toHaveAttribute("aria-checked", "false");
-    expect(screen.queryByText(/Starts from/)).not.toBeInTheDocument();
   });
 
-  it("files the task in a checked search's project and disables the others, In another project", async () => {
+  // Owner, round 14: with no project (or a new one not yet created) the
+  // field is disabled and says why; a project enables it.
+  it("is disabled, reading Choose a project first, until a project is chosen", async () => {
     const user = userEvent.setup();
     renderNewTask("/new?capability=options_scoping");
-    await user.click(check("Housing supply"));
-    expect(check("Housing supply")).toHaveAttribute("aria-checked", "true");
-    expect(project()).toHaveTextContent("Housing");
-    expect(check("Childhood obesity")).toBeDisabled();
-    expect(check("Childhood obesity")).toHaveTextContent("In another project");
-    await user.click(check("Housing costs"));
+    const trigger = screen.getByRole("button", { name: /^Evidence search to start from:/ });
+    expect(trigger).toBeDisabled();
+    expect(trigger).toHaveTextContent(/^Choose a project first$/);
+    expect(trigger).toHaveClass("disabled:bg-ground", "disabled:text-grey");
+    await user.click(project());
+    await user.click(screen.getByRole("option", { name: "Housing" }));
+    expect(from()).toBeEnabled();
+    expect(from()).toHaveTextContent(/^None$/);
+  });
+
+  it("goes back to disabled while a new project is being named", async () => {
+    const user = userEvent.setup();
+    renderNewTask("/new?capability=options_scoping&project=project-1");
+    expect(from()).toBeEnabled();
+    await user.click(project());
+    await user.click(screen.getByRole("option", { name: "New project…" }));
+    expect(screen.getByRole("button", { name: /^Evidence search to start from:/ })).toBeDisabled();
+  });
+
+  it("with a project chosen, lists only that project's finished searches", async () => {
+    const user = userEvent.setup();
+    renderNewTask("/new?capability=options_scoping&project=project-1");
+    await user.click(from());
+    expect(screen.getAllByRole("checkbox").map((box) => box.textContent)).toEqual(["Housing supply"]);
+  });
+
+  it("sends the picks without touching Project, and clears picks a new project does not hold", async () => {
+    const user = userEvent.setup();
+    renderNewTask("/new?capability=options_scoping&project=project-2");
+    await user.click(from());
+    await user.click(screen.getByRole("checkbox", { name: "Childhood obesity" }));
+    await user.keyboard("{Escape}");
+    expect(from()).toHaveTextContent("Childhood obesity");
+    expect(project()).toHaveTextContent("Child health");
+    // The chosen one as a removable chip under the trigger.
+    expect(screen.getByRole("button", { name: "Remove Childhood obesity" })).toBeInTheDocument();
+    // Another project does not hold it: the pick clears.
+    await user.click(project());
+    await user.click(screen.getByRole("option", { name: "Housing" }));
+    expect(from()).toHaveTextContent("None");
+    await user.click(from());
+    await user.click(screen.getByRole("checkbox", { name: "Housing supply" }));
+    await user.keyboard("{Escape}");
     await user.type(screen.getByLabelText("Your question"), "How do we build more homes?");
     await user.click(screen.getByRole("button", { name: "Prepare plan" }));
     expect(mutate.mock.calls[0][0]).toEqual({
       question: "How do we build more homes?",
       projectId: "project-1",
       capability: "options_scoping",
-      fromTaskIds: ["es-2", "es-5"],
+      fromTaskIds: ["es-2"],
     });
   });
 
-  it("unchecks the searches a newly chosen project does not hold", async () => {
+  it("clears the picks when the project goes back to None, and sends none", async () => {
     const user = userEvent.setup();
-    renderNewTask("/new?capability=options_scoping");
-    await user.click(check("Childhood obesity"));
+    renderNewTask("/new?capability=options_scoping&project=project-1");
+    await user.click(from());
+    await user.click(screen.getByRole("checkbox", { name: "Housing supply" }));
+    await user.keyboard("{Escape}");
     await user.click(project());
-    await user.click(screen.getByRole("option", { name: "Housing" }));
-    expect(check("Childhood obesity")).toHaveAttribute("aria-checked", "false");
-    expect(check("Childhood obesity")).toBeDisabled();
-    await user.type(screen.getByLabelText("Your question"), "What would cut obesity?");
+    await user.click(screen.getByRole("option", { name: "None" }));
+    expect(screen.getByRole("button", { name: /^Evidence search to start from:/ })).toHaveTextContent(
+      "Choose a project first",
+    );
+    await user.type(screen.getByLabelText("Your question"), "What would help?");
     await user.click(screen.getByRole("button", { name: "Prepare plan" }));
-    expect(mutate.mock.calls[0][0]).toMatchObject({ projectId: "project-1", fromTaskIds: [] });
-  });
-
-  it("unchecks a search on a second press", async () => {
-    const user = userEvent.setup();
-    renderNewTask("/new?capability=options_scoping");
-    await user.click(check("Housing supply"));
-    await user.click(check("Housing supply"));
-    expect(check("Housing supply")).toHaveAttribute("aria-checked", "false");
+    expect(mutate.mock.calls[0][0]).toMatchObject({ projectId: null, fromTaskIds: [] });
   });
 
   it("sends no project when None is chosen", async () => {

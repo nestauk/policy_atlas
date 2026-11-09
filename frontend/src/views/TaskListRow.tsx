@@ -78,11 +78,11 @@ export function TaskListRow({
   const status = taskStatus(latestRun, new Date(), { isOwner, ownerName: safeOwner, archived });
   const running = !archived && activeRun?.status === "running" && Boolean(activeRun.stage_label);
   const nowMs = useNow(running);
-  const statusLabel = scrub(
-    running
-      ? `${activeRun?.stage_label} · ${formatMinutes(elapsedSeconds(activeRun?.started_at, undefined, nowMs))}`
-      : status.label,
-  );
+  // A running row's step and its timer (round 14: a long step truncates,
+  // the timer always shows).
+  const liveStep = running ? scrub(activeRun?.stage_label ?? "") : null;
+  const liveTimer = running ? formatMinutes(elapsedSeconds(activeRun?.started_at, undefined, nowMs)) : null;
+  const statusLabel = liveStep !== null ? `${liveStep} · ${liveTimer}` : scrub(status.label);
   const safeName = scrub(name);
   const safeProjects = showProjectPrefix
     ? (projectNames ?? []).map(scrub).filter((project) => project !== "")
@@ -157,9 +157,20 @@ export function TaskListRow({
         {/* The status word keeps its room; the phone's project after it is
             what gives way (the word never shrinks on a phone: a shrink
             weight, however small, cuts it by a subpixel into an ellipsis). */}
-        <span className="min-w-0 truncate max-md:max-w-[calc(100%-12px)] max-md:shrink-0" title={statusLabel}>
-          <Figures text={statusLabel} />
-        </span>
+        {liveStep !== null ? (
+          // Round 14 (owner): the step gives way, the timer never does; the
+          // pair holds its place on a phone as the word does.
+          <span className="flex min-w-0 items-baseline max-md:max-w-[calc(100%-12px)] max-md:shrink-0" title={statusLabel}>
+            <span className="min-w-0 truncate">{liveStep}</span>
+            <span className="shrink-0 whitespace-pre">
+              <Figures text={` · ${liveTimer}`} />
+            </span>
+          </span>
+        ) : (
+          <span className="min-w-0 truncate max-md:max-w-[calc(100%-12px)] max-md:shrink-0" title={statusLabel}>
+            <Figures text={statusLabel} />
+          </span>
+        )}
         {projectText !== null && (
           <span className="flex min-w-0 shrink-[1000] items-baseline md:hidden">
             <span aria-hidden="true" className="mx-1.5 shrink-0">

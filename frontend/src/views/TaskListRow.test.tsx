@@ -276,3 +276,27 @@ describe("TaskListRow — the owner cell", () => {
     expect(owner).toHaveClass("max-w-[8rem]", "truncate");
   });
 });
+
+// Owner, round 14: a running row with a long live step kept hiding its
+// timer. The step truncates; the timer always shows.
+describe("TaskListRow — a long live step", () => {
+  it("truncates the step and keeps the timer whole beside it", () => {
+    const startedAt = new Date(Date.now() - 28 * 60_000).toISOString();
+    renderRow({
+      activeRun: {
+        capability_run_id: "r1",
+        status: "running",
+        started_at: startedAt,
+        stage: "screen",
+        stage_label: "Screening the sources against the inclusion criteria",
+      },
+    });
+    const step = screen.getByText("Screening the sources against the inclusion criteria");
+    expect(step).toHaveClass("min-w-0", "truncate");
+    const timer = step.nextElementSibling as HTMLElement;
+    expect(timer).toHaveClass("shrink-0");
+    expect(timer).toHaveTextContent(/^· 28 min$/);
+    // The whole pair is the hover text.
+    expect(step.parentElement).toHaveAttribute("title", "Screening the sources against the inclusion criteria · 28 min");
+  });
+});

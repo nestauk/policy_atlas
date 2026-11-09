@@ -34,3 +34,12 @@ export type ChipProps = HTMLAttributes<HTMLSpanElement> &
 export function Chip({ className, tone, ...props }: ChipProps) {
   return <span className={cn(chipVariants({ tone }), className)} {...props} />;
 }
+
+/** An applied choice: the filled Navy chip with its × inside it (the Sources
+ *  filter bar's applied filter; the multi-select's chosen items). */
+export const APPLIED_CHIP_CLASS =
+  "inline-flex h-8 min-w-0 max-w-full shrink-0 items-stretch border border-navy bg-navy text-meta font-semibold text-paper";
+
+/** One part of an applied chip (its words, its ×): Navy Line on hover. */
+export const APPLIED_CHIP_PART_CLASS =
+  "inline-flex min-w-0 cursor-pointer items-center gap-1.5 whitespace-nowrap transition-colors duration-150 hover:bg-navy-line focus-visible:outline-offset-[-4px] focus-visible:outline-paper";

@@ -12,7 +12,7 @@ import { useDocumentTitle } from "../lib/title";
 import { COPY, PROJECT, TASK } from "../lib/vocabulary";
 import { Button } from "../ui/brand/Button";
 import { Card } from "../ui/brand/Card";
-import { Checkbox } from "../ui/brand/Checkbox";
+import { MultiSelect } from "../ui/brand/MultiSelect";
 import { cn } from "../ui/brand/cn";
 import { CAPTION_LABEL_CLASS } from "../ui/brand/label";
 import { useMakeProject } from "./projectActions";
@@ -56,14 +56,18 @@ function CapabilityList({ onPick }: { onPick: (key: SelectableCapabilityKey) => 
   );
 }
 
+/** The help line under "Evidence search to start from" (owner, round 14). */
+export const START_FROM_HELP =
+  "Optional. Start from a completed evidence search in the same project to draw from its sources and report.";
+
 /** The label and one plain sentence over each optional field (owner, round
  *  13: "Starts from" was unclear in user testing). */
 const FIELD_LABEL_CLASS = "block text-body font-semibold text-navy";
 const FIELD_HELP_CLASS = "mt-1 max-w-prose text-body font-normal text-grey";
 
-/** A finished Evidence search a scoping task can start from: the server
- *  links only a search whose latest walk finished and that shares a project
- *  with the new task (C11, `_write_links`). */
+/** A finished Evidence search a scoping task can start from (owner, round
+ *  14): one the reader owns whose latest walk finished. The page offers the
+ *  chosen project's only. */
 type LinkableSearch = { task_id: string; name: string; project_ids: string[] };
 
 function linkableSearches(
@@ -71,6 +75,7 @@ function linkableSearches(
     task_id: string;
     name: string;
     capability?: string | null;
+    is_owner?: boolean;
     project_ids?: string[] | null;
     latest_run?: { status: string } | null;
   }>,
@@ -79,8 +84,8 @@ function linkableSearches(
     .filter(
       (task) =>
         task.capability === "evidence_search" &&
-        (task.latest_run?.status === "succeeded" || task.latest_run?.status === "degraded") &&
-        (task.project_ids?.length ?? 0) > 0,
+        task.is_owner !== false &&
+        (task.latest_run?.status === "succeeded" || task.latest_run?.status === "degraded"),
     )
     .map((task) => ({ task_id: task.task_id, name: task.name, project_ids: task.project_ids ?? [] }));
 }
@@ -125,35 +130,31 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
   // under the colleague-mutation grade (owner ruling 2026-08-27).
   const projects = useProjects();
   const assignableProjects = projects.data?.data ?? [];
-  const projectName = new Map(assignableProjects.map((project) => [project.project_id, project.name]));
-  // The searches a scoping task can start from: finished, and in a project
-  // (the server's link rules). All are listed; one outside the chosen
-  // project is disabled, "In another project".
+  // The searches a scoping task can start from: the reader's own finished
+  // Evidence searches (owner, round 14). Owned is
+  // read off the rows (`is_owner`), so a caller without an organisation
+  // sends no `scope` (rubric 14's dark-launch invariant).
   const tasks = useTasks({ status: "active", page_size: 200 }, { enabled: capability === "options_scoping" });
-  const searches = linkableSearches(tasks.data?.data ?? []);
   // While a new project is being named (`ProjectPicker`'s field is open),
-  // the typed name; null otherwise. A new project holds no search.
+  // the typed name; null otherwise.
   const [namingProject, setNamingProject] = useState<string | null>(null);
-  const inChosenProject = (search: LinkableSearch) =>
-    namingProject === null && (projectId === "" || search.project_ids.includes(projectId));
-  // A project change unchecks the searches it does not hold (C11).
+  // Only the chosen project's searches (owner, round 14). Picking one never
+  // changes the Project field; changing the project clears picks it does
+  // not hold.
+  // The field waits for a project (owner, round 14): with none chosen, or a
+  // new one not yet created, it is disabled ("Choose a project first").
+  const searchesWait = projectId === "" || namingProject !== null;
+  const searches = searchesWait
+    ? []
+    : linkableSearches(tasks.data?.data ?? []).filter((search) => search.project_ids.includes(projectId));
   const chooseProject = (next: string) => {
     setProjectId(next);
-    if (next === "") return;
     setFromTaskIds((ids) =>
-      ids.filter((id) => searches.find((search) => search.task_id === id)?.project_ids.includes(next)),
+      ids.filter((id) => {
+        const search = linkableSearches(tasks.data?.data ?? []).find((candidate) => candidate.task_id === id);
+        return next !== "" && search !== undefined && search.project_ids.includes(next);
+      }),
     );
-  };
-  const toggleSearch = (search: LinkableSearch) => {
-    if (fromTaskIds.includes(search.task_id)) {
-      setFromTaskIds((ids) => ids.filter((id) => id !== search.task_id));
-      return;
-    }
-    setFromTaskIds((ids) => [...ids, search.task_id]);
-    // The server links a search only into a project it is in (C11): with no
-    // project chosen, the task joins the search's first, shown at once in
-    // the Project field.
-    if (projectId === "") setProjectId(search.project_ids[0] ?? "");
   };
   const create = useCreateTask();
   // A name typed but not created when the task starts is made on the way.
@@ -216,7 +217,10 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
         {copy.blurb}
       </p>
 
-      <div className="mt-6 flex items-end gap-3 border border-line-2 bg-paper px-[18px] py-3.5 focus-within:outline-2 focus-within:outline-blue">
+      {/* The question step, then the two optional fields, then the primary
+          alone on its own row at the right, nothing below it (owner, round
+          14: the page's foot was busy). */}
+      <div className="mt-6 border border-line-2 bg-paper px-[18px] py-3.5 focus-within:outline-2 focus-within:outline-blue">
         <label className="sr-only" htmlFor="new-task-question">
           Your question
         </label>
@@ -233,26 +237,22 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
               submit();
             }
           }}
-          className="min-h-[5.5rem] min-w-0 flex-1 resize-none border-0 bg-transparent p-0 text-lead leading-[25px] text-ink focus-visible:outline-none"
+          className="block min-h-[5.5rem] w-full resize-none border-0 bg-transparent p-0 text-lead leading-[25px] text-ink focus-visible:outline-none"
         />
-        <Button type="submit" size="entry" disabled={!canSend} className="shrink-0">
-          {pending ? "Starting…" : copy.submitLabel}
-        </Button>
       </div>
       <p className="mt-2 text-meta font-normal leading-5 text-grey">
         Enter to send · Shift+Enter for a new line
       </p>
 
-      {/* Two plain optional fields, each a label and one sentence (owner,
-          round 13), 24 px apart. The create call carries both: the
-          project membership and the link land with the task. */}
-      {/* Always there (owner, round 13: a reader with no project never saw
-          it): None, the reader's projects, then New project…. */}
+      {/* Two plain optional fields, each a label, one line of help and its
+          control, 24 px apart (owner, rounds 13 and 14). The create call
+          carries both: the project membership and the links land with the
+          task. */}
       <div className="mt-8 max-w-md">
         <label className={FIELD_LABEL_CLASS} htmlFor="new-task-project">
           {PROJECT.one}
         </label>
-        <p className={FIELD_HELP_CLASS}>Add this {TASK.lower} to a {PROJECT.lower}. You can do this later too.</p>
+        <p className={FIELD_HELP_CLASS}>Add this {TASK.lower} to a {PROJECT.lower}.</p>
         {/* None, the reader's projects, then New project… (the shared
             picker: the task menu and the Share page use the same one). */}
         <div className="mt-2">
@@ -264,67 +264,53 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
             noneLabel="None"
             onChange={chooseProject}
             onNaming={(name) => {
-              // Opening the field unchecks the searches: a new project has none.
-              if (name !== null && namingProject === null) setFromTaskIds([]);
+              // Naming a new project clears the picks: it holds none.
+              if (name !== null) setFromTaskIds([]);
               setNamingProject(name);
             }}
           />
         </div>
       </div>
 
-      {/* Always there on a scoping task, so the field never comes and goes
-          as the project changes (owner, round 13: a checklist again, none
-          checked; each search with its project on a grey line). */}
       {capability === "options_scoping" && (
-        <div role="group" aria-labelledby="new-task-from-label" className="mt-6 max-w-md">
-          <p id="new-task-from-label" className={FIELD_LABEL_CLASS}>
+        <div className="mt-6 max-w-md">
+          <label className={FIELD_LABEL_CLASS} htmlFor="new-task-from">
             Evidence search to start from
-          </p>
+          </label>
           <p className={FIELD_HELP_CLASS}>
-            Optional. An evidence search you have already run gives the scoping its sources and report; without
-            one it searches for each option.
+            {START_FROM_HELP}
           </p>
-          {searches.length > 0 && (
-            <ul className="mt-2 flex flex-col">
-              {searches.map((search) => {
-                const enabled = inChosenProject(search);
-                const checked = fromTaskIds.includes(search.task_id);
-                const where = enabled
-                  ? search.project_ids.map((id) => projectName.get(id) ?? "").filter(Boolean).join(" · ")
-                  : "In another project";
-                return (
-                  <li key={search.task_id}>
-                    <Checkbox
-                      checked={checked && enabled}
-                      disabled={!enabled}
-                      onChange={() => toggleSearch(search)}
-                      label={
-                        <>
-                          <span className={cn("block text-body", enabled ? "text-navy" : "text-grey")}>
-                            {search.name}
-                          </span>
-                          {where !== "" && <span className="block text-meta text-grey">{where}</span>}
-                        </>
-                      }
-                    />
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          {/* The searchable multi-select (owner, round 14): the reader's own
+              finished searches in the chosen project; disabled until there
+              is one. */}
+          <MultiSelect
+            id="new-task-from"
+            label="Evidence search to start from"
+            options={searches.map((search) => ({ value: search.task_id, label: search.name }))}
+            values={searchesWait ? [] : fromTaskIds}
+            onChange={setFromTaskIds}
+            disabled={searchesWait}
+            placeholder={searchesWait ? `Choose a ${PROJECT.lower} first` : "None"}
+            filterLabel="Find a search"
+            empty="No finished evidence searches"
+            className="mt-2"
+          />
         </div>
       )}
 
-      {create.isError && (
+      {(create.isError || projectFailed) && (
         <Card role="alert" className="mt-6 max-w-md p-4 text-body text-navy">
-          The {TASK.lower} couldn't be started. Try again.
+          {projectFailed
+            ? `The ${PROJECT.lower} couldn't be created. Try again.`
+            : `The ${TASK.lower} couldn't be started. Try again.`}
         </Card>
       )}
-      {projectFailed && (
-        <Card role="alert" className="mt-6 max-w-md p-4 text-body text-navy">
-          The {PROJECT.lower} couldn't be created. Try again.
-        </Card>
-      )}
+
+      <div className="mt-8 flex justify-end">
+        <Button type="submit" size="entry" disabled={!canSend}>
+          {pending ? "Starting…" : copy.submitLabel}
+        </Button>
+      </div>
     </form>
   );
 }

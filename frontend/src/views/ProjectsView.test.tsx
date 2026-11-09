@@ -776,13 +776,16 @@ describe("ProjectsView — the row's menu (round 12)", () => {
     vi.mocked(mutations.useArchiveProject).mockReturnValue(
       { mutate, isPending: false } as unknown as ReturnType<typeof mutations.useArchiveProject>,
     );
-    vi.mocked(queries.useProjectsPaged).mockReturnValue(projectPages([PROJECT_ROW]));
+    vi.mocked(queries.useProjectsPaged).mockReturnValue(projectPages([{ ...PROJECT_ROW, solo_task_count: 1 }]));
     const user = userEvent.setup();
     renderList();
     await user.click(settings());
     await user.click(screen.getByRole("menuitem", { name: "Archive" }));
+    // Round 14: the row's count of tasks in no other project.
     expect(
-      screen.getByText("Archiving removes this project from your active projects. Its tasks stay as they are."),
+      screen.getByText(
+        "Archiving removes this project from your active projects and archives its 1 task that is in no other project.",
+      ),
     ).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Archive" }));
     expect(mutate).toHaveBeenCalledTimes(1);

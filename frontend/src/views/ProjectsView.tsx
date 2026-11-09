@@ -53,7 +53,7 @@ import {
 import { FindPopover } from "./FindPopover";
 import { ProjectNameField } from "./ProjectPicker";
 import { RowFold, RowMenuControl, RowRenameField, useDepartingRows } from "./ListRowMenu";
-import { ProjectName } from "./NameMenu";
+import { ProjectName, projectArchiveSentence, soloTaskCount } from "./NameMenu";
 import { VisibilityControl, visibilityOutcomeLine } from "./VisibilityControl";
 
 /**
@@ -328,7 +328,7 @@ function ProjectRowWithMenu({
                     onError: done.onError,
                   })
           }
-          archiveSentence={`Archiving removes this ${PROJECT.lower} from your active ${PROJECT.lowerMany}. Its ${TASK.lowerMany} stay as they are.`}
+          archiveSentence={projectArchiveSentence(soloTaskCount(project))}
           archiveError={`The ${PROJECT.lower} couldn't be archived. Try again.`}
         />
       )}
@@ -460,6 +460,7 @@ export function ProjectDetailView() {
               name={shown.name}
               isOwner={shown.is_owner}
               archived={shown.archived_at != null}
+              soloTasks={soloTaskCount(shown)}
             />
           )
         }
