@@ -1,5 +1,5 @@
 import { Fragment, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Link, useParams, useSearchParams } from "react-router";
+import { Link, useLocation, useParams, useSearchParams } from "react-router";
 
 import type { components } from "../../api/gen/types";
 import { useOption, usePlan, useTask } from "../../api/queries";
@@ -41,7 +41,7 @@ import {
   documentFacts,
   seeInSourcesWords,
   documentsToggleWords,
-  exclusionLine,
+  exclusionFacts,
   PROFILE_POINTS_INTRO,
   profilePoints,
   type SentencePart,
@@ -146,6 +146,48 @@ function DocumentLine({
         </dl>
       )}
     </li>
+  );
+}
+
+/** An excluded option's facts at the top of the card (round 15, owner). */
+function ExclusionBlock({
+  facts,
+  addReason,
+}: {
+  facts: { heading: string; constraint: string | null; why: string };
+  addReason: ReactNode;
+}) {
+  const rows: { label: string; value: ReactNode }[] = [
+    ...(facts.constraint !== null ? [{ label: "Constraint", value: scrub(facts.constraint) }] : []),
+    ...(facts.why !== "" || addReason !== null
+      ? [
+          {
+            label: "Why",
+            value: (
+              <>
+                {scrub(facts.why)}
+                {facts.why !== "" && addReason !== null && " "}
+                {addReason !== null && <span className={facts.why !== "" ? "ml-2" : undefined}>{addReason}</span>}
+              </>
+            ),
+          },
+        ]
+      : []),
+  ];
+  return (
+    <div data-testid="card-exclusion" className={cn("mt-4 max-w-prose-measure border-l border-line-2 pl-3", REPORT_BODY_CLASS)}>
+      <p className={NOTICE_WORD_CLASS.red}>{scrub(facts.heading)}</p>
+      {rows.length > 0 && (
+      <dl className="mt-1.5 space-y-1">
+        {rows.map((row) => (
+          <div key={row.label} className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-baseline gap-3 max-md:grid-cols-[6.5rem_minmax(0,1fr)]">
+            <dt className="text-meta text-grey">{row.label}</dt>
+            <dd className="text-ink [overflow-wrap:anywhere]">{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+      )}
+    </div>
   );
 }
 
@@ -380,8 +422,14 @@ const PROFILE_SENTENCE_CELL = "block pb-2.5 align-top sm:table-cell sm:py-2.5";
  * "how sure" appear nowhere on this page (trust § Provenance labels; a
  * locked test).
  */
+/** The link state the Shortlist page's option links carry (round 15). */
+export const CARD_FROM_SHORTLIST = { from: "shortlist" } as const;
+
 export function OptionCard() {
   const { taskId = "", optionId = "" } = useParams();
+  // Opened from the Shortlist page, the breadcrumb leads back there; from
+  // the longlist, or on a direct load, to the Longlist (round 15, owner).
+  const from = (useLocation().state as { from?: string } | null)?.from === "shortlist" ? "shortlist" : "longlist";
   const titleRef = useRef<HTMLHeadingElement>(null);
   // An option opens at its top with focus on its title (round 12, owner
   // bug: it opened at the foot), once per option.
@@ -494,7 +542,7 @@ export function OptionCard() {
     ...(item.relations ?? []).map(relationLabel),
     ...((item.also_found_as ?? []).length > 0 ? [`also found as: ${(item.also_found_as ?? []).join(", ")}`] : []),
   ].join(" · ");
-  const hasNotices = excluded || item.no_in_scope_evidence || item.search_pending || notices.length > 0;
+  const hasNotices = item.no_in_scope_evidence || item.search_pending || notices.length > 0;
 
   return (
     <ReportPage entries={sidebarEntries(item.profile != null)}>
@@ -503,8 +551,8 @@ export function OptionCard() {
             over the title (round 10, C4); the option's controls share its row. */}
         <div className="print-hide mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
           <nav aria-label="Breadcrumb" className="min-w-0 text-meta text-grey">
-            <Link to={`/tasks/${taskId}/result?view=longlist`} className={LINK_CLASS}>
-              Longlist
+            <Link to={`/tasks/${taskId}/result?view=${from}`} className={LINK_CLASS}>
+              {from === "shortlist" ? "Shortlist" : "Longlist"}
             </Link>
             <span aria-hidden="true" className="mx-2">/</span>
             <span>{scrub(item.name)}</span>
@@ -527,7 +575,21 @@ export function OptionCard() {
             Meta Grey line of where it came from and how it relates. */}
         <p className={cn("mt-3 max-w-prose-measure", REPORT_BODY_CLASS)}>{scrub(item.description)}</p>
         <p className="mt-2 text-meta text-grey">{scrub(headerLine)}</p>
-
+        {/* Why it is excluded, at the top of the card under the title and
+            its line, above How it works (round 15, owner), as the dossier's
+            labelled facts: who excluded it as the Red heading line, then
+            Constraint and Why, labels in Meta Grey at a fixed width;
+            "Add a reason" after the Why value while it invites one. */}
+        {excluded && item.exclusion != null && (
+          <ExclusionBlock
+            facts={exclusionFacts(item.exclusion)}
+            addReason={
+              invitesReason(item.exclusion) ? (
+                <AddReason actions={actions} optionId={optionId} current={item.exclusion.reason ?? ""} />
+              ) : null
+            }
+          />
+        )}
 
         {actions.notice !== null && (
           <p role="alert" className="mt-3 text-body text-red">
@@ -647,17 +709,6 @@ export function OptionCard() {
             sentence (round 10, finding 7: no card inside the sheet, no chips). */}
         {hasNotices && (
           <div className="max-w-prose-measure space-y-2 border-l border-line-2 pl-3">
-            {excluded && item.exclusion != null && (
-              <p>
-                <span className={NOTICE_WORD_CLASS.red}>Excluded:</span> {scrub(exclusionLine(item.exclusion))}
-                {invitesReason(item.exclusion) && (
-                  <>
-                    {" "}
-                    <AddReason actions={actions} optionId={optionId} current={item.exclusion.reason ?? ""} className="ml-2" />
-                  </>
-                )}
-              </p>
-            )}
             {item.no_in_scope_evidence && item.in_scope != null && (
               <p>
                 <span className={NOTICE_WORD_CLASS.navy}>{NO_IN_SCOPE_WORDS}:</span> None of its{" "}

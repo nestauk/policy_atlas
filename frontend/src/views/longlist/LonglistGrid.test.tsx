@@ -219,7 +219,8 @@ describe("LonglistGrid", () => {
     const mark = within(tile).getByTestId("tile-excluded");
     expect(mark).toHaveClass("text-grey", "absolute", "-top-2", "-right-2", "h-10", "w-10");
     expect(mark.querySelector("svg")).toHaveAttribute("width", "24");
-    expect(mark).toHaveAccessibleName(/^(Excluded by you|Breaks ")/);
+    // Round 15 (owner): the one short phrase, no constraint or reason.
+    expect(mark).toHaveAccessibleName(/^Excluded (by you|by a constraint|with the (theme|lever) .+)$/);
     expect(within(excludedCell).queryByText(/^Excluded$/)).not.toBeInTheDocument();
 
     const noInScopeLink = screen.getByRole("link", { name: "School-based mentoring" });

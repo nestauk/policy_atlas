@@ -377,11 +377,12 @@ describe("LonglistView", () => {
     const scoped = within(row as HTMLElement);
     expect(scoped.getByText("6 documents")).toBeInTheDocument();
     expect(scoped.queryByText(/evaluated it/)).not.toBeInTheDocument();
-    // Round 12 (owner): the exclusion in the meta line's grey, who set it
-    // aside first, no red word; the row keeps every other row's sizes.
+    // Round 15 (owner): one short phrase in the meta line's grey; the
+    // constraint and the reason are the card's.
     expect(scoped.queryByText("Excluded:")).not.toBeInTheDocument();
-    const exclusion = scoped.getByText(/^Breaks "Only include options a local authority can fund directly" · /);
+    const exclusion = scoped.getByText("Excluded by a constraint");
     expect(exclusion).toHaveClass("text-meta", "text-grey");
+    expect(row).not.toHaveTextContent(/Breaks|local authority can fund/);
     expect(within(row as HTMLElement).getByRole("link", { name: "National sanctions regime" }).closest("p")).toHaveClass("text-body");
     expect(scoped.queryByText("part of Universal youth offer bundle")).toBeNull();
   });
@@ -485,11 +486,11 @@ describe("LonglistView", () => {
     const firstRow = within(group).getAllByRole("listitem")[0];
     expect(include.compareDocumentPosition(firstRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(group).getByText("Universal youth offer bundle")).toBeInTheDocument();
-    // The heading names the theme; the row does not repeat it.
-    expect(within(firstRow).getByText(/^Excluded by you/)).toHaveTextContent(/^Excluded by you$/);
+    // Round 15 (lead): no exclusion phrase under the group's heading, which
+    // already names the theme.
+    expect(firstRow).not.toHaveTextContent(/Excluded (by|with)/);
     // "Add a reason" is the option card's only (round 13, owner).
     expect(within(excluded).queryByRole("button", { name: "Add a reason" })).not.toBeInTheDocument();
-    expect(within(firstRow).queryByText(/with the theme/)).not.toBeInTheDocument();
     // The option excluded one by one lists after the group, under Options.
     await user.click(within(excluded).getByRole("button", { name: /^Options \d/ }));
     const single = within(excluded).getByText("National sanctions regime");
@@ -514,14 +515,14 @@ describe("LonglistView", () => {
     const include = within(row).getByRole("button", { name: "Include again" });
     expect(include).toHaveAttribute("data-testid", "edge-action");
     expect(include.lastElementChild?.querySelector("svg")).toHaveAttribute("width", String(TOGGLE_GLYPH_SIZE));
-    expect(within(row).getByText(/^Excluded by you|^Breaks/)).not.toContainElement(include);
+    expect(within(row).getByText(/^Excluded by /)).not.toContainElement(include);
     await user.click(include);
     expect(includeMutate).toHaveBeenCalledWith({ optionId: MOCK_OPTION_ID_EXCLUDED }, expect.anything());
   });
 
-  // Round 13 (owner): a reason given on the option card reads as text on
-  // the row's exclusion line; the row offers no form of its own.
-  it("shows a reason given on the card as text on the row, under the group's heading without its words", async () => {
+  // Round 15 (owner): a reason given on the option card stays on the card;
+  // the row says only who excluded it, and offers no form of its own.
+  it("keeps a reason given on the card off the row, which under its group's heading carries no phrase", async () => {
     const user = userEvent.setup();
     renderLonglist({}, (longlist) => {
       const bundle = (longlist.options ?? []).find((option) => option.option_id === MOCK_OPTION_ID_PACKAGE);
@@ -532,7 +533,7 @@ describe("LonglistView", () => {
     });
     await user.click(screen.getByRole("button", { name: /^A universal offer/ }));
     const row = screen.getByText("Universal youth offer bundle").closest("li") as HTMLElement;
-    expect(within(row).getByText(/^Excluded by you/)).toHaveTextContent(/^Excluded by you · Too costly$/);
+    expect(row).not.toHaveTextContent(/Excluded (by|with)|Too costly/);
     expect(within(row).queryByRole("button", { name: "Add a reason" })).not.toBeInTheDocument();
     expect(within(row).queryByRole("textbox")).not.toBeInTheDocument();
   });

@@ -26,7 +26,8 @@ import {
   leverLineParts,
   actsOnParts,
   documentsToggleWords,
-  exclusionLine,
+  exclusionFacts,
+  exclusionPhrase,
   EXCLUDE_OPTION_TOOLTIP,
   EXCLUDE_TOOLTIP,
   profilePoints,
@@ -281,7 +282,7 @@ describe("longlist presentation (amendment 4)", () => {
         [guess("pref-1", "likely_falls_short"), guess("pref-2", "cannot_say"), guess("pref-3", "likely_meets")],
       ).map(({ tone, word, text }) => [tone, word, text]),
     ).toEqual([
-      ["red", "Breaks", '"Rule req-1". Because.'],
+      ["red", "Does not meet", '"Rule req-1". Because.'],
       ["grey", "Cannot check", '"Rule req-2". Because.'],
       ["navy", "May fall short", '"Rule pref-1". A guess.'],
       ["grey", "Cannot check", '"Rule pref-2". A guess.'],
@@ -410,24 +411,53 @@ describe("Exclude's tooltips", () => {
   });
 });
 
-describe("exclusionLine", () => {
-  it("says the user's own exclusion as Excluded by you, the reason after it when there is one", () => {
-    expect(exclusionLine({ by: "user", constraint: "your decision", reason: "Out of our remit" })).toBe(
-      "Excluded by you · Out of our remit",
+// Round 15 (owner): a row or tile says who excluded it in one short phrase.
+describe("exclusionPhrase", () => {
+  it("names only who: a constraint, you, or the group", () => {
+    const constraint = "Only include options a local authority can fund directly.";
+    expect(exclusionPhrase({ by: "constrain", constraint, reason: "It is national." })).toBe("Excluded by a constraint");
+    expect(exclusionPhrase({ by: "user", constraint: "your decision", reason: "Out of our remit" })).toBe("Excluded by you");
+    expect(exclusionPhrase({ by: "user", constraint: "your decision", reason: "with the theme A universal offer" })).toBe(
+      "Excluded with the theme A universal offer",
     );
-    expect(exclusionLine({ by: "user", constraint: "your decision", reason: "  " })).toBe("Excluded by you");
+    expect(exclusionPhrase({ by: "user", constraint: "your decision", reason: "with the lever Regulate: Too costly" })).toBe(
+      "Excluded with the lever Regulate",
+    );
   });
+});
 
-  it("says a constraint's exclusion as Breaks with the constraint, then the reason", () => {
+// Round 15 (owner): the card's labelled facts, no "Breaks".
+describe("exclusionFacts", () => {
+  it("heads a constraint's exclusion Does not meet a constraint, with its constraint and Policy Atlas's reason", () => {
     expect(
-      exclusionLine({
+      exclusionFacts({
         by: "constrain",
         constraint: "Only include options a local authority can fund directly.",
         reason: "A local authority cannot withdraw a national benefit directly.",
       }),
-    ).toBe(
-      'Breaks "Only include options a local authority can fund directly" · A local authority cannot withdraw a national benefit directly.',
-    );
+    ).toEqual({
+      heading: "Does not meet a constraint",
+      constraint: "Only include options a local authority can fund directly",
+      why: "A local authority cannot withdraw a national benefit directly.",
+    });
+  });
+
+  it("heads your own exclusion Excluded by you, the group's words after it, no constraint", () => {
+    expect(exclusionFacts({ by: "user", constraint: "your decision", reason: "Out of our remit" })).toEqual({
+      heading: "Excluded by you",
+      constraint: null,
+      why: "Out of our remit",
+    });
+    expect(exclusionFacts({ by: "user", constraint: "your decision", reason: "with the theme A universal offer: Too costly" })).toEqual({
+      heading: "Excluded by you · with the theme A universal offer",
+      constraint: null,
+      why: "Too costly",
+    });
+    expect(exclusionFacts({ by: "user", constraint: "your decision", reason: "with the lever Regulate" })).toEqual({
+      heading: "Excluded by you · with the lever Regulate",
+      constraint: null,
+      why: "",
+    });
   });
 });
 

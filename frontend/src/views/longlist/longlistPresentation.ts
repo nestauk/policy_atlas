@@ -85,23 +85,53 @@ type ExclusionOut = components["schemas"]["ExclusionOut"];
 type OptionDocumentOut = components["schemas"]["OptionDocumentOut"];
 
 /**
- * An excluded option's one line, on the row and the card (round 12, owner:
- * "Breaks your decision" was unclear). The user's own exclusion reads "Set
- * aside by you", a constraint's "Breaks "<constraint>"", then " · " and the
- * reason when there is one.
+ * An excluded option's facts on the option card (round 15, owner: "Breaks"
+ * was hard to read): the constraint it does not meet (none for the
+ * reader's own exclusion), why (Policy Atlas's or the reader's reason, the
+ * group's words moved to the heading), and the block's Red heading saying
+ * by whom: "Does not meet a constraint" (`by` is "constrain", Policy Atlas
+ * judging it against the plan's constraints), or "Excluded by you" and
+ * " · with the theme <name>" for a group's exclusion (owner: no By row).
  *
  * Args:
  *   exclusion: Who excluded the option, the constraint and the reason.
  *
  * Returns:
- *   The line, without a full stop of its own.
+ *   The heading, the constraint's words (or null) and the reason ("" when none).
  */
-export function exclusionLine(exclusion: Pick<ExclusionOut, "by" | "constraint" | "reason">): string {
-  const reason = (exclusion.reason ?? "").trim();
+export function exclusionFacts(exclusion: Pick<ExclusionOut, "by" | "constraint" | "reason">): {
+  heading: string;
+  constraint: string | null;
+  why: string;
+} {
   const constraint = constraintLabel(exclusion.constraint ?? "");
+  const reason = (exclusion.reason ?? "").trim();
   const byYou = exclusion.by === "user" || fold(constraint) === "your decision";
-  const head = byYou ? "Excluded by you" : constraint !== "" ? `Breaks "${constraint}"` : "";
-  return [head, reason].filter((part) => part !== "").join(" · ");
+  if (!byYou) return { heading: "Does not meet a constraint", constraint: constraint === "" ? null : constraint, why: reason };
+  const group = /^(with the (?:theme|lever) [^:]+):?\s*(.*)$/.exec(reason);
+  return group === null
+    ? { heading: "Excluded by you", constraint: null, why: reason }
+    : { heading: `Excluded by you · ${group[1].trim()}`, constraint: null, why: group[2].trim() };
+}
+
+/**
+ * An excluded row's or tile's one short phrase (round 15, owner): who or
+ * what excluded it, never the constraint's name or a reason; the option
+ * card keeps the full facts (`exclusionFacts`).
+ *
+ * Args:
+ *   exclusion: Who excluded the option, the constraint and the reason.
+ *
+ * Returns:
+ *   "Excluded with the theme <name>" / "Excluded with the lever <name>" for
+ *   a group's exclusion, "Excluded by you", or "Excluded by a constraint"
+ *   (`by` "constrain").
+ */
+export function exclusionPhrase(exclusion: Pick<ExclusionOut, "by" | "constraint" | "reason">): string {
+  const byYou = exclusion.by === "user" || fold(constraintLabel(exclusion.constraint ?? "")) === "your decision";
+  if (!byYou) return "Excluded by a constraint";
+  const group = /^with the (theme|lever) ([^:]+)/.exec((exclusion.reason ?? "").trim());
+  return group === null ? "Excluded by you" : `Excluded with the ${group[1]} ${group[2].trim()}`;
 }
 
 /** "a, b and c" */
@@ -848,7 +878,7 @@ export function constraintNotices(
     if (BUILT_IN_CHECK_IDS.includes(judgement.constraint_id)) continue;
     const label = constraintLabel(judgement.constraint_text);
     if (judgement.verdict === "breaks") {
-      notices.push({ key: judgement.constraint_id, constraint: label, tone: "red", word: "Breaks", text: `"${label}". ${judgement.reason}` });
+      notices.push({ key: judgement.constraint_id, constraint: label, tone: "red", word: "Does not meet", text: `"${label}". ${judgement.reason}` });
     } else if (judgement.verdict === "cannot_check") {
       notices.push({ key: judgement.constraint_id, constraint: label, tone: "grey", word: "Cannot check", text: `"${label}". ${judgement.reason}` });
     }

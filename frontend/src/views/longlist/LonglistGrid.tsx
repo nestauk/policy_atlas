@@ -21,7 +21,7 @@ import {
   NO_OPTIONS_FOR,
   OTHER_LEVER,
   shortlistedFirst,
-  exclusionLine,
+  exclusionPhrase,
   uncoveredLevers,
 } from "./longlistPresentation";
 import { useRegroupTransition } from "./regroupTransition";
@@ -223,7 +223,7 @@ export function LonglistGrid({
                                   Grey, its exclusion line as the tooltip, no
                                   words on the tile (round 13, owner). */}
                               {option.state === "excluded" ? (
-                                <ExcludedMark line={option.exclusion == null ? "" : scrub(exclusionLine(option.exclusion))} />
+                                <ExcludedMark line={option.exclusion == null ? "" : exclusionPhrase(option.exclusion)} />
                               ) : (
                                 <ShortlistToggle
                                   actions={actions}

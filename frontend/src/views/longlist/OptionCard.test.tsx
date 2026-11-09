@@ -16,6 +16,7 @@ import * as presentation from "./longlistPresentation";
 import * as queries from "../../api/queries";
 import * as mutations from "../../api/mutations";
 import { TOGGLE_GLYPH_SIZE } from "./optionActions";
+import { CARD_FROM_SHORTLIST } from "./OptionCard";
 
 vi.mock("../../api/queries", () => ({
   useTask: vi.fn(),
@@ -54,7 +55,7 @@ function LocationProbe() {
   return <p data-testid="location">{`${location.pathname}${location.search}`}</p>;
 }
 
-function renderCard(optionId: string, overrides: Record<string, unknown> = {}) {
+function renderCard(optionId: string, overrides: Record<string, unknown> = {}, entryState: unknown = null) {
   vi.mocked(queries.useTask).mockReturnValue(
     { data: { name: "NEET task" } } as unknown as ReturnType<typeof queries.useTask>,
   );
@@ -80,7 +81,7 @@ function renderCard(optionId: string, overrides: Record<string, unknown> = {}) {
   return render(
     <TooltipProvider>
       <PublicViewProvider value={publicLink}>
-      <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/options/${optionId}`]}>
+      <MemoryRouter initialEntries={[{ pathname: `/tasks/${TASK_ID}/options/${optionId}`, state: entryState }]}>
         <Routes>
           <Route
             path="/tasks/:taskId/options/:optionId"
@@ -1026,17 +1027,95 @@ describe("OptionCard", () => {
       renderCard(MOCK_OPTION_ID_EXCLUDED, {
         judgements: [{ constraint_id: "req-1", constraint_text: constraint, verdict: "breaks", reason: "It is a levy." }],
       });
-      const callout = screen.getByText("Excluded:").closest("p")?.parentElement;
-      expect(callout).not.toBeNull();
-      expect(callout?.querySelectorAll("p").length).toBe(1);
-      expect(screen.queryByText("Breaks:")).toBeNull();
+      // Said once, in the exclusion's facts; no notice repeats it.
+      const block = screen.getByTestId("card-exclusion");
+      expect(within(block).getByText("Constraint")).toBeInTheDocument();
+      expect(screen.queryByText("Does not meet:")).toBeNull();
+    });
+
+    // Round 15 (owner): the exclusion sits at the top of the card, under the
+    // title and its line, above How it works; not in the Evidence section.
+    it("puts the exclusion at the top of the card, above How it works", () => {
+      renderCard(MOCK_OPTION_ID_EXCLUDED, {
+        exclusion: { by: "user", constraint: "your decision", reason: "" },
+      });
+      const block = screen.getByTestId("card-exclusion");
+      expect(block).toHaveTextContent(/^Excluded/);
+      expect(within(block).getByRole("button", { name: "Add a reason" })).toBeInTheDocument();
+      expect(block.closest("header")).not.toBeNull();
+      const howItWorks = screen.getByRole("heading", { name: "How it works" });
+      expect(block.compareDocumentPosition(howItWorks) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(document.getElementById("evidence-base")).not.toContainElement(block);
+      // The header's Include again stays with the card's controls.
+      expect(screen.getByRole("button", { name: "Include again" })).toBeInTheDocument();
+    });
+
+    // Round 15 (owner): opened from the Shortlist page the breadcrumb leads
+    // back there; from the longlist, or on a direct load, to the Longlist.
+    it("leads the breadcrumb back to the Shortlist when opened from it, else to the Longlist", () => {
+      const { unmount } = renderCard(MOCK_OPTION_ID_EXCLUDED, {}, CARD_FROM_SHORTLIST);
+      const crumbs = () => screen.getByRole("navigation", { name: "Breadcrumb" });
+      expect(within(crumbs()).getByRole("link", { name: "Shortlist" })).toHaveAttribute(
+        "href",
+        `/tasks/${TASK_ID}/result?view=shortlist`,
+      );
+      unmount();
+      renderCard(MOCK_OPTION_ID_EXCLUDED);
+      expect(within(crumbs()).getByRole("link", { name: "Longlist" })).toHaveAttribute(
+        "href",
+        `/tasks/${TASK_ID}/result?view=longlist`,
+      );
+      expect(within(crumbs()).queryByRole("link", { name: "Shortlist" })).not.toBeInTheDocument();
+    });
+
+    // Round 15 (owner): the dossier's labelled facts: who excluded it as the
+    // Red heading line (no By row), then Constraint and Why, labels in Meta
+    // Grey at a fixed width; "Add a reason" after the Why value when it invites one.
+    it("lays a constraint's exclusion out as Does not meet a constraint, then Constraint and Why", () => {
+      renderCard(MOCK_OPTION_ID_EXCLUDED, {
+        exclusion: {
+          by: "constrain",
+          constraint: "Only include options a local authority can fund directly.",
+          reason: "A local authority cannot fund this directly.",
+        },
+      });
+      const block = screen.getByTestId("card-exclusion");
+      const title = block.firstElementChild as HTMLElement;
+      expect(title).toHaveTextContent(/^Does not meet a constraint$/);
+      expect(title).toHaveClass("text-red");
+      const rows = Array.from(block.querySelectorAll("dl > div")).map((row) => [
+        row.querySelector("dt")?.textContent,
+        row.querySelector("dd")?.textContent,
+      ]);
+      expect(rows).toEqual([
+        ["Constraint", "Only include options a local authority can fund directly"],
+        ["Why", "A local authority cannot fund this directly."],
+      ]);
+      expect(within(block).queryByText("By")).not.toBeInTheDocument();
+      for (const label of Array.from(block.querySelectorAll("dt"))) expect(label).toHaveClass("text-meta", "text-grey");
+      expect(block.querySelector("dl > div")?.className).toContain("grid-cols-[7.5rem_minmax(0,1fr)]");
+      expect(block).not.toHaveTextContent(/Breaks/);
+      expect(within(block).queryByRole("button", { name: "Add a reason" })).not.toBeInTheDocument();
+    });
+
+    it("heads your group exclusion Excluded by you with the theme, and offers Add a reason as the Why value", () => {
+      renderCard(MOCK_OPTION_ID_EXCLUDED, {
+        exclusion: { by: "user", constraint: "your decision", reason: "with the theme A universal offer" },
+      });
+      const block = screen.getByTestId("card-exclusion");
+      expect(within(block).queryByText("Constraint")).not.toBeInTheDocument();
+      const why = within(block).getByText("Why").nextElementSibling as HTMLElement;
+      expect(within(why).getByRole("button", { name: "Add a reason" })).toBeInTheDocument();
+      expect(block.firstElementChild).toHaveTextContent(/^Excluded by you · with the theme A universal offer$/);
+      expect(block.firstElementChild).toHaveClass("text-red");
+      expect(within(block).queryByText("By")).not.toBeInTheDocument();
     });
 
     // Round 10 (finding 7): a flat block on the sheet, no card and no chips;
     // each notice a word in its tone, red only for a failure.
     it("sits on the sheet as a flat block, never a card inside it", () => {
       calloutOf({ judgements: [judgement("req-1", "breaks")] });
-      const block = screen.getByText("Breaks:").closest("p")?.parentElement as HTMLElement;
+      const block = screen.getByText("Does not meet:").closest("p")?.parentElement as HTMLElement;
       expect(block.className).toContain("border-l");
       expect(block.className).not.toMatch(/shadow|bg-paper/);
       expect(block.querySelector("[class*='text-[11.5px]']")).toBeNull();
@@ -1044,8 +1123,10 @@ describe("OptionCard", () => {
 
     it("shows a broken constraint with its word in red", () => {
       calloutOf({ judgements: [judgement("req-1", "breaks")] });
-      expect(screen.getByText("Breaks:")).toHaveClass("text-red");
-      expect(screen.getByText("Breaks:").closest("p")).toHaveTextContent('Breaks: "Rule req-1". Because.');
+      // Round 15 (owner): "Does not meet", never "Breaks".
+      expect(screen.getByText("Does not meet:")).toHaveClass("text-red");
+      expect(screen.getByText("Does not meet:").closest("p")).toHaveTextContent('Does not meet: "Rule req-1". Because.');
+      expect(document.body).not.toHaveTextContent(/Breaks/);
     });
 
     it("shows a constraint that cannot be checked in the grey form", () => {

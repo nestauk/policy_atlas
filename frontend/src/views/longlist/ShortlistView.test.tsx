@@ -1,10 +1,11 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MOCK_OPTION_ID_NO_IN_SCOPE, mockLonglist } from "../../mock/fixtures";
 import { ShortlistView } from "./ShortlistView";
+import { CARD_FROM_SHORTLIST } from "./OptionCard";
 import { PublicViewProvider } from "../publicView";
 import { RISK_APPETITE_LABELS } from "../workspace/planVocabulary";
 import {
@@ -471,5 +472,32 @@ describe("ShortlistView, the note kept current", () => {
     renderShortlist({}, staleNote(true));
     expect(noteMutate).not.toHaveBeenCalled();
     expect(screen.queryByText("Written before your latest changes.")).not.toBeInTheDocument();
+  });
+});
+
+// Round 15 (owner): the Shortlist page's option links tell the card where
+// it was opened from, so its breadcrumb (and Back) lead here.
+describe("ShortlistView, the way to an option card", () => {
+  it("carries the shortlist as the card's origin on its option links", async () => {
+    const user = userEvent.setup();
+    renderShortlist();
+    const link = screen.getAllByRole("link").find((anchor) => anchor.getAttribute("href")?.includes("/options/")) as HTMLElement;
+    cleanup();
+    function Probe() {
+      return <p data-testid="probe">{JSON.stringify(useLocation().state)}</p>;
+    }
+    const href = link.getAttribute("href") ?? "";
+    render(
+      <PublicViewProvider value={false}>
+        <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/result`]}>
+          <Routes>
+            <Route path="/tasks/:taskId/result" element={<ShortlistView taskId={TASK_ID} longlist={mockLonglist()} />} />
+            <Route path="/tasks/:taskId/options/:optionId" element={<Probe />} />
+          </Routes>
+        </MemoryRouter>
+      </PublicViewProvider>,
+    );
+    await user.click(screen.getAllByRole("link").find((anchor) => anchor.getAttribute("href") === href) as HTMLElement);
+    expect(screen.getByTestId("probe")).toHaveTextContent(JSON.stringify(CARD_FROM_SHORTLIST));
   });
 });

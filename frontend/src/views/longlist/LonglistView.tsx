@@ -42,7 +42,7 @@ import {
   capitalise,
   countsParts,
   groupExclusionReason,
-  exclusionLine,
+  exclusionPhrase,
   leverCount,
   definitionSentence,
   layoutSignature,
@@ -269,7 +269,7 @@ function OptionRow({
   controls,
   rises,
   lands,
-  inExcludedGroup = false,
+  phrase = true,
 }: {
   taskId: string;
   row: BuildingRow;
@@ -283,20 +283,15 @@ function OptionRow({
   rises: boolean;
   /** Which of its parts arrive now (they fade in). */
   lands: (part: "meta" | "lever" | "short") => boolean;
-  /** Under an excluded group's heading, which names the theme or lever. */
-  inExcludedGroup?: boolean;
+  /** False under an excluded group's heading, which already names the
+   *  theme or lever (round 15, lead). */
+  phrase?: boolean;
 }) {
   const summary = row.summary;
   const excluded = summary?.state === "excluded";
   const fields = summary === null ? [] : rowMetaFields(summary, showLever ? row.lever : null, theme);
   const status = row.status;
-  const recorded = excluded ? (summary?.exclusion ?? null) : null;
-  // Under its group's heading the row reads "Excluded by you" and any reason
-  // of its own, not the group's words again (round 13, lead).
-  const exclusion =
-    recorded !== null && inExcludedGroup
-      ? { ...recorded, reason: (recorded.reason ?? "").replace(/^with the (theme|lever) [^:]+:?\s*/, "") }
-      : recorded;
+  const exclusion = excluded ? (summary?.exclusion ?? null) : null;
   const notice = controls?.notice ?? null;
   const publicView = usePublicView();
   // The row's name in the regrouping transition (`longlist.css`).
@@ -329,14 +324,11 @@ function OptionRow({
               ))}
             </p>
           )}
-          {/* Why it is excluded, at the meta line's size and colour: the
-              grey alone marks an excluded row (round 12, owner). */}
-          {exclusion !== null && exclusionLine(exclusion) !== "" && (
-            <p className="mt-0.5 max-w-[44em] text-meta text-grey">
-              {/* A reason is added on the option card only; here it is text
-                  (round 13, owner). */}
-              {scrub(exclusionLine(exclusion))}
-            </p>
+          {/* Who excluded it, one short phrase at the meta line's size and
+              colour; the constraint and any reason are the card's (round 15,
+              owner). */}
+          {exclusion !== null && phrase && (
+            <p className="mt-0.5 max-w-[44em] text-meta text-grey">{exclusionPhrase(exclusion)}</p>
           )}
         </div>
         <div className="flex flex-none items-center gap-x-4 text-meta text-grey sm:-mt-1">
@@ -627,9 +619,9 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
   // is the included row's, the grouping saying what it says for both.
   const rowTheme = (row: BuildingRow) => (groupBy === "theme" ? null : (themeOfOption.get(row.id) ?? null));
 
-  const renderRow = (row: BuildingRow, flat: boolean, inExcludedGroup = false) => (
+  const renderRow = (row: BuildingRow, flat: boolean, phrase = true) => (
     <OptionRow
-      inExcludedGroup={inExcludedGroup}
+      phrase={phrase}
       key={row.key}
       taskId={taskId}
       row={row}
@@ -855,7 +847,7 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
               }
             >
               <ul role="list" className="mt-4 space-y-4">
-                {group.rows.map((row) => renderRow(row, false, true))}
+                {group.rows.map((row) => renderRow(row, false, false))}
               </ul>
             </GroupSection>
           ))}

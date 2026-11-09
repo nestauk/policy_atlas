@@ -25,6 +25,7 @@ import { Select } from "../../ui/brand/Select";
 import { ShortlistToggle, useOptionActions } from "./optionActions";
 import { usePublicView } from "../publicView";
 import { useOpenAtTop } from "../../lib/openAtTop";
+import { CARD_FROM_SHORTLIST } from "./OptionCard";
 import { NOTE_REVIEWING_WORDS, useNoteRefresh, useRefreshShortlistNote } from "./shortlistNote";
 import { ActionLine } from "../workspace/ActionLine";
 
@@ -170,6 +171,8 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
           <div className="min-w-0 flex-1">
             <Link
               to={`/tasks/${taskId}/options/${option.option_id}`}
+              // The card's breadcrumb leads back here (round 15, owner).
+              state={CARD_FROM_SHORTLIST}
               className="text-lead font-bold text-navy underline-offset-4 hover:underline max-md:text-body"
             >
               {scrub(option.name)}
