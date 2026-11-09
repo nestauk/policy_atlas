@@ -107,7 +107,7 @@ longlist_constrain = { tier = "standard", reasoning_effort = "none", timeout_s =
 longlist_distinct = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
 longlist_authority = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
 longlist_shortlist = { tier = "frontier", reasoning_effort = "low", timeout_s = 60 }
-shortlist_note = { tier = "frontier", reasoning_effort = "low", timeout_s = 30 }   # the not-covered note rewritten alone from the places, on the tier that wrote it (task 058, round 14; owner)
+shortlist_note = { tier = "standard", reasoning_effort = "low", timeout_s = 30 }   # the not-covered note written alone from the places (task 058, round 14; owner 2026-11-09: standard at low, the frontier call was slow)
 option_profile_line = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
 option_profile_potential_impact = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
 option_profile_ambition = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)

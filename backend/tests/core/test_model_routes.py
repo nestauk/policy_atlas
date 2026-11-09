@@ -66,7 +66,7 @@ STEP_TIER_AND_EFFORT: dict[str, tuple[str, str]] = {
     "synthesise_write_case_studies": ("standard", "none"),
     "chat": ("standard", "none"),
     "task_title": ("fast", "low"),
-    "shortlist_note": ("frontier", "low"),
+    "shortlist_note": ("standard", "low"),
     "chat_title": ("fast", "low"),
     "agent_route": ("standard", "medium"),
     "agent_decide": ("standard", "medium"),
