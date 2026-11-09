@@ -194,6 +194,8 @@ def test_progress_emitter_case_studies_slot_and_citations_survive_replay(
             # Round 8: the saved ids and the quote ride along.
             "citation_id": str(uuid.uuid4()),
             "claim_id": str(uuid.uuid4()),
+            # 2026-11-09: the cited chunk, for the passage read before the commit.
+            "chunk_id": str(uuid.uuid4()),
             "quote": "Breakfast participation rose.",
         }
         # Recorded in the round-7 shape (no ids, no quote).
