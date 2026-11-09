@@ -12,7 +12,6 @@ import {
   formatElapsed,
   formatMinutes,
   isFinished,
-  READY_WORDS,
   rowCounts,
   rowDetail,
   rowLink,
@@ -444,9 +443,10 @@ describe("the trace's header words (annex § The run trace)", () => {
     expect(STALLED_LINE).toBe("Still working on this step");
   });
 
-  it("tells the owner a check-in waits, and a colleague only where the run stopped", () => {
-    expect(traceWords(currentRow(rows), "184 found so far", "paused", true)).toBe("Paused · a check-in is waiting on you");
-    expect(traceWords(currentRow(rows), "184 found so far", "paused", false)).toBe("Paused · Searching and screening");
+  it("names who a paused run waits on: the owner, else the owner's first name", () => {
+    expect(traceWords(currentRow(rows), "184 found so far", "paused", true)).toBe("Paused · waiting on you");
+    expect(traceWords(currentRow(rows), "184 found so far", "paused", false, "Grace Hopper")).toBe("Paused · waiting on Grace");
+    expect(traceWords(currentRow(rows), "184 found so far", "paused", false)).toBe("Paused");
   });
 
   it("counts the steps", () => {
@@ -469,8 +469,6 @@ describe("walk kinds and finished words (tasks 045, 055, 058)", () => {
   it("folds an ended run to its finish words, with the Result tab as its one link", () => {
     expect(isFinished("degraded")).toBe(true);
     expect(isFinished("failed")).toBe(false);
-    expect(READY_WORDS.evidence_search).toBe("Report ready");
-    expect(READY_WORDS.longlist).toBe("The longlist is ready");
     expect(endedLine("succeeded", "evidence_search")).toEqual({ words: "Report ready", tone: "complete", link: true });
     expect(endedLine("degraded", "longlist")).toEqual({ words: "The longlist is ready", tone: "complete", link: true });
   });

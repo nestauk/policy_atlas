@@ -7,9 +7,10 @@ import { scrub } from "../lib/scrub";
 import type { LiveSearchQuery } from "../store";
 import { cn } from "../ui/brand/cn";
 import { Collapse } from "../ui/motion/Collapse";
-import { ChevronIcon } from "../ui/brand/icons";
 import { TABLE_HEADER_TEXT_CLASS } from "./sourcesPresentation";
 import { CAPTION_LABEL_CLASS, PANE_LABEL_CLASS } from "../ui/brand/label";
+import { formatCount } from "../lib/format";
+import { DisclosureChevron } from "../ui/brand/Disclosure";
 
 /** The block's heading, live and finished (owner, round 12: plain). */
 export const SEARCH_QUERIES_TITLE = "Search queries";
@@ -125,8 +126,8 @@ export function queryTotals(groups: readonly QueryGroup[]): string {
   const passes = rows.filter((row) => row.pass !== null).length;
   const queries = rows.length - passes;
   const words = [
-    queries > 0 ? `${queries.toLocaleString("en-GB")} ${queries === 1 ? "query" : "queries"}` : null,
-    passes > 0 ? `${passes.toLocaleString("en-GB")} citation ${passes === 1 ? "pass" : "passes"}` : null,
+    queries > 0 ? `${formatCount(queries)} ${queries === 1 ? "query" : "queries"}` : null,
+    passes > 0 ? `${formatCount(passes)} citation ${passes === 1 ? "pass" : "passes"}` : null,
   ].filter((part) => part !== null);
   return `Found with ${words.join(" and ")}`;
 }
@@ -223,7 +224,7 @@ export function SearchQueries({
                         <QueryLink row={row} hrefFor={hrefFor} />
                       </td>
                       <td className="py-2 text-right tabular-nums text-navy">
-                        {row.results === null ? <ResultsPulse /> : row.results.toLocaleString("en-GB")}
+                        {row.results === null ? <ResultsPulse /> : formatCount(row.results)}
                       </td>
                     </tr>
                   );
@@ -287,13 +288,7 @@ export function QueriesSummary({
                 starts with the control, never with the dot. */}
             {"\u00a0· "}
             <span className="inline-flex items-baseline gap-1 whitespace-nowrap">
-              <ChevronIcon
-                size={12}
-                className={cn(
-                  "shrink-0 self-center text-grey transition-transform duration-200 ease-[var(--ease-out-strong)] group-hover:text-navy",
-                  open && "rotate-90",
-                )}
-              />
+              <DisclosureChevron open={open} className="self-center" />
               <span className="font-semibold text-grey underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 group-hover:text-navy group-hover:decoration-navy">
                 {open ? "Hide" : "Show"}
               </span>
@@ -326,7 +321,7 @@ export function QueriesSummary({
                   </td>
                   <td className="py-2 pr-4 align-top text-grey">{scrub(row.backend)}</td>
                   <td className="py-2 text-right align-top tabular-nums text-navy">
-                    {row.results === null ? <ResultsPulse /> : row.results.toLocaleString("en-GB")}
+                    {row.results === null ? <ResultsPulse /> : formatCount(row.results)}
                   </td>
                 </tr>
               ))}

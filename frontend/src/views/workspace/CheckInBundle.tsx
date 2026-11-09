@@ -13,6 +13,7 @@ import {
 } from "./checkInPresentation";
 import { LINK_CLASS } from "../../ui/brand/inlineActions";
 import { cn } from "../../ui/brand/cn";
+import { formatCount } from "../../lib/format";
 
 /** One staged P2 theme rename (batched into the single check-in response). */
 export interface ThemeRename {
@@ -163,7 +164,7 @@ export function CheckInBundle({
             {backends
               .map(({ backend, count }) => `${scrub(backendLabel(backend) ?? backend)} ${count}`)
               .join(" · ")}
-            {queries.length > 0 ? ` · from ${queries.length === 1 ? "1 query" : `${queries.length} queries`}` : ""}
+            {queries.length > 0 ? ` · from ${queries.length === 1 ? "1 query" : `${formatCount(queries.length)} queries`}` : ""}
           </p>
           {sampleTitles.length > 0 && (
             <ul className="mt-1.5 space-y-0.5">
@@ -273,7 +274,7 @@ export function CheckInBundle({
                 <span className="min-w-0 flex-1 truncate">{scrub(group.name)}</span>
                 {group.size !== null && (
                   <span className="shrink-0 text-grey">
-                    · {group.size === 1 ? "1 finding" : `${group.size} findings`}
+                    · {group.size === 1 ? "1 finding" : `${formatCount(group.size)} findings`}
                   </span>
                 )}
               </li>

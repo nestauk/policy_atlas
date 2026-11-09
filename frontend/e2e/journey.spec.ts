@@ -223,7 +223,7 @@ test.describe("mock task-lifecycle journey", () => {
     // Sources stay open; Plan/History stay open.
     await expect(page.getByText(CHECK_IN_QUESTION)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("check-in-facts")).toContainText("312 sources · 118 relevant");
-    await expect(traceHeader(page)).toContainText("Paused · a check-in is waiting on you");
+    await expect(traceHeader(page)).toContainText("Paused · waiting on you");
 
     for (const label of ["Agent", "Result", "Sources", "Share", "History"]) {
       await expect(nav.getByRole("link", { name: new RegExp(`^${label}`) })).toBeVisible();
@@ -554,13 +554,13 @@ test.describe("mock task-lifecycle journey", () => {
     await lifecycleNav(page).getByRole("link", { name: "History", exact: true }).click();
     const statusBar = page.getByTestId("run-status-bar");
     await expect(statusBar).toHaveAttribute("data-open", "true");
-    await expect(statusBar).toContainText(/Paused\s·\sa check-in is waiting on you/);
+    await expect(statusBar).toContainText(/Paused\s·\swaiting on you/);
     await expect(statusBar.getByRole("link")).toHaveCount(0);
     await expect(page.getByText("The analysis is paused — a check-in is waiting on you")).toHaveCount(0);
     await page.getByRole("button", { name: "Open the Agent" }).click();
     const sidebar = page.getByRole("complementary", { name: "Agent" });
     await expect(sidebar.getByRole("region", { name: "Analysis run" }).getByTestId("trace-header")).toContainText(
-      "Paused · a check-in is waiting on you",
+      "Paused · waiting on you",
     );
     await expect(sidebar.getByText(CHECK_IN_QUESTION)).toBeVisible();
   });
@@ -1058,7 +1058,7 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     // The status bar under the tabs says the run waits (owner, round 7); it is a
     // button that opens the Task Agent (round 8), not a link.
     const statusBar = page.getByTestId("run-status-bar");
-    await expect(statusBar).toContainText(/a check-in is waiting on you/);
+    await expect(statusBar).toContainText(/waiting on you/);
     await expect(statusBar.getByRole("link")).toHaveCount(0);
 
     // The sidebar's trace is the run view: opening it lands on the waiting
@@ -1066,7 +1066,7 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await page.getByRole("button", { name: "Open the Agent" }).click();
     const sidebar = page.getByRole("complementary", { name: "Agent" });
     const trace = sidebar.getByRole("region", { name: "Analysis run" });
-    await expect(trace.getByTestId("trace-header")).toContainText("Paused · a check-in is waiting on you", {
+    await expect(trace.getByTestId("trace-header")).toContainText("Paused · waiting on you", {
       timeout: 15_000,
     });
     await expect(page.getByText("Go to the check-in")).toHaveCount(0);
@@ -1086,7 +1086,7 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await expect(page.getByTestId("run-status-bar")).toHaveAttribute("data-open", "false");
     await taskNav(page).getByRole("link", { name: "History", exact: true }).click();
 
-    await expect(page.getByTestId("run-status-bar")).toContainText(/Paused\s·\sa check-in is waiting on you/);
+    await expect(page.getByTestId("run-status-bar")).toContainText(/Paused\s·\swaiting on you/);
     await expect(page.getByText("Go to the check-in")).toHaveCount(0);
     await expect(page.getByText("The analysis is paused — a check-in is waiting on you")).toHaveCount(0);
   });
@@ -1136,7 +1136,7 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await expect(sidebar.getByPlaceholder("Replanning unlocks when this run finishes.")).toBeDisabled();
     // The run trace in the sidebar's thread is its run view: no separate run line.
     await expect(sidebar.getByRole("region", { name: "Analysis run" }).getByTestId("trace-header")).toContainText(
-      "Paused · a check-in is waiting on you",
+      "Paused · waiting on you",
       { timeout: 15_000 },
     );
     await expect(sidebar.getByText(CHECK_IN_QUESTION)).toBeVisible();

@@ -5,6 +5,7 @@ import { rememberedChoice } from "../lib/remembered";
 import { useRunStream } from "../store";
 import { humanReason } from "../ui/brand/evidence";
 import { CAPTION_LABEL_CLASS } from "../ui/brand/label";
+import { FILTER_CONTROL_BASE } from "../ui/brand/Chip";
 
 type EvidenceItem = components["schemas"]["EvidenceItemOut"];
 
@@ -60,15 +61,10 @@ export function filterChipClass(active: boolean): string {
  * outline button (Line 2 border, Navy Semibold, hover #f0f0f3); a filter
  * that narrows the view is a filled Navy chip with its ×; the screening
  * switch's chosen choice takes a Navy border and Navy words, the others Grey
- * (the longlist's outline switch, at the bar's height).
+ * (the longlist's outline switch, at the bar's height). The chip is
+ * `FilterChip` (`ui/brand/Chip.tsx`); the switch shares its box. This is a
+ * choice of the screening switch, chosen or not.
  */
-export const FILTER_CONTROL_BASE =
-  "inline-flex h-8 min-w-0 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap border px-2.5 text-meta font-semibold transition-colors duration-150";
-
-/** An idle filter control: the outline button at the bar's height. */
-export const FILTER_CONTROL_IDLE = `${FILTER_CONTROL_BASE} border-line-2 bg-paper text-navy hover:bg-[#f0f0f3]`;
-
-/** A choice of the screening switch, chosen or not. */
 export function switchChoiceClass(chosen: boolean): string {
   return `${FILTER_CONTROL_BASE} bg-paper ${
     chosen ? "relative z-10 border-navy text-navy" : "border-line-2 text-grey hover:bg-[#f0f0f3] hover:text-navy"

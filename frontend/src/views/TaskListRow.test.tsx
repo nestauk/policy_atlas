@@ -50,12 +50,12 @@ describe("TaskListRow — the running stage", () => {
       activeRun: { capability_run_id: "r1", status: "running", started_at: startedAt, stage: "synthesise", stage_label: "Writing" },
     });
     expect(screen.getByTitle("Writing · 14 min")).toHaveTextContent("Writing · 14 min");
-    expect(screen.queryByText("Analysing the evidence…")).toBeNull();
+    expect(screen.queryByText("Running")).toBeNull();
   });
 
   it("keeps the status word when no stage is known, and once the run has finished", () => {
     renderRow({ latestRun: { capability_run_id: "r1", status: "running", started_at: startedAt } });
-    expect(screen.getByText("Analysing the evidence…")).toBeInTheDocument();
+    expect(screen.getByText("Running")).toBeInTheDocument();
   });
 
   it("keeps the paused word while a check-in waits", () => {

@@ -3,6 +3,7 @@ import type { LiveTheme, RunStreamState } from "../../store";
 import { countOf } from "../../lib/vocabulary";
 import { evidenceTypeLabel } from "../../ui/brand/evidence";
 import { PROFILE_LINE_LABELS } from "../workspace/planVocabulary";
+import { formatCount } from "../../lib/format";
 
 /**
  * Presentation helpers shared by the longlist's three surfaces (list view,
@@ -321,7 +322,7 @@ export function countsParts(
       ];
       return countOf(counts.options, "option", "options") + (spans.length > 0 ? ` in ${spans.join(" and ")}` : "");
     })(),
-    excluded: counts.excluded > 0 ? `${counts.excluded} excluded` : null,
+    excluded: counts.excluded > 0 ? `${formatCount(counts.excluded)} excluded` : null,
     noInScope: counts.no_in_scope > 0 ? `${counts.no_in_scope} with no in-scope evidence` : null,
   };
 }
@@ -621,7 +622,7 @@ export function actsOnParts(names: readonly string[] | undefined): SentencePart[
  *  (round 12, owner): "See these 12 documents in Sources", "See this
  *  document in Sources" for one. */
 export function seeInSourcesWords(count: number): string {
-  return count === 1 ? "See this document in Sources" : `See these ${count} documents in Sources`;
+  return count === 1 ? "See this document in Sources" : `See these ${formatCount(count)} documents in Sources`;
 }
 
 /** A group's count in its heading (round 13, owner): "12 options", then
@@ -687,7 +688,7 @@ export const LEVEL_MIDDLE_CLASS = "font-semibold text-grey";
  *  on 6 of 8" once, rather than "Middle" in six cells; "No line stands out"
  *  when no line carries a mark (C5). */
 export function middleSummary(unmarked: number, total: number): string {
-  return unmarked >= total ? "No line stands out" : `${MIDDLE_WORD} on ${unmarked} of ${total}`;
+  return unmarked >= total ? "No line stands out" : `${MIDDLE_WORD} on ${formatCount(unmarked)} of ${formatCount(total)}`;
 }
 
 /** The authority labels' words (R43); a null body reads "another body". */
@@ -778,7 +779,7 @@ export function evidenceSignal(
   parts.push(
     measured === 0
       ? "Measures none of your outcomes"
-      : `Measures ${measured} of your ${countOf(total, "outcome", "outcomes")}`,
+      : `Measures ${formatCount(measured)} of your ${countOf(total, "outcome", "outcomes")}`,
   );
   return parts.join(" · ");
 }
@@ -995,8 +996,6 @@ export function isLonglistBuilding(
   return stage != null && LONGLIST_WALK_STAGES.has(stage);
 }
 
-const FOUND_FORMAT = new Intl.NumberFormat("en-GB");
-
 /** A row's right-hand line while its own search is the news; nothing once
  *  the longlist read has the option (its evidence then sits on the meta
  *  line, so the count is said once: round 10, finding 2 with R85). */
@@ -1014,7 +1013,7 @@ export function searchStatusLine(row: Pick<OptionProgressOut, "search_status" | 
     case "searched":
       return {
         kind: "searched",
-        text: row.found == null ? "Searched" : `Searched · ${FOUND_FORMAT.format(row.found)} found`,
+        text: row.found == null ? "Searched" : `Searched · ${formatCount(row.found)} found`,
       };
   }
 }

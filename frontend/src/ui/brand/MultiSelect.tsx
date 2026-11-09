@@ -1,10 +1,10 @@
 import { useId, useRef, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "../radix/Popover";
-import { APPLIED_CHIP_CLASS, APPLIED_CHIP_PART_CLASS } from "./Chip";
+import { FilterChip } from "./Chip";
 import { Checkbox } from "./Checkbox";
 import { cn } from "./cn";
-import { ChevronIcon, CloseIcon } from "./icons";
+import { ChevronIcon } from "./icons";
 import type { SelectOption } from "./Select";
 
 /**
@@ -153,18 +153,10 @@ export function MultiSelect<V extends string>({
       {!disabled && chosen.length > 0 && (
         <ul aria-label={`${label}: chosen`} className="mt-2 flex flex-wrap gap-2">
           {chosen.map((option) => (
-            <li key={option.value} className={APPLIED_CHIP_CLASS}>
-              <span className={cn(APPLIED_CHIP_PART_CLASS, "cursor-default pl-2.5 pr-2 hover:bg-transparent")}>
-                <span className="truncate">{option.label}</span>
-              </span>
-              <button
-                type="button"
-                aria-label={`Remove ${option.label}`}
-                onClick={() => toggle(option.value)}
-                className={cn(APPLIED_CHIP_PART_CLASS, "border-l border-navy-line px-2")}
-              >
-                <CloseIcon size={12} />
-              </button>
+            <li key={option.value} className="flex min-w-0 max-w-full">
+              <FilterChip applied staticWords clearLabel={`Remove ${option.label}`} onClear={() => toggle(option.value)}>
+                {option.label}
+              </FilterChip>
             </li>
           ))}
         </ul>

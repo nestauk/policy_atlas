@@ -1021,7 +1021,7 @@ describe("TaskAgentPane — the run trace", () => {
     const trace = screen.getByRole("region", { name: "Analysis run" });
     const card = screen.getByTestId("check-in-card");
     expect(trace.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(trace).toHaveTextContent("Paused · a check-in is waiting on you");
+    expect(trace).toHaveTextContent("Paused · waiting on you");
     expect(trace.querySelector("[data-tone]")).toHaveClass("bg-orange");
   });
 

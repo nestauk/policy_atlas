@@ -2,27 +2,26 @@ import { useId, useState } from "react";
 import { useParams } from "react-router";
 
 import { useDecisions, useTaskAgentTurns, useTask } from "../api/queries";
+import { formatDate } from "../lib/dates";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
 import { LIFECYCLE_LABELS } from "../lib/vocabulary";
 import { StatusMark } from "../ui/brand/Card";
-import { ChevronIcon } from "../ui/brand/icons";
 import { QUIET_CONTROL_CLASS } from "../ui/brand/inlineActions";
 import { LABEL_CLASS } from "../ui/brand/label";
 import { cn } from "../ui/brand/cn";
 import { ReauthRedirect } from "../ui/feedback";
 import { Collapse } from "../ui/motion/Collapse";
 import {
-  fullTime,
   groupByDay,
   mergeHistory,
-  rowTime,
   type HistoryEntry,
   type HistoryRun,
 } from "./historyPresentation";
 import { LIFECYCLE_PAGE_CLASS } from "./listPageChrome";
-import { ListEmpty, ListError } from "./TaskListPanel";
+import { ListEmpty, ListError } from "../ui/brand/list/ListStates";
+import { DisclosureChevron } from "../ui/brand/Disclosure";
 
 const PAGE_SIZE = 200;
 
@@ -52,7 +51,7 @@ const STEP_SPINE =
 
 /** A disclosure row: hover and focus inside the frame (DESIGN.md § The Focus Rule). */
 const DISCLOSURE_CLASS =
-  "w-full cursor-pointer text-left transition-colors duration-150 ease-[ease] hover:bg-blue-tint-2 " +
+  "group w-full cursor-pointer text-left transition-colors duration-150 ease-[ease] hover:bg-blue-tint-2 " +
   "focus-visible:-outline-offset-2";
 
 /**
@@ -145,10 +144,10 @@ function RowTime({ at, className }: { at: string; className?: string }) {
   return (
     <time
       dateTime={at}
-      title={fullTime(at)}
+      title={`${formatDate(at, "long")} at ${formatDate(at, "time")}`}
       className={cn("text-meta tabular-nums text-grey [grid-area:time]", className)}
     >
-      {rowTime(at)}
+      {formatDate(at, "time")}
     </time>
   );
 }
@@ -172,20 +171,6 @@ function Sentence({
         </span>
       ))}
     </span>
-  );
-}
-
-/** The disclosure chevron, turning down as the row opens. */
-function RowChevron({ open, className }: { open: boolean; className?: string }) {
-  return (
-    <ChevronIcon
-      size={12}
-      className={cn(
-        "shrink-0 text-grey transition-transform duration-200 ease-[var(--ease-out-strong)]",
-        open && "rotate-90",
-        className,
-      )}
-    />
   );
 }
 
@@ -223,7 +208,7 @@ function EntryRow({ entry, step = false }: { entry: HistoryEntry; step?: boolean
       >
         <RowTime at={entry.at} className={timeClass} />
         <Sentence item={entry} className={textClass} />
-        <RowChevron open={open} className="[grid-area:mark]" />
+        <DisclosureChevron open={open} className="[grid-area:mark]" />
       </button>
       <Collapse show={open} durationMs={200}>
         <dl id={detailsId} className={cn("px-4 pb-3", SENTENCE_INDENT, step && cn(STEP_SPINE, "pl-8 md:pl-[6.5rem]"))}>
@@ -259,9 +244,9 @@ function RunRow({ run }: { run: HistoryRun }) {
             aria-expanded={open}
             aria-controls={open ? stepsId : undefined}
             onClick={() => setOpen((value) => !value)}
-            className={cn(QUIET_CONTROL_CLASS, "mt-0.5 flex items-center gap-1 text-meta")}
+            className={cn(QUIET_CONTROL_CLASS, "group mt-0.5 flex items-center gap-1 text-meta")}
           >
-            <RowChevron open={open} className="-ml-0.5" />
+            <DisclosureChevron open={open} className="-ml-0.5" />
             {open ? "Hide steps" : "Show steps"}
           </button>
         </span>

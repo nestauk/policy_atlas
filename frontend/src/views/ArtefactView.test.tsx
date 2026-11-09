@@ -17,7 +17,6 @@ import {
   orderSections,
   ProvenanceSheet,
   ReferencesSection,
-  reportDateLabel,
   ReportToBe,
   settlePlan,
   settleStep,
@@ -1040,10 +1039,8 @@ describe("ReportToBe", () => {
 });
 
 describe("re-run notice wording", () => {
-  it("dates the report and counts whole minutes, zero under a minute", () => {
+  it("counts whole minutes, zero under a minute", () => {
     const now = new Date("2026-11-05T10:00:00Z");
-    expect(reportDateLabel("2026-11-03T15:00:00Z", now)).toBe("3 November");
-    expect(reportDateLabel("2025-11-03T15:00:00Z", now)).toBe("3 November 2025");
     expect(minutesSince("2026-11-05T09:57:40Z", now.getTime())).toBe(2);
     // Task 058 polish ruling: under one minute the line reads "just now", so the count may be 0.
     expect(minutesSince("2026-11-05T09:59:50Z", now.getTime())).toBe(0);

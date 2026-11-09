@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { dayHeading, groupByDay, mergeHistory, rowTime, type HistoryEntry, type HistoryRun } from "./historyPresentation";
+import { dayHeading, groupByDay, mergeHistory, type HistoryEntry, type HistoryRun } from "./historyPresentation";
 
 const entry = (item: unknown) => item as HistoryEntry;
 const run = (item: unknown) => item as HistoryRun;
@@ -218,11 +218,6 @@ describe("mergeHistory", () => {
 });
 
 describe("days and times (H4)", () => {
-  it("shows a row's time as absolute local 24-hour time", () => {
-    const at = new Date(2026, 10, 3, 9, 2, 0).toISOString();
-    expect(rowTime(at)).toBe("09:02");
-  });
-
   it("heads a day Today, Yesterday, or with its long en-GB date", () => {
     const now = new Date(2026, 10, 5, 12, 0, 0);
     expect(dayHeading(new Date(2026, 10, 5, 8, 0).toISOString(), now)).toBe("Today");

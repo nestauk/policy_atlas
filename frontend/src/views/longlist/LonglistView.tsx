@@ -15,13 +15,12 @@ import { QUIET_CONTROL_CLASS } from "../../ui/brand/inlineActions";
 import { useRunStream } from "../../store";
 import { REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
 import { sectionAnchor, useOpenWhenNavigated } from "../ArtefactOutline";
-import { DisclosureWord, useExpandForPrint } from "../../ui/brand/Disclosure";
+import { DisclosureWord, useExpandForPrint, DisclosureChevron } from "../../ui/brand/Disclosure";
 import { LABEL_CLASS } from "../../ui/brand/label";
 import { OutlineSwitch } from "../../ui/brand/OutlineSwitch";
 import { REPORT_TITLE_CLASS, ReportPage } from "../reportPage";
 import { isRunActive } from "../scopingActivity";
 import { GroupCount, GroupName } from "./GroupHeading";
-import { ChevronIcon } from "../../ui/brand/icons";
 import { useOpenAtTop } from "../../lib/openAtTop";
 import { InfoHint } from "../../ui/brand/InfoHint";
 import { usePublicView } from "../publicView";
@@ -653,10 +652,7 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
       }}
       className="group print-hide inline-flex shrink-0 cursor-pointer items-center gap-1 text-meta font-semibold text-grey"
     >
-      <ChevronIcon
-        size={12}
-        className={cn("shrink-0 transition-transform duration-200 ease-[var(--ease-out-strong)]", everyOpen && "rotate-90")}
-      />
+      <DisclosureChevron open={everyOpen} />
       <span className="underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 group-hover:text-navy group-hover:decoration-navy">
         {everyOpen ? "Hide all" : "Show all"}
       </span>

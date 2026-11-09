@@ -23,9 +23,11 @@ import {
   splitLeadColon,
 } from "./artefactPresentation";
 import type { TopSource } from "./artefactPresentation";
-import { displayUrl, referenceAuthorsShort, referenceParts, SOURCE_TITLE_LINK_CLASS } from "../ui/brand/reference";
+import { referenceAuthorsShort, referenceParts, SOURCE_TITLE_LINK_CLASS } from "../ui/brand/reference";
+import { ReferenceUrl } from "../ui/brand/ReferenceUrl";
 import type { SidebarEntry } from "./ArtefactOutline";
 import { ArtefactDownload } from "./ArtefactDownload";
+import { formatDate } from "../lib/dates";
 import { errorCode } from "../lib/errors";
 import { useNow } from "../lib/freshness";
 import { scrub } from "../lib/scrub";
@@ -98,6 +100,7 @@ import { RetryCard } from "../ui/feedback/RetryCard";
 import { LINK_CLASS, QUIET_CONTROL_CLASS } from "../ui/brand/inlineActions";
 import { cn } from "../ui/brand/cn";
 import { GROWING_RULE_CLASS } from "../ui/brand/Nav";
+import { formatCount } from "../lib/format";
 
 type CitationOut = components["schemas"]["CitationOut"];
 type GapOut = components["schemas"]["GapOut"];
@@ -2950,18 +2953,6 @@ function SeePlanLink({ onClick, className }: { onClick: () => void; className?: 
   );
 }
 
-/** "3 November", with the year only when it is not this year, or always
- *  with `alwaysYear` ("5 November 2026": the report's facts line, which a
- *  printed copy carries out of its year; round 10, C4). */
-export function reportDateLabel(iso: string, now: Date = new Date(), alwaysYear = false): string {
-  const date = new Date(iso);
-  return date.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "long",
-    ...(!alwaysYear && date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
-  });
-}
-
 /** A link to a source's dossier on this page (`?source=`), keeping the
  *  page's other parameters: a real address, so it opens in a new tab or
  *  copies, while a plain click opens the sheet in place (round 10). */
@@ -3033,7 +3024,7 @@ export function RerunNotice({
   if (madeBy?.ended_at == null) return null;
   return (
     <p data-testid="rerun-notice" className="mb-6 border-b border-line pb-4 text-body text-grey">
-      This report is from {reportDateLabel(madeBy.ended_at)}. A new run started{" "}
+      This report is from {formatDate(madeBy.ended_at, "long")}. A new run started{" "}
       {minutesSince(runStartedAt, nowMs) < 1 ? "just now" : `${minutesSince(runStartedAt, nowMs)} min ago`}.
     </p>
   );
@@ -3216,7 +3207,7 @@ function MostRelevantSources({
                 sourceId={source.sourceId}
                 evidenceType={source.evidenceType}
                 strength={source.appraisalLabel}
-                facts={[source.citationCount === 1 ? "Cited by 1 claim" : `Cited by ${source.citationCount} claims`]}
+                facts={[source.citationCount === 1 ? "Cited by 1 claim" : `Cited by ${formatCount(source.citationCount)} claims`]}
                 className={cn("mt-1", arrivingClass)}
               />
             )}
@@ -3658,7 +3649,7 @@ function ArtefactReport() {
     // never "found".
     facts.push([
       "Sources",
-      `${snapshot.source_count} cited out of ${snapshot.included} included`,
+      `${formatCount(snapshot.source_count)} cited out of ${formatCount(snapshot.included)} included`,
       (data.references ?? []).length > 0 ? "#references" : null,
     ]);
   }
@@ -3779,7 +3770,7 @@ function ArtefactReport() {
             {/* The date on its own line under the title (owner, round 11). */}
             {lastUpdated != null && (
               <p className={cn(REPORT_DATELINE_CLASS, arriving)}>
-                Last updated <time dateTime={lastUpdated}>{reportDateLabel(lastUpdated, new Date(), true)}</time>
+                Last updated <time dateTime={lastUpdated}>{formatDate(lastUpdated, "long")}</time>
               </p>
             )}
             {/* One action line under the title, then the facts (round 10,
@@ -4010,15 +4001,7 @@ function ReferenceEntry({
           {url !== null && (
             <>
               {" "}
-              <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-grey underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 hover:text-navy hover:decoration-navy"
-              >
-                <span className="print:hidden">{displayUrl(url)}</span>
-                <span className="hidden print:inline">{url}</span>
-              </a>
+              <ReferenceUrl url={url} printFull />
             </>
           )}
         </span>

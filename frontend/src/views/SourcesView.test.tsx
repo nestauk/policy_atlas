@@ -382,7 +382,7 @@ describe("SourcesView — sortable table (028 strand 7)", () => {
     const foot = screen.getByTestId("sources-foot");
     expect(foot).toContainElement(download);
     expect(foot).toContainElement(count);
-    expect(download.closest("div")).toHaveClass("gap-x-6");
+    expect(download.closest("div")).toBe(foot);
   });
 
   it("shows the finished search as a one-line section above the filter bar, a Body sentence whose Show opens one table", async () => {

@@ -1,3 +1,4 @@
+import { formatDate } from "../lib/dates";
 import { friendlyDecisionDetails } from "./decisionsPresentation";
 import { confirmTarget } from "./workspace/PartCard";
 import { formatMinutes } from "./workspace/runProgress";
@@ -103,25 +104,6 @@ const RUN_NOUN: Record<string, string> = {
   options_scoping: "the options scoping",
 };
 
-const DAY_PARTS = new Intl.DateTimeFormat("en-GB", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-});
-const TIME = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
-const FULL = new Intl.DateTimeFormat("en-GB", { dateStyle: "long", timeStyle: "medium" });
-
-/** A row's time, absolute and local: "09:02" (en-GB, lead ruling H4). */
-export function rowTime(iso: string): string {
-  return TIME.format(new Date(iso));
-}
-
-/** The whole timestamp, for the row's `title`: "3 November 2026 at 09:02:00". */
-export function fullTime(iso: string): string {
-  return FULL.format(new Date(iso));
-}
-
 /** The local calendar day of a timestamp, as `YYYY-MM-DD`. */
 function dayKey(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -129,8 +111,8 @@ function dayKey(date: Date): string {
 }
 
 /**
- * A day's heading: "Today", "Yesterday", else the long en-GB date without
- * the comma Intl puts after the weekday ("Tuesday 3 November 2026").
+ * A day's heading: "Today", "Yesterday", else the long date led by its
+ * weekday ("Tuesday 3 November 2026").
  */
 export function dayHeading(iso: string, now: Date = new Date()): string {
   const date = new Date(iso);
@@ -139,9 +121,7 @@ export function dayHeading(iso: string, now: Date = new Date()): string {
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
   if (key === dayKey(yesterday)) return "Yesterday";
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    DAY_PARTS.formatToParts(date).find((p) => p.type === type)?.value ?? "";
-  return `${part("weekday")} ${part("day")} ${part("month")} ${part("year")}`;
+  return formatDate(date, "long", { weekday: true });
 }
 
 /** A string field of a decision's payload, when it is one. */

@@ -2,13 +2,13 @@ import { Link } from "react-router";
 
 import type { components } from "../api/gen/types";
 import { capabilityLabel } from "../lib/capabilities";
+import { formatDate } from "../lib/dates";
 import { Figures } from "../lib/figures";
 import { useNow } from "../lib/freshness";
 import { scrub } from "../lib/scrub";
 import { StatusMark } from "../ui/brand/Card";
-import { taskStatus } from "./landingPresentation";
+import { isStale, taskStatusTone, taskStatusWord } from "../ui/brand/taskStatus";
 import {
-  formatListDate,
   rowAccessibleName,
   rowFigureCellClass,
   rowNameCellClass,
@@ -17,6 +17,7 @@ import {
   taskListRowGridClass,
 } from "./listPageChrome";
 import { elapsedSeconds, formatMinutes } from "./workspace/runProgress";
+import { formatCount } from "../lib/format";
 
 type LatestRun = components["schemas"]["TaskOut"]["latest_run"];
 
@@ -75,14 +76,20 @@ export function TaskListRow({
   const safeOwner = ownerName != null ? scrub(ownerName) : null;
   // The words come from the one status vocabulary (round 10: who a paused
   // task waits on, one separator, "Archived").
-  const status = taskStatus(latestRun, new Date(), { isOwner, ownerName: safeOwner, archived });
+  const statusWord = taskStatusWord(latestRun?.status, {
+    isOwner,
+    ownerName: safeOwner,
+    archived,
+    stale: isStale(latestRun),
+  });
+  const statusTone = taskStatusTone(latestRun?.status, archived);
   const running = !archived && activeRun?.status === "running" && Boolean(activeRun.stage_label);
   const nowMs = useNow(running);
   // A running row's step and its timer (round 14: a long step truncates,
   // the timer always shows).
   const liveStep = running ? scrub(activeRun?.stage_label ?? "") : null;
   const liveTimer = running ? formatMinutes(elapsedSeconds(activeRun?.started_at, undefined, nowMs)) : null;
-  const statusLabel = liveStep !== null ? `${liveStep} · ${liveTimer}` : scrub(status.label);
+  const statusLabel = liveStep !== null ? `${liveStep} · ${liveTimer}` : scrub(statusWord);
   const safeName = scrub(name);
   const safeProjects = showProjectPrefix
     ? (projectNames ?? []).map(scrub).filter((project) => project !== "")
@@ -90,7 +97,7 @@ export function TaskListRow({
   const firstProject = safeProjects[0];
   const moreProjects = safeProjects.length - 1;
   const ownerCell = isOwner ? "You" : (safeOwner ?? ownerlessLabel);
-  const date = updatedAt != null ? formatListDate(updatedAt) : "";
+  const date = updatedAt != null ? formatDate(updatedAt, "short") : "";
 
   // The accessible name is the row's content in order (lead ruling 1, round
   // 10): the title, the status word with its live step, the project, the
@@ -149,10 +156,10 @@ export function TaskListRow({
         {/* Every row's mark is the 6 px square, so a running row's is the
             same size as a finished one's (owner, round 8): blue and
             breathing while the run is live. */}
-        {running || (!archived && status.dot === "running") ? (
+        {running || statusTone === "running" ? (
           <StatusMark tone="running" breathing />
         ) : (
-          <StatusMark tone={status.dot} />
+          <StatusMark tone={statusTone} />
         )}
         {/* The status word keeps its room; the phone's project after it is
             what gives way (the word never shrinks on a phone: a shrink
@@ -195,7 +202,7 @@ export function TaskListRow({
         {latestRun?.status === "failed" ? (
           "—"
         ) : sourceCount != null ? (
-          <Figures text={sourceCount === 1 ? "1 source" : `${sourceCount} sources`} />
+          <Figures text={sourceCount === 1 ? "1 source" : `${formatCount(sourceCount)} sources`} />
         ) : (
           ""
         )}

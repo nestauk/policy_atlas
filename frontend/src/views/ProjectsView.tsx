@@ -11,6 +11,7 @@ import {
   useTasksPaged,
 } from "../api/queries";
 import { useArchiveProject, useUpdateProject } from "../api/mutations";
+import { formatDate } from "../lib/dates";
 import { isConflictCode, conflictSentences } from "../lib/errors";
 import { Figures } from "../lib/figures";
 import { scrub } from "../lib/scrub";
@@ -26,8 +27,6 @@ import {
 } from "../ui/brand/PageHeader";
 import { useToast } from "../ui/radix/Toast";
 import {
-  formatListDate,
-  listFrameClass,
   newTaskHref,
   projectListRowGridClass,
   projectListRowGridClassWithOwner,
@@ -39,22 +38,14 @@ import {
 } from "./listPageChrome";
 import type { Scope } from "./ScopeSwitcher";
 import { ARCHIVED_HEADING_CLASS, ArchivedToggle, ScopeSwitcher } from "./ScopeSwitcher";
-import {
-  ListEmpty,
-  ListError,
-  FindTasks,
-  ListFootRow,
-  ListSkeleton,
-  ShowMore,
-  TaskListPanel,
-  pagedTasks,
-  type MoreTasks,
-} from "./TaskListPanel";
+import { FindTasks, TaskListPanel, pagedTasks, type MoreTasks } from "./TaskListPanel";
 import { FindPopover } from "./FindPopover";
 import { ProjectNameField } from "./ProjectPicker";
 import { RowFold, RowMenuControl, RowRenameField, useDepartingRows } from "./ListRowMenu";
 import { ProjectName, projectArchiveSentence, soloTaskCount } from "./NameMenu";
 import { VisibilityControl, visibilityOutcomeLine } from "./VisibilityControl";
+import { LIST_FRAME_CLASS, ListEmpty, ListError, ListSkeleton } from "../ui/brand/list/ListStates";
+import { ListFootRow, ShowMore } from "../ui/brand/list/ListFoot";
 
 /**
  * Projects: named groupings of tasks, and nothing else.
@@ -186,7 +177,7 @@ export function ProjectsView() {
           ))}
 
         {rows.length > 0 && (
-          <ul ref={listRef} role="list" className={listFrameClass}>
+          <ul ref={listRef} role="list" className={LIST_FRAME_CLASS}>
             {shown.map(({ row: project, leaving }) => (
               <li key={project.project_id} className="group border-b border-line last:border-b-0">
                 <RowFold leaving={leaving}>
@@ -217,7 +208,7 @@ export function ProjectsView() {
           start={
             rows.length > 0 && more.hasMore && !more.error ? (
               <ShowMore
-                more={more}
+                loading={more.loading}
                 onShowMore={() => {
                   listedBefore.current = new Set(rows.map((project) => project.project_id));
                   more.onShowMore();
@@ -260,7 +251,7 @@ function ProjectRowWithMenu({
   const control = useRef<HTMLButtonElement>(null);
   const pending = update.isPending || archive.isPending;
   const label = `${PROJECT.one} settings`;
-  const date = formatListDate(lastUpdated);
+  const date = formatDate(lastUpdated, "short");
   const owner = project.is_owner
     ? "You"
     : project.owner_display !== null

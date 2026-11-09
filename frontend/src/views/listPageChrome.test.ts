@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  formatListDate,
   rowAccessibleName,
   rowOwnerCellClass,
   rowStatusCellClass,
@@ -17,25 +16,6 @@ describe("newTaskHref", () => {
   it("opens the capability picker, with an optional task preset", () => {
     expect(newTaskHref()).toBe("/new");
     expect(newTaskHref("p-1")).toBe("/new?project=p-1");
-  });
-});
-
-// Round 10, lead ruling P7: one date form for every reader.
-describe("formatListDate", () => {
-  const now = new Date(2026, 10, 6, 12);
-
-  it("drops the year within the current year", () => {
-    expect(formatListDate(new Date(2026, 10, 5, 9).toISOString(), now)).toBe("5 Nov");
-    expect(formatListDate(new Date(2026, 0, 1, 0, 30).toISOString(), now)).toBe("1 Jan");
-  });
-
-  it("keeps the year before it, and never says Sept", () => {
-    expect(formatListDate(new Date(2025, 9, 12, 9).toISOString(), now)).toBe("12 Oct 2025");
-    expect(formatListDate(new Date(2025, 8, 3, 9).toISOString(), now)).toBe("3 Sep 2025");
-  });
-
-  it("is empty for a value it cannot read", () => {
-    expect(formatListDate("not a date", now)).toBe("");
   });
 });
 

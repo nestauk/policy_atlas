@@ -4,7 +4,8 @@ import { useLocation } from "react-router";
 import { TitleMarkerProvider } from "../lib/title";
 import { useRunStream, type RunStreamState } from "../store";
 import { tabOfPath, type LifecycleTab } from "./lifecycle";
-import { READY_WORDS, isFinished, walkKind } from "./workspace/runProgress";
+import { READY_WORDS } from "../ui/brand/taskStatus";
+import { isFinished, walkKind } from "./workspace/runProgress";
 
 /** A connection's replay arrives in a burst after it opens; nothing that lands
  *  in this window marks a tab, so an old run never reads as new. */
@@ -97,6 +98,8 @@ interface TaskLive {
   marks: Marks;
   capability: string | null | undefined;
   isOwner: boolean;
+  /** The task's owner (`TaskOut.owner_display`), for the paused words. */
+  ownerName: string | null;
 }
 
 const TaskLiveContext = createContext<TaskLive | null>(null);
@@ -135,6 +138,7 @@ export function TaskLiveProvider({
   enabled,
   capability,
   isOwner,
+  ownerName = null,
   children,
 }: {
   taskId: string;
@@ -144,6 +148,7 @@ export function TaskLiveProvider({
   enabled: boolean;
   capability: string | null | undefined;
   isOwner: boolean;
+  ownerName?: string | null;
   children: ReactNode;
 }) {
   const stream = useRunStream(taskId);
@@ -179,8 +184,8 @@ export function TaskLiveProvider({
 
   const kind = walkKind(capability, stream.stages);
   const value = useMemo(
-    () => (enabled ? { taskId, tab, stream, marks, capability, isOwner } : null),
-    [enabled, taskId, tab, stream, marks, capability, isOwner],
+    () => (enabled ? { taskId, tab, stream, marks, capability, isOwner, ownerName } : null),
+    [enabled, taskId, tab, stream, marks, capability, isOwner, ownerName],
   );
   return (
     <TaskLiveContext.Provider value={value}>

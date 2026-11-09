@@ -8,10 +8,10 @@ import { evidenceTypeLabel, FULL_TEXT } from "../ui/brand/evidence";
 import { LABEL_CLASS } from "../ui/brand/label";
 import { LINK_CLASS, QUIET_CONTROL_CLASS } from "../ui/brand/inlineActions";
 import { SOURCE_TITLE_LINK_CLASS } from "../ui/brand/reference";
-import { ChevronIcon } from "../ui/brand/icons";
-import { DisclosureWord, useExpandForPrint } from "../ui/brand/Disclosure";
+import { DisclosureWord, useExpandForPrint, DisclosureChevron } from "../ui/brand/Disclosure";
 import { cn } from "../ui/brand/cn";
 import { Collapse } from "../ui/motion/Collapse";
+import { formatCount } from "../lib/format";
 
 /** Minimal section shape the outline consumes (mirrors SectionOut). */
 export interface OutlineSection {
@@ -502,10 +502,7 @@ export function MobileContents({ entries }: { entries: SidebarEntry[] }) {
         onClick={() => setOpen((value) => !value)}
         className="group flex min-h-11 w-full cursor-pointer items-center gap-2 text-left"
       >
-        <ChevronIcon
-          size={12}
-          className={cn("shrink-0 text-grey transition-transform duration-200 ease-[var(--ease-out-strong)]", open && "rotate-90")}
-        />
+        <DisclosureChevron open={open} />
         <span className={cn(LABEL_CLASS, "group-hover:text-navy")}>Contents</span>
       </button>
       <Collapse show={open} durationMs={200}>
@@ -801,7 +798,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
     typeof funnel.data.found === "number" &&
     typeof funnel.data.relevant === "number" &&
     typeof funnel.data.cited === "number"
-      ? `${funnel.data.found} found → ${funnel.data.relevant} included → ${funnel.data.cited} cited`
+      ? `${formatCount(funnel.data.found)} found → ${formatCount(funnel.data.relevant)} included → ${formatCount(funnel.data.cited)} cited`
       : null;
   const counts = gatheredCounts(funnel.data);
 

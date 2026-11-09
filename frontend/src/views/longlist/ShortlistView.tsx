@@ -28,6 +28,7 @@ import { useOpenAtTop } from "../../lib/openAtTop";
 import { CARD_FROM_SHORTLIST } from "./OptionCard";
 import { NOTE_REVIEWING_WORDS, useNoteRefresh, useRefreshShortlistNote } from "./shortlistNote";
 import { ActionLine } from "../workspace/ActionLine";
+import { formatCount } from "../../lib/format";
 
 type LonglistOut = components["schemas"]["LonglistOut"];
 type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
@@ -133,7 +134,7 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
   const baselineCut = numberOf(provenance.baseline_chars_cut);
   const footerLines: string[] = [];
   if (linesCut !== null && linesCut > 0 && linesTotal !== null) {
-    footerLines.push(`Policy Atlas read ${linesTotal - linesCut} of ${linesTotal} document lines`);
+    footerLines.push(`Policy Atlas read ${formatCount(linesTotal - linesCut)} of ${formatCount(linesTotal)} document lines`);
   }
   if (baselineCut !== null && baselineCut > 0) footerLines.push("The baseline was cut");
 

@@ -16,6 +16,7 @@ import { fillYearRange, humaniseLabel, normaliseGeographies } from "../ui/charts
 import "./landscape.css";
 import { PANE_LABEL_CLASS } from "../ui/brand/label";
 import { evidenceTypeLabel } from "../ui/brand/evidence";
+import { formatCount } from "../lib/format";
 
 /* ---------------------------------------------------------------------------
  * Landscape charts (task 058, landscape polish; lead rulings 2026-11-05).
@@ -696,6 +697,6 @@ export const population = {
   withYear: (n: number) => `${n} with a year`,
   findings: (n: number) => plural(n, "finding"),
   classifiedSoFar: (classified: number, relevant: number) =>
-    `Classified so far: ${classified} of ${plural(relevant, "relevant source")}`,
+    `Classified so far: ${formatCount(classified)} of ${plural(relevant, "relevant source")}`,
 };
 

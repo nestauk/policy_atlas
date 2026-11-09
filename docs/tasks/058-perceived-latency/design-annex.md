@@ -1776,6 +1776,7 @@ Rulings on the build (agent, for the lead):
 | 9f | build, round 13 (owner live-run notes, 2026-11-06, late) and consolidation batch A | 2026-11-06 | the shared disclosure word, reference line, info hover and remembered choices (batch A); the longlist row's plain document count, the group heading shared by the list and grid with its shortlisted count, View as, the columns choice on the controls row, a wider Add an option, uncovered levers as a Body line, Other for the lever that fits none, the shortlist control as a circled check, Exclude only on the card and one-click with Add a reason after, excluding a theme or lever at its heading, the option card's documents without authors and in the References style with a link to the filtered table, the profile table at one size in a logical order, Your target and outcomes first with its values on two lines, no abstracts note; the New page's Project field (always shown, with New project…) and the scoping search field with one-line explanations; Share's two explanation lines; Landscape's published-country note in an i, the funnel rows Appraised and Full text accessed clickable, Relevant in the screening filter, the scoping task's Themes subtab from the longlist, the loading skeleton's bars in every column; the backend's depth and appraised filters, distinct appraised counts, a reason added after an exclusion updating in place; the page's scrollbar gutter kept | lead |
 | 9g | build, round 14 (owner live-run notes, 2026-11-07 to 09) | 2026-11-09 | a task named from the refined question at the step 1 decision and a chat titled from its first message (lead prompts task_title_v1, chat_title_v1), the header revealing the new name like streamed text; the shortlist's not-covered note with one writer (shortlist_note_v1; the shortlist prompt v2 writes no note) refreshed once on opening and after a pause, 'Written before your latest changes'; the References numbers blue and opening the source, the method as one designed section at the prose width, the report titled with the plan's question, the boxes on the shared marks line; tabs opening at their top, the plan's scrim on non-Agent tabs and the plan opening at its top, the Task Agent's three measured jumps fixed with one growing block per turn, the action line never under the composer, the status bar gated on loaded data, chats on the paced reveal with the mark and activity line and References in the report's form, the header naming the project, the sidebar trace's links right-aligned, the Result tab active on option cards; Collecting… from the row's queued status, the whole queries line as the trigger, Not reported linking (country=none), scoping theme headings filtering the table with distinct counts; the task list's timer kept, the New page's searchable multi-select of the user's finished searches, the foot reorganised, the archive sentence naming the solo tasks; one ProjectPicker; projects archiving their solo tasks, own searches linkable anywhere and never flagged, depth and theme filters, the mock's ingest stage | lead |
 | 9h | build, round 15 (owner live-run notes, 2026-11-09) | 2026-11-09 | the option card's exclusion block at the top as labelled facts with plain words (no 'Breaks'), the rows' one short exclusion phrase, the breadcrumb naming the origin, the note step on the standard tier, run-less History events kept out of the thread | lead |
+| 9i | build, consolidation batch B (seven rules the owner accepted 2026-11-06) | 2026-11-09 | one home each for dates (`lib/dates.ts`, three named forms), counts (`lib/format.ts`), a task's status words and mark (`ui/brand/taskStatus.ts`; "Paused · waiting on you" / "waiting on <first name>", "Running" before the first step, "Stopped" for an aborted or interrupted run), the filter chip (`FilterChip` in `ui/brand/Chip.tsx`), the list furniture (`ui/brand/list/`: frames, skeleton, empty and error states, foot row, Show more, Pagination), the rotating chevron (`DisclosureChevron`) and the address link (`ReferenceUrl`); the view-level copies deleted (`views/Pagination.tsx`, `landingPresentation`'s status words, `formatListDate`, `reportDateLabel`, History's three date formatters, the two count formatters, eight hand-drawn chevrons, two hand-built anchors). Where copies differed the shared rule won: the re-run notice carries the year, History's hover loses its seconds, the chat divider is "5 Nov" for every locale, five chevrons now turn Navy on hover, both addresses use the stricter href check. Left alone on purpose: Findings' toggle chips (a choice, not a filter), the fixed select chevrons, the chat list's date buckets. For the owner: the paused words supersede the trace's earlier "a check-in is waiting on you"; aborted (grey) and interrupted (red) both read "Stopped" with their marks kept. § Consolidation, batch B above has the full list. | lead |
 | 10 | review, agent pass | | | lead |
 | 11 | review, owner pass | | | owner |
 
@@ -2082,6 +2083,104 @@ History's row chevron and "Show steps" (`HistoryView.tsx`), the trace's "Show st
 (`RunTrace.tsx`) and the findings table's row chevron (`FindingsView.tsx`); the plan panel's own
 `InfoHint` on the navy surface (`workspace/PlanDocument.tsx`, a hand-drawn glyph in on-navy
 tokens); the chats sidebar's open-or-shut memory (`policy-atlas:chats-sidebar`, not per task).
+
+## Consolidation, batch B (owner, 2026-11-06; built 2026-11-09)
+
+Seven rules the owner accepted (2026-11-06), each defined once and used everywhere; the copies
+were deleted. Where two copies differed a rule had to be chosen; each choice is named below, so the
+lead can reverse it by changing the one home.
+
+1. **Dates** (`lib/dates.ts`): `formatDate(value, form, { now, weekday })` with three named forms,
+   `short` ("5 Nov" this year, "12 Oct 2025" before it), `long` ("6 November 2026") and `time`
+   ("09:02"). Fixed month and day names, so no locale writes "Sept"; the reader's local time on
+   the 24-hour clock; "" for a value it cannot read. Importers: the task row and the project row
+   (`short`), the chat's date divider (`short`), the report's "Last updated" line and its re-run
+   notice (`long`), History's rows (`time`), their hover text (`long` then "at" then `time`) and
+   day headings (`long` with the weekday). Deleted: `formatListDate` and its month table
+   (`listPageChrome.ts`), `reportDateLabel` (`ArtefactView.tsx`), `rowTime`, `fullTime` and the
+   three `Intl.DateTimeFormat`s (`historyPresentation.ts`), the chat divider's locale call.
+   **Chosen:** the long form always carries its year, so the re-run notice now reads "This report
+   is from 3 November 2026" (it dropped the year within the current year); the History row's hover
+   loses its seconds ("3 November 2026 at 09:02"); the chat's divider moves from the browser's
+   locale ("Nov 5" to a US reader) to the lists' "5 Nov".
+2. **Counts** (`lib/format.ts`): `formatCount(n)`, en-GB ("1,234"). `countOf` (`lib/vocabulary.ts`)
+   now groups its count through it, and so do the trace's counts (`COUNT_FORMAT`, deleted), the
+   longlist's search line (`FOUND_FORMAT`, deleted), the Sources range, totals and empty sentence,
+   the search queries' totals and results, the themes' document counts, the task row's source
+   count, the page numbers, the report's "Cited by", the snapshot and funnel lines, the Landscape's
+   classified line, the Markdown download's counts, the shortlist's document lines, the check-in's
+   query and finding counts, the step count and the longlist's excluded, middle-word and measures
+   lines. Visible only past 999 (a row's "1200 sources" now reads "1,200 sources").
+3. **A task's status words** (`ui/brand/taskStatus.ts`): `taskStatusWord(status, { isOwner,
+   ownerName, archived, stale })`, `taskStatusTone` (the row's mark), `isStale`, `RUNNING_WORD`,
+   and a finished walk's words (`READY_WORDS`, with the `WalkKind` type, moved from
+   `runProgress.ts`). The list row, the run trace's top line (running, paused, stopped, failed),
+   the run status bar (through `traceWords` and `useRunWords`) and the browser title's unseen
+   finish read them; the caller adds the live step and timer. The trace and the status bar now
+   carry the owner's name (`TaskLiveProvider` and `RunTrace` take `ownerName`, from
+   `TaskOut.owner_display`). Deleted: `runPresentation`, `taskStatus` and `isStale` from
+   `landingPresentation.ts` (its tests moved to `ui/brand/taskStatus.test.ts`); the trace's own
+   paused and ended strings. **Chosen** (each a visible change):
+   - Paused, the trace and the status bar now read the list's words: "Paused · waiting on you" to
+     the owner (was "Paused · a check-in is waiting on you"), "Paused · waiting on Grace" to a
+     colleague (was "Paused · <step label>"), "Paused" with no owner. The brief lists these words;
+     the annex's trace rulings (§ The run trace, "Paused") said the older ones. DESIGN.md's trace
+     paragraph now says the new words.
+   - Running with no step yet, the list row reads "Running" (was "Analysing the evidence…", wrong
+     for an Options scoping walk); the trace already said "Running".
+   - An interrupted run reads "Stopped" on the list row (was "Interrupted"), as the trace did.
+   - Kept as they were, not in the brief's list: the trace's finish words per walk ("Report
+     ready", the longlist's) where the list says "Complete"; "Complete · with gaps"; "Stale"; the
+     marks (a stopped trace is Red; on the list an interrupted row's mark is Red and an aborted
+     row's is Line 2, under the same word "Stopped").
+4. **The filter chip** (`FilterChip` in `ui/brand/Chip.tsx`): one control in two looks, the
+   outline box idle and the filled Navy chip with its × applied, its words a button (the ref's:
+   it is the select's popover trigger) or, `whole`, the whole chip one button that clears, or
+   `staticWords`; the × its own button named by `clearLabel`. `FILTER_CONTROL_BASE` (the 32 px box)
+   moved beside it; the screening switch imports it. Importers: the Sources filter bar (Cited, the
+   select filters and the Year filter, the query chip, the funnel's set chips), the multi-select's
+   chosen items, the plan card's scope chips. Deleted: `FILTER_CONTROL_IDLE` and the exported
+   `APPLIED_CHIP_CLASS` / `APPLIED_CHIP_PART_CLASS` (now private to the chip), the four hand-built
+   chips in `SourcesView.tsx`, the multi-select's, and the plan card's blue-tint chip with its ✎
+   and text ×. **Chosen:** the plan card's chips take the Sources look (Meta, 32 px, Navy), their
+   words open the editor in place of the ✎ (the button keeps its name, "Edit <chip>"), the × is
+   the 12 px glyph; read-only, the words alone; 8 px between chips (was 6 px).
+5. **List furniture** (`ui/brand/list/`): `ListStates.tsx` holds `LIST_FRAME_CLASS`,
+   `LIST_CONTROL_CLASS` (the 40 px ghost), `ListSkeleton`, `ListEmpty` (now with an `action` at the
+   right) and `ListError`, each taking the surface's frame (`frameClassName`); `ListFoot.tsx` holds
+   `ListFootRow` (its right end a row of items), `ShowMore` (takes `loading`) and `Pagination`.
+   Importers: the Tasks and Projects lists (`TaskListPanel.tsx`, `ProjectsView.tsx`,
+   `TasksListView.tsx`), History, All sources and Findings. The Sources table keeps its own frame
+   (rules above and below, `sources-frame`) and its table-shaped loading rows; its empty, failed and
+   no-match states are `ListEmpty` / `ListError` in that frame, and its foot is `ListFootRow`:
+   Download CSV at the left, the page size, the range and the page controls on the same line at the
+   right. Deleted: `views/Pagination.tsx`, `listFrameClass` (`listPageChrome.ts`), the furniture in
+   `TaskListPanel.tsx`, `SourcesEmpty` and `FRAME_CONTROL_CLASS` (`SourcesView.tsx`). **Chosen:**
+   the lists' spacing: the Sources foot is 16 px under the table and 16 px between its ends (was 20
+   and 24); Findings' page controls sit 16 px under the table (was 20); the Sources empty state's
+   padding is the lists' 24 px (was 20). Pagination no longer carries its own top margin.
+6. **One rotating chevron** (`DisclosureChevron` in `ui/brand/Disclosure.tsx`): the 12 px glyph,
+   right when shut, down when open over 200 ms on the strong ease-out, a cut under reduced motion,
+   Grey turning Navy with its control's hover (the control carries `group`); `className` seats it.
+   Users: `DisclosureWord`, the search queries' "Show", the option card's documents toggle,
+   History's rows and "Show steps", the trace's "Show steps", the Findings rows, the report's
+   phone contents, the longlist's "Show all" and the chats' Archived (`group-open:` turns it).
+   Deleted: History's `RowChevron` and eight hand-drawn copies. **Chosen:** the search queries'
+   rule (Grey, Navy with the control's hover): before, five copies stayed Grey on hover; the chats'
+   Archived chevron turned over 150 ms on the plain ease-out and now takes the 200 ms. None honoured
+   reduced motion before.
+7. **The address link** (`ReferenceUrl` in `ui/brand/ReferenceUrl.tsx`): the address without its
+   scheme, Grey over the Line 2 underline turning Navy, a new tab, nothing for an address that is
+   not http or https (`safeHref`); `printFull` prints the full address. The References pass it, the
+   dossier does not. Deleted: the two hand-built anchors (`ArtefactView.tsx`, `SourcesView.tsx`).
+   **Chosen:** the dossier's stricter check (`safeHref`) for both.
+
+**Left alone, on purpose** (for the lead): the Findings table's toggle chips (`filterChipClass`,
+blue tint, no ×: a choice, not an applied filter); the chat's report-context chip and its text ×
+(`ContextBar.tsx`) and the check-in's section rows with their ✎ and × (`CheckInBundle.tsx`): not
+filter chips, but each a text glyph DESIGN.md asks for a `CloseIcon`; the conversation list's
+"Today / This week / Earlier" buckets (groups, not a date form); the trace's step row "Stopped" (a
+step's state); the fixed-down chevrons of the selects and the header menu (they do not turn).
 
 ## Round 13, Options scoping (owner, 2026-11-06)
 

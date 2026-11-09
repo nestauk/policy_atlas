@@ -548,6 +548,7 @@ export function AppShell() {
                   enabled={liveShell}
                   capability={task.data?.capability}
                   isOwner={isOwner}
+                  ownerName={task.data?.owner_display ?? null}
                 >
                   <PlanPanelProvider key={taskId}>{shellChrome}</PlanPanelProvider>
                 </TaskLiveProvider>

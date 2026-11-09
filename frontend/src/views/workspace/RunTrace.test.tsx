@@ -342,7 +342,7 @@ describe("RunTrace — live (annex § The run trace; owner round 6: the card's b
     const { rerender } = render(trace());
     expect(header().querySelector(".anim-rise")).toBeNull();
     rerender(trace({ status: "paused" }));
-    expect(header().querySelector(".anim-rise")).toHaveTextContent("Paused · a check-in is waiting on you");
+    expect(header().querySelector(".anim-rise")).toHaveTextContent("Paused · waiting on you");
   });
 
   // Lead, round 9: a row that lands keeps its place (it shrinks as it lands,
@@ -379,7 +379,7 @@ describe("RunTrace — live (annex § The run trace; owner round 6: the card's b
 
   it("sets the state word as a label and what waits in grey; the rows read at Body", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
-    render(trace({ status: "paused", isOwner: false }));
+    render(trace({ status: "paused", isOwner: false, ownerName: "Grace Hopper" }));
     const words = header().querySelector(".anim-rise") as HTMLElement;
     expect(within(words).getByText("Paused")).toHaveClass("uppercase", "font-extrabold");
     expect(within(words).getByText("Paused").nextElementSibling).toHaveClass("text-grey");
@@ -420,13 +420,13 @@ describe("RunTrace — live (annex § The run trace; owner round 6: the card's b
 });
 
 describe("RunTrace — paused", () => {
-  it("turns the mark orange and tells the owner a check-in waits, with the rows under it, and never stalls", () => {
+  it("turns the mark orange and tells the owner the run waits on them, with the rows under it, and never stalls", () => {
     vi.useFakeTimers({ now: NOW });
     render(trace({ status: "paused" }));
     expect(mark()).toHaveClass("bg-orange", "size-1.5");
     expect(mark()).not.toHaveClass("anim-breathe-mark");
     expect(liveMark()).toBeNull();
-    expect(flat(header().textContent)).toMatch(/^Paused · a check-in is waiting on you6 min 12 s$/);
+    expect(flat(header().textContent)).toMatch(/^Paused · waiting on you6 min 12 s$/);
     // Nothing turns while the run waits on a person: the step's mark is the
     // orange square too.
     expect(screen.getByRole("list", { name: "Run steps" })).toBeVisible();
@@ -438,10 +438,10 @@ describe("RunTrace — paused", () => {
     expect(header()).not.toHaveTextContent("Still working");
   });
 
-  it("tells a colleague where the run stopped instead", () => {
+  it("tells a colleague whom the run waits on instead, by first name", () => {
     vi.useFakeTimers({ toFake: ["Date"], now: NOW });
-    render(trace({ status: "paused", isOwner: false }));
-    expect(flat(header().textContent)).toMatch(/^Paused · Classifying6 min 12 s/);
+    render(trace({ status: "paused", isOwner: false, ownerName: "Grace Hopper" }));
+    expect(flat(header().textContent)).toMatch(/^Paused · waiting on Grace6 min 12 s/);
     expect(header()).not.toHaveTextContent(/waiting on you/);
   });
 

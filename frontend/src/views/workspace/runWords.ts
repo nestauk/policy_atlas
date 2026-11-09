@@ -6,21 +6,22 @@ import { cardRows, currentRow, rowDetail, rowLiveness, traceWords, type CardRow 
 /**
  * What a run is doing now, in the trace header's words (task 058): the
  * current step and its activity ("Writing · Section 3 of 7 · Costs and
- * funding"), "Still working on this step" after two quiet minutes, and
- * "Paused · a check-in is waiting on you" (to a colleague, "Paused · <step>")
- * while a check-in waits. The rail's Task Agent mark and the run status bar read
+ * funding"), "Still working on this step" after two quiet minutes, and the
+ * task's paused words ("Paused · waiting on you", to a colleague "Paused ·
+ * waiting on <first name>") while a check-in waits. The rail's Task Agent mark and the run status bar read
  * these words; the trace in the thread works them out the same way.
  *
  * Args:
  *   stream: The task's run stream.
- *   isOwner: Only the owner is told a check-in waits on them.
+ *   isOwner: The owner is told a paused run waits on them.
+ *   ownerName: The owner's display name, which a colleague is told.
  *
  * Returns:
  *   `words` (empty before the first stage frame), the current `row`, whether
  *   the run is `paused`, and the `fresh` flag (an update arrived in the last
  *   moment, for a breathing mark).
  */
-export function useRunWords(stream: RunStreamState, isOwner: boolean) {
+export function useRunWords(stream: RunStreamState, isOwner: boolean, ownerName: string | null = null) {
   const status = stream.run?.status;
   const rows = cardRows(stream.stages, stream.plan?.plan, status);
   const row: CardRow | null = currentRow(rows);
@@ -31,6 +32,6 @@ export function useRunWords(stream: RunStreamState, isOwner: boolean) {
   const fresh = useFreshness(tick?.occurredAt);
   const paused = status === "paused" || stream.pendingCheckIn != null;
   const stalled = progress !== null && stamp !== undefined && quiet && !paused;
-  const words = scrub(traceWords(row, rowDetail(tick), paused ? "paused" : stalled ? "stalled" : "live", isOwner));
+  const words = scrub(traceWords(row, rowDetail(tick), paused ? "paused" : stalled ? "stalled" : "live", isOwner, ownerName));
   return { words, row, paused, fresh };
 }

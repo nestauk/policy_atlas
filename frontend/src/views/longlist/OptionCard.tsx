@@ -54,8 +54,8 @@ import { LINK_CLASS, PROSE_LINK_CLASS } from "../../ui/brand/inlineActions";
 import { useOpenAtTop } from "../../lib/openAtTop";
 import { InfoHint } from "../../ui/brand/InfoHint";
 import { BulletList } from "../../ui/brand/BulletList";
-import { ChevronIcon } from "../../ui/brand/icons";
 import { OptionDossier } from "./OptionDossier";
+import { DisclosureChevron } from "../../ui/brand/Disclosure";
 
 type OptionDocumentOut = components["schemas"]["OptionDocumentOut"];
 
@@ -212,10 +212,7 @@ function DocumentsDisclosure({
         onClick={() => setOpen((value) => !value)}
         className="group inline-flex min-h-6 cursor-pointer items-center gap-1 text-meta font-semibold text-grey"
       >
-        <ChevronIcon
-          size={12}
-          className={cn("shrink-0 transition-transform duration-200 ease-[var(--ease-out-strong)]", open && "rotate-90")}
-        />
+        <DisclosureChevron open={open} />
         <span className="underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 group-hover:text-navy group-hover:decoration-navy">
           {documentsToggleWords(open, evaluated, describing)}
         </span>

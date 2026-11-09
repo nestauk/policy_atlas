@@ -8,8 +8,9 @@ import { cn } from "../../../ui/brand/cn";
 import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
 import { DRAFT_CHAT_ID, TASK_AGENT_TAB_ID, taskAgentConversationId, useConversationMutations } from "./conversationState";
 import { ChangingText } from "../ChangingText";
-import { ArchiveIcon, ChevronIcon, ICON_ROW, PencilIcon, RestoreIcon, iconButtonClass } from "../../../ui/brand/icons";
+import { ArchiveIcon, ICON_ROW, PencilIcon, RestoreIcon, iconButtonClass } from "../../../ui/brand/icons";
 import { CAPTION_LABEL_CLASS } from "../../../ui/brand/label";
+import { DisclosureChevron } from "../../../ui/brand/Disclosure";
 
 export type ConversationRow = components["schemas"]["ConversationListItemOut"];
 
@@ -97,8 +98,8 @@ export function ConversationList({
       <ListGroups rows={draft === null ? rest : [draft, ...rest]} {...rowProps} />
       {archivedRows.length > 0 && (
         <details className="group/archive mt-4">
-          <summary className={cn(CAPTION_LABEL_CLASS, "flex cursor-pointer select-none items-center gap-1.5 py-1 pl-1.5 pr-2 hover:text-navy [&::-webkit-details-marker]:hidden")}>
-            <ChevronIcon size={12} className="transition-transform duration-150 ease-out group-open/archive:rotate-90" />
+          <summary className={cn(CAPTION_LABEL_CLASS, "group flex cursor-pointer select-none items-center gap-1.5 py-1 pl-1.5 pr-2 hover:text-navy [&::-webkit-details-marker]:hidden")}>
+            <DisclosureChevron className="group-open/archive:rotate-90" />
             <h3 className="font-bold">Archived</h3>
             <span className="normal-case tracking-normal">{archivedRows.length}</span>
           </summary>

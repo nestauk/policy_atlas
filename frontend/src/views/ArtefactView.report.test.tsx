@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createInitialRunStreamState } from "../store";
 import { TooltipProvider } from "../ui/radix/Tooltip";
-import { ArtefactView, reportDateLabel } from "./ArtefactView";
+import { ArtefactView } from "./ArtefactView";
 import { forgetReportExpand } from "./ArtefactOutline";
 import * as queries from "../api/queries";
 import * as store from "../store";
@@ -514,14 +514,6 @@ describe("the committed report page (task 058, round 10)", () => {
     stubNarrow(false);
     renderReport();
     expect(screen.getAllByRole("navigation", { name: "Contents" })).toHaveLength(1);
-  });
-});
-
-describe("reportDateLabel", () => {
-  it("always carries the year when asked, for the facts line", () => {
-    const now = new Date("2026-11-06T10:00:00Z");
-    expect(reportDateLabel("2026-11-05T12:00:00Z", now)).toBe("5 November");
-    expect(reportDateLabel("2026-11-05T12:00:00Z", now, true)).toBe("5 November 2026");
   });
 });
 

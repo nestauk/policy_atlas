@@ -11,13 +11,13 @@ import { useDocumentTitle } from "../lib/title";
 import { useRunStream } from "../store";
 import { Button, buttonVariants } from "../ui/brand/Button";
 import { Select } from "../ui/brand/Select";
-import { APPLIED_CHIP_CLASS, APPLIED_CHIP_PART_CLASS } from "../ui/brand/Chip";
+import { FilterChip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { cn } from "../ui/brand/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { Tooltip } from "../ui/radix/Tooltip";
-import { CloseIcon, DownloadIcon } from "../ui/brand/icons";
+import { DownloadIcon } from "../ui/brand/icons";
 import { Arrival, ArrivalProvider, useFirstPaintDone } from "../ui/motion/arrivals";
 import { findQueryRow, queryChipLabel, queryGroups, QueriesSummary, SearchQueries } from "./SearchQueries";
 import {
@@ -40,7 +40,6 @@ import {
   PHONE_SORT_OPTIONS,
   SOURCE_SORT_COLUMNS,
   TABLE_HEADER_TEXT_CLASS,
-  FILTER_CONTROL_IDLE,
   switchChoiceClass,
   type CellPulses,
   type EvidenceSortField,
@@ -60,12 +59,15 @@ import {
 } from "../ui/brand/evidence";
 import { DepthMark, StrengthMark, ToneSquare } from "../ui/brand/EvidenceMarks";
 import { numberedAuthorships } from "./artefactPresentation";
-import { displayUrl, referenceParts } from "../ui/brand/reference";
+import { referenceParts } from "../ui/brand/reference";
+import { ReferenceUrl } from "../ui/brand/ReferenceUrl";
 import { isScoping } from "./scopingActivity";
 import { isFinished } from "./workspace/runProgress";
-import { Pagination } from "./Pagination";
 import { normaliseGeographies } from "../ui/charts/EvidenceDistributionChart";
 import "./sources.css";
+import { formatCount } from "../lib/format";
+import { LIST_CONTROL_CLASS, ListEmpty, ListError } from "../ui/brand/list/ListStates";
+import { ListFootRow, Pagination } from "../ui/brand/list/ListFoot";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
@@ -80,9 +82,9 @@ type EvidenceItem = components["schemas"]["EvidenceItemOut"];
 type EvidenceQuery = NonNullable<Parameters<typeof useEvidence>[1]>;
 
 
-/** The 40 px ghost inside the table's frame (the list pages' `ListError`
- *  control): Try again, Clear filters. */
-const FRAME_CONTROL_CLASS = "h-10 whitespace-nowrap px-3 py-0 text-meta";
+/** The Sources table's frame: its rules above and below (`sources.css`),
+ *  which its empty and failed states keep. */
+const SOURCES_FRAME_CLASS = "sources-frame";
 
 /** Sources: collection-true server filters and a URL-addressable source dossier. */
 export function SourcesView() {
@@ -275,8 +277,8 @@ export function SourcesView() {
   const firstRow = (page - 1) * pageSize + 1;
   const countLine =
     totalItems > pageSize
-      ? `${firstRow.toLocaleString("en-GB")}–${(firstRow + rows.length - 1).toLocaleString("en-GB")} of ${totalItems.toLocaleString("en-GB")} sources`
-      : `${totalItems.toLocaleString("en-GB")} ${totalItems === 1 ? "source" : "sources"}`;
+      ? `${formatCount(firstRow)}–${formatCount(firstRow + rows.length - 1)} of ${formatCount(totalItems)} sources`
+      : `${formatCount(totalItems)} ${totalItems === 1 ? "source" : "sources"}`;
 
   // While the search runs and nothing has landed, the queries are the page:
   // the table waits for the first results (owner, round 9), and the filter
@@ -339,23 +341,15 @@ export function SourcesView() {
           ))}
         </div>
         <div data-testid="sources-facets" className="flex flex-wrap items-center gap-3">
-        {citedFilter ? (
-          <span className={APPLIED_CHIP_CLASS}>
-            <button
-              type="button"
-              aria-pressed
-              onClick={() => setFacet("cited", undefined)}
-              className={cn(APPLIED_CHIP_PART_CLASS, "pl-2.5 pr-2")}
-            >
-              Cited
-              <CloseIcon size={12} />
-            </button>
-          </span>
-        ) : (
-          <button type="button" aria-pressed={false} onClick={() => setFacet("cited", "true")} className={FILTER_CONTROL_IDLE}>
-            Cited
-          </button>
-        )}
+        <FilterChip
+          applied={citedFilter}
+          whole
+          aria-pressed={citedFilter}
+          onClick={citedFilter ? undefined : () => setFacet("cited", "true")}
+          onClear={() => setFacet("cited", undefined)}
+        >
+          Cited
+        </FilterChip>
         <FilterSelect
           label={scoping ? "Theme" : "Key theme"}
           allLabel="All themes"
@@ -410,21 +404,15 @@ export function SourcesView() {
         {/* One search query's results (round 12): set from the query's link,
             shown as the Country chip is, its × clearing it. */}
         {queryFilter !== undefined && (
-          <span className={APPLIED_CHIP_CLASS}>
-            <span className={cn(APPLIED_CHIP_PART_CLASS, "cursor-default pl-2.5 pr-2 hover:bg-transparent")}>
-              <span className="truncate max-md:max-w-52">
-                {`Query: ${appliedQuery !== undefined ? queryChipLabel(scrub(appliedQuery.query)) : "…"}`}
-              </span>
-            </span>
-            <button
-              type="button"
-              aria-label="Clear the query filter"
-              onClick={() => setFacet("query", undefined)}
-              className={cn(APPLIED_CHIP_PART_CLASS, "border-l border-navy-line px-2")}
-            >
-              <CloseIcon size={12} />
-            </button>
-          </span>
+          <FilterChip
+            applied
+            staticWords
+            wordsClassName="max-md:max-w-52"
+            clearLabel="Clear the query filter"
+            onClear={() => setFacet("query", undefined)}
+          >
+            {`Query: ${appliedQuery !== undefined ? queryChipLabel(scrub(appliedQuery.query)) : "…"}`}
+          </FilterChip>
         )}
         {/* The funnel's sets (round 13), set from its rows, each a chip whose
             × clears it. */}
@@ -466,27 +454,25 @@ export function SourcesView() {
           (errorCode(evidence.error) === "unauthenticated" ? (
             <ReauthRedirect />
           ) : (
-            <div role="alert" className="sources-frame flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-4 pl-4 pr-1">
-              <p className="text-body text-navy">Sources couldn't be loaded.</p>
-              <Button variant="ghost" className={FRAME_CONTROL_CLASS} onClick={() => void evidence.refetch()}>
-                Try again
-              </Button>
-            </div>
+            <ListError frameClassName={SOURCES_FRAME_CLASS} actionLabel="Try again" onRetry={() => void evidence.refetch()}>
+              Sources couldn't be loaded.
+            </ListError>
           ))}
 
         {/* A search that ran before queries were linked to their results
             cannot filter: the table's empty state says so (round 12). */}
         {preChangeQuery && (
-          <SourcesEmpty
+          <ListEmpty
+            frameClassName={SOURCES_FRAME_CLASS}
             label="No sources match"
             action={
-              <Button variant="ghost" className={FRAME_CONTROL_CLASS} onClick={clearFilters}>
+              <Button variant="ghost" className={LIST_CONTROL_CLASS} onClick={clearFilters}>
                 Clear filters
               </Button>
             }
           >
             This search ran before queries were linked to their results.
-          </SourcesEmpty>
+          </ListEmpty>
         )}
 
         {!preChangeQuery && evidence.data !== undefined && rows.length === 0 && !waiting && (
@@ -497,9 +483,9 @@ export function SourcesView() {
               onClear={clearFilters}
             />
           ) : (
-            <SourcesEmpty label={statusFilter === "all" ? "No sources yet" : "No sources match"}>
+            <ListEmpty frameClassName={SOURCES_FRAME_CLASS} label={statusFilter === "all" ? "No sources yet" : "No sources match"}>
               {statusFilter === "all" ? "They appear here as the search finds them." : null}
-            </SourcesEmpty>
+            </ListEmpty>
           )
         )}
 
@@ -529,33 +515,36 @@ export function SourcesView() {
             {/* The line under the table (owner, round 12): Download CSV at the
                 left; at the right the page size, the range, then the page
                 controls. */}
-            <div data-testid="sources-foot" className="mt-5 flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-              <DownloadSourcesButton taskId={taskId} taskName={task.data?.name} />
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-3 [&>nav]:mt-0">
-                {totalItems > DEFAULT_SOURCES_PAGE_SIZE && (
-                  <Select
-                    label="Sources per page"
-                    size={32}
-                    // The size the page asked for (a server may echo another).
-                    value={String(requestedPageSize)}
-                    options={SOURCES_PAGE_SIZES.map((size) => ({ value: String(size), label: `${size} per page` }))}
-                    onChange={choosePageSize}
-                    className="w-36"
-                  />
-                )}
-                <p className="text-meta text-grey" role="status">
-                  <Figures text={countLine} />
-                </p>
-                {totalPages > 1 && <Pagination page={page} totalPages={totalPages} onPage={goToPage} />}
-              </div>
-            </div>
+            <ListFootRow
+              data-testid="sources-foot"
+              start={<DownloadSourcesButton taskId={taskId} taskName={task.data?.name} />}
+              end={
+                <>
+                  {totalItems > DEFAULT_SOURCES_PAGE_SIZE && (
+                    <Select
+                      label="Sources per page"
+                      size={32}
+                      // The size the page asked for (a server may echo another).
+                      value={String(requestedPageSize)}
+                      options={SOURCES_PAGE_SIZES.map((size) => ({ value: String(size), label: `${size} per page` }))}
+                      onChange={choosePageSize}
+                      className="w-36"
+                    />
+                  )}
+                  <p className="text-meta text-grey" role="status">
+                    <Figures text={countLine} />
+                  </p>
+                  {totalPages > 1 && <Pagination page={page} totalPages={totalPages} onPage={goToPage} />}
+                </>
+              }
+            />
           </Arrival>
           </ArrivalProvider>
         )}
 
         {/* A page past the end shows its controls alone, the way back. */}
         {evidence.data !== undefined && rows.length === 0 && totalPages > 1 && (
-          <Pagination page={page} totalPages={totalPages} onPage={goToPage} />
+          <ListFootRow start={<Pagination page={page} totalPages={totalPages} onPage={goToPage} />} />
         )}
       </div>
 
@@ -746,12 +735,9 @@ function DepthValue({ item, depth }: { item: EvidenceItem; depth: ReadDepth }) {
  *  its × clearing it, as Cited is. */
 function SetChip({ words, onClear }: { words: string; onClear: () => void }) {
   return (
-    <span className={APPLIED_CHIP_CLASS}>
-      <button type="button" aria-pressed onClick={onClear} className={cn(APPLIED_CHIP_PART_CLASS, "pl-2.5 pr-2")}>
-        {words}
-        <CloseIcon size={12} />
-      </button>
-    </span>
+    <FilterChip applied whole onClear={onClear}>
+      {words}
+    </FilterChip>
   );
 }
 
@@ -848,20 +834,6 @@ function SourcesLoading({ header }: { header: ReactNode }) {
   );
 }
 
-/** An empty table: its frame with a label and, when there is one, one plain
- *  sentence, left-aligned at the table's edge (the list pages' pattern). */
-function SourcesEmpty({ label, children, action }: { label: string; children?: ReactNode; action?: ReactNode }) {
-  return (
-    <div role="status" className="sources-frame flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-5 pl-4 pr-1">
-      <div>
-        <p className="text-body font-semibold text-navy">{label}</p>
-        {children != null && <p className="mt-1 text-body text-grey">{children}</p>}
-      </div>
-      {action}
-    </div>
-  );
-}
-
 /** Nothing matches the filters: say how many the screening view holds
  *  without them, and offer to clear them. Asks for that total only here. */
 function SourcesNoMatch({
@@ -876,16 +848,17 @@ function SourcesNoMatch({
   const unfiltered = useEvidence(taskId, { page: 1, page_size: 1, status });
   const total = unfiltered.data?.pagination.total_items ?? 0;
   return (
-    <SourcesEmpty
+    <ListEmpty
+      frameClassName={SOURCES_FRAME_CLASS}
       label="No sources match"
       action={
-        <Button variant="ghost" className={FRAME_CONTROL_CLASS} onClick={onClear}>
+        <Button variant="ghost" className={LIST_CONTROL_CLASS} onClick={onClear}>
           Clear filters
         </Button>
       }
     >
-      {total > 0 ? `Clear the filters to see all ${total.toLocaleString("en-GB")}.` : null}
-    </SourcesEmpty>
+      {total > 0 ? `Clear the filters to see all ${formatCount(total)}.` : null}
+    </ListEmpty>
   );
 }
 
@@ -1142,28 +1115,32 @@ const FilterTrigger = forwardRef<
 >(function FilterTrigger({ label, shown: value, name, onClear, clearName, className, ...props }, ref) {
   if (value === null || onClear === undefined) {
     return (
-      <button ref={ref} type="button" aria-label={name} className={cn(FILTER_CONTROL_IDLE, className)} {...props}>
-        <span className="truncate">{value === null ? label : <Figures text={`${label}: ${value}`} />}</span>
-        <SelectChevron />
-      </button>
+      <FilterChip
+        ref={ref}
+        applied={false}
+        aria-label={name}
+        className={className}
+        wordsClassName="truncate"
+        trailing={<SelectChevron />}
+        {...props}
+      >
+        {value === null ? label : <Figures text={`${label}: ${value}`} />}
+      </FilterChip>
     );
   }
   return (
-    <span className={cn(APPLIED_CHIP_CLASS, className)}>
-      <button ref={ref} type="button" aria-label={name} className={cn(APPLIED_CHIP_PART_CLASS, "pl-2.5 pr-2")} {...props}>
-        <span className="truncate max-md:max-w-52">
-          <Figures text={`${label}: ${value}`} />
-        </span>
-      </button>
-      <button
-        type="button"
-        aria-label={clearName ?? `Clear the ${label.toLowerCase()} filter`}
-        onClick={onClear}
-        className={cn(APPLIED_CHIP_PART_CLASS, "border-l border-navy-line px-2")}
-      >
-        <CloseIcon size={12} />
-      </button>
-    </span>
+    <FilterChip
+      ref={ref}
+      applied
+      aria-label={name}
+      className={className}
+      wordsClassName="max-md:max-w-52"
+      clearLabel={clearName ?? `Clear the ${label.toLowerCase()} filter`}
+      onClear={onClear}
+      {...props}
+    >
+      <Figures text={`${label}: ${value}`} />
+    </FilterChip>
   );
 });
 
@@ -1555,14 +1532,7 @@ export function SourceDossierBody({
           {reference.url !== null && href !== undefined && (
             <>
               {" "}
-              <a
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-grey underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 hover:text-navy hover:decoration-navy"
-              >
-                {displayUrl(reference.url)}
-              </a>
+              <ReferenceUrl url={reference.url} />
             </>
           )}
         </p>

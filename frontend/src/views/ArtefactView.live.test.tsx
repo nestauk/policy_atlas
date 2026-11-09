@@ -189,7 +189,7 @@ describe("ArtefactView around a run", () => {
     world.artefact = committedArtefact;
     render(page());
     expect(screen.getByTestId("rerun-notice")).toHaveTextContent(
-      "This report is from 3 November. A new run started 2 min ago.",
+      "This report is from 3 November 2026. A new run started 2 min ago.",
     );
     // No button: the status bar and the sidebar are the routes to the run.
     expect(screen.queryByRole("button", { name: /run/i })).toBeNull();

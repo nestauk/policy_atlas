@@ -1,5 +1,7 @@
 import type { PlanDraft, RunStatus, StageEntry, StageLiveness, TaskAgentThreadRun } from "../../store";
 import { isScoping } from "../scopingActivity";
+import { formatCount } from "../../lib/format";
+import { READY_WORDS, taskStatusWord, type WalkKind } from "../../ui/brand/taskStatus";
 
 /** How a step row reads: done, in progress, still to come, or ended badly. */
 export type RowState = "done" | "progress" | "upcoming" | "failed" | "skipped";
@@ -21,12 +23,6 @@ export type CardRow = {
   entries: StageEntry[];
   state: RowState;
 };
-
-/** What kind of walk a run trace describes (task 045): an Evidence search, a
- *  scoping task's baseline walk, its longlist walk, or an added option's own
- *  search. The trace's finished words follow it — "the evidence base is
- *  ready" is wrong for a longlist. */
-export type WalkKind = "evidence_search" | "baseline" | "longlist" | "option_search" | "shortlist";
 
 const LONGLIST_STAGES = new Set([
   "inherit",
@@ -55,16 +51,6 @@ export function walkKind(
   if (stages.some((entry) => LONGLIST_STAGES.has(entry.stage))) return "longlist";
   return stages.some((entry) => entry.stage === "shortlist") ? "shortlist" : "baseline";
 }
-
-/** The finished words per walk, on the trace's folded line and in the
- *  browser title ("the capability's wording" for the scoping walks). */
-export const READY_WORDS: Record<WalkKind, string> = {
-  evidence_search: "Report ready",
-  baseline: "The baseline is ready",
-  longlist: "The longlist is ready",
-  option_search: "The option's search is done",
-  shortlist: "The shortlist is proposed",
-};
 
 /** The Result tab, opened on the view this walk produced. */
 export function resultHref(taskId: string, kind: WalkKind): string {
@@ -225,15 +211,13 @@ export function currentRow(rows: CardRow[]): CardRow | null {
   );
 }
 
-const COUNT_FORMAT = new Intl.NumberFormat("en-GB");
-
 /** The counts a done row shows: `312 found`, `118 relevant`. A stage that ran
  *  twice (a second search pass) shows its latest counts. */
 export function rowCounts(row: CardRow): string[] {
   return row.stages.flatMap((stage) => {
     const latest = [...row.entries].reverse().find((entry) => entry.stage === stage);
     // The server names the counts and their nouns on the frame (task 058, N17).
-    return (latest?.counts ?? []).map(({ value, noun }) => `${COUNT_FORMAT.format(value)} ${noun}`);
+    return (latest?.counts ?? []).map(({ value, noun }) => `${formatCount(value)} ${noun}`);
   });
 }
 
@@ -378,15 +362,16 @@ export function rowDetail(tick: StageLiveness | undefined): string | null {
 export const STALLED_LINE = "Still working on this step";
 
 /** The trace's header words while the run is live or paused (annex § The run
- *  trace): the current row's label and what it is doing now; paused, that a
- *  check-in waits (to the owner) or where the run stopped (to a colleague).
+ *  trace): the current row's label and what it is doing now; paused, the
+ *  task's status words, naming who the run waits on (`taskStatusWord`).
  *  Every label is the server's; the client adds only the separators.
  *
  * Args:
  *   row: The row in progress, else the last that ran; null before any frame.
  *   detail: The row's activity (`rowDetail`), or null.
  *   state: `stalled` once two minutes pass with no tick.
- *   isOwner: Only the owner is told the check-in waits on them.
+ *   isOwner: The owner is told the run waits on them.
+ *   ownerName: The owner's display name, which a colleague is told.
  *
  * Returns:
  *   The words, without the elapsed time.
@@ -396,10 +381,9 @@ export function traceWords(
   detail: string | null,
   state: "live" | "stalled" | "paused",
   isOwner: boolean,
+  ownerName: string | null = null,
 ): string {
-  if (state === "paused") {
-    return isOwner ? "Paused · a check-in is waiting on you" : ["Paused", row?.label].filter(Boolean).join(" · ");
-  }
+  if (state === "paused") return taskStatusWord("paused", { isOwner, ownerName });
   const doing = state === "stalled" ? STALLED_LINE : detail;
   // A step verb that repeats the row's label ("Classifying · Classifying")
   // says nothing twice (owner round 11, via the mock's scoping walk).
@@ -412,13 +396,13 @@ export const NO_SHORTLIST = "Policy Atlas could not propose a shortlist. Your pl
 
 /** "1 step", "6 steps". */
 export function stepCount(count: number): string {
-  return count === 1 ? "1 step" : `${count} steps`;
+  return count === 1 ? "1 step" : `${formatCount(count)} steps`;
 }
 
 /**
  * How a run that has ended reads, folded to one line (annex § The run trace):
  * the finish words per walk kind with the Result tab as its one link, or
- * "Stopped" / "Failed" with no link. A degraded shortlist walk ended with
+ * the status word ("Stopped", "Failed") with no link. A degraded shortlist walk ended with
  * no shortlist, so it says so in the existing sentence (lead ruling,
  * 2026-11-05). Null while the run has not ended.
  */
@@ -428,7 +412,8 @@ export function endedLine(
 ): { words: string; tone: "complete" | "failed"; link: boolean } | null {
   if (kind === "shortlist" && status === "degraded") return { words: NO_SHORTLIST, tone: "failed", link: false };
   if (isFinished(status)) return { words: READY_WORDS[kind], tone: "complete", link: true };
-  if (status === "failed") return { words: "Failed", tone: "failed", link: false };
-  if (status === "aborted" || status === "interrupted") return { words: "Stopped", tone: "failed", link: false };
+  if (status === "failed" || status === "aborted" || status === "interrupted") {
+    return { words: taskStatusWord(status), tone: "failed", link: false };
+  }
   return null;
 }

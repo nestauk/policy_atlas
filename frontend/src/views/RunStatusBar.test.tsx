@@ -72,7 +72,13 @@ function stream(status: RunStatus | null, overrides: Partial<RunStreamState> = {
   };
 }
 
-function live(tab: LifecycleTab | null, runStream: RunStreamState, isOwner = true, capability = "evidence_search") {
+function live(
+  tab: LifecycleTab | null,
+  runStream: RunStreamState,
+  isOwner = true,
+  capability = "evidence_search",
+  ownerName: string | null = null,
+) {
   vi.mocked(taskLive.useTaskLive).mockReturnValue({
     taskId: "t1",
     tab,
@@ -80,6 +86,7 @@ function live(tab: LifecycleTab | null, runStream: RunStreamState, isOwner = tru
     marks: taskLive.NO_MARKS,
     capability,
     isOwner,
+    ownerName,
   });
 }
 
@@ -307,16 +314,16 @@ describe("RunStatusBar (task 058, owner rounds 7 and 8: the status bar returns, 
     expect(words).toHaveClass("truncate", "min-w-0", "flex-1");
   });
 
-  it("says a check-in waits, with the orange square, to the owner; where it stopped to a colleague", () => {
+  it("says the run waits on the owner, with the orange square; on the owner by name to a colleague", () => {
     live("sources", stream("paused"));
     const { unmount } = renderStrip();
     expect(statusBar().querySelector("[data-tone='paused']")).not.toBeNull();
     expect(statusBar().querySelector("[data-live-mark]")).toBeNull();
-    expect(flat(statusBar().querySelector(".anim-rise")?.textContent)).toBe("Paused · a check-in is waiting on you");
+    expect(flat(statusBar().querySelector(".anim-rise")?.textContent)).toBe("Paused · waiting on you");
     unmount();
-    live("sources", stream("paused"), false);
+    live("sources", stream("paused"), false, "evidence_search", "Grace Hopper");
     renderStrip();
-    expect(flat(statusBar().querySelector(".anim-rise")?.textContent)).toBe("Paused · Writing");
+    expect(flat(statusBar().querySelector(".anim-rise")?.textContent)).toBe("Paused · waiting on Grace");
   });
 
   it("holds still under reduced motion, and mounts open without a transition", () => {

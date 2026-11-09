@@ -815,6 +815,7 @@ export function TaskAgentPane({
         capability={planQuery.data?.capability}
         purpose={liveRunPurpose}
         isOwner={isOwner}
+        ownerName={taskQuery.data?.owner_display ?? null}
         checkInWaiting={stream.pendingCheckIn !== null}
         onSeePlan={onReviewPlan}
       />

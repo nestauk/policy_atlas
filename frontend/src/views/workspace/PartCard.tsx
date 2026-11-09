@@ -14,6 +14,7 @@ import {
   researchApproachLabel,
 } from "./planVocabulary";
 import { QUIET_CONTROL_CLASS } from "../../ui/brand/inlineActions";
+import { FilterChip } from "../../ui/brand/Chip";
 
 type PartProposal = components["schemas"]["PartProposalOut"];
 type PartChip = components["schemas"]["PartChipOut"];
@@ -342,7 +343,7 @@ function parseDateRange(value: string): { after: string | null; before: string |
   }
 }
 
-/** One editable scope chip: ✎ opens the inline editor, × stages a removal. */
+/** One editable scope chip: its words open the inline editor, its × stages a removal. */
 function EditableChip({
   chip,
   disabled,
@@ -416,30 +417,20 @@ function EditableChip({
     );
   }
 
+  // The filter chip (`FilterChip`, the Sources bar's applied look): its
+  // words open the editor, its × stages the removal; read-only, the words
+  // alone.
   return (
-    <span className="inline-flex items-center gap-1 border border-blue-tint bg-blue-tint px-2 py-1 text-caption font-semibold text-blue">
+    <FilterChip
+      applied
+      staticWords={disabled}
+      aria-label={`Edit ${prefixed}`}
+      onClick={() => setEditing(true)}
+      clearLabel={`Remove ${prefixed}`}
+      onClear={disabled ? undefined : () => onStage({ kind: "remove", label: chip.label })}
+    >
       {scrub(displayLabel)}
-      {!disabled && (
-        <>
-          <button
-            type="button"
-            aria-label={`Edit ${prefixed}`}
-            className="cursor-pointer px-0.5 hover:text-navy"
-            onClick={() => setEditing(true)}
-          >
-            ✎
-          </button>
-          <button
-            type="button"
-            aria-label={`Remove ${prefixed}`}
-            className="cursor-pointer px-0.5 hover:text-navy"
-            onClick={() => onStage({ kind: "remove", label: chip.label })}
-          >
-            ×
-          </button>
-        </>
-      )}
-    </span>
+    </FilterChip>
   );
 }
 
@@ -890,7 +881,7 @@ export function PartCard({
           {chipGroups(chips).map((group, index) => (
             <div key={group.heading ?? "chips"} {...cascade(index)}>
               {group.heading !== null && <p className={cn(LABEL_CLASS, "mb-1 text-grey")}>{group.heading}</p>}
-              <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-2">
                 {group.chips.map((chip) => (
                   <EditableChip
                     key={chip.label}

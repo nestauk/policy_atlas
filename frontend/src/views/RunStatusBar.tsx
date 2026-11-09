@@ -137,7 +137,7 @@ export function RunStatusBar() {
   const reconnecting = onPage && stream.connectionStatus === "reconnecting";
   const open = (onPage && ticking && !agentInSidebar) || reconnecting;
   const nowMs = useNow(open);
-  const { words, row, paused } = useRunWords(stream, live?.isOwner ?? false);
+  const { words, row, paused } = useRunWords(stream, live?.isOwner ?? false, live?.ownerName ?? null);
   const traces = useMountedTraces();
   const navigate = useNavigate();
   const { pathname, search } = useLocation();

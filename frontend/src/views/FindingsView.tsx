@@ -27,10 +27,10 @@ import {
 import { TABLE_HEADER_TEXT_CLASS, filterChipClass } from "./sourcesPresentation";
 import { LABEL_CLASS } from "../ui/brand/label";
 import { cn } from "../ui/brand/cn";
-import { ChevronIcon } from "../ui/brand/icons";
 import { RetryCard } from "../ui/feedback/RetryCard";
 import { PROSE_LINK_CLASS } from "../ui/brand/inlineActions";
-import { Pagination } from "./Pagination";
+import { ListFootRow, Pagination } from "../ui/brand/list/ListFoot";
+import { DisclosureChevron } from "../ui/brand/Disclosure";
 
 type FindingOut = components["schemas"]["FindingOut"];
 type IofFinding = Extract<FindingOut, { profile: "iof" }>;
@@ -265,9 +265,9 @@ function FindingRow({
             aria-expanded={expanded}
             aria-label={`${expanded ? "Collapse" : "Expand"} finding: ${scrub(finding.intervention)}`}
             onClick={onToggle}
-            className="-m-1.5 inline-flex h-7 w-7 cursor-pointer items-center justify-center text-grey hover:text-navy"
+            className="group -m-1.5 inline-flex h-7 w-7 cursor-pointer items-center justify-center"
           >
-            <ChevronIcon size={12} className={cn("shrink-0 text-grey transition-transform duration-200 ease-[var(--ease-out-strong)]", expanded && "rotate-90")} />
+            <DisclosureChevron open={expanded} />
           </button>
         </td>
         {showKind && (
@@ -531,14 +531,18 @@ export function FindingsView() {
             </table>
           </div>
           {findings.data.pagination.total_items > findings.data.pagination.page_size && (
-            <Pagination
-              page={page}
-              totalPages={Math.ceil(findings.data.pagination.total_items / findings.data.pagination.page_size)}
-              onPage={(target) => {
-                updateParams((next) => next.set("page", String(target)));
-                // The reader starts the new page at its first row.
-                top.current?.scrollIntoView?.({ block: "start" });
-              }}
+            <ListFootRow
+              start={
+                <Pagination
+                  page={page}
+                  totalPages={Math.ceil(findings.data.pagination.total_items / findings.data.pagination.page_size)}
+                  onPage={(target) => {
+                    updateParams((next) => next.set("page", String(target)));
+                    // The reader starts the new page at its first row.
+                    top.current?.scrollIntoView?.({ block: "start" });
+                  }}
+                />
+              }
             />
           )}
         </>

@@ -2,6 +2,7 @@ import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { useApiClient } from "../../../api/queries";
+import { formatDate } from "../../../lib/dates";
 import { conflictSentences, isConflictCode } from "../../../lib/errors";
 import { scrub } from "../../../lib/scrub";
 import type { ChatConversationRow } from "../../../store";
@@ -477,7 +478,7 @@ function ChatCitationBlock({ taskId, turn, citation, onOpenDossier }: { taskId: 
 }
 
 function UserBubble({ text }: { text: string }) { return <div className="ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5"><p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{scrub(text)}</p></div>; }
-function DateDivider({ value }: { value: string }) { return <div className="flex items-center gap-2 text-caption text-grey"><span className="h-px flex-1 bg-line" />{new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" })}<span className="h-px flex-1 bg-line" /></div>; }
+function DateDivider({ value }: { value: string }) { return <div className="flex items-center gap-2 text-caption text-grey"><span className="h-px flex-1 bg-line" />{formatDate(value, "short")}<span className="h-px flex-1 bg-line" /></div>; }
 function createdAt(row: ChatConversationRow) { return "id" in row ? row.created_at : row.createdAt; }
 function userMessageOf(row: ChatConversationRow) { return "id" in row ? row.user_message : row.userMessage; }
 function keyOf(row: ChatConversationRow) { return "id" in row ? row.id : row.clientTurnId; }

@@ -53,7 +53,7 @@ export function isRunActive(task: TaskActivity | null | undefined): boolean {
 }
 
 /**
- * The walk a status word describes (the task lists' "Analysing…",
+ * The walk a status word describes (`taskStatusWord`: the task lists' "Running",
  * "Complete", "Failed").
  *
  * An Evidence search: its `latest_run`, unchanged. A scoping task: the

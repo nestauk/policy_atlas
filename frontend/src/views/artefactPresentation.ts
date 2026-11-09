@@ -1,5 +1,6 @@
 import { evidenceTypeLabel, strengthRank } from "../ui/brand/evidence";
 import { referenceCitation, type AuthorshipLike, type ReferenceLike } from "../ui/brand/reference";
+import { formatCount } from "../lib/format";
 
 /**
  * Structural minimums, not the generated contract types.
@@ -289,7 +290,7 @@ function markdownMostRelevantSources(sources: TopSource[]): string[] {
   const lines: string[] = ["### Most relevant sources", "", MOST_RELEVANT_SOURCES_INTRO, ""];
   for (const source of sources) {
     const facts = [
-      source.citationCount === 1 ? "cited by 1 claim" : `cited by ${source.citationCount} claims`,
+      source.citationCount === 1 ? "cited by 1 claim" : `cited by ${formatCount(source.citationCount)} claims`,
       source.appraisalLabel,
       source.evidenceType === null ? null : evidenceTypeLabel(source.evidenceType),
     ].filter((part): part is string => part != null && part !== "");
@@ -568,7 +569,7 @@ const LIVE_SOURCES_NAMED = 3;
  */
 export function drawingOnLine(sources: readonly { title: string }[] | undefined): string | null {
   if (sources === undefined || sources.length === 0) return null;
-  const count = sources.length === 1 ? "1 source" : `${sources.length} sources`;
+  const count = sources.length === 1 ? "1 source" : `${formatCount(sources.length)} sources`;
   const named = sources.slice(0, LIVE_SOURCES_NAMED).map((source) => liveSourceName(source.title));
   const rest = sources.length - named.length;
   return [`Drawing on ${count}`, ...named, ...(rest > 0 ? [`and ${rest} more`] : [])].join(" · ");

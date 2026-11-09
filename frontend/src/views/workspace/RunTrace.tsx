@@ -11,7 +11,6 @@ import { Collapse } from "../../ui/motion/Collapse";
 import { prefersReducedMotion } from "../../ui/motion/motion";
 import { useEasedHeight } from "../streamPacing";
 import { useRegisterTrace } from "../taskLive";
-import { ChevronIcon } from "../../ui/brand/icons";
 import { RUN_BLOCK_STATUS } from "./planVocabulary";
 import {
   STALLED_LINE,
@@ -31,9 +30,10 @@ import {
   traceWords,
   walkKind,
   type CardRow,
-  type WalkKind,
 } from "./runProgress";
+import { RUNNING_WORD, type WalkKind } from "../../ui/brand/taskStatus";
 import { LINK_CLASS, QUIET_CONTROL_CLASS } from "../../ui/brand/inlineActions";
+import { DisclosureChevron } from "../../ui/brand/Disclosure";
 
 /** Quiet grey text control ("See plan", "Show steps"): a link in look, a
  *  button in kind. */
@@ -304,7 +304,7 @@ function TopLine({
   mark: ReactNode;
   /** The state word ("Running", "Paused", "Report ready"), or a sentence. */
   label: string;
-  /** What follows the state word, in grey ("a check-in is waiting on you"). */
+  /** What follows the state word, in grey ("waiting on you"). */
   rest: string;
   time: string;
   link: ReactNode;
@@ -376,8 +376,11 @@ type TraceProps = {
   /** The run's own purpose (`RunOut.purpose`): an added option's search
    *  reads as its own kind, not the baseline (task 045, A7). */
   purpose?: string | null;
-  /** Only the owner is told that a check-in waits on them. */
+  /** The owner is told a paused run waits on them. */
   isOwner: boolean;
+  /** The task's owner (`TaskOut.owner_display`), whom a colleague is told a
+   *  paused run waits on. */
+  ownerName?: string | null;
   /** A check-in waits (the stream may say so before the status turns). */
   checkInWaiting?: boolean;
   /** Opens the plan document, from the foot of the list. */
@@ -403,6 +406,7 @@ function TraceCard({
   capability,
   purpose,
   isOwner,
+  ownerName = null,
   checkInWaiting = false,
   onSeePlan,
   past = false,
@@ -435,12 +439,12 @@ function TraceCard({
   const words =
     ended !== null
       ? ended.words
-      : traceWords(row, rowDetail(tick), paused ? "paused" : stalled ? "stalled" : "live", isOwner);
+      : traceWords(row, rowDetail(tick), paused ? "paused" : stalled ? "stalled" : "live", isOwner, ownerName);
   // Live, the top line reads "Running": the step's words live on its row
   // (lead, round 6). Paused, it keeps its words. A screen reader hears
   // `words` either way.
   const [head = "", ...restParts] = scrub(words).split(" · ");
-  const label = ended !== null ? scrub(ended.words) : paused ? head : "Running";
+  const label = ended !== null ? scrub(ended.words) : paused ? head : RUNNING_WORD;
   const rest = ended === null && paused ? restParts.join(" · ") : "";
   const time = ended !== null ? formatMinutes(seconds) : formatElapsed(seconds);
   const mark =
@@ -523,14 +527,10 @@ function TraceCard({
             aria-expanded={open}
             aria-controls={open ? listId : undefined}
             onClick={() => setOpen((value) => !value)}
-            className={cn(QUIET_CONTROL_CLASS, "mt-0.5 inline-flex text-meta items-center gap-1", WORDS_INDENT)}
+            className={cn(QUIET_CONTROL_CLASS, "group mt-0.5 inline-flex text-meta items-center gap-1", WORDS_INDENT)}
           >
-            {/* The conversation surfaces' chevron (one stroke family), turning
-                down as the steps open. */}
-            <ChevronIcon
-              size={12}
-              className={cn("-ml-0.5 shrink-0 transition-transform duration-200 ease-[var(--ease-out-strong)]", open && "rotate-90")}
-            />
+            {/* The one disclosure chevron, turning down as the steps open. */}
+            <DisclosureChevron open={open} className="-ml-0.5" />
             {open ? "Hide steps" : "Show steps"}
           </button>
         )}

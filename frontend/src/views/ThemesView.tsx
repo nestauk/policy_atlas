@@ -16,6 +16,7 @@ import { feedsSources, liveStages, useLiveRefetch } from "./sourcesPresentation"
 import { RetryCard } from "../ui/feedback/RetryCard";
 import { isScoping } from "./scopingActivity";
 import { GroupCount } from "./longlist/GroupHeading";
+import { formatCount } from "../lib/format";
 
 /** One row of the list: a committed theme, or a discovered one whose count
  *  is on its way (`size` null). */
@@ -60,7 +61,7 @@ export function themeItems(
 }
 
 function documentCount(size: number): string {
-  return size === 1 ? "1 document" : `${size} documents`;
+  return size === 1 ? "1 document" : `${formatCount(size)} documents`;
 }
 
 function ThemeRow({
@@ -297,7 +298,7 @@ export function scopingThemes(longlist: Pick<LonglistOut, "themes" | "options">)
 }
 
 function documentWords(count: number): string {
-  return count === 1 ? "1 document" : `${count.toLocaleString("en-GB")} documents`;
+  return count === 1 ? "1 document" : `${formatCount(count)} documents`;
 }
 
 /**

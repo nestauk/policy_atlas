@@ -11,7 +11,8 @@ import { ReauthRedirect } from "../ui/feedback";
 import { showOwnerColumn, newTaskHref } from "./listPageChrome";
 import type { Scope } from "./ScopeSwitcher";
 import { ARCHIVED_HEADING_CLASS, ArchivedToggle, ScopeSwitcher } from "./ScopeSwitcher";
-import { FindTasks, ListEmpty, TaskListPanel, pagedTasks } from "./TaskListPanel";
+import { FindTasks, TaskListPanel, pagedTasks } from "./TaskListPanel";
+import { ListEmpty } from "../ui/brand/list/ListStates";
 
 type TasksPages = ReturnType<typeof useTasksPaged>;
 

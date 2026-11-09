@@ -58,7 +58,7 @@ describe("MultiSelect", () => {
     const user = userEvent.setup();
     render(<Harness initial={["a", "c"]} />);
     const chips = screen.getByRole("list", { name: "Searches: chosen" });
-    expect(within(chips).getAllByRole("listitem")[0]).toHaveClass("bg-navy", "text-paper");
+    expect(within(chips).getAllByRole("listitem")[0].firstElementChild).toHaveClass("bg-navy", "text-paper");
     await user.click(screen.getByRole("button", { name: "Remove Childhood obesity" }));
     expect(trigger()).toHaveTextContent(/^Housing costs$/);
     expect(screen.queryByRole("button", { name: "Remove Childhood obesity" })).not.toBeInTheDocument();

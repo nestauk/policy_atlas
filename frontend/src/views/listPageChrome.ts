@@ -106,31 +106,6 @@ export const rowNameCellClass = "min-w-0 truncate text-body leading-7 max-md:lea
  *  tabular feature widens the space too ("46  sources", "Ada  Lovelace"). */
 export const rowFigureCellClass = "truncate text-right text-meta leading-7 text-grey";
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/**
- * A list row's date: "5 Nov" within the current year, "12 Oct 2025" before
- * it (lead ruling P7, round 10). One fixed form for every reader rather than
- * the browser's locale ("11/5/2026" and "05/11/2026" are different days to
- * two colleagues), and never relative ("2 days ago" goes stale under an open
- * tab and in a pasted screenshot). The month names are fixed here so no
- * locale can turn "Sep" into "Sept".
- *
- * Args:
- *   iso: An ISO 8601 timestamp.
- *   now: The current time, for the year comparison; a parameter so tests
- *     need no clock.
- *
- * Returns:
- *   The date in the reader's local time zone, or "" for an unreadable value.
- */
-export function formatListDate(iso: string, now: Date = new Date()): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  const dayMonth = `${date.getDate()} ${MONTHS[date.getMonth()]}`;
-  return date.getFullYear() === now.getFullYear() ? dayMonth : `${dayMonth} ${date.getFullYear()}`;
-}
-
 /**
  * A row's accessible name: its visible strings in reading order, joined by
  * " · " (lead ruling 1, round 10), skipping any the row does not show.
@@ -145,8 +120,6 @@ export function rowAccessibleName(parts: readonly (string | null | undefined)[])
   return parts.filter((part): part is string => part != null && part.trim() !== "").join(" · ");
 }
 
-/** The list frame: hairline paper, rows divided by Line hairlines. */
-export const listFrameClass = "border border-line-2 bg-paper";
 
 /**
  * Whether a list page shows the `owner_display` column (task 033 phase
