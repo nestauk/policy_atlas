@@ -5422,9 +5422,20 @@ export interface components {
          *             field existed.
          *         claim_id: The saved claim's id, the one the committed report's claim
          *             carries; `null` on older frames.
+         *         chunk_id: The cited chunk. The citation rows commit with the whole
+         *             report, so `citation_id` cannot be read until then; the chunks
+         *             are committed long before, so the page reads the passage by chunk
+         *             and quote (`GET .../chunks/{chunk_id}/context?quote=`) while the
+         *             report is still being written (owner, 2026-11-09). `null` on
+         *             frames recorded before the field existed.
          *         quote: The checked quote the citation rests on; empty on older frames.
          */
         SectionCitation: {
+            /**
+             * Chunk Id
+             * @default null
+             */
+            chunk_id: string | null;
             /**
              * Citation Id
              * @default null

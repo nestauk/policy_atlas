@@ -113,9 +113,12 @@ class ReferenceNumbering:
             ``start``, ``end`` (the
             claim's span), ``n``, ``source_id`` (the task source id as a
             string, or ``None``), ``title``, ``citation_id`` and ``claim_id`` (strings, or
-            ``None`` without a saved row to match) and ``quote``. A citation
-            whose chunk is unknown is left out, as the read model leaves it
-            out.
+            ``None`` without a saved row to match), ``chunk_id`` (the cited
+            chunk, a string; the chunks are committed long before the report,
+            so the page reads the passage by chunk and quote while the report
+            is still being written: owner, 2026-11-09) and ``quote``. A
+            citation whose chunk is unknown is left out, as the read model
+            leaves it out.
         """
         chunk_ids: set[uuid.UUID] = set()
         for claim in claims:
@@ -205,6 +208,7 @@ class ReferenceNumbering:
                         "title": titles.get(envelope_of(snapshot_id), UNKNOWN_SOURCE),
                         "citation_id": citation_id,
                         "claim_id": claim_id,
+                        "chunk_id": str(row.chunk_id),
                         "quote": row.quote,
                     }
                 )

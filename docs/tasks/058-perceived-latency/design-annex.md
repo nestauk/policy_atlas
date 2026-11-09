@@ -2657,3 +2657,15 @@ Owner notes on the live app after the review stack, applied in the review conver
   Videos: `research/screenshots/round16/decision-settle-{before,after}.webm`. Left as noted:
   pinned content wobbles under 1 px during eases (`scrollTop` is whole, eased heights are not);
   `PartCard`'s `useSettleMotion` reads layout on every commit (the pin now repairs any such read).
+- **A citation opened while a later section is still writing** (owner: "the quote and chunk
+  doesn't seem to load", then "wouldn't it be better to fix this at the root?"). The root: a
+  finished section's citation rows commit with the whole report, so the citation-keyed passage
+  read could only 404 until the write ended, and the sheet showed "Loading surrounding
+  context…" through three retries before falling back to the quote. The chunks themselves are
+  committed long before the write, and chat already reads a passage by chunk and quote. So the
+  completed-section frame now carries each citation's `chunk_id`, and the live sheet reads the
+  passage by chunk and quote (the same route and cache as chat's), by citation id once the
+  report is committed. With it: the quote shows at once in every state, the loading line sits
+  under it only while a read is in flight, and a 4xx on a passage read is not retried. A frame
+  recorded before the field existed still shows the quote with the note "The surrounding
+  passage is read once the report is complete."

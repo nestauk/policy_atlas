@@ -85,6 +85,25 @@ describe("CitationQuote — the quote not found in its passage (round 12 fallbac
     expect(screen.queryByText("After.")).toBeNull();
   });
 
+  it("shows the quote at once while its passage loads, and the quote with the note when no read runs (2026-11-09)", () => {
+    const view = render(
+      <CitationQuote quote="Uptake rose by a third." context={{ isPending: true, isLoading: true, isError: false, data: undefined }} />,
+    );
+    expect(screen.getByText("“Uptake rose by a third.”")).toHaveClass("text-navy");
+    expect(screen.getByRole("status")).toHaveTextContent("Loading surrounding context…");
+    // A live report's quote: the read is off (pending, not loading), the note under it.
+    view.rerender(
+      <CitationQuote
+        quote="Uptake rose by a third."
+        note="The surrounding passage is read once the report is complete."
+        context={{ isPending: true, isLoading: false, isError: false, data: undefined }}
+      />,
+    );
+    expect(screen.getByText("“Uptake rose by a third.”")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByText("The surrounding passage is read once the report is complete.")).toHaveClass("text-grey");
+  });
+
   it("highlights a quote whose trailing stop the passage lacks, inside its passage", () => {
     const { container } = render(
       <CitationQuote

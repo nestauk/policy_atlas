@@ -388,6 +388,7 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
           // Round 8: absent on a frame recorded before the fields existed.
           citationId: citation.citation_id ?? null,
           claimId: citation.claim_id ?? null,
+          chunkId: citation.chunk_id ?? null,
           quote: citation.quote ?? "",
         }));
       }

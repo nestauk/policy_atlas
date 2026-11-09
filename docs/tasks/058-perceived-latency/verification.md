@@ -206,6 +206,10 @@ review records them as an owner decision, not a gap.
   layout read inside React's commit and never re-pinned; a new block's gap arriving in one
   frame), both fixed with the probe's evidence (annex § Round 16; commit 90f17449); gate on the
   combined tree: frontend 1,823 passed, build, Playwright 36.
+  A citation opened during the write, fixed at the root (owner): the completed-section frame
+  carries each citation's `chunk_id` and the live sheet reads the passage by chunk and quote
+  (chat's route) until the report commits; the quote shows at once; a 4xx is not retried. Backend:
+  the frame builder's test asserts the chunk ids; OpenAPI and the generated types regenerated.
 
 ## Evidence shown live (owner, 2026-11-05)
 

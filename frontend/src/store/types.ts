@@ -160,6 +160,10 @@ export interface LiveCitation {
   title: string;
   citationId: string | null;
   claimId: string | null;
+  /** The cited chunk, for the passage read while the report is still being
+   *  written (its citation row is not committed yet); absent on frames
+   *  recorded before 2026-11-09. */
+  chunkId?: string | null;
   quote: string;
 }
 

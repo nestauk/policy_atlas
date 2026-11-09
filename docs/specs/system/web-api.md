@@ -763,7 +763,7 @@ Frame vocabulary (discriminated union, `type` names are contract):
 | `stage.failed` | `{stage, label, reason, skipped}` | component failure/skip |
 | `artefact.skeleton` | `{sections: [{index, title, focus, role}]}` in presentation order; `role` is `intro`, `key_findings`, `case_studies` or `section` | synthesise presentation progress |
 | `artefact.section_started` | `{index}` | synthesise presentation progress |
-| `artefact.section_completed` | `{index, title, prose, citations: [{start, end, n, source_id, title, citation_id, claim_id, quote}], claims: [{claim_id, start, end, tier, rationale}]}` (the judged markers that replace the draft's; task 058) | synthesise presentation progress |
+| `artefact.section_completed` | `{index, title, prose, citations: [{start, end, n, source_id, title, citation_id, claim_id, chunk_id, quote}], claims: [{claim_id, start, end, tier, rationale}]}` (the judged markers that replace the draft's; task 058). The citation rows commit with the whole report, so `citation_id` cannot be read until then; `chunk_id` (2026-11-09) lets the page read the passage by chunk and quote (`GET .../chunks/{chunk_id}/context?quote=`) while the report is still being written | synthesise presentation progress |
 | `checkin.pending` | the full check-in resource | `steering.pause` |
 | `checkin.resolved` | `{check_in_id, response, decided_by}` | `steering.decision` |
 | `plan.updated` | `{plan, version}` | plan row supersession |
@@ -864,7 +864,9 @@ deprecation window and never break the generated client within `/api/v1`.
   `artefact.section_claim`, `artefact.section_card`, `artefact.source_note`,
   `search.query`, `characterise.themes`); `tick.capability_run_id`;
   `occurred_at` on the deltas and revisions; the skeleton's `role`;
-  `section_completed.citations[]` and `.claims[]`; the provisional claim
+  `section_completed.citations[]` (with `chunk_id`, added the same day on the
+  owner's "fix it at the root": the passage of a finished section's citation
+  is readable during the write) and `.claims[]`; the provisional claim
   markers on the draft; `acquire` and `screen` as two rows; `page_size` 20 for
   tasks and projects and `pagination.has_more`; project archiving
   (`archived_at`, `POST /projects/{id}/archive`, `?status=`,

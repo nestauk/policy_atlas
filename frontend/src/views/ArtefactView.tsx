@@ -337,22 +337,49 @@ export function ChipWithTooltip({
   );
 }
 
-/** Fetch one citation's clamped chunk context on demand (the click rung). */
-function useChunkContext(taskId: string, citationId: string | null) {
+/** What a passage read needs: the saved citation's id for a committed
+ *  report, or the cited chunk and the quote while the report is still being
+ *  written (the live frame's `chunk_id`, 2026-11-09). */
+type PassageRef = { citation_id: string | null; quote: string; chunk_id?: string | null };
+
+/** Fetch one citation's clamped chunk context on demand (the click rung).
+ *  A committed report's citation is read by its id. While the report is
+ *  still being written (`live`) its citation rows are not committed yet,
+ *  so the read goes by the cited chunk and the quote, the way chat's does
+ *  (owner, 2026-11-09: the root of "the passage doesn't load during the
+ *  write"); the chunks were committed long before. A 4xx is not retried; it
+ *  means the same thing on every attempt. */
+function useChunkContext(taskId: string, citation: PassageRef, live = false) {
   const client = useApiClient();
+  const chunkId = live ? (citation.chunk_id ?? null) : null;
+  const byChunk = chunkId !== null && citation.quote !== "";
   return useQuery({
-    enabled: citationId !== null,
-    queryKey: ["tasks", taskId, "chunk-context", citationId],
+    enabled: byChunk || (!live && citation.citation_id !== null),
+    queryKey: byChunk
+      ? ["tasks", taskId, "chat-chunk-context", chunkId, citation.quote]
+      : ["tasks", taskId, "chunk-context", citation.citation_id],
     queryFn: async () => {
-      const { data, error } = await client.GET(
-        "/api/v1/tasks/{task_id}/citations/{citation_key}/context",
-        { params: { path: { task_id: taskId, citation_key: citationId ?? "" } } },
-      );
-      if (data === undefined) throw error;
+      const { data, error, response } = byChunk
+        ? await client.GET("/api/v1/tasks/{task_id}/chunks/{chunk_id}/context", {
+            params: { path: { task_id: taskId, chunk_id: chunkId }, query: { quote: citation.quote } },
+          })
+        : await client.GET("/api/v1/tasks/{task_id}/citations/{citation_key}/context", {
+            params: { path: { task_id: taskId, citation_key: citation.citation_id ?? "" } },
+          });
+      if (data === undefined) throw Object.assign(new Error("Failed to load the passage"), { status: response.status, body: error });
       return data;
+    },
+    retry: (failureCount, error) => {
+      const status = (error as { status?: number }).status;
+      if (status !== undefined && status < 500) return false;
+      return failureCount < 3;
     },
   });
 }
+
+/** Under a quote of a live report whose frame carries no chunk (recorded
+ *  before the field existed): no passage read can run until the commit. */
+const LIVE_PASSAGE_NOTE = "The surrounding passage is read once the report is complete.";
 
 /** The judge's callout tint (owner, round 13): a checked tier on Blue
  *  Wash 2 ("blue means checked"), an unsupported one on Red Tint, an
@@ -457,26 +484,33 @@ export function CitationQuote({
   context,
   quote,
   fallbackNote,
+  note,
   label = "Quote",
 }: {
-  context: { isPending: boolean; isError: boolean; data: components["schemas"]["ChunkContextOut"] | undefined };
+  context: {
+    isPending: boolean;
+    /** Pending and fetching (a query result); a disabled read is not loading. */
+    isLoading?: boolean;
+    isError: boolean;
+    data: components["schemas"]["ChunkContextOut"] | undefined;
+  };
   quote: string;
   fallbackNote?: string;
+  /** Shown under the quote whatever the read did (the live report's note). */
+  note?: string;
   /** "Quote", or "Quote 1", "Quote 2", … when a source gives several. */
   label?: string;
 }) {
   const parts = context.data !== undefined ? highlightParts(context.data.context, quote) : null;
+  // The quote is known before the passage is read: it shows at once, and the
+  // passage takes its place when it lands (owner, 2026-11-09: a citation
+  // opened during the write showed only "Loading…").
+  const loading = context.isLoading ?? (context.isPending && !context.isError);
   return (
     <div>
       <ProvenanceLabel>{label}</ProvenanceLabel>
       <div className="space-y-2 text-body">
-        {context.isPending && (
-          <p role="status" className="anim-breathe-soft text-grey">
-            Loading surrounding context…
-          </p>
-        )}
-        {parts?.kind === "degrade" && <p className="text-navy">“{scrub(quote)}”</p>}
-        {context.data !== undefined && parts?.kind === "highlight" && (
+        {context.data !== undefined && parts?.kind === "highlight" ? (
           <>
             {typeof context.data.previous === "string" && context.data.previous !== "" && (
               <p className="text-grey">{scrub(context.data.previous)}</p>
@@ -488,13 +522,16 @@ export function CitationQuote({
               <p className="text-grey">{scrub(context.data.next)}</p>
             )}
           </>
+        ) : (
+          <p className="text-navy">“{scrub(quote)}”</p>
         )}
-        {context.isError && (
-          <>
-            <p className="text-navy">“{scrub(quote)}”</p>
-            {fallbackNote !== undefined && <p className="text-grey">{fallbackNote}</p>}
-          </>
+        {loading && (
+          <p role="status" className="anim-breathe-soft text-grey">
+            Loading surrounding context…
+          </p>
         )}
+        {context.isError && fallbackNote !== undefined && <p className="text-grey">{fallbackNote}</p>}
+        {note !== undefined && <p className="text-grey">{note}</p>}
       </div>
     </div>
   );
@@ -668,10 +705,12 @@ function ClassificationReason({ taskId, sourceId }: { taskId: string; sourceId: 
   return <p>{dossier.isError ? "The reasoning could not be loaded." : "No reasoning was recorded for this type."}</p>;
 }
 
-/** One quote of a source group: its passage read on demand. */
-function ReportQuote({ taskId, citation, label }: { taskId: string; citation: CitationOut; label: string }) {
-  const context = useChunkContext(taskId, citation.citation_id);
-  return <CitationQuote context={context} quote={citation.quote} label={label} />;
+/** One quote of a source group: its passage read on demand (by chunk and
+ *  quote while the report is still being written). */
+function ReportQuote({ taskId, citation, label, live = false }: { taskId: string; citation: CitationOut & PassageRef; label: string; live?: boolean }) {
+  const context = useChunkContext(taskId, citation, live);
+  const unreadable = live && (citation.chunk_id ?? null) === null;
+  return <CitationQuote context={context} quote={citation.quote} label={label} note={unreadable ? LIVE_PASSAGE_NOTE : undefined} />;
 }
 
 /** One source's box in the claim panel (owner, round 13): a claim's
@@ -692,7 +731,7 @@ function SourceGroupBlock({
   live?: boolean;
 }) {
   const first = citations[0];
-  const context = useChunkContext(taskId, first.citation_id);
+  const context = useChunkContext(taskId, first, live);
   return (
     <CitationProvenanceBlock
       n={first.n}
@@ -710,6 +749,7 @@ function SourceGroupBlock({
           key={citation.citation_id}
           taskId={taskId}
           citation={citation}
+          live={live}
           // Several quotes from one source are numbered in order (owner, round 13).
           label={citations.length > 1 ? `Quote ${at + 1}` : "Quote"}
         />
@@ -2220,6 +2260,8 @@ export function liveClaims(
       source_title: citation.title,
       source_id: citation.sourceId,
       quote: citation.quote,
+      // The passage read while the report is still being written (2026-11-09).
+      chunk_id: citation.chunkId ?? null,
     } as unknown as CitationOut);
   }
   return [...bySpan.values()];

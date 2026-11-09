@@ -160,8 +160,9 @@ class ProgressEmitter:
             synthesis_index: Zero-based position in the generation loop.
             prose: Final whole-section prose shown by the live view.
             citations: The section's checked citations over ``prose``
-                (``start``, ``end``, ``n``, ``source_id``, ``title``; task
-                058, round 7).
+                (``start``, ``end``, ``n``, ``source_id``, ``title``, task
+                058 round 7; ``citation_id``, ``claim_id``, ``quote``, round
+                8; ``chunk_id``, 2026-11-09).
             claims: The section's checked claims with their verdicts
                 (``claim_id``, ``start``, ``end``, ``tier``, ``rationale``;
                 task 058, round 13).

@@ -701,9 +701,12 @@ function mockLiveCitations(claims: MockCitedClaim[]): components["schemas"]["Sec
       source_id: cite.source.source_id,
       title: cite.source.title,
       // Round 8: the committed report's ids (the mock answers the chunk
-      // context for any citation id) and the checked quote.
+      // context for any citation id) and the checked quote; 2026-11-09: the
+      // cited chunk, which the live page reads the passage by (the mock
+      // answers any chunk id).
       citation_id: cite.citationId,
       claim_id: claim.claimId,
+      chunk_id: "70000000-0000-4000-8000-000000000001",
       quote: cite.quote,
     })),
   );
@@ -884,6 +887,7 @@ export const mockSectionCitations: Record<number, components["schemas"]["Section
       title: mockEvidence[2].title,
       citation_id: "50000000-0000-4000-8000-000000000001",
       claim_id: "40000000-0000-4000-8000-000000000001",
+      chunk_id: "70000000-0000-4000-8000-000000000001",
       quote: "Breakfast participation increased when provision was universal.",
     },
   ],

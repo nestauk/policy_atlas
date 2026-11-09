@@ -332,7 +332,7 @@ the specs took B1 to B13 the same day (web-api spec log, 2026-11-09).
   `tick.capability_run_id`; the ephemeral frames `artefact.section_sources`,
   `artefact.section_claim`, `artefact.section_card`, `artefact.source_note`, `search.query`,
   `characterise.themes`; `artefact.skeleton` sections' `role`; `section_completed.citations[]`
-  and `.claims[]`; `RunOut.stages`; `ProjectOut.archived_at`, `.last_activity_at`,
+  (with `chunk_id`, owner 2026-11-09) and `.claims[]`; `RunOut.stages`; `ProjectOut.archived_at`, `.last_activity_at`,
   `.solo_task_count`; `POST /projects/{id}/archive`; `GET /projects?status=`;
   `PageMeta.has_more`; `DecisionOut.actor_display`, `.actor_is_viewer`; evidence rows'
   `country`, `full_text_url`, `full_text_status` and the `country=`, `query=`, `depth=`,

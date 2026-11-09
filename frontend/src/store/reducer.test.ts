@@ -630,8 +630,8 @@ describe("reduceRunStreamFrame — streamed drafts", () => {
     const state = reduceRunStreamFrame(live, withCitations);
     // Recorded in the round-7 shape: the round-8 ids are null, the quote empty.
     const expected = [
-      { start: 0, end: 12, n: 2, sourceId: "tss-a", title: "Breakfast clubs", citationId: null, claimId: null, quote: "" },
-      { start: 0, end: 12, n: 5, sourceId: null, title: "Unknown source", citationId: null, claimId: null, quote: "" },
+      { start: 0, end: 12, n: 2, sourceId: "tss-a", title: "Breakfast clubs", citationId: null, claimId: null, chunkId: null, quote: "" },
+      { start: 0, end: 12, n: 5, sourceId: null, title: "Unknown source", citationId: null, claimId: null, chunkId: null, quote: "" },
     ];
     expect(state.liveSections[3].citations).toEqual(expected);
     // Kept: a late ephemeral frame or the next section's frames leave them.
@@ -666,6 +666,7 @@ describe("reduceRunStreamFrame — streamed drafts", () => {
           title: "Breakfast clubs",
           citation_id: "c-1",
           claim_id: "u-1",
+          chunk_id: "ch-1",
           quote: "Participation rose.",
         },
       ],
@@ -685,6 +686,7 @@ describe("reduceRunStreamFrame — streamed drafts", () => {
         title: "Breakfast clubs",
         citationId: "c-1",
         claimId: "u-1",
+        chunkId: "ch-1",
         quote: "Participation rose.",
       },
     ]);

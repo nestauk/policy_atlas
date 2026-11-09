@@ -208,6 +208,10 @@ def test_completed_sections_carry_citations_numbered_as_the_saved_report(
             for citation in claim.citations
         ]
         live = completed[section.title]
+        # 2026-11-09: each entry also names its chunk, so the live page can
+        # read the passage by chunk and quote before the commit.
+        chunk_ids = [entry.pop("chunk_id") for entry in live["citations"]]
+        assert all(uuid.UUID(chunk_id) for chunk_id in chunk_ids), section.title
         assert live["citations"] == expected, section.title
         # Round 13: the verdict rides on the claim, as the saved claim has it.
         expected_claims = [
