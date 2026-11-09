@@ -56,10 +56,17 @@ test.describe("mock options-scoping journey", () => {
 
     // Only a search with a finished run is linkable (round 13); the mock
     // offers one in the project.
-    const startsFrom = page.getByRole("group", { name: "Evidence search to start from" });
-    const search = startsFrom.getByRole("checkbox", { name: MOCK_LINKABLE_SEARCH_NAME });
-    await search.check();
-    await expect(search).toBeChecked();
+    // The shared MultiSelect: a trigger that opens a small dialog with a
+    // filter field and checkbox rows; the chosen show as chips under it.
+    await page.getByRole("button", { name: /^Evidence search to start from: / }).click();
+    await page.getByRole("searchbox", { name: "Find a search" }).fill("Youth employment");
+    const list = page.getByRole("group", { name: "Evidence search to start from" });
+    await list.getByRole("checkbox", { name: new RegExp(MOCK_LINKABLE_SEARCH_NAME) }).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("searchbox", { name: "Find a search" })).toBeHidden();
+    await expect(
+      page.getByRole("list", { name: "Evidence search to start from: chosen" }).getByText(MOCK_LINKABLE_SEARCH_NAME),
+    ).toBeVisible();
 
     await page.getByRole("button", { name: "Prepare plan" }).click();
 
@@ -411,10 +418,11 @@ test.describe("task 058 options scoping: the gate and the longlist build", () =>
     await startScopingWalk(page);
     const thread = page.getByRole("region", { name: "Task Agent conversation" });
     await thread.getByRole("radio", { name: /^Confirm plan and build longlist/ }).click();
-    const trace = thread.getByRole("region", { name: "Analysis run" });
-    await expect(trace.getByTestId("trace-header")).toContainText("The longlist is ready", { timeout: 40_000 });
-    await trace.getByRole("link", { name: "Read it →" }).click();
-    await page.getByRole("button", { name: "Show all" }).click();
+    // The finished list, reached from the Result tab (not through the trace).
+    await page.getByRole("navigation", { name: "Task" }).getByRole("link", { name: /^Result/ }).click();
+    await expect(page.getByRole("group", { name: "Group by" })).toBeVisible({ timeout: 40_000 });
+    const showAll = page.getByRole("button", { name: "Show all" });
+    if (await showAll.count()) await showAll.click();
     const control = page.getByRole("button", { name: "Exclude theme" }).first();
     const section = control.locator("xpath=ancestor::section[1]");
     const heading = section.locator("h2 button");

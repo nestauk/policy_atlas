@@ -1669,6 +1669,93 @@ tab's placeholder paragraph carry each rule.
     before the clarification: the status cell also pulses on a source marked "unavailable" while
     the full texts are fetched; that stays, as the owner's rule reads.)
 
+## Round 14, Sources (owner, 2026-11-07)
+
+Screenshots in `research/screenshots/round14-sources/`.
+
+1. **"Collecting…" while the full texts are collected.** While the ingest stage is live a
+   relevant source whose depth is not yet full text reads "Collecting…" in the Status column, in
+   Grey on the soft breathe with a Line 2 square in the tone square's slot (in place of the
+   placeholder bar), and settles to Full text, Abstract only or Title only as the fetch ends.
+   It keys on the row's own pending state, `full_text_status` "queued" (the backend's, landed
+   this round), with the ingest stage as the guard: a queued source outside the stage shows its
+   depth. (Before the field landed it was inferred from the run; that, and round 13's pulse on
+   sources marked "unavailable", are gone.)
+2. **The whole Search queries line is the disclosure.** One button inside the section's heading
+   spans the row: "Search queries" at the left, the sentence and Show / Hide at the right, the
+   hairline under it, the house focus ring. Its accessible name carries its visible words,
+   heading first ("Search queries: Found with 5 queries and 1 citation pass · Show"; lead, Label
+   in Name), and the journeys find it without the `^` anchor; the region is named "Search
+   queries".
+3. **"Not reported" links.** The Landscape's "Not reported" country row opens All sources with
+   `country=none` (`NO_COUNTRY` in `sourcesPresentation.ts`); the Country filter offers "Not
+   reported" last when the landscape has such sources, and its chip reads "Country: Not
+   reported". Until the backend's sentinel lands the link filters on the literal value.
+4. **A scoping theme opens its sources** (owner). On a scoping task's Themes subtab each theme's
+   name links to All sources with `?theme=<longlist theme id>`, in the Landscape rows' quiet
+   link form (its own colour, underlined on hover); the options keep their links to the cards.
+   On a scoping task the table's theme filter is named "Theme" and its choices are the
+   longlist's themes (the longlist read, on scoping tasks only), so the applied chip reads
+   "Theme: <name>".
+6. **Document counts on the scoping themes** (owner). Each theme's heading carries its documents
+   at Meta Grey to the right (the longlist's `GroupCount`), in place of the options count (the
+   options are listed under it); each option row carries its own count right-aligned ("12
+   documents", "1 document"). The theme's figure is the theme's own distinct count,
+   `LonglistThemeOut.document_count` (landed this round); before it landed the options' counts
+   were summed, which counted a shared document twice.
+7. **Column headings on the open Search queries list** (owner). One header row above the ruled
+   rows, "Query", "Database", "Results" (right-aligned over the counts), in the Sources table's
+   header style (`TABLE_HEADER_TEXT_CLASS`, the Caption-size label the table and the live list
+   use; the owner's note said Meta, the table's style is Caption); once, as the rows are one
+   table.
+5. **The applied chip is defined once** (lead): `APPLIED_CHIP_CLASS` and
+   `APPLIED_CHIP_PART_CLASS` from `ui/brand/Chip.tsx`; the filter bar's local copies in
+   `sourcesPresentation.ts` are deleted and `SourcesView` imports the shared ones.
+
+## Round 14, the workspace (owner, 2026-11-07/08)
+
+Relayed by the lead in items; no brief file. Screenshots: `research/screenshots/round14-workspace/`
+(`r3-*` final; `r2-*` the confirming round before the last fixes).
+
+1. **Tabs open at their top.** The shell's pane scrolls to its top when the lifecycle tab changes
+   (`lib/openAtTop`'s rule; a Sources subtab or a `#hash` keeps its place); the report's expand
+   state is untouched.
+2. **The plan over a tab dims the page** with the sheets' scrim (`SHEET_SCRIM_CLASS`, now
+   exported from `ui/radix/Sheet.tsx`); a press on it closes the plan. The Agent tab has none.
+3. **The thread's jumps**, measured frame by frame (scratchpad `shots-ws14-probe.mjs`): the
+   answered card's settle let the thread drop 90 to 184 px for a frame (scroll anchoring, then
+   React's focus restore reading a shorter layout); the action line mounted under the thread's
+   clip; the stored turn landed above the plan card, which jumped 392 px. Now: no scroll anchoring
+   on the thread's pane; the card holds its open height through the settle's commit; each turn is
+   one `GrowBox` keyed by its client id (in flight and stored), the plan card after both; the run
+   block opens the same way; eased boxes measure deepest first and follow a nested ease instead of
+   chasing it. Largest downward one-frame move 409 px before, 73 px of eased glide after.
+   Strip: `r3-02-answer-strip-1280.png`.
+4. **The run status bar** waits for the task's run read and never shows for a run the read says
+   has ended (a newer run still shows).
+5. **The chats**: answers paced through `usePacedText` / `PacedReply`; the shared `ActionLine`
+   (turning mark and the stream's activity words, else the mark alone) under the answer, "Checking
+   the evidence…" while it is checked; References as the report's (the blue number opening the
+   source, the reference line, then the marks line: the verdict opening the citation's sheet, the
+   type, the strength mark, the depth mark); the notices as yellow-square lines, not chips.
+6. **The header names the project**: "Evidence search · in <project>" (and "and N more").
+7. **The sidebar trace's links** sit on the row's right edge as the wide table's do.
+8. **A backend rename is revealed as a generation** (`ChangingName` in `NameMenu.tsx`; the owner
+   replaced the first cut's crossfade): the old name fades out over 150 ms, then the new one comes
+   through `useRevealedText` in place, no width easing; the reader's own rename just commits.
+   Strips: `r4-07-name-reveal-strip-1280.png`, `r4-07-name-reveal-strip-400.png`.
+10. **The plan opens at its own top** every time, and again when its content first arrives.
+9. **The Result tab stays current on the option cards** (`/options/*`), its rule full.
+
+Rulings on the build (agent, for the lead):
+- The action line can still be partly hidden for about 50 ms when a turn's first reply line lands
+  while its block is still opening (300 ms); the mock answers in 200 ms, a live model later.
+- The opening turn's block opens from nothing as the page lands, so its action line is revealed
+  last (about 100 ms).
+- The chat's line before the stream says anything is the turning mark alone (no words invented);
+  the lead's "Checking claims" was not used: the existing "Checking the evidence…" stays.
+- Chat's References rows no longer carry the quote (the report's rows do not); it is in the sheet.
+
 ## Polish log
 
 | Round | Phase | Date | Notes applied | Sign-off |
@@ -1687,6 +1774,7 @@ tab's placeholder paragraph carry each rule.
 | 9d | build, round 11 (owner live-run notes) | 2026-11-06 | the square's pulse deeper with a scale, the citation wave as a visible sequence; scoping rows linking to Sources and Landscape, the baseline card keeping its link and its steps once the longlist starts, ticks and the option-search stage naming their walk; option and theme names appearing while clustering runs, the shortlist toggle saying Remove on hover, the option card in three blocks, the longlist row cut to its name, description and one grey line after a UX audit; most relevant sources and case studies back in cards above the Full report, the date on its own line, the sources count linking to References, the method as a ruled table, blue x-height bullets; the hover affordance and strength tone in the Sources table, the filter bar, the finished queries as one line with saved citation passes, greyed inactive subtabs, clickable funnel rows, the population line removed, a List / Map switch with a choropleth; Archived as a quiet foot link in the open scope, Find as a magnifier in the filters row; the name-and-menu header for tasks and projects with rename inline and a two-step archive, projects archivable, the reconnecting line in the run status bar's frame; the shortlist count fixed | lead |
 | 9e | build, round 12 (owner live-run notes, evening) | 2026-11-06 | the scoping planner's Something else option and its question decision (lead prompt change, v7); the header name at Heading with the capability under it; the planner's reply in its own eased box; the sidebar and Agent tab reading a closed Task Agent conversation; done scoping rows linking; the stepper counting decisions; groups closed by default with Navy names, the count right-aligned, Show/Hide on the right edge, rules around the controls row, no contents nav, shortlisted first, the theme-and-lever hover, levers counted; the option card as what it is, Evidence (places first) and What it could take with a code-built sentence, the estimate behind an i, the dossier over the card, the card opening at its top, Set aside by you; the shared Select for every dropdown; the gate card without the key assumption; the public link reaching the longlist and shortlist read-only; the report's expand state (watched, fresh, kept across tabs), badges reordered with the table's strength tone and a working classification hover, the citation sheet on one scale; Sources tones (green, yellow, red), Full text linking to the document, Cited under the status, the two-row filter bar, Download CSV and the page size on the foot line, 25 a page, How the sources were found as a section, queries filtering the table; the list gap fixed by a subgrid, the Projects list paged and ordered by the server, row menus for rename and archive; the backend's option-search count from dispatch, combined and Estimating, places split into Several countries / Place not stated / Other, full_text_url, query_id and record ids, projects by last activity, the card export | lead |
 | 9f | build, round 13 (owner live-run notes, 2026-11-06, late) and consolidation batch A | 2026-11-06 | the shared disclosure word, reference line, info hover and remembered choices (batch A); the longlist row's plain document count, the group heading shared by the list and grid with its shortlisted count, View as, the columns choice on the controls row, a wider Add an option, uncovered levers as a Body line, Other for the lever that fits none, the shortlist control as a circled check, Exclude only on the card and one-click with Add a reason after, excluding a theme or lever at its heading, the option card's documents without authors and in the References style with a link to the filtered table, the profile table at one size in a logical order, Your target and outcomes first with its values on two lines, no abstracts note; the New page's Project field (always shown, with New project…) and the scoping search field with one-line explanations; Share's two explanation lines; Landscape's published-country note in an i, the funnel rows Appraised and Full text accessed clickable, Relevant in the screening filter, the scoping task's Themes subtab from the longlist, the loading skeleton's bars in every column; the backend's depth and appraised filters, distinct appraised counts, a reason added after an exclusion updating in place; the page's scrollbar gutter kept | lead |
+| 9g | build, round 14 (owner live-run notes, 2026-11-07 to 09) | 2026-11-09 | a task named from the refined question at the step 1 decision and a chat titled from its first message (lead prompts task_title_v1, chat_title_v1), the header revealing the new name like streamed text; the shortlist's not-covered note with one writer (shortlist_note_v1; the shortlist prompt v2 writes no note) refreshed once on opening and after a pause, 'Written before your latest changes'; the References numbers blue and opening the source, the method as one designed section at the prose width, the report titled with the plan's question, the boxes on the shared marks line; tabs opening at their top, the plan's scrim on non-Agent tabs and the plan opening at its top, the Task Agent's three measured jumps fixed with one growing block per turn, the action line never under the composer, the status bar gated on loaded data, chats on the paced reveal with the mark and activity line and References in the report's form, the header naming the project, the sidebar trace's links right-aligned, the Result tab active on option cards; Collecting… from the row's queued status, the whole queries line as the trigger, Not reported linking (country=none), scoping theme headings filtering the table with distinct counts; the task list's timer kept, the New page's searchable multi-select of the user's finished searches, the foot reorganised, the archive sentence naming the solo tasks; one ProjectPicker; projects archiving their solo tasks, own searches linkable anywhere and never flagged, depth and theme filters, the mock's ingest stage | lead |
 | 10 | review, agent pass | | | lead |
 | 11 | review, owner pass | | | owner |
 
@@ -2128,6 +2216,14 @@ Later again the same round (owner, lead rulings):
 - **Exclude's tooltips end at "under Excluded"**: the group's "Excludes these options from being
   shortlisted. They stay on the longlist under Excluded.", the card's "Excludes this option from
   being shortlisted. It stays on the longlist under Excluded." (no "and can be included again").
+- **Round 14 (owner): an excluded lever is not "No options found for"**: the foot lists only the
+  lever types no option carries at all, included or excluded; a lever excluded whole sits under
+  Excluded and never joins the foot. One predicate (`uncoveredLevers`) for the grid and the list.
+- **One foot for both views** (owner): the list's lever view ends with the grid's foot, the same
+  component (`NoOptionsFoot`): "No options found for", then each lever on its own line in the row
+  heads' style, 8 px apart. Round 14 (owner): the foot carries its own Line hairline across the
+  full width with 24 px below it, so the list's lever view separates its last group from the foot
+  as the grid does.
 - **An excluded tile in the grid** has no word: its name in the list's excluded Grey, and in the
   corner where other tiles hold the toggle the `ExcludeIcon` at the toggle's 24 px in Grey, not a
   control, its tooltip (and accessible name) the exclusion line ("Excluded by you · with the theme
@@ -2285,3 +2381,99 @@ Navy on hover), not the Electric Blue prose link, so the table is calm; the sent
 Landscape tab" stays a prose link. Screenshot: `research/screenshots/round12-report/after-method-open-1280-light.png`.
 Test: `ArtefactView.report.test.tsx` (the hrefs, Full text included, and the quiet style).
 
+
+## Round 14, lists and the New page (owner, 2026-11-07)
+
+- **A running row's timer:** the live step and its timer are two cells in the status column; the
+  step is `min-w-0 truncate`, the timer (" · 28 min") never shrinks. The pair's hover text is the
+  whole line.
+- **"Evidence search to start from" is a searchable multi-select** (`ui/brand/MultiSelect.tsx`):
+  the Select's trigger and popover, a filter field at the top of the list ("Find a search", focused
+  as it opens; "No finished evidence searches" when nothing matches), a row per search through the
+  shared `Checkbox` with its project on a grey line, the chosen ones as removable Navy chips under
+  the trigger (the applied-chip classes now in `ui/brand/Chip.tsx`), the trigger reading "None",
+  the one name or "2 selected". It lists every finished Evidence search the reader owns, in any
+  project or none; there is no "In another project" rule and choosing a search never files the
+  task in a project (the server's shared-project rule is relaxed this round).
+- **The page's foot:** the question's box holds the text alone; the primary moved out of it to a
+  row of its own at the right, after the fields, with nothing below it (a failure's sentence sits
+  above it). Removed: the primary from inside the question box; "You can do this later too." from
+  the Project help line; the checklist and its "In another project" lines; the second error card
+  (one card says whichever failed).
+- **The project archive confirm** says what happens to the tasks: "Archiving removes this project
+  from your active projects and archives its N tasks that are in no other project." ("its 1 task
+  that is"; the clause left out at none or while the count is unknown), N from the project row's
+  `solo_task_count`, typed locally until the generated type carries it.
+
+## Round 14, the report page (owner, 2026-11-07/08)
+
+1. **References' numbers.** "[1]" is Electric Blue again and a button. It opens the source's
+   sheet by its reference title, as the title link does, and is named "Source 1: <title>". While
+   the report is written the number is Grey and plain, since there is no dossier yet. The markers
+   in the body keep their rule.
+2. **"How the evidence was gathered", polished as one section.**
+   - Every table spans the report's prose measure (the 32rem cap is gone), with a fixed layout and
+     Line hairline rules.
+   - Every table has one 80 px figure column at the right: the numbers alone, Navy, tabular
+     figures, right-aligned, so they line up down the whole section. " documents" is dropped from
+     the distribution and theme rows; the captions and the sentence say what is counted.
+   - There is 32 px between every part, and each caption sits 8 px above its table.
+   - The sentence ("The rest of this section covers only the cited sources; the Landscape tab
+     shows the whole search.") appears once, between the search's counts and the cited sources'
+     tables it introduces.
+   - The "Where published" note sits under its table at Meta Grey, as a footnote rather than a
+     second sentence of body.
+3. **Title.** The report's `h1`, live and committed, is the plan's refined research question
+   (`plan.question` from `usePlan`). The fallback is the task's question, then the stream's, then
+   the task's name. The plan read is not on the public surface, so a public link reads the task's
+   question (`usePlan` gets an empty id there, which disables it). The download's title follows
+   the same question.
+4. **Case studies and most relevant sources.** The chips are gone. Each box takes the citation
+   sheet's marks line (`EvidenceMarksLine`) under its title, and after the authors on a source:
+   the type (dotted, its reasoning on hover), the strength with its tone square, then "Since
+   2019" or "Cited by 3 claims", at Meta Grey joined by middots. It arrives with the committed
+   report. The now-unused `ClassificationChip` and `AppraisalChip` are deleted.
+
+Screenshots: `research/screenshots/round12-report/before14-*` and `after14-*`: title, references,
+method open (two scrolls), the boxes, at 1280 and 400. Tests: `ArtefactView.test.tsx` (the number
+opens the source and is plain while live), `ArtefactView.report.test.tsx` (the plan's title and
+its fallback, the marks line in both boxes, the method's one column), `ArtefactView.live.test.tsx`
+(the live title).
+
+## Round 14, the shortlist's note kept current (owner, 2026-11-08)
+
+- On opening the Shortlist page, if the read says `note_stale`, the page asks
+  `POST /tasks/{id}/shortlist/note` once. After a shortlist change on the page, one timer waits
+  3 s after the last change and asks once if the note is still stale; each change resets it,
+  leaving the page cancels it. The longlist never asks; the public link never asks.
+- While stale and not yet rewritten, a Meta Grey line under the note: "Written before your latest
+  changes." While it is rewritten, the Task Agent's working line stands in the note's place
+  (`ActionLine`: the turning fold mark and "Reviewing the shortlist for gaps"; owner, the words
+  do not breathe); the new note replaces it with the arrivals' fade (`anim-swap-in`). The note the
+  page opened with does not fade.
+- Built in `longlist/shortlistNote.ts` (`useRefreshShortlistNote`, `useNoteRefresh`,
+  `NOTE_REFRESH_PAUSE_MS`); the route is typed locally until the generated client carries it.
+
+
+- **The start-from help line** (owner, round 14): "Optionally start from a completed evidence
+  search to draw from its sources and report." (the owner's words without "in the same project",
+  which the field no longer requires), replacing "Optional. An evidence search you have already
+  run gives the scoping its sources and report; without one it searches for each option."
+  (`START_FROM_HELP` in `NewTaskView.tsx`).
+
+- **Correction, the searches offered** (owner, round 14, correcting the lead's reading of the
+  earlier note): the multi-select lists only the reader's own finished Evidence searches in the
+  chosen project; with no project chosen, only those in no project. Picking a search never
+  changes the Project field; changing the project clears the picks it does not hold, and naming a
+  new project clears them all (it holds none). The rows drop the grey project line (every row
+  listed is in the one place). The help line reads exactly "Optional. Start from a completed
+  evidence search in the same project to draw from its sources and report." (owner, 2026-11-09:
+  "Optional." as its own sentence). This supersedes the
+  "any project or none" bullet and the help line above.
+
+- **No project, no searches** (owner, round 14, replacing the no-project case above): with no
+  project chosen, or "New project…" not yet created, "Evidence search to start from" is disabled
+  (`MultiSelect`'s `disabled`: Ground fill, Grey words, it does not open, no chips) and its trigger
+  reads "Choose a project first", with no extra line. Choosing a project enables it and lists that
+  project's completed searches; changing the project clears the picks it does not hold, and going
+  back to None clears them all.

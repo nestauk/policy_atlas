@@ -369,7 +369,7 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(sourceRows).toHaveCount(includedCount + 1);
     // Round 11: the folded queries are one line, "Found with N queries and
     // M citation passes · Show".
-    const queriesToggle = page.getByRole("button", { name: /^Found with \d+ quer(y|ies)( and \d+ citation pass(es)?)? · Show$/ });
+    const queriesToggle = page.getByRole("button", { name: /Found with \d+ quer(y|ies)( and \d+ citation pass(es)?)? · Show$/ });
     await expect(queriesToggle).toBeVisible();
 
     // "All" is one click away and shows the whole collection.
@@ -643,9 +643,12 @@ test.describe("mock task-lifecycle journey", () => {
     await page.getByRole("button", { name: "Chats" }).click();
     const library = page.getByRole("region", { name: "Chats" });
     await expect(library).toBeVisible();
-    await expect(library.getByRole("button", { name: "New chat", exact: true })).toBeVisible();
+    // The chat is named from its first message once the answer is in
+    // (round 14: `conversation.titled` on the chat turn's stream, put into
+    // the cached list), so it is listed by that name, not "New chat".
+    await expect(library.getByRole("button", { name: "What does the evidence show", exact: true })).toBeVisible();
 
-    await library.getByRole("button", { name: "Rename New chat" }).click();
+    await library.getByRole("button", { name: "Rename What does the evidence show" }).click();
     await library.getByLabel("Chat title").fill("Breakfast provision");
     await library.getByLabel("Chat title").press("Enter");
     await expect(library.getByRole("button", { name: "Breakfast provision", exact: true })).toBeVisible();
@@ -888,7 +891,7 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     }
     // Once the search has ended the block folds to one line (round 11:
     // "Found with N queries and M citation passes · Show").
-    await expect(page.getByRole("button", { name: /^Found with \d+ quer(y|ies)( and \d+ citation pass(es)?)? · Show$/ })).toBeVisible({
+    await expect(page.getByRole("button", { name: /Found with \d+ quer(y|ies)( and \d+ citation pass(es)?)? · Show$/ })).toBeVisible({
       timeout: 20_000,
     });
 
