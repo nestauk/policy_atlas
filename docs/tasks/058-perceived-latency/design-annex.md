@@ -2634,3 +2634,10 @@ Owner notes on the live app after the review stack, applied in the review conver
   the link to `full_text_url` when the text was collected, opening in a new tab, named "Full text
   (opens the document in a new tab)"; plain without an address. The link moved into `DepthMark`
   (`href`), one home for both, and its style is the `text-link` utility (out of `sources.css`).
+- **One layout for the search queries, live and finished** (owner: "the first layout is better
+  and it doesn't make sense to have two"). The finished block's disclosure now opens the live
+  block's table (`QueriesTable`): Query and Results columns, each backend once as a row-group
+  label; the round-14 Database column and flat rows are deleted.
+- **The plan over a results tab runs the full height of the viewport**, as the citation and
+  document sheets do (owner: "currently it stops at the task header"): fixed to the viewport's
+  right edge over the headers, under the same scrim.

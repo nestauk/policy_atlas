@@ -199,6 +199,9 @@ review records them as an owner decision, not a gap.
   link lives in `DepthMark` (`href`) and its style in the `text-link` utility, so there is one. Tests:
   the retarget keyframes; the plan panel's closing state, its cut without Web Animations and an open
   during the exit; the dossier's link and its plain word without an address.
+  Same round, later: the finished search-queries block opens the live block's table (one
+  `QueriesTable`; the Database column and flat rows deleted; owner: one layout, the live one). The plan over a results tab is fixed to the viewport's full height, as the sheets are
+  (it stopped at the task header).
 
 ## Evidence shown live (owner, 2026-11-05)
 

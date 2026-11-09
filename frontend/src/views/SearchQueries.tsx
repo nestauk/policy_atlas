@@ -198,43 +198,72 @@ export function SearchQueries({
       )}
       <Collapse show={searching} durationMs={200}>
         <div className="pt-3">
-          <table className="w-full table-fixed border-y border-line text-left text-meta">
-            <thead className={cn("border-b border-line", TABLE_HEADER_TEXT_CLASS)}>
-              <tr>
-                <th scope="col" className="py-2 pr-4">
-                  Query
-                </th>
-                <th scope="col" className="w-24 py-2 text-right max-md:w-16">
-                  Results
-                </th>
-              </tr>
-            </thead>
-            {groups.map((group) => (
-              <tbody key={group.backend} className="border-b border-line last:border-b-0">
-                <tr>
-                  <th scope="rowgroup" colSpan={2} className={cn(CAPTION_LABEL_CLASS, "pt-3 pb-1")}>
-                    {scrub(group.backend)}
-                  </th>
-                </tr>
-                {group.rows.map((row, rowIndex) => {
-                  return (
-                    // A query that goes out while the reader watches fades in.
-                    <tr key={`${row.query}:${rowIndex}`} className={cn(rowIndex > 0 && "border-t border-line", "anim-swap-in")}>
-                      <td className={cn("py-2 pr-4 break-words leading-[1.5]", row.muted ? "text-grey" : "text-navy")}>
-                        <QueryLink row={row} hrefFor={hrefFor} />
-                      </td>
-                      <td className="py-2 text-right tabular-nums text-navy">
-                        {row.results === null ? <ResultsPulse /> : formatCount(row.results)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            ))}
-          </table>
+          <QueriesTable groups={groups} hrefFor={hrefFor} live className="border-y" />
         </div>
       </Collapse>
     </section>
+  );
+}
+
+/**
+ * The one queries table, live and finished (owner, 2026-11-09: the finished
+ * block had its own layout, a Database column and no group labels; one
+ * layout now, the live one). Hairline rows at Meta size, the Query and
+ * Results columns headed in the table-header label style, each backend once
+ * per group as a row-group label (Label treatment at Caption size, Grey),
+ * the query in Navy (a pass's description in Grey), the results count
+ * right-aligned in tabular figures, a placeholder bar until it returns.
+ *
+ * Args:
+ *   groups: The rows by backend.
+ *   hrefFor: The filter link for a row's key.
+ *   live: True while the search runs: a row that goes out fades in.
+ *   className: The frame's rules (`border-y` under its own heading,
+ *     `border-b` under a disclosure line that already draws the top one).
+ */
+function QueriesTable({
+  groups,
+  hrefFor,
+  live = false,
+  className,
+}: {
+  groups: readonly QueryGroup[];
+  hrefFor: (param: string) => string;
+  live?: boolean;
+  className?: string;
+}) {
+  return (
+    <table className={cn("w-full table-fixed border-line text-left text-meta", className)}>
+      <thead className={cn("border-b border-line", TABLE_HEADER_TEXT_CLASS)}>
+        <tr>
+          <th scope="col" className="py-2 pr-4">
+            Query
+          </th>
+          <th scope="col" className="w-24 py-2 text-right max-md:w-16">
+            Results
+          </th>
+        </tr>
+      </thead>
+      {groups.map((group) => (
+        <tbody key={group.backend} className="border-b border-line last:border-b-0">
+          <tr>
+            <th scope="rowgroup" colSpan={2} className={cn(CAPTION_LABEL_CLASS, "pt-3 pb-1")}>
+              {scrub(group.backend)}
+            </th>
+          </tr>
+          {group.rows.map((row, rowIndex) => (
+            <tr key={`${row.query}:${rowIndex}`} className={cn(rowIndex > 0 && "border-t border-line", live && "anim-swap-in")}>
+              <td className={cn("py-2 pr-4 break-words leading-[1.5]", row.muted ? "text-grey" : "text-navy")}>
+                <QueryLink row={row} hrefFor={hrefFor} />
+              </td>
+              <td className="py-2 text-right tabular-nums text-navy">
+                {row.results === null ? <ResultsPulse /> : formatCount(row.results)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      ))}
+    </table>
   );
 }
 
@@ -246,10 +275,9 @@ export function SearchQueries({
  * in Ink "Found with 12 queries and 3 citation passes · Show", "Show" the
  * quiet control with the disclosure chevron ("Hide" when open); on phones the
  * sentence wraps under the heading. The hairline runs under that line; open,
- * the queries are ruled rows under it at the sources table's Meta size
- * (round 11): the query in Navy (a pass's description in Grey, as its own
- * row), the database in Grey, the results count right-aligned; each query is
- * a link that filters the table (round 12). Hidden while the live list shows.
+ * the same table the live block shows (`QueriesTable`; owner, 2026-11-09:
+ * one layout), each query a link that filters the table (round 12). Hidden
+ * while the live list shows.
  */
 export function QueriesSummary({
   groups,
@@ -261,7 +289,6 @@ export function QueriesSummary({
   const [open, setOpen] = useState(false);
   const tableId = useId();
   if (groups.length === 0) return null;
-  const rows = groups.flatMap((group) => group.rows);
   return (
     <section aria-label={SEARCH_QUERIES_TITLE} data-testid="search-queries-summary" className="min-w-0">
       {/* The whole line is the disclosure (owner, round 14): one button
@@ -298,35 +325,7 @@ export function QueriesSummary({
       </h2>
       <Collapse show={open} durationMs={200}>
         <div id={tableId}>
-          <table className="w-full table-fixed text-left text-meta">
-            <colgroup>
-              <col />
-              <col className="w-28 max-md:w-24" />
-              <col className="w-16" />
-            </colgroup>
-            {/* Column headings in the Sources table's header style (owner,
-                round 14), once: the rows are one table. */}
-            <thead className={cn("border-b border-line", TABLE_HEADER_TEXT_CLASS)}>
-              <tr>
-                <th scope="col" className="py-2 pr-4 align-bottom">Query</th>
-                <th scope="col" className="py-2 pr-4 align-bottom">Database</th>
-                <th scope="col" className="py-2 text-right align-bottom">Results</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, index) => (
-                <tr key={`${row.backend}:${row.query}:${index}`} className="border-b border-line">
-                  <td className={cn("py-2 pr-4 break-words leading-[1.5]", row.muted ? "text-grey" : "text-navy")}>
-                    <QueryLink row={row} hrefFor={hrefFor} />
-                  </td>
-                  <td className="py-2 pr-4 align-top text-grey">{scrub(row.backend)}</td>
-                  <td className="py-2 text-right align-top tabular-nums text-navy">
-                    {row.results === null ? <ResultsPulse /> : formatCount(row.results)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <QueriesTable groups={groups} hrefFor={hrefFor} className="border-b" />
         </div>
       </Collapse>
     </section>

@@ -415,18 +415,18 @@ describe("SourcesView — sortable table (028 strand 7)", () => {
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(toggle).toHaveTextContent(/Hide$/);
     const table = within(block).getByRole("table");
-    // Ruled rows: the query, the database in Grey, the count; no row-group
-    // labels.
-    expect(within(table).queryByRole("rowheader")).toBeNull();
+    // One layout, the live block's (owner, 2026-11-09): the backend once per
+    // group as a row-group label, no Database column.
+    const overton = within(table).getAllByText("Overton")[0].closest("th");
+    expect(overton).toHaveAttribute("scope", "rowgroup");
     // Round 14 (owner): visible column headings in the Sources table's
     // header style, once, Results over the counts at the right.
     const head = within(table).getByRole("columnheader", { name: "Query" }).closest("thead") as HTMLElement;
     expect(head).not.toHaveClass("sr-only");
     expect(head).toHaveClass("border-b");
-    expect(within(table).getAllByRole("columnheader").map((th) => th.textContent)).toEqual(["Query", "Database", "Results"]);
+    expect(within(table).getAllByRole("columnheader").map((th) => th.textContent)).toEqual(["Query", "Results"]);
     expect(within(table).getByRole("columnheader", { name: "Results" })).toHaveClass("text-right");
     expect(table.querySelectorAll("thead")).toHaveLength(1);
-    expect(within(table).getAllByText("Overton")[0]).toHaveClass("text-grey");
     expect(table).toHaveClass("text-meta");
     // The saved pass is its own Grey row, worded by the server.
     expect(within(table).getByText("Followed citations from 50 sources").closest("td")).toHaveClass("text-grey");

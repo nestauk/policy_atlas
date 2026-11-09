@@ -257,8 +257,10 @@ function TaskTabs({
 
 /** The plan document over a non-Agent tab (the Agent tab mounts its own,
  *  with the plan's edits). Read-only here: edits and starts belong to the
- *  Agent tab. It lies over the right of the page with the overlay lift, so
- *  the report under it keeps its width; below `md` it covers the page. */
+ *  Agent tab. It lies over the right of the page with the overlay lift, the
+ *  full height of the viewport as the sheets are (owner, 2026-11-09: it
+ *  stopped at the task header), so the report under it keeps its width;
+ *  below `md` it covers the page. */
 function ShellPlanPanel({ taskId }: { taskId: string }) {
   const plan = usePlanPanel();
   const live = useTaskLive();
@@ -276,7 +278,7 @@ function ShellPlanPanel({ taskId }: { taskId: string }) {
       data-state={plan.closing ? "closed" : "open"}
       className={SHEET_SCRIM_CLASS}
     />
-    <div className="absolute inset-y-0 right-0 z-50 flex min-h-0 w-[min(46rem,55%)] shadow-overlay max-md:left-0 max-md:w-auto">
+    <div className="fixed inset-y-0 right-0 z-50 flex min-h-0 w-[min(46rem,55%)] shadow-overlay max-md:left-0 max-md:w-auto">
       <PlanDocument
         taskId={taskId}
         placement="side"
