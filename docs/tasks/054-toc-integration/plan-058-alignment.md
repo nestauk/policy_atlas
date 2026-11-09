@@ -28,7 +28,7 @@ Task 058 (perceived latency) merged into `dev` on 2026-11-09 and was merged into
 1. This pass is part of 054 (PR #114), not a new task.
 2. **The split.** This PR stays on Sol and keeps the ToC's own writer. A follow-up PR decides Terra against Sol and the move to the shared synthesis, after a colleague's manual quality checks. The rerun of the synthesis comparison on 3 local tasks feeds that follow-up (`research/report-synthesis-feasibility/`).
 3. **Contract change accepted:** the ToC step names join the API's stage keys (spec § SSE).
-4. **The report streams in page order (changed 2026-11-09).** Today's single `toc_report_v7` call streams unchanged: same prompt, model and content, and no hash change. Its fields fill the page top to bottom as the model writes them, through 058's report-section frames and live view. **The report's content does not change in this pass; only its formatting and presentation do.** The header above the canvas keeps all four parts: title, verdict and headline, question, "what would settle it". Writing each section with its own call, and the claim check with repair, move to the follow-up PR (owner, 2026-11-09).
+4. **The report streams (changed 2026-11-09).** Today's single `toc_report_v7` call streams unchanged: same prompt, model and content, and no hash change. Its fields fill the page in the order the model writes them, each in its own place (owner, 2026-11-09; S6), through 058's report-section frames and live view. **The report's content does not change in this pass; only its formatting and presentation do.** The header above the canvas keeps all four parts: title, verdict and headline, question, "what would settle it". Writing each section with its own call, and the claim check with repair, move to the follow-up PR (owner, 2026-11-09).
 5. **What changes from `TocTrace`:**
    - The per-search lines move to the Sources tab's "Search queries".
    - The outcome counts stay, as server counts on the finished rows.
@@ -85,10 +85,11 @@ Task 058 (perceived latency) merged into `dev` on 2026-11-09 and was merged into
 ## 5. Seams the build fixes
 
 - **S1. Stage keys.**
-  - Add one key per ToC step the reader sees, and one per fan-out (`toc_item_searches`, `toc_new_link_searches`, `toc_retry_searches`).
-  - Rows group them as the server decides.
-  - `STAGE_BY_REGISTRY` maps the `toc_*` components.
-  - `option_search._publish_progress` takes the stage.
+  - Add one key per ToC step the reader sees, and one per fan-out (`toc_item_searches`, `toc_new_link_searches`, `toc_retry_searches`). That makes 15 ToC keys (§ 9).
+  - A fan-out and the step that runs it keep separate keys but share a label; `cardRows` merges rows with the same label into one row. No `row` field is added to the frames.
+  - `STAGE_BY_REGISTRY` maps the `toc_*` components. `PlanStageKey` (`api/contract/task_agent.py`) is the third mirror of the keys and gains them too.
+  - `option_search._publish_progress` takes the stage as a parameter.
+  - **The upload's read.** `toc_draft` in a `review_first` draft walk reports as `toc_read`. The component name alone cannot tell the two apart, so the runner stamps `"stage"` on that walk's component payloads, and `stage_for_payload` reads a stamped `"stage"` first.
 - **S2. Derived counts.** The counts that `TocTrace` computes on the client ("N judged · M test them", "N set aside") become server count keys on `stage.completed`.
 - **S3. The walk kind.**
   - Expose draft against check on the run read: a field, or a `purpose` value.
@@ -102,15 +103,24 @@ Task 058 (perceived latency) merged into `dev` on 2026-11-09 and was merged into
   - Any retry sends `replace ""` first. The streamed call runs once, outside both inner retry loops; one non-streamed fallback is the retry.
 - **S5. Citations while streaming.** A streamed `[n]` shows as 058's muted pending chip `[·]`. The numbered sources are known before the call, so their titles can travel on the sources frame for the chip's hover. There is no claim check in this pass, so there is no revising blur.
 - **S6. The frames.**
-  - The ToC report emits 058's `artefact.skeleton` (its section list), then the section deltas, revising, claim and completed frames.
-  - The build's first step confirms that the skeleton and `section_completed` fit a report that is not an Evidence search artefact. If they do not, it adds the smallest generalisation and the lead records it here.
+  - The ToC report emits 058's `artefact.skeleton` (its section list), then the section deltas, sources and completed frames. There is no claim check, so no revising or claim frames.
+  - **Contract generalisation (touches Evidence search).** The ToC header parts (the verdict line, the headline) are not sections of an Evidence search artefact. Phase 4 first tries to place the header parts as ordinary skeleton entries. If that fails, the live frames gain a small `LiveSectionRole` so a skeleton entry can name its part (possible spec change S-4, § 10). Evidence search sends the same frames as today; its regression tests must pass unchanged at phases 4 and 6.
+  - **Fill order (owner, 2026-11-09).** The fields fill **in the order the model writes them**, each in its own place on the page. The output format is in the protected prompt, so it does not change. The order written: the header parts, Summary, Pathways, How it could fail, the connection reasons (the Assumptions table), How it could be expanded, Supporting activities, What to test first. So the reader sees the table and two parts below fill before "What to test first" above them.
+  - **Decoders.** String fields use `JsonStringFieldDecoder`; arrays of objects use `JsonArrayObjectDecoder`. `supporting_activities` is an array of strings, so it needs a small string-array decoder.
+  - **Markers in deltas.** A streamed `[n]` shows as the pending chip `[·]`. A `#n` code (a box or connection) shows as plain text until the swap. A marker split across two deltas is held until it closes.
+  - **Reconnects and failures.** Each field gets `section_completed` as soon as it closes, so a reconnect replays the closed fields. On a failure the fallback sends a fresh skeleton and `replace ""` for every part, then the fallback's text arrives as one replace per part.
 - **S7. The swap.** The live view hands over to the committed report from `GET /toc`. Citation numbers and the pathway order may change at the swap: they fade in as 058's swap does.
+- **S7b. Only a first report streams.** "Update the report", and a check walk that runs while a report exists, do not stream over the old report. The old report stays with the `ActionLine` until the new one swaps in (§ 8).
 - **S8. Per-connection commits.**
-  - The judge writes each connection's evidence rows in a short transaction of their own, idempotent under a component retry.
-  - The canvas refetches on a ToC `stage.completed`, and on a tick or a 5 s poll while the judge runs.
-  - Each connection takes its verdict tone as soon as it is judged (owner decision 9).
-  - The grade shown before classify and appraise finish is provisional. It may shift once more when they land.
-- **S9. Stale report.** The report read carries `stale` (edits since the report was written). The page shows "Written before your latest changes." with "Update the report", and the `ActionLine` while the update runs.
+  - The judge writes each connection's evidence rows through its own database connection (a `ConnectFactory`, as ingest does), in a short transaction per connection.
+  - Each commit updates the `counted_hash` that the canvas read uses, so the canvas sees the change.
+  - Idempotent under a component retry: a retry skips the connections already written by the same `capability_run_id` at the current graph hash.
+  - The step still sends one `toc.changed` at its end, so History gets one change record.
+  - The canvas refetches at most once per finished connection batch, on a ToC `stage.completed`, and on the 5 s poll while the judge runs.
+  - Each connection takes its verdict tone as soon as it is judged (owner decision 9). The grade shown before classify and appraise finish is provisional. It may shift once more when they land.
+- **S9. Stale report.** The report read carries `stale`. It is true when a content edit, an undo or an evidence decision was made after the report's walk started (`run.started`). Moving a box does not count. The page shows "Written before your latest changes." with "Update the report", and the `ActionLine` while the update runs.
+- **S10. Between the walks.** In the automatic chain, the card shows the draft row as done and stays "Running" until the check's first frame. If the check is refused (for example by the cost guard), the card ends with the draft's finish words and the refusal message from today.
+- **S11. Not built in this pass: including a set-aside pathway again.** The spec lists it as not built and `docs/deferred.md` records the seam. It needs a new edit with undo and maybe a migration. The set-aside line stays as text.
 
 ## 6. Phases
 
@@ -139,12 +149,14 @@ Task 058 (perceived latency) merged into `dev` on 2026-11-09 and was merged into
 ## 7. Risks and what we watch
 
 - **The wait before the first words.** Sol thinks before the first field (7–9 s on tiny prompts; longer on the report). The writing line covers the wait on screen. Phase 9 records the time to the first words and the report's wall time against today's.
-- **Sol stalls on Bedrock.** In the feasibility rerun, Sol timed out seven times at 300 s on one task (`research/report-synthesis-feasibility/round2/`). A stalled stream would wait out the 300 s timeout (which, when streaming, measures the gap between pieces) before falling back. Phase 4 adds a shorter time-to-first-content limit on the streamed call, so the fallback starts sooner. The limit is set from the measured thinking wait, with margin.
+- **Sol stalls on Bedrock.** In the feasibility rerun, Sol timed out seven times at 300 s on one task (`research/report-synthesis-feasibility/round2/`). A stalled stream would wait out the 300 s timeout (which, when streaming, measures the gap between pieces) before falling back. Phase 4 adds a shorter time-to-first-content limit on the streamed call, so the fallback starts sooner. The limit lives in `model_routes.toml`, not in code. Before phase 4, the lead measures the thinking wait on one real report and sets the limit from it, with margin.
 - **Retries multiply.** There are three retry layers today. S4 keeps the streamed call outside the inner two.
 - **The 058 frames may assume an Evidence search artefact** (S6). The first build step checks this before anything depends on it.
 - **The swap changes numbers.** Citation renumbering and pathway sorting happen in code (S7).
 - **Early grades are provisional.** Per-connection colours are shown before classify and appraise finish (S8).
 - **The prompt-hash rule.** Every prompt change is a version bump, a re-pin and a replay.
+- **Evidence search and Options scoping regressions.** Phases 3, 4 and 6 touch shared code (the stage vocabulary, the live frames, `RunTrace`). Their existing tests must pass unchanged at each of those gates.
+- **The fill order is not the page order** (S6). Accepted by the owner.
 
 ## 8. Design notes (the owner's rulings on the mock, 2026-11-09)
 
@@ -161,7 +173,8 @@ Task 058 (perceived latency) merged into `dev` on 2026-11-09 and was merged into
 - **The assumptions table** keeps all its columns, including Sources.
 - **Download** arrives with the committed report (058).
 - **"Update the report":** the old report stays, with the `ActionLine`, until the new one swaps in. The update does not stream over it.
-- **Including a set-aside pathway again** changes the theory, so the report shows the stale line.
+- **Including a set-aside pathway again** is not built in this pass (S11). When it is, it changes the theory, so the report shows the stale line.
+- **The live report fills in the order written**, not page order (S6; owner, 2026-11-09).
 - **"The report's sections are set out when writing begins."** is removed. Before writing starts, nothing shows under the canvas.
 - **The detail panel:** small consistency changes only (decision 12 in § 4 E).
 
@@ -199,11 +212,10 @@ Blurbs as in `research/mock/brief.md`. The ToC plan has no steps, so the blurbs 
 - The plan card reads "Theory of change plan" over the plan's title.
 - "Not enough evidence" takes a light grey (Line 2) tone square; the canvas line stays a faint dashed grey.
 - The set-aside line reads "Set aside by Policy Atlas · Too little evidence for 2 of its 4 connections."
-- The tooltips:
-  - document "Exclude": "Leave this document out of this connection's evidence."
-  - document "Include again": "Count this document in this connection's evidence again."
-  - pathway "Exclude": "Leave this pathway out of the theory and the report."
-  - pathway "Include again": "Put this pathway back in the theory and the report."
+- **The document controls keep their words, "Remove" and "Restore"**, as the colleague wrote them (owner, 2026-11-09). They get the quiet control style. Their tooltips:
+  - "Remove": "Leave this document out of this connection's evidence."
+  - "Restore": "Count this document in this connection's evidence again."
+- There is no pathway control in this pass (S11), so the pathway tooltips wait for it.
 - The facts line reads "Sources 21 cited out of 412 found · Published 2003–2025" (the figures from the task).
 
 **Kept from the audit's list:**
@@ -218,27 +230,62 @@ Blurbs as in `research/mock/brief.md`. The ToC plan has no steps, so the blurbs 
 ### Owner sign-off
 The mock rulings were accepted on 2026-11-09. The polish passes (phase 8) record their rulings here.
 
-## 9. Acceptance items for this pass (written in phase 2)
+## 9. Acceptance items for this pass
 
-Draft list, to be made testable in phase 2:
-- **Progress**
-  - A ToC walk's steps reach the client as `stage.started` and `stage.completed` frames, with server labels and counts.
-  - No ToC step copy stays in `frontend/src`. The guard in `runProgress.test.ts` holds without its `TocTrace` exemption.
-  - The run status bar and the task row show the step and the activity for a ToC walk.
-  - The finished card reads the ToC finish words and links to the ToC Result.
-  - Search progress during a ToC check never says "Searching for each option".
-- **The report**
-  - It streams in page order on Sol, from today's unchanged call.
-  - Its committed content matches a non-streamed run of the same call; only presentation differs.
-  - The live page hands over to the committed report in place.
-- **The report page**
-  - It uses `ReportPage`, the shared References and the full citation sheet with the dossier and "Back to the claim".
-- **Consistency**
-  - The audit's findings 2–18 are closed, or recorded as kept on purpose.
-  - The canvas shows at 400 px wide.
-- **Per-connection colours and the stale report**
-  - The canvas colours connections before the judge step ends.
-  - After an edit, the report reads "Written before your latest changes."
+Each item names its check. "Test" means a new or changed automated test, named in `verification.md`.
+
+### The stage keys (S1)
+| Stage key | Component(s) or fan-out mapped | Label (§ 8) | Done counts |
+|---|---|---|---|
+| `toc_draft` | `toc_draft` (draft walk, not `review_first`) | Drafting the theory | boxes, connections, pathways |
+| `toc_read` | `toc_draft` in a `review_first` draft walk, by the stamped `"stage"` (S1) | Reading your diagram | boxes, connections, pathways |
+| `toc_item_searches` | the check's first fan-out (`TOC_ITEM_SEARCHES_STAGE`) | Searching for each connection | searches, found |
+| `toc_select` | `toc_select` | Screening | read, relevant |
+| `toc_discover` | `toc_discover` | Looking for other routes | routes found |
+| `toc_merge` | `toc_merge` | Merging similar steps | merged |
+| `toc_search_new` | `toc_search_new` | Searching for the new connections | connections |
+| `toc_new_link_searches` | its fan-out (`TOC_NEW_LINK_SEARCHES_STAGE`) | Searching for the new connections (merged row) | searches, found |
+| `toc_judge` | `toc_judge` | Judging the evidence | judged, test them |
+| `toc_search_again` | `toc_search_again` | Searching again for thin connections | connections, judged |
+| `toc_retry_searches` | its fan-out (`TOC_RETRY_SEARCHES_STAGE`) | Searching again for thin connections (merged row) | searches, found |
+| `toc_figures` | `toc_figures` | Finding the size of change | figures |
+| (shared) `classify`, `appraise` | as today | Classifying | as today |
+| `toc_choose` | `toc_choose` | Choosing pathways | kept, set aside |
+| `toc_summarise` | `toc_summarise` | Writing titles and summaries | — |
+| `toc_report` | `toc_report` | Writing the report | — |
+
+15 ToC keys; with the 19 keys today, 34 in all. Rows with the same label merge into one row in `cardRows` (S1).
+
+- The blurbs are as in `research/mock/brief.md`. A key that cannot be mapped as written stops the build and goes back to the lead.
+- The counts the client derives today ("set aside" = read − relevant; "test them") become integer count keys on `component.completed`, so `stage.completed.counts` carries them.
+
+### Acceptance items
+| # | Item | Check |
+|---|---|---|
+| A1 | `StageKey` and `STAGE_KEYS` hold the 15 ToC keys of the table (34 in all), and so does `PlanStageKey`; `STAGE_PRESENTATION`, `STAGE_ROW`, `STAGE_COUNTS` and `STAGE_BY_REGISTRY` cover them; `make openapi-sync` regenerates the frontend types | `test_stage_vocabulary.py` coverage tests extended; `make drift-check` |
+| A2 | A ToC check walk emits `stage.started` and `stage.completed` for each step with the table's label and counts. A ToC walk's `RunOut.stages` and `active_run.stage` / `stage_label` are filled | backend SSE and runs-read tests on a stub ToC walk |
+| A3 | Fan-out progress on a ToC walk carries the ToC key and label, never `option_searches` / "Searching for each option". An Options scoping walk is unchanged | `test_option_search.py`: `_publish_progress` stage test for both capabilities |
+| A4 | Activity ticks: the fan-outs ("n of M searches done · S found"), screening ("n of M read · R relevant") and the judge ("n of M documents") publish through the shared `ACTIVITY` templates, throttled as 058's ticks are | unit tests on the loops' tick publishing |
+| A5 | The run read exposes the walk kind (draft, read, check, report update) and, for a check the server started after a draft, the draft's walk id, read from `evidence_scope.context["draft_capability_run_id"]` | API contract test; `make drift-check` |
+| A6 | `walkKind` and `READY_WORDS` gain the ToC kinds ("Theory drafted", "Evidence checked"); `resultHref` points at the ToC Result | `taskStatus` and `runProgress` unit tests |
+| A7 | A draft and its follow-on check render as one `RunTrace` card: one timer from the draft's start, the draft row first, the check's finish words. A walk the reader starts gets its own card | `TaskAgentPane` / `RunTrace` tests with a two-walk fixture |
+| A8 | `DRAFT_LANDED_MESSAGE` is not posted when the check follows automatically; the check's end message and the upload's review message stay | `test_toc_start` (or the walks test) |
+| A9 | `TocTrace.tsx` is deleted, and no ToC step copy remains in `frontend/src` | the guard in `runProgress.test.ts` passes with its `TocTrace` exemption removed |
+| A10 | The run status bar and the task list row show the step label and activity for a ToC walk. The ToC sidebar does not open by itself | `RunStatusBar` / `TaskListRow` / `ChatSidePanel` tests |
+| A11 | `toc_report` streams: one streamed call outside the inner retry loops, with a time-to-first-content limit; on failure `replace ""`, then one non-streamed fallback. A skeleton of the report's parts comes first; each field publishes in the order written and gets `section_completed` when it closes; the fallback sends a fresh skeleton and `replace ""` per part. `[n]` shows as `[·]`; a marker split across deltas is held | backend tests with a scripted stream (success, mid-stream failure, no first content, reconnect after two closed fields, a split marker); prompt hash unchanged (`make prompt-guard` with no re-pin) |
+| A12 | The committed report from a streamed call equals the report from the same response parsed without streaming, and the request sent is the same apart from `stream` | test: one canned response fed through both paths gives an identical stored payload |
+| A13 | The ToC Result renders the live report in the order written, each part in its page place, with `◆ Writing`, `[·]` chips and no revising; it swaps in place to the committed report | frontend test with the frames fixture; e2e scene |
+| A14 | The report page uses `ReportPage`: kind row with Download (committed only), date line, facts line, contents, h2 sections, the expand state. The header's four parts are unchanged; the report title is the `h1` | `TocResult` / `DetailedInformation` tests |
+| A15 | References use the shared form; the citation sheet is the shared one with source marks and the dossier with "Back to the claim"; "Open the source" is gone | frontend tests |
+| A16 | The judge commits each connection's evidence through its own connection in a short transaction, updates `counted_hash`, and skips connections already written by the same run at the current hash; the step sends one `toc.changed`; the canvas shows a connection's tone before the judge step ends | backend test (a retried judge leaves no duplicates); frontend test on a mid-walk graph read |
+| A17 | The report read carries `stale`: true after a content edit, undo or evidence decision made after the report walk's `run.started`; a box move does not count. The page shows "Written before your latest changes." with "Update the report", and the `ActionLine` while the update runs; the old report stays until the swap | backend read test; frontend test |
+| A18 | § 4 E: the audit's findings 3–17, as ruled in § 8, are closed or recorded as kept. The detail panel's content and order are unchanged | the lead's checklist in `verification.md`; polish pass sign-off |
+| A19 | The copy in § 8 is shipped word for word. The copy guard in `runProgress.test.ts` lists the ToC labels | grep-based test of the strings where practical; polish review |
+| A20 | Live: on the 3 local tasks on `bedrock`, a full draft and check shows one card, the status bar and a streamed report. The time to first words and the report's wall time are recorded against today's | `verification.md` live section |
+| A21 | The upload's read reports as `toc_read`: the runner stamps `"stage"` on the `review_first` draft walk's payloads and `stage_for_payload` reads it first | backend test: the same component reports `toc_draft` in a draft walk and `toc_read` in an upload's |
+| A22 | Only a first report streams. "Update the report", and a check while a report exists, send no section frames; the old report stays until the swap | backend test (no `artefact.section_delta` on an update); frontend test |
+| A23 | Between the walks the card stays "Running" with the draft row done; a refused check ends the card with the draft's finish words and today's refusal message | `RunTrace` test with a two-walk fixture and a refused check |
+| A24 | Evidence search and Options scoping are unchanged: their stage, live-frame and run-trace tests pass with no edits, at the phase 3, 4 and 6 gates | `make verify`; the diff shows no edits to those tests |
 
 ## 10. Spec changes
 
@@ -247,6 +294,7 @@ Draft list, to be made testable in phase 2:
 | S-1 | `docs/specs/system/web-api.md` § SSE: the stage-key list gains the ToC keys (S1) | accepted by the owner 2026-11-09; applied in phase 2 and logged in `docs/specs/log.md` |
 | S-2 | `docs/specs/capabilities/theory-of-change/capability.md`: the report streams to the page as it is written (its content is unchanged) | accepted by the owner 2026-11-09; applied in phase 2 and logged in `docs/specs/log.md` |
 | S-3 | The same file: the canvas colours each connection as it is judged; a report written before the reader's edits says so | accepted by the owner 2026-11-09; applied in phase 2 and logged in `docs/specs/log.md` |
+| S-4 (possible) | `docs/specs/system/web-api.md` § SSE: the skeleton frame names a part's role (`LiveSectionRole`, S6), if phase 4 cannot place the ToC header parts without it | not yet proposed; the lead brings it to the owner at phase 4 only if needed |
 
 ## 11. ADR
 

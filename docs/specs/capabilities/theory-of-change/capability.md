@@ -484,6 +484,12 @@ Design a theory of change".
   short questions, one at a time, each tied to one box or link that the canvas
   highlights: the critical connection failing here, mechanism, scope and population, failure. Replies are
   two to four sentences and use only the theory and its evidence.
+- 🟡 **The report streams** to the page as it is written; its content is the same as a report
+  written without streaming (task 054, 058 alignment, S-2).
+- 🟡 **The canvas colours each connection as it is judged**, during the check rather than at its
+  end; a grade may shift once more when classification and appraisal land. **A report written
+  before the reader's edits says so**: "Written before your latest changes.", with "Update the
+  report" (task 054, 058 alignment, S-3).
 - 🟡 **Discuss.** The existing chat, with the graph and its evidence as context, through the
   existing grounded-answer path. It does not edit the graph.
 - 🟡 **Canvas editing.** Add, edit, delete and connect boxes; edit a link's sentence and

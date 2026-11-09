@@ -1,5 +1,14 @@
 # Spec update log
 
+## 2026-11-09 (task 054, the 058 alignment pass)
+Owner-accepted spec changes S-1 to S-3 of
+[plan-058-alignment.md](../tasks/054-toc-integration/plan-058-alignment.md) § 10.
+* **Update**: [Web API § SSE](system/web-api.md) — the stage-key list gains the theory-of-change
+  keys (S-1), so a ToC walk's steps reach the client as stage frames with server copy.
+* **Update**: [ToC capability § Product surface](capabilities/theory-of-change/capability.md) — the
+  report streams to the page as it is written, its content unchanged (S-2); the canvas colours each
+  connection as it is judged, and a report written before the reader's edits says so (S-3).
+
 ## 2026-11-05 (task 054, review before the merge to `dev`)
 Owner rulings of 2026-11-03 to 2026-11-05, given in chat during the live feedback rounds, flowed
 back at the review stack. ADR 0042 § Amendment 2026-11-05 records the as-built state.

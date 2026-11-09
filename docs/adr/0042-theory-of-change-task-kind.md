@@ -170,6 +170,29 @@ Recorded by the review stack (task-cycle step 7) against `task/054-1-core`, befo
   "each revision refuses only while its own data exists": as built, the two value-mapping
   revisions keep every row instead of refusing.
 
+## Amendment, 2026-11-09: aligned with task 058
+
+Task 058 (ADR [0044](0044-live-activity-streamed-sections-one-copy-source.md)) merged into this branch
+on 2026-11-09. The owner then asked for three things: one progress surface, a streamed report, and a
+consistent presentation (`docs/tasks/054-toc-integration/plan-058-alignment.md`).
+
+- **The server owns the ToC's progress words.** Fifteen ToC stage keys join the pinned stage
+  vocabulary (web API § SSE), with server labels, rows and counts. Each fan-out of item searches
+  has its own key and its step's label, and the two render as one row. The client's own ToC step table (`TocTrace`) goes, and ToC walks
+  use the shared run trace.
+- **A draft and the check the server starts after it read as one run.** The server keeps two walks
+  and exposes the follow-on link it already records (`draft_run_id`). An uploaded theory still
+  stops after its read for the reader to check it.
+- **The report streams; its content does not change.** Today's `toc_report_v7` call streams
+  unchanged through 058's frames, with one non-streamed fallback. Writing section by section, the
+  grounding judge with repair, Terra against Sol, and the shared synthesis go to a follow-up PR,
+  after a colleague's manual quality checks. Evidence: `research/report-synthesis-feasibility/`.
+  Bedrock refuses Sol with function tools on Chat Completions; moving to the Responses API is
+  seeded as its own system-level task.
+- **The judge commits connection by connection**, so the canvas colours each connection as it is
+  judged.
+- **A report written before the reader's edits says so.**
+
 ## Consequences
 
 - Positive: a policy team gets a Magenta Book theory of change whose every step shows, in

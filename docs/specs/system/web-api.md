@@ -778,11 +778,19 @@ Frame vocabulary (discriminated union, `type` names are contract):
 | `search.query` | `{backend, query, kind, results, occurred_at, ephemeral: true}` | **ephemeral**: a search query as it runs, normalised and bounded (task 058, round 9) |
 | `characterise.themes` | `{themes: [{label, description}], stage, occurred_at, ephemeral: true}` | **ephemeral**: the themes as they are found (task 058, round 9) |
 
-`stage` keys are the pinned stable component vocabulary, nineteen keys
-(task 058, S1). Evidence search: `acquire`, `screen`, `classify`, `appraise`,
-`ingest`, `characterise`, `select`, `extract`, `group`, `synthesise`. Options
-scoping: `inherit`, `suggest`, `option_searches`, `extract_interventions`,
-`longlist`, `option_profile`, `constrain`, `theme`, `shortlist`. Labels,
+`stage` keys are the pinned stable component vocabulary, thirty-four keys
+(task 058, S1; task 054's 058 alignment). Evidence search: `acquire`, `screen`,
+`classify`, `appraise`, `ingest`, `characterise`, `select`, `extract`, `group`,
+`synthesise`. Options scoping: `inherit`, `suggest`, `option_searches`,
+`extract_interventions`, `longlist`, `option_profile`, `constrain`, `theme`,
+`shortlist`. Theory of change: `toc_draft`, `toc_read` (the draft walk of an
+uploaded theory), `toc_item_searches`, `toc_select`, `toc_discover`,
+`toc_merge`, `toc_search_new`, `toc_new_link_searches`, `toc_judge`,
+`toc_search_again`, `toc_retry_searches`, `toc_figures`, `toc_choose`,
+`toc_summarise`, `toc_report`; the check also uses the shared `classify` and
+`appraise`. Each fan-out of item searches has its own key and the same label as
+the step that runs it. A ToC walk has no plan steps, so its rows come from the
+frames alone; frames with the same label render as one row. Labels,
 blurbs and the activity text are server-supplied presentation from one table
 (`api/stage_vocabulary.py`, task 058 N17) and may change; the client renders
 them and keeps no stage copy of its own. A plan step carries a `row` key:
