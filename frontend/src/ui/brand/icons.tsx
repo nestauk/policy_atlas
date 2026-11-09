@@ -212,6 +212,15 @@ export function CheckCircleIcon({ filled = false, ...props }: IconProps & { fill
   );
 }
 
+/** Done: a check, after a settled step's name (the plan stepper). */
+export function CheckIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M3.5 8.5 6.5 11.5 12.5 4.75" />
+    </Glyph>
+  );
+}
+
 /** More: a list row's own menu (Rename, Add to project, Archive; owner,
  *  round 12). Three dots across the grid's middle, drawn as round-capped
  *  zero-length strokes so they take the module's stroke weight. */

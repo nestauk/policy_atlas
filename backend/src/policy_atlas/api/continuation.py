@@ -835,7 +835,10 @@ def _persist_intent(
     kind, value = intent
     chosen = {"option_id": option_id} if option_id is not None else None
     if kind == "abort":
-        return _persist_abort(conn, task_id=task_id, pause=pause, state=state, actor=actor)
+        # Task 058 review: the abort chosen from a card option names it too.
+        return _persist_abort(
+            conn, task_id=task_id, pause=pause, state=state, actor=actor, extra=chosen
+        )
     if kind == "continue":
         decision_id = _append_decision(
             conn,
@@ -1105,6 +1108,7 @@ def _persist_abort(
     pause: _Pause,
     state: Any,
     actor: str,
+    extra: dict[str, Any] | None = None,
 ) -> AnswerResult:
     """Record an abort and terminally mark the parked capability run.
 
@@ -1112,10 +1116,18 @@ def _persist_abort(
     finding, 2026-07-21): the plan flips to ``abandoned`` in the same
     transaction, and a ``run.finished`` event carries the terminal status so
     SSE replay and the live store see the walk end — without it the workspace
-    showed an aborted run as still paused forever.
+    showed an aborted run as still paused forever. ``extra`` is the
+    decision's extra record, as for the other decisions: the chosen card
+    option's id when the abort came from one.
     """
     decision_id = _append_decision(
-        conn, task_id=task_id, pause=pause, state=state, response="abort", action=None
+        conn,
+        task_id=task_id,
+        pause=pause,
+        state=state,
+        response="abort",
+        action=None,
+        extra=extra,
     )
     if state.plan_row_id is not None:
         conn.execute(

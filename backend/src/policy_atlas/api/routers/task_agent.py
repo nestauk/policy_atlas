@@ -1351,18 +1351,21 @@ def _planner_turn(
         )
     # Round 14 (owner): at the step 1 decision itself, the question part
     # answered, Policy Atlas names the task from the refined question unless
-    # the user has named it. After the commit, in this worker, before the
-    # stream's completed line, so the header changes with the decision.
+    # the user has named it. After the commit, on its own thread as
+    # ``patch_plan`` does (task 058 review): the title call no longer holds up
+    # the stream's completed line or the turn lock. A naming failure is
+    # logged there and never fails the committed turn.
     confirmed = _confirmed_question(turns, draft)
     if confirmed is not None:
-        try:
-            # Under the turn's own user scope; the call carries the task's
-            # session, as the turn's planner call does.
+
+        def _name_task() -> None:
+            # Under the turn's own user scope (opened in the new thread:
+            # context variables do not cross a thread start); the call
+            # carries the task's session, as the turn's planner call does.
             with tracing.trace_scope(user_id=user_id):
                 name_task_from_question(engine, titles, task_id=task_id, question=confirmed)
-        except Exception:
-            # The turn is committed; a naming failure never fails it.
-            log.warning("task.title_hook_failed", task_id=str(task_id), exc_info=True)
+
+        in_background(_name_task, name=f"policy-atlas-task-title-{task_id}")
     return result
 
 

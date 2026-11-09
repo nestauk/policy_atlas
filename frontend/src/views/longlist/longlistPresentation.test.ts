@@ -106,7 +106,9 @@ describe("longlist presentation (task 046)", () => {
     expect(rowMetaFields({ ...option, search_pending: true }, null, null)).toEqual(["searching for its evidence…"]);
     expect(
       rowMetaFields({ ...option, document_count: 0, no_in_scope_evidence: true }, null, "Staying in work"),
-    ).toEqual(["Staying in work", "No documents yet", "No in-scope evidence"]);
+    ).toEqual(["Staying in work", "No documents", "No in-scope evidence"]);
+    // While the list is built it reads "yet" (lead, design lane review).
+    expect(rowMetaFields({ ...option, document_count: 0 }, null, null, true)).toEqual(["No documents yet"]);
   });
 
   // Round 10, C1: one origin vocabulary; the card adds the report's section.
@@ -214,7 +216,8 @@ describe("longlist presentation (amendment 4)", () => {
       "No evaluations, 3 documents describe it",
     );
     expect(evidenceSignal({ ...signal, evaluated_countries: [] })).toContain(" · No evaluation gives a place · ");
-    expect(evidenceSignal({ ...signal, document_count: 0, evaluated_count: 0 })).toBe("No documents yet");
+    expect(evidenceSignal({ ...signal, document_count: 0, evaluated_count: 0 })).toBe("No documents");
+    expect(evidenceSignal({ ...signal, document_count: 0, evaluated_count: 0 }, true)).toBe("No documents yet");
   });
 
   it("words the signal's small cases", () => {

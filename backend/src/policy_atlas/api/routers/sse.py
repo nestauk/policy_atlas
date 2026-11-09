@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
-from collections.abc import AsyncIterator, Collection, Iterable
+from collections.abc import AsyncIterator, Collection, Iterable, Iterator
 from functools import partial
 from typing import Annotated, Any, cast
 
@@ -846,6 +846,22 @@ def _encode_ephemeral(message: HubMessage) -> str:
     return f"event: {frame.type}\ndata: {frame.model_dump_json()}\n\n"
 
 
+def _ephemeral_lines(messages: Iterable[HubMessage]) -> Iterator[str]:
+    """Encode each ephemeral message, skipping one that cannot be encoded.
+
+    The hub remembers what it sent, so one bad message would otherwise close
+    every reader's stream on every reconnect. The skip logs the message's
+    type only, never its text.
+    """
+    for message in messages:
+        try:
+            yield _encode_ephemeral(message)
+        except ValueError:
+            # Pydantic's serialisation error and UnicodeEncodeError are both
+            # ValueErrors (a lone surrogate raises either).
+            log.warning("api.sse_ephemeral_skipped", message_type=type(message).__name__)
+
+
 def _source_refs(sources: tuple[SourceRef, ...]) -> list[SectionSourceRef]:
     """Name each ``(source_id, title)`` pair as the frame carries it."""
     return [SectionSourceRef(source_id=source_id, title=title) for source_id, title in sources]
@@ -877,8 +893,8 @@ async def stream_events(
         try:
             for frame in replay:
                 yield _encode_frame(frame)
-            for message in cached:
-                yield _encode_ephemeral(message)
+            for line in _ephemeral_lines(cached):
+                yield line
             while True:
                 now = asyncio.get_running_loop().time()
                 heartbeat_remaining = max(
@@ -916,10 +932,13 @@ async def stream_events(
                     log.info("api.sse_revoked", task_id=str(task_id))
                     return
                 last_sequence, tail = batch
-                for message in pending:
-                    yield _encode_ephemeral(message)
+                # Durable rows first: a run's ``run.opened`` and its first
+                # ticks can share a batch, and a tick ahead of it would be
+                # dropped as another walk's.
                 for frame in tail:
                     yield _encode_frame(frame)
+                for line in _ephemeral_lines(pending):
+                    yield line
                 next_sequence = last_sequence + 1
                 now = asyncio.get_running_loop().time()
                 if now - last_heartbeat >= settings.sse_heartbeat_seconds:

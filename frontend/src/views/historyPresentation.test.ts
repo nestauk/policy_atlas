@@ -110,6 +110,20 @@ describe("mergeHistory", () => {
     expect(row.sentence).toBe("You wrote: “Refine”. This didn't send.");
   });
 
+  it("adds no full stop after a quote that ends its own sentence (design lane review)", () => {
+    const failed = [{ turn_index: 1, created_at: "2026-07-28T09:05:00Z", user_message: "Why the UK?", status: "failed" as const }];
+    expect(mergeHistory([], failed)[0].sentence).toBe("You wrote: “Why the UK?” This didn't send.");
+    const chose = [
+      {
+        turn_index: 1,
+        created_at: "2026-07-28T09:05:00Z",
+        user_message: "Looks right.\n\n[confirm part=question option=confirm]",
+        status: "completed" as const,
+      },
+    ];
+    expect(mergeHistory([], chose)[0].sentence).toBe("You chose “Looks right.”");
+  });
+
   it("gives a turn with a reply a details entry, and one without none", () => {
     const turns = [
       { turn_index: 0, created_at: "2026-07-28T09:00:00Z", user_message: "Start", reply: "Here is the plan.", status: "completed" as const },

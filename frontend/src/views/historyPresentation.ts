@@ -1,7 +1,7 @@
 import { formatDate } from "../lib/dates";
 import { friendlyDecisionDetails } from "./decisionsPresentation";
 import { confirmTarget } from "./workspace/PartCard";
-import { formatMinutes } from "./workspace/runProgress";
+import { formatElapsed } from "./workspace/runProgress";
 
 /** A detail line under a row, shown when the reader opens it. */
 type HistoryDetail = { label: string; value: string };
@@ -136,6 +136,12 @@ function stringField(detail: DecisionLike["detail"], key: string): string | null
  * card's own `confirmTarget`); it reads as the choice, and a scope edit as
  * its changes, one per line (lead ruling H3, wording P7).
  */
+/** The full stop after a closing quote, left out when the quoted words end
+ *  their own sentence (no "“Why?”."). */
+function stopAfter(quoted: string): string {
+  return /[.?!]$/.test(quoted) ? "" : ".";
+}
+
 function turnSentence(turn: TurnLike, subject: string): { sentence: string; lines?: string[] } {
   const message = turn.user_message.trim();
   const failed = turn.status === "failed" ? " This didn't send." : "";
@@ -148,10 +154,10 @@ function turnSentence(turn: TurnLike, subject: string): { sentence: string; line
         lines: rest.map((line) => line.replace(/^-\s*/, "")),
       };
     }
-    return { sentence: `${subject} chose “${body}”.${failed}` };
+    return { sentence: `${subject} chose “${body}”${stopAfter(body)}${failed}` };
   }
   const verb = turn.turn_index === 0 ? "asked" : "wrote";
-  return { sentence: `${subject} ${verb}: “${message}”${failed === "" ? "" : `.${failed}`}` };
+  return { sentence: `${subject} ${verb}: “${message}”${failed === "" ? "" : `${stopAfter(message)}${failed}`}` };
 }
 
 /** A run's search row's terms: every query it sent (the server's
@@ -182,7 +188,7 @@ function runLine(
   const Noun = noun[0].toUpperCase() + noun.slice(1);
   const start = Date.parse(steps[0].at);
   const end = Date.parse(steps[steps.length - 1].at);
-  const time = formatMinutes((end - start) / 1000);
+  const time = formatElapsed((end - start) / 1000, { withSeconds: false });
   if (kinds.includes("run.interrupted") || endStatus === "aborted" || endStatus === "interrupted") {
     return { sentence: `${Noun} stopped · ${time}`, failed: true };
   }

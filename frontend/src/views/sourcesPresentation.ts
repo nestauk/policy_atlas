@@ -58,7 +58,7 @@ export function filterChipClass(active: boolean): string {
 /**
  * The filter bar's controls (task 058, round 11): one row on one baseline,
  * every control a 32 px outline box at Meta size. Idle, a control is the
- * outline button (Line 2 border, Navy Semibold, hover #f0f0f3); a filter
+ * outline button (Line 2 border, Navy Semibold, hover `hover-fill`); a filter
  * that narrows the view is a filled Navy chip with its ×; the screening
  * switch's chosen choice takes a Navy border and Navy words, the others Grey
  * (the longlist's outline switch, at the bar's height). The chip is
@@ -67,7 +67,7 @@ export function filterChipClass(active: boolean): string {
  */
 export function switchChoiceClass(chosen: boolean): string {
   return `${FILTER_CONTROL_BASE} bg-paper ${
-    chosen ? "relative z-10 border-navy text-navy" : "border-line-2 text-grey hover:bg-[#f0f0f3] hover:text-navy"
+    chosen ? "relative z-10 border-navy text-navy" : "border-line-2 text-grey hover:bg-hover-fill hover:text-navy"
   }`;
 }
 

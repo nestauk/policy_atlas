@@ -55,6 +55,16 @@ const STRENGTH_TONES: Record<StrengthTier, StrengthTone> = {
   Unrated: "weak",
 };
 
+/**
+ * The strength's word as the vocabulary writes it ("moderate" and " Strong "
+ * read "Moderate" and "Strong"); a word outside the vocabulary is kept as
+ * it came.
+ */
+export function strengthTierName(tier: string): string {
+  const wanted = tier.trim().toLowerCase();
+  return STRENGTH_TIERS.find((name) => name.toLowerCase() === wanted) ?? tier;
+}
+
 /** The strength's tone, or `null` for a tier the vocabulary does not hold. */
 export function strengthTone(tier: string | null | undefined): StrengthTone | null {
   if (!tier) return null;

@@ -30,10 +30,10 @@ export const buttonVariants = cva(
           `cutout bg-blue font-bold text-white hover:bg-blue-pressed ${CUT_FOCUS_RING} ` +
           "disabled:bg-line-2 disabled:text-white",
         secondary:
-          "bg-transparent font-semibold text-navy hover:bg-[#f0f0f3] " +
+          "bg-transparent font-semibold text-navy hover:bg-hover-fill " +
           "disabled:text-line-2 disabled:hover:bg-transparent",
         outline:
-          "border border-line-2 bg-paper font-semibold text-navy hover:bg-[#f0f0f3] " +
+          "border border-line-2 bg-paper font-semibold text-navy hover:bg-hover-fill " +
           "disabled:text-line-2 disabled:hover:bg-paper",
         ghost:
           "bg-transparent font-semibold text-grey hover:text-navy " +

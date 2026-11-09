@@ -142,6 +142,43 @@ def test_the_stream_sends_progress_deltas_and_one_completed_turn(
     assert replay.events[0]["turn"] == turn
 
 
+def test_the_completed_line_does_not_wait_for_the_task_title(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Task 058 review: the title is written on its own thread, after the turn."""
+    _reset_turn_locks()
+    release = threading.Event()
+    calls: list[tuple[uuid.UUID, bool]] = []
+    done = threading.Event()
+
+    def _gated_title(_engine: Any, _titles: Any, *, task_id: uuid.UUID, question: Any) -> None:
+        # Held until the test has read the stream's completed line; a title
+        # written inside the stream worker would hold that line back instead.
+        calls.append((task_id, release.wait(timeout=5)))
+        done.set()
+
+    monkeypatch.setattr(task_agent_router, "name_task_from_question", _gated_title)
+    with api_client(tmp_path, {get_task_agent_backend: PiecewiseTaskAgent}) as (
+        client,
+        owner,
+        _,
+    ):
+        task_id = create_task(client, owner)
+        post_turn(client, _url(task_id), headers=owner, json=_body())
+        confirmed = post_turn(
+            client,
+            _url(task_id),
+            headers=owner,
+            json=_body("Yes\n\n[confirm part=question option=as_written]"),
+        )
+        types = [event["type"] for event in confirmed.events]
+        release.set()
+        assert done.wait(timeout=5)
+
+    assert types[-1] == "completed"
+    assert calls == [(uuid.UUID(task_id), True)]
+
+
 def test_a_planner_failure_is_one_failed_line_and_the_row_is_failed(
     engine: Engine, tmp_path: Path
 ) -> None:

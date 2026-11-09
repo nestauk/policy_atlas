@@ -128,6 +128,16 @@
   --color-on-navy-soft: #c5d0dc; /* secondary text on the navy panel */
   --color-on-navy-muted: #97a8bc; /* labels and meta on the navy panel */
 
+  /* Defined once (design lane review; owner round 12): the values the
+     components used to write inline. */
+  --color-hover-fill: #f0f0f3; /* secondary, outline and idle-chip hover */
+  --color-green-deep: #0c6b5a; /* text on Green Tint; a settled choice's words */
+  --color-yellow-deep: #8a5a00; /* text on Yellow Tint */
+  --color-blue-tint-edge: #c7c7ff; /* the blue chip's border */
+  --color-green-tint-edge: #b7e0d8; /* the green chip's border */
+  --color-yellow-tint-edge: #f3d99a; /* the yellow chip's border */
+  --color-red-tint-edge: #f4b8c6; /* the red chip's border */
+
   --color-violet-tint: #efedfc; /* the higher level word on a profile line (046) */
   --color-aqua-tint: #e6f5f7; /* the lower level word on a profile line (046) */
 
@@ -517,6 +527,10 @@
  * ------------------------------------------------------------------------- */
 @theme {
   --shadow-paper: 0 1px 3px rgba(15, 41, 74, 0.05), 0 8px 24px rgba(15, 41, 74, 0.04);
+  /* Overlay lift: popovers, sheets, toasts, the docked sidebar, jump to end. */
+  --shadow-overlay: 0 10px 30px rgba(15, 41, 74, 0.14);
+  /* Tooltip lift: tooltips only. */
+  --shadow-tooltip: 0 4px 16px rgba(15, 41, 74, 0.12);
 }
 
 @keyframes revise-in {

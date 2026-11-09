@@ -538,6 +538,94 @@ def test_the_note_is_rewritten_only_when_the_places_have_moved(
         assert note_lines() == ["Policy Atlas updated the shortlist note."]
 
 
+def _stale_note(engine: Engine, built: _Built) -> None:
+    """Store a proposal note written against no places, so a refresh writes."""
+    with engine.begin() as conn:
+        conn.execute(
+            longlist_result.update()
+            .where(longlist_result.c.task_id == built.task_id)
+            .values(
+                shortlist={
+                    "note": "Old note.",
+                    "provenance": {"appetite": "mostly_tried"},
+                    "places_at": [],
+                }
+            )
+        )
+
+
+def test_a_note_refresh_carries_the_tasks_session(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Task 058 review: the ``shortlist:note`` traces had no session id."""
+    from contextlib import contextmanager
+
+    from policy_atlas.core import tracing
+
+    scopes: list[dict[str, Any]] = []
+
+    @contextmanager
+    def fake_propagate_attributes(**attributes: Any) -> Any:
+        scopes.append(attributes)
+        yield
+
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
+        built = _org_build(engine, owner, colleague, linked=False)
+        guarantee = built.options["Youth guarantee"]
+        _stale_note(engine, built)
+        assert _post(client, built, guarantee, "shortlist", owner.headers).status_code == 200
+        monkeypatch.setattr(tracing, "propagate_attributes", fake_propagate_attributes)
+        refreshed = client.post(
+            f"/api/v1/tasks/{built.task_id}/shortlist/note", headers=owner.headers
+        )
+
+    assert refreshed.status_code == 200, refreshed.text
+    assert {"session_id": str(built.task_id), "user_id": owner.user_id} in scopes
+
+
+def test_a_note_with_a_link_has_the_link_taken_out(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Plan P5: the note shows no link. The proposal re-asked a note with one
+    (``test_a_note_with_a_link_re_asks_naming_it`` on dev); the note's own step
+    has no re-ask wording, so its writer takes the link out (task 058 review)."""
+    from types import SimpleNamespace
+
+    from policy_atlas.options_scoping.scoping_backend import StubLonglistBackend
+    from policy_atlas.options_scoping.shortlist.shortlist_note_prompt import (
+        ShortlistNoteWire,
+    )
+
+    writer = StubLonglistBackend(
+        shortlist_note_responses=ShortlistNoteWire(
+            note="Leaves out [the pilot](https://example.org/p) and see www.example.org. too."
+        )
+    )
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
+        built = _org_build(engine, owner, colleague, linked=False)
+        _stale_note(engine, built)
+        guarantee = built.options["Youth guarantee"]
+        assert _post(client, built, guarantee, "shortlist", owner.headers).status_code == 200
+        # The refresh reads only the bundle's longlist writer.
+        app: Any = client.app
+        app.dependency_overrides[get_runner_backends] = lambda: SimpleNamespace(
+            longlist=writer
+        )
+        refreshed = client.post(
+            f"/api/v1/tasks/{built.task_id}/shortlist/note", headers=owner.headers
+        )
+
+    assert refreshed.status_code == 200, refreshed.text
+    assert writer.calls["shortlist_note"] == 1
+    with engine.connect() as conn:
+        stored = conn.execute(
+            select(longlist_result.c.shortlist).where(
+                longlist_result.c.task_id == built.task_id
+            )
+        ).scalar_one()
+    assert stored["note"] == "Leaves out the pilot and see too."
+
+
 def test_a_note_refresh_opens_no_run_and_writes_only_its_history_line(
     engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -458,13 +458,14 @@ def test_a_full_queue_counts_dropped_messages_and_the_next_tick_carries_the_coun
             hub.publish_tick(TASK, stage="classify", activity=f"line {i}")
             await asyncio.sleep(0)
         await asyncio.sleep(0)
-        assert hub.dropped(TASK) == 3
+        # Two overflows (lines 2 and 4), each one resync of the stage's latest line.
+        assert hub.dropped(TASK) == 2
 
         watcher = await hub.subscribe(TASK)
         clock.now = 10.0
         hub.publish_tick(TASK, stage="classify", activity="line 5")
         sixth = _ticks(await _drain(watcher))
-        assert sixth[0].dropped == 3
+        assert sixth[0].dropped == 2
 
     _run(body)
 
@@ -512,35 +513,40 @@ def test_context_helpers_publish_for_the_bound_task_and_stage(
     _run(body)
 
 
-def test_a_held_tick_schedules_one_flush_per_key_and_an_open_call_one_sweep() -> None:
+def test_a_held_tick_schedules_one_flush_per_key_and_memory_one_sweep() -> None:
     scheduled: list[tuple[float, Callable[[], None]]] = []
     clock = FakeClock()
     hub = TickHub(clock=clock, schedule=lambda delay, fn: scheduled.append((delay, fn)))
 
     hub.publish_tick(TASK, stage="classify", activity="first")
     hub.publish_tick(TASK, stage="screen", activity="first")
-    assert scheduled == []
+    # The first message arms one sweep, open call or not: memory is forgotten
+    # even when a run dies without ending.
+    assert [delay for delay, _fn in scheduled] == [HEARTBEAT_SECONDS]
     clock.now = 0.1
     for i in range(5):
         hub.publish_tick(TASK, stage="classify", activity=f"held {i}")
         hub.publish_tick(TASK, stage="screen", activity=f"held {i}")
-    assert len(scheduled) == 2
-    assert all(delay == pytest.approx(COALESCE_SECONDS - 0.1) for delay, _fn in scheduled)
+    assert len(scheduled) == 3
+    assert all(delay == pytest.approx(COALESCE_SECONDS - 0.1) for delay, _fn in scheduled[1:])
 
     hub.call_opened(TASK, "classify")
     hub.call_opened(TASK, "screen")
-    assert len(scheduled) == 3
-    assert scheduled[2][0] == HEARTBEAT_SECONDS
+    assert len(scheduled) == 3  # the sweep is armed already
 
-    # A due flush clears the hold; the timer's sweep reschedules while a call is open.
+    # A due flush clears the hold; the timer's sweep re-arms while a task is remembered.
     clock.now = 1.0
-    scheduled[0][1]()
-    assert hub._tasks[TASK].stages[("classify", None)].pending is None
+    scheduled[1][1]()
     scheduled[2][1]()
+    assert hub._tasks[TASK].stages[("classify", None)].pending is None
+    scheduled[0][1]()
     assert len(scheduled) == 4 and scheduled[3][0] == HEARTBEAT_SECONDS
     hub.call_closed(TASK, "classify")
     hub.call_closed(TASK, "screen")
+    clock.now = 1.0 + MEMORY_TTL_SECONDS
     scheduled[3][1]()
+    # Everything went stale and was forgotten: no further sweep.
+    assert TASK not in hub._tasks
     assert len(scheduled) == 4
 
 
@@ -593,10 +599,11 @@ def test_snapshot_sends_the_draft_then_the_sources_then_each_claim() -> None:
         hub, _clock = _hub()
         hub.publish_sources(TASK, index=2, sources=[("a", "Smith 2023")])
 
-        # Sources before any text: no empty draft is sent, only the set.
+        # Sources before any text: an empty replace, then the set.
         queue, early = await hub.subscribe_with_snapshot(TASK)
         await hub.unsubscribe(TASK, queue)
-        assert len(early) == 1 and isinstance(early[0], SectionSources)
+        assert [type(m) for m in early] == [SectionDelta, SectionSources]
+        assert isinstance(early[0], SectionDelta) and early[0].text == ""
 
         hub.publish_delta(TASK, index=2, text="First. Second.")
         hub.publish_sources(TASK, index=2, sources=[("b", "DfE 2022")])
@@ -679,7 +686,8 @@ def test_sources_and_claims_count_as_dropped_on_a_full_queue() -> None:
         hub.publish_claim(TASK, index=0, start=0, end=1, sources=[("a", "A 2020")])
         await asyncio.sleep(0)
         await asyncio.sleep(0)
-        assert hub.dropped(TASK) == 2
+        # One overflow, one resync: the later messages are in it.
+        assert hub.dropped(TASK) == 1
 
     _run(body)
 
@@ -724,9 +732,11 @@ def test_cards_are_sent_and_remembered_in_order_and_a_snapshot_sends_them_after_
 
         queue, snapshot = await hub.subscribe_with_snapshot(TASK)
         await hub.unsubscribe(TASK, queue)
-        # No text was streamed for the slot: only the cards, in order.
+        # No text was streamed for the slot: an empty replace comes first, so
+        # a reconnecting client drops the cards it held, then the cards in order.
+        assert [type(m) for m in snapshot] == [SectionDelta, SectionCard, SectionCard]
+        assert isinstance(snapshot[0], SectionDelta) and snapshot[0].text == ""
         assert [m.title for m in snapshot if isinstance(m, SectionCard)] == ["Leeds", "Bristol"]
-        assert len(snapshot) == 2
 
         # A draft for the same slot comes first, then the cards.
         hub.publish_delta(TASK, index=1, text="Some text.")
@@ -802,7 +812,7 @@ def test_cards_count_as_dropped_on_a_full_queue() -> None:
         hub.publish_card(TASK, index=1, title="C", prose="c")
         await asyncio.sleep(0)
         await asyncio.sleep(0)
-        assert hub.dropped(TASK) == 2
+        assert hub.dropped(TASK) == 1
 
     _run(body)
 
@@ -899,7 +909,7 @@ def test_source_notes_count_as_dropped_on_a_full_queue() -> None:
             hub.publish_source_note(TASK, source_id=f"s{n}", title="T", note="N.")
         await asyncio.sleep(0)
         await asyncio.sleep(0)
-        assert hub.dropped(TASK) == 2
+        assert hub.dropped(TASK) == 1
 
     _run(body)
 
@@ -1051,7 +1061,7 @@ def test_queries_count_as_dropped_on_a_full_queue() -> None:
             )
         await asyncio.sleep(0)
         await asyncio.sleep(0)
-        assert hub.dropped(TASK) == 2
+        assert hub.dropped(TASK) == 1
 
     _run(body)
 
@@ -1099,5 +1109,186 @@ def test_context_helpers_publish_queries_and_themes_for_the_bound_task(
         sent = await _drain(queue)
         assert [type(m) for m in sent] == [SearchQuery, ThemesFound, ThemesFound]
         assert [m.stage for m in sent if isinstance(m, ThemesFound)] == ["characterise", "theme"]
+
+    _run(body)
+
+
+# --- Review fixes (task 058 review stack) ------------------------------------
+
+
+def test_a_lone_surrogate_reaches_a_subscriber_as_a_replaced_character() -> None:
+    async def body() -> None:
+        hub, _clock = _hub()
+        queue = await hub.subscribe(TASK)
+        hub.publish_delta(TASK, index=0, text="a\ud800b", mode="replace")
+        hub.publish_tick(TASK, stage="synthesise", activity="Writing \udfff", section="C\ud800")
+        sent = await _drain(queue)
+        delta, tick = sent
+        assert isinstance(delta, SectionDelta) and delta.text == "a?b"
+        assert isinstance(tick, Tick) and (tick.activity, tick.section) == ("Writing ?", "C?")
+        draft = hub._tasks[TASK].draft
+        assert draft is not None and draft.text == "a?b"
+
+    _run(body)
+
+
+def test_a_search_query_is_normalised_bounded_and_keyed_on_the_clean_text() -> None:
+    async def body() -> None:
+        hub, _clock = _hub()
+        queue = await hub.subscribe(TASK)
+        hub.publish_search_query(
+            TASK, backend="openalex", query="school‍ meals‮", kind="topic", results=None
+        )
+        hub.publish_search_query(
+            TASK, backend="openalex", query="school meals", kind="topic", results=4
+        )
+        hub.publish_search_query(
+            TASK, backend="openalex", query="x" * 400, kind="semantic", results=None
+        )
+        sent = [m for m in await _drain(queue) if isinstance(m, SearchQuery)]
+        assert [m.query for m in sent[:2]] == ["school meals", "school meals"]
+        assert len(sent[2].query) == liveness.SEARCH_QUERY_MAX == 300
+        # The query that came back replaced the one that went out.
+        assert list(hub._tasks[TASK].search_queries) == [
+            ("openalex", "school meals", "topic"),
+            ("openalex", "x" * 300, "semantic"),
+        ]
+
+    _run(body)
+
+
+def test_normalise_query_keeps_its_activity_default() -> None:
+    assert liveness.normalise_query("a‍b  c‮" + "y" * 200) == ("ab c" + "y" * 200)[:120]
+    assert liveness.normalise_query(None) == ""
+
+
+def test_a_run_that_died_without_ending_is_forgotten_after_the_ttl() -> None:
+    hub, clock = _hub()
+    run = uuid.uuid4()
+    hub.begin_run(TASK, run)
+    hub.publish_tick(TASK, stage="classify", activity="Classifying", run_id=run)
+    hub.publish_delta(TASK, index=0, text="Draft", mode="replace")
+    clock.now = MEMORY_TTL_SECONDS - 1
+    hub.sweep()
+    assert TASK in hub._tasks  # still fresh: kept
+    clock.now = MEMORY_TTL_SECONDS + 1
+    hub.sweep()
+    assert TASK not in hub._tasks
+
+
+def test_an_open_call_keeps_its_stage_fresh_and_heartbeating_past_the_ttl() -> None:
+    async def body() -> None:
+        hub, clock = _hub()
+        queue = await hub.subscribe(TASK)
+        hub.call_opened(TASK, "synthesise")
+        hub.publish_tick(TASK, stage="synthesise", activity="Writing")
+        await _drain(queue)
+        beats = []
+        for at in (700.0, 710.0):
+            clock.now = at
+            hub.sweep()
+            beats += [t for t in _ticks(await _drain(queue)) if t.heartbeat]
+        assert [t.activity for t in beats] == ["Writing", "Writing"]
+        assert hub._tasks[TASK].stages[("synthesise", None)].last is not None
+
+    _run(body)
+
+
+def test_an_empty_draft_after_the_fallback_still_sends_a_replace_before_the_cards() -> None:
+    async def body() -> None:
+        hub, _clock = _hub()
+        hub.publish_delta(TASK, index=1, text="The old reply.")
+        hub.publish_delta(TASK, index=1, text="", mode="replace")  # the fallback
+        hub.publish_card(TASK, index=1, title="Leeds", prose="Breakfast.")
+        queue, snapshot = await hub.subscribe_with_snapshot(TASK)
+        await hub.unsubscribe(TASK, queue)
+        assert [type(m) for m in snapshot] == [SectionDelta, SectionCard]
+        first = snapshot[0]
+        assert isinstance(first, SectionDelta) and (first.mode, first.text) == ("replace", "")
+
+    _run(body)
+
+
+def test_a_full_queue_is_resynced_with_the_whole_draft_and_no_partial_appends() -> None:
+    async def body() -> None:
+        hub, clock = _hub()
+        queue = await hub.subscribe(TASK)
+        words = [f"w{i} " for i in range(80)]
+        for i, word in enumerate(words):
+            clock.now = i * 0.2  # past the merge window: every other append goes out
+            hub.publish_delta(TASK, index=0, text=word)
+        # 40 appends were offered to a queue of 32 that was never drained.
+        sent = await _drain(queue)
+        assert len(sent) == 1
+        resync = sent[0]
+        assert isinstance(resync, SectionDelta) and resync.mode == "replace"
+        assert resync.text == "".join(words)
+        assert hub.dropped(TASK) == 1
+
+        # Later text reaches the queue as appends after the resync.
+        clock.now = 100.0
+        hub.publish_delta(TASK, index=0, text="more")
+        clock.now = 101.0
+        hub.flush()
+        later = await _drain(queue)
+        assert [(m.mode, m.text) for m in later if isinstance(m, SectionDelta)] == [
+            ("append", "more")
+        ]
+
+    _run(body)
+
+
+def test_a_count_never_goes_backwards_for_the_same_total() -> None:
+    async def body() -> None:
+        hub, clock = _hub()
+        queue = await hub.subscribe(TASK)
+        hub.publish_tick(TASK, stage="characterise", activity="5 of 10", done=5, total=10)
+        clock.now = 0.1
+        hub.publish_tick(TASK, stage="characterise", activity="7 of 10", done=7, total=10)
+        clock.now = 0.2
+        # A worker that read 6 publishes after the one that read 7.
+        hub.publish_tick(TASK, stage="characterise", activity="6 of 10", done=6, total=10)
+        clock.now = 1.0
+        hub.flush()
+        clock.now = 2.0
+        hub.publish_tick(TASK, stage="characterise", activity="4 of 10", done=4, total=10)
+        clock.now = 3.0
+        hub.publish_tick(TASK, stage="characterise", activity="2 of 20", done=2, total=20)
+        ticks = _ticks(await _drain(queue))
+        assert [(t.activity, t.done) for t in ticks] == [
+            ("5 of 10", 5),
+            ("6 of 10", 7),  # the text updates; the count keeps the larger
+            ("4 of 10", 7),
+            ("2 of 20", 2),  # a new total starts its own count
+        ]
+
+    _run(body)
+
+
+def test_a_late_tick_after_its_stage_ended_is_ignored_until_the_stage_starts_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def body() -> None:
+        hub, _clock = _hub()
+        monkeypatch.setattr(liveness, "tick_hub", hub)
+        run = uuid.uuid4()
+        hub.begin_run(TASK, run)
+        queue = await hub.subscribe(TASK)
+        hub.publish_tick(TASK, stage="characterise", activity="9 of 10", run_id=run)
+        hub.end_stage(TASK, "characterise", run)
+        hub.publish_tick(TASK, stage="characterise", activity="10 of 10", run_id=run)
+        assert [t.activity for t in _ticks(await _drain(queue))] == ["9 of 10"]
+        assert ("characterise", run) not in hub._tasks[TASK].stages
+
+        # The stage starting again (a rerun, the summaries pass) publishes again.
+        with liveness.task_liveness(TASK, stage="characterise", run_id=run):
+            liveness.publish_progress(activity="Again")
+        assert [t.activity for t in _ticks(await _drain(queue))] == ["Again"]
+
+        # A new run starts with no ended stages.
+        hub.end_stage(TASK, "characterise", run)
+        hub.begin_run(TASK, uuid.uuid4())
+        hub.publish_tick(TASK, stage="characterise", activity="Fresh", run_id=run)
+        assert [t.activity for t in _ticks(await _drain(queue))] == ["Fresh"]
 
     _run(body)

@@ -1714,6 +1714,9 @@ def run_plan(
                 option_search.abandon_children(engine, task_id=task_id, parent_id=walk_id)
             except Exception:
                 log.exception("runner.abandon_children_failed", capability_run_id=str(walk_id))
+            # The raise skips ``_finish_run``: the live memory goes here instead
+            # (a no-op for a child walk or one already finished).
+            tick_hub.end_run(task_id, walk_id)
         raise
 
 

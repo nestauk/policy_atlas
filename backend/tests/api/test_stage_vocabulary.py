@@ -68,6 +68,12 @@ def test_the_shortlist_row_counts_the_shortlist_after_the_step() -> None:
     assert STAGE_COUNTS["shortlist"] == (("shortlisted", "shortlisted"),)
 
 
+def test_every_stage_key_has_a_row_and_a_counts_entry() -> None:
+    """The two presentation tables cover exactly the public stage keys."""
+    assert set(STAGE_ROW) == set(STAGE_KEYS)
+    assert set(STAGE_COUNTS) == set(STAGE_KEYS)
+
+
 def test_every_route_step_has_a_verb() -> None:
     """Every configured model-call step has one fixed activity verb."""
     route_file = Path(__file__).resolve().parents[2] / "src/policy_atlas/model_routes.toml"
@@ -75,9 +81,7 @@ def test_every_route_step_has_a_verb() -> None:
         route_steps = set(tomllib.load(handle)["steps"])
 
     assert route_steps <= set(STEP_VERBS)
-    # Phase 2 adds this streamed writer step to the routes file, then removes
-    # this temporary allowance.
-    assert set(STEP_VERBS) - route_steps <= {"synthesise_section_emit"}
+    assert set(STEP_VERBS) <= route_steps
 
 
 def test_searching_and_screening_are_two_rows() -> None:

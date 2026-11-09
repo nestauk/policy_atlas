@@ -4,8 +4,10 @@ import type { components } from "../../api/gen/types";
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
+import { CheckIcon } from "../../ui/brand/icons";
 import { LABEL_CLASS } from "../../ui/brand/label";
 import { useArrives } from "../../ui/motion/arrivals";
+import { prefersReducedMotion } from "../../ui/motion/motion";
 import {
   PLAN_PARTS,
   RISK_APPETITE_LABELS,
@@ -517,8 +519,9 @@ export function PlanStepper({ steps, activeId }: { steps: PlanStep[]; activeId: 
   return (
     <p data-testid="plan-stepper" className={cn(LABEL_CLASS, "flex flex-wrap items-baseline gap-x-3 gap-y-1")}>
       {settled.map((step) => (
-        <span key={step.id}>
-          {step.name} <span aria-hidden="true">✓</span>
+        <span key={step.id} className="inline-flex items-center gap-1">
+          {step.name}
+          <CheckIcon size={12} className="shrink-0" />
           <span className="sr-only">, done</span>
         </span>
       ))}
@@ -636,10 +639,6 @@ const SETTLE_FADE_MS = 150;
 const SETTLE_MS = 300;
 /** The strong ease-out (`--ease-out-strong`), for the script-driven part. */
 const EASE_OUT_STRONG = "cubic-bezier(0.23, 1, 0.32, 1)";
-
-function prefersReducedMotion(): boolean {
-  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
-}
 
 /**
  * The settle's motion (owner, round 8: "make the transition from the decision
@@ -823,7 +822,7 @@ export function PartCard({
           {line.label !== null && <p className={cn(LABEL_CLASS, "text-caption text-grey")}>{line.label}</p>}
           {/* The deep green of the green tint's text: it passes contrast at
               the sidebar's Body size too. */}
-          <p className="max-w-prose-measure text-lead font-bold text-[#0c6b5a]">{scrub(line.text)}</p>
+          <p className="max-w-prose-measure text-lead font-bold text-green-deep">{scrub(line.text)}</p>
         </div>
       ))}
       {/* "Change" takes its own line under the green words, left-aligned,

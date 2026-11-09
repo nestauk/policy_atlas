@@ -722,7 +722,9 @@ export function OptionCard() {
           </div>
         )}
         {item.document_count === 0 && <p className="text-grey">No document names this option yet.</p>}
-        {item.document_count > 0 && (
+        {/* No disclosure without a document to show (design lane review:
+            never "Show 0 documents"). */}
+        {item.document_count > 0 && documents.length > 0 && (
             <DocumentsDisclosure evaluated={evaluatedDocuments.length} describing={describingDocuments.length}>
               <p className="text-grey">{capitalise(ABSTRACTS_NOTE)}.</p>
               <DocumentGroup heading="Evaluated it" taskId={taskId} optionId={item.option_id} documents={evaluatedDocuments} />

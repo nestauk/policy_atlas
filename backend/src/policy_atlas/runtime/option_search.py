@@ -568,7 +568,22 @@ def dispatch_option_searches(
     with engine.connect() as conn:
         already = dispatched_children(conn, task_id=task_id, parent_id=parent_id)
         if already is not None:
-            _start_progress_poll(engine, task_id=task_id, parent_id=parent_id, child_ids=already)
+            # Task 058 review: a walk resumed past its join republished the
+            # finished stage's count, which the hub then kept for ten minutes.
+            # Once the stage's completion is written there is nothing to show.
+            joined = conn.execute(
+                select(event_log.c.event_id)
+                .where(event_log.c.task_id == task_id)
+                .where(event_log.c.run_id.is_(None))
+                .where(event_log.c.event_type == "component.completed")
+                .where(event_log.c.payload["component"].astext == OPTION_SEARCHES_STAGE)
+                .where(event_log.c.payload["capability_run_id"].astext == str(parent_id))
+                .limit(1)
+            ).first()
+            if joined is None:
+                _start_progress_poll(
+                    engine, task_id=task_id, parent_id=parent_id, child_ids=already
+                )
             return already
         entrants = entrants_for_search(conn, task_id=task_id, suggest_run_id=suggest_run_id)
     child_ids: list[uuid.UUID] = []

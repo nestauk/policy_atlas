@@ -90,7 +90,7 @@ import {
   useRememberedOpen,
   useScrollWhenNavigated,
 } from "./ArtefactOutline";
-import { useExpandForPrint } from "../ui/brand/Disclosure";
+import { DisclosureWord, useExpandForPrint } from "../ui/brand/Disclosure";
 import { Tooltip } from "../ui/radix/Tooltip";
 import { DOSSIER_LOADING_LINE, SourceDossierBody, useDossierRecords } from "./SourcesView";
 import { useActiveConversation } from "./workspace/chat/conversationState";
@@ -242,54 +242,51 @@ export function orderSections<T extends SectionLike>(sections: T[]): T[] {
 
 type HighlightParts =
   | { kind: "highlight"; before: string; match: string; after: string }
-  | { kind: "degrade"; quote: string; text: string };
+  | { kind: "degrade"; quote: string };
+
+/** Where `quote` sits in `text`: exact first, then whitespace-normalised;
+ *  `null` when it is not there. */
+function locateQuote(text: string, quote: string): { start: number; end: number } | null {
+  if (quote.trim().length === 0) return null;
+  const exact = text.indexOf(quote);
+  if (exact >= 0) return { start: exact, end: exact + quote.length };
+  const squash = (value: string) => value.replace(/\s+/g, " ");
+  const index = squash(text).indexOf(squash(quote));
+  if (index < 0) return null;
+  let raw = 0;
+  let squashed = 0;
+  while (squashed < index && raw < text.length) {
+    raw += 1;
+    squashed = squash(text.slice(0, raw)).length;
+  }
+  // A run of N whitespace chars squashes to length 1, so the loop can
+  // stop inside the run — advance to the match's first real character.
+  if (!squash(quote).startsWith(" ")) {
+    while (raw < text.length && /\s/.test(text.charAt(raw))) raw += 1;
+  }
+  return { start: raw, end: Math.min(raw + quote.length + 20, text.length) };
+}
 
 /**
  * Locate `quote` inside `text` for highlighting: exact match first, then a
- * whitespace-normalised remap, then the honest degrade (quote shown above
- * the unhighlighted text) — never a broken panel (strand 5).
+ * whitespace-normalised remap, then the same without the quote's trailing
+ * `.`, `,`, `;` or `:` (the writer often ends a quote with a stop the passage
+ * does not have there), then the honest degrade (the quote alone, the passage
+ * not repeated; round 12) — never a broken panel (strand 5).
  */
 export function highlightParts(text: string, quote: string): HighlightParts {
-  let start = text.indexOf(quote);
-  let end = start + quote.length;
-  if (start < 0 && quote.trim().length > 0) {
-    const squash = (value: string) => value.replace(/\s+/g, " ");
-    const index = squash(text).indexOf(squash(quote));
-    if (index >= 0) {
-      let raw = 0;
-      let squashed = 0;
-      while (squashed < index && raw < text.length) {
-        raw += 1;
-        squashed = squash(text.slice(0, raw)).length;
-      }
-      // A run of N whitespace chars squashes to length 1, so the loop can
-      // stop inside the run — advance to the match's first real character.
-      if (!squash(quote).startsWith(" ")) {
-        while (raw < text.length && /\s/.test(text.charAt(raw))) raw += 1;
-      }
-      start = raw;
-      end = Math.min(start + quote.length + 20, text.length);
-    }
-  }
-  if (start < 0) return { kind: "degrade", quote, text };
+  const found = locateQuote(text, quote) ?? locateQuote(text, quote.trimEnd().replace(/[.,;:]+$/, ""));
+  if (found === null) return { kind: "degrade", quote };
   return {
     kind: "highlight",
-    before: text.slice(0, start),
-    match: text.slice(start, end),
-    after: text.slice(end),
+    before: text.slice(0, found.start),
+    match: text.slice(found.start, found.end),
+    after: text.slice(found.end),
   };
 }
 
-export function HighlightedContext({ text, quote }: { text: string; quote: string }) {
-  const parts = highlightParts(text, quote);
-  if (parts.kind === "degrade") {
-    return (
-      <>
-        <span className="mb-1 block italic text-grey">“{scrub(parts.quote)}”</span>
-        {scrub(parts.text)}
-      </>
-    );
-  }
+/** The passage with the quoted words in the highlight. */
+function HighlightedPassage({ parts }: { parts: Extract<HighlightParts, { kind: "highlight" }> }) {
   return (
     <>
       {scrub(parts.before)}
@@ -297,6 +294,21 @@ export function HighlightedContext({ text, quote }: { text: string; quote: strin
       {scrub(parts.after)}
     </>
   );
+}
+
+/** The Findings table's passage: the highlight, or on no match the quote
+ *  above the unhighlighted passage. */
+export function HighlightedContext({ text, quote }: { text: string; quote: string }) {
+  const parts = highlightParts(text, quote);
+  if (parts.kind === "degrade") {
+    return (
+      <>
+        <span className="mb-1 block italic text-grey">“{scrub(parts.quote)}”</span>
+        {scrub(text)}
+      </>
+    );
+  }
+  return <HighlightedPassage parts={parts} />;
 }
 
 /** A chip whose hover reveals its rationale — the one Tooltip-wraps-a-Chip
@@ -394,9 +406,53 @@ function ClassificationHint({ taskId, sourceId, type }: { taskId: string; source
   );
 }
 
+/** A theme item's sources in the citation sheet: "Identified across N
+ *  sources", then the shared Show / Hide word and chevron; open, the titles,
+ *  each opening its dossier. */
+function ThemeItemSources({
+  sources,
+  onOpenDossier,
+}: {
+  sources: readonly { source_id?: string | null; title?: string | null }[];
+  onOpenDossier: (sourceRef: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <details
+      className="mt-1 text-meta text-grey"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary className="group flex cursor-pointer list-none flex-wrap items-center gap-x-2 hover:text-navy [&::-webkit-details-marker]:hidden">
+        <span>
+          Identified across {formatCount(sources.length)} source{sources.length === 1 ? "" : "s"}
+        </span>
+        <DisclosureWord open={open} />
+      </summary>
+      <ul className="mt-1 list-disc space-y-0.5 pl-4 text-body">
+        {sources.map((source) =>
+          typeof source.title === "string" && source.title !== "" ? (
+            <li key={source.source_id ?? source.title}>
+              <button
+                type="button"
+                className="cursor-pointer text-left text-navy hover:text-blue hover:underline"
+                onClick={() => onOpenDossier(source.source_id ?? source.title ?? "")}
+              >
+                {scrub(source.title)}
+              </button>
+            </li>
+          ) : null,
+        )}
+      </ul>
+    </details>
+  );
+}
+
 /** One quote in a source's box: "Quote" over the passage at Body, the quoted
- *  words in the highlight, the surrounding sentences Grey; on a lookup
- *  failure the quote alone with the caller's honest note. */
+ *  words in the highlight, the surrounding sentences Grey; when the quote is
+ *  not found in the passage, the quote alone at Body Navy (the passage is not
+ *  repeated); on a lookup failure the quote alone with the caller's honest
+ *  note. */
 export function CitationQuote({
   context,
   quote,
@@ -409,6 +465,7 @@ export function CitationQuote({
   /** "Quote", or "Quote 1", "Quote 2", … when a source gives several. */
   label?: string;
 }) {
+  const parts = context.data !== undefined ? highlightParts(context.data.context, quote) : null;
   return (
     <div>
       <ProvenanceLabel>{label}</ProvenanceLabel>
@@ -418,13 +475,14 @@ export function CitationQuote({
             Loading surrounding context…
           </p>
         )}
-        {context.data !== undefined && (
+        {parts?.kind === "degrade" && <p className="text-navy">“{scrub(quote)}”</p>}
+        {context.data !== undefined && parts?.kind === "highlight" && (
           <>
             {typeof context.data.previous === "string" && context.data.previous !== "" && (
               <p className="text-grey">{scrub(context.data.previous)}</p>
             )}
             <p className="text-navy">
-              <HighlightedContext text={context.data.context} quote={quote} />
+              <HighlightedPassage parts={parts} />
             </p>
             {typeof context.data.next === "string" && context.data.next !== "" && (
               <p className="text-grey">{scrub(context.data.next)}</p>
@@ -823,27 +881,7 @@ function ClaimPanel({
                 </p>
               )}
               {(item.sources?.length ?? 0) > 0 ? (
-                <details className="mt-1 text-meta text-grey">
-                  <summary className="cursor-pointer hover:text-navy">
-                    Identified across {item.sources?.length} source
-                    {(item.sources?.length ?? 0) === 1 ? "" : "s"} — show them
-                  </summary>
-                  <ul className="mt-1 list-disc space-y-0.5 pl-4 text-body">
-                    {(item.sources ?? []).map((source) =>
-                      typeof source.title === "string" && source.title !== "" ? (
-                        <li key={source.source_id ?? source.title}>
-                          <button
-                            type="button"
-                            className="cursor-pointer text-left text-navy hover:text-blue hover:underline"
-                            onClick={() => onOpenDossier(source.source_id ?? source.title ?? "")}
-                          >
-                            {scrub(source.title)}
-                          </button>
-                        </li>
-                      ) : null,
-                    )}
-                  </ul>
-                </details>
+                <ThemeItemSources sources={item.sources ?? []} onOpenDossier={onOpenDossier} />
               ) : typeof item.size === "number" ? (
                 <p className="mt-1 text-meta text-grey">
                   Identified across {item.size} sources
@@ -2237,11 +2275,14 @@ function LiveSubhead({
   active,
   activity,
   terminal,
+  still,
 }: {
   section: LiveSection & { role: NonNullable<SectionLike["role"]> };
   active: boolean;
   activity: string | null;
   terminal: boolean;
+  /** The stream is not connected: the live mark holds still (lead ruling). */
+  still: boolean;
 }) {
   const filled = section.state === "filled" && (section.prose ?? "") !== "";
   // The action line under the heading opens while the section is being
@@ -2276,7 +2317,7 @@ function LiveSubhead({
           className="min-h-0 overflow-hidden text-body text-grey"
         >
           <span className="flex items-center gap-2 pt-1.5">
-            {writing && <LiveMark data-testid="section-mark" />}
+            {writing && <LiveMark data-testid="section-mark" still={still} />}
             {/* Kept as the line closes. */}
             {actionText !== null && <span className="min-w-0">{scrub(actionText)}</span>}
           </span>
@@ -2726,6 +2767,8 @@ function useLiveReport(
   const references = liveReferences(sections);
   const notes = report ? liveSourceNotes(stream) : [];
   const onOpenClaim = sheet?.onOpenClaim;
+  // The section's live mark holds still while the stream is down (lead ruling).
+  const markStill = stream.connectionStatus !== "connected";
 
   // Sections inside a part are h3; a baseline has no parts (round 10).
   const level: SectionHeadingLevel = report ? 3 : 2;
@@ -2741,7 +2784,13 @@ function useLiveReport(
   const renderSection = ({ section, id }: (typeof anchored)[number]) => {
     const isActive = section === active;
     const subhead = (
-      <LiveSubhead section={section} active={isActive} activity={isActive ? activity : null} terminal={terminal} />
+      <LiveSubhead
+        section={section}
+        active={isActive}
+        activity={isActive ? activity : null}
+        terminal={terminal}
+        still={markStill}
+      />
     );
     if (section.role === "case_studies") {
       const cards =
@@ -2849,6 +2898,7 @@ function useLiveReport(
               active={intro === active}
               activity={intro === active ? activity : null}
               terminal={terminal}
+              still={markStill}
             />
           )}
           {introProse !== "" ? (

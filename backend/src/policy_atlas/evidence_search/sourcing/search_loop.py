@@ -979,7 +979,7 @@ _LIVE_QUERY_KIND: dict[str, liveness.SearchQueryKind] = {
 
 def _short_query(text: str, limit: int = QUERY_LINE_CHARS) -> str:
     """Cut a query for the activity line at about ``limit`` characters, on a word."""
-    text = " ".join(text.split())
+    text = liveness.normalise_query(text)
     if len(text) <= limit:
         return text
     head = text[: limit + 1]

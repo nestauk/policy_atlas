@@ -33,7 +33,12 @@ from policy_atlas.runtime.task_plan import TIME_BANDS
 # 1000 characters (matches SCREENING_CRITERION_MAX). Succeeds planner_v10
 # (OECD members source-origin default + OECD setting screening criterion).
 # The router and watch moments live in agent_prompt.py.
-PLANNER_PROMPT_VERSION = "planner_v11"
+# planner_v12 (task 058, review 2026-11-09): the thoroughness copy in the plain voice
+# (totals kept, sections, deep extracts), the preset bands read from task_plan.TIME_BANDS
+# (Rapid overview ~5-10 min, Standard ~10-20, Detailed ~20-30). Three content changes
+# shipped under v11 during the build; the review bumps the version so the stored
+# prompt_version says which text a turn saw.
+PLANNER_PROMPT_VERSION = "planner_v12"
 
 # Default screening criterion when the OECD source-origin default applies.
 # Emitted verbatim into screening_criteria. Contiguous for pin tests.

@@ -255,7 +255,9 @@ export const mockFunnel: components["schemas"]["FunnelOut"] = {
   read_in_full: 29,
   selected: 18,
   findings: 34,
-  cited: 12,
+  // The report's three references (`mockArtefact.references`), so the
+  // method's Cited row, the facts line and the References agree.
+  cited: 3,
 };
 
 export const MOCK_THEME_ID_SCHOOL_FOOD = "30000000-0000-4000-8000-000000000001";
@@ -773,7 +775,9 @@ export const mockArtefact: components["schemas"]["ArtefactOut"] = {
   artefact_id: "00000000-0000-4000-8000-00000000a001",
   title: "Policy options for healthier childhoods",
   question: mockTask.question ?? "",
-  coverage_snapshot: { source_count: 46, included: 46, screened_out: 82, study_types: { review: 20, evaluation: 14, analysis: 12 }, year_range: [2019, 2024] },
+  // `source_count` is the sources the report cites, its References (the
+  // server's `len(refs_out)`), never the included set.
+  coverage_snapshot: { source_count: 3, included: 46, screened_out: 82, study_types: { review: 20, evaluation: 14, analysis: 12 }, year_range: [2019, 2024] },
   sections: [
     {
       title: "What appears to help",
@@ -1133,7 +1137,9 @@ export const mockPlanReady: components["schemas"]["PlanDraft"] = {
   expected_artefact_shape: "standard",
   time_band: "10-15 minutes",
   section_budget: null,
-  steps: (["acquire", "screen", "classify", "appraise", "characterise", "synthesise"] as const).map(planStep),
+  // The server's order (`task_plan.py`): the full texts are collected after
+  // classifying, before mapping.
+  steps: (["acquire", "screen", "classify", "appraise", "ingest", "characterise", "synthesise"] as const).map(planStep),
   ready: true,
 };
 
@@ -1538,6 +1544,60 @@ const MOCK_WALK_EXCLUDED_AT = [5, 7];
 /** Positions of the options the shortlist stage picks. */
 const MOCK_WALK_SHORTLIST_AT = [0, 1, 3];
 
+/** The documents of a walk option that evaluated it: one in eight of those
+ *  its search found. */
+function mockWalkEvaluatedCount(found: number): number {
+  return Math.floor(found / 8);
+}
+
+/** A walk theme's distinct documents: its options' documents, which no two
+ *  walk options share (`mockWalkDocuments`), so the theme counts what its
+ *  cards list. */
+function mockWalkThemeDocumentCount(options: readonly { document_count: number }[]): number {
+  return options.reduce((total, option) => total + option.document_count, 0);
+}
+
+/** The kinds of document a walk option's card lists, in turn. */
+const MOCK_WALK_DOCUMENT_KINDS = [
+  { evidence_type: "Systematic review", tier: "Strong", venue: "Campbell Systematic Reviews" },
+  { evidence_type: "Local evaluation", tier: "Moderate", venue: "Local Government Studies" },
+  { evidence_type: "Policy analysis", tier: null, venue: null },
+] as const;
+
+/**
+ * The documents behind a walk option's card (design lane review): as many as
+ * its row counts, the first `evaluated` of them evaluating it, the rest
+ * describing it, each with its own id, so the card, the row and the theme
+ * agree.
+ */
+function mockWalkDocuments(
+  optionId: string,
+  name: string,
+  count: number,
+  evaluated: number,
+): components["schemas"]["OptionDocumentOut"][] {
+  return Array.from({ length: count }, (_, n) => {
+    const kind = MOCK_WALK_DOCUMENT_KINDS[n % MOCK_WALK_DOCUMENT_KINDS.length];
+    const evaluates = n < evaluated;
+    return {
+      task_source_snapshot_id: `mock-walk-doc-${optionId}-${n + 1}`,
+      title: `${name}: ${evaluates ? "an evaluation" : "a review of practice"} (${n + 1})`,
+      role: evaluates ? "evaluated" : "described",
+      evidence_type: kind.evidence_type,
+      tier: kind.tier,
+      year: 2014 + (n % 11),
+      authors: ["A. Sampleton", "C. Mockford"],
+      venue: kind.venue,
+      place: "United Kingdom",
+      programme_name: null,
+      tried_on_kind: null,
+      measured: null,
+      place_detail: null,
+      records_count: 1,
+    };
+  });
+}
+
 /**
  * `GET /longlist` while the walk builds: the same option ids as the options
  * read (folded rows left out, as the API leaves them), growing stage by stage.
@@ -1578,10 +1638,13 @@ export function mockWalkLonglist(
       authority: null,
       taxonomy_version: "lever-types-v1",
       document_count: row.found ?? 0,
-      evaluated_count: 0,
+      evaluated_count: mockWalkEvaluatedCount(row.found ?? 0),
       relations: [],
       search_pending: false,
-      evaluated_countries: [],
+      evaluated_countries:
+        mockWalkEvaluatedCount(row.found ?? 0) > 0
+          ? [{ country: "United Kingdom", documents: mockWalkEvaluatedCount(row.found ?? 0) }]
+          : [],
       outcomes_evaluated: 0,
       outcomes_total: 2,
       shortlist: picked ? { state: "proposed", reason: "Mock reason: names a fact on the card." } : null,
@@ -1597,14 +1660,14 @@ export function mockWalkLonglist(
           name: "Conditionality and support",
           description: "Options that attach an obligation or targeted help to the existing offer.",
           option_ids: included.slice(0, half).map((option) => option.option_id),
-          document_count: mockThemeDocumentCount(included.slice(0, half).map((option) => option.option_id)),
+          document_count: mockWalkThemeDocumentCount(included.slice(0, half)),
         },
         {
           theme_id: MOCK_LONGLIST_THEME_ID_UNIVERSAL_OFFER,
           name: "A universal offer",
           description: "A single, non-conditional offer replacing today's patchwork.",
           option_ids: included.slice(half).map((option) => option.option_id),
-          document_count: mockThemeDocumentCount(included.slice(half).map((option) => option.option_id)),
+          document_count: mockWalkThemeDocumentCount(included.slice(half)),
         },
       ]
     : [];
@@ -1647,6 +1710,7 @@ export function mockWalkOptionCards(
     design_features: [summary.name],
     shortlist: summary.shortlist ?? null,
     maturity: summary.maturity ?? null,
+    documents: mockWalkDocuments(summary.option_id, summary.name, summary.document_count, summary.evaluated_count),
   }));
 }
 

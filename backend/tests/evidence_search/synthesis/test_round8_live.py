@@ -242,7 +242,7 @@ def test_a_reply_that_is_not_a_section_resets_the_slot_and_falls_back_once(
 ) -> None:
     text = '{"prose": "- A headline: stated.\\n", "claims": [{"claim_type"'
     backend, _completions = _backend(text, 5)
-    fallback = SectionProseWire(prose="", claims=[])
+    fallback = SectionProseWire(prose="- Fallback.", claims=[])
     calls: list[dict[str, Any]] = []
 
     def _forced(seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
@@ -251,7 +251,8 @@ def test_a_reply_that_is_not_a_section_resets_the_slot_and_falls_back_once(
 
     cast("Any", backend).write_key_findings = _forced
     section, _usage = backend.write_key_findings_stream(_KF_SEED, index=0, sources=_SOURCES)
-    assert live["deltas"][-1] == (0, "", "replace")
+    # The reset, then the fallback's prose in one replace (task 058 review).
+    assert live["deltas"][-2:] == [(0, "", "replace"), (0, "- Fallback.", "replace")]
     assert "".join(t for _i, t, m in live["deltas"] if m == "append") == "- A headline: stated.\n"
     assert calls == [_KF_SEED]
     assert section is fallback
@@ -309,7 +310,7 @@ def test_a_broken_intro_resets_the_slot_and_falls_back_once(
 
     cast("Any", backend).write_full_report_intro = _structured
     wire, _usage = backend.write_full_report_intro_stream(_INTRO_SEED, index=7)
-    assert live["deltas"][-1] == (7, "", "replace")
+    assert live["deltas"][-2:] == [(7, "", "replace"), (7, "Fallback.", "replace")]
     assert calls == [_INTRO_SEED]
     assert wire is fallback
     assert backend.stream_fallbacks == 1

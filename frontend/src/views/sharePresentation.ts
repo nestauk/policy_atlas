@@ -33,7 +33,7 @@ export const SHARE_COPY = {
   orgFailed: `The ${TASK.lower}'s visibility couldn't be changed. Try again.`,
   /** In a project the task follows the project's visibility (P3). */
   followsProject: (count: number) => `Follows its ${count === 1 ? PROJECT.lower : PROJECT.lowerMany}: `,
-  projectsHeading: `${PROJECT.many} this ${TASK.lower} belongs to`,
+  projectsHeading: PROJECT.many,
   notInProject: `Not in a ${PROJECT.lower}.`,
   addToProject: `Add to a ${PROJECT.lower}`,
   selectProject: `Select a ${PROJECT.lower}`,

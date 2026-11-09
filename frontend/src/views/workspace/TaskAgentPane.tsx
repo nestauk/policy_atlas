@@ -818,6 +818,7 @@ export function TaskAgentPane({
         ownerName={taskQuery.data?.owner_display ?? null}
         checkInWaiting={stream.pendingCheckIn !== null}
         onSeePlan={onReviewPlan}
+        streamOpen={stream.connectionStatus === "connected"}
       />
     );
 

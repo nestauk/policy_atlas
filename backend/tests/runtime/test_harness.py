@@ -83,6 +83,9 @@ def test_run_harness_binds_and_ends_the_component_stage(
         def publish_tick(self, task_id: uuid.UUID, **kwargs: Any) -> None:
             pass
 
+        def open_stage(self, *args: Any) -> None:
+            pass
+
     pid, rid = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)
     config = compile(Plan(component="acquire", evidence_scope_id=scope_id))

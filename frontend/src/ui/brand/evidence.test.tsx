@@ -17,6 +17,7 @@ import {
   strengthHint,
   strengthRank,
   strengthTierColour,
+  strengthTierName,
   strengthTone,
   TIER_LABEL,
   TIER_TEXT,
@@ -148,6 +149,15 @@ describe("the tone square and the marks", () => {
     rerender(<p><StrengthMark tier="Moderate confidence" /></p>);
     expect(screen.getByText("Moderate confidence")).toBeInTheDocument();
     expect(screen.queryByTestId("strength-mark")).toBeNull();
+  });
+
+  it("prints the vocabulary's word whatever case the server sends, and keeps an unknown word as it came", () => {
+    expect(strengthTierName("moderate")).toBe("Moderate");
+    expect(strengthTierName(" very STRONG ")).toBe("Very strong");
+    expect(strengthTierName("Moderate confidence")).toBe("Moderate confidence");
+    render(<p><StrengthMark tier="limited" /></p>);
+    expect(screen.getByText("Limited")).toBeInTheDocument();
+    expect(screen.queryByText("limited")).toBeNull();
   });
 
   it("writes a read depth as its square then its word", () => {

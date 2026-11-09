@@ -924,6 +924,21 @@ describe("reduceRunStreamFrame — streamed drafts", () => {
     expect(reduceRunStreamFrame(base, card("X", "y", 9))).toBe(base);
   });
 
+  it("a reconnect's snapshot (an empty replace, then the cards) never doubles the cards", () => {
+    const card = (title: string): SseFrame => ({
+      type: "artefact.section_card",
+      index: 3,
+      title,
+      prose: `${title} prose.`,
+      occurred_at: "2026-07-28T10:01:10Z",
+      ephemeral: true,
+    });
+    let state = fold(createInitialRunStreamState(), [...writingFrames(), card("A"), card("B")]);
+    // The hub sends a replace for the draft even when its text is empty.
+    state = fold(state, [delta(3, "", "replace"), card("A"), card("B")]);
+    expect(state.liveSections[3].cards?.map((c) => c.title)).toEqual(["A", "B"]);
+  });
+
   it("a late delta never reopens a completed section", () => {
     const state = fold(createInitialRunStreamState(), [...writingFrames(), completed, delta(3, "late")]);
     expect(state.liveSections[3].draft).toBeUndefined();

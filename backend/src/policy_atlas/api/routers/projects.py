@@ -43,7 +43,13 @@ from policy_atlas.api.routers.access import (
     trace_admin_listing,
 )
 from policy_atlas.api.routers.common import resolve_owner_display
-from policy_atlas.core.schema import app_user, project, project_membership, task
+from policy_atlas.core.schema import (
+    app_user,
+    capability_run,
+    project,
+    project_membership,
+    task,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -485,7 +491,8 @@ def archive_project(
     transaction, each of the caller's own active tasks in this project that
     is in no other active project is archived too (owner, 2026-11-07), each
     task's History saying so; a task also in another project, or a
-    colleague's, is left as it is. Archiving an archived project changes
+    colleague's, or one whose latest run is still running, paused or about to
+    start, is left as it is. Archiving an archived project changes
     nothing and keeps its first time.
 
     Args:
@@ -511,6 +518,10 @@ def archive_project(
             .values(archived_at=datetime.now(UTC))
         )
         for task_id in _tasks_only_here(conn, project_id=project_id, user_id=user.user_id):
+            if _run_active(conn, task_id):
+                # As the single-task archive refuses (``run_active``): a task
+                # mid-run stays visible (task 058 review).
+                continue
             if archive_task(
                 conn,
                 task_id,
@@ -538,6 +549,25 @@ def archive_project(
         owner_display=resolve_owner_display(conn, row["owner_user_id"]),
     )
     return ProjectArchiveOut(**out.model_dump(), archived_task_count=archived_tasks)
+
+
+def _run_active(conn: Connection, task_id: uuid.UUID) -> bool:
+    """Whether the task's latest run is active, as the single-task archive checks it.
+
+    Running or paused, or admitted and not yet inserted (the in-process
+    dispatch reservation): ``POST /tasks/{id}/archive`` refuses all three.
+    """
+    latest = conn.execute(
+        select(capability_run.c.status)
+        .where(capability_run.c.task_id == task_id)
+        .order_by(capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if latest in {"running", "paused"}:
+        return True
+    from policy_atlas.api.routers.runs import dispatch_reserved
+
+    return dispatch_reserved(task_id)
 
 
 def _tasks_only_here(

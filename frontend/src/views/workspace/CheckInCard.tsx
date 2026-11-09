@@ -9,6 +9,7 @@ import { Button } from "../../ui/brand/Button";
 import { Card } from "../../ui/brand/Card";
 import { Select } from "../../ui/brand/Select";
 import { cn } from "../../ui/brand/cn";
+import { DisclosureChevron } from "../../ui/brand/Disclosure";
 import { LABEL_CLASS } from "../../ui/brand/label";
 import { useArrives } from "../../ui/motion/arrivals";
 import { ARRIVE_MS, EASE_OUT_STRONG, prefersReducedMotion } from "../../ui/motion/motion";
@@ -86,7 +87,7 @@ export function SettledGateCard({ label }: { label: string }) {
       className="ml-8 border border-r-2 border-blue-tint border-r-green bg-blue-tint-2 px-3.5 py-2.5"
     >
       <p className={cn(LABEL_CLASS, "text-grey")}>{BASELINE_GATE_SETTLED_LABEL}</p>
-      <p className="mt-0.5 max-w-prose-measure text-lead font-bold text-[#0c6b5a]">{scrub(label)}</p>
+      <p className="mt-0.5 max-w-prose-measure text-lead font-bold text-green-deep">{scrub(label)}</p>
     </div>
   );
 }
@@ -504,8 +505,9 @@ function CheckInCardBody({
         })}
       </div>
 
-      <details className="group mt-3 border-t border-line pt-3">
-        <summary className="cursor-pointer text-body font-semibold text-grey marker:text-line-2 hover:text-navy">
+      <details className="group/steer mt-3 border-t border-line pt-3">
+        <summary className="group flex cursor-pointer list-none items-center gap-1.5 text-body font-semibold text-grey hover:text-navy [&::-webkit-details-marker]:hidden">
+          <DisclosureChevron className="group-open/steer:rotate-90" />
           Or steer in your own words
         </summary>
         <form

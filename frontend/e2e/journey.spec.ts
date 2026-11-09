@@ -34,6 +34,9 @@ const CHECK_IN_QUESTION = "Does this look right before I assess the sources?";
 
 const CITED_SOURCE_TITLE = "Universal breakfast clubs and diet quality";
 const CITATION_QUOTE = "Breakfast participation increased when provision was universal.";
+// The sheet highlights the quoted words inside the passage; the passage carries a comma where
+// the quote carries its stop, so the match is on the words (task 058 review, design fix 4).
+const CITATION_QUOTE_WORDS = CITATION_QUOTE.replace(/\.$/, "");
 
 /** The task-stage bar (Plan · Results · Sources · Share · History).
  *  The global App nav sits above it; Sources has its own subnav below. */
@@ -280,7 +283,7 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(marker).toBeVisible();
     await marker.click();
     await expect(page.getByText("Evidence for this claim")).toBeVisible();
-    await expect(page.getByText(CITATION_QUOTE).first()).toBeVisible();
+    await expect(page.getByText(CITATION_QUOTE_WORDS).first()).toBeVisible();
     await page
       .getByRole("dialog", { name: "Evidence for this claim" })
       .getByRole("button", { name: CITED_SOURCE_TITLE })
@@ -300,7 +303,8 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(themePanel.getByText("Active-travel offers")).toBeVisible();
     // The source count is a disclosure: expanding lists the member documents,
     // each opening its dossier.
-    await themePanel.getByText(/Identified across 2 sources — show them/).click();
+    // The count then the shared Show/Hide disclosure word (task 058 review, copy 2).
+    await themePanel.getByText(/Identified across 2 sources/).click();
     await expect(
       themePanel.getByRole("button", { name: /Childhood obesity prevention in urban primary schools/ }),
     ).toBeVisible();
@@ -460,7 +464,7 @@ test.describe("mock task-lifecycle journey", () => {
     expect(found).toBe(true);
 
     await page.keyboard.press("Enter");
-    await expect(page.getByText(CITATION_QUOTE).first()).toBeVisible();
+    await expect(page.getByText(CITATION_QUOTE_WORDS).first()).toBeVisible();
   });
 
   // (o) `prefers-reduced-motion` emulation runs the workspace — through
@@ -839,11 +843,12 @@ test.describe("task 058 live run states (annex scenes, evidence search)", () => 
     await openSteps(page);
     const timeline = page.getByRole("list", { name: "Run steps" });
     const rows = await timeline.getByRole("listitem").allInnerTexts();
-    const order = ["Searching", "Screening", "Classifying", "Mapping", "Writing"].map((label) =>
-      rows.findIndex((row) => row.startsWith(label)),
+    // The mock plan carries the ingest step in the real order (task 058 review).
+    const order = ["Searching", "Screening", "Classifying", "Collecting the full texts", "Mapping", "Writing"].map(
+      (label) => rows.findIndex((row) => row.startsWith(label)),
     );
-    expect(order).toEqual([0, 1, 2, 3, 4]);
-    for (const upcoming of ["Classifying", "Mapping", "Writing"]) {
+    expect(order).toEqual([0, 1, 2, 3, 4, 5]);
+    for (const upcoming of ["Classifying", "Collecting the full texts", "Mapping", "Writing"]) {
       const row = rows.find((text) => text.startsWith(upcoming)) ?? "";
       expect(row).not.toContain("·");
       expect(row).not.toMatch(/\d/);

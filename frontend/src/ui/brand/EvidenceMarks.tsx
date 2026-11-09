@@ -1,6 +1,6 @@
 import { scrub } from "../../lib/scrub";
 import { cn } from "./cn";
-import { readDepthColour, strengthTierColour, toneSquareClass, type ReadDepth, type ToneColour } from "./evidence";
+import { readDepthColour, strengthTierColour, strengthTierName, toneSquareClass, type ReadDepth, type ToneColour } from "./evidence";
 
 /**
  * The 6 px tone square (round 12): the palette's green, yellow or red,
@@ -22,8 +22,9 @@ export function ToneSquare({
 }
 
 /**
- * A strength as every surface writes it: its tone square, then the word. A
- * tier outside the vocabulary keeps its word and has no square. The
+ * A strength as every surface writes it: its tone square, then the word in
+ * the vocabulary's case ("moderate" prints "Moderate"). A tier outside the
+ * vocabulary keeps its word and has no square. The
  * surface sets the spacing and the word's affordance (the dotted underline
  * of a value with a reason behind it).
  */
@@ -40,7 +41,7 @@ export function StrengthMark({
   return (
     <>
       {colour !== null && <ToneSquare colour={colour} className={squareClassName} testId="strength-mark" />}
-      <span className={wordClassName}>{scrub(tier)}</span>
+      <span className={wordClassName}>{scrub(strengthTierName(tier))}</span>
     </>
   );
 }

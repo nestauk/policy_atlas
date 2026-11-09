@@ -1054,7 +1054,8 @@ def test_sse_card_frames_have_no_id_line_and_a_snapshot_sends_them_after_the_dra
                     if isinstance(frame, ArtefactSectionCardFrame)
                 ] == [(1, "Leeds", "Breakfast."), (1, "Bristol", "Walking buses.")]
 
-                # A reconnect: the cards so far, in order.
+                # A reconnect: an empty replace (the client drops the cards it
+                # held), then the cards so far, in order.
                 stream = await api.open_stream(task_id)
                 items = await stream.collect_until(
                     lambda item: item.event == "artefact.section_card"
@@ -1062,7 +1063,15 @@ def test_sse_card_frames_have_no_id_line_and_a_snapshot_sends_them_after_the_dra
                     and item.data.get("title") == "Bristol"
                 )
                 await stream.aclose()
-                assert [item.data["title"] for item in _frames(items) if item.data] == [
+                reconnect = _frames(items)
+                assert [item.event for item in reconnect] == [
+                    "artefact.section_delta",
+                    "artefact.section_card",
+                    "artefact.section_card",
+                ]
+                assert reconnect[0].data is not None
+                assert (reconnect[0].data["mode"], reconnect[0].data["text"]) == ("replace", "")
+                assert [item.data["title"] for item in reconnect[1:] if item.data] == [
                     "Leeds",
                     "Bristol",
                 ]
@@ -2162,6 +2171,75 @@ def test_sse_search_queries_and_themes_stream_and_a_reconnect_gets_them(
         finally:
             if task_id is not None:
                 tick_hub._tasks.pop(task_id, None)
+            _cleanup(engine, task_id)
+
+    asyncio.run(exercise())
+
+
+def test_sse_skips_an_ephemeral_message_that_cannot_be_encoded_and_keeps_streaming(
+    engine: Engine, tmp_path: Path, monkeypatch: Any
+) -> None:
+    """One unencodable hub message is skipped; the stream and the next message carry on."""
+
+    real_encode = sse._encode_ephemeral
+    calls = 0
+
+    def raise_once(message: Any) -> str:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise ValueError("unencodable")
+        return real_encode(message)
+
+    monkeypatch.setattr(sse, "_encode_ephemeral", raise_once)
+
+    async def exercise() -> None:
+        task_id: uuid.UUID | None = None
+        try:
+            async with _api_session(tmp_path) as api:
+                task_id, _ = _owned_seed(engine, api.owner_id)
+                stream = await api.open_stream(task_id)
+                await _subscribed(task_id)
+                tick_hub.publish_tick(task_id, stage="acquire", activity="Skipped")
+                tick_hub.publish_tick(task_id, stage="screen", activity="Arrives")
+                items = await stream.collect_until(lambda item: item.event == "tick")
+                await stream.aclose()
+                ticks = [item.data for item in items if item.event == "tick"]
+                assert [data["activity"] for data in ticks if data is not None] == ["Arrives"]
+        finally:
+            _cleanup(engine, task_id)
+
+    asyncio.run(exercise())
+
+
+def test_sse_writes_a_polls_durable_rows_before_its_live_messages(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """A durable row and a tick in one poll: the row first (a new run's ``run.opened``
+    must reach the client before that run's first tick, or the tick is dropped as
+    another walk's)."""
+
+    async def exercise() -> None:
+        task_id: uuid.UUID | None = None
+        try:
+            async with _api_session(tmp_path, poll_seconds=1.0) as api:
+                task_id, _ = _owned_seed(engine, api.owner_id)
+                stream = await api.open_stream(task_id)
+                await _subscribed(task_id)
+                with engine.begin() as conn:
+                    events.append(
+                        conn,
+                        task_id=task_id,
+                        run_id=None,
+                        event_type="task.renamed",
+                        payload={"name_to": "Durable first"},
+                    )
+                tick_hub.publish_tick(task_id, stage="acquire", activity="Live second")
+                items = await stream.collect_until(lambda item: item.event == "tick")
+                await stream.aclose()
+                frames = _frames(items)
+                assert [item.event for item in frames[-2:]] == ["task.updated", "tick"]
+        finally:
             _cleanup(engine, task_id)
 
     asyncio.run(exercise())

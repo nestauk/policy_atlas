@@ -89,7 +89,7 @@ export function Tooltip({
             // system's 2px blue leading rule via `className`; ones that
             // sit in running text (citations) stay plain.
             "z-50 max-w-xs border border-line-2 bg-paper px-2.5 py-1.5",
-            "text-caption leading-snug text-navy shadow-[0_4px_16px_rgba(15,41,74,0.12)]",
+            "text-caption leading-snug text-navy shadow-tooltip",
             "origin-[var(--radix-tooltip-content-transform-origin)] transition-[opacity,transform] duration-[125ms] ease-out-strong starting:scale-[0.97] starting:opacity-0",
             className,
           )}

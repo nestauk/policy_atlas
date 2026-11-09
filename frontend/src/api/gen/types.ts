@@ -330,7 +330,8 @@ export interface paths {
          *     transaction, each of the caller's own active tasks in this project that
          *     is in no other active project is archived too (owner, 2026-11-07), each
          *     task's History saying so; a task also in another project, or a
-         *     colleague's, is left as it is. Archiving an archived project changes
+         *     colleague's, or one whose latest run is still running, paused or about to
+         *     start, is left as it is. Archiving an archived project changes
          *     nothing and keeps its first time.
          *
          *     Args:

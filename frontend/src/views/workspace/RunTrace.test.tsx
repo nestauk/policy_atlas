@@ -480,7 +480,7 @@ describe("RunTrace — ended", () => {
     expect(screen.queryByRole("list", { name: "Run steps" })).toBeNull();
     expect(header()).not.toHaveClass("border-b");
     // No green one-liner: the words are not green, and nothing repeats a row.
-    expect(region.querySelector(".text-\\[\\#0c6b5a\\]")).toBeNull();
+    expect(region.querySelector(".text-green-deep")).toBeNull();
     expect(region).not.toHaveTextContent("312 found");
     await userEvent.click(headerButton());
     expect(headerButton()).toHaveAccessibleName("Hide steps");
@@ -660,6 +660,16 @@ describe("RunTrace — reduced motion", () => {
     frames.mockClear();
     stubReducedMotion(true);
     render(trace());
+    // Still the fold mark (the shut diamond), but no frame loop runs.
+    expect(liveMark()?.querySelector("svg")).not.toBeNull();
+    expect(frames).not.toHaveBeenCalled();
+  });
+
+  it("holds the live mark still while the stream is down (lead ruling, design lane review)", () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+    const frames = vi.spyOn(window, "requestAnimationFrame");
+    stubReducedMotion(false);
+    render(trace({ streamOpen: false }));
     // Still the fold mark (the shut diamond), but no frame loop runs.
     expect(liveMark()?.querySelector("svg")).not.toBeNull();
     expect(frames).not.toHaveBeenCalled();

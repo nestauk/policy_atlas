@@ -393,7 +393,7 @@ describe("LonglistView", () => {
     const packageRow = screen.getByText("Universal youth offer bundle").closest("li");
     expect(within(packageRow as HTMLElement).queryByText("includes National sanctions regime")).toBeNull();
     const addedRow = screen.getByText("Youth guarantee").closest("li");
-    expect(within(addedRow as HTMLElement).getByText("No documents yet")).toBeInTheDocument();
+    expect(within(addedRow as HTMLElement).getByText("No documents")).toBeInTheDocument();
     expect(within(addedRow as HTMLElement).queryByText("added by you")).toBeNull();
   });
 

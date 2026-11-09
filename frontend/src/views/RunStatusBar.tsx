@@ -250,7 +250,7 @@ export function RunStatusBar() {
             >
               {/* The mark sits on the first line of the words. */}
               <span aria-hidden="true" className="flex h-[1lh] w-3.5 shrink-0 items-center justify-center">
-                {shown.paused ? <StatusMark tone="paused" /> : <LiveMark />}
+                {shown.paused ? <StatusMark tone="paused" /> : <LiveMark still={stream.connectionStatus !== "connected"} />}
               </span>
               <span key={shown.key} className="anim-rise min-w-0 flex-1 truncate">
                 <span className="font-semibold text-navy">

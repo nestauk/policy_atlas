@@ -76,7 +76,7 @@ synthesise_write_block_summary = { tier = "standard", reasoning_effort = "none",
 synthesise_write_artefact_summary = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
 synthesise_judge_summary = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
 synthesise_section_turn = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }   # section turns and the repair share this step (D10)
-synthesise_section_emit = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }   # the streamed final turn (task 058, D1): strict json_schema, no tools, outside the retry loop
+synthesise_section_emit = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }   # the streamed final turn (task 058, D1): tools kept with tool_choice none, no response_format (the reply is parsed as the emit_section arguments), outside the retry loop
 synthesise_write_key_findings = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
 synthesise_write_case_studies = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
 synthesise_write_source_note = { tier = "fast", reasoning_effort = "medium", timeout_s = 30 }

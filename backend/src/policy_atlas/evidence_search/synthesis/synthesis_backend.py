@@ -34,6 +34,8 @@ plus the typed claims that anchor into it (ADR 0015).
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from threading import Lock
 from typing import Any, Literal, NotRequired, Protocol, TypedDict
 
@@ -44,6 +46,8 @@ from pydantic import ValidationError
 
 from policy_atlas.core import tracing
 from policy_atlas.core.liveness import (
+    model_call_closed,
+    model_call_opened,
     publish_section_card,
     publish_section_claim,
     publish_section_delta,
@@ -631,6 +635,25 @@ class StreamedClaimMarker:
                 if finding_id in by_finding
             ]
         return name_sources(found)
+
+
+@contextmanager
+def _open_model_call() -> Iterator[None]:
+    """Mark one streamed model call as open on the live-progress hub while it runs.
+
+    In plain terms: while a call is marked open, the hub keeps sending the
+    page a small "still working" signal (a heartbeat). Every other model call
+    is marked by :func:`tracing.traced_attempts`; the streamed write calls
+    run outside it, so without this the page heard nothing between chunks
+    (task 058 review: a 32 s silent gap on a real run). The mark covers the
+    stream and its non-streamed fallback, closed in a ``finally`` as
+    ``traced_attempts`` closes it.
+    """
+    model_call_opened()
+    try:
+        yield
+    finally:
+        model_call_closed()
 
 
 class StreamedCardPublisher:
@@ -1347,7 +1370,8 @@ class OpenAISynthesisBackend:
         chunks that runs out, text that is not a section object) the user's
         draft is reset with an empty ``replace``, :attr:`stream_fallbacks` is
         counted, and the turn is run once more without streaming through
-        :meth:`section_turn` with the forced tool, which keeps its own retries.
+        :meth:`section_turn` with the forced tool, which keeps its own retries;
+        that turn's prose is then sent to the page in one ``replace``.
 
         Args:
             seed: Section seed record.
@@ -1420,25 +1444,32 @@ class OpenAISynthesisBackend:
                 )
             return turn, usage
 
-        try:
-            if self._langfuse_client is None:
-                return _stream()
-            with tracing._observation(
-                self._langfuse_client,
-                name="synthesise:section_emit",
-                as_type="generation",
-            ) as span:
-                return _stream(span)
-        except Exception as exc:
-            log.warning(
-                "synthesis.section_emit_stream.fallback",
-                section_index=index,
-                error=type(exc).__name__,
-            )
-            publish_section_delta(index, "", mode="replace")
-            with self._lock:
-                self.stream_fallbacks += 1
-            return self.section_turn(seed, transcript, force_emit=True)
+        with _open_model_call():
+            try:
+                if self._langfuse_client is None:
+                    return _stream()
+                with tracing._observation(
+                    self._langfuse_client,
+                    name="synthesise:section_emit",
+                    as_type="generation",
+                ) as span:
+                    return _stream(span)
+            except Exception as exc:
+                log.warning(
+                    "synthesis.section_emit_stream.fallback",
+                    section_index=index,
+                    error=type(exc).__name__,
+                )
+                publish_section_delta(index, "", mode="replace")
+                with self._lock:
+                    self.stream_fallbacks += 1
+                result = self.section_turn(seed, transcript, force_emit=True)
+                # Task 058 review: the fallback's prose reaches the page at once, not at
+                # ``section_completed`` after the claim checks and the repair.
+                section = result[0]["claims"]
+                if section is not None and section.prose:
+                    publish_section_delta(index, section.prose, mode="replace")
+                return result
 
     def _repair_once(
         self,
@@ -1623,7 +1654,8 @@ class OpenAISynthesisBackend:
         reply that is not a section object) the page's draft is reset with
         an empty ``replace``, :attr:`stream_fallbacks` is counted, and
         :meth:`write_key_findings` runs once more without streaming (with its
-        own retries and its own absence rule).
+        own retries and its own absence rule); its prose is then sent to the
+        page in one ``replace``.
 
         Args:
             seed: The key-findings seed.
@@ -1688,25 +1720,29 @@ class OpenAISynthesisBackend:
                 )
             return section, usage
 
-        try:
-            if self._langfuse_client is None:
-                return _stream()
-            with tracing._observation(
-                self._langfuse_client,
-                name="synthesise:write_key_findings",
-                as_type="generation",
-            ) as span:
-                return _stream(span)
-        except Exception as exc:
-            log.warning(
-                "synthesis.key_findings_stream.fallback",
-                section_index=index,
-                error=type(exc).__name__,
-            )
-            publish_section_delta(index, "", mode="replace")
-            with self._lock:
-                self.stream_fallbacks += 1
-            return self.write_key_findings(seed)
+        with _open_model_call():
+            try:
+                if self._langfuse_client is None:
+                    return _stream()
+                with tracing._observation(
+                    self._langfuse_client,
+                    name="synthesise:write_key_findings",
+                    as_type="generation",
+                ) as span:
+                    return _stream(span)
+            except Exception as exc:
+                log.warning(
+                    "synthesis.key_findings_stream.fallback",
+                    section_index=index,
+                    error=type(exc).__name__,
+                )
+                publish_section_delta(index, "", mode="replace")
+                with self._lock:
+                    self.stream_fallbacks += 1
+                result = self.write_key_findings(seed)
+                if result[0].prose:
+                    publish_section_delta(index, result[0].prose, mode="replace")
+                return result
 
     def _write_case_studies_once(
         self,
@@ -1775,7 +1811,8 @@ class OpenAISynthesisBackend:
         repeat cards the user has already seen. On any failure the page's
         cards for the slot are cleared with an empty ``replace`` delta,
         :attr:`stream_fallbacks` is counted, and :meth:`write_case_studies`
-        runs once more without streaming (with its own retries).
+        runs once more without streaming (with its own retries); its cards
+        are then sent to the page.
 
         Args:
             seed: The case-studies seed.
@@ -1833,25 +1870,30 @@ class OpenAISynthesisBackend:
                 )
             return wire, usage
 
-        try:
-            if self._langfuse_client is None:
-                return _stream()
-            with tracing._observation(
-                self._langfuse_client,
-                name="synthesise:write_case_studies",
-                as_type="generation",
-            ) as span:
-                return _stream(span)
-        except Exception as exc:
-            log.warning(
-                "synthesis.case_studies_stream.fallback",
-                section_index=index,
-                error=type(exc).__name__,
-            )
-            publish_section_delta(index, "", mode="replace")
-            with self._lock:
-                self.stream_fallbacks += 1
-            return self.write_case_studies(seed)
+        with _open_model_call():
+            try:
+                if self._langfuse_client is None:
+                    return _stream()
+                with tracing._observation(
+                    self._langfuse_client,
+                    name="synthesise:write_case_studies",
+                    as_type="generation",
+                ) as span:
+                    return _stream(span)
+            except Exception as exc:
+                log.warning(
+                    "synthesis.case_studies_stream.fallback",
+                    section_index=index,
+                    error=type(exc).__name__,
+                )
+                publish_section_delta(index, "", mode="replace")
+                with self._lock:
+                    self.stream_fallbacks += 1
+                result = self.write_case_studies(seed)
+                for card in result[0].cards:
+                    if card.title.strip() and card.prose.strip():
+                        publish_section_card(index, card.title, card.prose)
+                return result
 
     def write_source_note(
         self, seed: dict[str, Any]
@@ -1979,7 +2021,8 @@ class OpenAISynthesisBackend:
         repeat text the user has already seen. On any failure the slot's
         draft is reset with an empty ``replace``, :attr:`stream_fallbacks` is
         counted, and :meth:`write_full_report_intro` runs once more without
-        streaming (with its own retries).
+        streaming (with its own retries); its text is then sent to the page
+        in one ``replace``.
 
         Args:
             seed: Report intent plus ordered body section titles and briefs.
@@ -2052,25 +2095,29 @@ class OpenAISynthesisBackend:
                 )
             return wire, usage
 
-        try:
-            if self._langfuse_client is None:
-                return _stream()
-            with tracing._observation(
-                self._langfuse_client,
-                name="synthesise:write_intro",
-                as_type="generation",
-            ) as span:
-                return _stream(span)
-        except Exception as exc:
-            log.warning(
-                "synthesis.full_report_intro_stream.fallback",
-                section_index=index,
-                error=type(exc).__name__,
-            )
-            publish_section_delta(index, "", mode="replace")
-            with self._lock:
-                self.stream_fallbacks += 1
-            return self.write_full_report_intro(seed)
+        with _open_model_call():
+            try:
+                if self._langfuse_client is None:
+                    return _stream()
+                with tracing._observation(
+                    self._langfuse_client,
+                    name="synthesise:write_intro",
+                    as_type="generation",
+                ) as span:
+                    return _stream(span)
+            except Exception as exc:
+                log.warning(
+                    "synthesis.full_report_intro_stream.fallback",
+                    section_index=index,
+                    error=type(exc).__name__,
+                )
+                publish_section_delta(index, "", mode="replace")
+                with self._lock:
+                    self.stream_fallbacks += 1
+                result = self.write_full_report_intro(seed)
+                if result[0].intro:
+                    publish_section_delta(index, result[0].intro, mode="replace")
+                return result
 
 
 class StubSynthesisBackend:

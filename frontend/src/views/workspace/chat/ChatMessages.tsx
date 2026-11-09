@@ -25,6 +25,7 @@ import { ActionLine } from "../ActionLine";
 import { PacedReply, usePacedText } from "../PacedReply";
 import { LABEL_CLASS } from "../../../ui/brand/label";
 import { cn } from "../../../ui/brand/cn";
+import { DisclosureChevron } from "../../../ui/brand/Disclosure";
 
 interface ChatCitation {
   id?: string;
@@ -319,7 +320,7 @@ function References({ citations, turn, onCitation, onOpenDossier }: { citations:
   // opening it too; then the marks line: the judge's verdict (opening the
   // citation's sheet), the evidence type, the strength and the read depth,
   // with the shared marks in place of the old chips.
-  return <footer className="border-t border-line pt-2"><details><summary className={cn(LABEL_CLASS, "cursor-pointer")}>References ({citations.length})</summary><ol className="mt-2 space-y-2 text-body text-ink">{citations.map((citation, index) => {
+  return <footer className="border-t border-line pt-2"><details className="group/references"><summary className={cn(LABEL_CLASS, "group flex cursor-pointer list-none items-center gap-1.5 hover:text-navy [&::-webkit-details-marker]:hidden")}><DisclosureChevron className="group-open/references:rotate-90" />References ({citations.length})</summary><ol className="mt-2 space-y-2 text-body text-ink">{citations.map((citation, index) => {
     const sourceRef = citation.source_id ?? citation.source_title ?? null;
     const titleText = scrub(citation.source_title ?? citation.title ?? citationId(citation) ?? "Citation");
     const n = citation.n ?? index + 1;

@@ -12,11 +12,11 @@ completes before acquire begins — this seam is never invoked mid-run
 
 from __future__ import annotations
 
+import time
 import uuid
 from collections.abc import Callable
 from typing import Any, Protocol, cast
 
-import openai
 import structlog
 from langfuse import Langfuse
 from openai.lib._pydantic import to_strict_json_schema
@@ -308,10 +308,13 @@ class OpenAITaskAgentBackend:
 
         In plain terms: the reply reaches the user piece by piece, so a request
         that fails after the first piece cannot be sent again without showing
-        the user the same words twice; that failure fails the turn. A dropped
-        connection or a timeout *before* the first piece has shown the user
+        the user the same words twice; that failure fails the turn. A passing
+        failure *before* the first word of the reply has shown the user
         nothing, so it is sent once more, as its own traced attempt
         (deferred.md, the chat stream's missing pre-token retry; task 058, N9).
+        "Passing" is the rule every other model call retries on
+        (:func:`tracing._retryable`: a timeout, a dropped connection, a 429 or
+        a 5xx), and the wait before the retry is theirs too.
         """
         logical_call_id = uuid.uuid4().hex[:12]
         for attempt in (1, 2):
@@ -329,16 +332,20 @@ class OpenAITaskAgentBackend:
                         "logical_call_id": logical_call_id,
                     },
                 )
-            except (openai.APIConnectionError, openai.APITimeoutError) as exc:
-                if attempt == 2 or started:
+            except Exception as exc:
+                # Task 058 review: the same failures traced_attempts retries.
+                if attempt == 2 or started or not tracing._retryable(exc):
                     raise
+                wait_s = tracing._retry_wait_s(exc)
                 log.warning(
                     "task_agent.turn.pre_token_retry",
                     step=profile.step,
                     attempt=attempt,
                     logical_call_id=logical_call_id,
                     error=type(exc).__name__,
+                    wait_s=wait_s,
                 )
+                time.sleep(wait_s)
         raise AssertionError("unreachable: the second attempt returns or raises")
 
     def _stream_attempt(
@@ -353,8 +360,9 @@ class OpenAITaskAgentBackend:
     ) -> Any:
         """Send one streamed request under its own Langfuse generation.
 
-        ``started`` gains an entry when the first content piece arrives, so the
-        caller knows whether a retry is still safe.
+        ``started`` gains an entry when the first piece of the reply's text
+        has gone to ``on_delta``, so the caller knows whether a retry is still
+        safe (a failure before that has shown the user nothing).
         """
         step = profile.step
         model = route().model_for(step)
@@ -396,10 +404,10 @@ class OpenAITaskAgentBackend:
                 if choices:
                     fragment = getattr(getattr(choices[0], "delta", None), "content", None)
                     if isinstance(fragment, str) and fragment:
-                        started.append(True)
                         pieces.append(fragment)
                         text = scrub_nul(decoder.feed(fragment))
                         if text:
+                            started.append(True)
                             on_delta(text)
                 chunk_usage = getattr(chunk, "usage", None)
                 if chunk_usage is not None:

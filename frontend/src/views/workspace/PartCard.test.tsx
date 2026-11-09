@@ -240,7 +240,7 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
     const name = screen.getByText("Question");
     expect(name).toHaveClass("uppercase", "text-meta", "text-grey");
     expect(name).not.toHaveClass("text-navy");
-    expect(screen.getByText("Looks right")).toHaveClass("text-[#0c6b5a]");
+    expect(screen.getByText("Looks right")).toHaveClass("text-green-deep");
   });
 
   // Owner, round 8: "Change" takes its own line under the green words, as a
@@ -387,7 +387,9 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
     const { unmount } = render(
       <PartCard part={proposal("scope")} state={OPEN} disabled={false} onSend={vi.fn()} steps={steps} />,
     );
-    expect(screen.getByTestId("plan-stepper")).toHaveTextContent(/^Question ✓, done\s*Plan · decision 2 of 3 · Scope$/);
+    expect(screen.getByTestId("plan-stepper")).toHaveTextContent(/^Question, done\s*Plan · decision 2 of 3 · Scope$/);
+    // The tick is the icon module's glyph, never a text "✓" (design lane review).
+    expect(screen.getByTestId("plan-stepper").querySelector("svg")).not.toBeNull();
     unmount();
     render(
       <PartCard part={proposal("scope")} state={{ ...OPEN, live: false, answered: true }} disabled={false} onSend={vi.fn()} steps={steps} />,
@@ -563,7 +565,7 @@ describe("scope chips grouped by what they constrain (owner, 2026-11-05)", () =>
     // The group labels a step smaller than the part's name (lead, round 6).
     expect(screen.getByText("Source filters")).toHaveClass("text-caption", "uppercase");
     expect(screen.getByText("Source filters")).not.toHaveClass("text-meta");
-    expect(screen.getByText("OECD")).toHaveClass("text-[#0c6b5a]");
+    expect(screen.getByText("OECD")).toHaveClass("text-green-deep");
     expect(screen.getByText("OECD").className).not.toMatch(/(^|\s)text-green(\s|$)/);
   });
 });

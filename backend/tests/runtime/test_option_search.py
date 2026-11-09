@@ -554,6 +554,57 @@ def test_the_fan_out_runs_once_across_a_resume(engine: Engine, child_run_plan: A
         _cleanup(engine, task_id)
 
 
+def test_a_resume_past_the_join_publishes_no_count(
+    engine: Engine, child_run_plan: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Task 058 review: a finished stage's count is not sent again on a resume."""
+    task_id: uuid.UUID | None = None
+    ticks: list[dict[str, Any]] = []
+
+    class FakeHub:
+        def publish_tick(self, task_id: uuid.UUID, **payload: Any) -> None:
+            ticks.append(payload)
+
+    monkeypatch.setattr(option_search, "tick_hub", FakeHub())
+    monkeypatch.setattr(option_search, "OPTION_SEARCH_JOIN_POLL", 0.05)
+    try:
+        child_run_plan(lambda *args, **kwargs: None)
+        plan = _longlist_plan("Own")
+        task_id, scope_id, plan_id = _seed_longlist(engine, plan)
+        parent = _seed_walk(engine, task_id, scope_id, plan_id)
+        _seed_option(engine, task_id, "Own", "added_by_you")
+        plan_row = {"plan_id": plan_id, "version": 1, "payload": plan.model_dump(mode="json")}
+        children = option_search.dispatch_option_searches(
+            engine,
+            task_id=task_id,
+            parent_id=parent,
+            plan_row=plan_row,
+            suggest_run_id=None,
+            backends=_runner_backends(),
+            session_id=task_id,
+        )
+        option_search.join_option_searches(
+            engine, task_id=task_id, parent_id=parent, child_ids=children, timeout=10
+        )
+        ticks.clear()
+
+        again = option_search.dispatch_option_searches(
+            engine,
+            task_id=task_id,
+            parent_id=parent,
+            plan_row=plan_row,
+            suggest_run_id=None,
+            backends=_runner_backends(),
+            session_id=task_id,
+        )
+
+        assert again == children
+        assert ticks == []
+        assert parent not in option_search._progress_polls
+    finally:
+        _cleanup(engine, task_id)
+
+
 # --- failure, the timeout and the conversation ------------------------------
 
 

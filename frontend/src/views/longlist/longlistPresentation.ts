@@ -165,21 +165,34 @@ export const NOT_EVALUATED_LINE = "Not evaluated in any of these sources.";
  *   lever: The lever's words, or null when the grouping says it or the
  *     profile wave has not written it.
  *   theme: The theme's name to show, or null when the grouping says it.
+ *   building: The list is still being built: an option with no documents
+ *     reads "No documents yet" then, "No documents" once the list is done.
  *
  * Returns:
  *   The fields, each one whole (a line wraps between fields, never inside a
  *   middot).
  */
-export function rowMetaFields(option: OptionSummaryOut, lever: string | null, theme: string | null): string[] {
+export function rowMetaFields(
+  option: OptionSummaryOut,
+  lever: string | null,
+  theme: string | null,
+  building = false,
+): string[] {
   const fields: string[] = [];
   if (lever !== null) fields.push(lever);
   if (theme !== null) fields.push(theme);
   if (option.search_pending) fields.push("searching for its evidence…");
   // The count alone on the list (round 13, owner: no evaluated / describe
   // split on the page); the card keeps the split.
-  else fields.push(option.document_count === 0 ? "No documents yet" : countOf(option.document_count, "document", "documents"));
+  else fields.push(option.document_count === 0 ? noDocumentsWords(building) : countOf(option.document_count, "document", "documents"));
   if (option.no_in_scope_evidence) fields.push(NO_IN_SCOPE_WORDS);
   return fields;
+}
+
+/** An option with no documents: "No documents yet" while the list is built,
+ *  "No documents" once it is done (lead, design lane review). */
+function noDocumentsWords(building: boolean): string {
+  return building ? "No documents yet" : "No documents";
 }
 
 /** A lever type as the noun a theme heading uses ("services, subsidies
@@ -754,6 +767,8 @@ function evaluatedInPart(countries: readonly EvaluatedCountryOut[]): string {
  *
  * Args:
  *   option: The option, read for its document counts, countries and outcome counts.
+ *   building: The list is still being built ("No documents yet" rather
+ *     than "No documents").
  *
  * Returns:
  *   The parts joined by " · ".
@@ -763,9 +778,10 @@ export function evidenceSignal(
     OptionSummaryOut,
     "document_count" | "evaluated_count" | "evaluated_countries" | "outcomes_evaluated" | "outcomes_total"
   >,
+  building = false,
 ): string {
   const documents = option.document_count;
-  if (documents === 0) return "No documents yet";
+  if (documents === 0) return noDocumentsWords(building);
   const evaluated = option.evaluated_count;
   const describing = documents - evaluated;
   if (evaluated === 0) {

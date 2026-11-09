@@ -150,10 +150,12 @@ export function useArchiveTask(taskId: string) {
   });
 }
 
-/** `POST /api/v1/projects/{id}/archive` (task 058, round 11): the owner
- *  archives a project. It leaves the default Projects list and is listed
- *  under `status: "archived"`; its tasks are left as they are. Archiving an
- *  archived project changes nothing. */
+/** `POST /api/v1/projects/{id}/archive` (task 058, rounds 11 and 14): the
+ *  owner archives a project. It leaves the default Projects list and is
+ *  listed under `status: "archived"`. In the same call the server archives
+ *  each of the caller's own active tasks in it that is in no other active
+ *  project and has no run under way; any other task is left as it is.
+ *  Archiving an archived project changes nothing. */
 export function useArchiveProject(projectId: string) {
   const client = useApiClient();
   const queryClient = useQueryClient();
@@ -166,8 +168,7 @@ export function useArchiveProject(projectId: string) {
       if (data === undefined) raise(error, response.status);
       return data;
     },
-    // Round 14: the archive also archives the project's tasks that are in no
-    // other project, so the task lists refetch too.
+    // The archived tasks leave the task lists, so they refetch too.
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["tasks"] });

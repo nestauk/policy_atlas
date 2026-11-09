@@ -10,7 +10,6 @@ import {
   currentRow,
   endedLine,
   formatElapsed,
-  formatMinutes,
   isFinished,
   rowCounts,
   rowDetail,
@@ -412,10 +411,12 @@ describe("elapsed time in words", () => {
     expect(formatElapsed(3840)).toBe("1 h 4 min");
   });
 
-  it("formats the status bar's and the task list's minutes", () => {
-    expect(formatMinutes(45)).toBe("45 s");
-    expect(formatMinutes(372)).toBe("6 min");
-    expect(formatMinutes(14 * 60 + 59)).toBe("14 min");
+  it("formats the folded trace line's, History's and the task list's minutes", () => {
+    const toTheMinute = (seconds: number) => formatElapsed(seconds, { withSeconds: false });
+    expect(toTheMinute(45)).toBe("45 s");
+    expect(toTheMinute(372)).toBe("6 min");
+    expect(toTheMinute(14 * 60 + 59)).toBe("14 min");
+    expect(toTheMinute(3840)).toBe("1 h 4 min");
   });
 });
 

@@ -43,7 +43,7 @@ export function OutlineSwitch<K extends string>({
               "pressable relative cursor-pointer border bg-paper text-meta font-semibold transition-colors duration-150",
               height === 40 ? "h-10 px-3.5" : "h-8 px-3",
               index > 0 && "-ml-px",
-              pressed ? "z-10 border-navy text-navy" : "border-line-2 text-grey hover:bg-[#f0f0f3] hover:text-navy",
+              pressed ? "z-10 border-navy text-navy" : "border-line-2 text-grey hover:bg-hover-fill hover:text-navy",
             )}
           >
             {choice.label}

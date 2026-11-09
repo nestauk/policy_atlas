@@ -288,7 +288,8 @@ function OptionRow({
 }) {
   const summary = row.summary;
   const excluded = summary?.state === "excluded";
-  const fields = summary === null ? [] : rowMetaFields(summary, showLever ? row.lever : null, theme);
+  // The controls are null while the list is built.
+  const fields = summary === null ? [] : rowMetaFields(summary, showLever ? row.lever : null, theme, controls === null);
   const status = row.status;
   const exclusion = excluded ? (summary?.exclusion ?? null) : null;
   const notice = controls?.notice ?? null;

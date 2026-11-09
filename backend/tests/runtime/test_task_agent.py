@@ -48,8 +48,8 @@ def _plan_from_draft(draft: PlanDraftWire) -> TaskPlan:
 
 
 def test_task_agent_prompt_version_pinned() -> None:
-    # planner_v11: APO source-collection restriction + 1000-char screening cap.
-    assert PLANNER_PROMPT_VERSION == "planner_v11"
+    # planner_v12 (task 058 review): plain thoroughness copy, bands from task_plan.TIME_BANDS.
+    assert PLANNER_PROMPT_VERSION == "planner_v12"
 
 
 def test_task_agent_prompt_teaches_apo_source_restriction() -> None:
@@ -563,6 +563,29 @@ def _streaming_backend(attempts: list[Any]) -> tuple[OpenAITaskAgentBackend, _St
     return backend, completions
 
 
+@pytest.fixture
+def retry_waits(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    """Record the streamed turn's waits before a retry instead of sleeping."""
+    from types import SimpleNamespace
+
+    from policy_atlas.runtime import task_agent as task_agent_module
+
+    waits: list[float] = []
+    monkeypatch.setattr(task_agent_module, "time", SimpleNamespace(sleep=waits.append))
+    return waits
+
+
+def _status_error(code: int) -> Exception:
+    import httpx
+    import openai
+
+    request = httpx.Request("POST", "https://example.invalid")
+    response = httpx.Response(code, request=request)
+    if code == 429:
+        return openai.RateLimitError("rate limited", response=response, body=None)
+    return openai.APIStatusError(f"status {code}", response=response, body=None)
+
+
 def _connection_error() -> Exception:
     import httpx
     import openai
@@ -613,7 +636,7 @@ def test_streamed_turn_sends_a_strict_schema_stream_and_deltas_join_to_the_reply
 
 
 def test_streamed_turn_retries_once_on_a_connection_error_before_the_first_piece(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, retry_waits: list[float]
 ) -> None:
     from policy_atlas.runtime import task_agent as task_agent_module
     from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
@@ -656,7 +679,7 @@ def test_streamed_turn_is_not_retried_after_the_first_piece() -> None:
     assert deltas == ["Hal"]
 
 
-def test_streamed_turn_retries_at_most_once() -> None:
+def test_streamed_turn_retries_at_most_once(retry_waits: list[float]) -> None:
     from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
 
     backend, completions = _streaming_backend(
@@ -667,6 +690,54 @@ def test_streamed_turn_retries_at_most_once() -> None:
     with pytest.raises(openai.APIConnectionError):
         backend.turn(EVIDENCE_SEARCH_TASK_AGENT, [_turn("Q?")], None, on_delta=lambda _t: None)
     assert len(completions.requests) == 2
+
+
+@pytest.mark.parametrize("code", [429, 503], ids=["rate-limited", "server-error"])
+def test_streamed_turn_retries_a_passing_status_error_before_the_first_piece(
+    code: int, retry_waits: list[float]
+) -> None:
+    """Task 058 review: the same failures every other model call retries."""
+    from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
+
+    backend, completions = _streaming_backend([_status_error(code), _pieces(_wire_json())])
+    deltas: list[str] = []
+    turn = backend.turn(EVIDENCE_SEARCH_TASK_AGENT, [_turn("Q?")], None, on_delta=deltas.append)
+
+    assert len(completions.requests) == 2
+    assert "".join(deltas) == turn.reply
+    assert retry_waits == [1.0]
+
+
+def test_streamed_turn_does_not_retry_a_bad_request(retry_waits: list[float]) -> None:
+    import openai
+
+    from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
+
+    backend, completions = _streaming_backend([_status_error(400), _pieces(_wire_json())])
+    with pytest.raises(openai.APIStatusError):
+        backend.turn(EVIDENCE_SEARCH_TASK_AGENT, [_turn("Q?")], None, on_delta=lambda _t: None)
+    assert len(completions.requests) == 1
+    assert retry_waits == []
+
+
+def test_streamed_turn_retries_a_drop_before_the_first_word_of_the_reply(
+    retry_waits: list[float],
+) -> None:
+    """Pieces that carried no reply text showed the user nothing, so a retry is safe."""
+    from policy_atlas.runtime.task_agent import EVIDENCE_SEARCH_TASK_AGENT
+
+    def _drops_before_the_reply_text() -> Iterator[Any]:
+        yield _chunk('{"reply": "')
+        raise _connection_error()
+
+    backend, completions = _streaming_backend(
+        [_drops_before_the_reply_text(), _pieces(_wire_json())]
+    )
+    deltas: list[str] = []
+    turn = backend.turn(EVIDENCE_SEARCH_TASK_AGENT, [_turn("Q?")], None, on_delta=deltas.append)
+
+    assert len(completions.requests) == 2
+    assert "".join(deltas) == turn.reply
 
 
 def test_turn_without_on_delta_keeps_the_parse_path() -> None:

@@ -13,6 +13,7 @@ line.
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
@@ -35,6 +36,13 @@ log = structlog.get_logger()
 
 #: The shortlist states that hold a place.
 PLACE_STATES = ("proposed", "added_by_you")
+
+#: What marks a link in the note; the card shows none (plan P5). The same
+#: marks the proposal's reasons are checked for (``shortlist._LINK_MARKS``;
+#: that module imports this one, so the tuple is not imported from there).
+_LINK_MARKS = ("http://", "https://", "www.", "](")
+#: A Markdown link, ``[words](address)``: its words are kept.
+_MARKDOWN_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 
 
 def current_places(conn: Connection, task_id: uuid.UUID) -> list[uuid.UUID]:
@@ -115,6 +123,22 @@ def _note_inputs(
     return options, [short[place] for place in places if place in short], short
 
 
+def without_links(text: str) -> str:
+    """The note with every link taken out (plan P5: the card shows none).
+
+    A Markdown link keeps its words; any other word carrying a link mark
+    (``http://``, ``https://``, ``www.``) is dropped. Task 058 review: the
+    proposal re-asked a note with a link once; the note's own step has no
+    re-ask wording, so the link is taken out instead.
+    """
+    unlinked = _MARKDOWN_LINK.sub(r"\1", text)
+    return " ".join(
+        word
+        for word in unlinked.split()
+        if not any(mark in word.lower() for mark in _LINK_MARKS)
+    )
+
+
 def bounded_note(text: str) -> str:
     """The note as stored: cleaned onto plain text and cut to the bound on a word."""
     note = clean_text(text) or ""
@@ -178,7 +202,10 @@ def write_shortlist_note(
     wire, _usage = backend.shortlist_note(
         outcomes=list(outcomes), options=options, places=short_places, changes=data_changes
     )
-    note = bounded_note(wire.note)
+    unlinked = without_links(wire.note)
+    if unlinked != " ".join(wire.note.split()):
+        log.warning("shortlist.note_link_removed", task_id=str(task_id))
+    note = bounded_note(unlinked)
     stored = dict(row.shortlist) if isinstance(row.shortlist, Mapping) else {}
     conn.execute(
         longlist_result.update()

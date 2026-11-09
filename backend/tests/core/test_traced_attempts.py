@@ -93,6 +93,9 @@ class _RecordingHub:
     ) -> None:
         self.events.append(("closed", {"task_id": task_id, "stage": stage, "run_id": run_id}))
 
+    def open_stage(self, *args: Any) -> None:
+        pass
+
 
 def _timeout() -> openai.APITimeoutError:
     return openai.APITimeoutError(request=_REQUEST)

@@ -16,7 +16,7 @@ import {
   rowStatusCellClass,
   taskListRowGridClass,
 } from "./listPageChrome";
-import { elapsedSeconds, formatMinutes } from "./workspace/runProgress";
+import { elapsedSeconds, formatElapsed } from "./workspace/runProgress";
 import { formatCount } from "../lib/format";
 
 type LatestRun = components["schemas"]["TaskOut"]["latest_run"];
@@ -88,7 +88,7 @@ export function TaskListRow({
   // A running row's step and its timer (round 14: a long step truncates,
   // the timer always shows).
   const liveStep = running ? scrub(activeRun?.stage_label ?? "") : null;
-  const liveTimer = running ? formatMinutes(elapsedSeconds(activeRun?.started_at, undefined, nowMs)) : null;
+  const liveTimer = running ? formatElapsed(elapsedSeconds(activeRun?.started_at, undefined, nowMs), { withSeconds: false }) : null;
   const statusLabel = liveStep !== null ? `${liveStep} · ${liveTimer}` : scrub(statusWord);
   const safeName = scrub(name);
   const safeProjects = showProjectPrefix

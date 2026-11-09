@@ -13,6 +13,7 @@ import {
 } from "./checkInPresentation";
 import { LINK_CLASS } from "../../ui/brand/inlineActions";
 import { cn } from "../../ui/brand/cn";
+import { DisclosureChevron } from "../../ui/brand/Disclosure";
 import { formatCount } from "../../lib/format";
 
 /** One staged P2 theme rename (batched into the single check-in response). */
@@ -176,8 +177,11 @@ export function CheckInBundle({
             </ul>
           )}
           {queries.length > 0 && (
-            <details className="mt-1.5 text-caption text-grey">
-              <summary className="cursor-pointer">The queries used</summary>
+            <details className="group/queries mt-1.5 text-caption text-grey">
+              <summary className="group flex cursor-pointer list-none items-center gap-1.5 hover:text-navy [&::-webkit-details-marker]:hidden">
+                <DisclosureChevron className="group-open/queries:rotate-90" />
+                The queries used
+              </summary>
               <ul className="mt-1 space-y-0.5">
                 {queries.map((query) => (
                   <li key={query} className="text-ink">

@@ -270,7 +270,7 @@ function ShellPlanPanel({ taskId }: { taskId: string }) {
         round 14); a press on it is a press outside the plan, which closes
         it. The Agent tab's plan sits beside the thread with no scrim. */}
     <div aria-hidden="true" data-testid="plan-scrim" className={SHEET_SCRIM_CLASS} />
-    <div className="absolute inset-y-0 right-0 z-50 flex min-h-0 w-[min(46rem,55%)] shadow-[0_10px_30px_rgba(15,41,74,0.14)] max-md:left-0 max-md:w-auto">
+    <div className="absolute inset-y-0 right-0 z-50 flex min-h-0 w-[min(46rem,55%)] shadow-overlay max-md:left-0 max-md:w-auto">
       <PlanDocument
         taskId={taskId}
         placement="side"

@@ -60,8 +60,8 @@ export function WorkspaceView() {
     setFooterOpen(false);
   }
   const hasRun = stream.run !== null;
-  // Shared with the task nav's "Plan" control and the sidebar (task 058,
-  // N15): one open state, and the side panel by default.
+  // Shared with the card's "See plan" and the sidebar (task 058, N15): one
+  // open state, and the side panel by default.
   const { open: planOpen, openPlan: showPlan, closePlan } = usePlanPanel();
   const [planPlacement, setPlanPlacement] = useState<"center" | "side">("side");
   // Plan edits live in the store (task 058, N20): leaving the tab keeps them.

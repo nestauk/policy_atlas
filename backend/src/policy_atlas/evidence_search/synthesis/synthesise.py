@@ -5893,6 +5893,11 @@ def synthesise_scope(
             f"scope {context.scope_id} run {run_id}"
         )
     reranker = chunk_reranker if chunk_reranker is not None else PassThroughChunkReranker()
+    # The backend's fallback counter lives for the whole process (one backend
+    # serves every run), so this run's count is the difference at the rollup.
+    # ponytail: two synthesis runs at once in one process can each count the
+    # other's fallback; counting inside the loop's own accounting is the upgrade.
+    fallbacks_before = getattr(synthesis_backend, "stream_fallbacks", 0)
     blocks_written: list[str] = []
     call_counts = {
         "proposal": 0,
@@ -6844,6 +6849,12 @@ def synthesise_scope(
         unspanned_unlocated=total_unspanned_unlocated,
         tool_calls_total=total_tool_calls,
     )
+    # Task 058 review (trace lane): the streamed write turn fell back to the forced tool
+    # call once on a real run and only the trace showed it. The count rides in the
+    # completed payload so the run row says so (``headline_counts``).
+    counts["stream_fallbacks"] = (
+        getattr(synthesis_backend, "stream_fallbacks", 0) - fallbacks_before
+    )
     # Conditional-required key-findings marker (ADR 0015 §8): present iff a
     # block was minted; the absence path records why nothing was forced.
     counts["key_findings"] = key_findings_rollup
@@ -6950,8 +6961,10 @@ def write_summaries_after_commit(
     provider_disabled = False
     disabled_logged = False
 
-    for index, spec in enumerate(block_specs, start=1):
-        # Round 14: the line moves section by section.
+    for index, spec in enumerate(block_specs):
+        # Round 14: the line moves section by section. ``done`` counts the
+        # sections already summarised, so the first line reads "0 of N"
+        # (task 058 review: it ran one ahead).
         liveness.publish_progress(
             activity=activity("synthesise.summary_section", done=index, total=len(block_specs)),
             done=index,

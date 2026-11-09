@@ -23,7 +23,6 @@ import html
 import json
 import math
 import re
-import unicodedata
 import uuid
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
@@ -47,6 +46,8 @@ from policy_atlas.core.embeddings import (
     embed_with_retry,
     validate_vector,
 )
+from policy_atlas.core.liveness import ACTIVITY_QUERY_MAX as ACTIVITY_QUERY_MAX
+from policy_atlas.core.liveness import normalise_query as normalise_query
 from policy_atlas.core.schema import (
     CONTEXT_TYPES,
     EFFECT_DIRECTIONS,
@@ -3582,34 +3583,6 @@ def run_tool_loop(
                 on_tool_result(tool_name, tool_result)
 
     raise RuntimeError("section loop exhausted without emission")
-
-
-#: Longest model query shown in the writer's activity line (task 058, N3).
-ACTIVITY_QUERY_MAX = 120
-
-
-def normalise_query(query: object) -> str:
-    """Make the model's search query safe to show in an activity line (task 058, N3).
-
-    The text is put in Unicode NFC form, every run of whitespace becomes one
-    space, control and format characters (Unicode categories starting with
-    ``C``, such as zero-width spaces) are removed, and the result is cut to
-    :data:`ACTIVITY_QUERY_MAX` characters with nothing appended.
-
-    Args:
-        query: The ``query`` argument the model sent, of any type.
-
-    Returns:
-        The cleaned query, or ``""`` when it is missing or not a string.
-    """
-    if not isinstance(query, str):
-        return ""
-    kept = (
-        " " if char.isspace() else char
-        for char in unicodedata.normalize("NFC", query)
-        if char.isspace() or not unicodedata.category(char).startswith("C")
-    )
-    return " ".join("".join(kept).split())[:ACTIVITY_QUERY_MAX]
 
 
 def _tool_activity(tool_name: str, arguments: Mapping[str, Any]) -> str | None:

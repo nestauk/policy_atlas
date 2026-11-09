@@ -366,7 +366,7 @@ def post_shortlist_note(
         # As the harness does: the stub when the bundle names none.
         writer = backends.longlist if backends.longlist is not None else StubLonglistBackend()
         try:
-            with tracing.trace_scope(user_id=user.user_id):
+            with tracing.trace_scope(user_id=user.user_id, session_id=task_id):
                 note = write_shortlist_note(
                     conn,
                     task_id,

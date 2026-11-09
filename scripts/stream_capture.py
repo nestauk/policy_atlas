@@ -398,16 +398,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--api", default="http://127.0.0.1:8000", help="API base address")
     parser.add_argument("--task-id", required=True, help="task uuid")
-    token = parser.add_mutually_exclusive_group(required=True)
-    token.add_argument("--token", help="bearer token (visible in the process list)")
-    token.add_argument("--token-env", metavar="NAME", help="read the token from $NAME")
+    parser.add_argument(
+        "--token-env",
+        required=True,
+        metavar="NAME",
+        help="name of the environment variable that holds the bearer token",
+    )
     parser.add_argument("--out", required=True, help="the .jsonl file to write")
     parser.add_argument(
         "--until-terminal", action="store_true", help="stop after the run's final run.status"
     )
     parser.add_argument("--timeout-s", type=float, default=7200.0, help="overall deadline")
     args = parser.parse_args(argv)
-    bearer = args.token if args.token is not None else os.environ.get(args.token_env, "")
+    bearer = os.environ.get(args.token_env, "")
     if not bearer:
         parser.error(f"${args.token_env} is empty or unset")
     deadline = time.monotonic() + args.timeout_s

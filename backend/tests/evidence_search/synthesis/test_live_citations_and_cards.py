@@ -383,7 +383,7 @@ def test_a_broken_reply_resets_the_slot_and_falls_back_once(
     good = json.dumps(_CARDS["cards"][0])
     text = '{"cards": [' + good + ", {broken"
     backend, _completions = _backend(text, 5)
-    fallback = CaseStudyWire(cards=[])
+    fallback = CaseStudyWire.model_validate({"cards": _CARDS["cards"][1:]})
     calls: list[dict[str, Any]] = []
 
     def _structured(seed: dict[str, Any]) -> UsageResult[CaseStudyWire]:
@@ -392,8 +392,12 @@ def test_a_broken_reply_resets_the_slot_and_falls_back_once(
 
     cast("Any", backend).write_case_studies = _structured
     wire, _usage = backend.write_case_studies_stream(_SEED, index=1)
-    # The first card had already been shown; the reset clears it on the page.
-    assert [title for _i, title, _p in cards] == [_CARDS["cards"][0]["title"]]
+    # The first card had already been shown; the reset clears it on the page,
+    # then the fallback's cards are shown (task 058 review).
+    assert [title for _i, title, _p in cards] == [
+        _CARDS["cards"][0]["title"],
+        _CARDS["cards"][1]["title"],
+    ]
     assert deltas == [(1, "", "replace")]
     assert calls == [_SEED]
     assert wire is fallback

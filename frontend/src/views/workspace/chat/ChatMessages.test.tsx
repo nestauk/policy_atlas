@@ -208,7 +208,7 @@ describe("ChatMessages", () => {
     ]);
     const [marker] = screen.getAllByRole("button", { name: "[1]" });
     await userEvent.setup().click(marker);
-    expect(await within(await screen.findByRole("dialog")).findByText("moderate")).toBeInTheDocument();
+    expect(await within(await screen.findByRole("dialog")).findByText("Moderate")).toBeInTheDocument();
   });
 
   // Round 12: the sheet's citation block takes the report's blocks: the
@@ -224,7 +224,8 @@ describe("ChatMessages", () => {
     const [marker] = screen.getAllByRole("button", { name: "[1]" });
     await userEvent.setup().click(marker);
     const sheet = await screen.findByRole("dialog");
-    expect(within(sheet).getByText("moderate")).toBeInTheDocument();
+    // The vocabulary's case, whatever the server sends (design lane review).
+    expect(within(sheet).getByText("Moderate")).toBeInTheDocument();
     expect(within(sheet).getByText(TIER_LABEL.tier_2)).toBeInTheDocument();
     expect(within(sheet).getByText(TIER_TEXT.tier_2)).toBeInTheDocument();
   });

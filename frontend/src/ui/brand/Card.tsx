@@ -11,7 +11,7 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
     <div
       className={cn(
         "border border-line-2 bg-paper",
-        "shadow-[0_1px_3px_rgba(15,41,74,0.05),0_8px_24px_rgba(15,41,74,0.04)]",
+        "shadow-paper",
         className,
       )}
       {...props}
@@ -92,17 +92,21 @@ export const LIVE_MARK_TEXT_SIZE = 14;
 /**
  * The live mark (task 058; annex § Owner round after the trace, item 6):
  * wherever a run is live, its mark is the Policy Atlas fold mark turning.
- * It holds still (the shut blue diamond) under reduced motion. The static
- * states keep the 6 px square (`StatusMark`).
+ * It turns while the stream is open and the run is live (heartbeats count as
+ * data arriving), and holds still (the shut blue diamond) when the
+ * connection is down or under reduced motion (lead ruling, design lane
+ * review). The static states keep the 6 px square (`StatusMark`).
  *
  * Args:
  *   size: 14 px in a line of text (the default), 17 px in the rail.
+ *   still: Hold the mark still: the caller's stream is not open.
  */
 export function LiveMark({
   size = LIVE_MARK_TEXT_SIZE,
+  still = false,
   className,
   ...props
-}: HTMLAttributes<HTMLSpanElement> & { size?: number }) {
+}: HTMLAttributes<HTMLSpanElement> & { size?: number; still?: boolean }) {
   return (
     <span
       aria-hidden="true"
@@ -111,7 +115,7 @@ export function LiveMark({
       style={{ width: size, height: size }}
       {...props}
     >
-      <FoldMarkAnimated size={size} onDark={false} />
+      <FoldMarkAnimated size={size} onDark={false} reducedMotion={still ? true : undefined} />
     </span>
   );
 }

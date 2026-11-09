@@ -649,7 +649,7 @@ def test_abort_emits_terminal_event_and_abandons_plan(engine: Engine) -> None:
     task_id: uuid.UUID | None = None
     try:
         task_id, _scope_id, capability_run_id, check_in_id = _park_walk(engine)
-        answer_check_in(
+        answer = answer_check_in(
             engine,
             task_id=task_id,
             check_in_id=check_in_id,
@@ -680,6 +680,12 @@ def test_abort_emits_terminal_event_and_abandons_plan(engine: Engine) -> None:
         ]
         assert len(finished) == 1
         assert finished[0]["payload"]["status"] == "aborted"
+        # Task 058 review: the abort chosen from the card's option names it, so
+        # History can quote the card's words.
+        [decision] = [
+            row for row in log_rows if row["event_id"] == answer.decision_event_id
+        ]
+        assert decision["payload"]["option_id"] == "abort"
         # SSE replay derives run.status frames from run.* events, so the store
         # sees the terminal transition (review findings adv-M5/codex-5).
         assert "abandoned" in plan_statuses

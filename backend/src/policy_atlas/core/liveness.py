@@ -23,8 +23,9 @@ sources are assigned to them, then the themes found while options are
 (round 11), each kept under its stage.
 
 Nothing here is saved to the database. The durable record stays in
-``event_log``; these messages may be lost (a full queue drops its oldest
-message, a restart forgets everything) and that is by design.
+``event_log``; these messages may be lost (a full queue is emptied and
+refilled with where things stand, a restart forgets everything) and that is by
+design.
 
 Three things keep the stream calm and alive:
 
@@ -46,9 +47,10 @@ import asyncio
 import dataclasses
 import threading
 import time
+import unicodedata
 import uuid
 from collections.abc import Callable, Iterator, Sequence
-from contextlib import contextmanager, suppress
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -65,6 +67,12 @@ HEARTBEAT_SECONDS = 10.0
 MEMORY_TTL_SECONDS = 600.0
 #: The remembered section draft keeps at most this many characters (the stream is not cut).
 DRAFT_MAX_CHARS = 20_000
+#: Longest model query shown in an activity line (task 058, N3).
+ACTIVITY_QUERY_MAX = 120
+#: Longest query a ``search.query`` message carries. The Search queries table
+#: shows whole queries, so this is wider than the activity line's bound; it
+#: bounds the frame.
+SEARCH_QUERY_MAX = 300
 
 type TickSource = Literal["loop", "hook"]
 #: One source as the page names it: ``(source_id, title)``.
@@ -286,12 +294,15 @@ type HubMessage = (
 )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class _Subscriber:
-    """One queue and the event loop that owns it."""
+    """One queue, the event loop that owns it, and how far a resync covered."""
 
     loop: asyncio.AbstractEventLoop
     queue: asyncio.Queue[HubMessage]
+    #: Messages numbered up to this one are already in the resync this queue
+    #: was refilled with, so they are not placed again.
+    resynced_through: int = 0
 
 
 @dataclass(slots=True)
@@ -350,6 +361,9 @@ class _TaskMemory:
     #: and 11), in the order first found.
     themes: dict[str, ThemesFound] = field(default_factory=dict)
     themes_at: float = 0.0
+    #: Stages the run has ended: a late tick for one is ignored, so it cannot
+    #: bring the stage back until it starts again.
+    ended_stages: set[_StageKey] = field(default_factory=set)
 
     def keeps_run_lists(self) -> bool:
         """Whether the run's source notes, search queries or themes are remembered."""
@@ -360,13 +374,44 @@ def _now_utc() -> datetime:
     return datetime.now(UTC)
 
 
+def _clean(text: str) -> str:
+    """Replace what UTF-8 cannot carry (a lone surrogate) so the text can be sent."""
+    return text.encode("utf-8", "replace").decode("utf-8")
+
+
+def normalise_query(query: object, limit: int = ACTIVITY_QUERY_MAX) -> str:
+    """Make the model's search query safe to show (task 058, N3).
+
+    The text is put in Unicode NFC form, every run of whitespace becomes one
+    space, control and format characters (Unicode categories starting with
+    ``C``, such as zero-width spaces and lone surrogates) are removed, and the
+    result is cut to ``limit`` characters with nothing appended.
+
+    Args:
+        query: The query the model sent, of any type.
+        limit: The most characters kept.
+
+    Returns:
+        The cleaned query, or ``""`` when it is missing or not a string.
+    """
+    if not isinstance(query, str):
+        return ""
+    kept = (
+        " " if char.isspace() else char
+        for char in unicodedata.normalize("NFC", query)
+        if char.isspace() or not unicodedata.category(char).startswith("C")
+    )
+    return " ".join("".join(kept).split())[:limit]
+
+
 class TickHub:
     """Fans live messages out to each task's subscribers and remembers the latest state.
 
     Publishers call from worker threads; subscribers are asyncio queues on their
     own event loops. One lock guards all state, and messages reach a queue
-    through its loop's ``call_soon_threadsafe``. A full queue drops its oldest
-    message and the task's dropped counter goes up.
+    through its loop's ``call_soon_threadsafe``. A full queue is emptied and
+    refilled with the task's remembered state, the section draft first, and
+    the task's dropped counter goes up by one.
     """
 
     def __init__(
@@ -394,6 +439,8 @@ class TickHub:
         self._tasks: dict[uuid.UUID, _TaskMemory] = {}
         self._dropped: dict[uuid.UUID, int] = {}
         self._sweep_scheduled = False
+        #: Every message fanned out gets the next number (see ``_offer``).
+        self._sent = 0
 
     # Subscribers ---------------------------------------------------------
 
@@ -429,61 +476,17 @@ class TickHub:
             so far (each in its latest state, in the order first sent) and
             its themes once found; then the last tick of each stage (in the
             order the stages first appeared), then, if a section is being
-            written, one ``replace`` delta carrying its text so far (when
-            there is any), the sources read so far (when there are any),
+            written, one ``replace`` delta carrying its text so far (even
+            when empty, so a client drops what it held before), the sources
+            read so far (when there are any),
             each citation bound so far and each case-study card closed so
             far; then the run's source notes so far, in order.
         """
         queue: asyncio.Queue[HubMessage] = asyncio.Queue(maxsize=self._queue_size)
         subscriber = _Subscriber(asyncio.get_running_loop(), queue)
         with self._lock:
-            now = self._clock()
-            memory = self._tasks.get(task_id)
-            if memory is not None and memory.pending_delta is not None:
-                # The draft already holds the held text; send it to the
-                # existing subscribers now so the newcomer does not get it twice.
-                self._emit_pending_delta(task_id, memory)
+            snapshot = self._remembered(task_id)
             self._subscribers.setdefault(task_id, []).append(subscriber)
-            snapshot: list[HubMessage] = []
-            if memory is not None:
-                if (
-                    memory.search_queries
-                    and now - memory.search_queries_at < MEMORY_TTL_SECONDS
-                ):
-                    snapshot.extend(memory.search_queries.values())
-                if memory.themes and now - memory.themes_at < MEMORY_TTL_SECONDS:
-                    snapshot.extend(memory.themes.values())
-                for stage_memory in memory.stages.values():
-                    last = stage_memory.last
-                    if last is None or now - stage_memory.updated_at >= MEMORY_TTL_SECONDS:
-                        continue
-                    snapshot.append(dataclasses.replace(last, heartbeat=False))
-                draft = memory.draft
-                if draft is not None and now - draft.updated_at < MEMORY_TTL_SECONDS:
-                    if draft.text:
-                        snapshot.append(
-                            SectionDelta(
-                                index=draft.index,
-                                text=draft.text,
-                                mode="replace",
-                                occurred_at=_now_utc(),
-                            )
-                        )
-                    if draft.sources:
-                        snapshot.append(
-                            SectionSources(
-                                index=draft.index,
-                                sources=draft.sources,
-                                occurred_at=_now_utc(),
-                            )
-                        )
-                    snapshot.extend(draft.claims)
-                    snapshot.extend(draft.cards)
-                if (
-                    memory.source_notes
-                    and now - memory.source_notes_at < MEMORY_TTL_SECONDS
-                ):
-                    snapshot.extend(memory.source_notes)
         return queue, snapshot
 
     async def unsubscribe(self, task_id: uuid.UUID, queue: asyncio.Queue[HubMessage]) -> None:
@@ -548,21 +551,30 @@ class TickHub:
                 model-call wrapper's verb.
             run_id: The walk the line belongs to, or ``None``.
         """
-        tick = Tick(
-            stage=stage,
-            activity=activity,
-            occurred_at=_now_utc(),
-            done=done,
-            total=total,
-            unit=unit,
-            section=section,
-            run_id=run_id,
-        )
         key: _StageKey = (stage, run_id)
         with self._lock:
             now = self._clock()
             memory = self._tasks.setdefault(task_id, _TaskMemory())
+            if key in memory.ended_stages:
+                # A late callback after the stage ended (task 058 review).
+                return
             entry = memory.stages.setdefault(key, _StageMemory())
+            if done is not None and total is not None:
+                # Workers publish after releasing their own lock, so a smaller
+                # count can arrive last: the count never goes backwards.
+                for prior in (entry.pending, entry.last):
+                    if prior is not None and prior.total == total and prior.done is not None:
+                        done = max(done, prior.done)
+            tick = Tick(
+                stage=stage,
+                activity=_clean(activity),
+                occurred_at=_now_utc(),
+                done=done,
+                total=total,
+                unit=unit,
+                section=_clean(section) if section is not None else None,
+                run_id=run_id,
+            )
             if source == "hook":
                 current_source = (
                     entry.pending_source
@@ -640,6 +652,7 @@ class TickHub:
             text: The text.
             mode: ``"append"`` or ``"replace"``.
         """
+        text = _clean(text)
         with self._lock:
             now = self._clock()
             memory = self._tasks.setdefault(task_id, _TaskMemory())
@@ -732,7 +745,7 @@ class TickHub:
                 if source_id in seen:
                     continue
                 seen.add(source_id)
-                added.append((source_id, title))
+                added.append((source_id, _clean(title)))
             draft.updated_at = now
             if not added:
                 return
@@ -792,7 +805,9 @@ class TickHub:
             title: The card's title.
             prose: The card's text.
         """
-        card = SectionCard(index=index, title=title, prose=prose, occurred_at=_now_utc())
+        card = SectionCard(
+            index=index, title=_clean(title), prose=_clean(prose), occurred_at=_now_utc()
+        )
         with self._lock:
             now = self._clock()
             memory = self._tasks.setdefault(task_id, _TaskMemory())
@@ -816,7 +831,7 @@ class TickHub:
             note: The note's text.
         """
         message = SourceNote(
-            source_id=source_id, title=title, note=note, occurred_at=_now_utc()
+            source_id=source_id, title=_clean(title), note=_clean(note), occurred_at=_now_utc()
         )
         with self._lock:
             memory = self._tasks.setdefault(task_id, _TaskMemory())
@@ -836,7 +851,9 @@ class TickHub:
         """Send one search query's state, and remember it for a reconnect until the run ends.
 
         A query is keyed by ``(backend, query, kind)``: the message sent when
-        it comes back replaces the one sent when it went out.
+        it comes back replaces the one sent when it went out. The query is
+        normalised (:func:`normalise_query`) and cut at
+        :data:`SEARCH_QUERY_MAX` first, and keyed on that text.
 
         Args:
             task_id: The task.
@@ -845,6 +862,7 @@ class TickHub:
             kind: What the query is.
             results: ``None`` while out; the records returned once back.
         """
+        query = normalise_query(query, limit=SEARCH_QUERY_MAX)
         message = SearchQuery(
             backend=backend, query=query, kind=kind, results=results, occurred_at=_now_utc()
         )
@@ -871,7 +889,11 @@ class TickHub:
             themes: ``(label, description)`` pairs in the order found.
             stage: The stage that found them.
         """
-        message = ThemesFound(themes=tuple(themes), occurred_at=_now_utc(), stage=stage)
+        cleaned = tuple(
+            (_clean(label), _clean(description) if description is not None else None)
+            for label, description in themes
+        )
+        message = ThemesFound(themes=cleaned, occurred_at=_now_utc(), stage=stage)
         with self._lock:
             memory = self._tasks.setdefault(task_id, _TaskMemory())
             memory.themes[stage] = message
@@ -948,21 +970,39 @@ class TickHub:
         """Forget one stage's tick, held tick and open calls.
 
         Ending ``synthesise`` also forgets the section draft (with its sources,
-        citations and cards) and held text.
+        citations and cards) and held text. Until the stage starts again
+        (:meth:`open_stage`) or the run ends, a late tick for it is ignored.
 
         Args:
             task_id: The task.
             stage: Public stage key.
+            run_id: The walk, or ``None``.
         """
         with self._lock:
             memory = self._tasks.get(task_id)
             if memory is None:
                 return
             memory.stages.pop((stage, run_id), None)
+            memory.ended_stages.add((stage, run_id))
             if stage == "synthesise":
                 memory.draft = None
                 memory.pending_delta = None
             self._forget_if_empty(task_id, memory)
+
+    def open_stage(
+        self, task_id: uuid.UUID, stage: str, run_id: uuid.UUID | None = None
+    ) -> None:
+        """Let a stage that ended publish again, because it is starting again.
+
+        Args:
+            task_id: The task.
+            stage: Public stage key.
+            run_id: The walk, or ``None``.
+        """
+        with self._lock:
+            memory = self._tasks.get(task_id)
+            if memory is not None:
+                memory.ended_stages.discard((stage, run_id))
 
     # Timed work ----------------------------------------------------------
 
@@ -998,8 +1038,10 @@ class TickHub:
         :data:`HEARTBEAT_SECONDS` ago gets that tick again with
         ``heartbeat=True``. Ticks, drafts, source notes, search queries and
         themes not updated for
-        :data:`MEMORY_TTL_SECONDS` are forgotten. While any call is open,
-        another sweep is arranged.
+        :data:`MEMORY_TTL_SECONDS` are forgotten; a stage with an open model
+        call stays fresh. A task left with nothing fresh is forgotten, its run
+        too (a run that died without ending). While the hub remembers any
+        task, another sweep is arranged.
         """
         with self._lock:
             now = self._clock()
@@ -1021,7 +1063,11 @@ class TickHub:
                             ),
                         )
                         entry.last_emit = now
-                    if entry.last is not None and now - entry.updated_at >= MEMORY_TTL_SECONDS:
+                    if (
+                        entry.last is not None
+                        and entry.open_calls == 0
+                        and now - entry.updated_at >= MEMORY_TTL_SECONDS
+                    ):
                         entry.last = None
                     if entry.last is None and entry.pending is None and entry.open_calls == 0:
                         del memory.stages[key]
@@ -1086,37 +1132,91 @@ class TickHub:
             ),
         )
 
+    def _remembered(self, task_id: uuid.UUID) -> list[HubMessage]:
+        """Build the task's remembered state, as :meth:`subscribe_with_snapshot` returns it."""
+        now = self._clock()
+        memory = self._tasks.get(task_id)
+        snapshot: list[HubMessage] = []
+        if memory is None:
+            return snapshot
+        if memory.pending_delta is not None:
+            # The draft already holds the held text; send it to the existing
+            # subscribers now so a newcomer does not get it twice.
+            self._emit_pending_delta(task_id, memory)
+        if memory.search_queries and now - memory.search_queries_at < MEMORY_TTL_SECONDS:
+            snapshot.extend(memory.search_queries.values())
+        if memory.themes and now - memory.themes_at < MEMORY_TTL_SECONDS:
+            snapshot.extend(memory.themes.values())
+        for stage_memory in memory.stages.values():
+            last = stage_memory.last
+            if last is None or now - stage_memory.updated_at >= MEMORY_TTL_SECONDS:
+                continue
+            snapshot.append(dataclasses.replace(last, heartbeat=False))
+        draft = memory.draft
+        if draft is not None and now - draft.updated_at < MEMORY_TTL_SECONDS:
+            # Sent even when empty: a client that held text from before (the
+            # fallback's reset) drops it, and its cards and citations with it.
+            snapshot.append(
+                SectionDelta(
+                    index=draft.index, text=draft.text, mode="replace", occurred_at=_now_utc()
+                )
+            )
+            if draft.sources:
+                snapshot.append(
+                    SectionSources(
+                        index=draft.index, sources=draft.sources, occurred_at=_now_utc()
+                    )
+                )
+            snapshot.extend(draft.claims)
+            snapshot.extend(draft.cards)
+        if memory.source_notes and now - memory.source_notes_at < MEMORY_TTL_SECONDS:
+            snapshot.extend(memory.source_notes)
+        return snapshot
+
     def _fan_out(self, task_id: uuid.UUID, message: HubMessage) -> None:
+        self._sent += 1
+        self._schedule_sweep()
         for subscriber in self._subscribers.get(task_id, ()):
             try:
                 subscriber.loop.call_soon_threadsafe(
-                    self._offer, task_id, subscriber.queue, message
+                    self._offer, task_id, subscriber, message, self._sent
                 )
             except RuntimeError:
                 # A closed loop is a disconnected client.
                 continue
 
     def _offer(
-        self, task_id: uuid.UUID, queue: asyncio.Queue[HubMessage], message: HubMessage
+        self, task_id: uuid.UUID, subscriber: _Subscriber, message: HubMessage, number: int
     ) -> None:
-        """Place one message without waiting, dropping the oldest when full (loop thread)."""
+        """Place one message without waiting; resync a full queue (loop thread).
+
+        Dropping messages would leave a hole in the client's draft, so a full
+        queue is emptied and refilled with the task's remembered state, the
+        section draft first. Messages fanned out before the resync was built
+        are in it already and are not placed again.
+        """
+        if number <= subscriber.resynced_through:
+            return
+        queue = subscriber.queue
         try:
             queue.put_nowait(message)
+            return
         except asyncio.QueueFull:
-            with suppress(asyncio.QueueEmpty):
-                queue.get_nowait()
-            queue.put_nowait(message)
-            with self._lock:
-                self._dropped[task_id] = self._dropped.get(task_id, 0) + 1
+            pass
+        with self._lock:
+            resync = self._remembered(task_id)
+            subscriber.resynced_through = self._sent
+            self._dropped[task_id] = self._dropped.get(task_id, 0) + 1
+        while not queue.empty():
+            queue.get_nowait()
+        drafts = (SectionDelta, SectionSources, SectionClaim, SectionCard)
+        ordered: list[HubMessage] = [m for m in resync if isinstance(m, drafts)]
+        ordered += [m for m in resync if not isinstance(m, drafts)]
+        for item in ordered[: queue.maxsize]:
+            queue.put_nowait(item)
 
     def _schedule_sweep(self) -> None:
-        if self._schedule is None or self._sweep_scheduled:
-            return
-        if not any(
-            entry.open_calls > 0
-            for memory in self._tasks.values()
-            for entry in memory.stages.values()
-        ):
+        if self._schedule is None or self._sweep_scheduled or not self._tasks:
             return
         self._sweep_scheduled = True
         self._schedule(HEARTBEAT_SECONDS, self._timer_sweep)
@@ -1184,6 +1284,8 @@ def task_liveness(
     Yields:
         Nothing; the binding lasts until the block exits.
     """
+    if stage is not None:
+        tick_hub.open_stage(task_id, stage, run_id)
     task_token = _task_id.set(task_id)
     stage_token = _stage.set(stage)
     run_token = _run_id.set(run_id)

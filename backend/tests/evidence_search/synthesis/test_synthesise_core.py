@@ -382,6 +382,53 @@ def test_characterisation_only_stub_writes_substrate_and_rollup(conn: Connection
     assert row.counts["key_findings"] == {"present": False, "reason": "no_headline_claims"}
 
 
+class _OneFallbackBackend(StubSynthesisBackend):
+    """A stub whose process-wide fallback counter already holds earlier runs' count.
+
+    The first section turn adds one fallback, as a streamed write that fell
+    back would.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.stream_fallbacks = 3  # earlier runs in the same process
+
+    def section_turn(
+        self,
+        seed: dict[str, Any],
+        transcript: list[Any],
+        *,
+        force_emit: bool,
+    ) -> UsageResult[SectionTurn]:
+        if self.stream_fallbacks == 3:
+            self.stream_fallbacks += 1
+        return super().section_turn(seed, transcript, force_emit=force_emit)
+
+
+def test_the_rollup_counts_only_this_runs_stream_fallbacks(conn: Connection) -> None:
+    """Task 058 review: the backend's counter is process-wide; the row carries this run's."""
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    characterisation_run_id = seed_run(conn, task_id)
+    seed_characterisation(
+        conn, task_id, scope_id, characterisation_run_id, themes={"theme-a": []}
+    )
+
+    _run_synthesise(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        characterisation_run_id=characterisation_run_id,
+        backend=_OneFallbackBackend(),
+    )
+
+    row = conn.execute(
+        select(synthesis_result).where(synthesis_result.c.task_id == task_id)
+    ).one()
+    assert row.counts["stream_fallbacks"] == 1
+
+
 def test_chunk_substrate_writes_verified_unselected_citations(conn: Connection) -> None:
     task_id, run_id = seed_task_and_run(conn)
     scope_id = seed_scope(conn, task_id)

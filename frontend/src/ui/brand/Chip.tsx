@@ -17,11 +17,11 @@ const chipVariants = cva(
     variants: {
       tone: {
         default: "border-line-2 bg-paper text-navy",
-        blue: "border-[#c7c7ff] bg-blue-tint text-blue",
+        blue: "border-blue-tint-edge bg-blue-tint text-blue",
         soft: "border-line bg-ground text-grey",
-        green: "border-[#b7e0d8] bg-green-tint text-[#0c6b5a]",
-        yellow: "border-[#f3d99a] bg-yellow-tint text-[#8a5a00]",
-        red: "border-[#f4b8c6] bg-red-tint text-red",
+        green: "border-green-tint-edge bg-green-tint text-green-deep",
+        yellow: "border-yellow-tint-edge bg-yellow-tint text-yellow-deep",
+        red: "border-red-tint-edge bg-red-tint text-red",
       },
     },
     defaultVariants: { tone: "default" },
@@ -41,8 +41,8 @@ export const FILTER_CONTROL_BASE =
   "inline-flex h-8 min-w-0 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap border px-2.5 text-meta font-semibold transition-colors duration-150";
 
 /** An idle filter: the outline box (Line 2 border, Navy Semibold, hover
- *  #f0f0f3) at the bar's height. */
-const IDLE_CHIP_CLASS = `${FILTER_CONTROL_BASE} border-line-2 bg-paper text-navy hover:bg-[#f0f0f3]`;
+ *  `hover-fill`) at the bar's height. */
+const IDLE_CHIP_CLASS = `${FILTER_CONTROL_BASE} border-line-2 bg-paper text-navy hover:bg-hover-fill`;
 
 /** An applied filter: the filled Navy chip with its × inside it. */
 const APPLIED_CHIP_CLASS =

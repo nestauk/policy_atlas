@@ -82,7 +82,7 @@ export function SheetContent({
       <DialogPrimitive.Content
         className={cn(
           "fixed inset-y-0 z-50 flex w-full max-w-xl flex-col overflow-y-auto",
-          "border-line-2 bg-paper shadow-[0_10px_30px_rgba(15,41,74,0.14)]",
+          "border-line-2 bg-paper shadow-overlay",
           // Slides in from its edge on the drawer curve; transform only.
           "transition-transform duration-[260ms] ease-drawer",
           side === "right" ? "right-0 border-l starting:translate-x-full" : "left-0 border-r starting:-translate-x-full",

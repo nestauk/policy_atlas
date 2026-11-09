@@ -315,7 +315,7 @@
   padding: 6px 10px;
   border: 1px solid var(--color-line-2);
   background-color: var(--color-paper);
-  box-shadow: 0 4px 16px rgba(15, 41, 74, 0.12);
+  box-shadow: var(--shadow-tooltip);
   font-size: var(--text-caption);
   line-height: var(--text-caption--line-height);
   font-weight: 600;

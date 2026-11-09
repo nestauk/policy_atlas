@@ -1110,9 +1110,10 @@ def test_section_emit_stream_failure_midway_falls_back_once(
     assert usage is None
     assert forced == [True]
     assert backend.stream_fallbacks == 1
-    # Some prose went out before the drop; one empty replace resets the draft.
-    assert section_deltas[-1] == (0, "", "replace")
-    assert [mode for _i, _t, mode in section_deltas].count("replace") == 1
+    # Some prose went out before the drop; one empty replace resets the draft,
+    # then one replace carries the fallback's prose (task 058 review).
+    assert section_deltas[-2:] == [(0, "", "replace"), (0, "Fallback prose.", "replace")]
+    assert [mode for _i, _t, mode in section_deltas].count("replace") == 2
     [entry] = [e for e in logs if e["event"] == "synthesis.section_emit_stream.fallback"]
     assert entry["error"] == "ConnectionError"
 
@@ -1130,7 +1131,63 @@ def test_section_emit_stream_unparseable_text_falls_back_once(
     assert turn is fallback_turn
     assert forced == [True]
     assert backend.stream_fallbacks == 1
-    assert section_deltas[-1] == (0, "", "replace")
+    assert section_deltas[-2:] == [(0, "", "replace"), (0, "Fallback prose.", "replace")]
+
+
+def _open_calls(task_id: uuid.UUID) -> int:
+    from policy_atlas.core import liveness
+
+    memory = liveness.tick_hub._tasks.get(task_id)
+    entry = memory.stages.get(("synthesise", None)) if memory is not None else None
+    return entry.open_calls if entry is not None else 0
+
+
+class _CountingStream(_StreamCompletions):
+    """Records the hub's open-call count as each chunk is read."""
+
+    def __init__(self, task_id: uuid.UUID, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._task_id = task_id
+        self.open_during: list[int] = []
+
+    def _iterate(self) -> Iterator[Any]:
+        for chunk in super()._iterate():
+            self.open_during.append(_open_calls(self._task_id))
+            yield chunk
+
+
+@pytest.mark.parametrize("fail_after", [None, 4], ids=["streamed", "fallback"])
+def test_section_emit_stream_holds_one_open_call_for_the_heartbeats(
+    fail_after: int | None,
+    monkeypatch: pytest.MonkeyPatch,
+    section_deltas: list[tuple[int, str, str]],
+) -> None:
+    """Task 058 review: the hub sends heartbeats between chunks, so the stream is an open call."""
+    from policy_atlas.core import liveness
+
+    task_id = uuid.uuid4()
+    completions = _CountingStream(
+        task_id, _stream_chunks(_STREAM_JSON, 7), fail_after=fail_after
+    )
+    backend = _streaming_backend(completions)
+    open_in_fallback: list[int] = []
+
+    def _section_turn(
+        seed: dict[str, Any], transcript: list[ToolExchange], *, force_emit: bool
+    ) -> tuple[SectionTurn, None]:
+        del seed, transcript, force_emit
+        open_in_fallback.append(_open_calls(task_id))
+        return {"tool_calls": [], "claims": SectionProseWire(prose="F.", claims=[])}, None
+
+    monkeypatch.setattr(backend, "section_turn", _section_turn)
+
+    with liveness.task_liveness(task_id, stage="synthesise"):
+        backend.section_emit_stream(_seed(), [])
+        after = _open_calls(task_id)
+
+    assert completions.open_during and set(completions.open_during) == {1}
+    assert open_in_fallback == ([] if fail_after is None else [1])
+    assert after == 0
 
 
 class _StreamingLoopBackend:

@@ -19,7 +19,6 @@ import {
   elapsedSeconds,
   endedLine,
   formatElapsed,
-  formatMinutes,
   resultHref,
   rowCounts,
   rowDetail,
@@ -319,8 +318,9 @@ function TopLine({
       <div className={cn(TABLE_ROW, "justify-between")}>
         <p key={labelKey} className={cn("min-w-0 flex-1", rise && "anim-rise")}>
           <span className={stateWord ? TOP_LINE_LABEL : "text-navy"}>{scrub(label)}</span>
+          {/* "waiting on you" never splits across lines (design lane review). */}
           {rest !== "" && (
-            <span className="text-grey">
+            <span className="whitespace-nowrap text-grey">
               {SEP}
               <Figures text={bound(rest)} />
             </span>
@@ -385,6 +385,9 @@ type TraceProps = {
   checkInWaiting?: boolean;
   /** Opens the plan document, from the foot of the list. */
   onSeePlan?: () => void;
+  /** The run stream is connected: the live mark turns only while it is, and
+   *  holds still when the connection is down (lead ruling). */
+  streamOpen?: boolean;
 };
 
 /**
@@ -409,6 +412,7 @@ function TraceCard({
   ownerName = null,
   checkInWaiting = false,
   onSeePlan,
+  streamOpen = true,
   past = false,
 }: TraceProps & { past?: boolean }) {
   const [open, setOpen] = useState(false);
@@ -446,9 +450,9 @@ function TraceCard({
   const [head = "", ...restParts] = scrub(words).split(" · ");
   const label = ended !== null ? scrub(ended.words) : paused ? head : RUNNING_WORD;
   const rest = ended === null && paused ? restParts.join(" · ") : "";
-  const time = ended !== null ? formatMinutes(seconds) : formatElapsed(seconds);
+  const time = ended !== null ? formatElapsed(seconds, { withSeconds: false }) : formatElapsed(seconds);
   const mark =
-    ended !== null ? <StatusMark tone={ended.tone} /> : paused ? <StatusMark tone="paused" /> : <LiveMark />;
+    ended !== null ? <StatusMark tone={ended.tone} /> : paused ? <StatusMark tone="paused" /> : <LiveMark still={!streamOpen} />;
   const readIt = ended?.link ? (
     <Link to={resultHref(taskId, kind)} className={TRACE_LINK_CLASS}>
       Read it →

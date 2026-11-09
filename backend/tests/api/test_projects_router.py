@@ -10,6 +10,7 @@ from sqlalchemy.engine import Engine
 from policy_atlas.api.read_models import history
 from policy_atlas.core import events
 from tests.api.resource_support import api_client, create_task
+from tests.helpers import seed_walk
 
 
 def test_create_project_returns_created_fields(tmp_path: Path) -> None:
@@ -411,3 +412,26 @@ def test_the_list_pages_by_last_activity_newest_first(tmp_path: Path) -> None:
         assert rows[newest]["last_activity_at"] == rows[newest]["created_at"]
         single = client.get(f"/api/v1/projects/{oldest}", headers=owner).json()
         assert single["last_activity_at"] == task_updated
+
+
+def test_archiving_a_project_leaves_a_task_that_is_mid_run(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Task 058 review: as the single-task archive refuses ``run_active``, the
+    project archive leaves a solo task whose latest walk is running."""
+    with api_client(tmp_path) as (client, owner, _other):
+        gone = client.post("/api/v1/projects", headers=owner, json={"name": "Gone"}).json()
+        busy = create_task(client, owner)
+        patched = client.patch(
+            f"/api/v1/tasks/{busy}", headers=owner, json={"project_ids": [gone["project_id"]]}
+        )
+        assert patched.status_code == 200, patched.text
+        with engine.begin() as conn:
+            seed_walk(conn, uuid.UUID(busy), capability="evidence_search", status="running")
+
+        archived = client.post(f"/api/v1/projects/{gone['project_id']}/archive", headers=owner)
+
+        assert archived.status_code == 200, archived.text
+        assert archived.json()["archived_at"] is not None
+        assert archived.json()["archived_task_count"] == 0
+        assert client.get(f"/api/v1/tasks/{busy}", headers=owner).json()["status"] == "active"

@@ -8,6 +8,7 @@ import { TooltipProvider } from "../ui/radix/Tooltip";
 import {
   AnnotatedProse,
   CitationProvenanceBlock,
+  CitationQuote,
   draftParagraphs,
   highlightParts,
   LiveArtefactBody,
@@ -51,13 +52,47 @@ describe("highlightParts", () => {
     }
   });
 
-  it("degrades to quote-above-text when nothing matches — never a broken panel", () => {
+  it("degrades to the quote alone when nothing matches — never a broken panel, never the passage twice", () => {
     const parts = highlightParts("completely different content", "an absent quote");
+    expect(parts).toEqual({ kind: "degrade", quote: "an absent quote" });
+  });
+
+  it("matches a quote whose trailing stop the passage does not have there", () => {
+    const parts = highlightParts("Uptake rose by a third in the first year, then levelled off.", "Uptake rose by a third in the first year.");
     expect(parts).toEqual({
-      kind: "degrade",
-      quote: "an absent quote",
-      text: "completely different content",
+      kind: "highlight",
+      before: "",
+      match: "Uptake rose by a third in the first year",
+      after: ", then levelled off.",
     });
+    expect(highlightParts("the end", "the end;:").kind).toBe("highlight");
+  });
+});
+
+describe("CitationQuote — the quote not found in its passage (round 12 fallback ruling)", () => {
+  it("shows the quote alone at Body Navy, not italic Grey, and does not repeat the passage", () => {
+    render(
+      <CitationQuote
+        quote="An absent quote."
+        context={{ isPending: false, isError: false, data: { context: "Completely different content.", previous: "Before.", next: "After.", clamped: false, span_start: 0, span_end: 0 } }}
+      />,
+    );
+    const quote = screen.getByText("“An absent quote.”");
+    expect(quote).toHaveClass("text-navy");
+    expect(quote).not.toHaveClass("italic", "text-grey");
+    expect(screen.queryByText(/Completely different content/)).toBeNull();
+    expect(screen.queryByText("Before.")).toBeNull();
+    expect(screen.queryByText("After.")).toBeNull();
+  });
+
+  it("highlights a quote whose trailing stop the passage lacks, inside its passage", () => {
+    const { container } = render(
+      <CitationQuote
+        quote="Uptake rose by a third."
+        context={{ isPending: false, isError: false, data: { context: "Uptake rose by a third, then levelled off.", clamped: false, span_start: 0, span_end: 0 } }}
+      />,
+    );
+    expect(container.querySelector("mark")).toHaveTextContent(/^Uptake rose by a third$/);
   });
 });
 

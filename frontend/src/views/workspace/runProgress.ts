@@ -69,25 +69,25 @@ export function isFinished(status: RunStatus | undefined): boolean {
 /**
  * A duration in the trace's words: `45 s`, `6 min 12 s`, `1 h 4 min`. Elapsed
  * time only, never a countdown (annex § Voice rules).
+ *
+ * Args:
+ *   seconds: The duration.
+ *   withSeconds: Keep the seconds after the minutes (`6 min 12 s`, the
+ *     default); false gives the duration to the minute (`6 min`), for the
+ *     folded trace line, History and the task list. Under a minute it is
+ *     always seconds, and from an hour up always hours and minutes.
+ *
+ * Returns:
+ *   The duration as the reader sees it.
  */
-export function formatElapsed(seconds: number): string {
+export function formatElapsed(seconds: number, { withSeconds = true }: { withSeconds?: boolean } = {}): string {
   const total = Math.max(0, Math.round(seconds));
   if (total < 60) return `${total} s`;
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
   if (hours > 0) return minutes === 0 ? `${hours} h` : `${hours} h ${minutes} min`;
   const rest = total % 60;
-  return rest === 0 ? `${minutes} min` : `${minutes} min ${rest} s`;
-}
-
-/** A duration to the minute, for the folded trace line and the task list (`14 min`). */
-export function formatMinutes(seconds: number): string {
-  const total = Math.max(0, Math.round(seconds));
-  if (total < 60) return `${total} s`;
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  if (hours > 0) return minutes === 0 ? `${hours} h` : `${hours} h ${minutes} min`;
-  return `${minutes} min`;
+  return rest === 0 || !withSeconds ? `${minutes} min` : `${minutes} min ${rest} s`;
 }
 
 /**
