@@ -26,6 +26,8 @@ from sqlalchemy import select as sa_select
 from sqlalchemy import update as sa_update
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import liveness
 from policy_atlas.core.hashing import content_hash
 from policy_atlas.core.schema import (
     EVIDENCE_TYPES,
@@ -89,6 +91,10 @@ from policy_atlas.evidence_search.synthesis.grounding_judge import (
     GroundingJudgeBackend,
     build_envelope,
 )
+from policy_atlas.evidence_search.synthesis.live_citations import (
+    ReferenceNumbering,
+    source_names,
+)
 from policy_atlas.evidence_search.synthesis.section_prompt import (
     CASE_STUDIES_PROMPT_VERSION,
     FULL_REPORT_INTRO_PROMPT_VERSION,
@@ -143,15 +149,18 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     build_retrieval_scope,
     build_section_tools,
     chunk_text_basis_case,
+    citable_sources,
     facet_of_group_id,
     gathered_ids,
     is_qualified_group_id,
     make_findings_reader,
     make_lookup_reader,
+    make_source_labeller,
     parse_synthesis_directive,
     run_section_loop,
+    source_labelling,
 )
-from policy_atlas.runtime.progress import ProgressEmitter
+from policy_atlas.runtime.progress import INTRO_SECTION_LINE, ProgressEmitter
 
 log = structlog.get_logger()
 
@@ -4274,7 +4283,23 @@ def _section_claims(
     intent: str = "",
     section_focus: str = "",
     gap_restatement_seeds: Sequence[Mapping[str, Any]] | None = None,
+    section_line: str | None = None,
 ) -> tuple[list[ClaimDraft], str, list[dict[str, Any]], dict[str, int], dict[str, int]]:
+    """Check a section's claims, repair the failing ones once, and settle its prose.
+
+    While it runs it tells the user what is happening (task 058, N3 and N7):
+    "Checking claims" before the judge; when claims fail, "Revising n claims"
+    and the draft ranges being rewritten, before the repair call. Once the
+    prose is settled the live draft is forgotten; the durable
+    ``section_completed`` frame stays the record.
+
+    ``section_line`` is the section's own line, sent with each activity line,
+    or ``None`` (the key findings pass).
+
+    Returns:
+        The final claims, the final prose, the minted unspanned records, the
+        call counts and the usage totals.
+    """
     call_counts = {"judge": 0, "repair": 0, "rejudge": 0}
     usage_totals = UsageAccumulator()
     prose = raw_claims.prose
@@ -4290,6 +4315,7 @@ def _section_claims(
         available_claim_types=available_claim_types,
         gap_restatement_seeds=gap_restatement_seeds,
     )
+    liveness.publish_progress(activity=activity("synthesise.checking"), section=section_line)
     judge_calls, judge_usage, unspanned = _judge_claims(
         claims=initial.drafts,
         substrate=substrate,
@@ -4316,6 +4342,11 @@ def _section_claims(
     else:
         accounting.repair_taken = True
         call_counts["repair"] += 1
+        # The page addresses sections by their display index (the seed carries
+        # it); ``section_index`` stays the loop's count, used for claim ids.
+        _publish_revising(
+            int(seed.get("display_index", section_index)), failing, section_line=section_line
+        )
         repair_wire: SectionRepairWire | None
         try:
             repair_wire, repair_usage = synthesis_backend.repair_section(
@@ -4389,7 +4420,36 @@ def _section_claims(
         accounting=accounting,
         claim_spans=[claim.span for claim in final if claim.span is not None],
     )
+    liveness.clear_section_draft()
     return final, final_prose, minted_unspanned, call_counts, usage_totals.payload()
+
+
+def _publish_revising(
+    section_index: int,
+    failing: Sequence[Mapping[str, Any]],
+    *,
+    section_line: str | None,
+) -> None:
+    """Tell the user which claims are being rewritten (task 058, N3 and N7).
+
+    Publishes "Revising n claim(s)" and the draft ranges of the failing claims
+    that bound to the prose (a claim that never bound has no range).
+
+    Args:
+        section_index: The section's position in the report.
+        failing: The failing claim records, each with ``span`` or ``None``.
+        section_line: The section's own line, or ``None``.
+    """
+    count = len(failing)
+    key = "synthesise.revising" if count == 1 else "synthesise.revising_many"
+    liveness.publish_progress(activity=activity(key, count=count), section=section_line)
+    spans = [
+        (int(record["span"][0]), int(record["span"][1]))
+        for record in failing
+        if record.get("span") is not None
+    ]
+    if spans:
+        liveness.publish_section_revising(section_index, spans)
 
 
 def _claim_counts(claims: Sequence[ClaimDraft]) -> dict[str, int]:
@@ -4954,8 +5014,18 @@ def _key_findings_pass(
     available_claim_types: set[str],
     kf_section_index: int,
     created_at: datetime,
+    display_index: int | None = None,
+    sources: (
+        tuple[dict[str, tuple[str, str | None]], dict[str, tuple[str, str | None]]] | None
+    ) = None,
 ) -> dict[str, Any]:
     """Run the final key-findings pass (produced last, shown first).
+
+    When the backend can stream (``write_key_findings_stream``) and the page
+    has a key-findings slot (``display_index``), the prose streams into the
+    slot and the writer's citations are marked as they close, as for a body
+    section (task 058, round 8); ``sources`` names what the cited ids are
+    for those marks. The parsed reply is the same either way.
 
     A schema-constrained emission over the run's surviving claims ledger, then
     the ordinary ``_section_claims`` grounding path with a synthetic seed and
@@ -4989,6 +5059,8 @@ def _key_findings_pass(
         "available_tools": [],
         "available_claim_types": sorted(kf_available),
         "ledger": ledger,
+        # The key findings are always the page's first section (task 058).
+        "display_index": 0,
         # Chunk-content map filtered to chunks cited by surviving claims only
         # (022 rider 16) — the pass's evidence surface, since it runs
         # transcript-free. ``citable_chunk_ids`` (below) already IS that set:
@@ -5003,10 +5075,21 @@ def _key_findings_pass(
         },
     }
     usage_totals = UsageAccumulator()
-    raw_kf, kf_usage = synthesis_backend.write_key_findings(seed)
+    # The section line names the slot, so the page's mark and action line
+    # show on it as on the body sections (task 058, round 8).
+    liveness.publish_progress(
+        activity=activity("synthesise.key_findings"), section=KEY_FINDINGS_TITLE
+    )
+    stream_kf = getattr(synthesis_backend, "write_key_findings_stream", None)
+    if stream_kf is not None and display_index is not None:
+        raw_kf, kf_usage = stream_kf(seed, index=display_index, sources=sources)
+    else:
+        raw_kf, kf_usage = synthesis_backend.write_key_findings(seed)
     usage_totals.add(kf_usage)
     # The explicit absence path (test-owned): nothing is forced.
     if not raw_kf.prose.strip() and not raw_kf.claims:
+        # Whatever streamed is not kept; the empty completion hides the slot.
+        liveness.clear_section_draft()
         return {
             "present": False,
             "reason": "no_headline_claims",
@@ -5040,6 +5123,7 @@ def _key_findings_pass(
         intent=intent,
         section_focus=KEY_FINDINGS_SECTION_FOCUS,
         gap_restatement_seeds=gap_seeds,
+        section_line=KEY_FINDINGS_TITLE,
     )
     usage_totals.add_payload(section_usage)
     block_id = _write_section(
@@ -5347,19 +5431,34 @@ def _case_studies_pass(
     cs_section_index: int,
     created_at: datetime,
     doc_meta: dict[str, dict[str, Any]],
+    display_index: int | None = None,
 ) -> dict[str, Any]:
     """Run the case-studies pass.
 
+    When the backend can stream (``write_case_studies_stream``) and the page
+    has a case-studies slot (``display_index``), each card is sent to the
+    page as it closes in the reply (task 058, round 7); the parsed reply is
+    the same either way.
+
     Returns a result dict: ``present`` plus, when present, the minted
-    ``block_id``, its ``claims``, ``block_rollup`` and the ``call_counts``/
-    ``usage`` of the pass; when absent, ``reason``.
+    ``block_id``, its ``claims``, the block's ``prose``, ``block_rollup`` and
+    the ``call_counts``/``usage`` of the pass; when absent, ``reason``.
     """
     cs_available = CASE_STUDIES_CLAIM_TYPES & available_claim_types
     seed = _case_studies_seed(
         intent, section_claim_groups, run_chunk_content, doc_meta,
     )
     usage_totals = UsageAccumulator()
-    raw_wire, cs_usage = synthesis_backend.write_case_studies(seed)
+    # The section line names the slot, so the page's mark and action line
+    # show on it as on the ordinary sections (task 058, round 7).
+    liveness.publish_progress(
+        activity=activity("synthesise.case_studies"), section=CASE_STUDIES_TITLE
+    )
+    stream_cards = getattr(synthesis_backend, "write_case_studies_stream", None)
+    if stream_cards is not None and display_index is not None:
+        raw_wire, cs_usage = stream_cards(seed, index=display_index)
+    else:
+        raw_wire, cs_usage = synthesis_backend.write_case_studies(seed)
     usage_totals.add(cs_usage)
 
     survivors, absence_reason = _validate_case_study_cards(raw_wire)
@@ -5533,6 +5632,7 @@ def _case_studies_pass(
         "emission_calls": 1,
         "call_counts": call_counts,
         "usage": usage_totals.payload(),
+        "prose": final_prose,
     }
 
 
@@ -5622,14 +5722,24 @@ def _ranked_top_sources(
 def _write_mrs_notes(
     top_sources: list[dict[str, Any]],
     synthesis_backend: SynthesisBackend,
+    *,
+    names: Mapping[str, tuple[str, str]] | None = None,
 ) -> tuple[list[dict[str, Any]], int, dict[str, int]]:
     """Write grounded notes for the top cited sources.
 
     Fail-soft: a failing note is omitted, never fails the run.
 
+    Each note is visible as it is written (task 058, round 8): the activity
+    line names the source ("Writing a source note · Smith 2023") and each
+    kept note is sent to the page with the source's title. Neither is saved;
+    the notes this returns are the record.
+
     Args:
         top_sources: Ranked source dicts with claim_texts/quotes.
         synthesis_backend: The synthesis backend for note generation.
+        names: ``{source_id: (short_name, title)}`` for the page, as
+            :func:`source_names` gives them; a source without a name gets
+            the plain activity line and the ranking's title.
 
     Returns:
         Tuple of note dicts, generation call count, and usage totals payload.
@@ -5645,7 +5755,17 @@ def _write_mrs_notes(
             "claim_texts": source.get("claim_texts", [])[:10],
             "quotes": source.get("quotes", [])[:5],
         }
+        short_name, title = (names or {}).get(
+            str(source.get("source_id")), ("", str(source.get("title") or ""))
+        )
         try:
+            liveness.publish_progress(
+                activity=(
+                    activity("synthesise.source_note_named", name=short_name)
+                    if short_name
+                    else activity("synthesise.source_note")
+                )
+            )
             note_wire, note_usage = synthesis_backend.write_source_note(seed)
             note_calls += 1
             usage_totals.add(note_usage)
@@ -5654,6 +5774,9 @@ def _write_mrs_notes(
                     "source_id": source["source_id"],
                     "note": note_wire.note.strip(),
                 })
+                liveness.publish_source_note(
+                    str(source["source_id"]), title, note_wire.note.strip()
+                )
         except Exception:  # noqa: BLE001 - fail-soft
             log.warning(
                 "synthesis.mrs_note.failed",
@@ -5667,15 +5790,22 @@ def _write_full_report_intro(
     intent: str,
     sections: Sequence[SectionSpec],
     synthesis_backend: SynthesisBackend,
+    display_index: int | None = None,
 ) -> tuple[str | None, int, dict[str, int]]:
     """Write a short introduction to the full-report body sections.
 
     Fail-soft: a failing intro is omitted, never fails the run.
 
+    When the backend can stream (``write_full_report_intro_stream``) and the
+    page has an introduction slot (``display_index``), the text streams into
+    the slot (task 058, round 8); the parsed reply is the same either way.
+
     Args:
         intent: The evidence-scope intent.
         sections: Proposed section specs in report order.
         synthesis_backend: The synthesis backend for intro generation.
+        display_index: The page's index for the introduction slot, or
+            ``None`` without one.
 
     Returns:
         Tuple of intro text (or None), generation call count, and usage payload.
@@ -5696,7 +5826,16 @@ def _write_full_report_intro(
         ],
     }
     try:
-        intro_wire, intro_usage = synthesis_backend.write_full_report_intro(seed)
+        # The section line names the introduction, not its "Full report" slot
+        # title (task 058, round 9).
+        liveness.publish_progress(
+            activity=activity("synthesise.intro"), section=INTRO_SECTION_LINE
+        )
+        stream_intro = getattr(synthesis_backend, "write_full_report_intro_stream", None)
+        if stream_intro is not None and display_index is not None:
+            intro_wire, intro_usage = stream_intro(seed, index=display_index)
+        else:
+            intro_wire, intro_usage = synthesis_backend.write_full_report_intro(seed)
         intro_text = intro_wire.intro.strip()
         usage_totals = UsageAccumulator()
         usage_totals.add(intro_usage)
@@ -5754,6 +5893,11 @@ def synthesise_scope(
             f"scope {context.scope_id} run {run_id}"
         )
     reranker = chunk_reranker if chunk_reranker is not None else PassThroughChunkReranker()
+    # The backend's fallback counter lives for the whole process (one backend
+    # serves every run), so this run's count is the difference at the rollup.
+    # ponytail: two synthesis runs at once in one process can each count the
+    # other's fallback; counting inside the loop's own accounting is the upgrade.
+    fallbacks_before = getattr(synthesis_backend, "stream_fallbacks", 0)
     blocks_written: list[str] = []
     call_counts = {
         "proposal": 0,
@@ -6041,6 +6185,10 @@ def synthesise_scope(
         progress_emitter.emit_skeleton(
             [{"title": section.title, "focus": section.focus} for section in sections],
             key_findings=es_passes,
+            # Task 058, round 7: the case studies stream into their own slot.
+            case_studies=es_passes,
+            # Round 8: so does the full report's introduction.
+            intro=es_passes,
         )
 
     assigned_groups = {group_id for section in sections for group_id in section.group_ids}
@@ -6099,9 +6247,35 @@ def synthesise_scope(
     repair_count_mismatch_any = False
     repair_unparseable_any = False
 
+    source_labeller = make_source_labeller(conn, task_id=task_id)
+    # Task 058, round 7: each completed section carries its citations, with
+    # the reference numbers the saved report will give them.
+    reference_numbering = ReferenceNumbering(conn, task_id=task_id)
+    # Round 8: what each id the sections could cite is from, so the key
+    # findings' streamed citations can be marked (they run transcript-free).
+    kf_sources: tuple[dict[str, tuple[str, str | None]], dict[str, tuple[str, str | None]]] = (
+        {},
+        {},
+    )
     for section_index, section in enumerate(written_sections):
         if progress_emitter is not None:
             progress_emitter.section_started(section_index)
+        # Task 058, N2 and N3: the section line rides on ``section=`` with
+        # every writer line for this section; ``done`` counts the sections
+        # finished before this one.
+        section_line = activity(
+            "synthesise.section",
+            number=section_index + 1,
+            total=len(written_sections),
+            title=section.title,
+        )
+        liveness.publish_progress(
+            activity=activity("synthesise.writing"),
+            section=section_line,
+            done=section_index,
+            total=len(written_sections),
+            unit="sections",
+        )
         member_findings = _group_member_findings(section, substrate=substrate)
         member_finding_ids = {
             finding["finding_id"]
@@ -6112,6 +6286,14 @@ def synthesise_scope(
             "intent": context.intent,
             "section": section.as_seed(),
             "section_index": section_index,
+            # The page's index for this section (key findings first at 0):
+            # streamed text and revising spans are addressed with it, never
+            # with the loop's own count (task 058; owner round 5).
+            "display_index": (
+                progress_emitter.display_index(section_index)
+                if progress_emitter is not None
+                else section_index
+            ),
             "substrate": section_substrate,
             "corpus": corpus_summary if isinstance(corpus_summary, dict) else {},
             "available_tools": [
@@ -6147,14 +6329,18 @@ def synthesise_scope(
             group_doc_ids_by_group_id=group_doc_ids_by_group_id,
         )
         try:
-            loop_result = run_section_loop(
-                synthesis_backend,
-                seed=seed,
-                tools=tools,
-                turn_cap=section.turn_cap or SECTION_TURN_CAP,
-                retriever=retriever,
-                langfuse_client=getattr(synthesis_backend, "langfuse_client", None),
-            )
+            # The sources read and cited are named on the page as the
+            # section is written (task 058, owner 2026-11-05).
+            with source_labelling(source_labeller):
+                loop_result = run_section_loop(
+                    synthesis_backend,
+                    seed=seed,
+                    tools=tools,
+                    turn_cap=section.turn_cap or SECTION_TURN_CAP,
+                    retriever=retriever,
+                    langfuse_client=getattr(synthesis_backend, "langfuse_client", None),
+                    section_line=section_line,
+                )
             usage_totals.add_payload(loop_result["usage_totals"])
         except RuntimeError as exc:
             raise SynthesiseFailure(type(exc).__name__, blocks_written=blocks_written) from exc
@@ -6199,6 +6385,7 @@ def synthesise_scope(
                 accounting=accounting,
                 intent=context.intent,
                 section_focus=section.focus,
+                section_line=section_line,
             )
             usage_totals.add_payload(section_usage)
         except SynthesiseFailure as exc:
@@ -6221,8 +6408,14 @@ def synthesise_scope(
             created_at=created_at,
         )
         blocks_written.append(block_id)
+        section_citations = reference_numbering.citations(claims, block_id=block_id)
         if progress_emitter is not None:
-            progress_emitter.section_completed(section_index, prose=final_prose)
+            progress_emitter.section_completed(
+                section_index,
+                prose=final_prose,
+                citations=section_citations,
+                claims=reference_numbering.claim_verdicts(claims, block_id=block_id),
+            )
         total_chunk_rejections += accounting.chunk_claims_rejected
         total_structural_rejections += accounting.claims_rejected_structural
         total_gap_degraded += accounting.gap_claims_degraded
@@ -6260,6 +6453,11 @@ def synthesise_scope(
         all_claims.extend(claims)
         section_claim_groups.append((section, claims))
         run_chunk_content.update(_chunk_content_by_id(transcript))
+        by_chunk, by_finding = citable_sources(seed, transcript)
+        for chunk_id, source in by_chunk.items():
+            kf_sources[0].setdefault(chunk_id, source)
+        for finding_id, source in by_finding.items():
+            kf_sources[1].setdefault(finding_id, source)
 
     # --- The baseline's code-rendered Sources foot (task 044 § Baseline) ---
     #
@@ -6272,6 +6470,7 @@ def synthesise_scope(
         sources_index = len(written_sections)
         if progress_emitter is not None:
             progress_emitter.section_started(sources_index)
+        liveness.publish_progress(activity=activity("synthesise.sources"))
         sources_prose = _baseline_sources_prose(
             document_count=corpus.appraised_docs,
             mix=_baseline_source_mix(
@@ -6334,20 +6533,29 @@ def synthesise_scope(
         if progress_emitter is not None:
             progress_emitter.key_findings_started()
         try:
-            key_findings_result = _key_findings_pass(
-                conn,
-                artefact_id=artefact_id,
-                intent=context.intent,
-                section_claim_groups=section_claim_groups,
-                all_claims=all_claims,
-                substrate=substrate,
-                synthesis_backend=synthesis_backend,
-                grounding_judge_backend=grounding_judge_backend,
-                run_chunk_content=run_chunk_content,
-                available_claim_types=available_claim_types,
-                kf_section_index=len(sections),
-                created_at=created_at,
-            )
+            # The streamed key findings' citations are named on the page as
+            # the sections' are (task 058, round 8).
+            with source_labelling(source_labeller):
+                key_findings_result = _key_findings_pass(
+                    conn,
+                    artefact_id=artefact_id,
+                    intent=context.intent,
+                    section_claim_groups=section_claim_groups,
+                    all_claims=all_claims,
+                    substrate=substrate,
+                    synthesis_backend=synthesis_backend,
+                    grounding_judge_backend=grounding_judge_backend,
+                    run_chunk_content=run_chunk_content,
+                    available_claim_types=available_claim_types,
+                    kf_section_index=len(sections),
+                    created_at=created_at,
+                    display_index=(
+                        progress_emitter.key_findings_display_index()
+                        if progress_emitter is not None
+                        else None
+                    ),
+                    sources=kf_sources,
+                )
         except SynthesiseFailure as exc:
             raise SynthesiseFailure(
                 exc.error, blocks_written=blocks_written or exc.blocks_written
@@ -6389,9 +6597,16 @@ def synthesise_scope(
             all_claims.extend(kf_claims)
             key_findings_present = True
             key_findings_rollup = {"present": True}
+            kf_citations = reference_numbering.citations(
+                kf_claims, block_id=key_findings_result["block_id"]
+            )
             if progress_emitter is not None:
                 progress_emitter.key_findings_completed(
-                    prose=key_findings_result["prose"]
+                    prose=key_findings_result["prose"],
+                    citations=kf_citations,
+                    claims=reference_numbering.claim_verdicts(
+                        kf_claims, block_id=key_findings_result["block_id"]
+                    ),
                 )
         else:
             key_findings_rollup = {
@@ -6411,6 +6626,8 @@ def synthesise_scope(
         "reason": "template_has_no_case_studies",
     }
     if es_passes:
+        if progress_emitter is not None:
+            progress_emitter.case_studies_started()
         try:
             case_studies_result = _case_studies_pass(
                 conn,
@@ -6426,6 +6643,11 @@ def synthesise_scope(
                 cs_section_index=len(sections) + 1,
                 created_at=created_at,
                 doc_meta=doc_meta,
+                display_index=(
+                    progress_emitter.case_studies_display_index()
+                    if progress_emitter is not None
+                    else None
+                ),
             )
         except Exception:  # noqa: BLE001 - case studies fail-soft
             log.warning("synthesis.case_studies.failed", exc_info=True)
@@ -6435,6 +6657,9 @@ def synthesise_scope(
                 "emission_calls": 0,
                 "usage": UsageAccumulator().payload(),
             }
+        # The streamed cards were the reply still to be checked; the
+        # completed section below brings the checked ones (task 058, round 7).
+        liveness.clear_section_draft()
         call_counts["case_studies"] += int(case_studies_result.get("emission_calls", 0))
         usage_totals.add_payload(
             case_studies_result.get("usage", UsageAccumulator().payload())
@@ -6455,11 +6680,24 @@ def synthesise_scope(
             repair_path_taken = repair_path_taken or cs_accounting.repair_taken
             all_claims.extend(cs_claims)
             case_studies_rollup = {"present": True}
+            cs_citations = reference_numbering.citations(
+                cs_claims, block_id=case_studies_result["block_id"]
+            )
+            if progress_emitter is not None:
+                progress_emitter.case_studies_completed(
+                    prose=case_studies_result["prose"],
+                    citations=cs_citations,
+                    claims=reference_numbering.claim_verdicts(
+                        cs_claims, block_id=case_studies_result["block_id"]
+                    ),
+                )
         else:
             case_studies_rollup = {
                 "present": False,
                 "reason": case_studies_result.get("reason", "unknown"),
             }
+            if progress_emitter is not None:
+                progress_emitter.case_studies_completed(prose="")
 
 
     # --- Most-relevant-source notes (task 034 S5) ---
@@ -6470,9 +6708,15 @@ def synthesise_scope(
     mrs_notes: list[dict[str, Any]] = []
     if es_passes:
         try:
+            top_sources = _ranked_top_sources(all_claims, substrate, doc_meta)
             mrs_notes, mrs_note_calls, mrs_note_usage = _write_mrs_notes(
-                _ranked_top_sources(all_claims, substrate, doc_meta),
+                top_sources,
                 synthesis_backend,
+                names=source_names(
+                    conn,
+                    task_id=task_id,
+                    source_ids=[str(source["source_id"]) for source in top_sources],
+                ),
             )
             call_counts["mrs_notes"] += mrs_note_calls
             usage_totals.add_payload(mrs_note_usage)
@@ -6481,17 +6725,29 @@ def synthesise_scope(
 
     full_report_intro: str | None = None
     if es_passes:
+        if progress_emitter is not None:
+            progress_emitter.intro_started()
         try:
             intro_text, intro_calls, intro_usage = _write_full_report_intro(
                 intent=context.intent,
                 sections=sections,
                 synthesis_backend=synthesis_backend,
+                display_index=(
+                    progress_emitter.intro_display_index()
+                    if progress_emitter is not None
+                    else None
+                ),
             )
             call_counts["full_report_intro"] += intro_calls
             usage_totals.add_payload(intro_usage)
             full_report_intro = intro_text
         except Exception:  # noqa: BLE001 - full-report intro fail-soft
             log.warning("synthesis.full_report_intro.failed", exc_info=True)
+        # The streamed text was the reply; the completed slot carries the
+        # introduction as the report keeps it (task 058, round 8).
+        liveness.clear_section_draft()
+        if progress_emitter is not None:
+            progress_emitter.intro_completed(prose=full_report_intro or "")
 
     retrieval_provenance = retriever.provenance() if retriever is not None else {}
     retrieval_scope_payload = {
@@ -6593,6 +6849,12 @@ def synthesise_scope(
         unspanned_unlocated=total_unspanned_unlocated,
         tool_calls_total=total_tool_calls,
     )
+    # Task 058 review (trace lane): the streamed write turn fell back to the forced tool
+    # call once on a real run and only the trace showed it. The count rides in the
+    # completed payload so the run row says so (``headline_counts``).
+    counts["stream_fallbacks"] = (
+        getattr(synthesis_backend, "stream_fallbacks", 0) - fallbacks_before
+    )
     # Conditional-required key-findings marker (ADR 0015 §8): present iff a
     # block was minted; the absence path records why nothing was forced.
     counts["key_findings"] = key_findings_rollup
@@ -6691,6 +6953,7 @@ def write_summaries_after_commit(
         return _empty_summary_accounting(source_error=False)
 
     artefact_id, artefact_title, question, block_specs = source
+    liveness.publish_progress(activity=activity("synthesise.summaries"))
     records: list[dict[str, Any]] = []
     totals = UsageAccumulator()
     call_counts = {"writer": 0, "judge": 0}
@@ -6698,7 +6961,16 @@ def write_summaries_after_commit(
     provider_disabled = False
     disabled_logged = False
 
-    for spec in block_specs:
+    for index, spec in enumerate(block_specs):
+        # Round 14: the line moves section by section. ``done`` counts the
+        # sections already summarised, so the first line reads "0 of N"
+        # (task 058 review: it ran one ahead).
+        liveness.publish_progress(
+            activity=activity("synthesise.summary_section", done=index, total=len(block_specs)),
+            done=index,
+            total=len(block_specs),
+            unit="sections",
+        )
         if provider_disabled:
             records.append(
                 {
@@ -7013,6 +7285,7 @@ def _write_and_judge_summary(
                     "judge_calls": judge_calls,
                     "usage_totals": totals.payload(),
                 }
+            liveness.publish_progress(activity=activity("synthesise.summary_check"))
             verdict, usage = synthesis_backend.judge_summary(
                 summary=emitted.summary, detail=detail
             )

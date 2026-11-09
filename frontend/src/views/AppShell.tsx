@@ -1,209 +1,133 @@
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { Link, Outlet, useLocation, useParams } from "react-router";
 import { useFinishAlerts } from "./finishAlerts";
-import { Outlet, useLocation, useParams } from "react-router";
 
 import { useArchiveTask, useUpdateTask } from "../api/mutations";
-import { useCheckIns, useMe, useTask, useTasks } from "../api/queries";
+import { useCheckIns, useMe, useProject, useTask } from "../api/queries";
 import { useAuth } from "../auth";
 import { capabilityLabel } from "../lib/capabilities";
 import { TitleMarkerProvider } from "../lib/title";
 import { scrub } from "../lib/scrub";
-import { Button } from "../ui/brand/Button";
-import { StatusDot } from "../ui/brand/Card";
+import { StatusMark } from "../ui/brand/Card";
 import { cn } from "../ui/brand/cn";
 import { LifecycleBar, LifecycleBottomBar } from "../ui/brand/LifecycleBar";
 import { NavBar, NavHomeLink, NavItem } from "../ui/brand/Nav";
 import { COPY, PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
-import { lifecycleTabs, publicLifecycleTabs, withChat } from "./lifecycle";
+import { lifecycleTabs, publicLifecycleTabs, sourcesLanding, tabOfPath, withChat, withSourcesLanding } from "./lifecycle";
+import { PlanPanelProvider, usePlanPanel } from "./planPanel";
 import { PublicViewProvider } from "./publicView";
-import { activeRun, tabRunStatus } from "./scopingActivity";
+import { isScoping, tabRunStatus } from "./scopingActivity";
+import { RunStatusBar } from "./RunStatusBar";
+import { TaskLiveProvider, useTaskLive, withTabMarks } from "./taskLive";
 import { useTabOptions } from "./taskResult";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
 import { RunStreamProvider } from "../store";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
+import { MENU_ITEM_CLASS, moveMenuFocus } from "../ui/radix/menu";
+import { iconButtonClass } from "../ui/brand/icons";
+import { PROSE_LINK_CLASS } from "../ui/brand/inlineActions";
 import { AppFooter } from "./AppFooter";
 import { SensitiveInfoBanner } from "./SensitiveInfoBanner";
 import { ChatSidePanel } from "./workspace/chat/ChatSidePanel";
+import { PlanDocument } from "./workspace/PlanDocument";
+import { SHEET_SCRIM_CLASS } from "../ui/radix/Sheet";
 import { ToastProvider, useToast } from "../ui/radix/Toast";
 import { TooltipProvider } from "../ui/radix/Tooltip";
+import { NameMenu, useAddToProjectStep } from "./NameMenu";
+import { useForgetReportExpandOnLeave } from "./ArtefactOutline";
 
-/** Task settings affordance (028 F.5): rename + archive, wired to the
- *  existing task mutations — the task-card pattern,
- *  condensed into the header popover. Rename saves inline; archive takes an
- *  explicit confirm step before the mutation fires. Visibility moved to the
- *  Share page (`ShareView`). */
-function TaskSettingsMenu({
+/**
+ * The task header's left side (task 058, owner rounds 11 and 12): the name at
+ * the Heading size (Lead below `md`) with the owner's menu (Rename, Add to
+ * project, Archive; the rows' menu shares the last two)
+ * behind the chevron on its baseline, and the capability on its own short
+ * line under it in Meta Grey ("Options scoping", "Evidence search"; task 044,
+ * X12: a colleague can tell the two kinds apart without opening the plan). Rename and archive are owner-only
+ * (task 033 phase 10c, contract § 11 / rubric 37), so a colleague sees no
+ * chevron at all. Visibility lives on the Share page.
+ */
+function TaskName({
   taskId,
-  taskName,
+  name,
+  capability,
   isOwner,
+  projectIds,
 }: {
   taskId: string;
-  taskName: string;
+  name: string;
+  /** The task's projects, for the menu's "Add to project" (round 12). */
+  projectIds: readonly string[] | null | undefined;
+  capability: string | null | undefined;
   isOwner: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [confirmingArchive, setConfirmingArchive] = useState(false);
-  const [draftName, setDraftName] = useState(taskName);
   const update = useUpdateTask(taskId);
   const archive = useArchiveTask(taskId);
   const toast = useToast();
-
-  // Non-owner (task 033 phase 10c, contract § 11 / rubric 37): every item
-  // inside this popover is owner-gated — a non-owner has nothing to do here
-  // at all, so the trigger itself must not render. Rev 1 of this gate
-  // covered only the items, leaving a colleague a gear that opened onto an
-  // empty popover.
-  if (!isOwner) return null;
-
-  const reset = () => {
-    setEditing(false);
-    setConfirmingArchive(false);
-    setDraftName(taskName);
-  };
-
-  const saveRename = () => {
-    const name = draftName.trim();
-    if (!name) return;
-    update.mutate(
-      { name },
-      {
-        onSuccess: () => setEditing(false),
-        onError: () =>
-          toast.toast({
-            title: "Rename failed",
-            description: "The task couldn't be renamed. Try again.",
-            tone: "error",
-          }),
-      },
-    );
-  };
-
+  // The same "Add to project" as a task row's menu (owner, round 12).
+  const addToProject = useAddToProjectStep(taskId, projectIds);
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) reset();
-      }}
-    >
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          aria-label={COPY.taskSettings}
-          title={COPY.taskSettings}
-          className="cursor-pointer text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
-        >
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 24 24"
-            className="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="m6 9 6 6 6-6" />
-          </svg>
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 space-y-3">
-        {editing ? (
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              saveRename();
-            }}
-          >
-            <label className="sr-only" htmlFor="task-settings-name">
-              {TASK.one} name
-            </label>
-            <input
-              id="task-settings-name"
-              autoFocus
-              value={draftName}
-              onChange={(event) => setDraftName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") reset();
-              }}
-              className="w-full border border-line-2 bg-paper px-2 py-1.5 text-meta font-bold text-navy focus-visible:outline-2 focus-visible:outline-blue"
-            />
-            {update.isError && (
-              <p role="alert" className="mt-2 text-body text-red">
-                The task couldn't be renamed. Try again.
-              </p>
-            )}
-            <div className="mt-3 flex gap-2">
-              <Button type="submit" size="sm" disabled={!draftName.trim() || update.isPending}>
-                Save name
-              </Button>
-              <Button type="button" variant="ghost" size="sm" onClick={reset}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        ) : (
-          <>
-            {/* Rename and archive are owner-only mutations (task 033 phase
-                10c, contract § 11 / rubric 37) — hidden entirely for a
-                non-owner. Rev 1 of this menu shipped these ungated: a
-                colleague would see Rename, click, and get "The task
-                couldn't be renamed." */}
-            {isOwner && (
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                className="block w-full cursor-pointer text-left text-meta font-semibold text-navy hover:text-blue"
-              >
-                Rename
-              </button>
-            )}
-            {isOwner && archive.isError && (
-              <p role="alert" className="text-body text-red">
-                The task couldn't be archived. Try again.
-              </p>
-            )}
-            {isOwner &&
-              (confirmingArchive ? (
-                <div className="space-y-2 text-body text-grey">
-                  <p>Archiving removes this task from your active tasks.</p>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      disabled={archive.isPending}
-                      onClick={() =>
-                        archive.mutate(undefined, {
-                          onSuccess: () => setOpen(false),
-                          onError: () =>
-                            toast.toast({
-                              title: "Archive failed",
-                              description: "The task couldn't be archived. Try again.",
-                              tone: "error",
-                            }),
-                        })
-                      }
-                    >
-                      Confirm archive
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setConfirmingArchive(false)}>
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setConfirmingArchive(true)}
-                  className="block w-full cursor-pointer text-left text-meta font-semibold text-navy hover:text-blue"
-                >
-                  Archive
-                </button>
-              ))}
-          </>
-        )}
-      </PopoverContent>
-    </Popover>
+    <NameMenu
+      steps={[addToProject]}
+      name={name}
+      label={COPY.taskSettings}
+      fieldLabel={`${TASK.one} name`}
+      titleClassName="text-heading font-bold text-navy max-md:text-lead max-md:font-bold"
+      below={<TaskKindLine capability={capability} projectIds={projectIds} />}
+      canEdit={isOwner}
+      pending={update.isPending || archive.isPending}
+      rename={(next, done) =>
+        update.mutate({ name: next }, { onSuccess: done.onSuccess, onError: done.onError })
+      }
+      renameError={`The ${TASK.lower} couldn't be renamed. Try again.`}
+      archive={(_, done) =>
+        archive.mutate(undefined, {
+          onSuccess: done.onSuccess,
+          onError: () => {
+            done.onError();
+            toast.toast({
+              title: "Archive failed",
+              description: `The ${TASK.lower} couldn't be archived. Try again.`,
+              tone: "error",
+            });
+          },
+        })
+      }
+      archiveSentence={`Archiving removes this ${TASK.lower} from your active ${TASK.lowerMany}.`}
+      archiveError={`The ${TASK.lower} couldn't be archived. Try again.`}
+    />
+  );
+}
+
+/**
+ * The short line under the task's name (owner, round 14): the capability,
+ * then "· in <project>" when the task belongs to one, the name linking to
+ * the project; with several, the first and "and N more". A project the
+ * reader cannot read (or still loading) is left out rather than guessed.
+ */
+function TaskKindLine({
+  capability,
+  projectIds,
+}: {
+  capability: string | null | undefined;
+  projectIds: readonly string[] | null | undefined;
+}) {
+  const ids = projectIds ?? [];
+  const first = ids[0] ?? "";
+  const project = useProject(first);
+  const more = ids.length - 1;
+  return (
+    <span className="block truncate text-meta leading-tight text-grey">
+      {capabilityLabel(capability)}
+      {project.data !== undefined && (
+        <>
+          {" · in "}
+          <Link to={`/projects/${first}`} className={PROSE_LINK_CLASS}>
+            {scrub(project.data.name)}
+          </Link>
+          {more > 0 && ` and ${more} more`}
+        </>
+      )}
+    </span>
   );
 }
 
@@ -220,14 +144,21 @@ function TaskSettingsMenu({
  */
 function AccountMenu({ signOut }: { signOut: () => void }) {
   const me = useMe();
+  const menuRef = useRef<HTMLDivElement>(null);
   return (
     <Popover>
       <PopoverTrigger asChild>
+        {/* The open state shows on the trigger (the pressed look: Blue Wash,
+            Navy) while the menu is open; Radix sets `aria-expanded`. */}
         <button
           type="button"
           aria-label="Account"
+          aria-haspopup="menu"
           title="Account"
-          className="flex h-8 w-8 cursor-pointer items-center justify-center text-navy hover:text-blue focus-visible:outline-2 focus-visible:outline-blue"
+          className={cn(
+            iconButtonClass("chrome"),
+            "text-navy hover:text-navy data-[state=open]:bg-blue-tint-2 data-[state=open]:text-navy",
+          )}
         >
           <svg
             aria-hidden="true"
@@ -244,9 +175,24 @@ function AccountMenu({ signOut }: { signOut: () => void }) {
           </svg>
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-56 p-1">
+      {/* The account menu (task 058 consistency pass, lead rulings): the
+          popover's tokens (Paper, Line 2 hairline, the overlay lift), as wide
+          as its content and at least 240 px, right-aligned under the button.
+          Who you are first, a hairline, then the items as 40 px Meta rows
+          with the menu-item wash; Sign out, the one destructive item, last.
+          Focus goes to the first item on open and back to the button on
+          close; Escape and an outside press close it; the arrow keys move
+          between items. */}
+      <PopoverContent
+        align="end"
+        className="anim-menu w-auto min-w-60 p-0 transition-none"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+        }}
+      >
         {me.data !== undefined && (
-          <div className="min-w-0 border-b border-line px-3 py-2">
+          <div className="min-w-0 max-w-80 p-4 pb-3">
             <p className="truncate text-meta font-bold text-navy">{scrub(me.data.display_name)}</p>
             {me.data.email != null && (
               <p className="truncate text-caption text-grey">{scrub(me.data.email)}</p>
@@ -257,25 +203,104 @@ function AccountMenu({ signOut }: { signOut: () => void }) {
                 : TENANCY_COPY.noOrganisation}
             </p>
             {me.data.is_admin && (
-              <p className="text-caption font-bold text-blue">{TENANCY_COPY.administrator}</p>
+              <p className="text-caption font-bold text-grey">{TENANCY_COPY.administrator}</p>
             )}
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => signOut()}
-          className="block w-full cursor-pointer px-3 py-2 text-left text-meta font-semibold text-navy hover:bg-blue-tint-2 hover:text-blue"
+        <div
+          ref={menuRef}
+          role="menu"
+          aria-label="Account"
+          aria-orientation="vertical"
+          className="border-t border-line py-1"
+          onKeyDown={(event) => moveMenuFocus(event, menuRef.current)}
         >
-          Sign out
-        </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => signOut()}
+            className={MENU_ITEM_CLASS}
+          >
+            Sign out
+          </button>
+        </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+type LifecycleItems = Parameters<typeof LifecycleBar>[0]["items"];
+
+/** The lifecycle tabs with the live layer's new-content dots (task 058, N14),
+ *  in either placement. */
+function TaskTabs({
+  items,
+  placement,
+  lead,
+  evidenceSearch,
+}: {
+  items: LifecycleItems;
+  placement: "nav" | "bottom";
+  lead?: ReactNode;
+  /** The Sources tab opens on the step that has landed during an Evidence
+   *  search run (annex, owner round after the trace, item 8). */
+  evidenceSearch: boolean;
+}) {
+  const live = useTaskLive();
+  const landing = sourcesLanding(live?.stream.run?.status, live?.stream.stages ?? [], evidenceSearch);
+  const marked = withTabMarks(withSourcesLanding([...items], landing), live?.marks ?? null);
+  return placement === "nav" ? (
+    <LifecycleBar hint={COPY.lockedHint} items={marked} lead={lead} />
+  ) : (
+    <LifecycleBottomBar hint={COPY.lockedHint} items={marked} lead={lead} />
+  );
+}
+
+/** The plan document over a non-Agent tab (the Agent tab mounts its own,
+ *  with the plan's edits). Read-only here: edits and starts belong to the
+ *  Agent tab. It lies over the right of the page with the overlay lift, the
+ *  full height of the viewport as the sheets are (owner, 2026-11-09: it
+ *  stopped at the task header), so the report under it keeps its width;
+ *  below `md` it covers the page. */
+function ShellPlanPanel({ taskId }: { taskId: string }) {
+  const plan = usePlanPanel();
+  const live = useTaskLive();
+  const status = live?.stream.run?.status;
+  if (!plan.open) return null;
+  return (
+    <>
+    {/* Over a tab the plan dims the page with the sheets' scrim (owner,
+        round 14); a press on it is a press outside the plan, which closes
+        it, and the scrim fades out with the plan as a sheet's does. The
+        Agent tab's plan sits beside the thread with no scrim. */}
+    <div
+      aria-hidden="true"
+      data-testid="plan-scrim"
+      data-state={plan.closing ? "closed" : "open"}
+      className={SHEET_SCRIM_CLASS}
+    />
+    <div className="fixed inset-y-0 right-0 z-50 flex min-h-0 w-[min(46rem,55%)] shadow-overlay max-md:left-0 max-md:w-auto">
+      <PlanDocument
+        taskId={taskId}
+        placement="side"
+        readOnly
+        closing={plan.closing}
+        runActive={status === "running" || status === "paused"}
+        onClose={plan.closePlan}
+        overlay={{}}
+        onOverlayChange={() => undefined}
+      />
+    </div>
+    </>
   );
 }
 
 /** App chrome: global controls always; task stages on a second bar. */
 export function AppShell() {
   const { taskId } = useParams();
+  // A reader who leaves the task and comes back gets a fresh collapsed
+  // report; moving between its tabs keeps what they opened (round 12).
+  useForgetReportExpandOnLeave(taskId);
   const location = useLocation();
   const auth = useAuth();
   // Belt-and-braces while a run is active: the shell-owned run stream
@@ -292,20 +317,8 @@ export function AppShell() {
   // a public Task briefly opened the run stream and mounted the chat panel
   // before access was known. Both gate on the query having resolved.
   const taskResolved = task.data !== undefined;
-  // Outside a task, check all tasks so the nav logo animates even when the
-  // user has navigated away. Cost: one list fetch when the shell mounts (once
-  // per session — AppShell is the layout route), plus useTasks's own 15s
-  // poll while any run is active; the query is shared with TasksListView.
-  const allTasks = useTasks();
   // Browser alerts when a task's work finishes, on any page (owner, 2026-11-04).
   useFinishAlerts();
-  // Task 045 (S15): a scoping task is running when ANY of its walks is —
-  // an option search included — so `activeRun` reads `active_run` there and
-  // `latest_run` for an Evidence search, as before.
-  const anyRunning =
-    base !== null
-      ? activeRun(task.data)?.status === "running"
-      : (allTasks.data?.data.some((p) => activeRun(p)?.status === "running") ?? false);
   const inWorkspace = base !== null && location.pathname === base;
   // Every task tab but Agent (038 V8, owner ruling 2026-09-05): the Agent
   // tab lists the same conversations in its own sidebar and shows the
@@ -346,6 +359,24 @@ export function AppShell() {
   });
   const hasPendingCheckIn =
     base !== null && !inWorkspace && isOwner && (pendingCheckIns.data?.data.length ?? 0) > 0;
+  // The live layer (tab dots, the title's finish, the reconnecting banner)
+  // belongs to the signed-in shell only; the public task shell has no stream
+  // (task 058, N12).
+  const liveShell = base !== null && taskResolved && !publicAccess;
+
+  // A lifecycle tab opens at its top (owner, round 14; `lib/openAtTop`'s
+  // rule): the tabs share one scrolling pane, which would otherwise keep the
+  // last tab's offset. Only when the tab changes (a Sources subtab or the
+  // Result tab's view keeps its place) and never over a link's own `#hash`.
+  const scrollPane = useRef<HTMLDivElement>(null);
+  const tab = base === null ? null : tabOfPath(location.pathname, base);
+  const lastTab = useRef(tab);
+  useLayoutEffect(() => {
+    if (lastTab.current === tab) return;
+    lastTab.current = tab;
+    if (tab === null || location.hash !== "" || scrollPane.current === null) return;
+    scrollPane.current.scrollTop = 0;
+  }, [tab, location.hash]);
 
   // Task views lock to the viewport so the app/lifecycle chrome stays put
   // and only the panes below scroll. List pages keep normal document scroll.
@@ -371,7 +402,7 @@ export function AppShell() {
                 ...item,
                 marker: (
                   <>
-                    <StatusDot tone="paused" />
+                    <StatusMark tone="paused" />
                     <span className="sr-only">Check-in pending</span>
                   </>
                 ),
@@ -386,8 +417,10 @@ export function AppShell() {
         base === null ? "min-h-svh" : "h-svh overflow-hidden",
       )}
     >
-      <NavBar aria-label="App" className="shrink-0">
-        <NavHomeLink running={anyRunning} />
+      {/* Its own View Transition layer, held still above the page, so a
+          longlist regroup never draws over it (round 13, owner). */}
+      <NavBar aria-label="App" className="shrink-0 [view-transition-name:app-nav] [view-transition-class:shell-chrome]">
+        <NavHomeLink />
         {/* Below md the link group wraps to its own second row (order-last +
             w-full), left-justified, while the account icon stays on the logo
             row; from md up the DOM order and right grouping are unchanged
@@ -415,52 +448,42 @@ export function AppShell() {
         {auth.user !== null && <AccountMenu signOut={() => auth.signOut()} />}
       </NavBar>
       {base !== null && (
-        <NavBar aria-label={TASK.one} className="shrink-0 bg-ground">
-          <div className="flex min-w-0 items-center gap-2">
+        <NavBar
+          aria-label={TASK.one}
+          className="shrink-0 bg-ground [view-transition-name:task-nav] [view-transition-class:shell-chrome]"
+        >
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             {task.data !== undefined && (
               <>
-                <span className="truncate text-lead font-semibold text-navy">
-                  {scrub(task.data.name)}
-                </span>
-                {/* The kind of work this task is (task 044, X12; Frame board):
-                    "Options scoping" or "Evidence search", read straight off
-                    the row so a colleague never has to open the plan to tell
-                    the two kinds apart. */}
-                <span className="shrink-0 text-caption font-semibold uppercase tracking-[0.06em] text-grey">
-                  {capabilityLabel(task.data.capability)}
-                </span>
-                <TaskSettingsMenu
+                <TaskName
                   taskId={task.data.task_id}
-                  taskName={task.data.name}
+                  name={task.data.name}
+                  capability={task.data.capability}
                   isOwner={task.data.is_owner}
+                  projectIds={task.data.project_ids}
                 />
               </>
             )}
           </div>
-          <div className="max-md:hidden">
-            <LifecycleBar hint={COPY.lockedHint} items={lifecycleItems ?? []} />
+          {/* Never shrinks: a long task name truncates instead, and keeps a
+              gutter's width from the Plan control. */}
+          <div className="shrink-0 pl-6 max-md:hidden">
+            <TaskTabs
+              placement="nav"
+              items={lifecycleItems ?? []}
+              evidenceSearch={!isScoping(task.data)}
+              lead={undefined}
+            />
           </div>
         </NavBar>
       )}
       <SensitiveInfoBanner />
-      {/* Cross-tab pause banner (028 strand 14 — pause salience): a
-          paused run must be unmissable from every tab; the banner jumps
-          straight to the waiting check-in. */}
-      {hasPendingCheckIn && base !== null && (
-        <div role="status" className="shrink-0 border-b border-orange bg-orange/10 px-5 py-2">
-          <NavItem to={base}>
-            <span className="text-body font-semibold text-navy">
-              The analysis is paused — a check-in is waiting on you. Go to the check-in →
-            </span>
-          </NavItem>
-        </div>
-      )}
       {/* The Agent overlay beside every task view outside the Agent tab
           (029 rev 3.4, 038 V8): the Agent tab hosts the conversation list
           and the conversation itself, so the panel mounts everywhere else. */}
       <div
         className={cn(
-          "flex min-w-0 flex-1",
+          "relative flex min-w-0 flex-1",
           base !== null && "min-h-0 overflow-hidden",
           chatOpen && "lg:min-h-0",
         )}
@@ -470,30 +493,49 @@ export function AppShell() {
             out the rest of the shell (nav, the routed view). */}
         {showChatPanel && (
           <ErrorBoundary key={taskId}>
+            {/* The Agent tab has no overlay. */}
             <ChatSidePanel taskId={taskId ?? ""} isOwner={isOwner} />
           </ErrorBoundary>
         )}
-        <div
-          data-testid={footerInScrollPane ? "task-scroll-pane" : undefined}
-          className={cn(
-            "min-h-0 min-w-0 flex-1",
-            inWorkspace ? "overflow-hidden" : "overflow-y-auto [scrollbar-gutter:stable]",
-            // The pane is a flex column only to pin the footer with
-            // `mt-auto`; children must never flex-shrink, or a view
-            // root with an explicit min-height (Sources' `min-h-full`)
-            // gets squashed to one viewport and the footer lands
-            // mid-content.
-            footerInScrollPane && "flex flex-col [&>*]:shrink-0",
-          )}
-        >
-          <ErrorBoundary key={location.pathname}>
-            <Outlet />
-          </ErrorBoundary>
-          {footerInScrollPane && <AppFooter />}
+        {/* The page's column: the run status bar on top, then the routed view.
+            The status bar starts after the rail (owner, round 8: it no longer
+            runs under the sidebar to the window's left edge); below md the
+            rail hides and the column is the full width. */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {/* The run status bar under the tabs on every tab but Agent (task 058,
+              owner rounds 7 and 8): it opens the Task Agent. While the live
+              stream reconnects its frame carries the reconnecting line
+              (owner, round 11), so the line never runs under the rail. */}
+          {liveShell && <RunStatusBar />}
+          <div
+            ref={scrollPane}
+            data-testid={footerInScrollPane ? "task-scroll-pane" : undefined}
+            className={cn(
+              "min-h-0 min-w-0 flex-1",
+              inWorkspace ? "overflow-hidden" : "overflow-y-auto [scrollbar-gutter:stable]",
+              // The pane is a flex column only to pin the footer with
+              // `mt-auto`; children must never flex-shrink, or a view
+              // root with an explicit min-height (Sources' `min-h-full`)
+              // gets squashed to one viewport and the footer lands
+              // mid-content.
+              footerInScrollPane && "flex flex-col [&>*]:shrink-0",
+            )}
+          >
+            <ErrorBoundary key={location.pathname}>
+              <Outlet />
+            </ErrorBoundary>
+            {footerInScrollPane && <AppFooter />}
+          </div>
         </div>
+        {liveShell && !inWorkspace && <ShellPlanPanel taskId={taskId ?? ""} />}
       </div>
       {lifecycleItems !== null && (
-        <LifecycleBottomBar hint={COPY.lockedHint} items={lifecycleItems} />
+        <TaskTabs
+          placement="bottom"
+          items={lifecycleItems}
+          evidenceSearch={!isScoping(task.data)}
+          lead={undefined}
+        />
       )}
       {/* List pages only — Plan hosts its own footer in the chat scroll. */}
       {base === null && <AppFooter />}
@@ -513,7 +555,15 @@ export function AppShell() {
               // resolution, access is unknown, so this must not connect
               // either (review fix, task 037).
               <RunStreamProvider taskId={taskId} connect={taskResolved && !publicAccess}>
-                {shellChrome}
+                <TaskLiveProvider
+                  taskId={taskId}
+                  enabled={liveShell}
+                  capability={task.data?.capability}
+                  isOwner={isOwner}
+                  ownerName={task.data?.owner_display ?? null}
+                >
+                  <PlanPanelProvider key={taskId}>{shellChrome}</PlanPanelProvider>
+                </TaskLiveProvider>
               </RunStreamProvider>
             ) : (
               shellChrome

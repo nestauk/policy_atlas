@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthContext } from "../auth/AuthContext";
 import type { AuthApi } from "../auth/types";
-import { useChatTurns, useMe, useTask } from "./queries";
+import { useChatTurns, useMe, useOptions, useProjects, useProjectsPaged, useTask, useTasksPaged } from "./queries";
 
 const conversationId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
@@ -183,5 +183,120 @@ describe("useTask", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect((result.current.error as Error & { status?: number }).status).toBe(404);
+  });
+});
+
+describe("useOptions (task 058, N22)", () => {
+  const taskId = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+
+  it("reads the task's option rows from GET /tasks/{id}/options", async () => {
+    const body = {
+      options: [
+        {
+          option_id: "cccccccc-cccc-cccc-cccc-cccccccccccc",
+          name: "Youth hubs",
+          description: "One local place.",
+          origin: "suggested",
+          state: "included",
+          merged_into_option_id: null,
+          search_status: "searching",
+          found: null,
+        },
+      ],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), "http://localhost:3000");
+      expect(url.pathname).toBe(`/api/v1/tasks/${taskId}/options`);
+      return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useOptions(taskId), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.data?.options).toHaveLength(1));
+    expect(result.current.data?.options?.[0]).toMatchObject({ name: "Youth hubs", search_status: "searching" });
+  });
+
+  it("reads a 404 as no rows yet, not an error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ detail: "not found" }), { status: 404, headers: { "Content-Type": "application/json" } })),
+    );
+    const { result } = renderHook(() => useOptions(taskId), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeNull();
+  });
+});
+
+describe("useTasksPaged (task 058, round 10)", () => {
+  it("asks for the next page only while the server says has_more", async () => {
+    const totalItems = 61;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), "http://localhost:3000");
+      const page = Number(url.searchParams.get("page") ?? "1");
+      const start = (page - 1) * 50;
+      const data = Array.from({ length: Math.max(0, Math.min(50, totalItems - start)) }, (_, i) => ({
+        task_id: `task-${start + i}`,
+        latest_run: null,
+        active_run: null,
+      }));
+      return new Response(
+        JSON.stringify({
+          data,
+          pagination: { page, page_size: 50, total_items: totalItems, has_more: page * 50 < totalItems },
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useTasksPaged({ scope: "mine" }), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.data?.pages).toHaveLength(1));
+    expect(result.current.hasNextPage).toBe(true);
+    await result.current.fetchNextPage();
+    await waitFor(() => expect(result.current.data?.pages).toHaveLength(2));
+    expect(result.current.hasNextPage).toBe(false);
+    expect(result.current.data?.pages.flatMap((page) => page.data)).toHaveLength(61);
+    const second = fetchMock.mock.calls[1][0] as Request;
+    expect(new URL(second instanceof Request ? second.url : String(second)).searchParams.get("scope")).toBe("mine");
+  });
+});
+
+describe("the Projects list pages (task 058, round 12)", () => {
+  const projectsServer = (totalItems: number) =>
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), "http://localhost:3000");
+      const page = Number(url.searchParams.get("page") ?? "1");
+      const size = Number(url.searchParams.get("page_size") ?? "20");
+      const start = (page - 1) * size;
+      const data = Array.from({ length: Math.max(0, Math.min(size, totalItems - start)) }, (_, i) => ({
+        project_id: `project-${start + i}`,
+      }));
+      return new Response(
+        JSON.stringify({ data, pagination: { page, page_size: size, total_items: totalItems, has_more: start + size < totalItems } }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+  it("useProjectsPaged reads twenty, then the next page only while has_more", async () => {
+    const fetchMock = projectsServer(27);
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useProjectsPaged({ scope: "mine" }), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.data?.pages).toHaveLength(1));
+    expect(result.current.data?.pages[0].data).toHaveLength(20);
+    expect(result.current.hasNextPage).toBe(true);
+    await result.current.fetchNextPage();
+    await waitFor(() => expect(result.current.data?.pages).toHaveLength(2));
+    expect(result.current.hasNextPage).toBe(false);
+    expect(result.current.data?.pages.flatMap((page) => page.data)).toHaveLength(27);
+  });
+
+  it("useProjects asks for the whole list, so a picker never stops at twenty", async () => {
+    const fetchMock = projectsServer(27);
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useProjects(), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.data).toHaveLength(27);
+    const first = fetchMock.mock.calls[0][0] as Request;
+    expect(new URL(first instanceof Request ? first.url : String(first)).searchParams.get("page_size")).toBe("200");
   });
 });

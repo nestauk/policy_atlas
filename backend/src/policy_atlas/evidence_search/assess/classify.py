@@ -1,5 +1,6 @@
 """Classify screened-in documents by evidence type through a backend seam."""
 
+import threading
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
@@ -10,7 +11,9 @@ import structlog
 from sqlalchemy import exists, func, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core import events, tracing
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import events, liveness, tracing
+from policy_atlas.core.done_callbacks import add_done_callback_in_context
 from policy_atlas.core.prompt_fields import clamp_reason, metadata_dict
 from policy_atlas.core.schema import (
     EVIDENCE_TYPES,
@@ -349,14 +352,34 @@ def _run_classification_calls(
     results: dict[int, ClassifyWire] = {}
     errors: dict[int, Exception] = {}
     usage_totals = UsageAccumulator()
+
+    # Task 058, N2: one count per document, on the pool's own future; the
+    # serial retry below never publishes.
+    done = 0
+    lock = threading.Lock()
+    total = len(docs)
+
+    def publish_done(finished: Future[Any] | None) -> None:
+        nonlocal done
+        with lock:
+            if finished is not None:
+                done += 1
+            n = done
+        liveness.publish_progress(
+            activity=activity("classify.progress", done=n, total=total),
+            done=n,
+            total=total,
+            unit="documents",
+        )
+
+    publish_done(None)
+
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_CLASSIFY) as executor:
-        submitted: list[tuple[int, Future[Any]]] = [
-            (
-                doc_index,
-                tracing.submit_with_context(executor, classify_in_slot, doc.payload),
-            )
-            for doc_index, doc in enumerate(docs)
-        ]
+        submitted: list[tuple[int, Future[Any]]] = []
+        for doc_index, doc in enumerate(docs):
+            future = tracing.submit_with_context(executor, classify_in_slot, doc.payload)
+            add_done_callback_in_context(future, publish_done)
+            submitted.append((doc_index, future))
         wait([future for _, future in submitted])
         for doc_index, future in submitted:
             try:

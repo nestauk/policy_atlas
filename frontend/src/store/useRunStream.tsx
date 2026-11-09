@@ -7,6 +7,7 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { queryKeys } from "../api/queries";
 import { connectEventStream } from "../api/sse";
 import { useAuth } from "../auth";
 import { createInitialRunStreamState } from "./types";
@@ -19,6 +20,13 @@ import type { RunStreamState } from "./types";
  * into one read-model refresh instead of one per frame.
  */
 export const RUN_STREAM_INVALIDATE_DEBOUNCE_MS = 300;
+
+/**
+ * Trailing window for refreshing the Sources list and the Landscape while
+ * the full texts are read: at most one refresh per window, however many
+ * `ingest` ticks arrive (task 058, N16).
+ */
+export const INGEST_REFRESH_THROTTLE_MS = 5_000;
 
 interface RunStreamContextValue {
   taskId: string;
@@ -87,8 +95,17 @@ export function useRunStream(taskId: string): RunStreamState {
 
 /**
  * Open one authed SSE connection, fold frames through the pure reducer, and
- * coalesce read-model invalidations on `stage.completed` / `run.status`. A
- * fresh mount/reconnect always starts from `cursor=0` — the reducer's replay
+ * refresh the read models the frames make stale:
+ *
+ * - the tracked run's `stage.completed` / `run.status`: every query under the
+ *   task, debounced so a cold full-history replay is one refresh;
+ * - a child walk's (an option search's) `stage.completed` / `run.status`:
+ *   the options query only, in the same debounce window (task 058, N23);
+ * - an `ingest` tick: the Sources list and the Landscape, at most once per
+ *   `INGEST_REFRESH_THROTTLE_MS` (task 058, N16). No other tick refreshes
+ *   anything.
+ *
+ * A fresh mount always starts from `cursor=0` — the reducer's replay
  * idempotence is what makes that safe.
  */
 function useRunStreamConnection(taskId: string, connect: boolean): RunStreamState {
@@ -115,29 +132,40 @@ function useRunStreamConnection(taskId: string, connect: boolean): RunStreamStat
     // state (a stale-connection race at the task-switch boundary).
     let closed = false;
     let invalidateTimer: ReturnType<typeof setTimeout> | null = null;
+    let ingestTimer: ReturnType<typeof setTimeout> | null = null;
     // This connection's frames folded on their own, so a frame can be told
     // apart as a child walk's (a longlist's option search) as it lands.
     let folded = createInitialRunStreamState();
-    // True while every frame in the pending window came from a child walk:
-    // those leave the longlist and the option cards alone.
-    let childOnly = true;
+    // What the pending debounce window has seen: a tracked-run frame
+    // refreshes everything; child frames alone refresh the options only.
+    let parentPending = false;
 
     const flushInvalidate = () => {
       invalidateTimer = null;
-      const keepLonglist = childOnly;
-      childOnly = true;
-      void queryClient.invalidateQueries({
-        predicate: ({ queryKey }) =>
-          queryKey[0] === "tasks" &&
-          queryKey[1] === taskId &&
-          !(keepLonglist && (queryKey[2] === "longlist" || queryKey[2] === "options")),
-      });
+      const everything = parentPending;
+      parentPending = false;
+      const queryKey: readonly unknown[] = everything
+        ? queryKeys.taskRoot(taskId)
+        : [...queryKeys.taskRoot(taskId), "options"];
+      void queryClient.invalidateQueries({ queryKey });
     };
 
     const scheduleInvalidate = (fromChild: boolean) => {
-      if (!fromChild) childOnly = false;
+      if (!fromChild) parentPending = true;
       if (invalidateTimer !== null) clearTimeout(invalidateTimer);
       invalidateTimer = setTimeout(flushInvalidate, RUN_STREAM_INVALIDATE_DEBOUNCE_MS);
+    };
+
+    const flushIngestRefresh = () => {
+      ingestTimer = null;
+      void queryClient.invalidateQueries({ queryKey: [...queryKeys.taskRoot(taskId), "evidence"] });
+      void queryClient.invalidateQueries({ queryKey: [...queryKeys.taskRoot(taskId), "landscape"] });
+    };
+
+    // Trailing throttle: the first ingest tick opens a window; later ticks
+    // inside it are folded into the one refresh at its end.
+    const scheduleIngestRefresh = () => {
+      if (ingestTimer === null) ingestTimer = setTimeout(flushIngestRefresh, INGEST_REFRESH_THROTTLE_MS);
     };
 
     const connection = connectEventStream({
@@ -162,6 +190,8 @@ function useRunStreamConnection(taskId: string, connect: boolean): RunStreamStat
         setState((previous) => reduceRunStreamFrame(previous, frame));
         if (frame.type === "stage.completed" || frame.type === "run.status") {
           scheduleInvalidate(isOtherRunsStage(folded, frame.capability_run_id));
+        } else if (frame.type === "tick" && frame.stage === "ingest") {
+          scheduleIngestRefresh();
         }
       },
     });
@@ -169,6 +199,7 @@ function useRunStreamConnection(taskId: string, connect: boolean): RunStreamStat
     return () => {
       closed = true;
       if (invalidateTimer !== null) clearTimeout(invalidateTimer);
+      if (ingestTimer !== null) clearTimeout(ingestTimer);
       connection.close();
     };
   }, [taskId, auth, queryClient, connect]);

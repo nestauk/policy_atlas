@@ -20,7 +20,9 @@ holds none of them (P1):
   apply the cap (the user's own and the report-derived first, never dropped;
   the model's suggestions fill the rest), skip on a rebuild every entrant that
   already has a finished option search (P12), dispatch one child walk each,
-  and emit the ``option_searches`` stage's start.
+  and emit the ``option_searches`` stage's start; then publish the stage's
+  count at once and keep it current while the walk's own search runs (a
+  daemon poll the join stops; task 058, round 12).
 - :func:`join_option_searches` — before ``screen_abstract`` (task 046,
   S2; the children only acquire): wait, outside any
   transaction, for every child to reach a terminal status, bounded by
@@ -51,11 +53,13 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 from pydantic import ValidationError
-from sqlalchemy import select, update
+from sqlalchemy import Integer, cast, func, select, update
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.stage_vocabulary import activity
 from policy_atlas.core import events, tracing
-from policy_atlas.core.schema import capability_run, event_log, evidence_scope, option
+from policy_atlas.core.liveness import tick_hub
+from policy_atlas.core.schema import capability_run, event_log, evidence_scope, option, runs
 from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.runtime.capability_registry import (
     OPTIONS_SCOPING,
@@ -117,6 +121,9 @@ _FINISHED = frozenset({"succeeded", "degraded"})
 # join abandoned before it opened its row never starts.
 _futures: dict[uuid.UUID, Future[None]] = {}
 _abandoned: set[uuid.UUID] = set()
+# The fan-out's progress polls, one per longlist walk (task 058, round 12):
+# the thread and the event that stops it.
+_progress_polls: dict[uuid.UUID, tuple[threading.Thread, threading.Event]] = {}
 _handles_lock = threading.Lock()
 
 
@@ -556,6 +563,33 @@ def child_walks(
     }
 
 
+def child_acquired_total(conn: Connection, *, child_ids: list[uuid.UUID]) -> int:
+    """Return sources acquired by a set of child capability runs.
+
+    Args:
+        conn: Open connection.
+        child_ids: Child capability-run ids.
+
+    Returns:
+        The sum of acquired sources reported by the children.
+    """
+    if not child_ids:
+        return 0
+    total = conn.execute(
+        select(
+            func.coalesce(
+                func.sum(cast(event_log.c.payload["acquired"].astext, Integer)),
+                0,
+            )
+        )
+        .select_from(event_log.join(runs, runs.c.run_id == event_log.c.run_id))
+        .where(event_log.c.event_type == "component.completed")
+        .where(event_log.c.payload["component"].astext == "acquire")
+        .where(runs.c.capability_run_id.in_(child_ids))
+    ).scalar_one()
+    return int(total)
+
+
 def dispatched_children(
     conn: Connection,
     *,
@@ -618,6 +652,22 @@ def dispatch_option_searches(
     with engine.connect() as conn:
         already = dispatched_children(conn, task_id=task_id, parent_id=parent_id)
         if already is not None:
+            # Task 058 review: a walk resumed past its join republished the
+            # finished stage's count, which the hub then kept for ten minutes.
+            # Once the stage's completion is written there is nothing to show.
+            joined = conn.execute(
+                select(event_log.c.event_id)
+                .where(event_log.c.task_id == task_id)
+                .where(event_log.c.run_id.is_(None))
+                .where(event_log.c.event_type == "component.completed")
+                .where(event_log.c.payload["component"].astext == OPTION_SEARCHES_STAGE)
+                .where(event_log.c.payload["capability_run_id"].astext == str(parent_id))
+                .limit(1)
+            ).first()
+            if joined is None:
+                _start_progress_poll(
+                    engine, task_id=task_id, parent_id=parent_id, child_ids=already
+                )
             return already
         entrants = entrants_for_search(conn, task_id=task_id, suggest_run_id=suggest_run_id)
 
@@ -711,6 +761,7 @@ def _fan_out[T](
         total=len(child_ids),
         **(extra or {}),
     )
+    _start_progress_poll(engine, task_id=task_id, parent_id=parent_id, child_ids=child_ids)
     return child_ids
 
 
@@ -850,9 +901,14 @@ def join_option_searches(
     deadline = time.monotonic() + (OPTION_SEARCH_JOIN_TIMEOUT if timeout is None else timeout)
     statuses: dict[uuid.UUID, str] = {}
     pending: list[uuid.UUID] = list(child_ids)
+    sources = 0
+    # The progress poll started at the fan-out ends here: from now on this
+    # loop publishes the same line (task 058, round 12).
+    _stop_progress_poll(parent_id)
     while True:
-        with engine.connect() as conn:
-            statuses = child_walks(conn, task_id=task_id, parent_id=parent_id)
+        statuses, sources = _publish_progress(
+            engine, task_id=task_id, parent_id=parent_id, child_ids=child_ids
+        )
         pending = [child for child in child_ids if not _ended(child, statuses.get(child))]
         if not pending or time.monotonic() >= deadline:
             break
@@ -875,9 +931,13 @@ def join_option_searches(
             event_type="component.completed",
             payload={
                 "component": stage,
+                # The walk this stage belongs to: the event has no component
+                # run to name it (task 058, round 11).
+                "capability_run_id": str(parent_id),
                 "total": outcome.total,
                 "finished": outcome.finished,
                 "failed": outcome.failed,
+                "sources": sources,
             },
         )
     log.info(
@@ -890,6 +950,123 @@ def join_option_searches(
         interrupted=len(outcome.interrupted),
     )
     return outcome
+
+
+def _publish_progress(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    parent_id: uuid.UUID,
+    child_ids: list[uuid.UUID],
+) -> tuple[dict[uuid.UUID, str], int]:
+    """Read the children once and publish the stage's progress tick.
+
+    The one body of the join's loop and the fan-out's progress poll: "n of M
+    searches done · S sources", on the walk's ``option_searches`` row.
+
+    Returns:
+        The children's statuses and the sources they have acquired.
+    """
+    with engine.connect() as conn:
+        statuses = child_walks(conn, task_id=task_id, parent_id=parent_id)
+        sources = child_acquired_total(conn, child_ids=child_ids)
+    finished = sum(1 for child in child_ids if statuses.get(child) in _FINISHED)
+    tick_hub.publish_tick(
+        task_id,
+        stage=OPTION_SEARCHES_STAGE,
+        activity=activity(
+            "option_searches.progress",
+            done=finished,
+            total=len(child_ids),
+            sources=sources,
+        ),
+        done=finished,
+        total=len(child_ids),
+        unit="searches",
+        run_id=parent_id,
+    )
+    return statuses, sources
+
+
+def _start_progress_poll(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    parent_id: uuid.UUID,
+    child_ids: list[uuid.UUID],
+) -> None:
+    """Keep the stage's count current from the fan-out until the join.
+
+    The walk runs its own broad search between the fan-out and the join, so
+    without this the ``option_searches`` row would read nothing until that
+    search ended (task 058, round 12). Publishes the first tick ("0 of M
+    searches done · 0 sources") at once, then a daemon thread re-reads every
+    :data:`OPTION_SEARCH_JOIN_POLL` seconds. It stops when the join or
+    :func:`abandon_children` stops it, when every child has ended, or after
+    :data:`OPTION_SEARCH_JOIN_TIMEOUT` (a walk resumed past its join never
+    joins again). A failed read never touches the walk: the poll logs and
+    stops.
+
+    Args:
+        engine: Database engine.
+        task_id: The task.
+        parent_id: The longlist walk.
+        child_ids: The children the fan-out dispatched.
+    """
+    if not child_ids:
+        return
+    _stop_progress_poll(parent_id)
+    stop = threading.Event()
+    deadline = time.monotonic() + OPTION_SEARCH_JOIN_TIMEOUT
+
+    def publish() -> bool:
+        """Publish once; whether the poll should go on."""
+        try:
+            statuses, _ = _publish_progress(
+                engine, task_id=task_id, parent_id=parent_id, child_ids=child_ids
+            )
+        except Exception:
+            log.warning(
+                "option_search.progress_poll_failed",
+                task_id=str(task_id),
+                capability_run_id=str(parent_id),
+                exc_info=True,
+            )
+            return False
+        ended = all(_ended(child, statuses.get(child)) for child in child_ids)
+        return not ended and time.monotonic() < deadline
+
+    # The first tick at the fan-out itself, before the walk's own search.
+    if not publish():
+        return
+
+    def poll() -> None:
+        while not stop.wait(OPTION_SEARCH_JOIN_POLL):
+            if not publish():
+                break
+        with _handles_lock:
+            handle = _progress_polls.get(parent_id)
+            if handle is not None and handle[1] is stop:
+                del _progress_polls[parent_id]
+
+    thread = threading.Thread(
+        target=poll, name=f"option-search-progress-{parent_id}", daemon=True
+    )
+    with _handles_lock:
+        _progress_polls[parent_id] = (thread, stop)
+    thread.start()
+
+
+def _stop_progress_poll(parent_id: uuid.UUID) -> None:
+    """Stop the walk's progress poll, if one runs, and wait for it to end."""
+    with _handles_lock:
+        handle = _progress_polls.pop(parent_id, None)
+    if handle is None:
+        return
+    thread, stop = handle
+    stop.set()
+    if thread is not threading.current_thread():
+        thread.join(timeout=5.0)
 
 
 def _ended(child: uuid.UUID, status: str | None) -> bool:
@@ -948,6 +1125,7 @@ def abandon_children(
     Returns:
         The children whose row this call ended.
     """
+    _stop_progress_poll(parent_id)
     with engine.connect() as conn:
         child_ids = [
             child

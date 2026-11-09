@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { friendlyDecisionDetails, groupSearchDecisions } from "./decisionsPresentation";
+import { friendlyDecisionDetails } from "./decisionsPresentation";
 import { cancelledRenameState } from "./landingPresentation";
 import { abstractSourceLabel, screeningDetails, sourceStatusLabel } from "./sourcesPresentation";
 
@@ -24,14 +24,6 @@ describe("decision presentation", () => {
     expect(friendlyDecisionDetails({ acquired: 8, internal_trace: "do not render", nested: { token: "do not render" } })).toEqual([
       { label: "New sources found", value: 8 },
     ]);
-  });
-
-  it("groups search entries into one search terms row", () => {
-    const entries = [
-      { sequence: 3, occurred_at: "2026-07-28T10:00:00Z", kind: "search.executed", summary: "Executed a search query.", detail: null },
-      { sequence: 2, occurred_at: "2026-07-28T09:59:00Z", kind: "search.executed", summary: "Executed a search query.", detail: null },
-    ];
-    expect(groupSearchDecisions(entries)).toMatchObject([{ summary: "Search terms used (2 queries)", searchCount: 2 }]);
   });
 });
 

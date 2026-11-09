@@ -33,13 +33,21 @@ from policy_atlas.api.contract import (
     TurnDecisionOut,
 )
 from policy_atlas.api.contract.sse import (
+    ArtefactSectionCardFrame,
+    ArtefactSectionClaimFrame,
     ArtefactSectionCompletedFrame,
+    ArtefactSectionDeltaFrame,
+    ArtefactSectionRevisingFrame,
+    ArtefactSectionSourcesFrame,
     ArtefactSectionStartedFrame,
     ArtefactSkeletonFrame,
+    ArtefactSourceNoteFrame,
+    CharacteriseThemesFrame,
     CheckinPendingFrame,
     CheckinResolvedFrame,
     PlanUpdatedFrame,
     RunStatusFrame,
+    SearchQueryFrame,
     StageCompletedFrame,
     StageFailedFrame,
     StageStartedFrame,
@@ -258,7 +266,7 @@ def test_stage_started_frame_discriminates() -> None:
             "sequence": 2,
             "occurred_at": _now().isoformat(),
             "stage": "acquire",
-            "label": "Searching sources",
+            "label": "Searching",
             "blurb": "…",
         }
     )
@@ -273,13 +281,32 @@ def test_stage_completed_frame_discriminates() -> None:
             "sequence": 3,
             "occurred_at": _now().isoformat(),
             "stage": "acquire",
-            "label": "Searching sources",
+            "label": "Searching",
             "summary": {"found": 58},
             "seconds": 12.4,
         }
     )
     assert isinstance(model, StageCompletedFrame)
     assert model.summary == {"found": 58}
+    assert model.counts == []  # task 058 (N17): the done row's counts ride on the frame
+
+
+def test_stage_completed_frame_carries_its_counts_in_the_servers_words() -> None:
+    """Task 058 (N17): `counts` names what the done row shows, value and noun."""
+    model = _adapter().validate_python(
+        {
+            "type": "stage.completed",
+            "sequence": 3,
+            "occurred_at": _now().isoformat(),
+            "stage": "acquire",
+            "label": "Searching",
+            "summary": {"acquired": 312},
+            "seconds": 64.0,
+            "counts": [{"value": 312, "noun": "found"}],
+        }
+    )
+    assert isinstance(model, StageCompletedFrame)
+    assert [(count.value, count.noun) for count in model.counts] == [(312, "found")]
 
 
 def test_stage_failed_frame_discriminates() -> None:
@@ -421,42 +448,307 @@ def test_tick_frame_discriminates_and_has_no_sequence() -> None:
         {
             "type": "tick",
             "occurred_at": _now().isoformat(),
-            "note": "still working…",
+            "activity": "Classifying",
         }
     )
     assert isinstance(model, TickFrame)
     assert not hasattr(model, "sequence")
 
 
-def test_tick_frame_counts_are_optional_typed_ints() -> None:
-    """Task 056 (S5): `fetched`, `parsed`, `total` are optional ints on a tick."""
+def test_tick_frame_fields_are_one_set_for_every_stage() -> None:
+    """Task 058 (D2, S2): `done`, `total`, `unit`, `section` are optional; the rest typed."""
     with_counts = _adapter().validate_python(
         {
             "type": "tick",
             "stage": "ingest",
             "occurred_at": _now().isoformat(),
-            "note": "1 of 4 read, 2 fetched.",
-            "fetched": 2,
-            "parsed": 1,
+            "activity": "collecting 1 of 4",
+            "done": 1,
             "total": 4,
+            "unit": "documents",
+            "heartbeat": True,
+            "dropped": 2,
         }
     )
     assert isinstance(with_counts, TickFrame)
-    assert (with_counts.fetched, with_counts.parsed, with_counts.total) == (2, 1, 4)
+    assert (with_counts.done, with_counts.total, with_counts.unit) == (1, 4, "documents")
+    assert (with_counts.section, with_counts.heartbeat, with_counts.dropped) == (None, True, 2)
     bare = _adapter().validate_python(
-        {"type": "tick", "occurred_at": _now().isoformat(), "note": "still working…"}
+        {"type": "tick", "occurred_at": _now().isoformat(), "activity": "Writing"}
     )
     assert isinstance(bare, TickFrame)
-    assert (bare.fetched, bare.parsed, bare.total) == (None, None, None)
+    assert (bare.done, bare.total, bare.unit, bare.section) == (None, None, None, None)
+    assert (bare.heartbeat, bare.dropped) == (False, 0)
     with pytest.raises(ValidationError):
         _adapter().validate_python(
             {
                 "type": "tick",
                 "occurred_at": _now().isoformat(),
-                "note": "n",
-                "parsed": "many",
+                "activity": "n",
+                "done": "many",
             }
         )
+    with pytest.raises(ValidationError):  # the task 056 ingest-only fields are gone
+        _adapter().validate_python(
+            {"type": "tick", "occurred_at": _now().isoformat(), "note": "1 of 4 read."}
+        )
+
+
+def test_section_delta_and_revising_frames_are_ephemeral() -> None:
+    """Task 058 (N7, S3): the two display-only frames carry no `sequence`."""
+    delta = _adapter().validate_python(
+        {
+            "type": "artefact.section_delta",
+            "occurred_at": _now().isoformat(),
+            "index": 3,
+            "text": "Cost is the barrier ",
+            "mode": "append",
+        }
+    )
+    assert isinstance(delta, ArtefactSectionDeltaFrame)
+    assert not hasattr(delta, "sequence")
+    assert delta.ephemeral is True
+    revising = _adapter().validate_python(
+        {
+            "type": "artefact.section_revising",
+            "occurred_at": _now().isoformat(),
+            "index": 3,
+            "spans": [{"start": 40, "end": 112}],
+        }
+    )
+    assert isinstance(revising, ArtefactSectionRevisingFrame)
+    assert not hasattr(revising, "sequence")
+    assert (revising.spans[0].start, revising.spans[0].end) == (40, 112)
+    with pytest.raises(ValidationError):
+        _adapter().validate_python(
+            {
+                "type": "artefact.section_delta",
+                "occurred_at": _now().isoformat(),
+                "index": 3,
+                "text": "",
+                "mode": "rewrite",
+            }
+        )
+
+
+def test_section_sources_and_claim_frames_are_ephemeral() -> None:
+    """Task 058 (evidence shown live): the sources and claim frames carry no `sequence`."""
+    sources = _adapter().validate_python(
+        {
+            "type": "artefact.section_sources",
+            "occurred_at": _now().isoformat(),
+            "index": 2,
+            "sources": [
+                {"source_id": "tss-1", "title": "Smith 2023"},
+                {"source_id": "tss-2", "title": "DfE 2022"},
+            ],
+        }
+    )
+    assert isinstance(sources, ArtefactSectionSourcesFrame)
+    assert not hasattr(sources, "sequence")
+    assert sources.ephemeral is True
+    assert [(s.source_id, s.title) for s in sources.sources] == [
+        ("tss-1", "Smith 2023"),
+        ("tss-2", "DfE 2022"),
+    ]
+    claim = _adapter().validate_python(
+        {
+            "type": "artefact.section_claim",
+            "occurred_at": _now().isoformat(),
+            "index": 2,
+            "start": 4,
+            "end": 31,
+            "sources": [{"source_id": "tss-1", "title": "Smith 2023"}],
+        }
+    )
+    assert isinstance(claim, ArtefactSectionClaimFrame)
+    assert not hasattr(claim, "sequence")
+    assert claim.ephemeral is True
+    assert (claim.start, claim.end, claim.sources[0].title) == (4, 31, "Smith 2023")
+    with pytest.raises(ValidationError):
+        _adapter().validate_python(
+            {
+                "type": "artefact.section_claim",
+                "occurred_at": _now().isoformat(),
+                "index": 2,
+                "start": 4,
+                "sources": [],
+            }
+        )
+
+
+def test_section_completed_carries_citations_and_the_card_frame_is_ephemeral() -> None:
+    """Task 058, round 7: the completed frame's citations, and the card frame."""
+    source_id = uuid.uuid4()
+    completed = _adapter().validate_python(
+        {
+            "type": "artefact.section_completed",
+            "sequence": 9,
+            "occurred_at": _now().isoformat(),
+            "index": 2,
+            "title": "Costs",
+            "prose": "Costs fall.",
+            "citations": [
+                {
+                    "start": 0,
+                    "end": 11,
+                    "n": 3,
+                    "source_id": str(source_id),
+                    "title": "Breakfast clubs",
+                },
+                {
+                    "start": 0,
+                    "end": 11,
+                    "n": 4,
+                    "source_id": None,
+                    "title": "Unknown source",
+                },
+            ],
+            # Round 13: the verdict is the claim's.
+            "claims": [
+                {"start": 0, "end": 11, "tier": "tier_1", "rationale": "Matches the trial."}
+            ],
+        }
+    )
+    assert isinstance(completed, ArtefactSectionCompletedFrame)
+    assert [(c.n, c.source_id) for c in completed.citations] == [(3, source_id), (4, None)]
+    assert [(c.start, c.end, c.tier, c.rationale) for c in completed.claims] == [
+        (0, 11, "tier_1", "Matches the trial.")
+    ]
+    assert "tier" not in completed.model_dump(mode="json")["citations"][0]
+    dumped = completed.model_dump(mode="json")
+    assert dumped["citations"][0]["source_id"] == str(source_id)
+    # A frame recorded before the field existed still validates, with none.
+    older = _adapter().validate_python(
+        {
+            "type": "artefact.section_completed",
+            "sequence": 3,
+            "occurred_at": _now().isoformat(),
+            "index": 1,
+            "title": "Evidence",
+            "prose": "Prose.",
+        }
+    )
+    assert isinstance(older, ArtefactSectionCompletedFrame) and older.citations == []
+    assert older.claims == []
+
+    card = _adapter().validate_python(
+        {
+            "type": "artefact.section_card",
+            "occurred_at": _now().isoformat(),
+            "index": 1,
+            "title": "Leeds",
+            "prose": "Breakfast in every primary.",
+        }
+    )
+    assert isinstance(card, ArtefactSectionCardFrame)
+    assert not hasattr(card, "sequence")
+    assert card.ephemeral is True
+    assert (card.index, card.title) == (1, "Leeds")
+
+
+def test_round8_citation_ids_the_intro_role_and_the_source_note_frame() -> None:
+    """Task 058, round 8: a citation carries its saved ids and quote, a skeleton
+    slot can be the introduction, and a source note is an ephemeral frame."""
+    citation_id, claim_id = uuid.uuid4(), uuid.uuid4()
+    completed = _adapter().validate_python(
+        {
+            "type": "artefact.section_completed",
+            "sequence": 9,
+            "occurred_at": _now().isoformat(),
+            "index": 0,
+            "title": "Key findings",
+            "prose": "- Costs fall: in two trials.",
+            "citations": [
+                {
+                    "start": 2,
+                    "end": 12,
+                    "n": 1,
+                    "source_id": None,
+                    "title": "Breakfast clubs",
+                    "citation_id": str(citation_id),
+                    "claim_id": str(claim_id),
+                    "quote": "Costs fell in both trials.",
+                }
+            ],
+        }
+    )
+    assert isinstance(completed, ArtefactSectionCompletedFrame)
+    [citation] = completed.citations
+    assert (citation.citation_id, citation.claim_id) == (citation_id, claim_id)
+    assert citation.quote == "Costs fell in both trials."
+    dumped = completed.model_dump(mode="json")["citations"][0]
+    assert dumped["citation_id"] == str(citation_id) and dumped["claim_id"] == str(claim_id)
+
+    skeleton = _adapter().validate_python(
+        {
+            "type": "artefact.skeleton",
+            "sequence": 2,
+            "occurred_at": _now().isoformat(),
+            "sections": [{"index": 3, "title": "Full report", "focus": "", "role": "intro"}],
+        }
+    )
+    assert isinstance(skeleton, ArtefactSkeletonFrame)
+    assert skeleton.sections[0].role == "intro"
+
+    note = _adapter().validate_python(
+        {
+            "type": "artefact.source_note",
+            "occurred_at": _now().isoformat(),
+            "source_id": "tss-1",
+            "title": "Breakfast clubs",
+            "note": "A large trial in English primaries.",
+        }
+    )
+    assert isinstance(note, ArtefactSourceNoteFrame)
+    assert not hasattr(note, "sequence")
+    assert note.ephemeral is True
+    assert (note.source_id, note.title) == ("tss-1", "Breakfast clubs")
+
+
+def test_sse_round9_search_query_and_themes_frames() -> None:
+    """Task 058, round 9: the search's queries and the themes found are ephemeral frames."""
+    query = _adapter().validate_python(
+        {
+            "type": "search.query",
+            "occurred_at": _now().isoformat(),
+            "backend": "openalex",
+            "query": "Following citations from 50 sources",
+            "kind": "citations",
+            "results": None,
+        }
+    )
+    assert isinstance(query, SearchQueryFrame)
+    assert not hasattr(query, "sequence")
+    assert query.ephemeral is True
+    assert (query.kind, query.results) == ("citations", None)
+    with pytest.raises(ValidationError):
+        _adapter().validate_python(
+            {
+                "type": "search.query",
+                "occurred_at": _now().isoformat(),
+                "backend": "openalex",
+                "query": "q",
+                "kind": "ids",
+                "results": 3,
+            }
+        )
+
+    themes = _adapter().validate_python(
+        {
+            "type": "characterise.themes",
+            "stage": "characterise",
+            "occurred_at": _now().isoformat(),
+            "themes": [
+                {"label": "Attendance", "description": "Who comes."},
+                {"label": "Costs", "description": None},
+            ],
+        }
+    )
+    assert isinstance(themes, CharacteriseThemesFrame)
+    assert not hasattr(themes, "sequence")
+    assert [theme.label for theme in themes.themes] == ["Attendance", "Costs"]
+    assert themes.stage == "characterise"
 
 
 def test_sse_frame_unknown_type_rejected() -> None:
@@ -521,3 +813,46 @@ def test_task_agent_turn_out_round_trips_a_decision_turn() -> None:
     assert turn.decision.check_in_id == check_in_id
     assert turn.decision.capability_run_id == capability_run_id
     assert turn.decision.plan_version == 3
+
+
+def test_the_options_read_models_validate_and_refuse_an_unknown_status() -> None:
+    """Task 058, N22: one option row with its search, and the read around it."""
+    from policy_atlas.api.contract import OptionProgressOut, OptionsOut
+
+    row = {
+        "option_id": str(uuid.uuid4()),
+        "name": "Mentoring",
+        "description": "A mentor for each young person.",
+        "origin": "suggested",
+        "state": "included",
+        "merged_into_option_id": None,
+        "search_status": "searched",
+        "found": 12,
+    }
+    model = OptionsOut.model_validate({"options": [row]})
+    assert model.options[0].search_status == "searched"
+    assert model.options[0].found == 12
+    assert OptionsOut().options == []
+    queued = OptionProgressOut.model_validate({**row, "search_status": "queued", "found": None})
+    assert queued.found is None
+    with pytest.raises(ValidationError):
+        OptionProgressOut.model_validate({**row, "search_status": "provisional"})
+
+
+def test_latest_run_carries_a_stage_key_and_its_label() -> None:
+    """Task 058, N15: ``active_run.stage`` is a public stage key or null."""
+    from policy_atlas.api.contract import LatestRun
+
+    base = {
+        "capability_run_id": str(uuid.uuid4()),
+        "status": "running",
+        "started_at": datetime(2026, 11, 5, tzinfo=UTC).isoformat(),
+    }
+    bare = LatestRun.model_validate(base)
+    assert bare.stage is None and bare.stage_label is None
+    staged = LatestRun.model_validate(
+        {**base, "stage": "classify", "stage_label": "Classifying"}
+    )
+    assert staged.stage == "classify"
+    with pytest.raises(ValidationError):
+        LatestRun.model_validate({**base, "stage": "screen_full"})

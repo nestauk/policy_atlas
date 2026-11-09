@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -96,6 +97,38 @@ describe("SourcesLayout — the four Sources subview tabs", () => {
     expect(screen.getByRole("link", { name: "Landscape" })).toHaveClass("flex-1");
   });
 
+  it("marks the active subtab with the app's growing rule held full, not a filled Navy block", () => {
+    mockFunnel(34);
+    renderLayout(`/tasks/${TASK_ID}/sources/landscape`);
+    const active = screen.getByRole("link", { name: "Landscape" });
+    expect(active).toHaveAttribute("aria-current", "page");
+    expect(active).toHaveClass("after:scale-x-100", "hover:after:scale-x-100", "font-extrabold", "text-navy");
+    expect(active).not.toHaveClass("bg-navy");
+    const idle = screen.getByRole("link", { name: "Themes" });
+    // Inactive reads as greyed (owner, round 11): Grey at the medium weight.
+    expect(idle).toHaveClass("border-transparent", "font-medium", "text-grey");
+    expect(idle).not.toHaveClass("font-semibold");
+    // The same rule as the lifecycle tabs: left edge to centre on hover.
+    expect(idle).toHaveClass("after:origin-left", "after:scale-x-0", "hover:after:scale-x-50", "after:duration-200");
+  });
+
+  it("sets an idle subtab in the Grey token, Navy on hover, never a faded tint (owner)", () => {
+    mockFunnel(34);
+    renderLayout(`/tasks/${TASK_ID}/sources/landscape`);
+    const idle = screen.getByRole("link", { name: "Themes" });
+    expect(idle).toHaveClass("text-grey", "hover:text-navy");
+    for (const name of idle.className.split(" ")) {
+      expect(name).not.toMatch(/opacity|text-grey\/|text-line|text-navy\//);
+    }
+  });
+
+  it("keeps the subtabs on one line and scrolls them sideways when they do not fit", () => {
+    mockFunnel(34);
+    renderLayout();
+    expect(screen.getByRole("navigation", { name: "Sources" })).toHaveClass("overflow-x-auto");
+    expect(screen.getByRole("link", { name: "All sources" })).toHaveClass("whitespace-nowrap");
+  });
+
   it("uses the wide column for every Sources subview, including Themes", () => {
     mockFunnel(34);
     renderLayout();
@@ -113,5 +146,22 @@ describe("SourcesLayout — the four Sources subview tabs", () => {
     renderLayout(`/tasks/${TASK_ID}/sources/all`);
     expect(screen.queryByRole("link", { name: "Themes" })).toBeNull();
     expect(screen.getByRole("link", { name: "All sources" })).toBeInTheDocument();
+  });
+});
+
+describe("SourcesLayout — the reader's choice of subtab (owner, round 10)", { timeout: 20_000 }, () => {
+  it("remembers the subtab the reader picks on this task", async () => {
+    const values = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => void values.set(key, value),
+    });
+    mockFunnel(3);
+    renderLayout();
+    await userEvent.click(screen.getByRole("link", { name: "Landscape" }));
+    expect(values.get(`policy-atlas:sources-subtab:${TASK_ID}`)).toBe("/landscape");
+    await userEvent.click(screen.getByRole("link", { name: "Themes" }));
+    expect(values.get(`policy-atlas:sources-subtab:${TASK_ID}`)).toBe("themes");
+    vi.unstubAllGlobals();
   });
 });

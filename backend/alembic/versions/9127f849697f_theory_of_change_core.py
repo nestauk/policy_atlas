@@ -31,7 +31,7 @@ Downgrade — the refusal (the 044 A5 pattern)
     tables are dropped child first and the three checks narrowed.
 
 Revision ID: 9127f849697f
-Revises: 0914321f8de4
+Revises: c4e8a2f6d1b3
 Create Date: 2026-10-26 00:00:00.000000
 
 Rebased onto dev's head (2026-11-05, owner): the task 054 chain first hung off
@@ -48,7 +48,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "9127f849697f"
-down_revision: Union[str, None] = "0914321f8de4"
+down_revision: Union[str, None] = "c4e8a2f6d1b3"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

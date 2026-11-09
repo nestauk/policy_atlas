@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../../../ui/radix/Tooltip";
 
 import type { ChatConversationRow, ChatTurn, OptimisticChatTurn } from "../../../store";
 import { ChatMessages } from "./ChatMessages";
+import { TIER_LABEL, TIER_TEXT } from "../../../ui/brand/evidence";
 
 // The citation sheet's quote-in-context fetch is the only place this view
 // calls the API client — mock just that hook (029 Fix A/B) so a click on a
@@ -93,10 +94,30 @@ describe("ChatMessages", () => {
     expect(screen.queryByText("Tier 2 · grounded")).not.toBeInTheDocument();
   });
 
-  it("renders a still-streaming optimistic turn's activity summary and partial prose", () => {
+  // Owner, round 14: the chats feel like the Task Agent. While the answer
+  // streams, the turning mark and the activity line sit under it, and the
+  // words come at the paced reveal's steady rate rather than as they land.
+  it("renders a still-streaming optimistic turn's activity line under its paced prose", async () => {
     renderChat([optimisticTurn({ activityLabels: ["Searching sources", "Reading passages"], answer: "Costs fell so " })]);
-    expect(screen.getByText("Reading passages — 2 searches")).toBeInTheDocument();
-    expect(screen.getByText("Costs fell so", { exact: false })).toBeInTheDocument();
+    const line = screen.getByRole("status");
+    expect(line).toHaveTextContent("Reading passages — 2 searches");
+    expect(line.querySelector("svg")).not.toBeNull();
+    const prose = () => [...document.querySelectorAll("p.whitespace-pre-wrap")].find((p) => p.textContent?.includes("Costs fell so"));
+    await waitFor(() => expect(prose()).toBeDefined());
+    // The line follows the answer.
+    expect((prose() as Element).compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("shows the turning mark alone before the stream says what it is doing", () => {
+    renderChat([optimisticTurn({ activityLabels: [], answer: "" })]);
+    expect(screen.getByRole("status")).toHaveTextContent("Working");
+  });
+
+  it("says a stopped or unchecked answer on a marks line, not a chip", () => {
+    renderChat([turn({ status: "cancelled", stopped_before_evidence_check: true })]);
+    const notice = screen.getByText("Stopped before evidence check");
+    expect(notice.tagName).toBe("P");
+    expect(notice.querySelector("[data-tone='yellow']")).not.toBeNull();
   });
 
   it("renders a failed turn honestly with a known conflict sentence and a wired retry", async () => {
@@ -125,6 +146,28 @@ describe("ChatMessages", () => {
     expect(screen.getByText("Tier 2 · grounded")).toBeInTheDocument();
   });
 
+  // Owner, round 14: References in the report's style, the shared marks in
+  // place of the chips.
+  it("lays a References row out as the report's: the blue number, the reference line and the marks line", async () => {
+    mockGet.mockResolvedValue({ data: { context: "context text", year: 2024 }, error: undefined });
+    renderChat([
+      turn({
+        citations: [{ id: "chunk-1", n: 1, quote: "Costs fell", source_title: "A breakfast study", source_id: "s1", state: "verdict:tier_2", appraisal_label: "Moderate", evidence_type: "Cohort study", text_basis: "abstract_only" }],
+      }),
+    ]);
+    const user = userEvent.setup();
+    await user.click(screen.getByText("References (1)"));
+    const row = screen.getByRole("button", { name: "Source 1: A breakfast study" }).closest("li") as HTMLElement;
+    expect(within(row).getByRole("button", { name: "Source 1: A breakfast study" })).toHaveClass("text-blue", "tabular-nums");
+    expect(within(row).getByRole("button", { name: "A breakfast study" })).toBeInTheDocument();
+    expect(within(row).getByTestId("strength-mark")).toBeInTheDocument();
+    expect(within(row).getByTestId("status-mark")).toHaveAttribute("data-tone", "yellow");
+    expect(row.querySelector(".rounded-full, [class*='chip']")).toBeNull();
+    // The verdict opens the citation's sheet.
+    await user.click(within(row).getByRole("button", { name: "Tier 2 · grounded" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
   it("opens the citation sheet from an inline marker with the citing claim text and the highlighted context (029 Fix B)", async () => {
     mockGet.mockResolvedValueOnce({
       data: { context: "Costs fell sharply last year.", previous: "An intro sentence.", next: "A trailing sentence.", year: 2024, venue: "Journal of Policy" },
@@ -133,7 +176,7 @@ describe("ChatMessages", () => {
     renderChat([turn({ claims: [{ claim_id: "c1", text: "Costs fell sharply.", citation_ns: [1], verdict: "tier_2", rationale: "Matches the source passage." }] })]);
     const [marker] = screen.getAllByRole("button", { name: "[1]" });
     await userEvent.setup().click(marker);
-    expect(screen.getByText("Where this comes from")).toBeInTheDocument();
+    expect(screen.getByText("Evidence for this claim")).toBeInTheDocument();
     expect(screen.getByText("Costs fell sharply.")).toBeInTheDocument();
     expect(await screen.findByText(/sharply last year/)).toBeInTheDocument();
     expect(screen.getByText("An intro sentence.")).toBeInTheDocument();
@@ -165,7 +208,37 @@ describe("ChatMessages", () => {
     ]);
     const [marker] = screen.getAllByRole("button", { name: "[1]" });
     await userEvent.setup().click(marker);
-    expect(await screen.findByText("moderate")).toBeInTheDocument();
+    expect(await within(await screen.findByRole("dialog")).findByText("Moderate")).toBeInTheDocument();
+  });
+
+  // Round 12: the sheet's citation block takes the report's blocks: the
+  // evidence type and strength at Meta and the judge's words under their
+  // label, for the citation's best-supported claim; no chips.
+  it("shows the citation's type, strength and judgement in the sheet, without chips (round 12)", async () => {
+    mockGet.mockResolvedValueOnce({ data: { context: "context text", year: 2024 }, error: undefined });
+    renderChat([
+      turn({
+        citations: [{ id: "chunk-1", n: 1, quote: "Costs fell", state: "verdict:tier_2", appraisal_label: "moderate", evidence_type: "Cohort study" }],
+      }),
+    ]);
+    const [marker] = screen.getAllByRole("button", { name: "[1]" });
+    await userEvent.setup().click(marker);
+    const sheet = await screen.findByRole("dialog");
+    // The vocabulary's case, whatever the server sends (design lane review).
+    expect(within(sheet).getByText("Moderate")).toBeInTheDocument();
+    expect(within(sheet).getByText(TIER_LABEL.tier_2)).toBeInTheDocument();
+    expect(within(sheet).getByText(TIER_TEXT.tier_2)).toBeInTheDocument();
+  });
+
+  // Lead, round 12: an unjudged citation says it is unchecked in the sheet.
+  it("says an unjudged citation is unchecked, awaiting the check", async () => {
+    mockGet.mockResolvedValueOnce({ data: { context: "context text", year: 2024 }, error: undefined });
+    renderChat([turn({ citations: [{ id: "chunk-1", n: 1, quote: "Costs fell" }] })]);
+    const [marker] = screen.getAllByRole("button", { name: "[1]" });
+    await userEvent.setup().click(marker);
+    const sheet = await screen.findByRole("dialog");
+    expect(within(sheet).getByText("Unchecked")).toBeInTheDocument();
+    expect(within(sheet).getByText("Awaiting evidence check")).toBeInTheDocument();
   });
 
   it("omits the appraisal chip in the citation sheet when appraisal_label is absent", async () => {
@@ -173,11 +246,11 @@ describe("ChatMessages", () => {
     renderChat([turn()]);
     const [marker] = screen.getAllByRole("button", { name: "[1]" });
     await userEvent.setup().click(marker);
-    await screen.findByText("Where this comes from");
+    await screen.findByText("Evidence for this claim");
     expect(screen.queryByText("moderate")).not.toBeInTheDocument();
   });
 
-  // Task 046, contract item 7: the "abstract only" label in the sheet's
+  // Task 046, contract item 7: the "Abstract only" label in the sheet's
   // citation block, gated on text_basis alone (honest absence otherwise).
   it("shows the abstract-only label in the citation sheet when text_basis is abstract_only", async () => {
     mockGet.mockResolvedValueOnce({ data: { context: "context text", year: 2024 }, error: undefined });
@@ -188,7 +261,10 @@ describe("ChatMessages", () => {
     ]);
     const [marker] = screen.getAllByRole("button", { name: "[1]" });
     await userEvent.setup().click(marker);
-    expect(await screen.findByText("abstract only")).toBeInTheDocument();
+    // The Sources table's word and tone square (round 12 consolidation).
+    const sheet = await screen.findByRole("dialog");
+    expect(await within(sheet).findByText("Abstract only")).toBeInTheDocument();
+    expect(within(sheet).getByTestId("status-mark")).toHaveAttribute("data-tone", "yellow");
   });
 
   it("omits the abstract-only label in the citation sheet when text_basis is full_text", async () => {
@@ -198,8 +274,8 @@ describe("ChatMessages", () => {
     ]);
     const [marker] = screen.getAllByRole("button", { name: "[1]" });
     await userEvent.setup().click(marker);
-    await screen.findByText("Where this comes from");
-    expect(screen.queryByText("abstract only")).not.toBeInTheDocument();
+    await screen.findByText("Evidence for this claim");
+    expect(screen.queryByText("Abstract only")).not.toBeInTheDocument();
   });
 
   it("keeps a cancelled turn's inline markers inert — clickable but no verdict tooltip promised", async () => {
@@ -231,9 +307,12 @@ describe("ChatMessages", () => {
     // The literal `[1]` marker stays its own, separate, small button (the
     // References row below carries a second one) — the span wraps only the
     // claim's own text, not the trailing marker.
-    expect(screen.getAllByRole("button", { name: "[1]" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "[1]" })).toHaveLength(1);
+    // The References row's number is the report's: Electric Blue, named for
+    // its source, opening it (owner, round 14).
+    expect(screen.getByRole("button", { name: "Source 1: A breakfast study" })).toHaveClass("text-blue");
     await userEvent.setup().click(span);
-    const sheet = screen.getByRole("dialog", { name: "Where this comes from" });
+    const sheet = screen.getByRole("dialog", { name: "Evidence for this claim" });
     // Appears twice: the claim-text blockquote, and again inside the
     // highlighted quote-in-context below it.
     expect(within(sheet).getAllByText(spanText)).toHaveLength(2);
@@ -255,7 +334,7 @@ describe("ChatMessages", () => {
     const span = screen.getByRole("button", { name: spanText });
     span.focus();
     await userEvent.setup().keyboard("{Enter}");
-    expect(screen.getByRole("dialog", { name: "Where this comes from" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Evidence for this claim" })).toBeInTheDocument();
   });
 
   it("keeps a marker nested inside a claim span opening only its own citation sheet — no double-open from the enclosing span", async () => {
@@ -270,7 +349,7 @@ describe("ChatMessages", () => {
     ]);
     const [inlineMarker] = screen.getAllByRole("button", { name: "[1]" });
     await userEvent.setup().click(inlineMarker);
-    expect(screen.getAllByRole("dialog", { name: "Where this comes from" })).toHaveLength(1);
+    expect(screen.getAllByRole("dialog", { name: "Evidence for this claim" })).toHaveLength(1);
     expect(mockGet).toHaveBeenCalledTimes(1);
   });
 
@@ -338,8 +417,8 @@ describe("ChatMessages", () => {
     const [inlineMarker] = screen.getAllByRole("button", { name: "[1]" });
     inlineMarker.focus();
     await userEvent.setup().keyboard("{Enter}");
-    expect(screen.getAllByRole("dialog", { name: "Where this comes from" })).toHaveLength(1);
-    const sheet = screen.getByRole("dialog", { name: "Where this comes from" });
+    expect(screen.getAllByRole("dialog", { name: "Evidence for this claim" })).toHaveLength(1);
+    const sheet = screen.getByRole("dialog", { name: "Evidence for this claim" });
     expect(within(sheet).getByRole("button", { name: "Source One" })).toBeInTheDocument();
     expect(within(sheet).queryByRole("button", { name: "Source Two" })).not.toBeInTheDocument();
   });
@@ -368,7 +447,7 @@ describe("ChatMessages", () => {
     // either way).
     const [marker] = screen.getAllByRole("button", { name: "[2]" });
     await userEvent.setup().click(marker);
-    const sheet = screen.getByRole("dialog", { name: "Where this comes from" });
+    const sheet = screen.getByRole("dialog", { name: "Evidence for this claim" });
     expect(within(sheet).getByRole("button", { name: "Correct Two" })).toBeInTheDocument();
     expect(within(sheet).queryByRole("button", { name: "Wrong One" })).not.toBeInTheDocument();
   });

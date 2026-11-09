@@ -19,6 +19,7 @@ from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
 from structlog.testing import capture_logs
 
+from policy_atlas.api.stage_vocabulary import activity
 from policy_atlas.core import events
 from policy_atlas.core.inference import StubEchoProvider
 from policy_atlas.core.markup import strip_markup
@@ -1581,32 +1582,35 @@ def test_javascript_wall_page_is_blocked_by_host_not_full_text() -> None:
 def test_progress_ticks_carry_store_status_counts(
     conn: Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Task 057 (N3): the stage publishes ``ingest`` ticks from the stored statuses:
-    ``parsed`` is the eligible documents ``ingested`` so far (those the store held
-    before the run included), ``fetched`` is null (one call fetches and parses, so
-    a fetched-but-unparsed count does not exist), ``total`` the eligible set."""
+    """Task 057 (N3), task 058 (D2): the stage publishes progress from the stored
+    statuses: ``done`` is the eligible documents ``ingested`` so far (those the
+    store held before the run included), ``total`` the eligible set, ``unit``
+    ``documents``, and the line is the shared vocabulary's ``ingest.progress``.
+    The stage key comes from the harness's bound context, not the call."""
     ticks: list[dict[str, Any]] = []
     monkeypatch.setattr(
-        ingest_full_text, "publish_current_tick", lambda **kwargs: ticks.append(kwargs)
+        ingest_full_text, "publish_progress", lambda **kwargs: ticks.append(kwargs)
     )
     task_id, run_id, scope_id = seed_small_corpus(conn)
     first = run_ingest(conn, task_id, run_id, scope_id)
     assert ticks
-    assert {tick["stage"] for tick in ticks} == {"ingest"}
+    assert all("stage" not in tick for tick in ticks)
+    assert {tick["unit"] for tick in ticks} == {"documents"}
     assert {tick["total"] for tick in ticks} == {first["eligible"]} == {4}
-    assert {tick["fetched"] for tick in ticks} == {None}
     for tick in ticks:
-        assert 0 <= tick["parsed"] <= tick["total"]
-        assert tick["note"]
-    assert [t["parsed"] for t in ticks] == sorted(t["parsed"] for t in ticks)
-    assert ticks[-1]["parsed"] == first["ingested"] == 2
+        assert 0 <= tick["done"] <= tick["total"]
+        assert tick["activity"] == activity(
+            "ingest.progress", done=tick["done"], total=tick["total"]
+        )
+    assert [t["done"] for t in ticks] == sorted(t["done"] for t in ticks)
+    assert ticks[-1]["done"] == first["ingested"] == 2
 
     ticks.clear()
     second = run_ingest(conn, task_id, seed_run(conn, task_id), scope_id)
     assert second["already_ingested"] == 2
     # The store's two ``ingested`` rows count as read from the start.
-    assert ticks and all(t["parsed"] >= 2 for t in ticks)
-    assert ticks[-1]["parsed"] == 2
+    assert ticks and all(t["done"] >= 2 for t in ticks)
+    assert ticks[-1]["done"] == 2
 
 
 def test_spread_by_host_mixes_hosts_and_keeps_each_hosts_own_order() -> None:

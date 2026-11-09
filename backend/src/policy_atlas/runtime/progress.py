@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import structlog
@@ -12,6 +12,17 @@ from sqlalchemy.engine import Engine
 from policy_atlas.core import events
 
 log = structlog.get_logger()
+
+#: The case-studies slot's title and focus in the skeleton (task 058, round 7).
+CASE_STUDIES_SLOT_TITLE = "Case studies"
+CASE_STUDIES_SLOT_FOCUS = "Relevant examples from the cited evidence."
+#: The introduction's slot: the saved report shows the intro under its "Full
+#: report" heading, so the slot carries that title and no focus (round 8).
+INTRO_SLOT_TITLE = "Full report"
+#: The introduction's section line while it is written: the card and the
+#: strip read "Writing · Introduction", while the slot keeps its "Full report"
+#: title (owner round 9, 2026-11-05).
+INTRO_SECTION_LINE = "Introduction"
 
 
 class ProgressEmitter:
@@ -33,11 +44,18 @@ class ProgressEmitter:
         self._run_id = run_id
         self._sections_by_synthesis_index: list[dict[str, Any]] = []
         self._key_findings: dict[str, Any] | None = None
+        self._case_studies: dict[str, Any] | None = None
+        self._intro: dict[str, Any] | None = None
         self._skeleton_emitted = False
         self._disabled = False
 
     def emit_skeleton(
-        self, sections: Sequence[dict[str, str]], *, key_findings: bool = True
+        self,
+        sections: Sequence[dict[str, str]],
+        *,
+        key_findings: bool = True,
+        case_studies: bool = False,
+        intro: bool = False,
     ) -> None:
         """Emit the presentation-ordered skeleton and establish display indexes.
 
@@ -50,6 +68,19 @@ class ProgressEmitter:
                 search report; False for an output kind that runs no such pass
                 (the baseline, task 044 X8), whose skeleton is exactly
                 ``sections``.
+            case_studies: Whether the run ends in a case-studies pass, which
+                is generated after the key findings (task 058, round 7: its
+                cards stream into this slot). Its slot comes last, after the
+                body sections, so their indexes do not move.
+            intro: Whether the run writes the full report's introduction
+                (round 8: it streams into this slot). Its slot takes the index
+                after the case studies, so no other index moves; the page
+                shows it by its role, after the executive summary and before
+                the body sections, as the saved report does.
+
+        Every skeleton entry carries a ``role`` (``key_findings``, ``body``,
+        ``case_studies`` or ``intro``) so the page orders the live sections by
+        the same rule as the saved report. The list is in index order.
 
         Raises:
             RuntimeError: If a skeleton was already emitted for this emitter.
@@ -62,18 +93,47 @@ class ProgressEmitter:
                 "index": 0,
                 "title": "Key findings",
                 "focus": "The report's headline claims.",
+                "role": "key_findings",
             }
             if key_findings
             else None
         )
-        self._sections_by_synthesis_index = [
-            {"index": index, "title": section["title"], "focus": section["focus"]}
-            for index, section in enumerate(sections, start=1 if key_findings else 0)
-        ]
         leading = [self._key_findings] if self._key_findings is not None else []
+        self._sections_by_synthesis_index = [
+            {
+                "index": index,
+                "title": section["title"],
+                "focus": section["focus"],
+                "role": "body",
+            }
+            for index, section in enumerate(sections, start=len(leading))
+        ]
+        self._case_studies = (
+            {
+                "index": len(leading) + len(sections),
+                "title": CASE_STUDIES_SLOT_TITLE,
+                "focus": CASE_STUDIES_SLOT_FOCUS,
+                "role": "case_studies",
+            }
+            if case_studies
+            else None
+        )
+        trailing = [self._case_studies] if self._case_studies is not None else []
+        self._intro = (
+            {
+                "index": len(leading) + len(sections) + len(trailing),
+                "title": INTRO_SLOT_TITLE,
+                "focus": "",
+                "role": "intro",
+            }
+            if intro
+            else None
+        )
+        if self._intro is not None:
+            trailing.append(self._intro)
         self._append(
             "artefact.skeleton",
-            {"sections": [*leading, *self._sections_by_synthesis_index]},
+            {"sections": [*leading, *self._sections_by_synthesis_index, *trailing]},
         )
 
     def section_started(self, synthesis_index: int) -> None:
@@ -86,18 +146,34 @@ class ProgressEmitter:
         if payload is not None:
             self._append("artefact.section_started", payload)
 
-    def section_completed(self, synthesis_index: int, *, prose: str) -> None:
+    def section_completed(
+        self,
+        synthesis_index: int,
+        *,
+        prose: str,
+        citations: Sequence[Mapping[str, Any]] = (),
+        claims: Sequence[Mapping[str, Any]] = (),
+    ) -> None:
         """Record a normal section after its artefact write.
 
         Args:
             synthesis_index: Zero-based position in the generation loop.
             prose: Final whole-section prose shown by the live view.
+            citations: The section's checked citations over ``prose``
+                (``start``, ``end``, ``n``, ``source_id``, ``title``, task
+                058 round 7; ``citation_id``, ``claim_id``, ``quote``, round
+                8; ``chunk_id``, 2026-11-09).
+            claims: The section's checked claims with their verdicts
+                (``claim_id``, ``start``, ``end``, ``tier``, ``rationale``;
+                task 058, round 13).
         """
         payload = self._compose(
             lambda: {
                 "index": self._section(synthesis_index)["index"],
                 "title": self._section(synthesis_index)["title"],
                 "prose": prose,
+                "citations": [dict(citation) for citation in citations],
+                "claims": [dict(claim) for claim in claims],
             }
         )
         if payload is not None:
@@ -109,22 +185,103 @@ class ProgressEmitter:
         if payload is not None:
             self._append("artefact.section_started", payload)
 
-    def key_findings_completed(self, *, prose: str) -> None:
+    def key_findings_completed(
+        self,
+        *,
+        prose: str,
+        citations: Sequence[Mapping[str, Any]] = (),
+        claims: Sequence[Mapping[str, Any]] = (),
+    ) -> None:
         """Close the key-findings slot, including the intentional empty case.
 
         Args:
             prose: Generated prose, or an empty string when no key-findings
                 block was warranted.
+            citations: The block's checked citations over ``prose``.
+            claims: The block's checked claims with their verdicts.
         """
         payload = self._compose(
             lambda: {
                 "index": self._key_findings_section()["index"],
                 "title": self._key_findings_section()["title"],
                 "prose": prose,
+                "citations": [dict(citation) for citation in citations],
+                "claims": [dict(claim) for claim in claims],
             }
         )
         if payload is not None:
             self._append("artefact.section_completed", payload)
+
+    def case_studies_started(self) -> None:
+        """Record that the case-studies pass has begun (task 058, round 7)."""
+        payload = self._compose(lambda: {"index": self._case_studies_section()["index"]})
+        if payload is not None:
+            self._append("artefact.section_started", payload)
+
+    def case_studies_completed(
+        self,
+        *,
+        prose: str,
+        citations: Sequence[Mapping[str, Any]] = (),
+        claims: Sequence[Mapping[str, Any]] = (),
+    ) -> None:
+        """Close the case-studies slot, including the empty case (no cards survived).
+
+        Args:
+            prose: The block's prose (each card as its bold title line and
+                text, cards separated by a blank line), or an empty string
+                when no case studies were kept.
+            citations: The block's checked citations over ``prose``.
+            claims: The block's checked claims with their verdicts.
+        """
+        payload = self._compose(
+            lambda: {
+                "index": self._case_studies_section()["index"],
+                "title": self._case_studies_section()["title"],
+                "prose": prose,
+                "citations": [dict(citation) for citation in citations],
+                "claims": [dict(claim) for claim in claims],
+            }
+        )
+        if payload is not None:
+            self._append("artefact.section_completed", payload)
+
+    def intro_started(self) -> None:
+        """Record that the introduction is being written (task 058, round 8)."""
+        payload = self._compose(lambda: {"index": self._intro_section()["index"]})
+        if payload is not None:
+            self._append("artefact.section_started", payload)
+
+    def intro_completed(self, *, prose: str) -> None:
+        """Close the introduction's slot, including the empty case (no intro written).
+
+        Args:
+            prose: The introduction as the saved report keeps it, or an empty
+                string when there is none. It carries no citations.
+        """
+        payload = self._compose(
+            lambda: {
+                "index": self._intro_section()["index"],
+                "title": self._intro_section()["title"],
+                "prose": prose,
+                "citations": [],
+                "claims": [],
+            }
+        )
+        if payload is not None:
+            self._append("artefact.section_completed", payload)
+
+    def intro_display_index(self) -> int | None:
+        """The introduction slot's index on the page, or ``None`` without one."""
+        return None if self._intro is None else int(self._intro["index"])
+
+    def key_findings_display_index(self) -> int | None:
+        """The key-findings slot's index on the page, or ``None`` without one."""
+        return None if self._key_findings is None else int(self._key_findings["index"])
+
+    def case_studies_display_index(self) -> int | None:
+        """The case-studies slot's index on the page, or ``None`` without one."""
+        return None if self._case_studies is None else int(self._case_studies["index"])
 
     def _compose(self, build: Any) -> dict[str, Any] | None:
         """Build an event payload, degrading (never raising) on skeleton drift."""
@@ -141,11 +298,39 @@ class ProgressEmitter:
             )
             return None
 
+    def display_index(self, synthesis_index: int) -> int:
+        """The index the page shows for a section the writer is on (task 058).
+
+        The writer counts sections in the order it writes them, from 0. The
+        page numbers them with the key findings first at 0 when the report
+        has them, so a body section's display index is one higher (the
+        case-studies slot, when there is one, comes after the body).
+        Streamed text and revising spans must carry this index, or they land
+        on the wrong section.
+
+        Args:
+            synthesis_index: Zero-based position in the generation loop.
+
+        Returns:
+            The section's index in the skeleton the page received.
+        """
+        return int(self._section(synthesis_index)["index"])
+
     def _section(self, synthesis_index: int) -> dict[str, Any]:
         try:
             return self._sections_by_synthesis_index[synthesis_index]
         except IndexError as exc:
             raise RuntimeError("synthesis progress section is not in the skeleton") from exc
+
+    def _case_studies_section(self) -> dict[str, Any]:
+        if self._case_studies is None:
+            raise RuntimeError("synthesis progress skeleton carries no case-studies slot")
+        return self._case_studies
+
+    def _intro_section(self) -> dict[str, Any]:
+        if self._intro is None:
+            raise RuntimeError("synthesis progress skeleton carries no introduction slot")
+        return self._intro
 
     def _key_findings_section(self) -> dict[str, Any]:
         if self._key_findings is None:

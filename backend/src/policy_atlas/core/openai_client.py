@@ -336,9 +336,7 @@ def traced_parse[T: BaseModel](
         parsed, usage = result
         span.update(
             usage_details=usage_details(usage),
-            input={"messages": messages},
             output=parsed.model_dump(),
-            model=model,
             metadata={
                 "prompt_version": prompt_version,
                 "reasoning_effort": reasoning_effort,
@@ -354,8 +352,267 @@ def traced_parse[T: BaseModel](
         step=step,
         call=_call,
         session_id=session_id,
+        before=lambda span: span.update(input={"messages": messages}, model=model),
         update=_update,
     )
+
+
+_SIMPLE_ESCAPES = {
+    '"': '"',
+    "\\": "\\",
+    "/": "/",
+    "b": "\b",
+    "f": "\f",
+    "n": "\n",
+    "r": "\r",
+    "t": "\t",
+}
+
+
+class JsonStringFieldDecoder:
+    """Follow one top-level string field of a JSON object as it streams in.
+
+    In plain terms: a streamed structured answer arrives as JSON text in small
+    pieces, and one field of it (the planner's ``reply``, say) is the part the
+    user should read while the rest is still being written. Feed each piece to
+    :meth:`feed`; it returns the newly readable characters of that one field,
+    already decoded (``\\n`` becomes a line break, ``\\u00e9`` becomes ``é``).
+    Only a key of the outermost object counts, so the same name nested deeper,
+    or written inside another string, is ignored. An escape split across two
+    pieces is held until it is complete, and a ``\\uXXXX`` surrogate pair
+    becomes one character. Once the field's closing quote arrives, every later
+    piece returns ``""``. Task 058, N9.
+
+    Args:
+        field_name: The top-level key whose string value to follow.
+    """
+
+    def __init__(self, field_name: str) -> None:
+        self._field_name = field_name
+        self._depth = 0
+        self._in_string = False
+        self._string_is_key = False
+        self._string_is_target = False
+        self._raw_key: list[str] = []
+        self._expect_key = False
+        self._last_key: str | None = None
+        self._value_pending = False
+        self._escape = ""
+        self._high_surrogate: int | None = None
+        self.done = False
+
+    def feed(self, fragment: str) -> str:
+        """Consume one piece of the JSON text.
+
+        Args:
+            fragment: The next piece of the streamed JSON text.
+
+        Returns:
+            The field's newly decoded characters, or ``""`` when this piece
+            holds none of them.
+        """
+        out: list[str] = []
+        for char in fragment:
+            if self.done:
+                break
+            if self._in_string:
+                self._string_char(char, out)
+            else:
+                self._structural_char(char)
+        return "".join(out)
+
+    def _structural_char(self, char: str) -> None:
+        if char == '"':
+            self._in_string = True
+            self._string_is_key = self._depth == 1 and self._expect_key
+            self._string_is_target = (
+                self._depth == 1
+                and self._value_pending
+                and self._last_key == self._field_name
+            )
+            self._raw_key = []
+            if self._depth == 1:
+                self._value_pending = False
+            return
+        if char in "{[":
+            self._depth += 1
+            self._expect_key = self._depth == 1 and char == "{"
+            if self._depth == 2:
+                self._value_pending = False
+        elif char in "}]":
+            self._depth -= 1
+        elif char == "," and self._depth == 1:
+            self._expect_key = True
+        elif char == ":" and self._depth == 1:
+            self._value_pending = True
+        elif self._depth == 1 and not char.isspace():
+            # A number, true, false or null value: not a string, so not ours.
+            self._value_pending = False
+
+    def _string_char(self, char: str, out: list[str]) -> None:
+        if self._escape:
+            self._escape += char
+            if self._escape.startswith("\\u") and len(self._escape) < 6:
+                return
+            self._emit_escape(self._escape, out)
+            self._escape = ""
+            return
+        if char == "\\":
+            self._escape = "\\"
+            return
+        if char == '"':
+            self._flush_surrogate(out)
+            self._in_string = False
+            if self._string_is_key:
+                self._last_key = "".join(self._raw_key)
+                self._expect_key = False
+            elif self._string_is_target:
+                self.done = True
+            return
+        self._flush_surrogate(out)
+        self._keep(char, out)
+
+    def _keep(self, text: str, out: list[str]) -> None:
+        if self._string_is_target:
+            out.append(text)
+        elif self._string_is_key:
+            self._raw_key.append(text)
+
+    def _emit_escape(self, escape: str, out: list[str]) -> None:
+        if not escape.startswith("\\u"):
+            self._flush_surrogate(out)
+            self._keep(_SIMPLE_ESCAPES.get(escape[1], escape[1]), out)
+            return
+        codepoint = int(escape[2:], 16)
+        if 0xDC00 <= codepoint <= 0xDFFF and self._high_surrogate is not None:
+            high = self._high_surrogate
+            self._high_surrogate = None
+            self._keep(chr(0x10000 + ((high - 0xD800) << 10) + (codepoint - 0xDC00)), out)
+            return
+        self._flush_surrogate(out)
+        if 0xD800 <= codepoint <= 0xDBFF:
+            self._high_surrogate = codepoint
+            return
+        self._keep(chr(codepoint), out)
+
+    def _flush_surrogate(self, out: list[str]) -> None:
+        """Pass a high surrogate that no low surrogate followed, as ``json`` does."""
+        if self._high_surrogate is not None:
+            self._keep(chr(self._high_surrogate), out)
+            self._high_surrogate = None
+
+
+class JsonArrayObjectDecoder:
+    """Hand back each object of one top-level array field as soon as it closes.
+
+    In plain terms: the section writer's streamed answer is one JSON object,
+    ``{"prose": "...", "claims": [{...}, {...}]}``, arriving in small pieces.
+    Feed each piece to :meth:`feed`; whenever one object inside the named
+    array (``claims``) is complete, its JSON text is returned, so it can be
+    read on its own while the rest is still arriving. The scanning follows
+    :class:`JsonStringFieldDecoder`: only a key of the outermost object
+    counts, and braces, brackets and quotes inside strings (escaped quotes
+    included) are text, not structure. The returned text is not checked; the
+    caller parses it and skips what does not parse. Task 058, owner
+    2026-11-05.
+
+    Args:
+        field_name: The top-level key whose array of objects to follow.
+    """
+
+    def __init__(self, field_name: str) -> None:
+        self._field_name = field_name
+        self._depth = 0
+        self._in_string = False
+        self._escape = False
+        self._string_is_key = False
+        self._raw_key: list[str] = []
+        self._expect_key = False
+        self._last_key: str | None = None
+        self._value_pending = False
+        self._in_array = False
+        self._object: list[str] | None = None
+        self.done = False
+
+    def feed(self, fragment: str) -> list[str]:
+        """Consume one piece of the JSON text.
+
+        Args:
+            fragment: The next piece of the streamed JSON text.
+
+        Returns:
+            The JSON text of each array object that closed in this piece, in
+            order (often none).
+        """
+        closed: list[str] = []
+        for char in fragment:
+            if self.done:
+                break
+            if self._object is not None:
+                self._object.append(char)
+            if self._in_string:
+                self._string_char(char)
+            else:
+                self._structural_char(char, closed)
+        return closed
+
+    def _string_char(self, char: str) -> None:
+        if self._escape:
+            self._escape = False
+            if self._string_is_key:
+                self._raw_key.append(char)
+            return
+        if char == "\\":
+            self._escape = True
+            return
+        if char == '"':
+            self._in_string = False
+            if self._string_is_key:
+                self._last_key = "".join(self._raw_key)
+                self._expect_key = False
+            return
+        if self._string_is_key:
+            self._raw_key.append(char)
+
+    def _structural_char(self, char: str, closed: list[str]) -> None:
+        if char == '"':
+            self._in_string = True
+            self._string_is_key = self._depth == 1 and self._expect_key
+            self._raw_key = []
+            if self._depth == 1:
+                self._value_pending = False
+            return
+        if char in "{[":
+            opens_array = (
+                char == "["
+                and self._depth == 1
+                and self._value_pending
+                and self._last_key == self._field_name
+            )
+            self._depth += 1
+            if self._depth == 1:
+                self._expect_key = char == "{"
+            if self._depth == 2:
+                self._value_pending = False
+                self._in_array = opens_array
+            elif self._depth == 3 and self._in_array and char == "{":
+                self._object = ["{"]
+            return
+        if char in "}]":
+            if self._depth == 3 and self._object is not None and char == "}":
+                closed.append("".join(self._object))
+                self._object = None
+            elif self._depth == 2 and self._in_array:
+                self._in_array = False
+                self.done = True
+            self._depth -= 1
+            return
+        if char == "," and self._depth == 1:
+            self._expect_key = True
+        elif char == ":" and self._depth == 1:
+            self._value_pending = True
+        elif self._depth == 1 and not char.isspace():
+            self._value_pending = False
 
 
 def require_single_tool_call(response: Any, *, label: str) -> Any:

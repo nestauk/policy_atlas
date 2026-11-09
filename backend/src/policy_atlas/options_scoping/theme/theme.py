@@ -28,6 +28,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.core import liveness
 from policy_atlas.core.clustering_engine import (
     AssignmentOutput,
     ClusterAssignment,
@@ -168,6 +169,15 @@ def _theme_policy(max_labels: int) -> ClusteringPolicy:
         label_noun="theme",
         log_event_prefix="longlist.themes",
         max_concurrent_batches=MAX_CONCURRENT_BATCHES,
+        progress_key="theme.batches",
+        on_labels=_publish_themes,
+    )
+
+
+def _publish_themes(labels: list[ClusterLabel]) -> None:
+    """Show the themes found while options are assigned to them (task 058, round 11)."""
+    liveness.publish_themes(
+        [(label.label, label.description or None) for label in labels], stage="theme"
     )
 
 

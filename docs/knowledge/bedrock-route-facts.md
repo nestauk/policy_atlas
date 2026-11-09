@@ -23,6 +23,15 @@ timestamp: 2026-11-05
   the profile**. That reads like a permission gap; check the variable before treating
   it as one. A 401 from `api.openai.com` quoting a `bedrock-…` key means the route
   selector is unset, not a bad key.
+- **What streams on the OpenAI-compatible endpoint (task 058, probes 1, 2 and the cache
+  probe).** A streamed strict `json_schema` response delivers a string field's text as it
+  is generated (prose ahead of claims); a streamed forced tool call delivers its arguments
+  in one burst at the end, so it cannot show progress. On a live run the writer called its
+  emit tool itself on turn 2, before any forced turn, so "stream the forced turn" showed
+  nothing. The shape that streams AND keeps the cached prompt prefix is a no-argument ready
+  tool on the open turns, then a write turn with the same tools kept, `tool_choice`
+  "none" and no `response_format`, parsed as the tool's arguments; adding
+  `response_format` or dropping the tools broke the cache prefix.
 - **Terra's knob is about function tools, not structured output.** On Bedrock as on
   OpenAI direct, `chat.completions.create(tools=...)` on Terra returns 400 unless
   `reasoning_effort="none"`; `chat.completions.parse(response_format=...)` works

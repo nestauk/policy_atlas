@@ -14,7 +14,14 @@ export interface StageEntry {
   status: StageStatus;
   summary?: Record<string, number | string>;
   seconds?: number | null;
+  /** The done row's counts with the server's nouns (task 058, N17). */
+  counts?: { value: number; noun: string }[];
   blurb?: string;
+  /** When the stage started: the `occurred_at` of its `stage.started`
+   *  frame, kept through `stage.completed` / `stage.failed` so the card can
+   *  show the in-progress row's elapsed time and a merged row's span
+   *  (task 058, N5). */
+  startedAt: string;
 }
 
 /** The current run, as far as the reducer needs to track it. */
@@ -55,14 +62,27 @@ interface TaskSummary {
   status?: "active" | "archived" | null;
 }
 
-/** Last tick note for one stage (or the global key, for stage-less ticks).
- *  The full-text reading stage's ticks also carry document counts (task 056). */
+/** The latest tick for one stage (or the global key, for stage-less
+ *  ticks) — what the model is doing now (task 058, D2). Null counts on the
+ *  wire are left out here. The view decides from `occurredAt` whether the
+ *  activity dot still breathes. */
 export interface StageLiveness {
-  note: string;
-  occurredAt: string;
-  fetched?: number;
-  parsed?: number;
+  /** The activity line, in the server's words; shown as it is. */
+  activity: string;
+  /** Items finished so far, when the stage has an honest count. */
+  done?: number;
+  /** The total known before the stage's loop started. */
   total?: number;
+  /** What `done` and `total` count (`documents`, `batches`, ...). */
+  unit?: string;
+  /** The writer's section line ("Section 3 of 7 · Costs"), while writing. */
+  section?: string;
+  /** True when the server repeated the tick because a model call is still
+   *  running, not because anything changed. */
+  heartbeat: boolean;
+  /** The server's dropped-tick counter for this task. */
+  dropped: number;
+  occurredAt: string;
 }
 
 /** One presentation-only artefact section received through the live SSE
@@ -73,7 +93,126 @@ export interface LiveSection {
   title: string;
   focus: string;
   state: "planned" | "writing" | "filled";
+  /** What the section is (`key_findings`, `case_studies`, `body` or
+   *  `intro`), from the skeleton, so the page orders live sections by the
+   *  same rule as the saved report (task 058, round 7). `intro` (round 8) is
+   *  the paragraph the saved report shows under "Full report": after the
+   *  executive summary, before the body sections, whatever its index. */
+  role?: string;
   prose?: string;
+  /** The prose streamed so far for a section being written, from the
+   *  ephemeral `artefact.section_delta` frames. Kept apart from `prose`
+   *  (the durable record) and cleared when the section completes
+   *  (task 058, N7). */
+  draft?: string;
+  /** Character spans of `draft` the checker failed and the writer is now
+   *  revising (`artefact.section_revising`); cleared on completion. */
+  revising?: { start: number; end: number }[];
+  /** The sources the writer has read so far for this section, in the order
+   *  first read (`artefact.section_sources`; each frame replaces the set);
+   *  cleared on completion. */
+  sources?: LiveSource[];
+  /** The writer's own citations as they close, each a code-point span of
+   *  `draft` and the sources it cites (`artefact.section_claim`). Not yet
+   *  checked; cleared on completion and when the draft is replaced. */
+  claims?: LiveClaim[];
+  /** The checked section's citations (`artefact.section_completed`), each a
+   *  code-point span of `prose` with its report-wide reference number. Set
+   *  on completion when the section has any, and kept until the committed
+   *  report replaces the live view (task 058, round 7). */
+  citations?: LiveCitation[];
+  /** The checked section's claims with the checker's verdict
+   *  (`artefact.section_completed.claims`, task 058, round 13): the verdict
+   *  is the claim's, not each citation's. Set on completion when the section
+   *  has any; join to `citations` by `claimId`, or by span. */
+  checkedClaims?: LiveCheckedClaim[];
+  /** Case-study cards as each one closes in the streamed reply
+   *  (`artefact.section_card`), in order; cleared on completion and when the
+   *  draft is replaced (task 058, round 7). */
+  cards?: LiveCard[];
+}
+
+/** One checked claim on a completed live section (task 058, round 13):
+ *  `[start, end)` in code points of `prose`, the checker's `tier` (null when
+ *  not checked) and its `rationale`. `claimId` is the committed report's
+ *  claim id, or null without a saved row. */
+export interface LiveCheckedClaim {
+  claimId: string | null;
+  start: number;
+  end: number;
+  tier: string | null;
+  rationale: string | null;
+}
+
+/** One checked citation on a completed live section (task 058, round 7).
+ *  `[start, end)` counts code points of the section's `prose`; `n` is the
+ *  report-wide reference number (the verdict is the claim's since round 13:
+ *  `LiveSection.checkedClaims`).
+ *  `citationId` and `claimId` are the ids the committed report's citation and
+ *  claim carry (the chunk context is asked for by `citationId`), and `quote`
+ *  the checked quote (round 8); the ids are null and the quote empty on a
+ *  frame recorded before round 8. */
+export interface LiveCitation {
+  start: number;
+  end: number;
+  n: number;
+  sourceId: string | null;
+  title: string;
+  citationId: string | null;
+  claimId: string | null;
+  /** The cited chunk, for the passage read while the report is still being
+   *  written (its citation row is not committed yet); absent on frames
+   *  recorded before 2026-11-09. */
+  chunkId?: string | null;
+  quote: string;
+}
+
+/** One most-relevant-source note as it is written (`artefact.source_note`,
+ *  task 058, round 8). Display-only: the committed report brings the notes
+ *  it keeps. */
+export interface LiveSourceNote {
+  sourceId: string;
+  title: string;
+  note: string;
+}
+
+/** One search query as the search sends it (`search.query`, task 058,
+ *  round 9): `results` is null while it is out and the records it returned
+ *  once back. A topic or semantic query carries its text; a citations or
+ *  lookup pass carries a short description, never ids. Display-only: the
+ *  saved search record lists the queries after the stage. */
+export interface LiveSearchQuery {
+  backend: string;
+  query: string;
+  kind: "topic" | "semantic" | "citations" | "lookup";
+  results: number | null;
+}
+
+/** One theme as the characterise stage found it, before sources are
+ *  assigned (`characterise.themes`, task 058, round 9). Display-only: the
+ *  saved characterisation brings the themes with their document counts. */
+export interface LiveTheme {
+  label: string;
+  description: string | null;
+}
+
+/** One case-study card as it closes in the streamed reply (task 058, round 7). */
+export interface LiveCard {
+  title: string;
+  prose: string;
+}
+
+/** A source named on the page while a section is written. */
+export interface LiveSource {
+  sourceId: string;
+  title: string;
+}
+
+/** One provisional citation in a section draft (task 058, owner 2026-11-05). */
+export interface LiveClaim {
+  start: number;
+  end: number;
+  sources: LiveSource[];
 }
 
 /** Liveness key used for `tick` frames with no `stage`. */
@@ -105,7 +244,35 @@ export interface RunStreamState {
   /** Presentation-only live artefact sections, keyed by their display
    * index. They are not the persisted evidence-search artefact. */
   liveSections: Record<number, LiveSection>;
-  /** Transient: last note per stage. Never sequence-gated, never replayed
+  /** Transient: streamed drafts for section indices the store has no
+   *  skeleton for yet. The next `artefact.skeleton` folds them into its
+   *  sections, so no streamed prose is lost (task 058, N7). */
+  pendingDrafts: Record<number, string>;
+  /** The run's source notes as each is written, in order, one per source
+   *  (`artefact.source_note`; a reconnect's repeat replaces, never doubles).
+   *  Absent until the first note; cleared when a new run starts (task 058,
+   *  round 8). */
+  liveSourceNotes?: LiveSourceNote[];
+  /** The run's search queries, in the order first sent, one row per
+   *  (backend, query, kind): the frame sent when a query comes back updates
+   *  its row in place, and a reconnect's repeat replaces, never doubles.
+   *  Absent until the first query; cleared when a new run starts (task 058,
+   *  round 9). */
+  liveSearchQueries?: LiveSearchQuery[];
+  /** The characterise stage's themes once found, in order, before sources
+   *  are assigned to them (`characterise.themes`). Absent until then;
+   *  cleared when a new run starts (task 058, round 9). */
+  liveThemes?: LiveTheme[];
+  /** The longlist walk's options once its clustering has found them, in
+   *  order, before sources are assigned to them (`characterise.themes` with
+   *  `stage: "longlist"`; the residual pass replaces the list). Absent until
+   *  then; cleared when a new run starts (task 058, round 11). */
+  liveOptions?: LiveTheme[];
+  /** The longlist walk's themes once found, in order, before options are
+   *  assigned to them (`characterise.themes` with `stage: "theme"`). Absent
+   *  until then; cleared when a new run starts (task 058, round 11). */
+  liveOptionThemes?: LiveTheme[];
+  /** Transient: latest tick per stage. Never sequence-gated, never replayed
    *  (a fresh mount/reconnect starts this slice empty regardless of
    *  cursor). */
   liveness: Record<string, StageLiveness>;
@@ -125,6 +292,7 @@ export function createInitialRunStreamState(): RunStreamState {
     plan: null,
     task: {},
     liveSections: {},
+    pendingDrafts: {},
     liveness: {},
   };
 }

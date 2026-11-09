@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .common import reject_explicit_nulls
+from .common import StageKey, reject_explicit_nulls
 from .runs import RunStatus
 from .tenancy import Visibility
 
@@ -189,12 +189,20 @@ class LatestRun(BaseModel):
         started_at: When that run started executing.
         ended_at: When that run reached a terminal status, or `None` while
             still running or paused.
+        stage: On `TaskOut.active_run` only: the public stage the task's
+            parentless active walk last started, so a scoping task shows the
+            parent's stage rather than a child's (task 058, N15). `None` before
+            the walk starts a stage, and on every other use of this shape.
+        stage_label: The server's label for `stage` (the stage vocabulary),
+            or `None` with it.
     """
 
     capability_run_id: uuid.UUID
     status: RunStatus
     started_at: datetime
     ended_at: datetime | None = None
+    stage: StageKey | None = None
+    stage_label: str | None = None
 
 
 class TaskLinkOut(BaseModel):

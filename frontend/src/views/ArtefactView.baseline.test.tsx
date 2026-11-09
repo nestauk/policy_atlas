@@ -183,7 +183,7 @@ describe("ArtefactView — the options-scoping baseline", () => {
       "Cost of inaction",
       "Key assumption",
       "Sources",
-      "Method",
+      "How the evidence was gathered",
     ]);
   });
 
@@ -192,6 +192,16 @@ describe("ArtefactView — the options-scoping baseline", () => {
     expect(screen.queryByText("Key findings")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Executive summary" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Full report" })).not.toBeInTheDocument();
+  });
+
+  it("opens the baseline at its top with focus on its title (round 13), and not a report", () => {
+    const view = renderBaseline();
+    const title = screen.getByRole("heading", { level: 1, name: "Do nothing: current policy and trajectory" });
+    expect(title).toHaveAttribute("tabindex", "-1");
+    expect(document.activeElement).toBe(title);
+    view.unmount();
+    renderBaseline({ artefact: { ...mockBaselineArtefact, template: null, depth_label: null } });
+    expect(screen.getByRole("heading", { level: 1 })).not.toHaveAttribute("tabindex");
   });
 
   it("leaves an Evidence search report exactly as it was — no band, no depth label", () => {
@@ -224,10 +234,14 @@ describe("ArtefactView — the Result's view switch (task 045, deliverable 9)", 
       "Baseline",
       "Longlist",
       "Shortlist",
-      "Report· available after assessment",
+      "Report",
     ]);
     expect(tabs[1]).toHaveAttribute("aria-selected", "true");
+    // Locked as a lifecycle stage is, with no note (round 10, C3), and the
+    // growing rule on every tab (finding 3).
     expect(tabs[3]).toBeDisabled();
+    expect(tabs[3].className).toContain("disabled:text-line-2");
+    for (const tab of tabs) expect(tab.className).toContain("after:scale-x-0");
     expect(screen.getByText(`Longlist view for ${TASK_ID} from run-longlist`)).toBeInTheDocument();
     expect(
       screen.queryByRole("heading", { name: "Do nothing: current policy and trajectory" }),

@@ -9,8 +9,10 @@ per-test rollback.
 
 from __future__ import annotations
 
+import threading
 import uuid
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 from sqlalchemy import func, select
@@ -27,7 +29,7 @@ from policy_atlas.core.schema import (
     source_snapshot,
     task_source_snapshot,
 )
-from policy_atlas.core.usage import UsageResult
+from policy_atlas.core.usage import UsageAccumulator, UsageResult
 from policy_atlas.evidence_search.extract import extract, iof_prompt
 from policy_atlas.evidence_search.extract.extract import (
     ExtractContext,
@@ -56,6 +58,7 @@ from policy_atlas.evidence_search.extract.iof_records import (
     IOFStratum,
 )
 from policy_atlas.evidence_search.synthesis.synthesis_tools import make_findings_reader
+from tests import progress_recorder
 from tests.helpers import (
     EVIDENCE_TYPE,
     ICF_PROFILE_ID,
@@ -1571,3 +1574,98 @@ def test_judge_payload_entry_key_set_excludes_effect_basis_and_study_geography()
         "stratum_qualifiers",
         "quotes",
     }
+
+
+# --- Live progress and summary counts (task 058, N2) ---
+
+
+class _FailsOnceExtractor:
+    """Answers every window with no findings; the first call fails once."""
+
+    def __init__(self) -> None:
+        self._failed = False
+        self._lock = threading.Lock()
+
+    def extract(self, payload: Any) -> Any:
+        with self._lock:
+            first = not self._failed
+            self._failed = True
+        if first:
+            raise RuntimeError("one transient failure")
+        return SimpleNamespace(findings=[]), None
+
+
+def _window_doc(window_count: int) -> extract._Doc:
+    return extract._Doc(
+        tss_id=uuid.uuid4(),
+        text_basis="abstract_only",
+        envelope_snapshot_id=uuid.uuid4(),
+        full_text_snapshot_id=None,
+        metadata={},
+        primary_evidence_type=None,
+        chunks=[],
+        extractable=True,
+        window_payloads=cast(
+            "Any",
+            [
+                SimpleNamespace(window_index=i, primary_evidence_type=None)
+                for i in range(window_count)
+            ],
+        ),
+    )
+
+
+def _run_windows_for(stage: str, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    calls = progress_recorder.install(monkeypatch, stage=stage)
+    profile = SimpleNamespace(backend=_FailsOnceExtractor(), wire_record_model=None)
+    _, _, _, _, retries, _ = extract._run_windows(
+        [_window_doc(2), _window_doc(1)], profile=cast("Any", profile)
+    )
+    assert retries == 1
+    return calls
+
+
+def test_extract_windows_publish_windows_done_of_total(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _run_windows_for("extract", monkeypatch)
+
+    assert all(c["total"] == 3 and c["unit"] == "windows" for c in calls)
+    # The retried window counts once: 0, 1, 2, 3.
+    assert sorted(c["done"] for c in calls) == [0, 1, 2, 3]
+    assert max(calls, key=lambda c: c["done"])["activity"] == "3 of 3 read for findings"
+
+
+def test_interventions_windows_publish_abstracts_done_of_total(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _run_windows_for("extract_interventions", monkeypatch)
+
+    assert all(c["total"] == 3 and c["unit"] == "abstracts" for c in calls)
+    assert max(calls, key=lambda c: c["done"])["activity"] == "3 of 3 abstracts read"
+
+
+def test_extract_summary_carries_finding_and_document_counts() -> None:
+    def doc(status: str, findings: int) -> extract._Doc:
+        item = _window_doc(0)
+        item.status = status
+        item.finding_count = findings
+        item.basis = "abstract"
+        return item
+
+    docs = [doc("extracted", 3), doc("extracted", 2), doc("no_findings", 0)]
+    run = extract._ProfileRun(
+        profile_id="iof",
+        docs=docs,
+        components={},
+        fingerprint="f",
+        budget_baseline=3,
+        budget_maximum=6,
+        budget_used=3,
+        retry_count=0,
+        usage_totals=UsageAccumulator().payload(),
+        finding_vetter_active=False,
+    )
+
+    summary = extract._build_summary(docs, [run], selection_run_id=None)
+
+    assert summary["finding_count"] == 5
+    assert summary["documents"] == 2

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import insert, select, update
 from sqlalchemy.engine import Connection, Engine
@@ -681,7 +682,12 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
                 f"/api/v1/tasks/{task_id}/evidence?page=1&page_size=2", headers=owner
             )
             assert evidence.status_code == 200
-            assert evidence.json()["pagination"] == {"page": 1, "page_size": 2, "total_items": 3}
+            assert evidence.json()["pagination"] == {
+                "page": 1,
+                "page_size": 2,
+                "total_items": 3,
+                "has_more": True,
+            }
             assert {row["status"] for row in evidence.json()["data"]} <= {
                 "cited",
                 "screened_out",
@@ -728,7 +734,11 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
             decisions = client.get(f"/api/v1/tasks/{task_id}/decisions", headers=owner)
             assert decisions.status_code == 200
             assert decisions.json()["data"][0]["kind"] == "search.executed"
-            assert decisions.json()["data"][0]["summary"] == "Executed a search query."
+            assert (
+                decisions.json()["data"][0]["summary"]
+                == "Searched with 1 query: “training uptake”."
+            )
+            assert decisions.json()["data"][0]["detail"] == {"queries": ["training uptake"]}
             coverage = client.get(f"/api/v1/tasks/{task_id}/coverage", headers=owner).json()
             assert coverage["sentence"] == "Searching completed. Coverage was judged adequate."
             assert coverage["base"]["counts"] == {"found": 3, "relevant": 1, "screened_out": 1}
@@ -751,7 +761,11 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
             citation_out = artefact["sections"][0]["blocks"][0]["claims"][0]["citations"][0]
             assert citation_out["source_title"] == "Selected trial"
             assert citation_out["source_id"] == cited_source["source_id"]
-            assert citation_out["grounding_rationale"] == "Quote matches the source verbatim."
+            # Round 13: the verdict and its reason are the claim's, not the citation's.
+            claim_out = artefact["sections"][0]["blocks"][0]["claims"][0]
+            assert claim_out["grounding_rationale"] == "Quote matches the source verbatim."
+            assert "grounding_rationale" not in citation_out
+            assert "grounding_tier" not in citation_out
             # The appraisal band's scoring input rides with the label.
             assert citation_out["evidence_type"] == "RCTs and Quasi-Experimental Studies"
             assert citation_out["appraisal_label"] == "Moderate"
@@ -1093,7 +1107,12 @@ def test_evidence_status_filter_collection_true_counts(tmp_path: Path, engine: E
             body = found.json()
             # Collection-true: total reflects the filtered collection (3), not the
             # page length (2) and not the unfiltered task total (7).
-            assert body["pagination"] == {"page": 1, "page_size": 2, "total_items": 3}
+            assert body["pagination"] == {
+                "page": 1,
+                "page_size": 2,
+                "total_items": 3,
+                "has_more": True,
+            }
             assert len(body["data"]) == 2
             assert {row["status"] for row in body["data"]} == {"found"}
 
@@ -1560,7 +1579,7 @@ def test_landscape_geography_residual_makes_every_scope_add_up(
 
             funnel = client.get(f"/api/v1/tasks/{task_id}/funnel", headers=owner).json()
             whole = client.get(f"/api/v1/tasks/{task_id}/landscape", headers=owner).json()
-            assert whole["geographies"] == {"GB": 1, "Not reported": 1}
+            assert whole["geographies"] == {"United Kingdom": 1, "Not reported": 1}
             assert sum(whole["geographies"].values()) == funnel["relevant"] == 2
 
             cited = client.get(
@@ -1572,6 +1591,32 @@ def test_landscape_geography_residual_makes_every_scope_add_up(
             # happens inside the loop over the already-narrowed rows.
             assert cited["geographies"] == {"Not reported": 1}
             assert sum(cited["geographies"].values()) == 1 != funnel["relevant"]
+
+            # Task 058, round 10: a geography row links to All sources filtered
+            # by the value it shows; any spelling of the country names the same
+            # set, and "Not reported" is the chart's own bucket.
+            def titles(country: str) -> list[str]:
+                body = client.get(
+                    f"/api/v1/tasks/{task_id}/evidence",
+                    params={"country": country},
+                    headers=owner,
+                ).json()
+                assert body["pagination"]["total_items"] == len(body["data"])
+                return [row["title"] for row in body["data"]]
+
+            for spelling in ("United Kingdom", "GB", "UK", "united kingdom"):
+                assert titles(spelling) == ["Reported country"]
+            assert "Reported country" not in titles("Not reported")
+            assert titles("Not reported")
+            # Round 14: `none` is the sentinel for the same set.
+            assert titles("none") == titles("Not reported")
+            assert titles("France") == []
+            every = client.get(f"/api/v1/tasks/{task_id}/evidence", headers=owner).json()
+            countries = {row["title"]: row["country"] for row in every["data"]}
+            assert countries["Reported country"] == "United Kingdom"
+            assert {value for key, value in countries.items() if key != "Reported country"} == {
+                None
+            }
         finally:
             with engine.begin() as conn:
                 delete_task_data(conn, task_id)
@@ -2580,3 +2625,316 @@ def test_strength_sort_puts_unrated_after_scored_and_before_unappraised() -> Non
         tiers = [item.appraisal_tier for item, _score in ordered]
         scored = ["Weak", "Very strong"] if direction == "asc" else ["Very strong", "Weak"]
         assert tiers == [*scored, "Unrated", None]
+
+
+def test_coverage_names_each_citation_and_lookup_pass_in_words(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Task 058, round 11: a pass is one row in words, never its ids as queries.
+
+    The id calls of one pass (one run, backend and verb) fold into one row,
+    counted by distinct ids, in the order the passes ran; the written
+    queries stay as they were and ``results`` counts both.
+    """
+    with api_client(tmp_path) as (client, owner, _other):
+        task_id = uuid.UUID(create_task(client, owner))
+        _seed_read_model_ladder(engine, task_id)
+        try:
+            with engine.begin() as conn:
+                run_id = conn.execute(
+                    select(search_coverage_record.c.acquired_by_run_id).where(
+                        search_coverage_record.c.task_id == task_id
+                    )
+                ).scalar_one()
+                conn.execute(
+                    update(search_coverage_record)
+                    .where(search_coverage_record.c.task_id == task_id)
+                    .values(
+                        backends=[
+                            {"backend": "openalex", "trust_class": "academic"},
+                            {"backend": "overton", "trust_class": "policy"},
+                        ]
+                    )
+                )
+
+                def call(backend: str, verb: str, query: str, results: int) -> None:
+                    events.append(
+                        conn,
+                        task_id=task_id,
+                        run_id=run_id,
+                        event_type="search.executed",
+                        payload={
+                            "backend": backend,
+                            "verb": verb,
+                            "query": query,
+                            "result_count": results,
+                        },
+                    )
+
+                call("openalex", "search", "school meals attainment", 40)
+                call("openalex", "fetch_references", "W1|W2", 2)
+                call("openalex", "fetch_references", "W3", 1)
+                # Forward pages repeat their ids: counted once.
+                call("openalex", "fetch_citations", "W1|W2", 100)
+                call("openalex", "fetch_citations", "W1|W2", 30)
+                call("overton", "fetch_by_id", "doc-1", 1)
+
+            coverage = client.get(f"/api/v1/tasks/{task_id}/coverage", headers=owner).json()
+            details = {row["backend"]: row for row in coverage["backends_detail"]}
+            openalex = details["OpenAlex"]
+            assert [query["query"] for query in openalex["queries"]] == ["school meals attainment"]
+            # Round 12: each row carries its key for the sources filter.
+            assert all(isinstance(row.pop("query_id"), int) for row in openalex["passes"])
+            assert openalex["passes"] == [
+                {"pass": "lookup", "query": "Looked up 3 cited works", "results": 3},
+                {"pass": "citations", "query": "Followed citations from 2 sources", "results": 130},
+            ]
+            assert openalex["results"] == 40 + 3 + 130
+            overton_passes = details["Overton"]["passes"]
+            assert all(isinstance(row.pop("query_id"), int) for row in overton_passes)
+            assert overton_passes == [
+                {"pass": "lookup", "query": "Looked up 1 cited document", "results": 1}
+            ]
+        finally:
+            with engine.begin() as conn:
+                delete_task_data(conn, task_id)
+
+
+def test_the_sources_filter_to_what_one_query_or_pass_returned(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Task 058, round 12: ``?query=<query_id>`` keeps the rows that search
+    returned, matched by backend and record id; a pass is all its calls; a
+    search from before the ids were kept, or an unknown key, keeps nothing."""
+    with api_client(tmp_path) as (client, owner, _other):
+        task_id = uuid.UUID(create_task(client, owner))
+        _seed_read_model_ladder(engine, task_id)
+        try:
+            with engine.begin() as conn:
+                run_id = conn.execute(
+                    select(search_coverage_record.c.acquired_by_run_id).where(
+                        search_coverage_record.c.task_id == task_id
+                    )
+                ).scalar_one()
+                conn.execute(
+                    update(search_coverage_record)
+                    .where(search_coverage_record.c.task_id == task_id)
+                    .values(backends=[{"backend": "openalex"}, {"backend": "overton"}])
+                )
+                for title, backend, record_id in (
+                    ("Query hit", "openalex", "W10"),
+                    ("Second hit", "openalex", "W11"),
+                    ("Cited work", "openalex", "W12"),
+                    ("Same id, other backend", "overton", "W10"),
+                ):
+                    seed_source(
+                        conn,
+                        task_id,
+                        {"title": title, "backend": backend, "backend_record_id": record_id},
+                    )
+
+                def call(verb: str, query: str, ids: list[str] | None) -> None:
+                    payload: dict[str, Any] = {
+                        "backend": "openalex",
+                        "verb": verb,
+                        "query": query,
+                        "result_count": len(ids or []),
+                    }
+                    if ids is not None:
+                        payload["record_ids"] = ids
+                    events.append(
+                        conn,
+                        task_id=task_id,
+                        run_id=run_id,
+                        event_type="search.executed",
+                        payload=payload,
+                    )
+
+                call("search", "school meals", ["W10", "W11", "W99"])
+                call("search", "an older search", None)
+                call("fetch_references", "W1", ["W11"])
+                call("fetch_references", "W2", ["W12"])
+
+            coverage = client.get(f"/api/v1/tasks/{task_id}/coverage", headers=owner).json()
+            openalex = next(
+                row for row in coverage["backends_detail"] if row["backend"] == "OpenAlex"
+            )
+            by_query = {row["query"]: row["query_id"] for row in openalex["queries"]}
+            (lookup,) = openalex["passes"]
+
+            def titles(query_id: int) -> list[str]:
+                response = client.get(
+                    f"/api/v1/tasks/{task_id}/evidence?query={query_id}&sort=title",
+                    headers=owner,
+                )
+                assert response.status_code == 200
+                return [row["title"] for row in response.json()["data"]]
+
+            assert titles(by_query["school meals"]) == ["Query hit", "Second hit"]
+            assert titles(lookup["query_id"]) == ["Cited work", "Second hit"]
+            empty = client.get(
+                f"/api/v1/tasks/{task_id}/evidence?query={by_query['an older search']}",
+                headers=owner,
+            )
+            assert empty.status_code == 200
+            assert empty.json() == {
+                "data": [],
+                "pagination": {"page": 1, "page_size": 50, "total_items": 0, "has_more": False},
+            }
+            assert titles(999_999) == []
+        finally:
+            with engine.begin() as conn:
+                delete_task_data(conn, task_id)
+
+
+def test_a_source_with_a_collected_full_text_links_to_it(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Task 058, round 12: ``full_text_url`` is where the full text came from,
+    only when it was collected and only an http(s) address; Europe PMC's XML
+    service reads as the article's page."""
+    with api_client(tmp_path) as (client, owner, _other):
+        task_id = uuid.UUID(create_task(client, owner))
+        try:
+            with engine.begin() as conn:
+                _, fetched = seed_source(conn, task_id, {"title": "Fetched"})
+                seed_ingested_full_text(conn, tss_id=fetched, chunks=["Body."])
+                _, pmc = seed_source(conn, task_id, {"title": "Europe PMC"})
+                seed_ingested_full_text(conn, tss_id=pmc, chunks=["Body."])
+                _, older = seed_source(conn, task_id, {"title": "Older, no address"})
+                seed_ingested_full_text(conn, tss_id=older, chunks=["Body."])
+                seed_source(conn, task_id, {"title": "Not collected"})
+                _, queued = seed_source(conn, task_id, {"title": "Collecting"})
+                conn.execute(
+                    update(task_source_snapshot)
+                    .where(task_source_snapshot.c.task_source_snapshot_id == queued)
+                    .values(full_text_status="queued")
+                )
+                conn.execute(
+                    update(task_source_snapshot)
+                    .where(task_source_snapshot.c.task_source_snapshot_id == fetched)
+                    .values(fetched_from="https://example.org/report.pdf")
+                )
+                conn.execute(
+                    update(task_source_snapshot)
+                    .where(task_source_snapshot.c.task_source_snapshot_id == pmc)
+                    .values(
+                        fetched_from="https://www.ebi.ac.uk/europepmc/webservices/rest/PMC123/fullTextXML"
+                    )
+                )
+            rows = client.get(f"/api/v1/tasks/{task_id}/evidence", headers=owner).json()["data"]
+            links = {row["title"]: row["full_text_url"] for row in rows}
+            assert links == {
+                "Fetched": "https://example.org/report.pdf",
+                "Europe PMC": "https://europepmc.org/article/PMC/PMC123",
+                # The fixture's own locator is no http(s) address.
+                "Older, no address": None,
+                "Not collected": None,
+                "Collecting": None,
+            }
+            # Round 14: the fetch's state, so a pending one reads "Collecting…".
+            states = {row["title"]: row["full_text_status"] for row in rows}
+            assert states["Fetched"] == "ingested"
+            assert states["Not collected"] == "not_attempted"
+            assert states["Collecting"] == "queued"
+            dossier = client.get(
+                f"/api/v1/tasks/{task_id}/sources/{fetched}", headers=owner
+            ).json()
+            assert dossier["full_text_url"] == "https://example.org/report.pdf"
+        finally:
+            with engine.begin() as conn:
+                delete_task_data(conn, task_id)
+
+
+def test_the_sources_filter_by_read_depth_and_by_appraisal(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Task 058, round 13: ``depth`` keeps the rows the Status column shows at
+    that depth; ``appraised`` the documents the appraise stage scored."""
+    with api_client(tmp_path) as (client, owner, _other):
+        task_id = uuid.UUID(create_task(client, owner))
+        scope_id = _seed_evidence_filter_fixture(engine, task_id)
+        try:
+            with engine.begin() as conn:
+                run_id = conn.execute(
+                    select(runs.c.run_id).where(runs.c.task_id == task_id)
+                ).scalar_one()
+                _, with_abstract = seed_source(
+                    conn, task_id, {"title": "With abstract", "abstract": "What it found."}
+                )
+                seed_screening_result(
+                    conn, task_id, run_id, scope_id, with_abstract, status="relevant"
+                )
+                selected = conn.execute(
+                    select(task_source_snapshot.c.task_source_snapshot_id)
+                    .join(
+                        source_snapshot,
+                        source_snapshot.c.source_snapshot_id
+                        == task_source_snapshot.c.source_snapshot_id,
+                    )
+                    .where(
+                        task_source_snapshot.c.task_id == task_id,
+                        source_snapshot.c.metadata["title"].astext == "Selected",
+                    )
+                ).scalar_one()
+                conn.execute(
+                    insert(source_appraisal_result).values(
+                        source_appraisal_result_id=uuid.uuid4(),
+                        evidence_scope_id=scope_id,
+                        task_source_snapshot_id=selected,
+                        task_id=task_id,
+                        appraised_by_run_id=run_id,
+                        quality_score=4,
+                        rubric_version="test",
+                        appraised_at=now(),
+                    )
+                )
+
+            def titles(query: str) -> list[str]:
+                response = client.get(
+                    f"/api/v1/tasks/{task_id}/evidence?{query}&sort=title", headers=owner
+                )
+                assert response.status_code == 200, response.text
+                return [row["title"] for row in response.json()["data"]]
+
+            assert titles("depth=full_text") == ["Demoted after full text"]
+            assert titles("depth=abstract") == ["With abstract"]
+            assert titles("depth=title") == ["Not selected", "Selected"]
+            assert titles("appraised=true") == ["Selected"]
+            assert "Selected" not in titles("appraised=false")
+            funnel = client.get(f"/api/v1/tasks/{task_id}/funnel", headers=owner).json()
+            assert funnel["quality_checked"] == len(titles("appraised=true"))
+            # A redrawn plan appraises the same document again under its new
+            # question: the funnel still counts it once.
+            with engine.begin() as conn:
+                second_scope = seed_scope(conn, task_id, intent="The redrawn question")
+                conn.execute(
+                    insert(source_appraisal_result).values(
+                        source_appraisal_result_id=uuid.uuid4(),
+                        evidence_scope_id=second_scope,
+                        task_source_snapshot_id=selected,
+                        task_id=task_id,
+                        appraised_by_run_id=run_id,
+                        quality_score=3,
+                        rubric_version="test",
+                        appraised_at=now(),
+                    )
+                )
+            funnel = client.get(f"/api/v1/tasks/{task_id}/funnel", headers=owner).json()
+            assert funnel["quality_checked"] == len(titles("appraised=true")) == 1
+            # "Full text accessed" counts the texts obtained, as `depth=full_text`
+            # lists them: a failed fetch is in neither (round 13).
+            with engine.begin() as conn:
+                conn.execute(
+                    update(task_source_snapshot)
+                    .where(task_source_snapshot.c.task_source_snapshot_id == with_abstract)
+                    .values(full_text_status="fetch_failed", full_text_error="paywall")
+                )
+            funnel = client.get(f"/api/v1/tasks/{task_id}/funnel", headers=owner).json()
+            assert funnel["read_in_full"] == len(titles("depth=full_text")) == 1
+            assert (
+                client.get(f"/api/v1/tasks/{task_id}/evidence?depth=page", headers=owner)
+            ).status_code == 422
+        finally:
+            with engine.begin() as conn:
+                delete_task_data(conn, task_id)

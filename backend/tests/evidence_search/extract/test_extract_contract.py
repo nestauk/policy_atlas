@@ -1262,6 +1262,8 @@ def test_summary_payload_shape(conn: Connection) -> None:
     assert set(summary.keys()) == {
         "docs", "counts", "selection_run_id", "flags", "provenance", "profiles",
         "usage_totals",
+        # Task 058 (N17): the done row's integers.
+        "finding_count", "documents",
     }
     for doc in summary["docs"]:
         assert set(doc.keys()) == {"tss_id", "basis", "profiles"}

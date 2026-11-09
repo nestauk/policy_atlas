@@ -184,9 +184,115 @@
         "title": "ArtefactOut",
         "type": "object"
       },
-      "ArtefactSectionCompletedFrame": {
-        "description": "A live-artefact section's whole prose is available.",
+      "ArtefactSectionCardFrame": {
+        "description": "Ephemeral: one case-study card as it closes in the streamed reply (task 058).\n\nCards arrive in order and add to the ones before; a `replace`\n`artefact.section_delta` for the same section clears them (the reply is\nbeing written again). `artefact.section_completed` brings the checked\nsection. Display-only: never persisted, no `id:` line, no `sequence`.",
         "properties": {
+          "ephemeral": {
+            "const": true,
+            "default": true,
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "prose": {
+            "title": "Prose",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "artefact.section_card",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "index",
+          "title",
+          "prose",
+          "occurred_at"
+        ],
+        "title": "ArtefactSectionCardFrame",
+        "type": "object"
+      },
+      "ArtefactSectionClaimFrame": {
+        "description": "Ephemeral: one of the writer's citations, bound to the draft (task 058).\n\nThe span `[start, end)` counts code points of the section draft, as\n`artefact.section_revising` does. The citation is still to be checked;\n`artefact.section_completed` brings the checked section. Display-only:\nnever persisted, no `id:` line, no `sequence`.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "ephemeral": {
+            "const": true,
+            "default": true,
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SectionSourceRef"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "type": {
+            "const": "artefact.section_claim",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "index",
+          "start",
+          "end",
+          "sources",
+          "occurred_at"
+        ],
+        "title": "ArtefactSectionClaimFrame",
+        "type": "object"
+      },
+      "ArtefactSectionCompletedFrame": {
+        "description": "A live-artefact section's whole prose is available.\n\nArgs:\n    citations: The section's checked citations over `prose` (task 058,\n        round 7); empty when it has none, and on frames recorded before\n        the field existed.\n    claims: The section's checked claims with their verdicts (task 058,\n        round 13); empty on frames recorded before the field existed.",
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/SectionCitation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/SectionClaim"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
           "index": {
             "title": "Index",
             "type": "integer"
@@ -225,8 +331,94 @@
         "title": "ArtefactSectionCompletedFrame",
         "type": "object"
       },
+      "ArtefactSectionDeltaFrame": {
+        "description": "Ephemeral: prose appended to the section being written (task 058, N7).\n\nDisplay-only. `artefact.section_completed` stays the record; a replay\ncarries no deltas. Never persisted, no `id:` line, no `sequence`.\n\nArgs:\n    index: The skeleton display index of the section.\n    text: The prose delta.\n    mode: `append` adds `text` to the client's draft; `replace` resets\n        the draft to `text` (a reconnect mid-section, or the streamed\n        turn's fallback resetting an abandoned draft with empty text).",
+        "properties": {
+          "ephemeral": {
+            "const": true,
+            "default": true,
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "mode": {
+            "enum": [
+              "append",
+              "replace"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "const": "artefact.section_delta",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "index",
+          "text",
+          "mode",
+          "occurred_at"
+        ],
+        "title": "ArtefactSectionDeltaFrame",
+        "type": "object"
+      },
+      "ArtefactSectionRevisingFrame": {
+        "description": "Ephemeral: the sentences the judge failed, sent before the repair (N7).\n\nDisplay-only: the client blurs these spans of its draft until\n`artefact.section_completed` brings the repaired prose. Never persisted,\nno `id:` line, no `sequence`.",
+        "properties": {
+          "ephemeral": {
+            "const": true,
+            "default": true,
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "spans": {
+            "items": {
+              "$ref": "#/components/schemas/SectionSpan"
+            },
+            "title": "Spans",
+            "type": "array"
+          },
+          "type": {
+            "const": "artefact.section_revising",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "index",
+          "spans",
+          "occurred_at"
+        ],
+        "title": "ArtefactSectionRevisingFrame",
+        "type": "object"
+      },
       "ArtefactSectionSkeleton": {
-        "description": "One planned live-artefact section in presentation order.",
+        "description": "One planned live-artefact section.\n\nArgs:\n    index: The section's display identity (the key findings at 0 when the\n        report has them, the body sections next, then the case studies,\n        then the introduction). The index is identity, not reading\n        order: the page orders by `role`.\n    title: The section's title.\n    focus: What the section covers.\n    role: `key_findings`, `case_studies`, `body` or `intro`; skeletons\n        recorded before the field existed read as `body`.",
         "properties": {
           "focus": {
             "title": "Focus",
@@ -235,6 +427,17 @@
           "index": {
             "title": "Index",
             "type": "integer"
+          },
+          "role": {
+            "default": "body",
+            "enum": [
+              "key_findings",
+              "case_studies",
+              "body",
+              "intro"
+            ],
+            "title": "Role",
+            "type": "string"
           },
           "title": {
             "title": "Title",
@@ -247,6 +450,46 @@
           "focus"
         ],
         "title": "ArtefactSectionSkeleton",
+        "type": "object"
+      },
+      "ArtefactSectionSourcesFrame": {
+        "description": "Ephemeral: the sources the writer has read so far for a section (task 058).\n\nEach frame carries the whole set, in the order the sources were first\nread; it replaces the one before. Display-only: never persisted, no\n`id:` line, no `sequence`. A reconnect mid-section gets the current set.",
+        "properties": {
+          "ephemeral": {
+            "const": true,
+            "default": true,
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SectionSourceRef"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "type": {
+            "const": "artefact.section_sources",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "index",
+          "sources",
+          "occurred_at"
+        ],
+        "title": "ArtefactSectionSourcesFrame",
         "type": "object"
       },
       "ArtefactSectionStartedFrame": {
@@ -312,6 +555,48 @@
           "sections"
         ],
         "title": "ArtefactSkeletonFrame",
+        "type": "object"
+      },
+      "ArtefactSourceNoteFrame": {
+        "description": "Ephemeral: one most-relevant-source note as it is written (task 058, round 8).\n\nThe notes arrive one at a time, in the order the saved report lists\nthem; each adds to the ones before. A reconnect gets the run's notes so\nfar. Display-only: never persisted, no `id:` line, no `sequence`.\n\nArgs:\n    source_id: The source's id in this task.\n    title: The source's title as the committed report's references name it.\n    note: The note's text.",
+        "properties": {
+          "ephemeral": {
+            "const": true,
+            "default": true,
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "artefact.source_note",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "source_id",
+          "title",
+          "note",
+          "occurred_at"
+        ],
+        "title": "ArtefactSourceNoteFrame",
         "type": "object"
       },
       "AuthorityOut": {
@@ -544,6 +829,51 @@
           "prose"
         ],
         "title": "CaseStudyCardOut",
+        "type": "object"
+      },
+      "CharacteriseThemesFrame": {
+        "description": "Ephemeral: the names a clustering found, before units are assigned (rounds 9, 11).\n\nSent once a clustering stage has found its names, in the order found:\n`characterise` its themes (sources into themes), `longlist` its options\n(sources into options; the residual pass sends the whole list again) and\n`theme` its themes (options into themes). The saved result brings them\nwith their counts when the stage ends. A reconnect gets each stage's\nlatest again. Display-only: never persisted, no `id:` line, no\n`sequence`.",
+        "properties": {
+          "ephemeral": {
+            "const": true,
+            "default": true,
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "characterise",
+              "longlist",
+              "theme"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "themes": {
+            "items": {
+              "$ref": "#/components/schemas/LiveTheme"
+            },
+            "title": "Themes",
+            "type": "array"
+          },
+          "type": {
+            "const": "characterise.themes",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "stage",
+          "themes",
+          "occurred_at"
+        ],
+        "title": "CharacteriseThemesFrame",
         "type": "object"
       },
       "ChatTurnCreate": {
@@ -1087,7 +1417,7 @@
         "type": "object"
       },
       "CitationOut": {
-        "description": "One citation attached to a citation-type claim.\n\nArgs:\n    citation_id: Durable citation identity \u2014 the key for the\n        chunk-context endpoint (`GET .../citations/{citation_id}/context`).\n    n: Reference number (matches a `ReferenceOut.n`).\n    source_id: The cited document's task source identity, when the\n        citation resolves to one (joins to the sources/dossier surface).\n    source_title: Cited source's title (envelope metadata).\n    quote: The quoted span from the source.\n    grounding_tier: Optional grounding-judge tier label.\n    grounding_rationale: The grounding judge's recorded reason for the\n        tier, when one was persisted with the verdict.\n    appraisal_label: Optional appraisal label.\n    evidence_type: The cited document's classified evidence type \u2014 the\n        input the appraisal rubric scores from.\n    text_basis: The cited document's extraction basis (`abstract_only`\n        or `full_text`), when known (task 046).",
+        "description": "One citation attached to a citation-type claim.\n\nArgs:\n    citation_id: Durable citation identity \u2014 the key for the\n        chunk-context endpoint (`GET .../citations/{citation_id}/context`).\n    n: Reference number (matches a `ReferenceOut.n`).\n    source_id: The cited document's task source identity, when the\n        citation resolves to one (joins to the sources/dossier surface).\n    source_title: Cited source's title (envelope metadata).\n    quote: The quoted span from the source.\n    appraisal_label: Optional appraisal label.\n    evidence_type: The cited document's classified evidence type \u2014 the\n        input the appraisal rubric scores from.\n    text_basis: The cited document's extraction basis (`abstract_only`\n        or `full_text`), when known (task 046).",
         "properties": {
           "appraisal_label": {
             "anyOf": [
@@ -1115,28 +1445,6 @@
               }
             ],
             "title": "Evidence Type"
-          },
-          "grounding_rationale": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Grounding Rationale"
-          },
-          "grounding_tier": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Grounding Tier"
           },
           "n": {
             "title": "N",
@@ -1254,7 +1562,7 @@
         "type": "object"
       },
       "ClaimOut": {
-        "description": "One span-anchored claim annotation within a block.\n\nArgs:\n    claim_id: The claim's identity.\n    claim_type: Annotation type.\n    text: The spanned text.\n    span: Character offsets `[start, end]` into the block's `prose`, or\n        `None`.\n    citations: Citations attached to this claim (citation-type only).\n    theme: Named themes or groups referenced by a theme claim.",
+        "description": "One span-anchored claim annotation within a block.\n\nArgs:\n    claim_id: The claim's identity.\n    claim_type: Annotation type.\n    text: The spanned text.\n    span: Character offsets `[start, end]` into the block's `prose`, or\n        `None`.\n    citations: Citations attached to this claim (citation-type only).\n    grounding_tier: The grounding judge's verdict on the claim, when it\n        was checked (task 058, round 13: the claim's, not each citation's).\n    grounding_rationale: The judge's recorded reason for the verdict.\n    theme: Named themes or groups referenced by a theme claim.",
         "properties": {
           "citations": {
             "items": {
@@ -1289,6 +1597,28 @@
                 "type": "null"
               }
             ]
+          },
+          "grounding_rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grounding Rationale"
+          },
+          "grounding_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grounding Tier"
           },
           "span": {
             "anyOf": [
@@ -1597,6 +1927,32 @@
         "title": "ConversationOut",
         "type": "object"
       },
+      "ConversationTitledEvent": {
+        "description": "The chat's title written from its first message (task 058, round 14).\n\nSent once, while the first turn's stream is open, when the ``chat_title``\nstep's line replaces the message's cut; never terminal.\n\nArgs:\n    conversation_id: The chat.\n    title: Its new title.",
+        "properties": {
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "conversation.titled",
+            "default": "conversation.titled",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "title"
+        ],
+        "title": "ConversationTitledEvent",
+        "type": "object"
+      },
       "ConversationUpdate": {
         "additionalProperties": false,
         "description": "Partial update for an existing chat conversation.\n\nOmitted fields remain unchanged. An explicitly null ``entry_artefact_id``\nclears its entry-context chip.\n\nArgs:\n    title: Replacement user-visible chat title.\n    entry_artefact_id: Replacement task-local entry context, or null to clear it.",
@@ -1681,11 +2037,18 @@
         "type": "object"
       },
       "CoverageBackendDetailOut": {
-        "description": "Post-run source counts for one public backend.\n\n``relevant`` is deliberately task-wide in C.1; per-query relevance\nwas not recorded and is therefore absent.",
+        "description": "Post-run source counts for one public backend.\n\n``relevant`` is deliberately task-wide in C.1; per-query relevance\nwas not recorded and is therefore absent. ``queries`` are the written\nsearches (topic and semantic); ``passes`` the citations and lookup passes\nin the order they ran (round 11). ``results`` counts both.",
         "properties": {
           "backend": {
             "title": "Backend",
             "type": "string"
+          },
+          "passes": {
+            "items": {
+              "$ref": "#/components/schemas/CoveragePassOut"
+            },
+            "title": "Passes",
+            "type": "array"
           },
           "queries": {
             "items": {
@@ -1744,12 +2107,49 @@
         "title": "CoverageOut",
         "type": "object"
       },
+      "CoveragePassOut": {
+        "description": "One citations or lookup pass of a finished search (task 058, round 11).\n\nArgs:\n    pass_: `citations` (the works citing the best-connected sources) or\n        `lookup` (cited works or documents fetched by id). Serialised as\n        `pass`.\n    query: The pass in words, as a finished search names it: \"Followed\n        citations from 40 sources\", \"Looked up 120 cited works\",\n        \"Looked up 30 cited documents\". Never its ids.\n    results: The records the pass's calls returned.\n    query_id: The pass's key for the sources filter\n        (`GET /tasks/{id}/evidence?query=`; task 058, round 12): the\n        records every call of the pass returned.",
+        "properties": {
+          "pass": {
+            "enum": [
+              "citations",
+              "lookup"
+            ],
+            "title": "Pass",
+            "type": "string"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "query_id": {
+            "title": "Query Id",
+            "type": "integer"
+          },
+          "results": {
+            "title": "Results",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pass",
+          "query",
+          "results",
+          "query_id"
+        ],
+        "title": "CoveragePassOut",
+        "type": "object"
+      },
       "CoverageQueryOut": {
-        "description": "One completed query and its result count for a public backend.",
+        "description": "One completed query and its result count for a public backend.\n\nArgs:\n    query: The query as written.\n    results: The records the call returned.\n    query_id: The query's key for the sources filter\n        (`GET /tasks/{id}/evidence?query=`; task 058, round 12).",
         "properties": {
           "query": {
             "title": "Query",
             "type": "string"
+          },
+          "query_id": {
+            "title": "Query Id",
+            "type": "integer"
           },
           "results": {
             "title": "Results",
@@ -1758,7 +2158,8 @@
         },
         "required": [
           "query",
-          "results"
+          "results",
+          "query_id"
         ],
         "title": "CoverageQueryOut",
         "type": "object"
@@ -1832,8 +2233,30 @@
         "type": "object"
       },
       "DecisionOut": {
-        "description": "One entry in the paginated decision log.\n\nArgs:\n    sequence: The underlying event's `event_log` sequence.\n    occurred_at: When the decision was recorded.\n    kind: Decision kind.\n    summary: Human-readable summary of the decision.\n    decided_by: Who decided, when known.\n    detail: Optional structured detail.\n    capability_run_id: The walk the underlying event belongs to, when\n        the event carries a run (task 045) \u2014 lets the thread tell a\n        hidden child walk's lines from its parent's. Null otherwise.",
+        "description": "One entry in the paginated decision log.\n\nArgs:\n    sequence: The underlying event's `event_log` sequence.\n    occurred_at: When the decision was recorded.\n    kind: Decision kind.\n    summary: Human-readable summary of the decision.\n    decided_by: Who decided, when known.\n    detail: Optional structured detail.\n    capability_run_id: The walk the underlying event belongs to, when\n        the event carries a run (task 045) \u2014 lets the thread tell a\n        hidden child walk's lines from its parent's. Null otherwise.\n    actor_display: The display name of the person who acted (task 058,\n        round 10), never an email; null for Policy Atlas's own acts. The\n        summary already names them (\"You\" for the reader).\n    actor_is_viewer: Whether the person who acted is the reader; null\n        when no person acted (Policy Atlas's acts, a step's line).",
         "properties": {
+          "actor_display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Display"
+          },
+          "actor_is_viewer": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Is Viewer"
+          },
           "capability_run_id": {
             "anyOf": [
               {
@@ -1941,7 +2364,7 @@
         "type": "object"
       },
       "EvidenceItemOut": {
-        "description": "One row of the paginated evidence/source list.\n\nArgs:\n    source_id: The source's identity.\n    title: Source title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    origin: Acquisition backend.\n    status: Position on the evidence status ladder.\n    status_reason: Optional human-readable reason for the current status\n        (e.g. why screened out).\n    evidence_type: Optional evidence type label.\n    appraisal_tier: Optional appraisal tier label.\n    cited: Whether this source is cited in the artefact.\n    url: Optional source URL.",
+        "description": "One row of the paginated evidence/source list.\n\nArgs:\n    source_id: The source's identity.\n    title: Source title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    origin: Acquisition backend.\n    status: Position on the evidence status ladder.\n    status_reason: Optional human-readable reason for the current status\n        (e.g. why screened out).\n    evidence_type: Optional evidence type label.\n    appraisal_tier: Optional appraisal tier label.\n    cited: Whether this source is cited in the artefact.\n    url: Optional source URL.\n    full_text_url: The address the full text was collected from (an\n        http(s) link a reader can open), or `None` when no full text was\n        collected.\n    full_text_status: Where the full text's fetch stands: `queued`\n        while the ingest is pending (task 058, round 14).",
         "properties": {
           "abstract": {
             "anyOf": [
@@ -1995,6 +2418,17 @@
             ],
             "title": "Classification Reason"
           },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
           "evidence_type": {
             "anyOf": [
               {
@@ -2005,6 +2439,29 @@
               }
             ],
             "title": "Evidence Type"
+          },
+          "full_text_status": {
+            "default": "not_attempted",
+            "enum": [
+              "not_attempted",
+              "queued",
+              "ingested",
+              "fetch_failed",
+              "parse_failed"
+            ],
+            "title": "Full Text Status",
+            "type": "string"
+          },
+          "full_text_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Text Url"
           },
           "origin": {
             "enum": [
@@ -3278,7 +3735,7 @@
         "type": "object"
       },
       "LatestRun": {
-        "description": "The derived latest-run read model carried on a task.\n\nArgs:\n    capability_run_id: Identity of the task's most recent run.\n    status: That run's current status.\n    started_at: When that run started executing.\n    ended_at: When that run reached a terminal status, or `None` while\n        still running or paused.",
+        "description": "The derived latest-run read model carried on a task.\n\nArgs:\n    capability_run_id: Identity of the task's most recent run.\n    status: That run's current status.\n    started_at: When that run started executing.\n    ended_at: When that run reached a terminal status, or `None` while\n        still running or paused.\n    stage: On `TaskOut.active_run` only: the public stage the task's\n        parentless active walk last started, so a scoping task shows the\n        parent's stage rather than a child's (task 058, N15). `None` before\n        the walk starts a stage, and on every other use of this shape.\n    stage_label: The server's label for `stage` (the stage vocabulary),\n        or `None` with it.",
         "properties": {
           "capability_run_id": {
             "format": "uuid",
@@ -3296,6 +3753,49 @@
               }
             ],
             "title": "Ended At"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "enum": [
+                  "acquire",
+                  "screen",
+                  "classify",
+                  "appraise",
+                  "ingest",
+                  "characterise",
+                  "select",
+                  "extract",
+                  "group",
+                  "synthesise",
+                  "inherit",
+                  "suggest",
+                  "option_searches",
+                  "extract_interventions",
+                  "longlist",
+                  "option_profile",
+                  "constrain",
+                  "theme",
+                  "shortlist"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "stage_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Label"
           },
           "started_at": {
             "format": "date-time",
@@ -3380,6 +3880,32 @@
           "definition"
         ],
         "title": "LeverTypeOut",
+        "type": "object"
+      },
+      "LiveTheme": {
+        "description": "One theme as the characterise stage found it (task 058, round 9).\n\nArgs:\n    label: The theme's name.\n    description: Its one-line description, or null.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "description"
+        ],
+        "title": "LiveTheme",
         "type": "object"
       },
       "LonglistCountsOut": {
@@ -3530,11 +4056,16 @@
         "type": "object"
       },
       "LonglistThemeOut": {
-        "description": "One theme: a generated grouping of options in the problem's own words.\n\nArgs:\n    theme_id: Stable theme identity.\n    name: Theme name.\n    description: One-line description.\n    option_ids: The theme's options, in display order.",
+        "description": "One theme: a generated grouping of options in the problem's own words.\n\nArgs:\n    theme_id: Stable theme identity.\n    name: Theme name.\n    description: One-line description.\n    option_ids: The theme's options, in display order.\n    document_count: The theme's distinct documents across its options,\n        each counted once (task 058, round 14): the rows\n        `GET /tasks/{id}/evidence?theme=` lists.",
         "properties": {
           "description": {
             "title": "Description",
             "type": "string"
+          },
+          "document_count": {
+            "default": 0,
+            "title": "Document Count",
+            "type": "integer"
           },
           "name": {
             "title": "Name",
@@ -3759,8 +4290,15 @@
         "type": "object"
       },
       "OptionDocumentOut": {
-        "description": "One document behind an option (\"Show the documents\"), one per document.\n\nArgs:\n    task_source_snapshot_id: This task's document row, when the task holds one.\n    title: The document's title.\n    role: What the document does with the intervention.\n    evidence_type: Its evidence type, when classified.\n    tier: Its quality tier label, when appraised.\n    year: Its publication year, when the metadata has one.\n    place: Where it was studied: its where-tried top level.\n    programme_name: The programme name of its first member record under\n        the option (by role order); `null` when none is given or the\n        document is a linked finding (task 046, amendment 4, R81).\n    tried_on_kind: That record's unit as its folded Tried on kind (its\n        own word when the fold has none).\n    measured: The plan outcome that record measures, in the plan's words,\n        else its outcome as its folded Measures kind.\n    place_detail: That record's place below the document's country, when\n        it adds one.\n    records_count: The document's member records under the option (0 for\n        a linked finding).",
+        "description": "One document behind an option (\"Show the documents\"), one per document.\n\nArgs:\n    task_source_snapshot_id: This task's document row, when the task holds one.\n    title: The document's title.\n    role: What the document does with the intervention.\n    evidence_type: Its evidence type, when classified.\n    tier: Its quality tier label, when appraised.\n    year: Its publication year, when the metadata has one.\n    authors: Its authors' names, in order, as the reference line names\n        them (task 058, round 12); empty when unknown.\n    venue: Where it was published, as the evidence row's `venue`\n        (task 058, round 12), or `None`.\n    place: Where it was studied: its where-tried top level.\n    programme_name: The programme name of its first member record under\n        the option (by role order); `null` when none is given or the\n        document is a linked finding (task 046, amendment 4, R81).\n    tried_on_kind: That record's unit as its folded Tried on kind (its\n        own word when the fold has none).\n    measured: The plan outcome that record measures, in the plan's words,\n        else its outcome as its folded Measures kind.\n    place_detail: That record's place below the document's country, when\n        it adds one.\n    records_count: The document's member records under the option (0 for\n        a linked finding).",
         "properties": {
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Authors",
+            "type": "array"
+          },
           "evidence_type": {
             "anyOf": [
               {
@@ -3868,6 +4406,17 @@
               }
             ],
             "title": "Tried On Kind"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue"
           },
           "year": {
             "anyOf": [
@@ -4258,8 +4807,15 @@
         "type": "object"
       },
       "OptionProfileOut": {
-        "description": "What the option would take, in eight lines and its delivery setting.\n\nPolicy Atlas's estimate before assessment, not a finding.\n\nArgs:\n    lines: The eight lines, in display order.\n    settings: The delivery setting, main first, then the second; empty\n        when none is named (R41).",
+        "description": "What the option would take, in eight lines and its delivery setting.\n\nPolicy Atlas's estimate before assessment, not a finding.\n\nArgs:\n    lines: The eight lines, in display order.\n    settings: The delivery setting, main first, then the second; empty\n        when none is named (R41).\n    acts_on: Whom the option acts on directly, the model's words in its\n        order (task 058, round 12); empty for a whole-system instrument and\n        for a profile written before round 12.",
         "properties": {
+          "acts_on": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Acts On",
+            "type": "array"
+          },
           "lines": {
             "items": {
               "$ref": "#/components/schemas/ProfileLineOut"
@@ -4280,6 +4836,85 @@
           "settings"
         ],
         "title": "OptionProfileOut",
+        "type": "object"
+      },
+      "OptionProgressOut": {
+        "description": "One option row while the longlist is being built (task 058, N22).\n\nArgs:\n    option_id: The option's identity.\n    name: Its name.\n    description: Its one-line description.\n    origin: Where it came from.\n    state: Included or excluded.\n    merged_into_option_id: The kept option a duplicate was folded into,\n        or `None`.\n    search_status: Where the option's own search stands.\n    found: How many sources that search found (its acquire count), or\n        `None` until the search has finished acquiring.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "found": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Found"
+          },
+          "merged_into_option_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merged Into Option Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "option_id": {
+            "format": "uuid",
+            "title": "Option Id",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "clustered",
+              "suggested",
+              "from_evidence_search",
+              "added_by_you"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "search_status": {
+            "enum": [
+              "queued",
+              "searching",
+              "searched",
+              "failed"
+            ],
+            "title": "Search Status",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "included",
+              "excluded"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "option_id",
+          "name",
+          "description",
+          "origin",
+          "state",
+          "search_status"
+        ],
+        "title": "OptionProgressOut",
         "type": "object"
       },
       "OptionRecordOut": {
@@ -4643,6 +5278,20 @@
         "title": "OptionSummaryOut",
         "type": "object"
       },
+      "OptionsOut": {
+        "description": "The `options` read: every option row of the task, with its search (N22).\n\nServed from the end of the suggest stage, before the longlist exists; an\nempty list before suggest has written any option.\n\nArgs:\n    options: The task's options, oldest first.",
+        "properties": {
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/OptionProgressOut"
+            },
+            "title": "Options",
+            "type": "array"
+          }
+        },
+        "title": "OptionsOut",
+        "type": "object"
+      },
       "OrganisationRef": {
         "description": "The organisation the caller belongs to.\n\nArgs:\n    org_id: The organisation's identity.\n    name: Its display name.",
         "properties": {
@@ -4707,8 +5356,13 @@
         "type": "object"
       },
       "PageMeta": {
-        "description": "Pagination metadata attached to a paginated list response.\n\nArgs:\n    page: 1-indexed page number returned.\n    page_size: Number of items requested per page (server-capped at\n        `PAGE_SIZE_MAX`).\n    total_items: Total number of items across all pages.",
+        "description": "Pagination metadata attached to a paginated list response.\n\nArgs:\n    page: 1-indexed page number returned.\n    page_size: Number of items requested per page (server-capped at\n        `PAGE_SIZE_MAX`).\n    total_items: Total number of items across all pages.\n    has_more: Whether a later page holds more items (task 058, round 10):\n        ``page * page_size < total_items``. Derived, never set by a route,\n        so a \"Show more\" control needs no arithmetic of its own.",
         "properties": {
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          },
           "page": {
             "minimum": 1.0,
             "title": "Page",
@@ -5067,7 +5721,7 @@
         "type": "object"
       },
       "PlaceSentenceOut": {
-        "description": "One place of an option's evaluating documents and its sentence (task 046, amendment 4, R80).\n\nArgs:\n    place: The place: a country's short English name, or \"No single place\".\n    sentence: What the evaluations in that place are.\n    generated: The sentence was generated and passed the trace check;\n        ``false`` for the code-built template.\n    where: The place is the plan's Where country.",
+        "description": "One place of an option's evaluating documents and its sentence (task 046, amendment 4, R80).\n\nArgs:\n    place: The place: a country's short English name, or after the\n        countries \"Several countries\", \"Place not stated\" or \"Other\".\n    sentence: What the evaluations in that place are.\n    generated: The sentence was generated and passed the trace check;\n        ``false`` for the code-built template.\n    where: The place is the plan's Where country.",
         "properties": {
           "generated": {
             "title": "Generated",
@@ -5597,7 +6251,7 @@
         "type": "object"
       },
       "PlanStep": {
-        "description": "One user-visible step in the composed chain, for progress display.\n\nArgs:\n    label: Short user-visible step label (presentation; may change).\n    blurb: Longer user-visible step description (presentation; may\n        change).\n    stage: Composed-chain stage name the step corresponds to.",
+        "description": "One user-visible step in the composed chain, for progress display.\n\nArgs:\n    label: Short user-visible step label (presentation; may change).\n    blurb: Longer user-visible step description (presentation; may\n        change).\n    stage: Composed-chain stage name the step corresponds to.\n    row: The card row the step belongs to (task 058, N17). Steps that\n        share a row key render as one row, with the row's label; the\n        client groups by this key and decides nothing about rows.",
         "properties": {
           "blurb": {
             "title": "Blurb",
@@ -5605,6 +6259,10 @@
           },
           "label": {
             "title": "Label",
+            "type": "string"
+          },
+          "row": {
+            "title": "Row",
             "type": "string"
           },
           "stage": {
@@ -5636,7 +6294,8 @@
         "required": [
           "label",
           "blurb",
-          "stage"
+          "stage",
+          "row"
         ],
         "title": "PlanStep",
         "type": "object"
@@ -5770,6 +6429,102 @@
         "title": "ProgressEvent",
         "type": "object"
       },
+      "ProjectArchiveOut": {
+        "description": "A project just archived (task 058, round 14).\n\nArgs:\n    archived_task_count: How many of its tasks this archive archived: the\n        caller's own active tasks that are in no other active project.",
+        "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "archived_task_count": {
+            "default": 0,
+            "title": "Archived Task Count",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "is_owner": {
+            "title": "Is Owner",
+            "type": "boolean"
+          },
+          "last_activity_at": {
+            "format": "date-time",
+            "title": "Last Activity At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner_display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Display"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "solo_task_count": {
+            "default": 0,
+            "title": "Solo Task Count",
+            "type": "integer"
+          },
+          "task_count": {
+            "title": "Task Count",
+            "type": "integer"
+          },
+          "visibility": {
+            "enum": [
+              "org",
+              "private"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "name",
+          "created_at",
+          "task_count",
+          "visibility",
+          "is_owner",
+          "owner_display",
+          "last_activity_at"
+        ],
+        "title": "ProjectArchiveOut",
+        "type": "object"
+      },
       "ProjectCreate": {
         "additionalProperties": false,
         "description": "Inbound body for `POST /api/v1/projects`.\n\nArgs:\n    name: Project display name, 1-200 characters. Outer whitespace is\n        stripped before the length constraint is applied.\n    description: Optional free-text description.\n    from_task_id: Seed the new project from an existing task the\n        caller **owns**: the project inherits that task's\n        `visibility` and organisation and takes it as its first member,\n        in one transaction (contract \u00a7 6, i.1). Omit to create an empty\n        project. This amends ADR 0031 decision 4 (\"assignment is a\n        PATCH, not a field on create\"); ADR 0033 records the amendment.",
@@ -5811,8 +6566,20 @@
         "type": "object"
       },
       "ProjectOut": {
-        "description": "A project resource.\n\nArgs:\n    project_id: The project's identity.\n    name: Current display name.\n    description: Current description, or `None` if not set.\n    created_at: When the project was created.\n    task_count: How many active tasks **the caller may read, in the\n        caller's own organisation** are assigned to this project,\n        derived per request and never cached on the row (contract \u00a7 8).\n        A colleague's private member is not counted, and an\n        administrator's count stays their own organisation's count rather\n        than a cross-organisation sum.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all.",
+        "description": "A project resource.\n\nArgs:\n    project_id: The project's identity.\n    name: Current display name.\n    description: Current description, or `None` if not set.\n    created_at: When the project was created.\n    task_count: How many active tasks **the caller may read, in the\n        caller's own organisation** are assigned to this project,\n        derived per request and never cached on the row (contract \u00a7 8).\n        A colleague's private member is not counted, and an\n        administrator's count stays their own organisation's count rather\n        than a cross-organisation sum.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all.\n    archived_at: When the owner archived the project, or `None` while it\n        is in use (task 058, round 11). Archiving leaves its tasks as\n        they are.\n    solo_task_count: The caller's own active tasks here that are in no\n        other active project: what archiving the project archives with it\n        (task 058, round 14).\n    last_activity_at: The newest of `created_at` and the `updated_at` of\n        the members `task_count` counts (task 058, round 12). `GET\n        /projects` lists newest activity first by it.",
         "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -5832,6 +6599,11 @@
           "is_owner": {
             "title": "Is Owner",
             "type": "boolean"
+          },
+          "last_activity_at": {
+            "format": "date-time",
+            "title": "Last Activity At",
+            "type": "string"
           },
           "name": {
             "title": "Name",
@@ -5853,6 +6625,11 @@
             "title": "Project Id",
             "type": "string"
           },
+          "solo_task_count": {
+            "default": 0,
+            "title": "Solo Task Count",
+            "type": "integer"
+          },
           "task_count": {
             "title": "Task Count",
             "type": "integer"
@@ -5873,7 +6650,8 @@
           "task_count",
           "visibility",
           "is_owner",
-          "owner_display"
+          "owner_display",
+          "last_activity_at"
         ],
         "title": "ProjectOut",
         "type": "object"
@@ -6021,7 +6799,7 @@
         "type": "object"
       },
       "RunOut": {
-        "description": "A capability run resource.\n\nArgs:\n    capability_run_id: The run's identity.\n    task_id: Owning task.\n    plan_id: Identity of the plan the run executes.\n    plan_version: Plan version current at run creation.\n    status: Current run status.\n    started_at: When the run started executing.\n    ended_at: When the run reached a terminal status, or `None` while\n        still running or paused.\n    artefact_id: The artefact this walk wrote, or `None` when it wrote\n        none (it has not reached synthesise, or ended before it). A\n        scoping walk that carries one produced a baseline, whatever its\n        terminal status (task 044 review, C5/C6).\n    parent_capability_run_id: The walk that dispatched this one (a longlist\n        walk's option search), or `None` for a parentless walk (task 045).\n    purpose: The walk's intent-record purpose (`baseline`, `longlist`,\n        `targeted`, ...), or `None` for an Evidence search walk.",
+        "description": "A capability run resource.\n\nArgs:\n    capability_run_id: The run's identity.\n    task_id: Owning task.\n    plan_id: Identity of the plan the run executes.\n    plan_version: Plan version current at run creation.\n    status: Current run status.\n    started_at: When the run started executing.\n    ended_at: When the run reached a terminal status, or `None` while\n        still running or paused.\n    artefact_id: The artefact this walk wrote, or `None` when it wrote\n        none (it has not reached synthesise, or ended before it). A\n        scoping walk that carries one produced a baseline, whatever its\n        terminal status (task 044 review, C5/C6).\n    parent_capability_run_id: The walk that dispatched this one (a longlist\n        walk's option search), or `None` for a parentless walk (task 045).\n    purpose: The walk's intent-record purpose (`baseline`, `longlist`,\n        `targeted`, ...), or `None` for an Evidence search walk.\n    stages: The walk's own steps in the order started (task 058, round\n        11), on the list and the one-run reads; empty elsewhere.",
         "properties": {
           "artefact_id": {
             "anyOf": [
@@ -6084,6 +6862,13 @@
             ],
             "title": "Purpose"
           },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/RunStageOut"
+            },
+            "title": "Stages",
+            "type": "array"
+          },
           "started_at": {
             "format": "date-time",
             "title": "Started At",
@@ -6117,6 +6902,116 @@
           "started_at"
         ],
         "title": "RunOut",
+        "type": "object"
+      },
+      "RunStageOut": {
+        "description": "One step of a walk, as its stage frames told it (task 058, round 11).\n\nThe walk's own steps only: an option search's steps belong to that child\nwalk, not to the longlist walk that dispatched it. The same words the\n`stage.started` and `stage.completed` frames carry, so a walk that has\nended renders its rows as the live one did.\n\nArgs:\n    stage: The public stage key.\n    label: The row's label.\n    status: `started` (no end recorded), `completed`, `failed` or\n        `skipped`.\n    started_at: When the step started, or `None` when only its end is\n        recorded.\n    ended_at: When it ended, or `None` while started.\n    summary: The done row's scalar counts (`stage.completed.summary`),\n        or `{\"reason\": ...}` for a failed or skipped step.\n    counts: The counts the done row shows, each with its noun.\n    seconds: The step's wall time, when recorded.",
+        "properties": {
+          "counts": {
+            "items": {
+              "$ref": "#/components/schemas/StageCount"
+            },
+            "title": "Counts",
+            "type": "array"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seconds"
+          },
+          "stage": {
+            "enum": [
+              "acquire",
+              "screen",
+              "classify",
+              "appraise",
+              "ingest",
+              "characterise",
+              "select",
+              "extract",
+              "group",
+              "synthesise",
+              "inherit",
+              "suggest",
+              "option_searches",
+              "extract_interventions",
+              "longlist",
+              "option_profile",
+              "constrain",
+              "theme",
+              "shortlist"
+            ],
+            "title": "Stage",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "started",
+              "completed",
+              "failed",
+              "skipped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "Summary",
+            "type": "object"
+          }
+        },
+        "required": [
+          "stage",
+          "label",
+          "status"
+        ],
+        "title": "RunStageOut",
         "type": "object"
       },
       "RunStatusFrame": {
@@ -6848,6 +7743,208 @@
         "title": "ScopingSteerPointDefaultOut",
         "type": "object"
       },
+      "SearchQueryFrame": {
+        "description": "Ephemeral: one search query as it goes out, and again when it comes back (round 9).\n\nA query is identified by `(backend, query, kind)`: the frame sent when it\ncomes back (with `results`) replaces the one sent when it went out\n(`results` null). A reconnect gets the run's queries so far, each in its\nlatest state. Display-only: never persisted, no `id:` line, no\n`sequence`; the saved search record lists the queries after the stage.\n\nArgs:\n    backend: The database searched, `openalex` or `overton`.\n    query: The query text for a `topic` or `semantic` query; for a\n        `citations` or `lookup` pass a short description (\"Following\n        citations from 50 sources\"), never the ids.\n    kind: `topic`, `semantic`, `citations` or `lookup`.\n    results: Null while the query is out; the number of records it\n        returned once it is back.",
+        "properties": {
+          "backend": {
+            "title": "Backend",
+            "type": "string"
+          },
+          "ephemeral": {
+            "const": true,
+            "default": true,
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "topic",
+              "semantic",
+              "citations",
+              "lookup"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "results": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Results"
+          },
+          "type": {
+            "const": "search.query",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "backend",
+          "query",
+          "kind",
+          "results",
+          "occurred_at"
+        ],
+        "title": "SearchQueryFrame",
+        "type": "object"
+      },
+      "SectionCitation": {
+        "description": "One checked citation on a completed live section (task 058, round 7).\n\nOne entry per citation row of the section's judged claims, so a claim\nciting two sources gives two entries over the same span.\n\nArgs:\n    start: First code point of the cited claim's text in `prose`.\n    end: One past its last code point.\n    n: The report-wide reference number, numbered as the committed\n        report numbers its references (by source, in order of first\n        citation).\n    source_id: The source's id in this task, or `null` when the cited\n        text is not one of the task's sources.\n    title: The source's title as the committed report's references name it.\n    citation_id: The saved citation's id, the one the committed report's\n        citation carries, so the page can ask for its chunk context while\n        the run is live (round 8); `null` on frames recorded before the\n        field existed.\n    claim_id: The saved claim's id, the one the committed report's claim\n        carries; `null` on older frames.\n    chunk_id: The cited chunk. The citation rows commit with the whole\n        report, so `citation_id` cannot be read until then; the chunks\n        are committed long before, so the page reads the passage by chunk\n        and quote (`GET .../chunks/{chunk_id}/context?quote=`) while the\n        report is still being written (owner, 2026-11-09). `null` on\n        frames recorded before the field existed.\n    quote: The checked quote the citation rests on; empty on older frames.",
+        "properties": {
+          "chunk_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Chunk Id"
+          },
+          "citation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Citation Id"
+          },
+          "claim_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Claim Id"
+          },
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "quote": {
+            "default": "",
+            "title": "Quote",
+            "type": "string"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "n",
+          "source_id",
+          "title"
+        ],
+        "title": "SectionCitation",
+        "type": "object"
+      },
+      "SectionClaim": {
+        "description": "One checked claim on a completed live section (task 058, round 13).\n\nThe checker's verdict belongs to the claim, not to each of its citations.\n\nArgs:\n    claim_id: The saved claim's id, the one the committed report's claim\n        carries; `null` without a saved row to match.\n    start: First code point of the claim's text in `prose`.\n    end: One past its last code point.\n    tier: The checker's verdict (`tier_1` ... `tier_4`,\n        `unsupported_mis_cited`), or `null` when it was not checked.\n    rationale: The checker's reason for the verdict, when recorded.",
+        "properties": {
+          "claim_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Claim Id"
+          },
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Rationale"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tier"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "SectionClaim",
+        "type": "object"
+      },
       "SectionOut": {
         "description": "One artefact section.\n\nArgs:\n    title: Section title.\n    role: Section role (determines page position).\n    nav_label: Short scannable name for the contents list, or `None` for\n        an artefact produced before the label existed. Absence is a normal\n        state: the client falls back to a shortened title.\n    blocks: The section's prose blocks, in order.\n    cards: Case-study cards (populated only for ``case_studies`` sections).\n    summary: Verified summary for a single-block section, if available.\n    summary_status: Summary production state for a single-block section.",
         "properties": {
@@ -6936,8 +8033,46 @@
         "title": "SectionOut",
         "type": "object"
       },
+      "SectionSourceRef": {
+        "description": "One source as the page names it while a section is written.\n\nArgs:\n    source_id: The source's id in this task (display identity only).\n    title: The source's short name: first author or publisher and year\n        when both are known, else its title, else where it came from.",
+        "properties": {
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "title"
+        ],
+        "title": "SectionSourceRef",
+        "type": "object"
+      },
+      "SectionSpan": {
+        "description": "A code-point span `[start, end)` of the section draft.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "SectionSpan",
+        "type": "object"
+      },
       "ShortlistOut": {
-        "description": "The latest shortlist proposal on a longlist (task 055).\n\nArgs:\n    note: The proposal's short \"what this leaves out\" note; `null` before\n        the first proposal.\n    provenance: How the proposal was made (prompt version, model,\n        appetite, plan version, \u2026); empty before the first proposal.\n    places_target: How many places a proposal fills to.\n    stale: The proposal does not match the plan's current risk appetite,\n        or a built longlist has no proposal yet. The view then asks the\n        user to press Suggest more to re-propose.",
+        "description": "The latest shortlist proposal on a longlist (task 055).\n\nArgs:\n    note: The proposal's short \"what this leaves out\" note; `null` before\n        the first proposal.\n    provenance: How the proposal was made (prompt version, model,\n        appetite, plan version, \u2026); empty before the first proposal.\n    places_target: How many places a proposal fills to.\n    stale: The proposal does not match the plan's current risk appetite,\n        or a built longlist has no proposal yet. The view then asks the\n        user to press Suggest more to re-propose.\n    note_stale: The note was written against other places than the\n        shortlist now holds (task 058, round 14): `POST\n        /tasks/{id}/shortlist/note` rewrites it. `false` with no note.",
         "properties": {
           "note": {
             "anyOf": [
@@ -6949,6 +8084,11 @@
               }
             ],
             "title": "Note"
+          },
+          "note_stale": {
+            "default": false,
+            "title": "Note Stale",
+            "type": "boolean"
           },
           "places_target": {
             "default": 5,
@@ -7081,6 +8221,17 @@
             ],
             "title": "Classification Reason"
           },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
           "doi": {
             "anyOf": [
               {
@@ -7102,6 +8253,29 @@
               }
             ],
             "title": "Evidence Type"
+          },
+          "full_text_status": {
+            "default": "not_attempted",
+            "enum": [
+              "not_attempted",
+              "queued",
+              "ingested",
+              "fetch_failed",
+              "parse_failed"
+            ],
+            "title": "Full Text Status",
+            "type": "string"
+          },
+          "full_text_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Text Url"
           },
           "fwci": {
             "anyOf": [
@@ -7356,13 +8530,21 @@
       "SseFrame": {
         "discriminator": {
           "mapping": {
+            "artefact.section_card": "#/components/schemas/ArtefactSectionCardFrame",
+            "artefact.section_claim": "#/components/schemas/ArtefactSectionClaimFrame",
             "artefact.section_completed": "#/components/schemas/ArtefactSectionCompletedFrame",
+            "artefact.section_delta": "#/components/schemas/ArtefactSectionDeltaFrame",
+            "artefact.section_revising": "#/components/schemas/ArtefactSectionRevisingFrame",
+            "artefact.section_sources": "#/components/schemas/ArtefactSectionSourcesFrame",
             "artefact.section_started": "#/components/schemas/ArtefactSectionStartedFrame",
             "artefact.skeleton": "#/components/schemas/ArtefactSkeletonFrame",
+            "artefact.source_note": "#/components/schemas/ArtefactSourceNoteFrame",
+            "characterise.themes": "#/components/schemas/CharacteriseThemesFrame",
             "checkin.pending": "#/components/schemas/CheckinPendingFrame",
             "checkin.resolved": "#/components/schemas/CheckinResolvedFrame",
             "plan.updated": "#/components/schemas/PlanUpdatedFrame",
             "run.status": "#/components/schemas/RunStatusFrame",
+            "search.query": "#/components/schemas/SearchQueryFrame",
             "stage.completed": "#/components/schemas/StageCompletedFrame",
             "stage.failed": "#/components/schemas/StageFailedFrame",
             "stage.started": "#/components/schemas/StageStartedFrame",
@@ -7407,11 +8589,35 @@
           },
           {
             "$ref": "#/components/schemas/TickFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ArtefactSectionDeltaFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ArtefactSectionRevisingFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ArtefactSectionSourcesFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ArtefactSectionClaimFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ArtefactSectionCardFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ArtefactSourceNoteFrame"
+          },
+          {
+            "$ref": "#/components/schemas/SearchQueryFrame"
+          },
+          {
+            "$ref": "#/components/schemas/CharacteriseThemesFrame"
           }
         ]
       },
       "StageCompletedFrame": {
-        "description": "A component reached its terminal (successful) outcome.",
+        "description": "A component reached its terminal (successful) outcome.\n\nArgs:\n    counts: The counts the done row shows, in order, each with the\n        server's noun (task 058, N17: the client keeps no copy of which\n        summary keys a stage shows). Empty when the stage names none.",
         "properties": {
           "capability_run_id": {
             "anyOf": [
@@ -7425,6 +8631,13 @@
             ],
             "default": null,
             "title": "Capability Run Id"
+          },
+          "counts": {
+            "items": {
+              "$ref": "#/components/schemas/StageCount"
+            },
+            "title": "Counts",
+            "type": "array"
           },
           "label": {
             "title": "Label",
@@ -7507,6 +8720,25 @@
           "label"
         ],
         "title": "StageCompletedFrame",
+        "type": "object"
+      },
+      "StageCount": {
+        "description": "One count a done row shows, with its noun: `312 found` (task 058, N17).",
+        "properties": {
+          "noun": {
+            "title": "Noun",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "value",
+          "noun"
+        ],
+        "title": "StageCount",
         "type": "object"
       },
       "StageFailedFrame": {
@@ -7688,8 +8920,110 @@
         "title": "TaggedOut",
         "type": "object"
       },
+      "TaskAgentCompletedEvent": {
+        "description": "The one successful last event: the finished, stored turn.\n\nArgs:\n    turn: The turn exactly as a read of it returns it.",
+        "properties": {
+          "turn": {
+            "$ref": "#/components/schemas/TaskAgentTurnOut"
+          },
+          "type": {
+            "const": "completed",
+            "default": "completed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn"
+        ],
+        "title": "TaskAgentCompletedEvent",
+        "type": "object"
+      },
+      "TaskAgentDeltaEvent": {
+        "description": "One new piece of the planner's reply; the pieces joined are the reply.\n\nArgs:\n    text: The next piece of reply text.",
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "const": "delta",
+            "default": "delta",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "TaskAgentDeltaEvent",
+        "type": "object"
+      },
+      "TaskAgentFailedEvent": {
+        "description": "The one failed last event, sent after the response has started.\n\nArgs:\n    error: What went wrong, in public-safe terms.\n    turn_index: The failed turn's place in the conversation; the stored\n        row is marked failed and may be retried with the same client turn id.",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/TaskAgentFailedEventError"
+          },
+          "turn_index": {
+            "title": "Turn Index",
+            "type": "integer"
+          },
+          "type": {
+            "const": "failed",
+            "default": "failed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "turn_index"
+        ],
+        "title": "TaskAgentFailedEvent",
+        "type": "object"
+      },
+      "TaskAgentFailedEventError": {
+        "description": "Failure details that are safe to show the caller.\n\nArgs:\n    code: A stable error code (``task_agent_turn_failed``, or a conflict\n        or capacity code such as ``run_active``).\n    message: A short plain explanation.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "TaskAgentFailedEventError",
+        "type": "object"
+      },
+      "TaskAgentProgressEvent": {
+        "description": "What the planner is doing now, sent before its reply starts (task 058, N9).\n\nArgs:\n    label: The user-facing activity line, such as \"Drafting the plan\".",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "type": {
+            "const": "progress",
+            "default": "progress",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "title": "TaskAgentProgressEvent",
+        "type": "object"
+      },
       "TaskAgentTranscriptTurnOut": {
-        "description": "One durable task_agent-transcript turn shown in chronological order.\n\nArgs:\n    turn_index: Monotonic per-task conversation coordinate.\n    conversation_id: Owning task_agent conversation, absent only on legacy rows.\n    client_turn_id: The caller's idempotency key for this turn \u2014 returned\n        so a reloaded client can retry its own incomplete latest turn.\n    user_message: Submitted user message.\n    reply: Task Agent reply, absent until a pending turn completes.\n    suggestions: Task Agent quick-reply suggestions, if the turn completed.\n    part: Structured sequential-task_agent proposal, absent for legacy turns.\n    capability: The owning task's capability, absent on legacy turns.\n    status: Durable execution state for this turn.\n    created_at: Receipt timestamp, retained as display metadata.\n    completed_at: Terminal timestamp, absent while still pending.\n    kind: What this turn is. Absent on turns stored before task 044,\n        which are all replies.\n    answer: The cited answer, on an `answer` turn.\n    decision: The recorded gate decision, on a `decision` turn.\n    action: The applied longlist verb, on an `action` turn.\n    sources: The sources the reply's `[n]` markers cite, on a theory-of-change\n        turn whose sense check found evaluations (task 054).",
+        "description": "One durable task_agent-transcript turn shown in chronological order.\n\nArgs:\n    turn_index: Monotonic per-task conversation coordinate.\n    conversation_id: Owning task_agent conversation, absent only on legacy rows.\n    client_turn_id: The caller's idempotency key for this turn \u2014 returned\n        so a reloaded client can retry its own incomplete latest turn.\n    user_message: Submitted user message.\n    reply: Task Agent reply, absent until a pending turn completes.\n    question: The planner's clarifying question, read back off the stored\n        turn (task 058, N10). Null when the turn asked none.\n    suggestions: Task Agent quick-reply suggestions, if the turn completed.\n    part: Structured sequential-task_agent proposal, absent for legacy turns.\n    capability: The owning task's capability, absent on legacy turns.\n    status: Durable execution state for this turn.\n    created_at: Receipt timestamp, retained as display metadata.\n    completed_at: Terminal timestamp, absent while still pending.\n    kind: What this turn is. Absent on turns stored before task 044,\n        which are all replies.\n    answer: The cited answer, on an `answer` turn.\n    decision: The recorded gate decision, on a `decision` turn.\n    action: The applied longlist verb, on an `action` turn.\n    sources: The sources the reply's `[n]` markers cite, on a theory-of-change\n        turn whose sense check found evaluations (task 054).",
         "properties": {
           "action": {
             "anyOf": [
@@ -7793,6 +9127,17 @@
               }
             ]
           },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
           "reply": {
             "anyOf": [
               {
@@ -7872,7 +9217,7 @@
         "type": "object"
       },
       "TaskAgentTurnOut": {
-        "description": "Response body for one task_agent turn.\n\nA turn is one of four things, named by ``kind``: a planning ``reply``, a\ngrounded ``answer`` from the paused walk's evidence (or the longlist's), a\nrecorded ``decision`` at a gate, or an applied longlist ``action`` (task\n045). They are additive optional fields rather than a discriminated union,\nso every existing reader keeps working and a turn stored before task 044\nstays valid with ``kind`` absent.\n\nArgs:\n    reply: The task_agent's conversational reply for this turn.\n    plan: The full current draft plan.\n    suggestions: The task_agent's suggested answers to its clarifying\n        question, rendered as tappable quick replies. Empty when none.\n    part: Structured sequential-task_agent proposal, when this turn carries one.\n    conversation_id: Task Agent conversation that produced this turn.\n    capability: The owning task's capability, when known. Absent on turns\n        stored before task 044.\n    scoping_plan: The full current scoping draft, on an options-scoping\n        turn. `plan` is null for those turns, and this is null for\n        Evidence search turns.\n    toc_plan: The full current theory-of-change draft, on a theory-of-change\n        turn (task 054).\n    kind: What this turn is. Absent on turns stored before task 044,\n        which are all replies.\n    answer: The cited answer, on an `answer` turn.\n    decision: The recorded gate decision, on a `decision` turn.\n    action: The applied longlist verb, on an `action` turn.\n    sources: The sources the reply's `[n]` markers cite, on a theory-of-change\n        turn whose sense check found evaluations (task 054).",
+        "description": "Response body for one task_agent turn.\n\nA turn is one of four things, named by ``kind``: a planning ``reply``, a\ngrounded ``answer`` from the paused walk's evidence (or the longlist's), a\nrecorded ``decision`` at a gate, or an applied longlist ``action`` (task\n045). They are additive optional fields rather than a discriminated union,\nso every existing reader keeps working and a turn stored before task 044\nstays valid with ``kind`` absent.\n\nArgs:\n    reply: The task_agent's conversational reply for this turn.\n    plan: The full current draft plan.\n    question: The planner's clarifying question, when this turn asks one\n        (task 058, N10); the ``suggestions`` answer it. Null otherwise.\n    suggestions: The task_agent's suggested answers to its clarifying\n        question, rendered as tappable quick replies. Empty when none.\n    part: Structured sequential-task_agent proposal, when this turn carries one.\n    conversation_id: Task Agent conversation that produced this turn.\n    capability: The owning task's capability, when known. Absent on turns\n        stored before task 044.\n    scoping_plan: The full current scoping draft, on an options-scoping\n        turn. `plan` is null for those turns, and this is null for\n        Evidence search turns.\n    toc_plan: The full current theory-of-change draft, on a theory-of-change\n        turn (task 054).\n    kind: What this turn is. Absent on turns stored before task 044,\n        which are all replies.\n    answer: The cited answer, on an `answer` turn.\n    decision: The recorded gate decision, on a `decision` turn.\n    action: The applied longlist verb, on an `action` turn.\n    sources: The sources the reply's `[n]` markers cite, on a theory-of-change\n        turn whose sense check found evaluations (task 054).",
         "properties": {
           "action": {
             "anyOf": [
@@ -7963,6 +9308,17 @@
                 "type": "null"
               }
             ]
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
           },
           "reply": {
             "title": "Reply",
@@ -8567,46 +9923,69 @@
         "type": "object"
       },
       "TickFrame": {
-        "description": "Ephemeral heartbeat/progress-note frame.\n\nNever persisted, never state-bearing, carries no `id:` line \u2014 so it has\nno `sequence` field at all (unlike every other frame type).",
+        "description": "Ephemeral activity frame (task 058, D2): what the model is doing now.\n\nNever persisted, never state-bearing, carries no `id:` line \u2014 so it has\nno `sequence` field at all (unlike every other frame type). One set of\nfields for every stage.\n\nArgs:\n    stage: The stage the activity belongs to.\n    activity: The activity line, in the server's plain voice; the client\n        shows it as it is.\n    done: Items finished so far, or null when the stage has no honest\n        count (no total known before its loop started).\n    total: The total known before the loop started, or null.\n    unit: What `done` and `total` count (`documents`, `batches`,\n        `searches`, `sections`), or null with no count.\n    section: The writer's section line (\"Section 3 of 7 \u00b7 Costs\"), or\n        null outside writing.\n    heartbeat: True when the hub repeated the current tick because a\n        model call is still in flight (every 10 s), not because anything\n        changed.\n    dropped: The hub's dropped-tick counter for this task (slow\n        subscriber evictions), for the silent-gap measure (N25).\n    capability_run_id: The walk the line belongs to (round 11): a\n        longlist walk's option searches are walks of their own and run\n        the same stages, so the page keeps the tracked walk's lines only.\n        Null when the server could not tell.",
         "properties": {
+          "activity": {
+            "title": "Activity",
+            "type": "string"
+          },
+          "capability_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Capability Run Id"
+          },
+          "done": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Done"
+          },
+          "dropped": {
+            "default": 0,
+            "title": "Dropped",
+            "type": "integer"
+          },
           "ephemeral": {
             "const": true,
             "default": true,
             "title": "Ephemeral",
             "type": "boolean"
           },
-          "fetched": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Fetched"
-          },
-          "note": {
-            "title": "Note",
-            "type": "string"
+          "heartbeat": {
+            "default": false,
+            "title": "Heartbeat",
+            "type": "boolean"
           },
           "occurred_at": {
             "format": "date-time",
             "title": "Occurred At",
             "type": "string"
           },
-          "parsed": {
+          "section": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ],
             "default": null,
-            "title": "Parsed"
+            "title": "Section"
           },
           "stage": {
             "anyOf": [
@@ -8657,11 +10036,23 @@
             "const": "tick",
             "title": "Type",
             "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Unit"
           }
         },
         "required": [
           "type",
-          "note",
+          "activity",
           "occurred_at"
         ],
         "title": "TickFrame",
@@ -12598,7 +13989,7 @@
     },
     "/api/v1/projects": {
       "get": {
-        "description": "List the projects the caller may see, with a derived task count.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n    scope: `all` (default) \u2014 the caller's own rows plus their\n        organisation's org-visible rows, and for an administrator every\n        row in every organisation \u2014 or `mine` for owner-only.\n    owner_email: Narrow to one owner's rows. **Administrators only**; any\n        other caller gets 422 `validation_error`, as does a value longer\n        than `OWNER_EMAIL_MAX` or one carrying no `@` \u2014 see\n        `tasks.list_tasks`.\n    page: 1-indexed page number.\n    page_size: Rows per page, server-capped.\n\nReturns:\n    One page of projects.\n\nRaises:\n    HTTPException: 422 when a non-administrator passes `owner_email`.",
+        "description": "List the projects the caller may see, with a derived task count.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n    scope: `all` (default) \u2014 the caller's own rows plus their\n        organisation's org-visible rows, and for an administrator every\n        row in every organisation \u2014 or `mine` for owner-only.\n    owner_email: Narrow to one owner's rows. **Administrators only**; any\n        other caller gets 422 `validation_error`, as does a value longer\n        than `OWNER_EMAIL_MAX` or one carrying no `@` \u2014 see\n        `tasks.list_tasks`.\n    page: 1-indexed page number.\n    page_size: Rows per page, server-capped.\n    status_filter: `active` (default: not archived), `archived` or `all`\n        (task 058, round 11), as `GET /tasks` takes it.\n\nReturns:\n    One page of projects.\n\nRaises:\n    HTTPException: 422 when a non-administrator passes `owner_email`.",
         "operationId": "list_projects_api_v1_projects_get",
         "parameters": [
           {
@@ -12648,11 +14039,26 @@
             "name": "page_size",
             "required": false,
             "schema": {
-              "default": 50,
+              "default": 20,
               "maximum": 200,
               "minimum": 1,
               "title": "Page Size",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "active",
+              "enum": [
+                "active",
+                "archived",
+                "all"
+              ],
+              "title": "Status",
+              "type": "string"
             }
           }
         ],
@@ -12840,6 +14246,55 @@
         ]
       }
     },
+    "/api/v1/projects/{project_id}/archive": {
+      "post": {
+        "description": "Archive a project (task 058, round 11), and the tasks only it holds (round 14).\n\nOwner only. The project leaves the default list (`status=active`) and is\nlisted under `status=archived`; it stays readable by id. In the same\ntransaction, each of the caller's own active tasks in this project that\nis in no other active project is archived too (owner, 2026-11-07), each\ntask's History saying so; a task also in another project, or a\ncolleague's, or one whose latest run is still running, paused or about to\nstart, is left as it is. Archiving an archived project changes\nnothing and keeps its first time.\n\nArgs:\n    project_id: The project to archive.\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The project with its `archived_at` and `archived_task_count`.\n\nRaises:\n    HTTPException: 404 when the project is unreadable, 403 when it is\n        readable but not owned.",
+        "operationId": "archive_project_api_v1_projects__project_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectArchiveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Archive Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
     "/api/v1/tasks": {
       "get": {
         "description": "List the tasks the caller may see, with derived latest-run state.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n    status_filter: `active` (default), `archived` or `all`.\n    scope: `all` (default) \u2014 the caller's own rows plus their\n        organisation's org-visible rows, and for an administrator every\n        row in every organisation \u2014 or `mine` for owner-only, the\n        pre-033 behaviour. **The default is `all`**: a `mine` default\n        would hide the whole feature behind a switcher.\n    project_id: Narrow to one project's members. Server-side because\n        `ProjectDetailView` filtered the default 50-row global page\n        client-side and would silently under-report once the visible\n        estate spans an organisation.\n    owner_email: Narrow to one owner's rows. **Administrators only**; any\n        other caller gets 422 `validation_error`, as does a value longer\n        than `OWNER_EMAIL_MAX` or one carrying no `@` \u2014 the value is\n        logged verbatim on the admin trace, so it is bounded and shaped at\n        the boundary rather than in the log.\n    page: 1-indexed page number.\n    page_size: Rows per page, server-capped.\n\nReturns:\n    One page of tasks.\n\nRaises:\n    HTTPException: 422 when a non-administrator passes `owner_email`.",
@@ -12924,7 +14379,7 @@
             "name": "page_size",
             "required": false,
             "schema": {
-              "default": 50,
+              "default": 20,
               "maximum": 200,
               "minimum": 1,
               "title": "Page Size",
@@ -14007,6 +15462,7 @@
             }
           },
           {
+            "description": "A theme's id: a characterisation theme's sources, or on an options-scoping task a longlist theme's, the documents of its options (task 058, round 14).",
             "in": "query",
             "name": "theme",
             "required": false,
@@ -14020,6 +15476,7 @@
                   "type": "null"
                 }
               ],
+              "description": "A theme's id: a characterisation theme's sources, or on an options-scoping task a longlist theme's, the documents of its options (task 058, round 14).",
               "title": "Theme"
             }
           },
@@ -14119,6 +15576,86 @@
                 }
               ],
               "title": "Year To"
+            }
+          },
+          {
+            "description": "A publisher country, by any spelling; `none` for the sources with no country (Landscape's Not reported row; task 058, round 14).",
+            "in": "query",
+            "name": "country",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A publisher country, by any spelling; `none` for the sources with no country (Landscape's Not reported row; task 058, round 14).",
+              "title": "Country"
+            }
+          },
+          {
+            "description": "A coverage row's `query_id`: only the sources that search returned (task 058, round 12). Empty for a search run before the ids were kept.",
+            "in": "query",
+            "name": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A coverage row's `query_id`: only the sources that search returned (task 058, round 12). Empty for a search run before the ids were kept.",
+              "title": "Query"
+            }
+          },
+          {
+            "description": "The read depth the Status column shows: the full text, the abstract only, or the title only (task 058, round 13).",
+            "in": "query",
+            "name": "depth",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "full_text",
+                    "abstract",
+                    "title"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The read depth the Status column shows: the full text, the abstract only, or the title only (task 058, round 13).",
+              "title": "Depth"
+            }
+          },
+          {
+            "description": "`true`: the documents the appraise stage scored, the funnel's quality-checked row; `false`: the rest (task 058, round 13).",
+            "in": "query",
+            "name": "appraised",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`true`: the documents the appraise stage scored, the funnel's quality-checked row; `false`: the rest (task 058, round 13).",
+              "title": "Appraised"
             }
           }
         ],
@@ -14526,6 +16063,53 @@
       }
     },
     "/api/v1/tasks/{task_id}/options": {
+      "get": {
+        "description": "Return the task's option rows with each option's search (task 058, N22).\n\nReadable from the end of the suggest stage, before the longlist exists,\nunder the same graded-or-public check as the longlist read. Empty before\nany option exists; never a 404 for a readable task.",
+        "operationId": "get_options_api_v1_tasks__task_id__options_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptionsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Options",
+        "tags": [
+          "longlist"
+        ]
+      },
       "post": {
         "description": "Add an option by hand: propose its design, mint it, open its option search.\n\nThe design is proposed back from the user's words (``option_design_v1``)\noutside any transaction; the option is minted *added by you* and its\noption search opened as a walk with no parent (:func:`add_option`). The\nfence is read twice: before the model call, so a refused add costs no\ncall, and again under the lock.",
         "operationId": "post_option_api_v1_tasks__task_id__options_post",
@@ -15276,6 +16860,55 @@
         ]
       }
     },
+    "/api/v1/tasks/{task_id}/shortlist/note": {
+      "post": {
+        "description": "Rewrite the shortlist's not-covered note for the places as they stand (round 14).\n\nOwner only. Only when the note is stale (written against other places,\nor missing beside a proposal); otherwise the shortlist comes back as it\nis. The note's one writer (:func:`write_shortlist_note`) runs with no\nchanges: it reads the plan's outcomes, the option list and the places,\nnever a document line. History says \"Policy Atlas updated the shortlist\nnote\".\n\nRaises:\n    HTTPException: 404 with no longlist, 409 while a walk runs, 503 when\n        the call fails (nothing is written).",
+        "operationId": "post_shortlist_note_api_v1_tasks__task_id__shortlist_note_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShortlistOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Post Shortlist Note",
+        "tags": [
+          "longlist"
+        ]
+      }
+    },
     "/api/v1/tasks/{task_id}/shortlist/suggest": {
       "post": {
         "description": "Open a shortlist walk that fills the open places (Suggest more; task 055).\n\nThe access check runs in its own short transaction, then the opener takes\nthe dispatch lock and the task row itself (the order ``create_run``\nuses). Refused with 409 ``run_active``, ``capacity``, ``plan_stale`` or\n``nothing_to_propose``, and 404 when the task has no longlist.",
@@ -15532,7 +17165,7 @@
         ]
       },
       "post": {
-        "description": "Advance one task's durable task_agent conversation once per client turn id.\n\nTwo capabilities share this route, and everything durable about it \u2014 the\nphase-one reservation, the idempotency key, the run fences, the transaction\nthat joins the turn to the plan it approved \u2014 is shared with them. What the\ncapability picks is which Task Agent is called, which plan model validates\nwhat it returns, and which of the two draft projections the turn carries\nback (task 044, C9).\n\nA turn that arrives while an options-scoping walk is paused on its baseline\ngate is admitted, sorted, and dispatched to an answer or a decision before\nany planner call (task 044, S5). One shape crosses back into the ordinary\npath: \"change the plan\" carrying an instruction commits the decision and\nthen continues, on the *same* reserved row, as an ordinary planning turn.",
+        "description": "Advance one task's durable task_agent conversation once per client turn id.\n\nTwo capabilities share this route, and everything durable about it \u2014 the\nphase-one reservation, the idempotency key, the run fences, the transaction\nthat joins the turn to the plan it approved \u2014 is shared with them. What the\ncapability picks is which Task Agent is called, which plan model validates\nwhat it returns, and which of the two draft projections the turn carries\nback (task 044, C9).\n\nA turn that arrives while an options-scoping walk is paused on its baseline\ngate is admitted, sorted, and dispatched to an answer or a decision before\nany planner call (task 044, S5). One shape crosses back into the ordinary\npath: \"change the plan\" carrying an instruction commits the decision and\nthen continues, on the *same* reserved row, as an ordinary planning turn.\n\nThe response is a stream of NDJSON lines with the chat route's rules\n(task 058, N9). Everything up to the planner call happens before the\nresponse headers are sent, so a refusal (an unknown task, a turn already\nrunning, a run in progress) is the usual JSON error. A turn settled there\n(a replay, a gate answer or decision, a longlist action) is one\n``completed`` line. A planner turn runs in its own thread: one\n``progress`` line, the reply as ``delta`` lines while it is written, then\nexactly one ``completed`` or ``failed`` line. The thread finishes and\nstores the turn even if the caller stops reading, and it holds the task's\nturn lock until it ends.",
         "operationId": "create_task_agent_turn_api_v1_tasks__task_id__task_agent_turns_post",
         "parameters": [
           {
@@ -15559,13 +17192,13 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
+              "application/x-ndjson": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskAgentTurnOut"
+                  "type": "string"
                 }
               }
             },
-            "description": "Successful Response"
+            "description": "`application/x-ndjson`: progress/delta events followed by exactly one completed or failed terminal event."
           },
           "422": {
             "content": {

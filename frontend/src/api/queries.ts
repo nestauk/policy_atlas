@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "../auth";
 import { createAuthedApiClient } from "./client";
@@ -20,6 +20,8 @@ export const queryKeys = {
   // gets its own cache entry rather than silently serving another scope's
   // rows.
   tasks: (query?: TasksQuery) => ["tasks", "list", query] as const,
+  tasksPaged: (query?: Omit<TasksQuery, "page">) => ["tasks", "list", "paged", query] as const,
+  projectsPaged: (query?: Omit<ProjectsQuery, "page">) => ["projects", "list", "paged", query] as const,
   task: (taskId: string) => ["tasks", taskId, "detail"] as const,
   checkIns: (taskId: string, status?: "pending" | "all") =>
     ["tasks", taskId, "check-ins", status] as const,
@@ -27,7 +29,7 @@ export const queryKeys = {
   landscape: (taskId: string, scope?: "cited") =>
     ["tasks", taskId, "landscape", scope] as const,
   evidence: (taskId: string, query?: EvidenceQuery) =>
-    ["tasks", taskId, "evidence", query?.page, query?.page_size, query?.status, query?.cited, query?.sort, query?.order, query?.theme, query?.origin, query?.evidence_type, query?.strength, query?.year_from, query?.year_to] as const,
+    ["tasks", taskId, "evidence", query?.page, query?.page_size, query?.status, query?.cited, query?.sort, query?.order, query?.theme, query?.origin, query?.evidence_type, query?.strength, query?.year_from, query?.year_to, query?.country, query?.query, query?.depth, query?.appraised] as const,
   findings: (taskId: string, query?: FindingsQuery) =>
     ["tasks", taskId, "findings", query?.page, query?.page_size, query?.profile, query?.facet, query?.group, query?.group_id, query?.source_id] as const,
   decisions: (taskId: string, page?: number, pageSize?: number) =>
@@ -73,9 +75,12 @@ interface TasksQuery {
   page_size?: number;
 }
 
-/** `GET /api/v1/projects` filters (task 033 phase 10a adds `scope`). */
+/** `GET /api/v1/projects` filters (task 033 phase 10a adds `scope`; task
+ *  058 round 11 adds `status`: `active`, the server's default, hides archived
+ *  projects; `archived` lists only those; `all` both). */
 interface ProjectsQuery {
   scope?: "all" | "mine";
+  status?: "active" | "archived" | "all";
   page?: number;
   page_size?: number;
 }
@@ -113,6 +118,19 @@ export interface EvidenceQuery extends PageQuery {
   strength?: "Very strong" | "Strong" | "Moderate" | "Limited" | "Weak" | "Unrated";
   year_from?: number;
   year_to?: number;
+  /** Publisher country as the Landscape chart's row shows it (any spelling:
+   *  "United Kingdom", "GB" and "UK" name the same sources); "Not reported"
+   *  keeps the sources with none (task 058, round 10). */
+  country?: string;
+  /** A coverage row's `query_id` (`CoverageQueryOut` / `CoveragePassOut`):
+   *  only the sources that search or pass returned; an empty page for a
+   *  search from before the ids were kept (task 058, round 12). */
+  query?: number;
+  /** The read depth the Status column shows (task 058, round 13). */
+  depth?: "full_text" | "abstract" | "title";
+  /** `true`: the documents the appraise stage scored, the funnel's
+   *  quality-checked row (task 058, round 13). */
+  appraised?: boolean;
 }
 
 interface FindingsQuery extends PageQuery {
@@ -166,13 +184,23 @@ export function useMe() {
  *  keeps showing "Analysing"/"Paused" after the run has actually moved on.
  *  `refetchIntervalInBackground` defaults to `false`, so this only polls
  *  while the tab is visible. */
+/**
+ * The page size a one-page list read asks for when its caller names none: the
+ * server's cap. The Tasks and Projects lists page at 20 by default (task 058,
+ * round 12), so a picker or a name lookup that reads one page would otherwise
+ * stop at the first 20 rows without saying so.
+ */
+export const WHOLE_LIST_PAGE_SIZE = 200;
+
 export function useTasks(query?: TasksQuery, options?: { enabled?: boolean; background?: boolean }) {
   const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.tasks(query),
     enabled: options?.enabled,
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/tasks", { params: { query } });
+      const { data, error } = await client.GET("/api/v1/tasks", {
+        params: { query: { page_size: WHOLE_LIST_PAGE_SIZE, ...query } },
+      });
       if (error) throw error;
       return data;
     },
@@ -187,16 +215,74 @@ export function useTasks(query?: TasksQuery, options?: { enabled?: boolean; back
   });
 }
 
-/** `GET /api/v1/projects` — the screen's Projects, with a derived task count. */
+/**
+ * `GET /api/v1/tasks`, a page at a time, for a list with "Show more" (task
+ * 058, round 10). The server keeps 20 a page (round 12) and says `has_more`;
+ * the next page is asked for only when it does. `data.pages` holds the pages
+ * in order.
+ */
+export function useTasksPaged(
+  query?: Omit<TasksQuery, "page">,
+  options?: { enabled?: boolean },
+) {
+  const client = useApiClient();
+  return useInfiniteQuery({
+    queryKey: queryKeys.tasksPaged(query),
+    enabled: options?.enabled,
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) => {
+      const { data, error } = await client.GET("/api/v1/tasks", {
+        params: { query: { ...query, page: pageParam } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    getNextPageParam: (last) =>
+      last.pagination.has_more === true ? last.pagination.page + 1 : undefined,
+    refetchInterval: (activeQuery) => {
+      const hasActiveRun = activeQuery.state.data?.pages.some((page) => page.data.some(isRunActive));
+      return hasActiveRun ? 15_000 : false;
+    },
+  });
+}
+
+/** `GET /api/v1/projects` — the screen's Projects, with a derived task count.
+ *  One page of up to {@link WHOLE_LIST_PAGE_SIZE} unless the caller names a
+ *  size: pickers and name lookups read every project. */
 export function useProjects(query?: ProjectsQuery) {
   const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.projects(query),
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/projects", { params: { query } });
+      const { data, error } = await client.GET("/api/v1/projects", {
+        params: { query: { page_size: WHOLE_LIST_PAGE_SIZE, ...query } },
+      });
       if (error) throw error;
       return data;
     },
+  });
+}
+
+/**
+ * `GET /api/v1/projects`, a page at a time, for the Projects list with "Show
+ * more" (task 058, round 12): 20 a page by default, the next page asked for
+ * only while `has_more`. `data.pages` holds the pages in order, as
+ * {@link useTasksPaged}.
+ */
+export function useProjectsPaged(query?: Omit<ProjectsQuery, "page">) {
+  const client = useApiClient();
+  return useInfiniteQuery({
+    queryKey: queryKeys.projectsPaged(query),
+    initialPageParam: 1,
+    queryFn: async ({ pageParam }) => {
+      const { data, error } = await client.GET("/api/v1/projects", {
+        params: { query: { ...query, page: pageParam } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    getNextPageParam: (last) =>
+      last.pagination.has_more === true ? last.pagination.page + 1 : undefined,
   });
 }
 
@@ -639,6 +725,28 @@ export function useOption(taskId: string, optionId: string) {
       return data ?? null;
     },
     enabled: Boolean(taskId) && Boolean(optionId),
+  });
+}
+
+/** `GET /api/v1/tasks/{task_id}/options` — every option row of a scoping
+ *  task with its own search's status, served from the end of the suggest
+ *  stage while the longlist is still being built (task 058, N22). An empty
+ *  list before suggest; a 404 is treated as absence. Keyed
+ *  `["tasks", id, "options"]`: the run stream refreshes that prefix on a
+ *  child walk's frames (N23), and the whole task on the walk's own. */
+export function useOptions(taskId: string, options?: { enabled?: boolean }) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: [...queryKeys.taskRoot(taskId), "options"] as const,
+    queryFn: async () => {
+      const { data, error, response } = await client.GET("/api/v1/tasks/{task_id}/options", {
+        params: { path: { task_id: taskId } },
+      });
+      if (response.status === 404) return null;
+      if (error) throw error;
+      return data ?? null;
+    },
+    enabled: Boolean(taskId) && (options?.enabled ?? true),
   });
 }
 

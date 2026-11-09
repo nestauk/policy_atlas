@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .chat import AnswerPayloadOut
 from .tasks import LatestRun
@@ -145,11 +145,15 @@ class PlanStep(BaseModel):
         blurb: Longer user-visible step description (presentation; may
             change).
         stage: Composed-chain stage name the step corresponds to.
+        row: The card row the step belongs to (task 058, N17). Steps that
+            share a row key render as one row, with the row's label; the
+            client groups by this key and decides nothing about rows.
     """
 
     label: str
     blurb: str
     stage: PlanStageKey
+    row: str
 
 
 class PlanDraft(BaseModel):
@@ -487,6 +491,19 @@ class ScopingPlanDraft(BaseModel):
     risk_appetite: ScopingRiskAppetite | None = None
     ready: bool = False
 
+    @model_validator(mode="before")
+    @classmethod
+    def steps_are_the_codes(cls, data: Any) -> Any:
+        """Replace stored steps with today's copy, as ``ScopingPlan`` does.
+
+        2026-11-09: a chat turn stored before task 058 carried a draft whose
+        steps had no ``row``, and loading the Agent tab's history failed (500).
+        """
+        # ponytail: lazy import, the runtime module imports this one.
+        from policy_atlas.runtime.scoping_plan import with_current_steps
+
+        return with_current_steps(data)
+
 
 class TocPlanPatch(BaseModel):
     """Typed replace-field edits for a theory-of-change plan (task 054).
@@ -704,6 +721,8 @@ class TaskAgentTurnOut(BaseModel):
     Args:
         reply: The task_agent's conversational reply for this turn.
         plan: The full current draft plan.
+        question: The planner's clarifying question, when this turn asks one
+            (task 058, N10); the ``suggestions`` answer it. Null otherwise.
         suggestions: The task_agent's suggested answers to its clarifying
             question, rendered as tappable quick replies. Empty when none.
         part: Structured sequential-task_agent proposal, when this turn carries one.
@@ -726,6 +745,7 @@ class TaskAgentTurnOut(BaseModel):
 
     reply: str
     plan: PlanDraft | None = None
+    question: str | None = None
     suggestions: list[str] = Field(default_factory=list)
     part: PartProposalOut | None = None
     conversation_id: uuid.UUID | None = None
@@ -739,6 +759,74 @@ class TaskAgentTurnOut(BaseModel):
     sources: list[CitedSourceOut] = Field(default_factory=list)
 
 
+class TaskAgentProgressEvent(BaseModel):
+    """What the planner is doing now, sent before its reply starts (task 058, N9).
+
+    Args:
+        label: The user-facing activity line, such as "Drafting the plan".
+    """
+
+    type: Literal["progress"] = "progress"
+    label: str
+
+
+class TaskAgentDeltaEvent(BaseModel):
+    """One new piece of the planner's reply; the pieces joined are the reply.
+
+    Args:
+        text: The next piece of reply text.
+    """
+
+    type: Literal["delta"] = "delta"
+    text: str
+
+
+class TaskAgentCompletedEvent(BaseModel):
+    """The one successful last event: the finished, stored turn.
+
+    Args:
+        turn: The turn exactly as a read of it returns it.
+    """
+
+    type: Literal["completed"] = "completed"
+    turn: TaskAgentTurnOut
+
+
+class TaskAgentFailedEventError(BaseModel):
+    """Failure details that are safe to show the caller.
+
+    Args:
+        code: A stable error code (``task_agent_turn_failed``, or a conflict
+            or capacity code such as ``run_active``).
+        message: A short plain explanation.
+    """
+
+    code: str
+    message: str
+
+
+class TaskAgentFailedEvent(BaseModel):
+    """The one failed last event, sent after the response has started.
+
+    Args:
+        error: What went wrong, in public-safe terms.
+        turn_index: The failed turn's place in the conversation; the stored
+            row is marked failed and may be retried with the same client turn id.
+    """
+
+    type: Literal["failed"] = "failed"
+    error: TaskAgentFailedEventError
+    turn_index: int
+
+
+#: One NDJSON line of ``POST /tasks/{id}/task-agent-turns`` (task 058, N9):
+#: progress and delta lines, then exactly one completed or failed line.
+TaskAgentStreamEvent = Annotated[
+    TaskAgentProgressEvent | TaskAgentDeltaEvent | TaskAgentCompletedEvent | TaskAgentFailedEvent,
+    Field(discriminator="type"),
+]
+
+
 class TaskAgentTranscriptTurnOut(BaseModel):
     """One durable task_agent-transcript turn shown in chronological order.
 
@@ -749,6 +837,8 @@ class TaskAgentTranscriptTurnOut(BaseModel):
             so a reloaded client can retry its own incomplete latest turn.
         user_message: Submitted user message.
         reply: Task Agent reply, absent until a pending turn completes.
+        question: The planner's clarifying question, read back off the stored
+            turn (task 058, N10). Null when the turn asked none.
         suggestions: Task Agent quick-reply suggestions, if the turn completed.
         part: Structured sequential-task_agent proposal, absent for legacy turns.
         capability: The owning task's capability, absent on legacy turns.
@@ -769,6 +859,7 @@ class TaskAgentTranscriptTurnOut(BaseModel):
     client_turn_id: uuid.UUID
     user_message: str
     reply: str | None
+    question: str | None = None
     suggestions: list[str] = Field(default_factory=list)
     part: PartProposalOut | None = None
     capability: str | None = None

@@ -5,7 +5,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthContext } from "../auth/AuthContext";
 import type { AuthApi } from "../auth/types";
-import { taskNameFromQuestion, useCreateTask, useUpdateProject, useUpdateTask } from "./mutations";
+import {
+  TaskAgentStreamInterruptedError,
+  consumeTaskAgentStream,
+  taskNameFromQuestion,
+  useArchiveProject,
+  useCreateTask,
+  useUpdateProject,
+  useUpdateTask,
+} from "./mutations";
 
 describe("taskNameFromQuestion", () => {
   it("drops a trailing question mark", () => {
@@ -96,6 +104,44 @@ describe("cross-family cache invalidation (task 033 phase 10a)", () => {
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
     expect(invalidatedKeys).toContainEqual(["projects"]);
     expect(invalidatedKeys).toContainEqual(["tasks"]);
+  });
+
+  it("useArchiveProject posts the archive route and refreshes the projects (round 11)", async () => {
+    const fetchMock = vi.fn(async (input: Request | string | URL) => {
+      // The request is read back from the mock's calls below.
+      void input;
+      return new Response(
+        JSON.stringify({
+          project_id: "p1",
+          name: "Housing",
+          description: null,
+          created_at: "2026-01-01T00:00:00Z",
+          task_count: 2,
+          visibility: "private",
+          is_owner: true,
+          owner_display: "Ada Lovelace",
+          archived_at: "2026-11-06T10:00:00Z",
+          archived_task_count: 1,
+        }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => useArchiveProject("p1"), { wrapper: wrapper(queryClient) });
+    result.current.mutate();
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const request = fetchMock.mock.calls[0]![0] as Request;
+    expect(request.method).toBe("POST");
+    expect(new URL(request.url).pathname).toBe("/api/v1/projects/p1/archive");
+    expect(result.current.data?.archived_at).toBe("2026-11-06T10:00:00Z");
+    expect(invalidateSpy.mock.calls.map((call) => call[0]?.queryKey)).toContainEqual(["projects"]);
+    // Round 14: its solo tasks were archived with it.
+    expect(invalidateSpy.mock.calls.map((call) => call[0]?.queryKey)).toContainEqual(["tasks"]);
+    expect(result.current.data?.archived_task_count).toBe(1);
   });
 
   it("useUpdateTask invalidates both the task and project families", async () => {
@@ -294,5 +340,47 @@ describe("useCreateTask — one create request carrying projects and links", () 
     result.current.mutate({ question: "A question", projectId: "project-1" });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    // Task 058 (N9): the Agent tab streams the opening turn; create never posts it.
+    const calledUrls = fetchMock.mock.calls.map(([req]) => (req as Request).url);
+    expect(calledUrls.some((url) => url.includes("/task-agent-turns"))).toBe(false);
+  });
+});
+
+describe("consumeTaskAgentStream (task 058, N9)", () => {
+  function body(lines: string[], splitAt?: number): ReadableStream<Uint8Array> {
+    const text = lines.map((line) => `${line}\n`).join("");
+    const encoder = new TextEncoder();
+    const pieces = splitAt === undefined ? [text] : [text.slice(0, splitAt), text.slice(splitAt)];
+    return new ReadableStream({
+      start(controller) {
+        for (const piece of pieces) controller.enqueue(encoder.encode(piece));
+        controller.close();
+      },
+    });
+  }
+
+  it("hands over progress and deltas in order, then returns the one terminal event", async () => {
+    const events: string[] = [];
+    const terminal = await consumeTaskAgentStream(
+      body(
+        [
+          JSON.stringify({ type: "progress", label: "Drafting the plan" }),
+          JSON.stringify({ type: "delta", text: "I can " }),
+          JSON.stringify({ type: "delta", text: "search for this." }),
+          JSON.stringify({ type: "completed", turn: { reply: "I can search for this." } }),
+          JSON.stringify({ type: "delta", text: "ignored after the terminal event" }),
+        ],
+        23,
+      ),
+      (event) => events.push(event.type === "delta" ? event.text : event.type),
+    );
+    expect(events).toEqual(["progress", "I can ", "search for this.", "completed"]);
+    expect(terminal).toMatchObject({ type: "completed", turn: { reply: "I can search for this." } });
+  });
+
+  it("says the connection dropped when the body ends before a terminal event", async () => {
+    await expect(
+      consumeTaskAgentStream(body([JSON.stringify({ type: "delta", text: "half" })]), () => undefined),
+    ).rejects.toBeInstanceOf(TaskAgentStreamInterruptedError);
   });
 });

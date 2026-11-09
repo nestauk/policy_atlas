@@ -166,6 +166,8 @@ SITES: tuple[Site, ...] = (
     Site("synthesise:section_turn", "synthesise_section_turn", 120, SYNTH),
     # the claim repair shares the section-turn step (route file comment, D10)
     Site("synthesise:repair_claims", "synthesise_section_turn", 120, SYNTH),
+    # the streamed final turn (task 058, D1): one generation, no retry loop
+    Site("synthesise:section_emit", "synthesise_section_emit", 120, SYNTH),
     Site("synthesise:write_key_findings", "synthesise_write_key_findings", 120, SYNTH),
     Site("synthesise:write_case_studies", "synthesise_write_case_studies", 120, SYNTH),
     # source note and intro build their own 30 s client (max_retries=1)
@@ -183,6 +185,9 @@ SITES: tuple[Site, ...] = (
     Site("agent:longlist_sort", "agent_longlist_sort", 60, AGENT),
     Site("agent:option_design", "agent_option_design", 60, AGENT),
     Site("agent:suggest", "agent_suggest", 60, AGENT),
+    # round 14: the two title calls (runtime/agent_backend.py write_title)
+    Site("task_agent:title", "task_title", 20, AGENT),
+    Site("chat:title", "chat_title", 20, AGENT),
     Site("task_agent:turn", "task_agent_turn", 60, TASK_AGENT),
     # the scoping profile runs on the same OpenAITaskAgentBackend client (runtime/task_agent.py)
     Site("task_agent_scoping:turn", "task_agent_scoping_turn", 60, TASK_AGENT_SCOPING),
@@ -196,6 +201,8 @@ SITES: tuple[Site, ...] = (
     Site("longlist:distinct", "longlist_distinct", 60, SCOPING),
     Site("longlist:authority", "longlist_authority", 60, SCOPING),
     Site("longlist:shortlist", "longlist_shortlist", 60, SCOPING),
+    # round 14: the shortlist note's one writer (scoping_backend.py shortlist_note)
+    Site("shortlist:note", "shortlist_note", 30, SCOPING),
     Site("option_profile:line", "option_profile_line", 60, SCOPING),
     Site("option_profile:potential_impact", "option_profile_potential_impact", 60, SCOPING),
     Site("option_profile:ambition", "option_profile_ambition", 60, SCOPING),

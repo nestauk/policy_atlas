@@ -52,7 +52,7 @@ export function DevTokenLoginPanel({
         spellCheck={false}
         autoComplete="off"
         placeholder="eyJhbGciOi..."
-        className="mb-4 w-full resize-none border border-line-2 bg-paper-2 p-2.5 font-mono text-caption text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue"
+        className="mb-4 w-full resize-none border border-line-2 bg-paper-2 p-2.5 font-mono text-caption text-ink"
       />
       <Button type="submit" disabled={draft.trim().length === 0}>
         Sign in

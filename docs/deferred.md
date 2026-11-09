@@ -1990,15 +1990,21 @@ first-class vocabulary. What follows is what it deliberately left out.
 - **Cross-instance steering & live tail** (025 contract, digest §1.3) — the deployment
   posture is one API instance / one worker process: pause-unblocking, the live SSE tail
   and the ephemeral tick channel are process-local; durable replay covers reconstruction,
-  not cross-instance live delivery. Scale-out needs Postgres LISTEN/NOTIFY (or pub-sub)
+  not cross-instance live delivery. Task 058 widened the process-local part: the liveness
+  hub keeps each task's last ticks, section draft, queries, themes and notes in one
+  process's memory and the SSE route reads them from there, so a second API replica turns
+  the live line off for every client it serves, with nothing failing a test (058 review,
+  adversarial lane). Scale-out needs Postgres LISTEN/NOTIFY (or pub-sub)
   for tail fan-out and answer delivery — the infra/CDK slice's seam. The continuation
   dispatch path is deliberately queue-shaped so broker-backed workers (Celery/RQ) slot in
   behind it later without a reshape.
 - **Designed component-progress protocol** (RETRO §4.10, 025 contract 🟡) — 025 ships
   stage-grain durable events plus a minimal ephemeral tick channel
   (`policy_atlas.core.liveness`, best-effort publish points in the search/fetch
-  transports). A *designed* per-component progress protocol (typed progress shapes,
-  coverage of every component, durable where warranted) is still open.
+  transports). **Largely met by task 058:** every stage publishes a plain activity line,
+  each loop that knows its total publishes its own count with a unit, `stage.completed`
+  carries the done row's counts, and one server table holds the copy. Still open: durable
+  per-component progress shapes (ticks stay ephemeral by design).
 - **Cursor pagination migration path** (025 API pins) — offset + `total_items` is the
   deliberate v1 shape at per-task scale; if cross-task or unbounded-growth listings
   appear, add an opaque `cursor` param alongside (additive, never a breaking reshape).
@@ -2046,7 +2052,8 @@ first-class vocabulary. What follows is what it deliberately left out.
   task settings menu has exposed rename and archive since task 032; the entry was stale.
   The PATCH/archive mutations exist, are authz-tested and envelope-conformant. Ingest also
   presents under the acquire stage label ("Searching sources" while reading documents) —
-  both are workspace-surface polish for the next frontend-touching slice.
+  **CORRECTED (task 058):** ingest is its own row, "Collecting the full texts", with a
+  collected count; rename and archive sit in the name menu for tasks and projects.
 
 ## Infra deployment (task 026 seams)
 
@@ -2088,8 +2095,10 @@ first-class vocabulary. What follows is what it deliberately left out.
   registry by design (one-instance posture); LISTEN/NOTIFY stays the 025 scale-out seam.
 - **Live per-backend search counts** (D‑1 rev 2) — `search.executed` events commit with
   the acquire component, so mid-stage per-backend counts genuinely cannot stream yet;
-  the journey shows tick-based activity until stage completion. Revisit if tick payloads
-  ever widen (behaviour change, own gate).
+  the journey shows tick-based activity until stage completion. **DISCHARGED (task 058):**
+  the ephemeral `search.query` frame shows each query out and back with its count, and the
+  acquire ticks carry the running total; the durable `search.executed` still commits with
+  the stage.
 - **Print/share/export CTA** — the report print stylesheet ships; the share/export
   product seam stays deferred and undischarged.
 - **Task-wide decision-log scoping** (read-model-additions.md rev 2 [D-2], recorded
@@ -2119,9 +2128,9 @@ first-class vocabulary. What follows is what it deliberately left out.
   `connectionStatus` still "connected" — the server-side close is visible only as the
   backend's `api.sse_closed` log. The server heartbeats every 15s (`: keep-alive`), so
   the fix shape is bounded: abort the attempt after ~45s (3× heartbeat) without bytes
-  and fall into the existing backoff/reconnect at the cursor. Deferred because sse.ts's
-  byte-identical state was this slice's rubric-14 evidence and the CloudFront behaviour
-  deserves its own live verification; own small slice.
+  and fall into the existing backoff/reconnect at the cursor. **DISCHARGED (task 058, N15):**
+  `READ_INACTIVITY_MS` in `sse.ts` aborts a silent attempt and reconnects at the cursor;
+  the reconnecting line sits in the run status bar.
 - **`summary_status="pending"` is dead vocabulary** (028 review m3): migration CHECK and
   contract admit it, nothing writes it; the FE keys strictly on `"verified"` so nothing
   mislabels, but in-flight and never-summarised are indistinguishable to readers. Write
@@ -2157,7 +2166,8 @@ first-class vocabulary. What follows is what it deliberately left out.
   completed turns only, so Start can dispatch against the older approved plan while a
   newer turn is still pending (safe — the pending turn then fails `run_active`, but
   "start silently wins over a message already sent" is untested UX). Add the race test
-  if the planning surface ever softens the 409 posture.
+  if the planning surface ever softens the 409 posture. (Task 058 disables Start while a
+  turn streams; the race test is still open.)
 - **Summary-runtime niceties** (028 review INFOs): `writer_calls` misses the attempt
   that raised; regenerate resends an identical seed (no judge-feedback rider — a
   deterministic/low-temperature writer retries byte-identically); the artefact-summary
@@ -2173,9 +2183,10 @@ citation floors, and async grounding-judge enrichment (contract
 `docs/tasks/029-copilot-chat/contract.md`). What follows is what it deliberately left
 out (Out-of-scope list plus seams named in the strands).
 
-- **Planning-turn streaming** — chat streams prose deltas; planning turns stay
-  blocking (`POST /planning-turns` returns whole). Its own later uplift once the
-  planner's own moment wants it; the NDJSON wire this slice built is reusable.
+- **Planning-turn streaming** — **DISCHARGED (task 058, N9):** the planner's reply streams
+  on the chat route's event shape (`POST /tasks/{id}/task-agent-turns` answers with the
+  stream; one terminal event; the turn completes if the client disconnects). The original
+  entry: planning turns stayed blocking and returned whole.
 - **Recall beyond the window, incl. cross-planning-conversation rationale carry** —
   chat context is the conversation's own turns under a ceiling-only window (no
   summarization/recall layer yet — window-first, honestly); a re-plan's rationale
@@ -2223,7 +2234,8 @@ out (Out-of-scope list plus seams named in the strands).
 - **Resumable mid-stream recovery** — a client that reconnects mid-stream re-reads
   the turn once it lands, never resumes the byte stream itself (a Redis-style delta
   buffer is additive later, precisely because the DB only ever commits terminal
-  rows).
+  rows). Task 058's section stream does resume: the hub replays the draft so far as one
+  `replace` delta on connect; the chat and planner turns still re-read.
 - **Thumbs-feedback → Langfuse scores** — named as the eval slice's gold-set seam;
   that slice decides the surface and scoring mechanics.
 - **LLM auto-titling** — v1 titles a chat from its first question by truncation;
@@ -2264,16 +2276,20 @@ omissions.
   `plan.title`. So a task keeps its derived name until renamed by hand, even after
   planning settles on a better one. Writing it back is new behaviour (which write
   wins, and when) rather than a display fix.
-- **Project soft-delete** — the `project` row has no `archived_at` and there is
-  no archive route (ADR 0031 decision 3). Both land together when archiving a project
-  is actually wanted.
+- **Project soft-delete** — **DISCHARGED (task 058, round 11; migration `c4e8a2f6d1b3`):**
+  `project.archived_at` and `POST /projects/{id}/archive`, owner only and idempotent;
+  archiving a project archives the caller's solo tasks that sit in no other active project
+  (round 14) and skips a task whose walk is running or paused (058 review). The original
+  entry: no `archived_at`, no archive route (ADR 0031 decision 3).
 - **Project membership beyond one** — **discharged in 033** (ADR 0032):
   `project_membership` is many-to-many; a task in two projects counts in
   both `task_count`s; `source_count` stays on the task.
 - **The code-word/screen-word split** (ADR 0031) — **DISCHARGED (task 038, ADR 0036):**
   the rows are `task` and `project`, the API is `/api/v1/tasks/**` and `/api/v1/projects/**`,
   the screen word and the code word are the same word; `frontend/src/lib/vocabulary.ts`
-  stays the one place screen copy is maintained. The original entry: screen **Task** =
+  stays the one place screen copy is maintained (task 058 deleted the client's stage
+  vocabulary: stage labels, blurbs and verbs now come from the server's
+  `api/stage_vocabulary.py`; `vocabulary.ts` keeps the screen words only). The original entry: screen **Task** =
   code `project`, screen **Project** = code `portfolio`. **Owner ruling 2026-08-24: this
   gets its own rename slice, scheduled after 033-organisations** — `project` → `task`,
   `portfolio` → `project`, mechanical, no behaviour change. It was not folded into 033
@@ -2625,11 +2641,11 @@ deferred here — the owner ruled the font is fine for now.
   token (`tracking-label`) exists for it. Seam: one Label component or class.
 - **The report sheet carries the only neutral shadow.** `ArtefactView` uses Tailwind
   `shadow-sm` (grey) plus `ring-1 ring-line`; every other surface uses the navy-tinted
-  card shadow. Swap to the Card shadow or drop the shadow and keep the ring.
+  card shadow. **DISCHARGED (task 058 consistency pass):** grey shadows 4 → 0.
 - **Check-in cards use two colours for one state.** `CheckInCard` has a 2px Orange left
   rule, a Yellow "Waiting on your input" chip and the Yellow glow; Orange means *paused*
-  on `StatusDot`. If "waiting on you" is one state it should be one colour — owner call
-  on which.
+  on `StatusDot`. **DISCHARGED (task 058, D15):** one Orange for "waiting on you"; the
+  chip and the glow are gone.
 
 ## Options scoping shell and baseline (task 044 seams)
 
@@ -2834,7 +2850,8 @@ Recorded by the task 046 contract, plan and build (`docs/tasks/046-longlist-refi
   from the end of `longlist` to the end of `theme` (20 to 45 s in the replays). Holding the
   Result on the baseline until `theme` ends changes the rule for "a longlist exists"; for task 3.
   Themes also go out of date after a user's own exclusion; `theme` can run alone, so task 3's
-  update in place can run it again.
+  update in place can run it again. (Task 058 shows the names as clustering finds them,
+  `characterise.themes` with its stage, so the gap is now a list without groups, not a blank.)
 - **User-visible loop budgets (R11).** The target size, the ceiling, the residual pass count and
   the records-per-document cap are constants; the user does not see or set them.
 - **The not-stated flag at reader grain (R23).** The flag is on 76 to 96 percent of memberships
@@ -2877,7 +2894,8 @@ Recorded by the task 046 amendment 2 build (`amendment-2-final.md` § 4 and § 2
   read-model field and no place on the screen (B4).
 - **The list shows no lever type, no ambition and no lines from the end of `longlist` to the
   end of `option_profile`** (44 to 77 s in the replays), as it shows no themes until `theme`
-  ends.
+  ends. (Task 058: each row shows its search status and the stage line meanwhile; the
+  profile lines still arrive together when `option_profile` commits.)
 - **The marks of a merged pair.** The lines were written with the duplicate on the list; the
   kept option keeps its own lines (final § 2.8).
 - **Marks on a list split in two kinds of action.** On the obesity list about two thirds of
@@ -3305,6 +3323,7 @@ Recorded by the task 055 contract, plan and build (`docs/tasks/055-scoping-short
 - **The baseline check-in card does not show the appetite.** Its settings summary comes from the
   backend's check-in bundle (Who · Where · Outcomes · Depth); adding "Risk appetite" is one bundle
   key and one label in `checkInPresentation.ts`. The plan document beside the card shows it.
+  **DISCHARGED (task 058):** `baseline_gate.py` carries the appetite.
 - **Potential impact length.** The ceiling is a code check (a `max_length` on the wire made the
   constrained decoder cut sentences mid-word at the limit): the prompt states a target (about 300,
   never more than 380), a line over 400 is kept with a warning, and only a line over the hard bound
@@ -3457,12 +3476,15 @@ says what is true today and what the lever is. Experiment figures are from the g
   call cut on every attempt (round (g): one `synthesise_section_turn` three times at 23 s)
   cannot be diagnosed from Langfuse: long output, long reasoning or a stall look the same.
   Lever: a `before` hook on `traced_attempts` that records the input before the request goes
-  out (24 call sites take it).
+  out (24 call sites take it). **DISCHARGED (task 058, N1):** `traced_attempts` and
+  `traced_parse` take a `before` hook; the stage's verb and the input are recorded before the
+  request goes out.
 - **The chat prose stream has no retry** (review, contract verifier). The streamed
   `chat:call` is exempt from the step timeouts (D12) and the SDK's two silent retries are
   gone with `max_retries=0`, so a connection error before the first token fails the turn
   where it used to be retried. Lever: `traced_attempts` around the stream's opening request
-  only (nothing has been sent to the user yet).
+  only (nothing has been sent to the user yet). (Task 058 gave the planner's stream that
+  retry, widened at the review to rate limits and 5xx; the chat stream still has none.)
 - **Three Retry-After parsers** (review, code review): `tracing._retry_wait_s`,
   `embeddings._retry_after_s` and `fetch_live.retry_after_seconds`; only the last handles
   the HTTP-date form. Model and embedding providers send seconds today. Lever: one parser in
@@ -3484,6 +3506,97 @@ says what is true today and what the lever is. Experiment figures are from the g
   the stored bodies; replace the long-term API key (AWS: "exploration only") with
   short-term keys or SigV4 as its own approval-gated task. Not: TCP keep-alive, the NAT
   sysctl, streaming on the long steps, a token-aware limiter (reasoned out in the brief).
+- **The ingest function runs at most 20 documents at once** (owner, 2026-11-04; contract
+  N5). `MAX_CONCURRENCY = 20` in `infra/infra/components/ingest_worker.py`, so a
+  100-document run parses in about five waves. Kept low on purpose: embedding, not parsing,
+  binds the stage while the Bedrock embedding quota is about 650,000 tokens a minute, and
+  every running copy holds one connection on the burstable `db.t3.medium` writer. Revisit
+  when AWS raises the quota (3,000,000 a minute asked, case open 2026-11-03): measure on
+  staging whether documents wait in the queue for a free copy, check the writer's free
+  connections against the API pool and the scoping fan-out, then raise the cap.
+
+## Perceived latency (task 058 seams)
+
+Seams left by task 058 (contract D6, D7, D9, D12, D13, D14; the build of 2026-11-05 to 09 and
+the review of 2026-11-09). Each entry says what is true today and what the lever is.
+
+- **No cancel** (D7). A run cannot be cancelled; the check-in's "Stop the run" is the existing
+  abort between steps. The probe (`research/exp-cancel-probe.md`, gitignored) found that
+  closing the HTTP client does not interrupt a Bedrock call, so cancel needs a cooperative
+  flag checked between turns and chunks, never a closed client. Own slice.
+- **No computed time band** (D6). The planner's three bands are a static table
+  (`runtime/task_plan.TIME_BANDS`, hashed with the prompt since the review); the page shows
+  elapsed time only. Lever: a rolling window of recent walks' wall times per depth once the
+  056 and 057 timings and the Cohere quota raise have settled, shown as a range, never a
+  countdown.
+- **No per-option reading counts before clustering** (D9). The longlist during the build
+  shows each option's search status and the stage lines; reading counts per option would need
+  the option-search children to publish document counts, which they do not.
+- **The section proposal stays in synthesise** (D12). Headings appear when writing begins;
+  moving the proposal earlier would take it out of the component.
+- **No leave-and-return telemetry** (D13). PostHog is the later answer; the N25 measure is
+  server-side and was not run (owner, 2026-11-09).
+- **No notification channel** (D14). The SES note stays for a later task.
+- **The live channel polls the database once per wake-up** (review, adversarial lane). Each
+  ephemeral message that reaches a subscriber's queue makes the SSE loop re-authorise and read
+  the durable tail in a worker thread, so a streaming section costs about ten database round
+  trips a second per watching client (the hub coalesces appends at 100 ms); before 058 the loop
+  polled every 0.4 s. A full 32-slot queue now resyncs the client from the hub's memory instead
+  of dropping messages. Lever: read the tail at most once per poll interval and let the
+  ephemeral batch wait for it; measure the feel first, the owner tuned it.
+- **One blocked thread per planner or chat stream** (review, adversarial lane).
+  `api/routers/task_agent.py` and `api/routers/conversations.py` bridge the worker's event
+  queue with `run_in_executor(None, events.get)`, so each open stream holds a thread of
+  asyncio's default pool (`min(32, cpus + 4)`: six on the 2-vCPU Fargate task) for the whole
+  turn, and a disconnected client's thread stays blocked until the next event. Lever: the
+  hub's bridge (`loop.call_soon_threadsafe` into an `asyncio.Queue`) for both routes.
+- **A `cursor=0` reconnect replays and maps the whole durable log** (review, security lane).
+  The snapshot reads every row since the cursor and maps it (walks, seconds, plan validation);
+  no per-user cap on open streams. Pre-existing surface, widened by the hub snapshot. Lever:
+  cap concurrent streams per user and task (429 on the next), and cap the replay at the last K
+  sequences unless the client asks for the whole history.
+- **The planner turn's lock is taken before authorisation** (review, security lane;
+  pre-existing). A signed-in user posting to a task they cannot read gets 409 while the
+  owner's turn runs, else 404: an existence-and-activity oracle for task ids. Lever: resolve
+  `accessible_task(write=True)` before `lock.acquire`.
+- **Offset paging under a moving sort can skip a row** (review; the build flagged tasks, the
+  adversarial lane found projects). Tasks and projects page by offset over an order that moves
+  while runs write (`updated_at`, `last_activity_at`); a row that rises from page 2 to page 1
+  after page 1 loaded is never shown; the client drops duplicates but cannot recover a skip.
+  Lever: the cursor param the 025 entry names, on both lists.
+- **The projects list computes last activity three times** (review, code review). The order
+  is a correlated subquery over memberships and tasks per project row, then `_task_counts`
+  joins the same rows twice. Lever: one grouped CTE for ordering and counts.
+- **A timer thread per coalesce window** (review, code review). `liveness._timer_schedule`
+  starts a `threading.Timer` for every 100 ms delta window and every 500 ms tick window, so a
+  streaming section spawns about ten short-lived threads a second per task. Works; churns.
+  Lever: one scheduler thread with a heap of due times.
+- **Chat's turn citations still carry a per-citation verdict** (owner rule, round 14: the
+  verdict belongs to the claim). The report moved it to `ClaimOut` (round 13); the chat API's
+  shape is unchanged. Lever: the same move on the chat turn's citations, with the chat
+  renderer.
+- **A case study's result sentence turns bold only at the swap** (review, design lane). The
+  live card has no `result_claim_id`, so the sentence reflows when the committed report lands.
+  Lever: carry the result claim's id on `artefact.section_card`.
+- **The hub's lists are bounded by the run, not by a cap** (review; security and adversarial
+  lanes). `search_queries`, `source_notes`, `claims` and `cards` grow for the run's length: the
+  walk's own queries (option searches publish no query frames, round 9), about 25 notes, a
+  section's claims and cards; the draft is capped at 20,000 characters. Declined as a defect at
+  the review; the cap is one line if a run ever publishes thousands.
+- **A timed-out streamed turn records no usage** (review, adversarial lane; declined). Usage
+  arrives on a stream's final chunk; a stream cut by the between-chunks timeout has none, so
+  `usage_totals` carries the fallback call only and Langfuse shows the attempt as an ERROR
+  generation with no tokens. Honest absence, not a miscount.
+- **A timing test is load-sensitive** (build, round 12).
+  `test_option_searches_run_at_the_configured_width` measures peak concurrency with 0.2 s
+  sleeps and failed once under a load average above 200, passing alone and on every rerun.
+  Lever: a barrier instead of sleeps.
+- **Three design-lane leftovers** (review, design lane, 2026-11-09). The Findings table keeps its
+  own quote fallback (italic Grey quote over the passage) where the citation sheet now shows the
+  quote alone (round 12 ruling); the Sources table draws its own tick and cross SVGs (`CitedMark`,
+  `VerdictMark`) rather than the icon module's glyphs; `auth/DevTokenLoginPanel.tsx` keeps two raw
+  colours (`#f3d99a`, `#8a5a00`) because auth is off limits to agents. Each is one small edit under
+  the defined-once rule for the next frontend-touching slice.
 
 ## Theory of change (task 054 seams)
 

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,7 +13,7 @@ import { tocEvidenceFixture, tocGraphFixture } from "./toc/fixture";
 // route is not on the public surface) — stub the SSE-backed store to its
 // idle shape rather than requiring a real RunStreamProvider connection.
 vi.mock("../store", () => ({
-  useRunStream: () => ({ liveSections: {}, run: null, connectionStatus: "idle" }),
+  useRunStream: () => ({ liveSections: {}, liveness: {}, task: {}, run: null, connectionStatus: "idle" }),
   hasTerminalPartialLiveArtefact: () => false,
 }));
 
@@ -69,6 +69,7 @@ function renderPublicArtefact(project: Record<string, unknown> = PROJECT) {
     if (url.pathname === `/api/v1/tasks/${TASK_ID}`) return jsonResponse(project);
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/toc`) return jsonResponse({ ...tocGraphFixture(), task_id: TASK_ID });
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/toc/evidence`) return jsonResponse(tocEvidenceFixture());
+    if (url.pathname.endsWith("/longlist")) return new Response(JSON.stringify({ detail: "not found" }), { status: 404 });
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/artefact`) return jsonResponse(ARTEFACT);
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/landscape`) return jsonResponse(LANDSCAPE);
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/funnel`) return jsonResponse(FUNNEL);
@@ -127,5 +128,21 @@ describe("ArtefactView — a public theory of change (task 054, C17)", () => {
     await waitFor(() => expect(requestedPaths).toContain(`/api/v1/tasks/${TASK_ID}/toc`));
     expect(requestedPaths.some((path) => path.includes("conversations"))).toBe(false);
     expect(requestedPaths).toContain(`/api/v1/tasks/${TASK_ID}/toc/evidence`);
+  });
+});
+
+describe("ArtefactView — a shared options scoping task (owner, round 12)", () => {
+  it("shows the Baseline, Longlist and Shortlist views once the task has a longlist", async () => {
+    renderPublicArtefact({ ...PROJECT, capability: "options_scoping", has_longlist: true });
+    const views = await screen.findByRole("tablist", { name: "Result view" });
+    for (const name of ["Baseline", "Longlist", "Shortlist"]) {
+      expect(within(views).getByRole("tab", { name })).toBeInTheDocument();
+    }
+  });
+
+  it("shows the baseline alone while the task has no longlist", async () => {
+    renderPublicArtefact({ ...PROJECT, capability: "options_scoping", has_longlist: false });
+    await waitFor(() => expect(screen.getByText("Shared evidence review")).toBeInTheDocument());
+    expect(screen.queryByRole("tablist", { name: "Result view" })).toBeNull();
   });
 });

@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
+from policy_atlas.core import events
 from policy_atlas.core.schema import (
     artefact,
     capability_run,
@@ -35,7 +36,7 @@ from tests.api.resource_support import (
     to_ready,
 )
 from tests.api.test_task_agent_scoping import _overrides
-from tests.helpers import seed_walk
+from tests.helpers import seed_run, seed_walk
 
 _T0 = datetime(2026, 9, 22, 9, 0, tzinfo=UTC)
 
@@ -223,6 +224,107 @@ def test_an_evidence_search_task_reads_as_before(engine: Engine, tmp_path: Path)
         assert body["active_run"]["capability_run_id"] == str(second)
         assert body["has_longlist"] is False
         assert first != second
+
+
+# --- active_run.stage (task 058, N15) ------------------------------------------------
+
+
+def _stage_started(
+    engine: Engine,
+    task_id: str,
+    walk: uuid.UUID,
+    component: str,
+    *,
+    minutes: int,
+) -> None:
+    """Commit one component run of ``walk`` and its ``run.started`` event."""
+    tid = uuid.UUID(task_id)
+    with engine.begin() as conn:
+        run_id = seed_run(
+            conn, tid, capability_run_id=walk, started_at=_T0 + timedelta(minutes=minutes)
+        )
+        events.append(
+            conn,
+            task_id=tid,
+            run_id=run_id,
+            event_type="run.started",
+            payload={"component": component, "registry_component": component},
+        )
+
+
+def _active(client: TestClient, headers: dict[str, str], task_id: str) -> Any:
+    return _listed(client, headers, task_id)["active_run"]
+
+
+def test_a_scoping_task_shows_the_parent_stage_while_a_child_searches(
+    engine: Engine, tmp_path: Path
+) -> None:
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_scoping_task(client, owner)
+        longlist = _walk(engine, task_id, purpose="longlist", status="running", minutes=0)
+        _stage_started(engine, task_id, longlist, "suggest", minutes=1)
+        active = _active(client, owner, task_id)
+        assert (active["stage"], active["stage_label"]) == ("suggest", "Suggesting options")
+
+        child = _walk(
+            engine, task_id, purpose="targeted", status="running", minutes=2, parent=longlist
+        )
+        # The fan-out's stage row has no component run: it names the walk.
+        with engine.begin() as conn:
+            events.append(
+                conn,
+                task_id=uuid.UUID(task_id),
+                run_id=None,
+                event_type="run.started",
+                payload={
+                    "component": "option_searches",
+                    "registry_component": "option_searches",
+                    "capability_run_id": str(longlist),
+                    "child_capability_run_ids": [str(child)],
+                    "total": 1,
+                },
+            )
+        # The child starts a stage of its own; the row still reads the parent's.
+        _stage_started(engine, task_id, child, "acquire", minutes=3)
+        active = _active(client, owner, task_id)
+        assert active["capability_run_id"] == str(child)
+        assert active["stage"] == "option_searches"
+        assert active["stage_label"] == "Searching for each option"
+        assert _get(client, owner, task_id)["active_run"]["stage"] == "option_searches"
+
+
+def test_an_evidence_search_mid_classify_shows_categorising(
+    engine: Engine, tmp_path: Path
+) -> None:
+    with api_client(tmp_path, _overrides()) as (client, owner, _other):
+        task_id = create_task(client, owner)
+        walk = _walk(
+            engine, task_id, purpose=None, status="running", minutes=0, capability="evidence_search"
+        )
+        active = _active(client, owner, task_id)
+        # A walk that has started no stage yet reads nulls.
+        assert active["capability_run_id"] == str(walk)
+        assert active["stage"] is None and active["stage_label"] is None
+
+        _stage_started(engine, task_id, walk, "acquire", minutes=1)
+        _stage_started(engine, task_id, walk, "classify", minutes=2)
+        active = _active(client, owner, task_id)
+        assert (active["stage"], active["stage_label"]) == ("classify", "Classifying")
+
+        # The full-text screen starts no stage of its own: the row keeps the last one.
+        _stage_started(engine, task_id, walk, "screen_full", minutes=3)
+        assert _active(client, owner, task_id)["stage"] == "classify"
+
+        with engine.begin() as conn:
+            conn.execute(
+                capability_run.update()
+                .where(capability_run.c.capability_run_id == walk)
+                .values(status="succeeded", ended_at=_T0)
+            )
+        assert _active(client, owner, task_id) is None
+        # ``latest_run`` never carries a stage.
+        latest = _listed(client, owner, task_id)["latest_run"]
+        assert latest["stage"] is None and latest["stage_label"] is None
 
 
 # --- the admission fences ------------------------------------------------------------

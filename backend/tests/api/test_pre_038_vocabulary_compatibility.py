@@ -216,10 +216,12 @@ def test_pre_038_lifecycle_events_still_reach_both_read_paths(conn: Connection) 
         )
 
     summaries = {item.kind: item.summary for item in decisions_page(conn, task_id, 1, 50).data}
-    assert summaries["project.renamed"] == "Renamed the task."
-    assert summaries["project.archived"] == "Archived the task."
-    assert summaries["project.shared_publicly"] == "Made the task public."
-    assert summaries["task.unshared"] == "Made the task private."
+    # The bare word ``user`` reads as the task's owner; this seeded task has
+    # none, so the subject is "Someone" (task 058, round 10).
+    assert summaries["project.renamed"] == "Someone renamed the task to “After”."
+    assert summaries["project.archived"] == "Someone archived the task."
+    assert summaries["project.shared_publicly"] == "Someone made the task public."
+    assert summaries["task.unshared"] == "Someone stopped sharing the task publicly."
 
     frames = sse._map_rows(conn, task_id=task_id, rows=_rows(conn, task_id), through=None)
     updates = [frame for frame in frames if frame["type"] == "task.updated"]

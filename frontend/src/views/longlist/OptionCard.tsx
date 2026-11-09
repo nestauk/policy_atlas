@@ -1,62 +1,99 @@
-import { useState, type ReactNode } from "react";
-import { Link, useParams } from "react-router";
+import { Fragment, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Link, useLocation, useParams, useSearchParams } from "react-router";
 
 import type { components } from "../../api/gen/types";
-import { useOption, useTask } from "../../api/queries";
+import { useOption, usePlan, useTask } from "../../api/queries";
 import { errorCode } from "../../lib/errors";
 import { scrub } from "../../lib/scrub";
 import { isRunActive } from "../scopingActivity";
 import { useDocumentTitle } from "../../lib/title";
 import { Button } from "../../ui/brand/Button";
 import { Card } from "../../ui/brand/Card";
-import { Chip } from "../../ui/brand/Chip";
 import { cn } from "../../ui/brand/cn";
 import { ReauthRedirect } from "../../ui/feedback";
-import { REPORT_BODY_CLASS } from "../artefactPresentation";
 import { SectionDisclosure, type SidebarEntry } from "../ArtefactOutline";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
-import { REPORT_TITLE_CLASS, ReportKindRow, ReportPage } from "../reportPage";
+import { REPORT_TITLE_CLASS, ReportPage } from "../reportPage";
+import { REPORT_BODY_CLASS } from "../artefactPresentation";
+import { SOURCE_TITLE_LINK_CLASS, referenceParts } from "../../ui/brand/reference";
 import {
   authorityWords,
   GRID_COLUMN_LINES,
-  LEVEL_WORD_CLASS,
+  LEVEL_MARKED_CLASS,
+  LEVEL_MIDDLE_CLASS,
   LEVEL_WORDS,
   LINE_NAMES,
   MIDDLE_WORD,
+  NOT_EVALUATED_LINE,
+  outcomeCoverage,
+  outcomeCoverageLines,
+  targetCoverage,
+  targetCoverageWords,
+  actsOnParts,
+  NO_IN_SCOPE_WORDS,
   PROFILE_LINE_KEYS,
-  WORD_TINT_BASE,
   capitalise,
   constraintLabel,
   constraintNotices,
-  deliveredLeadIn,
-  documentsSummary,
-  evidenceOpener,
-  evidenceSignal,
-  leverLabel,
-  leverLine,
-  maturityLine,
-  noOutcomeMeasuredLine,
+  deliveredLeadInParts,
+  leverLineParts,
+  ABSTRACTS_NOTE,
+  documentFacts,
+  seeInSourcesWords,
+  documentsToggleWords,
+  exclusionFacts,
+  PROFILE_POINTS_INTRO,
+  profilePoints,
+  type SentencePart,
   originLabel,
-  outcomeCountLabel,
-  placeWithDetail,
   relationLabel,
-  servesOutcome,
 } from "./longlistPresentation";
-import { ExcludeReasonForm, OptionActionButton, ShortlistActionButton, useOptionActions } from "./optionActions";
+import { AddReason, invitesReason, OptionActionButton, ShortlistToggle, useOptionActions } from "./optionActions";
+import { RetryCard } from "../../ui/feedback/RetryCard";
+import { LINK_CLASS, PROSE_LINK_CLASS } from "../../ui/brand/inlineActions";
+import { useOpenAtTop } from "../../lib/openAtTop";
+import { InfoHint } from "../../ui/brand/InfoHint";
+import { BulletList } from "../../ui/brand/BulletList";
+import { OptionDossier } from "./OptionDossier";
+import { DisclosureChevron } from "../../ui/brand/Disclosure";
 
 type OptionDocumentOut = components["schemas"]["OptionDocumentOut"];
+
+/** A sentence's runs, its takeaways in Semibold Navy and the joining words
+ *  regular (round 12, owner): the profile sentence, the lever and the
+ *  delivery setting. */
+function SentenceRuns({ parts }: { parts: readonly SentencePart[] }) {
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.strong ? (
+          <strong key={index} className="font-semibold text-navy">
+            {scrub(part.text)}
+          </strong>
+        ) : (
+          <Fragment key={index}>{scrub(part.text)}</Fragment>
+        ),
+      )}
+    </>
+  );
+}
+
+/** A heading inside a block (round 12, owner): the report's subheading,
+ *  the case study title's Lead Bold Navy, Body below `md`. */
+const BLOCK_SUBHEADING_CLASS = "text-lead font-bold text-navy max-md:text-body";
+
+/** A document group's heading ("Evaluated it · 3"): Body Semibold Navy. */
+const DOCUMENT_GROUP_HEADING_CLASS = "font-semibold text-navy";
 
 /** Documents shown in a group before "Show all N". */
 const DOCUMENTS_SHOWN = 5;
 /** Design features shown on the card (R63; § 2.5). */
 const FEATURES_SHOWN = 6;
 
-/** The names that join the parts of a document's second line. */
-const Dot = () => <span aria-hidden="true"> · </span>;
-
-/** One document in the disclosure (task 046, amendment 4, R81): the linked title; a grey line of
- *  programme, place (the level below in brackets), the folded kind and what it measured; a grey
- *  line of tier, evidence type and year; "+N more" to the dossier when several records name it. */
+/** One document, two lines (round 12, owner): the reference in the
+ *  References form (authors, year, the title as the link to its dossier,
+ *  which opens over the card, the venue), then one Meta Grey
+ *  line of its facts joined by the middot, nothing under it. */
 function DocumentLine({
   taskId,
   optionId,
@@ -67,58 +104,121 @@ function DocumentLine({
   document: OptionDocumentOut;
 }) {
   const linked = document.task_source_snapshot_id != null && taskId !== undefined;
+  // The dossier opens over the card, the reader staying on it (round 12,
+  // owner): the same path with `source` and `option`, which the card reads.
   const dossier = linked
-    ? `/tasks/${taskId}/sources/all?source=${document.task_source_snapshot_id}&option=${optionId}`
+    ? { search: `?${new URLSearchParams({ source: String(document.task_source_snapshot_id), option: optionId })}` }
     : null;
-  const { place, detail } = placeWithDetail(document.place, document.place_detail);
-  const recordParts: ReactNode[] = [];
-  if (linked && document.programme_name != null && document.programme_name !== "") {
-    recordParts.push(<strong key="programme" className="font-bold">{scrub(document.programme_name)}</strong>);
-  }
-  if (linked && place !== null) {
-    recordParts.push(
-      <span key="place">
-        {scrub(place)}
-        {detail !== null && <span className="text-grey"> ({scrub(detail)})</span>}
-      </span>,
-    );
-  }
-  if (linked && document.tried_on_kind != null && document.tried_on_kind !== "") {
-    recordParts.push(<span key="kind">{scrub(document.tried_on_kind)}</span>);
-  }
-  if (linked && document.measured != null && document.measured !== "") {
-    recordParts.push(<span key="measured">{scrub(document.measured)}</span>);
-  }
-  const qualityLine = [document.tier, document.evidence_type, document.year]
-    .filter((part) => part !== null && part !== undefined && part !== "")
-    .map((part) => scrub(String(part)))
-    .join(" · ");
-  const more = (document.records_count ?? 0) - 1;
+  // The References form (round 12): authors, year, the title, the venue; a
+  // part the read lacks is left out, so the title alone still reads.
+  // The title first, the year in brackets after it, then the venue (round
+  // 13, owner: no authors on the card).
+  const { title, afterTitle, venue } = referenceParts({
+    title: scrub(document.title),
+    year: document.year ?? null,
+    venue: document.venue == null ? null : scrub(document.venue),
+  });
+  const facts = documentFacts(document);
   return (
-    <li>
-      <p className={`${REPORT_BODY_CLASS} font-bold`}>
+    <li className="py-2.5 first:pt-0 last:pb-0">
+      <p className="text-ink [overflow-wrap:anywhere]">
         {dossier !== null ? (
-          <Link className="underline underline-offset-2" to={dossier}>
-            {scrub(document.title)}
+          <Link className={SOURCE_TITLE_LINK_CLASS} to={dossier}>
+            {title}
           </Link>
         ) : (
-          scrub(document.title)
+          <span className="text-navy">{title}</span>
         )}
+        {afterTitle}
+        {venue !== null && <span className="text-grey"> {venue}</span>}
       </p>
-      {recordParts.length > 0 && (
-        <p className="text-meta text-grey">
-          {recordParts.flatMap((part, index) => (index === 0 ? [part] : [<Dot key={`dot-${index}`} />, part]))}
-        </p>
-      )}
-      {qualityLine !== "" && <p className="text-meta text-grey">{qualityLine}</p>}
-      {dossier !== null && more > 0 && (
-        <p className="text-meta">
-          <Link className="text-blue underline underline-offset-2" to={dossier}>
-            +{more} more
-          </Link>
-        </p>
+      {/* Its facts as a small labelled list, the dossier's facts pattern
+          (round 12, owner): the label at Meta Grey in a fixed column, the
+          value at Body Ink beside it; no middots. */}
+      {facts.length > 0 && (
+        <dl className="mt-1.5 space-y-1">
+          {facts.map((fact) => (
+            <div key={fact.label} className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-baseline gap-3 max-md:grid-cols-[6.5rem_minmax(0,1fr)]">
+              <dt className="text-grey">{fact.label}</dt>
+              <dd className="text-ink [overflow-wrap:anywhere]">{scrub(fact.value)}</dd>
+            </div>
+          ))}
+        </dl>
       )}
     </li>
+  );
+}
+
+/** An excluded option's facts at the top of the card (round 15, owner). */
+function ExclusionBlock({
+  facts,
+  addReason,
+}: {
+  facts: { heading: string; constraint: string | null; why: string };
+  addReason: ReactNode;
+}) {
+  const rows: { label: string; value: ReactNode }[] = [
+    ...(facts.constraint !== null ? [{ label: "Constraint", value: scrub(facts.constraint) }] : []),
+    ...(facts.why !== "" || addReason !== null
+      ? [
+          {
+            label: "Why",
+            value: (
+              <>
+                {scrub(facts.why)}
+                {facts.why !== "" && addReason !== null && " "}
+                {addReason !== null && <span className={facts.why !== "" ? "ml-2" : undefined}>{addReason}</span>}
+              </>
+            ),
+          },
+        ]
+      : []),
+  ];
+  return (
+    <div data-testid="card-exclusion" className={cn("mt-4 max-w-prose-measure border-l border-line-2 pl-3", REPORT_BODY_CLASS)}>
+      <p className={NOTICE_WORD_CLASS.red}>{scrub(facts.heading)}</p>
+      {rows.length > 0 && (
+      <dl className="mt-1.5 space-y-1">
+        {rows.map((row) => (
+          <div key={row.label} className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-baseline gap-3 max-md:grid-cols-[6.5rem_minmax(0,1fr)]">
+            <dt className="text-meta text-grey">{row.label}</dt>
+            <dd className="text-ink [overflow-wrap:anywhere]">{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+      )}
+    </div>
+  );
+}
+
+/** The documents behind the option, closed by default (round 12, owner):
+ *  "Show 6 documents" / "Hide documents" after the chevron, the quiet
+ *  control's look, the one disclosure language. */
+function DocumentsDisclosure({
+  evaluated,
+  describing,
+  children,
+}: {
+  evaluated: number;
+  describing: number;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className="group inline-flex min-h-6 cursor-pointer items-center gap-1 text-meta font-semibold text-grey"
+      >
+        <DisclosureChevron open={open} />
+        <span className="underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 group-hover:text-navy group-hover:decoration-navy">
+          {documentsToggleWords(open, evaluated, describing)}
+        </span>
+      </button>
+      {open && <div className="mt-3 space-y-4">{children}</div>}
+    </div>
   );
 }
 
@@ -139,10 +239,13 @@ function DocumentGroup({
   const shown = showAll ? documents : documents.slice(0, DOCUMENTS_SHOWN);
   return (
     <div className="space-y-3">
-      <p className="font-bold text-navy">
+      {/* A subheading, not a label (round 12, owner). */}
+      <h3 className={DOCUMENT_GROUP_HEADING_CLASS}>
         {heading} · {documents.length}
-      </p>
-      <ul role="list" className="grid gap-3">
+      </h3>
+      {/* One size for the whole entry, 20 px between documents with one
+          hairline between them (round 12, owner: not dense). */}
+      <ul role="list" className="divide-y divide-line">
         {shown.map((document, index) => (
           <DocumentLine
             key={document.task_source_snapshot_id ?? `${document.title}-${index}`}
@@ -165,9 +268,10 @@ const PAGE_CLASS = `${LIFECYCLE_PAGE_CLASS} py-8`;
 
 /** The card's sections, in order (task 046, amendment 4, R78). */
 const SECTIONS = [
+  // Round 12 (owner): what it is, then Evidence, then What it could take.
   { id: "how-it-works", title: "How it works" },
-  { id: "what-it-would-take", title: "What it would take" },
   { id: "evidence-base", title: "Evidence" },
+  { id: "what-it-would-take", title: "What it could take" },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
@@ -176,69 +280,133 @@ type SectionId = (typeof SECTIONS)[number]["id"];
 const sidebarEntries = (hasProfile: boolean): SidebarEntry[] =>
   SECTIONS.filter(({ id }) => hasProfile || id !== "what-it-would-take").map(({ id, title }) => ({ id, title }));
 
-/** The label beside the profile section's heading, in both states (R37). */
+/** The info glyph's name after "What it would take" (R37; round 12: the
+ *  words left the heading for the glyph). */
 const ESTIMATE_LABEL = "Policy Atlas's estimate";
+/** Its tooltip (round 12, owner). */
+const ESTIMATE_NOTE = "Policy Atlas's estimate from the abstracts. Not an assessment.";
+
+/**
+ * The small "i" after a section's heading (round 12, owner), its tooltip
+ * saying what the block is. The heading is a disclosure button, and a
+ * button cannot hold another, so the glyph's own button sits beside the
+ * heading's, placed just after the title's last word: measured from the
+ * title's text and kept there as the column reflows or the fonts load. A
+ * 16 px glyph in a 24 px target, Grey turning Navy; focusable, and the
+ * tooltip opens on hover and on keyboard focus.
+ */
+function HeadingInfo({ sectionId, label, note }: { sectionId: string; label: string; note: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [place, setPlace] = useState<{ left: number; top: number } | null>(null);
+  useLayoutEffect(() => {
+    const holder = ref.current?.parentElement;
+    if (holder == null) return;
+    const measure = () => {
+      const title = holder.querySelector(`#${sectionId} button > span`);
+      if (title === null || typeof document.createRange !== "function") return;
+      const range = document.createRange();
+      range.selectNodeContents(title);
+      if (typeof range.getClientRects !== "function") return;
+      const rects = range.getClientRects();
+      const last = rects.length > 0 ? rects[rects.length - 1] : null;
+      if (last === null || last.width === 0) return;
+      const box = holder.getBoundingClientRect();
+      setPlace({ left: last.right - box.left + 6, top: last.top + last.height / 2 - box.top });
+    };
+    measure();
+    void document.fonts?.ready.then(measure);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(holder);
+    return () => observer.disconnect();
+  }, [sectionId]);
+  return (
+    <span
+      ref={ref}
+      className={cn("print-hide absolute -translate-y-1/2", place === null && "invisible")}
+      style={place === null ? undefined : { left: place.left, top: place.top }}
+    >
+      <InfoHint label={label} note={note} />
+    </span>
+  );
+}
 
 /** A card section on the report's disclosure (EB as-is): the heading row
  *  toggles, `summary` is the one line shown while collapsed. `summaryNode`
  *  replaces that line with a node (the profile's row of cells only). */
 function CardSection({
   id,
-  summary,
+  summary = "",
   children,
   defaultOpen = true,
-  meta,
+  collapsible = false,
+  info,
   summaryNode,
 }: {
   id: SectionId;
-  summary: string;
+  /** The line shown while shut (a collapsible block only). */
+  summary?: string;
   children: ReactNode;
   defaultOpen?: boolean;
-  meta?: ReactNode;
+  /** Only What it could take folds (round 12, owner); the short blocks are
+   *  always open, with no Show / Hide. */
+  collapsible?: boolean;
+  /** An "i" after the heading: its name and its tooltip. */
+  info?: { label: string; note: string };
   summaryNode?: ReactNode;
 }) {
   const { title } = SECTIONS.find((section) => section.id === id) ?? { title: id };
+  // Each block under the one rule, its sentences at Body (round 11, item 4:
+  // no Lead on the card).
   return (
-    <SectionDisclosure
-      id={id}
-      section={{ title, role: "standard", blocks: summary === "" ? null : [{ prose: summary }] }}
-      defaultOpen={defaultOpen}
-      collapsible
-      meta={meta}
-      summaryNode={summaryNode}
-    >
-      <div className={`max-w-prose-measure space-y-3 ${REPORT_BODY_CLASS}`}>{children}</div>
-    </SectionDisclosure>
+    <div className="relative border-t border-line pt-6">
+      <SectionDisclosure
+        id={id}
+        section={{ title, role: "standard", blocks: summary === "" ? null : [{ prose: summary }] }}
+        defaultOpen={defaultOpen}
+        collapsible={collapsible}
+        summaryNode={summaryNode}
+      >
+        <div className={cn("max-w-prose-measure space-y-4", REPORT_BODY_CLASS)}>{children}</div>
+      </SectionDisclosure>
+      {info !== undefined && <HeadingInfo sectionId={id} label={info.label} note={info.note} />}
+    </div>
   );
 }
 
-/** The authority word's tint beside "Who decides" (R70): pale tint, dark text, as the level words. */
+/** The authority words beside "Who decides" (R70), in the column's one
+ *  type: Navy Semibold, Grey when it is unclear who can act (round 10: no
+ *  tint, as the level words). */
 const AUTHORITY_WORD_CLASS: Record<"within_your_power" | "needs_action_by" | "unclear", string> = {
-  within_your_power: `${WORD_TINT_BASE} bg-green-tint text-navy`,
-  needs_action_by: `${WORD_TINT_BASE} bg-yellow-tint text-navy`,
-  unclear: `${WORD_TINT_BASE} bg-paper-2 text-grey`,
+  within_your_power: "font-semibold text-navy",
+  needs_action_by: "font-semibold text-navy",
+  unclear: "font-semibold text-grey",
 };
 
-/** A line's level word on its tint, or "Middle" when the line has no mark. */
-function LevelWord({
-  line,
-  mark,
-  middleClassName = "font-semibold text-navy",
-}: {
-  line: keyof typeof LEVEL_WORDS;
-  mark: "less" | "more" | null;
-  middleClassName?: string;
-}) {
+/** A line's level word in the one Navy look after a 6 px Navy square, the
+ *  word saying the direction ("Quicker", "Higher"); "Middle" in Grey when the
+ *  line has no mark (round 10, lead ruling on finding 7). */
+function LevelWord({ line, mark }: { line: keyof typeof LEVEL_WORDS; mark: "less" | "more" | null }) {
   return mark === null ? (
-    <span className={middleClassName}>{MIDDLE_WORD}</span>
+    <span className={LEVEL_MIDDLE_CLASS}>{MIDDLE_WORD}</span>
   ) : (
-    <span className={LEVEL_WORD_CLASS[mark]}>{LEVEL_WORDS[line][mark]}</span>
+    <span className={LEVEL_MARKED_CLASS}>
+      <span aria-hidden="true" className="inline-block size-1.5 flex-none bg-navy" />
+      {LEVEL_WORDS[line][mark]}
+    </span>
   );
 }
+
+/** A notice's word in its tone: Red only for a failure (an exclusion, a
+ *  break), Navy for a likely shortfall or no in-scope evidence, Grey when it
+ *  cannot be said. */
+const NOTICE_WORD_CLASS = { red: "font-semibold text-red", navy: "font-semibold text-navy", grey: "font-semibold text-grey" } as const;
 
 /** The profile table's cells: three columns from `sm` up; stacked blocks below it, so the
  *  sentence keeps the full width at 390 px (22b, after the browser check). */
-const PROFILE_NAME_CELL = "block pt-2.5 pr-4 align-top font-semibold text-navy sm:w-48 sm:table-cell sm:py-2.5";
+// The line's name and its mark at the block's reading size, as the sentence
+// cells (round 13, owner: they read too small); the name in Grey.
+const PROFILE_NAME_CELL = "block pt-2.5 pr-4 align-top font-normal text-grey sm:w-48 sm:table-cell sm:py-2.5";
 const PROFILE_WORD_CELL = "block pr-4 align-top sm:w-40 sm:table-cell sm:py-2.5";
 const PROFILE_SENTENCE_CELL = "block pb-2.5 align-top sm:table-cell sm:py-2.5";
 
@@ -251,23 +419,45 @@ const PROFILE_SENTENCE_CELL = "block pb-2.5 align-top sm:table-cell sm:py-2.5";
  * "how sure" appear nowhere on this page (trust § Provenance labels; a
  * locked test).
  */
+/** The link state the Shortlist page's option links carry (round 15). */
+export const CARD_FROM_SHORTLIST = { from: "shortlist" } as const;
+
 export function OptionCard() {
   const { taskId = "", optionId = "" } = useParams();
+  // Opened from the Shortlist page, the breadcrumb leads back there; from
+  // the longlist, or on a direct load, to the Longlist (round 15, owner).
+  const from = (useLocation().state as { from?: string } | null)?.from === "shortlist" ? "shortlist" : "longlist";
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  // An option opens at its top with focus on its title (round 12, owner
+  // bug: it opened at the foot), once per option.
+  useOpenAtTop(titleRef, optionId);
   const task = useTask(taskId);
+  const plan = usePlan(taskId);
   const option = useOption(taskId, optionId);
   // Task 045 (F15): a refused exclude / include says so under the header.
   const actions = useOptionActions(taskId, isRunActive(task.data));
+  // A document's dossier, open over the card (round 12): Close or Back
+  // returns to the card and the URL stays on it.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const dossierSource = searchParams.get("source");
+  const closeDossier = () =>
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("source");
+      next.delete("option");
+      return next;
+    });
 
   useDocumentTitle(task.data?.name, option.data?.name ?? "Option");
 
   if (option.isPending) {
     return (
       <main aria-busy="true" aria-label="Loading the option" className={PAGE_CLASS}>
-        <div className="h-4 w-40 animate-pulse bg-paper-2" />
-        <div className="mt-4 h-9 w-2/3 animate-pulse bg-paper-2" />
-        <div className="mt-3 h-6 w-full animate-pulse bg-paper-2" />
+        <div className="h-4 w-40 anim-breathe bg-paper-2" />
+        <div className="mt-4 h-9 w-2/3 anim-breathe bg-paper-2" />
+        <div className="mt-3 h-6 w-full anim-breathe bg-paper-2" />
         {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="mt-8 h-24 animate-pulse border-t border-line bg-paper-2" />
+          <div key={i} className="mt-8 h-24 anim-breathe border-t border-line bg-paper-2" />
         ))}
       </main>
     );
@@ -278,16 +468,7 @@ export function OptionCard() {
     if (code === "unauthenticated") return <ReauthRedirect />;
     return (
       <main className={PAGE_CLASS}>
-        <Card role="alert" className="p-8 text-center text-body text-navy">
-          This option couldn't be loaded.{" "}
-          <button
-            type="button"
-            className="cursor-pointer font-bold text-blue hover:underline"
-            onClick={() => void option.refetch()}
-          >
-            Retry
-          </button>
-        </Card>
+        <RetryCard copy="This option couldn't be loaded." onRetry={() => void option.refetch()} />
       </main>
     );
   }
@@ -303,7 +484,6 @@ export function OptionCard() {
   }
 
   const item = option.data;
-  const evidence = item.evidence;
   const excluded = item.state === "excluded";
   // The constraint callout (R78); a judgement on the constraint the option is already
   // excluded for is said once, by the exclusion line (30b).
@@ -316,14 +496,29 @@ export function OptionCard() {
   const evaluatedDocuments = documents.filter((document) => document.role === "evaluated");
   const describingDocuments = documents.filter((document) => document.role !== "evaluated");
   const placeSentences = item.place_sentences ?? [];
-  const planOutcomes = evidence.outcome_counts?.by_outcome ?? [];
-  const noneMeasured = planOutcomes.length > 0 && planOutcomes.every((entry) => entry.evaluated === 0);
-  const maturity = maturityLine(item.maturity);
-  const opener = evidenceOpener(item.evaluated_count, item.document_count);
+  // The plan's outcomes and how the documents cover each (round 12, owner).
+  const coverage = outcomeCoverage(
+    (item.evidence.outcome_counts?.by_outcome ?? []).map((entry) => entry.outcome),
+    documents,
+  );
+  // The plan's target first (round 12, owner).
+  const targetUnit = plan.data?.scoping?.target_unit?.text?.trim() ?? "";
+  // The row is left out when no document's target is known.
+  // The row is left out when no document's target is known.
+  const targetFound = targetUnit === "" ? null : targetCoverage(targetUnit, documents);
+  const target = targetFound !== null && targetFound.known > 0 ? targetFound : null;
   const profile = item.profile ?? null;
   const profileLines = profile === null ? [] : PROFILE_LINE_KEYS.map((key) => ({ key, line: profile.lines.find((line) => line.key === key) }))
     // A profile written before the ninth line existed has eight; show no empty row.
     .filter(({ key, line }) => key !== "potential_impact" || line !== undefined);
+  // The open table's order (round 13, owner): ambition (its own row first),
+  // potential impact, the lines that compare, then those that do not.
+  const compares = (key: (typeof profileLines)[number]["key"]) => LEVEL_WORDS[key].less !== null;
+  const orderedProfileLines = [
+    ...profileLines.filter(({ key }) => key === "potential_impact"),
+    ...profileLines.filter(({ key }) => key !== "potential_impact" && compares(key)),
+    ...profileLines.filter(({ key }) => !compares(key)),
+  ];
   const cellLines = profile === null ? [] : GRID_COLUMN_LINES
     // Likewise no Potential impact cell for a profile without that line.
     .filter((key) => key !== "potential_impact" || profile.lines.some((line) => line.key === key))
@@ -331,45 +526,67 @@ export function OptionCard() {
       key,
       mark: key === "ambition" ? (item.ambition ?? null) : (profile.lines.find((line) => line.key === key)?.mark ?? null),
     }));
+  // The sentence's lines: those the profile carries, ambition apart.
+  const sentenceLines = cellLines.filter(({ key }) => key !== "ambition");
   const ambitionMark = item.ambition ?? null;
-  const leverText = leverLine(item.primary_lever_type, item.secondary_lever_types);
   // One reason only: the none-fits reason says what the option does instead.
   const leverReason = (item.primary_lever_type == null ? (item.lever_none_fits_reason ?? item.lever_reason) : item.lever_reason) ?? "";
+  // Each thing said once (round 10, finding 7): the lever lives in How it
+  // works, the counts in the evidence line, so the grey line is where the
+  // option came from and how it relates to others.
   const headerLine = [
-    leverLabel(item),
-    originLabel(item.origin, item.document_count, item.from_section),
+    originLabel(item.origin, item.from_section),
     ...(item.relations ?? []).map(relationLabel),
     ...((item.also_found_as ?? []).length > 0 ? [`also found as: ${(item.also_found_as ?? []).join(", ")}`] : []),
   ].join(" · ");
+  const hasNotices = item.no_in_scope_evidence || item.search_pending || notices.length > 0;
 
   return (
     <ReportPage entries={sidebarEntries(item.profile != null)}>
-      <nav aria-label="Breadcrumb" className="print-hide mb-4 text-meta text-grey">
-        <Link to={`/tasks/${taskId}/result?view=longlist`} className="font-semibold text-blue underline-offset-4 hover:underline">
-          Longlist
-        </Link>
-        <span aria-hidden="true" className="mx-2">/</span>
-        <span>{scrub(item.name)}</span>
-      </nav>
-
       <header className="mb-8">
-        <ReportKindRow kind="Option">
-          <div className="print-hide flex items-center gap-2">
-            <ShortlistActionButton
+        {/* The breadcrumb names the page's kind, so no "Option" label sits
+            over the title (round 10, C4); the option's controls share its row. */}
+        <div className="print-hide mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <nav aria-label="Breadcrumb" className="min-w-0 text-meta text-grey">
+            <Link to={`/tasks/${taskId}/result?view=${from}`} className={LINK_CLASS}>
+              {from === "shortlist" ? "Shortlist" : "Longlist"}
+            </Link>
+            <span aria-hidden="true" className="mx-2">/</span>
+            <span>{scrub(item.name)}</span>
+          </nav>
+          <div className="flex items-center gap-6">
+            <ShortlistToggle
               actions={actions}
               optionId={optionId}
               shortlistState={item.shortlist?.state}
               excluded={excluded}
+              worded
             />
             <OptionActionButton actions={actions} optionId={optionId} excluded={excluded} />
           </div>
-        </ReportKindRow>
-        <h1 className={cn(REPORT_TITLE_CLASS, excluded && "text-grey")}>{scrub(item.name)}</h1>
-        <p className={`mt-3 max-w-prose-measure ${REPORT_BODY_CLASS}`}>{scrub(item.description)}</p>
-        <p className="mt-2 text-body text-grey">{scrub(headerLine)}</p>
-        <p className="mt-1.5 text-body text-navy">{evidenceSignal(item)}</p>
-
-        <ExcludeReasonForm actions={actions} optionId={optionId} className="mt-4 flex flex-wrap items-center gap-2" />
+        </div>
+        <h1 ref={titleRef} tabIndex={-1} className={cn(REPORT_TITLE_CLASS, "outline-none", excluded && "text-grey")}>
+          {scrub(item.name)}
+        </h1>
+        {/* What it is (round 11, item 4): the description at Body, then one
+            Meta Grey line of where it came from and how it relates. */}
+        <p className={cn("mt-3 max-w-prose-measure", REPORT_BODY_CLASS)}>{scrub(item.description)}</p>
+        <p className="mt-2 text-meta text-grey">{scrub(headerLine)}</p>
+        {/* Why it is excluded, at the top of the card under the title and
+            its line, above How it works (round 15, owner), as the dossier's
+            labelled facts: who excluded it as the Red heading line, then
+            Constraint and Why, labels in Meta Grey at a fixed width;
+            "Add a reason" after the Why value while it invites one. */}
+        {excluded && item.exclusion != null && (
+          <ExclusionBlock
+            facts={exclusionFacts(item.exclusion)}
+            addReason={
+              invitesReason(item.exclusion) ? (
+                <AddReason actions={actions} optionId={optionId} current={item.exclusion.reason ?? ""} />
+              ) : null
+            }
+          />
+        )}
 
         {actions.notice !== null && (
           <p role="alert" className="mt-3 text-body text-red">
@@ -377,66 +594,169 @@ export function OptionCard() {
           </p>
         )}
 
-        {(excluded || item.no_in_scope_evidence || item.search_pending || notices.length > 0) && (
-          <Card className="mt-5 space-y-2 p-4 text-body text-ink">
-            {excluded && item.exclusion != null && (
-              <p>
-                <Chip tone="red" className="mr-2 align-middle">excluded</Chip>
-                Breaks "{constraintLabel(scrub(item.exclusion.constraint))}". {scrub(item.exclusion.reason)}
-              </p>
-            )}
+      </header>
+
+      <CardSection id="how-it-works">
+        {/* One sentence, not an eyebrow over a value (round 12, owner). */}
+        <div>
+          <p>
+            <SentenceRuns parts={leverLineParts(item.primary_lever_type, item.secondary_lever_types)} />
+          </p>
+          {leverReason.trim() !== "" && <p className="text-grey">{scrub(leverReason)}</p>}
+        </div>
+        <p>
+          <SentenceRuns parts={deliveredLeadInParts(profile?.settings, actsOnParts(profile?.acts_on))} />
+        </p>
+        {item.design.design_features.length > 0 && (
+          // The report's Electric Blue squares (round 12, owner).
+          <BulletList items={item.design.design_features.slice(0, FEATURES_SHOWN).map((feature) => capitalise(scrub(feature)))} />
+        )}
+      </CardSection>
+
+      {/* The counts are the header's evidence line; the section opens with
+          the evaluations' standing (round 10, C7: no opener repeating them). */}
+      <CardSection id="evidence-base">
+        {/* Where it has been evaluated first, then the notices, then the
+            documents (round 12, owner: the Sources lines and Your outcomes
+            went; the counts are the row's and the collapsed summary's). */}
+        {/* Your target and outcomes, first in Evidence (round 13, owner),
+            then where it has been evaluated. Round 12: the report's
+            method-table pattern, the plan's words left and their coverage
+            right; the target first. Tabular figures are left off: under
+            them the fallback face widens the spaces between the words, as
+            the report's table found. */}
+        {item.document_count > 0 && (target !== null || coverage.length > 0) && (
+          <div>
+            <h3 id="your-outcomes-heading" className={BLOCK_SUBHEADING_CLASS}>
+              Your target and outcomes
+            </h3>
+            <table aria-labelledby="your-outcomes-heading" className="mt-1.5 w-full border-t border-line">
+              <tbody>
+                {target !== null && (
+                  <tr className="border-b border-line">
+                    <th scope="row" className="py-1.5 pr-6 text-left align-top font-normal text-ink">
+                      {scrub(target.unit)}
+                    </th>
+                    <td
+                      className={cn(
+                        "py-1.5 text-right align-top",
+                        target.targeted > 0 ? "text-navy" : "text-grey",
+                      )}
+                    >
+                      {targetCoverageWords(target)}
+                    </td>
+                  </tr>
+                )}
+                {coverage.map((entry) => {
+                  const covered = entry.measured + entry.discussed > 0;
+                  return (
+                    <tr key={entry.outcome} className="border-b border-line">
+                      <th scope="row" className="py-1.5 pr-6 text-left align-top font-normal text-ink">
+                        {scrub(entry.outcome)}
+                      </th>
+                      <td
+                        className={cn(
+                          "whitespace-nowrap py-1.5 text-right align-top",
+                          covered ? "text-navy" : "text-grey",
+                        )}
+                      >
+                        {/* One line each (round 13, owner). */}
+                        {outcomeCoverageLines(entry).map((line) => (
+                          <span key={line} className="block">
+                            {line}
+                          </span>
+                        ))}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {/* With no evaluation the subheading stays and says so (round 12,
+            owner), so the section never drops to the documents alone. */}
+        {item.document_count > 0 && item.evaluated_count === 0 && (
+          <div>
+            <h3 className={BLOCK_SUBHEADING_CLASS}>Where it has been evaluated</h3>
+            <p className="text-grey">{NOT_EVALUATED_LINE}</p>
+          </div>
+        )}
+        {item.document_count > 0 && item.evaluated_count > 0 && placeSentences.length > 0 && (
+              <div>
+                <h3 className={BLOCK_SUBHEADING_CLASS}>Where it has been evaluated</h3>
+                <dl aria-label="Where it has been evaluated" className="divide-y divide-line">
+                  {placeSentences.map((entry) => (
+                    <div
+                      key={entry.place}
+                      data-where={entry.where ? "true" : undefined}
+                      className="grid gap-x-4 py-1.5 sm:grid-cols-[10rem_1fr]"
+                    >
+                      {/* The plan's own place leads the list; no mark of its
+                          own (round 12, owner). */}
+                      <dt className="text-navy">{scrub(entry.place)}</dt>
+                      <dd>{scrub(entry.sentence)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+          )}
+        {/* The notices (round 11, item 4): a flat
+            block with a hairline rule, each a word in its tone then its
+            sentence (round 10, finding 7: no card inside the sheet, no chips). */}
+        {hasNotices && (
+          <div className="max-w-prose-measure space-y-2 border-l border-line-2 pl-3">
             {item.no_in_scope_evidence && item.in_scope != null && (
               <p>
-                <Chip tone="yellow" className="mr-2 align-middle">no in-scope evidence</Chip>
-                None of its {item.in_scope.documents} documents pass {scrub(item.in_scope.restriction)}. It stays on
-                the longlist until the scope changes.
+                <span className={NOTICE_WORD_CLASS.navy}>{NO_IN_SCOPE_WORDS}:</span> None of its{" "}
+                {item.in_scope.documents} documents pass {scrub(item.in_scope.restriction)}. It stays on the longlist
+                until the scope changes.
               </p>
             )}
             {item.search_pending && <p className="text-grey">Its own evidence search is still running.</p>}
             {notices.map((notice) => (
               <p key={notice.key}>
-                <Chip tone={notice.tone} className="mr-2 align-middle">{notice.chip}</Chip>
-                {scrub(notice.text)}
+                <span className={NOTICE_WORD_CLASS[notice.tone]}>{notice.word}:</span> {scrub(notice.text)}
               </p>
             ))}
-          </Card>
+          </div>
         )}
-      </header>
-
-      <CardSection id="how-it-works" summary={leverText}>
-        <div>
-          <p>
-            <strong className="font-bold text-navy">Lever:</strong> {leverText.replace(/^Lever: /, "")}
-          </p>
-          {leverReason.trim() !== "" && <p className="text-body text-grey">{scrub(leverReason)}</p>}
-        </div>
-        <p>{scrub(deliveredLeadIn(profile?.settings))}</p>
-        {item.design.design_features.length > 0 && (
-          <ul className="list-disc space-y-1 pl-5 text-body">
-            {item.design.design_features.slice(0, FEATURES_SHOWN).map((feature, index) => (
-              <li key={index}>{capitalise(scrub(feature))}</li>
-            ))}
-          </ul>
+        {item.document_count === 0 && <p className="text-grey">No document names this option yet.</p>}
+        {/* No disclosure without a document to show (design lane review:
+            never "Show 0 documents"). */}
+        {item.document_count > 0 && documents.length > 0 && (
+            <DocumentsDisclosure evaluated={evaluatedDocuments.length} describing={describingDocuments.length}>
+              <p className="text-grey">{capitalise(ABSTRACTS_NOTE)}.</p>
+              <DocumentGroup heading="Evaluated it" taskId={taskId} optionId={item.option_id} documents={evaluatedDocuments} />
+              <DocumentGroup
+                heading="Describe or recommend it"
+                taskId={taskId}
+                optionId={item.option_id}
+                documents={describingDocuments}
+              />
+              {/* The same documents in Sources, the table filtered by the
+                  option (round 12, owner). */}
+              <p>
+                <Link className={PROSE_LINK_CLASS} to={`/tasks/${taskId}/sources/all?option=${item.option_id}`}>
+                  {seeInSourcesWords(documents.length)}
+                </Link>
+              </p>
+            </DocumentsDisclosure>
         )}
       </CardSection>
-
       {profile !== null && (
         <CardSection
           id="what-it-would-take"
-          summary=""
+          collapsible
           defaultOpen={false}
-          meta={ESTIMATE_LABEL}
+          info={{ label: ESTIMATE_LABEL, note: ESTIMATE_NOTE }}
           summaryNode={
-            <ul role="list" className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
-              {cellLines.map(({ key, mark }) => (
-                <li key={key}>
-                  <span className="block text-meta text-grey">{LINE_NAMES[key]}</span>
-                  <span className="mt-1 block min-h-6">
-                    <LevelWord line={key} mark={mark} middleClassName="text-meta font-semibold text-navy" />
-                  </span>
-                </li>
-              ))}
-            </ul>
+            // Shut: an intro line and the points, the report's square
+            // bullets (round 12, owner); open, the table of lines.
+            <div className={cn("max-w-prose-measure space-y-2", REPORT_BODY_CLASS)}>
+              <p>{PROFILE_POINTS_INTRO}</p>
+              <BulletList items={profilePoints(ambitionMark, sentenceLines)} />
+            </div>
           }
         >
           <table className="w-full border-collapse text-left">
@@ -448,7 +768,7 @@ export function OptionCard() {
                 </td>
                 <td className={PROFILE_SENTENCE_CELL}>{scrub(item.ambition_reason ?? "")}</td>
               </tr>
-              {profileLines.map(({ key, line }) => {
+              {orderedProfileLines.map(({ key, line }) => {
                 const mark = line?.mark ?? null;
                 const marked = LEVEL_WORDS[key].less !== null;
                 const authority = key === "who_decides" ? item.authority : null;
@@ -471,71 +791,14 @@ export function OptionCard() {
         </CardSection>
       )}
 
-      <CardSection id="evidence-base" summary={maturity === null ? opener : `${maturity}. ${opener}`}>
-        {maturity !== null && <p className="font-semibold text-navy">{maturity}</p>}
-        <p>{opener}</p>
-        {item.document_count > 0 && (
-          <>
-            {planOutcomes.length > 0 && (
-              <div>
-                <p className="font-bold text-navy">Your outcomes</p>
-                {noneMeasured ? (
-                  <p>{noOutcomeMeasuredLine(planOutcomes.length)}</p>
-                ) : (
-                  <ul role="list" aria-label="Your outcomes" className="divide-y divide-line">
-                    {planOutcomes.map((entry) => (
-                      <li key={entry.outcome} className="flex items-baseline justify-between gap-4 py-1.5">
-                        <span>{scrub(entry.outcome)}</span>
-                        <span className="shrink-0 text-right">
-                          {entry.evaluated === 0 ? (
-                            <span className="text-grey">none</span>
-                          ) : (
-                            outcomeCountLabel(entry.evaluated)
-                          )}
-                          {!servesOutcome(item.outcomes_served, entry.outcome) && (
-                            <span className="ml-2 text-grey">not a target of this option</span>
-                          )}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-            {placeSentences.length > 0 && (
-              <div>
-                <p className="font-bold text-navy">Where it has been evaluated</p>
-                <dl aria-label="Where it has been evaluated" className="divide-y divide-line">
-                  {placeSentences.map((entry) => (
-                    <div
-                      key={entry.place}
-                      data-where={entry.where ? "true" : undefined}
-                      className={cn("grid gap-x-4 py-1.5 sm:grid-cols-[10rem_1fr]", entry.where && "bg-aqua-tint")}
-                    >
-                      <dt className="font-bold text-navy">{scrub(entry.place)}</dt>
-                      <dd>{scrub(entry.sentence)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            )}
-            <details className="group">
-              <summary className="cursor-pointer font-bold text-navy">
-                {documentsSummary(documents.length)}
-              </summary>
-              <div className="mt-3 space-y-4">
-                <DocumentGroup heading="Evaluated it" taskId={taskId} optionId={item.option_id} documents={evaluatedDocuments} />
-                <DocumentGroup
-                  heading="Describe or recommend it"
-                  taskId={taskId}
-                  optionId={item.option_id}
-                  documents={describingDocuments}
-                />
-              </div>
-            </details>
-          </>
-        )}
-      </CardSection>
+      {dossierSource !== null && (
+        <OptionDossier
+          taskId={taskId}
+          sourceId={dossierSource}
+          optionId={searchParams.get("option") ?? optionId}
+          onClose={closeDossier}
+        />
+      )}
     </ReportPage>
   );
 }

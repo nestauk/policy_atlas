@@ -1,6 +1,8 @@
 import type { HTMLAttributes } from "react";
 
 import { cn } from "./cn";
+import { FoldMarkAnimated } from "./FoldMarkAnimated";
+import { PANE_LABEL_CLASS } from "./label";
 
 /** Paper surface on the app ground (hifi.css .screen): 0 radius, hairline
  * border, the soft navy-tinted shadow. Composable — no configuration. */
@@ -9,7 +11,7 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
     <div
       className={cn(
         "border border-line-2 bg-paper",
-        "shadow-[0_1px_3px_rgba(15,41,74,0.05),0_8px_24px_rgba(15,41,74,0.04)]",
+        "shadow-paper",
         className,
       )}
       {...props}
@@ -23,7 +25,7 @@ export function PaneHeading({ className, ...props }: HTMLAttributes<HTMLDivEleme
     <div
       className={cn(
         "flex items-center justify-between px-4 pb-2.5 pt-3.5",
-        "text-meta font-extrabold uppercase tracking-[0.06em] text-grey",
+        PANE_LABEL_CLASS,
         className,
       )}
       {...props}
@@ -36,29 +38,84 @@ export function Divider({ className, ...props }: HTMLAttributes<HTMLDivElement>)
   return <div className={cn("h-px bg-line", className)} {...props} />;
 }
 
-const STATUS_DOT_TONES = {
-  running: "bg-yellow",
+const STATUS_MARK_TONES = {
+  running: "bg-blue",
   complete: "bg-green",
   paused: "bg-orange",
   idle: "bg-line-2",
   failed: "bg-red",
 } as const;
 
-/** Status dot — always pair with a text label (never colour alone). */
-export function StatusDot({
+/** The colour a status mark takes: live, done, waiting, not started, failed. */
+export type StatusTone = keyof typeof STATUS_MARK_TONES;
+
+/**
+ * The status mark (task 058; DESIGN.md § Status mark): a 6 px square with
+ * square corners, always followed by its word, never colour alone. Electric
+ * Blue while a run is live, Green when it ended well, Orange while it waits
+ * on a person, Red when it failed, Line 2 when nothing has started.
+ *
+ * Args:
+ *   tone: Which state the mark shows.
+ *   breathing: True while updates are arriving (the caller's freshness
+ *     rule); only a live mark breathes (opacity to 0.25 and scale to 0.8,
+ *     `anim-breathe-mark`; owner, round 11), and it holds still under
+ *     reduced motion.
+ */
+export function StatusMark({
   tone,
+  breathing = false,
   className,
   ...props
-}: HTMLAttributes<HTMLSpanElement> & { tone: keyof typeof STATUS_DOT_TONES }) {
+}: HTMLAttributes<HTMLSpanElement> & { tone: StatusTone; breathing?: boolean }) {
   return (
     <span
       aria-hidden="true"
+      data-tone={tone}
       className={cn(
-        "inline-block size-2 flex-none rounded-full",
-        STATUS_DOT_TONES[tone],
+        // A mark that changes state (a step landing: blue to green) eases
+        // its colour over 150 ms (round 9).
+        "inline-block size-1.5 flex-none transition-colors duration-150 ease-[ease]",
+        STATUS_MARK_TONES[tone],
+        breathing && tone === "running" && "anim-breathe-mark",
         className,
       )}
       {...props}
     />
+  );
+}
+
+/** The live mark's size in a line of text; the conversation rail uses the
+ *  brand size (17 px) instead. */
+export const LIVE_MARK_TEXT_SIZE = 14;
+
+/**
+ * The live mark (task 058; annex § Owner round after the trace, item 6):
+ * wherever a run is live, its mark is the Policy Atlas fold mark turning.
+ * It turns while the stream is open and the run is live (heartbeats count as
+ * data arriving), and holds still (the shut blue diamond) when the
+ * connection is down or under reduced motion (lead ruling, design lane
+ * review). The static states keep the 6 px square (`StatusMark`).
+ *
+ * Args:
+ *   size: 14 px in a line of text (the default), 17 px in the rail.
+ *   still: Hold the mark still: the caller's stream is not open.
+ */
+export function LiveMark({
+  size = LIVE_MARK_TEXT_SIZE,
+  still = false,
+  className,
+  ...props
+}: HTMLAttributes<HTMLSpanElement> & { size?: number; still?: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      data-live-mark=""
+      className={cn("inline-flex shrink-0 items-center justify-center", className)}
+      style={{ width: size, height: size }}
+      {...props}
+    >
+      <FoldMarkAnimated size={size} onDark={false} reducedMotion={still ? true : undefined} />
+    </span>
   );
 }

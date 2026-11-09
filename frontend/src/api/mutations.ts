@@ -1,6 +1,9 @@
 import { useMutation, useMutationState, useQueryClient } from "@tanstack/react-query";
 import { askForFinishAlerts } from "../lib/askForAlerts";
 
+import { useAuth } from "../auth";
+import { buildAuthHeaders } from "./authMiddleware";
+import { apiBaseUrl } from "./client";
 import type { components } from "./gen/types";
 import { queryKeys, useApiClient } from "./queries";
 
@@ -28,10 +31,10 @@ function raise(error: unknown, status?: number): never {
  * but unassigned task — and "Starts from" cannot be built on a flow with
  * that failure mode.
  *
- * The opening task_agent turn is still a second call, deliberately: it posts
- * the same question so the conversation opens with the words the person
- * actually typed rather than a system greeting, and a failure there leaves a
- * real, usable task.
+ * The opening task_agent turn is not posted here (task 058, N9): the New Task
+ * screen navigates to the Agent tab at once, and the tab streams the opening
+ * turn with the words the person typed, so the planner's reply arrives where
+ * they are looking instead of behind a blocked submit button.
  *
  * The task's name is derived from the question here (D5). The task_agent's own
  * `plan.title` is deliberately not written back — that would be new
@@ -46,8 +49,6 @@ export function useCreateTask() {
       projectId?: string | null;
       capability?: components["schemas"]["TaskCreate"]["capability"];
       fromTaskIds?: string[];
-      /** False when the task opens with an upload instead: its message is the opening turn. */
-      openingTurn?: boolean;
     }) => {
       const question = input.question.trim();
       const { data: task, error, response } = await client.POST("/api/v1/tasks", {
@@ -60,15 +61,6 @@ export function useCreateTask() {
         },
       });
       if (task === undefined) raise(error, response.status);
-
-      // The opening turn. A failure here leaves a real, usable task whose
-      // conversation is simply empty, so it is not worth unwinding the
-      // creation — the person can just type the question again.
-      if (input.openingTurn === false) return task;
-      await client.POST("/api/v1/tasks/{task_id}/task-agent-turns", {
-        params: { path: { task_id: task.task_id } },
-        body: { message: question, client_turn_id: crypto.randomUUID() },
-      });
       return task;
     },
     // "projects" is invalidated too, symmetric with `useUpdateTask`/
@@ -159,6 +151,32 @@ export function useArchiveTask(taskId: string) {
   });
 }
 
+/** `POST /api/v1/projects/{id}/archive` (task 058, rounds 11 and 14): the
+ *  owner archives a project. It leaves the default Projects list and is
+ *  listed under `status: "archived"`. In the same call the server archives
+ *  each of the caller's own active tasks in it that is in no other active
+ *  project and has no run under way; any other task is left as it is.
+ *  Archiving an archived project changes nothing. */
+export function useArchiveProject(projectId: string) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error, response } = await client.POST(
+        "/api/v1/projects/{project_id}/archive",
+        { params: { path: { project_id: projectId } } },
+      );
+      if (data === undefined) raise(error, response.status);
+      return data;
+    },
+    // The archived tasks leave the task lists, so they refetch too.
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
+}
+
 /**
  * `PATCH /api/v1/projects/{id}` — rename, re-describe, or (supplying
  * `visibility`) run the server's i.4 visibility cascade onto every member
@@ -189,26 +207,137 @@ export function useUpdateProject(projectId: string) {
   });
 }
 
-/** `POST .../task-agent-turns` — one real task_agent turn. `clientTurnId` is
- *  minted by the caller per logical turn (one per submitted message, not
- *  per send attempt) so that retrying the same submission reuses the id
- *  rather than minting a fresh one the server would treat as a new turn. */
+/** One event of the planner's turn stream (task 058, N9). */
+export type TaskAgentStreamEvent =
+  | components["schemas"]["TaskAgentProgressEvent"]
+  | components["schemas"]["TaskAgentDeltaEvent"]
+  | components["schemas"]["TaskAgentCompletedEvent"]
+  | components["schemas"]["TaskAgentFailedEvent"];
+
+/** The stream ended before its one terminal event: the connection dropped.
+ *  The turn is durable and finishes on the server, so the caller re-reads the
+ *  transcript rather than retrying. */
+export class TaskAgentStreamInterruptedError extends Error {
+  constructor() {
+    super("The connection dropped before the reply finished.");
+    this.name = "TaskAgentStreamInterruptedError";
+  }
+}
+
+function narrowTaskAgentEvent(value: unknown): TaskAgentStreamEvent {
+  const event = value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+  if (event.type === "progress" && typeof event.label === "string") return event as TaskAgentStreamEvent;
+  if (event.type === "delta" && typeof event.text === "string") return event as TaskAgentStreamEvent;
+  if (event.type === "completed" && event.turn !== null && typeof event.turn === "object") {
+    return event as TaskAgentStreamEvent;
+  }
+  if (event.type === "failed" && event.error !== null && typeof event.error === "object") {
+    return event as TaskAgentStreamEvent;
+  }
+  throw Object.assign(new Error("The reply stream contained an invalid event."), { code: "internal" });
+}
+
+/**
+ * Read a planner turn's NDJSON body, handing each event over in wire order,
+ * up to and including its one terminal event (`completed` or `failed`).
+ *
+ * Args:
+ *   body: The streamed response body.
+ *   onEvent: Receives each event.
+ *
+ * Returns:
+ *   The terminal event.
+ *
+ * Raises:
+ *   TaskAgentStreamInterruptedError: The body ended before a terminal event.
+ */
+export async function consumeTaskAgentStream(
+  body: ReadableStream<Uint8Array>,
+  onEvent: (event: TaskAgentStreamEvent) => void,
+): Promise<TaskAgentStreamEvent> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let terminal: TaskAgentStreamEvent | null = null;
+  const consumeLine = (raw: string) => {
+    const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+    if (line.trim() === "" || terminal !== null) return;
+    let value: unknown;
+    try {
+      value = JSON.parse(line);
+    } catch {
+      throw Object.assign(new Error("The reply stream contained malformed JSON."), { code: "internal" });
+    }
+    const event = narrowTaskAgentEvent(value);
+    onEvent(event);
+    if (event.type === "completed" || event.type === "failed") terminal = event;
+  };
+  try {
+    while (terminal === null) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) consumeLine(line);
+    }
+    if (terminal === null) consumeLine(buffer + decoder.decode());
+  } finally {
+    reader.releaseLock();
+  }
+  if (terminal === null) throw new TaskAgentStreamInterruptedError();
+  return terminal;
+}
+
+/** `POST .../task-agent-turns` — one real task_agent turn, streamed (task
+ *  058, N9): a `progress` line, the reply in `delta` pieces, then exactly one
+ *  `completed` (the stored turn) or `failed`. `clientTurnId` is minted by the
+ *  caller per logical turn (one per submitted message, not per send attempt)
+ *  so that retrying the same submission reuses the id rather than minting a
+ *  fresh one the server would treat as a new turn. A refusal before the
+ *  stream opens (a fence, capacity) throws the server's envelope; a `failed`
+ *  event throws its code; a dropped connection throws
+ *  `TaskAgentStreamInterruptedError`. */
 export function useTaskAgentTurn(taskId: string) {
-  const client = useApiClient();
+  const auth = useAuth();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { message: string; clientTurnId: string }) => {
-      const { data, error, response } = await client.POST(
-        "/api/v1/tasks/{task_id}/task-agent-turns",
-        {
-          params: { path: { task_id: taskId } },
-          body: { message: input.message, client_turn_id: input.clientTurnId },
-        },
-      );
-      if (data === undefined) raise(error, response.status);
-      return data;
+    mutationFn: async (input: {
+      message: string;
+      clientTurnId: string;
+      onEvent?: (event: TaskAgentStreamEvent) => void;
+    }): Promise<components["schemas"]["TaskAgentTurnOut"]> => {
+      const post = async (forceRefresh = false) => {
+        const headers = await buildAuthHeaders(auth, forceRefresh);
+        headers.set("Content-Type", "application/json");
+        headers.set("Accept", "application/x-ndjson");
+        return fetch(`${apiBaseUrl()}/api/v1/tasks/${taskId}/task-agent-turns`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ message: input.message, client_turn_id: input.clientTurnId }),
+        });
+      };
+      let response = await post();
+      if (response.status === 401) response = await post(true);
+      if (!response.ok) {
+        let envelope: unknown = undefined;
+        try {
+          envelope = await response.json();
+        } catch {
+          // Not a JSON body: `raise` falls back to a generic message.
+        }
+        raise(envelope, response.status);
+      }
+      if (response.body === null) throw new TaskAgentStreamInterruptedError();
+      const terminal = await consumeTaskAgentStream(response.body, (event) => input.onEvent?.(event));
+      if (terminal.type === "failed") raise({ error: terminal.error }, response.status);
+      if (terminal.type !== "completed") throw new TaskAgentStreamInterruptedError();
+      return terminal.turn;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.taskRoot(taskId) }),
+    // A dropped stream still lands a durable turn: re-read either way.
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.taskRoot(taskId) }),
   });
 }
 

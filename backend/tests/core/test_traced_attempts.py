@@ -7,6 +7,7 @@ made on it, in order, so a test can read back what each attempt carried. A fake
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -17,7 +18,7 @@ import openai
 import pytest
 from structlog.testing import capture_logs
 
-from policy_atlas.core import tracing
+from policy_atlas.core import liveness, tracing
 
 _REQUEST = httpx.Request("POST", "https://provider.test/v1/chat/completions")
 
@@ -75,6 +76,27 @@ class _Script:
         return "ok"
 
 
+class _RecordingHub:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, Any]]] = []
+
+    def publish_tick(self, task_id: uuid.UUID, **kwargs: Any) -> None:
+        self.events.append(("verb", {"task_id": task_id, **kwargs}))
+
+    def call_opened(
+        self, task_id: uuid.UUID, stage: str, run_id: uuid.UUID | None = None
+    ) -> None:
+        self.events.append(("opened", {"task_id": task_id, "stage": stage, "run_id": run_id}))
+
+    def call_closed(
+        self, task_id: uuid.UUID, stage: str, run_id: uuid.UUID | None = None
+    ) -> None:
+        self.events.append(("closed", {"task_id": task_id, "stage": stage, "run_id": run_id}))
+
+    def open_stage(self, *args: Any) -> None:
+        pass
+
+
 def _timeout() -> openai.APITimeoutError:
     return openai.APITimeoutError(request=_REQUEST)
 
@@ -91,13 +113,17 @@ def _status(code: int) -> openai.APIStatusError:
 
 
 def _run(
-    call: _Script, client: _FakeLangfuse | None = None, **kwargs: Any
+    call: _Script,
+    client: _FakeLangfuse | None = None,
+    *,
+    step: str = "select_rerank",
+    **kwargs: Any,
 ) -> tuple[str, list[float]]:
     waits: list[float] = []
     result = tracing.traced_attempts(
         client,  # type: ignore[arg-type]
         name="select:rerank",
-        step="select_rerank",
+        step=step,
         call=call,
         sleep=waits.append,
         **kwargs,
@@ -260,3 +286,98 @@ def test_the_two_calls_get_different_ids() -> None:
     _run(_Script(), langfuse)
     ids = [span.metadata()["logical_call_id"] for span in langfuse.spans]
     assert len(set(ids)) == 2
+
+
+def test_liveness_hooks_publish_the_step_verb_and_bracket_the_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hub = _RecordingHub()
+    task_id = uuid.uuid4()
+    monkeypatch.setattr(liveness, "tick_hub", hub)
+
+    with liveness.task_liveness(task_id, stage="classify"):
+        result, waits = _run(_Script(), _FakeLangfuse(), step="classify_document")
+
+    assert result == "ok"
+    assert waits == []
+    assert [event for event, _payload in hub.events] == ["verb", "opened", "closed"]
+    assert hub.events[0][1] == {
+        "task_id": task_id,
+        "stage": "classify",
+        "activity": "Classifying",
+        "source": "hook",
+        # No walk bound here; a walk's component run binds its id (round 11).
+        "run_id": None,
+    }
+    assert all("done" not in payload for _event, payload in hub.events)
+    assert all("total" not in payload for _event, payload in hub.events)
+
+
+def test_liveness_hooks_bracket_every_retry_without_counts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hub = _RecordingHub()
+    monkeypatch.setattr(liveness, "tick_hub", hub)
+
+    with liveness.task_liveness(uuid.uuid4(), stage="classify"):
+        result, waits = _run(
+            _Script(_timeout()), _FakeLangfuse(), step="classify_document"
+        )
+
+    assert result == "ok"
+    assert waits == [tracing.DEFAULT_RETRY_WAIT_S]
+    assert [event for event, _payload in hub.events] == [
+        "verb",
+        "opened",
+        "closed",
+        "verb",
+        "opened",
+        "closed",
+    ]
+    assert all("done" not in payload for _event, payload in hub.events)
+    assert all("total" not in payload for _event, payload in hub.events)
+
+
+def test_liveness_hooks_publish_nothing_outside_a_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hub = _RecordingHub()
+    monkeypatch.setattr(liveness, "tick_hub", hub)
+
+    _run(_Script(), _FakeLangfuse(), step="classify_document")
+
+    assert hub.events == []
+
+
+def test_before_runs_on_every_traced_attempt_before_the_call() -> None:
+    langfuse = _FakeLangfuse()
+    call = _Script(_timeout())
+    seen: list[_FakeSpan] = []
+
+    def _before(span: _FakeSpan) -> None:
+        seen.append(span)
+        span.update(input={"messages": ["hello"]}, model="model-id")
+
+    _run(call, langfuse, before=_before)
+
+    assert seen == langfuse.spans
+    assert [span.metadata()["attempt"] for span in seen] == [1, 2]
+    assert [span.field("input") for span in seen] == [
+        {"messages": ["hello"]},
+        {"messages": ["hello"]},
+    ]
+    assert [span.field("model") for span in seen] == ["model-id", "model-id"]
+
+
+def test_without_langfuse_the_liveness_hooks_still_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hub = _RecordingHub()
+    monkeypatch.setattr(liveness, "tick_hub", hub)
+
+    with liveness.task_liveness(uuid.uuid4(), stage="classify"):
+        result, waits = _run(_Script(), None, step="classify_document")
+
+    assert result == "ok"
+    assert waits == []
+    assert [event for event, _payload in hub.events] == ["verb", "opened", "closed"]

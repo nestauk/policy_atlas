@@ -3,8 +3,10 @@
 One builder renders an :class:`~policy_atlas.api.contract.read_models.OptionOut`
 the way the option card (``frontend/src/views/longlist/OptionCard.tsx``) shows
 it, in the card's order, as plain Markdown: the header, the callouts, *How it
-works*, *What it would take*, *Evidence* (with the maturity rung), then one
-line per document. What Policy Atlas reads is what the user can see (S13).
+works*, *Evidence* (where it has been evaluated first, then the outcomes and
+the maturity rung), one line per document, then *What it could take* (task
+058, round 12: the card's order and its heading). What Policy Atlas reads is
+what the user can see (S13).
 
 Left out, as the contract's card-text matrix says: the exclusion block
 (excluded options are never candidates), the action buttons, every link and
@@ -121,14 +123,17 @@ class CardText:
     """One option card as text, its document lines kept apart.
 
     Attributes:
-        fixed: Everything but the document lines, ending with the documents
+        fixed: Everything before the document lines, ending with the documents
             summary line when the option has documents.
         document_lines: One ``(year, line)`` per document, in the card's
             order; the year (``None`` when unknown) decides the cut order.
+        tail: What follows the document lines: *What it could take*, or
+            ``""`` when the option has no profile (task 058, round 12).
     """
 
     fixed: str
     document_lines: list[tuple[int | None, str]]
+    tail: str = ""
 
     def render(self, lines: Sequence[tuple[int | None, str]] | None = None) -> str:
         """Join the fixed text and the document lines that are kept.
@@ -140,7 +145,8 @@ class CardText:
             The card's text.
         """
         kept = self.document_lines if lines is None else lines
-        return "\n".join([self.fixed, *(line for _, line in kept)])
+        parts = [self.fixed, *(line for _, line in kept)]
+        return "\n".join([*parts, self.tail] if self.tail else parts)
 
 
 def _t(value: object) -> str:
@@ -413,27 +419,15 @@ def option_card_text(option: OptionOut, *, today_year: int | None = None) -> Car
         for feature in option.design.design_features[:FEATURES_SHOWN]
     )
 
-    if profile is not None:
-        out.append("### What it would take")
-        ambition_word = LEVEL_WORDS["ambition"][option.ambition] if option.ambition else None
-        ambition = f"Ambition: {_t(option.ambition_reason or '')}".rstrip()
-        out.append(f"{ambition} ({ambition_word})" if ambition_word else ambition)
-        by_key: dict[str, ProfileLineOut] = {line.key: line for line in profile.lines}
-        for key, name in LINE_NAMES.items():
-            line = by_key.get(key)
-            if line is None:
-                continue
-            row = f"{name}: {_t(line.sentence)}"
-            if key == "who_decides" and option.authority is not None:
-                row = f"{row} ({_authority_words(option.authority)})"
-            elif line.mark is not None and key in LEVEL_WORDS:
-                row = f"{row} ({LEVEL_WORDS[key][line.mark]})"
-            out.append(row)
-
     out.append("### Evidence")
     out.append(_evidence_opener(option.evaluated_count, option.document_count))
     document_lines: list[tuple[int | None, str]] = []
     if option.document_count > 0:
+        if option.place_sentences:
+            out.append("Where it has been evaluated:")
+            out.extend(
+                f"- {_t(entry.place)}: {_t(entry.sentence)}" for entry in option.place_sentences
+            )
         by_outcome = option.evidence.outcome_counts.by_outcome
         if by_outcome:
             out.append("Your outcomes:")
@@ -453,11 +447,6 @@ def option_card_text(option: OptionOut, *, today_year: int | None = None) -> Car
                         else " · not a target of this option"
                     )
                     out.append(f"- {_t(entry.outcome)}: {count}{target}")
-        if option.place_sentences:
-            out.append("Where it has been evaluated:")
-            out.extend(
-                f"- {_t(entry.place)}: {_t(entry.sentence)}" for entry in option.place_sentences
-            )
     if option.maturity is not None:
         out.append(_maturity_line(option.maturity, today_year))
     if option.document_count > 0:
@@ -465,7 +454,26 @@ def option_card_text(option: OptionOut, *, today_year: int | None = None) -> Car
         summary = f"Documents · {len(documents)}"
         out.append(f"{summary} · read from titles and abstracts only" if documents else summary)
         document_lines = [(document.year, _document_line(document)) for document in documents]
-    return CardText(fixed="\n".join(out), document_lines=document_lines)
+    tail: list[str] = []
+    if profile is not None:
+        tail.append("### What it could take")
+        ambition_word = LEVEL_WORDS["ambition"][option.ambition] if option.ambition else None
+        ambition = f"Ambition: {_t(option.ambition_reason or '')}".rstrip()
+        tail.append(f"{ambition} ({ambition_word})" if ambition_word else ambition)
+        by_key: dict[str, ProfileLineOut] = {line.key: line for line in profile.lines}
+        for key, name in LINE_NAMES.items():
+            line = by_key.get(key)
+            if line is None:
+                continue
+            row = f"{name}: {_t(line.sentence)}"
+            if key == "who_decides" and option.authority is not None:
+                row = f"{row} ({_authority_words(option.authority)})"
+            elif line.mark is not None and key in LEVEL_WORDS:
+                row = f"{row} ({LEVEL_WORDS[key][line.mark]})"
+            tail.append(row)
+    return CardText(
+        fixed="\n".join(out), document_lines=document_lines, tail="\n".join(tail)
+    )
 
 
 def fit_cards(cards: Sequence[CardText], budget: int) -> tuple[list[str], int]:

@@ -20,9 +20,11 @@ from langfuse import Langfuse
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.lifecycle import touch_task
 from policy_atlas.core import events, tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.inference import StubEchoProvider
+from policy_atlas.core.liveness import task_liveness, tick_hub
 from policy_atlas.core.schema import (
     capability_run,
     event_log,
@@ -1892,6 +1894,9 @@ def run_plan(
                 option_search.abandon_children(engine, task_id=task_id, parent_id=walk_id)
             except Exception:
                 log.exception("runner.abandon_children_failed", capability_run_id=str(walk_id))
+            # The raise skips ``_finish_run``: the live memory goes here instead
+            # (a no-op for a child walk or one already finished).
+            tick_hub.end_run(task_id, walk_id)
         raise
 
 
@@ -5702,6 +5707,10 @@ def _open_capability_run(
         context (task 046, AM4: it marks an acquire-only option search).
     """
     with engine.begin() as conn:
+        # A run's start is work on the task (task 058, round 10); first in the
+        # transaction, as in ``_finish_run``.
+        if parent_capability_run_id is None:
+            touch_task(conn, task_id)
         capability = capability_of_task(conn, task_id)
         purpose = purpose_of_scope(
             conn, task_id=task_id, evidence_scope_id=evidence_scope_id
@@ -5734,6 +5743,11 @@ def _open_capability_run(
                 "plan_version": plan_version,
             },
         )
+    tick_hub.begin_run(
+        task_id,
+        capability_run_id,
+        parent_run_id=parent_capability_run_id,
+    )
     return capability, purpose, scope_context
 
 
@@ -5748,8 +5762,8 @@ def _finish_run(
     follow_on: str | None = None,
 ) -> RunPlanOutcome:
     with engine.connect() as conn:
-        purpose = conn.execute(
-            select(evidence_scope.c.purpose)
+        walk_scope = conn.execute(
+            select(evidence_scope.c.purpose, capability_run.c.parent_capability_run_id)
             .select_from(
                 capability_run.join(
                     evidence_scope,
@@ -5759,7 +5773,8 @@ def _finish_run(
             )
             .where(capability_run.c.capability_run_id == capability_run_id)
             .where(capability_run.c.task_id == task_id)
-        ).scalar_one_or_none()
+        ).one_or_none()
+    purpose = walk_scope.purpose if walk_scope is not None else None
     if purpose in (LONGLIST_PURPOSE, TOC_PURPOSE):
         # Every end of a longlist walk — the spine failed, an abort, or the
         # walk's own finish — ends the option searches the join never waited
@@ -5767,6 +5782,12 @@ def _finish_run(
         # A theory-of-change check walk's item searches end the same way (054).
         option_search.abandon_children(engine, task_id=task_id, parent_id=capability_run_id)
     with engine.begin() as conn:
+        # A run's end is work on the task (task 058, round 10). First in the
+        # transaction, before the walk row is locked: the API takes the task
+        # row before run rows, and one order means no deadlock. Only a walk
+        # the user started: an option search ends inside its parent's run.
+        if walk_scope is not None and walk_scope.parent_capability_run_id is None:
+            touch_task(conn, task_id)
         ended_at = datetime.now(UTC)
         walk = conn.execute(
             select(
@@ -5845,6 +5866,7 @@ def _finish_run(
             and purpose != TOC_PURPOSE
         ):
             close_task_agent_conversation(conn, task_id=task_id, closed_at=ended_at)
+    tick_hub.end_run(task_id, capability_run_id)
     collation = render_collation(flagged_events)
     log.info("runner.collation", render=collation)
     _log_run_summary(outcomes, status=status)
@@ -6126,16 +6148,22 @@ def _run_step_attempt(
                     # failure must not fail the run) but inside its run span, so
                     # the summaries trace as the tail of the run, not as root
                     # traces of their own.
-                    summary_accounting = write_summaries_after_commit(
-                        engine,
-                        task_id=task_id,
-                        run_id=run_id,
-                        synthesis_backend=(
-                            backends.synthesis
-                            if backends.synthesis is not None
-                            else StubSynthesisBackend()
-                        ),
-                    )
+                    # Bound to the task, the stage and the walk (round 14): the
+                    # harness's binding has ended by now, and without this the
+                    # pass's lines reach nobody.
+                    with task_liveness(
+                        task_id, stage="synthesise", run_id=capability_run_id
+                    ):
+                        summary_accounting = write_summaries_after_commit(
+                            engine,
+                            task_id=task_id,
+                            run_id=run_id,
+                            synthesis_backend=(
+                                backends.synthesis
+                                if backends.synthesis is not None
+                                else StubSynthesisBackend()
+                            ),
+                        )
                     component_usage = component_summary.get("usage_totals")
                     if isinstance(component_usage, dict):
                         merged_usage = UsageAccumulator()
@@ -6158,13 +6186,18 @@ def _run_step_attempt(
         # append its terminal lifecycle event separately so the payload remains
         # byte-identical to the former node-level append.
         if component_summary is not None:
+            completed_wall_clock_s = time.monotonic() - started
             with engine.begin() as conn:
                 events.append(
                     conn,
                     task_id=task_id,
                     run_id=run_id,
                     event_type="component.completed",
-                    payload={"component": registry_component, **component_summary},
+                    payload={
+                        "component": registry_component,
+                        "wall_clock_s": completed_wall_clock_s,
+                        **component_summary,
+                    },
                 )
             log.info(
                 "component.completed",

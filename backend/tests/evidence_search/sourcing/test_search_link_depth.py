@@ -78,12 +78,13 @@ def test_link_depth_runs_five_calls_and_keeps_every_distinct_result(
         generation_backend=_generation(),
     )
 
-    assert [(c.verb, c.query, c.max_results) for c in openalex.calls] == [
+    # The calls run in a thread pool: the backend sees them in any order.
+    assert sorted((c.verb, c.query, c.max_results) for c in openalex.calls) == sorted([
         ("search_semantic", SENTENCE, 20),
         ("search_semantic", SENTENCE + LINK_PLACE_SUFFIX, 10),
         ("search", SR, 10),
         ("search", RCT, 10),
-    ]
+    ])
     assert [(c.verb, c.query, c.max_results) for c in overton.calls] == [("search", SENTENCE, 10)]
     assert counts["search"]["generation_calls"] == 1
     assert counts["search"]["queries_executed"] == {"openalex": 4, "overton": 1}
@@ -128,7 +129,7 @@ def test_find_more_evidence_asks_every_call_for_twice_the_results(conn: Connecti
         backends=[openalex, overton],
         generation_backend=_generation(),
     )
-    assert [c.max_results for c in openalex.calls] == [40, 20, 20, 20]
+    assert sorted(c.max_results or 0 for c in openalex.calls) == [20, 20, 20, 40]
     assert [c.max_results for c in overton.calls] == [20]
 
 
@@ -150,7 +151,8 @@ def test_a_reformulated_search_searches_by_meaning_on_the_paraphrase(conn: Conne
         backends=[openalex, overton],
         generation_backend=_generation(),
     )
-    assert [c.query for c in openalex.calls][:2] == ["p", "p" + LINK_PLACE_SUFFIX]
+    queries = [c.query for c in openalex.calls]
+    assert "p" in queries and "p" + LINK_PLACE_SUFFIX in queries
     assert [c.query for c in overton.calls] == ["p"]
     assert counts["search"]["reformulated"] is True
 

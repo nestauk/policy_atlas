@@ -5,7 +5,15 @@ export { useChatConversation, useComposerDraft } from "./conversations";
 export { RunStreamProvider, useRunStream } from "./useRunStream";
 export { createInitialRunStreamState } from "./types";
 export type {
+  LiveCard,
+  LiveCheckedClaim,
+  LiveCitation,
+  LiveClaim,
+  LiveSearchQuery,
   LiveSection,
+  LiveSource,
+  LiveSourceNote,
+  LiveTheme,
   PlanDraft,
   ResolvedDecision,
   RunStatus,

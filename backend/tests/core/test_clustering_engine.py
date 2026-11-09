@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 import pytest
@@ -19,6 +19,7 @@ from policy_atlas.core.clustering_engine import (
     validate_discovered_labels,
 )
 from policy_atlas.core.usage import TokenUsage, UsageResult
+from tests import progress_recorder
 
 
 def _policy(
@@ -215,3 +216,136 @@ def test_discovery_rejection_details_are_bounded() -> None:
 
     assert result.discovery_retries_used == 1
     assert result.discovery_rejections == ["label 0 name exceeds 20 chars"]
+
+
+# --- Live progress (task 058, N2) ---
+
+
+def test_first_round_publishes_batches_done_of_total(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = progress_recorder.install(monkeypatch)
+    units = [ClusterUnit(unit_id=f"u{i}", payload={}) for i in range(1, 4)]
+    labels = [ClusterLabel(label="A", description="Alpha")]
+    backend = _Backend(
+        discovery_outputs=[labels],
+        assignment_outputs=[
+            [
+                ClusterAssignment(unit_id="u1", label="A"),
+                ClusterAssignment(unit_id="u2", label="A"),
+            ],
+            [ClusterAssignment(unit_id="u3", label="A")],
+        ],
+    )
+    policy = replace(_policy(), assignment_batch_size=2, progress_key="longlist.batches")
+
+    cluster_units(units, backend=backend, policy=policy)
+
+    assert [(c["done"], c["total"], c["unit"]) for c in calls] == [
+        (0, 2, "batches"),
+        (1, 2, "batches"),
+        (2, 2, "batches"),
+    ]
+    assert calls[-1]["activity"] == "Assigning sources to options · batch 2 of 2"
+
+
+def test_repair_call_does_not_move_the_batch_count(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = progress_recorder.install(monkeypatch)
+    units = [ClusterUnit(unit_id="u1", payload={}), ClusterUnit(unit_id="u2", payload={})]
+    labels = [ClusterLabel(label="A", description="Alpha")]
+    backend = _Backend(
+        discovery_outputs=[labels],
+        assignment_outputs=[[ClusterAssignment(unit_id="u1", label="A")], {"u2": "A"}],
+    )
+    policy = replace(_policy(), progress_key="characterise.batches")
+
+    result = cluster_units(units, backend=backend, policy=policy)
+
+    assert result.assignment_repair_calls_used == 1
+    assert [c["done"] for c in calls] == [0, 1]
+
+
+def test_no_progress_key_publishes_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = progress_recorder.install(monkeypatch)
+    units = [ClusterUnit(unit_id="u1", payload={})]
+    backend = _Backend(
+        discovery_outputs=[[ClusterLabel(label="A", description="Alpha")]],
+        assignment_outputs=[[ClusterAssignment(unit_id="u1", label="A")]],
+    )
+
+    cluster_units(units, backend=backend, policy=_policy())
+
+    assert calls == []
+
+
+def test_each_caller_names_its_progress_key() -> None:
+    from policy_atlas.evidence_search.corpus.characterise import _characterise_clustering_policy
+    from policy_atlas.evidence_search.group.group import _group_policy
+    from policy_atlas.options_scoping.longlist.longlist import _option_policy
+    from policy_atlas.options_scoping.theme.theme import _theme_policy
+
+    assert _characterise_clustering_policy(min_themes=2, max_themes=6).progress_key == (
+        "characterise.batches"
+    )
+    assert _group_policy(unit_count=10).progress_key == "group.batches"
+    assert _option_policy(8).progress_key == "longlist.batches"
+    assert _theme_policy(4).progress_key == "theme.batches"
+
+
+def test_labels_are_handed_over_after_discovery_and_before_assignment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task 058, round 9: the characterise stage shows its themes while it assigns."""
+    order: list[str] = []
+    units = [ClusterUnit(unit_id="u1", payload={})]
+    labels = [
+        ClusterLabel(label="A", description="Alpha"),
+        ClusterLabel(label="B", description="Beta"),
+    ]
+
+    class _Ordered(_Backend):
+        def assign(
+            self, batch: list[ClusterUnit], *, labels: list[ClusterLabel]
+        ) -> UsageResult[AssignmentOutput]:
+            order.append("assign")
+            return super().assign(batch, labels=labels)
+
+    backend = _Ordered(
+        discovery_outputs=[labels],
+        assignment_outputs=[[ClusterAssignment(unit_id="u1", label="A")]],
+    )
+    seen: list[list[str]] = []
+
+    def on_labels(found: list[ClusterLabel]) -> None:
+        order.append("labels")
+        seen.append([label.label for label in found])
+
+    cluster_units(units, backend=backend, policy=replace(_policy(), on_labels=on_labels))
+    assert order == ["labels", "assign"]
+    assert seen == [["A", "B"]]
+
+    # The characterise stage publishes its themes, the longlist its options and
+    # the theme stage its themes, each under its stage (round 11); grouping
+    # findings publishes nothing.
+    from policy_atlas.core import liveness
+    from policy_atlas.evidence_search.corpus.characterise import _characterise_clustering_policy
+    from policy_atlas.evidence_search.group.group import _group_policy
+    from policy_atlas.options_scoping.longlist.longlist import _option_policy
+    from policy_atlas.options_scoping.theme.theme import _theme_policy
+
+    published: list[tuple[str, list[tuple[str, str | None]]]] = []
+
+    def record(themes: list[tuple[str, str | None]], *, stage: str) -> None:
+        published.append((stage, list(themes)))
+
+    monkeypatch.setattr(liveness, "publish_themes", record)
+    found = [labels[0], ClusterLabel(label="B", description="")]
+    for policy in (
+        _characterise_clustering_policy(min_themes=2, max_themes=6),
+        _option_policy(8),
+        _theme_policy(4),
+    ):
+        assert policy.on_labels is not None
+        policy.on_labels(found)
+    assert published == [
+        (stage, [("A", "Alpha"), ("B", None)]) for stage in ("characterise", "longlist", "theme")
+    ]
+    assert _group_policy(unit_count=10).on_labels is None

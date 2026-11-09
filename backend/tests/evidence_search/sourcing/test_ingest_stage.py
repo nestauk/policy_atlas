@@ -1056,7 +1056,7 @@ def _run_queued(
     """Run the stage in queued mode; return its summary and its progress ticks."""
     ticks: list[dict[str, Any]] = []
     monkeypatch.setattr(
-        ingest_full_text, "publish_current_tick", lambda **kwargs: ticks.append(kwargs)
+        ingest_full_text, "publish_progress", lambda **kwargs: ticks.append(kwargs)
     )
     # The stage's connection keeps its transaction open throughout, like the
     # runner's component transaction; the workers' commits are visible to it.
@@ -1128,8 +1128,8 @@ def test_queued_all_done_early_stops_at_once_and_embeds_on_its_own_thread(
         assert summary["fetch_failed"] == 0 and summary["by_reason"] == {}
         _assert_counts_invariant(summary)
         assert summary["bytes_fetched"] is None
-        assert ticks and all(t["fetched"] is None and t["total"] == 3 for t in ticks)
-        assert ticks[-1]["parsed"] == 3
+        assert ticks and all(t["unit"] == "documents" and t["total"] == 3 for t in ticks)
+        assert ticks[-1]["done"] == 3
         chunks, with_vector = _embedded_chunk_count(engine, task_id)
         assert chunks == 9 and with_vector == 9
         assert summary["embed"]["embedded"] + summary["embed"]["already_embedded"] == 9
@@ -1219,7 +1219,7 @@ def test_queued_deadline_hit_with_orphans_requeued_at_start(
         assert summary["by_reason"] == {"not_ready": 3}
         _assert_counts_invariant(summary)
         assert sum(workers.sleeps) >= 600.0 and len(workers.sleeps) <= 7
-        assert all(t["parsed"] == 0 and t["fetched"] is None for t in ticks)
+        assert all(t["done"] == 0 and t["unit"] == "documents" for t in ticks)
         assert summary["embed"]["embedded"] == 0
 
         _set_status(engine, tss_ids[1], "fetch_failed", "paywall")

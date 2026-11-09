@@ -34,16 +34,28 @@ plus the typed claims that anchor into it (ADR 0015).
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from threading import Lock
 from typing import Any, Literal, NotRequired, Protocol, TypedDict
 
 import structlog
 from langfuse import Langfuse
+from openai.lib._pydantic import to_strict_json_schema
 from pydantic import ValidationError
 
 from policy_atlas.core import tracing
+from policy_atlas.core.liveness import (
+    model_call_closed,
+    model_call_opened,
+    publish_section_card,
+    publish_section_claim,
+    publish_section_delta,
+)
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import (
+    JsonArrayObjectDecoder,
+    JsonStringFieldDecoder,
     openai_kwargs,
     require_parsed,
     require_single_tool_call,
@@ -111,7 +123,9 @@ from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     MalformedEmissionError,
     ToolCallRequest,
     ToolExchange,
+    citable_sources,
     is_qualified_group_id,
+    name_sources,
 )
 
 log = structlog.get_logger()
@@ -208,12 +222,18 @@ class SectionTurn(TypedDict):
     056 D10: parallel tool calls stay on for the forced turn so it reads the
     cache). The ``claims`` field name is kept for the wire shape ``SectionProseWire``
     (prose + claims) to bound the diff.
+
+    ``ready`` is True when the writer said it has gathered enough (task 058,
+    owner 2026-11-05): it called ``write_section``, or replied with no tool
+    call at all. Such a turn carries no reads and no claims; the loop then
+    runs the write turn, which streams the section to the user.
     """
 
     tool_calls: list[ToolCallRequest]
     claims: SectionProseWire | None
     malformed_claims: NotRequired[int]
     extra_tool_calls_ignored: NotRequired[int]
+    ready: NotRequired[bool]
 
 
 # --- The backend seam ---
@@ -289,8 +309,8 @@ class SynthesisBackend(Protocol):
         *,
         force_emit: bool,
     ) -> UsageResult[SectionTurn]:
-        """Produce one loop turn: one or more read-tool calls, or the claims
-        emission.
+        """Produce one loop turn: one or more read-tool calls, the claims
+        emission, or the ready signal.
 
         Args:
             seed: Id-keyed section seed.
@@ -299,7 +319,8 @@ class SynthesisBackend(Protocol):
 
         Returns:
             The turn plus token usage: exactly one of ``tool_calls`` (one or
-            more entries) or ``claims``.
+            more entries), ``claims``, or ``ready`` (the writer has gathered
+            enough; the loop runs the write turn next, task 058).
         """
         ...
 
@@ -386,6 +407,32 @@ class SynthesisBackend(Protocol):
         ...
 
 
+def _strip_code_fence(text: str) -> str:
+    """Remove a Markdown code fence the model may wrap its JSON reply in.
+
+    The streamed write turn asks for a bare JSON object, but a model sometimes
+    wraps it as ```` ```json … ``` ````. A leading fence line (with or without
+    a language tag) and a trailing ```` ``` ```` are dropped; any other text is
+    returned as it came, stripped of outer whitespace.
+
+    Args:
+        text: The whole streamed reply.
+
+    Returns:
+        The reply without the fence.
+    """
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return stripped
+    first_newline = stripped.find("\n")
+    if first_newline == -1:
+        return stripped
+    body = stripped[first_newline + 1 :]
+    if body.rstrip().endswith("```"):
+        body = body.rstrip()[:-3]
+    return body.strip()
+
+
 def _salvage_section(arguments: str) -> tuple[SectionProseWire, int]:
     """Parse an ``emit_section`` argument string: prose plus claim-by-claim.
 
@@ -453,6 +500,210 @@ def _salvage_section(arguments: str) -> tuple[SectionProseWire, int]:
                 error=str(exc)[:300],
             )
     return SectionProseWire(prose=prose, claims=valid), malformed
+
+
+class StreamedClaimMarker:
+    """Mark the writer's citations on the page as each claim closes (task 058).
+
+    In plain terms: the streamed write turn sends the prose first and then the
+    claims, each naming the exact words of the prose it supports and the
+    sources it cites. As each claim object closes, this class reads it alone,
+    finds its words in the prose streamed so far (the same ordered search as
+    the final binding: from where the last claim ended, else the first place
+    that does not overlap a claim already placed), and publishes the span and
+    the cited sources' names through :func:`publish_section_claim`.
+
+    Display-only: a claim that does not parse, does not validate, does not
+    bind, or cites no known source is skipped; nothing here can raise or
+    change what the final parse returns.
+
+    Args:
+        index: The page's index for the section.
+        seed: The section seed (its member findings are citable).
+        transcript: The section's tool exchanges.
+        sources: The citable ids' sources, ``(by_chunk_id, by_finding_id)``
+            as :func:`citable_sources` gives them, when the caller already
+            has them (the key findings, which run without a transcript, cite
+            what the sections read; round 8). ``None`` reads them from
+            ``seed`` and ``transcript``.
+    """
+
+    def __init__(
+        self,
+        index: int,
+        seed: dict[str, Any],
+        transcript: list[ToolExchange],
+        *,
+        sources: (
+            tuple[dict[str, tuple[str, str | None]], dict[str, tuple[str, str | None]]] | None
+        ) = None,
+    ) -> None:
+        self._index = index
+        self._seed = seed
+        self._transcript = transcript
+        self._claims = JsonArrayObjectDecoder("claims")
+        self._prose = ""
+        self._cursor = 0
+        self._bound: list[tuple[int, int]] = []
+        self._seen = 0
+        self._sources: (
+            tuple[dict[str, tuple[str, str | None]], dict[str, tuple[str, str | None]]] | None
+        ) = sources
+        self._broken = False
+
+    def feed(self, fragment: str, decoded_prose: str) -> None:
+        """Take one streamed piece and the prose decoded from it.
+
+        Args:
+            fragment: The raw streamed JSON text.
+            decoded_prose: The prose characters decoded from ``fragment``.
+        """
+        if self._broken:
+            return
+        try:
+            self._prose += decoded_prose
+            for raw in self._claims.feed(fragment):
+                self._claim(raw)
+        except Exception as exc:  # noqa: BLE001 - display-only, never fails the turn
+            self._broken = True
+            log.warning("synthesis.streamed_claim_marker.failed", error=type(exc).__name__)
+
+    def _claim(self, raw: str) -> None:
+        self._seen += 1
+        if self._seen > EMISSION_CLAIMS_MAX:
+            return
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            return
+        if not isinstance(payload, dict):
+            return
+        text = payload.get("text")
+        if not isinstance(text, str) or not text or len(text) > CLAIM_TEXT_MAX:
+            return
+        try:
+            claim = ClaimWire.model_validate(payload)
+        except ValidationError:
+            return
+        span = self._bind(claim.text)
+        if span is None:
+            return
+        sources = self._cited_sources(claim)
+        if sources:
+            publish_section_claim(self._index, span[0], span[1], sources)
+
+    def _bind(self, text: str) -> tuple[int, int] | None:
+        prose = self._prose
+        at = prose.find(text, self._cursor)
+        if at == -1:
+            search = 0
+            while True:
+                candidate = prose.find(text, search)
+                if candidate == -1:
+                    break
+                if not self._overlaps((candidate, candidate + len(text))):
+                    at = candidate
+                    break
+                search = candidate + 1
+        if at == -1:
+            return None
+        span = (at, at + len(text))
+        if self._overlaps(span):
+            return None
+        self._bound.append(span)
+        self._cursor = max(self._cursor, span[1])
+        return span
+
+    def _overlaps(self, span: tuple[int, int]) -> bool:
+        return any(span[0] < end and start < span[1] for start, end in self._bound)
+
+    def _cited_sources(self, claim: ClaimWire) -> list[tuple[str, str]]:
+        if self._sources is None:
+            self._sources = citable_sources(self._seed, self._transcript)
+        by_chunk, by_finding = self._sources
+        found: list[tuple[str, str | None]] = []
+        if claim.claim_type == "chunk":
+            found = [
+                by_chunk[citation.chunk_record_id]
+                for citation in claim.citations
+                if citation.chunk_record_id in by_chunk
+            ]
+        elif claim.claim_type == "finding":
+            found = [
+                by_finding[finding_id]
+                for finding_id in claim.cited_finding_ids
+                if finding_id in by_finding
+            ]
+        return name_sources(found)
+
+
+@contextmanager
+def _open_model_call() -> Iterator[None]:
+    """Mark one streamed model call as open on the live-progress hub while it runs.
+
+    In plain terms: while a call is marked open, the hub keeps sending the
+    page a small "still working" signal (a heartbeat). Every other model call
+    is marked by :func:`tracing.traced_attempts`; the streamed write calls
+    run outside it, so without this the page heard nothing between chunks
+    (task 058 review: a 32 s silent gap on a real run). The mark covers the
+    stream and its non-streamed fallback, closed in a ``finally`` as
+    ``traced_attempts`` closes it.
+    """
+    model_call_opened()
+    try:
+        yield
+    finally:
+        model_call_closed()
+
+
+class StreamedCardPublisher:
+    """Send each case-study card to the page as it closes in the reply (task 058).
+
+    In plain terms: the case-studies reply is one JSON object,
+    ``{"cards": [{"title": ..., "prose": ..., ...}, ...]}``, arriving in
+    pieces. As each card object closes it is read on its own and, when it has
+    a title and some text, sent through :func:`publish_section_card`.
+
+    Display-only: a card that does not parse or lacks a title or text is
+    skipped; nothing here can raise or change what the final parse returns.
+
+    Args:
+        index: The page's index for the case-studies slot.
+    """
+
+    def __init__(self, index: int) -> None:
+        self._index = index
+        self._cards = JsonArrayObjectDecoder("cards")
+        self._broken = False
+
+    def feed(self, fragment: str) -> None:
+        """Take one streamed piece of the reply.
+
+        Args:
+            fragment: The raw streamed JSON text.
+        """
+        if self._broken:
+            return
+        try:
+            for raw in self._cards.feed(fragment):
+                self._card(raw)
+        except Exception as exc:  # noqa: BLE001 - display-only, never fails the call
+            self._broken = True
+            log.warning("synthesis.streamed_card_publisher.failed", error=type(exc).__name__)
+
+    def _card(self, raw: str) -> None:
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            return
+        if not isinstance(payload, dict):
+            return
+        title, prose = payload.get("title"), payload.get("prose")
+        if not isinstance(title, str) or not isinstance(prose, str):
+            return
+        if not title.strip() or not prose.strip():
+            return
+        publish_section_card(self._index, title, prose)
 
 
 def _salvage_repairs(arguments: str) -> SectionRepairWire:
@@ -720,6 +971,8 @@ class OpenAISynthesisBackend:
         self._langfuse_client = langfuse_client
         self._turn_count = 0
         self._lock = Lock()
+        # Streamed final turns that fell back to the forced tool call (task 058, N6).
+        self.stream_fallbacks = 0
 
     @property
     def langfuse_client(self) -> Langfuse | None:
@@ -966,11 +1219,20 @@ class OpenAISynthesisBackend:
                 forced_turn[0]["extra_tool_calls_ignored"] = len(ignored)
             return forced_turn
 
+        def _ready_turn() -> UsageResult[SectionTurn]:
+            return {
+                "tool_calls": [],
+                "claims": None,
+                "ready": True,
+            }, token_usage_from_provider(response.usage)
+
         if not response.choices:
             raise RuntimeError("OpenAI synthesis section turn response had no choices.")
         message_tool_calls = response.choices[0].message.tool_calls or []
         if not message_tool_calls:
-            raise RuntimeError("OpenAI synthesis section turn response had no tool call.")
+            # A bare reply with no tool call means the writer is ready to write
+            # (owner, 2026-11-05): the loop runs the write turn next.
+            return _ready_turn()
 
         if len(message_tool_calls) == 1:
             only_call = message_tool_calls[0]
@@ -980,12 +1242,15 @@ class OpenAISynthesisBackend:
                 raise RuntimeError("OpenAI synthesis section turn returned an unnamed tool call.")
             if not isinstance(arguments, str):
                 arguments = "{}"
+            if name == "write_section":
+                return _ready_turn()
             if name == "emit_section":
                 return _emit_turn(arguments)
             return _read_turn(name, arguments)
 
         read_calls: list[ToolCallRequest] = []
         emit_arguments: str | None = None
+        write_requested = False
         for tool_call in message_tool_calls:
             name = tool_call.function.name
             arguments = tool_call.function.arguments
@@ -993,15 +1258,27 @@ class OpenAISynthesisBackend:
                 raise RuntimeError("OpenAI synthesis section turn returned an unnamed tool call.")
             if not isinstance(arguments, str):
                 arguments = "{}"
+            if name == "write_section":
+                write_requested = True
+                continue
             if name == "emit_section":
                 emit_arguments = arguments
                 continue
             read_calls.append({"tool": name, "arguments": _json_object_or_empty(arguments)})
         if emit_arguments is not None and not read_calls:
-            # Every parallel call was emit_section — honour the emission rather
-            # than returning an empty turn the loop would treat as a protocol
-            # violation.
+            # Every parallel call was emit_section (perhaps beside
+            # write_section) — honour the emission rather than returning an
+            # empty turn the loop would treat as a protocol violation.
             return _emit_turn(emit_arguments)
+        if write_requested and not read_calls:
+            # Every parallel call was write_section: the writer is ready.
+            return _ready_turn()
+        if write_requested:
+            # write_section beside reads: run the reads and drop the write;
+            # the model sees the results and calls write_section again.
+            log.warning(
+                "synthesis.write_with_reads_deferred", read_tool_count=len(read_calls)
+            )
         if emit_arguments is not None:
             log.warning(
                 "synthesis.emit_with_reads_deferred", read_tool_count=len(read_calls)
@@ -1023,7 +1300,8 @@ class OpenAISynthesisBackend:
             force_emit: Whether this is the final forced-emission turn.
 
         Returns:
-            One tool call request or a claims emission plus token usage.
+            Read-tool call requests, a claims emission, or (on an open turn) the
+            ready signal, plus token usage.
 
         Raises:
             RuntimeError: If the provider response violates the one-tool-call protocol.
@@ -1059,6 +1337,139 @@ class OpenAISynthesisBackend:
             update=_update,
         )
         return turn, usage
+
+    def section_emit_stream(
+        self,
+        seed: dict[str, Any],
+        transcript: list[ToolExchange],
+    ) -> UsageResult[SectionTurn]:
+        """Write the section as one streamed reply (task 058, N6; owner 2026-11-05).
+
+        This is every section's write turn: the turn after the writer calls
+        ``write_section`` (it has gathered enough), and the forced final turn
+        when the turn budget runs out.
+
+        The request keeps the section turns' tools on it, with no tool allowed
+        (``tool_choice="none"``) and no structured-output schema, and the last
+        message asks for the ``emit_section`` arguments as one JSON object.
+        Keeping the tools means the provider can reuse the part of the prompt
+        it has already stored from the earlier turns (its "prompt cache"); a
+        structured-output schema would change that stored part and lose the
+        reuse (probe, 2026-11-05). Each piece of prose is sent to the user as
+        it arrives through :func:`publish_section_delta`. Each claim object is
+        read as soon as it closes, and a claim whose text is found in the
+        prose and that cites a source is sent to the page with its sources
+        (:class:`StreamedClaimMarker`, display-only). The whole text, less
+        any Markdown code fence around it, is then parsed exactly as the
+        forced ``emit_section`` call is, so the result continues into the
+        claim checks unchanged.
+
+        The call runs once, outside the retry loop, because a retry would
+        repeat text the user has already seen; the route step's timeout bounds
+        the wait between chunks. On any failure (connection, a gap between
+        chunks that runs out, text that is not a section object) the user's
+        draft is reset with an empty ``replace``, :attr:`stream_fallbacks` is
+        counted, and the turn is run once more without streaming through
+        :meth:`section_turn` with the forced tool, which keeps its own retries;
+        that turn's prose is then sent to the page in one ``replace``.
+
+        Args:
+            seed: Section seed record.
+            transcript: Executed tool exchanges so far.
+
+        Returns:
+            A parsed claims emission plus token usage.
+        """
+        step = "synthesise_section_emit"
+        # ``streamed=True`` appends the write-turn message whatever
+        # ``force_emit`` says, so the ready and the forced write send the same.
+        messages = build_section_messages(
+            seed, transcript, force_emit=False, streamed=True
+        )
+        tools = section_request_tools(seed)
+        # Deltas are addressed to the page's section index (key findings first
+        # at 0), which the seed carries as ``display_index``; the loop's own
+        # ``section_index`` is one lower for a body section when the report
+        # has key findings (task 058; owner round 5).
+        index = int(seed.get("display_index", seed["section_index"]))
+        metadata = {
+            "step": step,
+            "attempt": 1,
+            "prompt_version": self._section_prompt_version,
+            "transcript_length": len(transcript),
+        }
+
+        def _stream(span: Any | None = None) -> UsageResult[SectionTurn]:
+            if span is not None:
+                span.update(input={"messages": messages}, metadata=metadata)
+            completions: Any = self._client.chat.completions
+            stream = completions.create(
+                **_step_kwargs(step),
+                messages=_cache_messages(step, messages),
+                tools=tools,
+                tool_choice="none",
+                stream=True,
+                stream_options={"include_usage": True},
+            )
+            decoder = JsonStringFieldDecoder("prose")
+            markers = StreamedClaimMarker(index, seed, transcript)
+            text = ""
+            provider_usage: Any | None = None
+            for chunk in stream:
+                choices = getattr(chunk, "choices", None)
+                if choices:
+                    delta = getattr(choices[0], "delta", None)
+                    fragment = getattr(delta, "content", None)
+                    if isinstance(fragment, str):
+                        text += fragment
+                        decoded = decoder.feed(fragment)
+                        if decoded:
+                            publish_section_delta(index, decoded)
+                        markers.feed(fragment, decoded)
+                chunk_usage = getattr(chunk, "usage", None)
+                if chunk_usage is not None:
+                    provider_usage = chunk_usage
+            log_usage("synthesis.section_emit_stream.usage", provider_usage)
+            section, malformed = _salvage_section(_strip_code_fence(text))
+            turn: SectionTurn = {"tool_calls": [], "claims": section}
+            if malformed:
+                turn["malformed_claims"] = malformed
+            usage = token_usage_from_provider(provider_usage)
+            if span is not None:
+                span.update(
+                    usage_details=usage_details(usage),
+                    output=_turn_output(turn),
+                    model=route().model_for(step),
+                    metadata={**metadata, **usage_metadata(usage)},
+                )
+            return turn, usage
+
+        with _open_model_call():
+            try:
+                if self._langfuse_client is None:
+                    return _stream()
+                with tracing._observation(
+                    self._langfuse_client,
+                    name="synthesise:section_emit",
+                    as_type="generation",
+                ) as span:
+                    return _stream(span)
+            except Exception as exc:
+                log.warning(
+                    "synthesis.section_emit_stream.fallback",
+                    section_index=index,
+                    error=type(exc).__name__,
+                )
+                publish_section_delta(index, "", mode="replace")
+                with self._lock:
+                    self.stream_fallbacks += 1
+                result = self.section_turn(seed, transcript, force_emit=True)
+                # Task 058 review: the fallback's prose reaches the page at once, not at
+                # ``section_completed`` after the claim checks and the repair.
+                section = result[0]["claims"]
+                if section is not None and section.prose:
+                    publish_section_delta(index, section.prose, mode="replace")
+                return result
 
     def _repair_once(
         self,
@@ -1214,6 +1625,125 @@ class OpenAISynthesisBackend:
         )
         return section, usage
 
+    def write_key_findings_stream(
+        self,
+        seed: dict[str, Any],
+        *,
+        index: int,
+        sources: (
+            tuple[dict[str, tuple[str, str | None]], dict[str, tuple[str, str | None]]] | None
+        ) = None,
+    ) -> UsageResult[SectionProseWire]:
+        """Write the key findings as one streamed reply (task 058, round 8).
+
+        The messages are the ones :meth:`write_key_findings` sends, unchanged.
+        That call forces the ``emit_section`` tool, which the provider
+        delivers in one burst at the end (probe, 2026-11-04), so this one asks
+        for the same arguments as a structured reply instead: the
+        ``emit_section`` parameters schema as a strict ``json_schema``
+        response format (the schema the probe's fourth call showed the
+        provider accepts and streams prose-first). As the reply arrives, the
+        prose's pieces go to the page through :func:`publish_section_delta`
+        and each claim is marked as it closes (:class:`StreamedClaimMarker`),
+        on the key-findings slot. The whole text, less any Markdown code
+        fence, is then parsed exactly as the forced call's arguments are, so
+        the result goes on to the claim checks unchanged.
+
+        The call runs once, outside the retry loop, because a retry would
+        repeat text the user has already seen. On any failure (including a
+        reply that is not a section object) the page's draft is reset with
+        an empty ``replace``, :attr:`stream_fallbacks` is counted, and
+        :meth:`write_key_findings` runs once more without streaming (with its
+        own retries and its own absence rule); its prose is then sent to the
+        page in one ``replace``.
+
+        Args:
+            seed: The key-findings seed.
+            index: The page's index for the key-findings slot.
+            sources: The citable ids' sources for the claim marks, or
+                ``None`` to mark none.
+
+        Returns:
+            Raw structurally parsed prose + claims plus token usage.
+        """
+        step = "synthesise_write_key_findings"
+        messages = build_key_findings_messages(seed)
+        metadata = {"step": step, "attempt": 1, "prompt_version": KEY_FINDINGS_PROMPT_VERSION}
+
+        def _stream(span: Any | None = None) -> UsageResult[SectionProseWire]:
+            if span is not None:
+                span.update(input={"messages": messages}, metadata=metadata)
+            completions: Any = self._client.chat.completions
+            stream = completions.create(
+                **_step_kwargs(step),
+                messages=_cache_messages(step, messages),
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "emit_section",
+                        "schema": EMIT_SECTION_TOOL_SCHEMA["function"]["parameters"],
+                        "strict": True,
+                    },
+                },
+                stream=True,
+                stream_options={"include_usage": True},
+            )
+            decoder = JsonStringFieldDecoder("prose")
+            markers = StreamedClaimMarker(
+                index, seed, [], sources=sources if sources is not None else ({}, {})
+            )
+            text = ""
+            provider_usage: Any | None = None
+            for chunk in stream:
+                choices = getattr(chunk, "choices", None)
+                if choices:
+                    delta = getattr(choices[0], "delta", None)
+                    fragment = getattr(delta, "content", None)
+                    if isinstance(fragment, str):
+                        text += fragment
+                        decoded = decoder.feed(fragment)
+                        if decoded:
+                            publish_section_delta(index, decoded)
+                        markers.feed(fragment, decoded)
+                chunk_usage = getattr(chunk, "usage", None)
+                if chunk_usage is not None:
+                    provider_usage = chunk_usage
+            log_usage("synthesis.key_findings.usage", provider_usage)
+            section, _malformed = _salvage_section(_strip_code_fence(text))
+            usage = token_usage_from_provider(provider_usage)
+            if span is not None:
+                span.update(
+                    usage_details=usage_details(usage),
+                    output=section.model_dump(),
+                    model=route().model_for(step),
+                    metadata={**metadata, **usage_metadata(usage)},
+                )
+            return section, usage
+
+        with _open_model_call():
+            try:
+                if self._langfuse_client is None:
+                    return _stream()
+                with tracing._observation(
+                    self._langfuse_client,
+                    name="synthesise:write_key_findings",
+                    as_type="generation",
+                ) as span:
+                    return _stream(span)
+            except Exception as exc:
+                log.warning(
+                    "synthesis.key_findings_stream.fallback",
+                    section_index=index,
+                    error=type(exc).__name__,
+                )
+                publish_section_delta(index, "", mode="replace")
+                with self._lock:
+                    self.stream_fallbacks += 1
+                result = self.write_key_findings(seed)
+                if result[0].prose:
+                    publish_section_delta(index, result[0].prose, mode="replace")
+                return result
+
     def _write_case_studies_once(
         self,
         messages: list[dict[str, Any]],
@@ -1262,6 +1792,108 @@ class OpenAISynthesisBackend:
             update=_update,
         )
         return wire, usage
+
+    def write_case_studies_stream(
+        self, seed: dict[str, Any], *, index: int
+    ) -> UsageResult[CaseStudyWire]:
+        """Write the case-study cards as one streamed reply (task 058, round 7).
+
+        The request is the one :meth:`write_case_studies` sends (the same
+        messages and the same structured-output schema), streamed. As each
+        card object in the reply's ``cards`` array closes, its title and text
+        are sent to the page through :func:`publish_section_card`
+        (display-only: a card that does not read as one is skipped). The
+        whole reply is then parsed into :class:`CaseStudyWire` exactly as the
+        structured call is, so the result goes on to the card checks
+        unchanged.
+
+        The call runs once, outside the retry loop, because a retry would
+        repeat cards the user has already seen. On any failure the page's
+        cards for the slot are cleared with an empty ``replace`` delta,
+        :attr:`stream_fallbacks` is counted, and :meth:`write_case_studies`
+        runs once more without streaming (with its own retries); its cards
+        are then sent to the page.
+
+        Args:
+            seed: The case-studies seed.
+            index: The page's index for the case-studies slot.
+
+        Returns:
+            Raw structurally parsed cards plus token usage.
+        """
+        step = "synthesise_write_case_studies"
+        messages = build_case_studies_messages(seed)
+        metadata = {"step": step, "attempt": 1, "prompt_version": CASE_STUDIES_PROMPT_VERSION}
+
+        def _stream(span: Any | None = None) -> UsageResult[CaseStudyWire]:
+            if span is not None:
+                span.update(input={"messages": messages}, metadata=metadata)
+            completions: Any = self._client.chat.completions
+            stream = completions.create(
+                **_step_kwargs(step),
+                messages=_cache_messages(step, messages),
+                # The schema ``parse`` sends for the same wire.
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "schema": to_strict_json_schema(CaseStudyWire),
+                        "name": CaseStudyWire.__name__,
+                        "strict": True,
+                    },
+                },
+                stream=True,
+                stream_options={"include_usage": True},
+            )
+            cards = StreamedCardPublisher(index)
+            text = ""
+            provider_usage: Any | None = None
+            for chunk in stream:
+                choices = getattr(chunk, "choices", None)
+                if choices:
+                    delta = getattr(choices[0], "delta", None)
+                    fragment = getattr(delta, "content", None)
+                    if isinstance(fragment, str):
+                        text += fragment
+                        cards.feed(fragment)
+                chunk_usage = getattr(chunk, "usage", None)
+                if chunk_usage is not None:
+                    provider_usage = chunk_usage
+            log_usage("synthesis.case_studies.usage", provider_usage)
+            wire = CaseStudyWire.model_validate_json(_strip_code_fence(text))
+            usage = token_usage_from_provider(provider_usage)
+            if span is not None:
+                span.update(
+                    usage_details=usage_details(usage),
+                    output=wire.model_dump(),
+                    model=CASE_STUDIES_MODEL,
+                    metadata={**metadata, **usage_metadata(usage)},
+                )
+            return wire, usage
+
+        with _open_model_call():
+            try:
+                if self._langfuse_client is None:
+                    return _stream()
+                with tracing._observation(
+                    self._langfuse_client,
+                    name="synthesise:write_case_studies",
+                    as_type="generation",
+                ) as span:
+                    return _stream(span)
+            except Exception as exc:
+                log.warning(
+                    "synthesis.case_studies_stream.fallback",
+                    section_index=index,
+                    error=type(exc).__name__,
+                )
+                publish_section_delta(index, "", mode="replace")
+                with self._lock:
+                    self.stream_fallbacks += 1
+                result = self.write_case_studies(seed)
+                for card in result[0].cards:
+                    if card.title.strip() and card.prose.strip():
+                        publish_section_card(index, card.title, card.prose)
+                return result
 
     def write_source_note(
         self, seed: dict[str, Any]
@@ -1372,6 +2004,120 @@ class OpenAISynthesisBackend:
             update=_update,
         )
         return wire, usage
+
+    def write_full_report_intro_stream(
+        self, seed: dict[str, Any], *, index: int
+    ) -> UsageResult[IntroWire]:
+        """Write the full report's introduction as one streamed reply (task 058, round 8).
+
+        The request is the one :meth:`write_full_report_intro` sends (the
+        same messages and the same structured-output schema), streamed. As
+        the reply's ``intro`` text arrives, its pieces go to the page's
+        introduction slot through :func:`publish_section_delta`. The whole
+        reply is then parsed into :class:`IntroWire` exactly as the
+        structured call is.
+
+        The call runs once, outside the retry loop, because a retry would
+        repeat text the user has already seen. On any failure the slot's
+        draft is reset with an empty ``replace``, :attr:`stream_fallbacks` is
+        counted, and :meth:`write_full_report_intro` runs once more without
+        streaming (with its own retries); its text is then sent to the page
+        in one ``replace``.
+
+        Args:
+            seed: Report intent plus ordered body section titles and briefs.
+            index: The page's index for the introduction slot.
+
+        Returns:
+            Structurally parsed intro plus token usage.
+        """
+        step = "synthesise_write_intro"
+        client = resolve_openai_client(None, backend_name="FullReportIntroWriter")
+        messages = [
+            {"role": "system", "content": FULL_REPORT_INTRO_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": FULL_REPORT_INTRO_USER_TEMPLATE.format(
+                    seed_json=json.dumps(seed, ensure_ascii=False, sort_keys=True)
+                ),
+            },
+        ]
+        metadata = {
+            "step": step,
+            "attempt": 1,
+            "prompt_version": FULL_REPORT_INTRO_PROMPT_VERSION,
+        }
+
+        def _stream(span: Any | None = None) -> UsageResult[IntroWire]:
+            if span is not None:
+                span.update(input={"messages": messages}, metadata=metadata)
+            completions: Any = client.chat.completions
+            stream = completions.create(
+                **_step_kwargs(step),
+                messages=_cache_messages(step, messages),
+                # The schema ``parse`` sends for the same wire.
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "schema": to_strict_json_schema(IntroWire),
+                        "name": IntroWire.__name__,
+                        "strict": True,
+                    },
+                },
+                stream=True,
+                stream_options={"include_usage": True},
+            )
+            decoder = JsonStringFieldDecoder("intro")
+            text = ""
+            provider_usage: Any | None = None
+            for chunk in stream:
+                choices = getattr(chunk, "choices", None)
+                if choices:
+                    delta = getattr(choices[0], "delta", None)
+                    fragment = getattr(delta, "content", None)
+                    if isinstance(fragment, str):
+                        text += fragment
+                        decoded = decoder.feed(fragment)
+                        if decoded:
+                            publish_section_delta(index, decoded)
+                chunk_usage = getattr(chunk, "usage", None)
+                if chunk_usage is not None:
+                    provider_usage = chunk_usage
+            log_usage("synthesis.full_report_intro.usage", provider_usage)
+            wire = IntroWire.model_validate_json(_strip_code_fence(text))
+            usage = token_usage_from_provider(provider_usage)
+            if span is not None:
+                span.update(
+                    usage_details=usage_details(usage),
+                    output=wire.model_dump(),
+                    model=FULL_REPORT_INTRO_MODEL,
+                    metadata={**metadata, **usage_metadata(usage)},
+                )
+            return wire, usage
+
+        with _open_model_call():
+            try:
+                if self._langfuse_client is None:
+                    return _stream()
+                with tracing._observation(
+                    self._langfuse_client,
+                    name="synthesise:write_intro",
+                    as_type="generation",
+                ) as span:
+                    return _stream(span)
+            except Exception as exc:
+                log.warning(
+                    "synthesis.full_report_intro_stream.fallback",
+                    section_index=index,
+                    error=type(exc).__name__,
+                )
+                publish_section_delta(index, "", mode="replace")
+                with self._lock:
+                    self.stream_fallbacks += 1
+                result = self.write_full_report_intro(seed)
+                if result[0].intro:
+                    publish_section_delta(index, result[0].intro, mode="replace")
+                return result
 
 
 class StubSynthesisBackend:

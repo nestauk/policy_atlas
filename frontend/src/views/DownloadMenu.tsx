@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { buttonVariants } from "../ui/brand/Button";
 import { cn } from "../ui/brand/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 
@@ -27,10 +28,7 @@ export function DownloadMenu({ items, small = false }: { items: DownloadItem[]; 
             type="button"
             aria-haspopup="menu"
             aria-expanded={open}
-            className={cn(
-              "inline-flex cursor-pointer items-center gap-2 border border-navy bg-paper font-semibold text-navy hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue",
-              small ? "px-2.5 py-[5px] text-meta" : "px-3 py-2 text-body",
-            )}
+            className={buttonVariants({ variant: "outline", size: small ? "sm" : "md" })}
           >
             Download
             <svg

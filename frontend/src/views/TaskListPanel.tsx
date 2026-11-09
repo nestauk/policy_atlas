@@ -1,15 +1,22 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import type { components } from "../api/gen/types";
-import { scrub } from "../lib/scrub";
+import { useArchiveTask, useUpdateTask } from "../api/mutations";
+import type { useTasksPaged } from "../api/queries";
 import { COPY, TASK } from "../lib/vocabulary";
-import { Button } from "../ui/brand/Button";
-import { Card } from "../ui/brand/Card";
+import { FindPopover, type FindItem } from "./FindPopover";
+import { RowFold, RowMenuControl, RowRenameField, useDepartingRows } from "./ListRowMenu";
+import { useAddToProjectStep } from "./NameMenu";
 import { taskDestination } from "./lifecycle";
-import { listNewButtonClass } from "./listPageChrome";
+import {
+  taskListGridClass,
+  taskListGridClassWithOwner,
+  taskListItemClass,
+} from "./listPageChrome";
 import { TaskListRow } from "./TaskListRow";
 import { hasLonglist, statusRun } from "./scopingActivity";
+import { LIST_FRAME_CLASS, ListError, ListSkeleton } from "../ui/brand/list/ListStates";
+import { ListFootRow, ShowMore } from "../ui/brand/list/ListFoot";
 
 type LatestRun = components["schemas"]["TaskOut"]["latest_run"];
 
@@ -29,6 +36,8 @@ type TaskListItem = {
   source_count?: number | null;
   is_owner?: boolean;
   owner_display?: string | null;
+  /** `TaskOut.status`: an archived task's row reads "Archived". */
+  status?: "active" | "archived";
 };
 
 /** Where a row lands: the Result once there is one to read (a finished run,
@@ -37,137 +46,106 @@ function rowDestination(row: TaskListItem): string {
   return taskDestination(row.task_id, row.latest_run?.status, { hasLonglist: hasLonglist(row) });
 }
 
+/** The names of a task's projects, in order, skipping any not in the map. */
+function projectNameList(
+  ids: readonly string[] | null | undefined,
+  names?: ReadonlyMap<string, string>,
+): string[] {
+  if (ids == null || ids.length === 0) return [];
+  return ids.map((id) => names?.get(id) ?? "").filter((name) => name !== "");
+}
+
 function projectPrefix(
-  ids: readonly string[] | undefined,
+  ids: readonly string[] | null | undefined,
   names?: ReadonlyMap<string, string>,
 ): string {
-  if (ids == null || ids.length === 0) return "";
-  return ids.map((id) => names?.get(id) ?? "").filter((name) => name !== "").join(" · ");
+  return projectNameList(ids, names).join(" · ");
 }
 
-function FindTask({
-  rows,
-  projectNames,
-  showProjectPrefix,
-  onClose,
-}: {
-  rows: readonly TaskListItem[];
-  projectNames?: ReadonlyMap<string, string>;
-  showProjectPrefix?: boolean;
-  onClose: () => void;
-}) {
-  const [term, setTerm] = useState("");
-  const navigate = useNavigate();
-  const needle = term.trim().toLowerCase();
-  const matches =
-    needle === ""
-      ? rows
-      : rows.filter((row) => {
-          const project =
-            showProjectPrefix ? projectPrefix(row.project_ids, projectNames) : "";
-          const haystack = `${project} ${row.name}`.toLowerCase();
-          return haystack.includes(needle);
-        });
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={COPY.findTask}
-      className="fixed inset-x-0 top-24 z-30 mx-auto max-w-xl border border-line bg-paper p-4 shadow-lg"
-    >
-      <div className="flex items-center gap-3">
-        <label className="sr-only" htmlFor="find-task">
-          {COPY.findTask}
-        </label>
-        <input
-          id="find-task"
-          autoFocus
-          value={term}
-          onChange={(event) => setTerm(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") onClose();
-          }}
-          placeholder={`Search ${TASK.lowerMany} by name`}
-          className="flex-1 border border-line-2 bg-paper px-3 py-2 text-body text-navy focus-visible:outline-2 focus-visible:outline-blue"
-        />
-        <button
-          type="button"
-          aria-label="Close search"
-          onClick={onClose}
-          className="cursor-pointer text-heading leading-none text-grey hover:text-navy"
-        >
-          ×
-        </button>
-      </div>
-      <ul role="list" className="mt-3 max-h-80 overflow-y-auto">
-        {matches.length === 0 && (
-          <li className="px-1 py-3 text-body text-grey">Nothing matches “{scrub(term)}”.</li>
-        )}
-        {matches.map((row) => {
-          const projectName = showProjectPrefix
-            ? projectPrefix(row.project_ids, projectNames) || null
-            : null;
-          const label =
-            projectName != null ? `${projectName} / ${row.name}` : row.name;
-          return (
-            <li key={row.task_id}>
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  void navigate(rowDestination(row));
-                }}
-                className="w-full cursor-pointer border-b border-line px-1 py-2.5 text-left text-body text-navy last:border-b-0 hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-blue"
-              >
-                {scrub(label)}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
-/** Find-a-task and New-task controls shared by Tasks and task-detail headers. */
-export function TaskListActions({
+/** "Find a task", shared by the Tasks and Project pages: the magnifier at
+ *  the right of the filters row (round 11; the header keeps only the
+ *  primary). */
+export function FindTasks({
   rows,
   projectNames,
   showProjectPrefix = false,
-  newTaskHref,
+  className,
 }: {
   rows: readonly TaskListItem[];
   projectNames?: ReadonlyMap<string, string>;
   showProjectPrefix?: boolean;
-  newTaskHref: string;
+  /** Placement only, passed to the magnifier. */
+  className?: string;
 }) {
-  const [finding, setFinding] = useState(false);
+  const items: FindItem[] = rows.map((row) => {
+    const projectName = showProjectPrefix ? projectPrefix(row.project_ids, projectNames) : "";
+    return {
+      id: row.task_id,
+      label: projectName !== "" ? `${projectName} / ${row.name}` : row.name,
+      href: rowDestination(row),
+      updatedAt: row.updated_at,
+    };
+  });
 
   return (
-    <>
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          className="px-3 py-2.5 text-lead font-normal"
-          onClick={() => setFinding(true)}
-        >
-          {COPY.findTask}
-        </Button>
-        <Link to={newTaskHref} className={listNewButtonClass}>
-          {COPY.newTask}
-        </Link>
-      </div>
-      {finding && (
-        <FindTask
-          rows={rows}
-          projectNames={projectNames}
-          showProjectPrefix={showProjectPrefix}
-          onClose={() => setFinding(false)}
-        />
-      )}
-    </>
+    <FindPopover
+      items={items}
+      copy={{ label: COPY.findTask, noun: TASK.lowerMany }}
+      className={className}
+    />
   );
+}
+
+type PagedTasks = ReturnType<typeof useTasksPaged>;
+type TaskRow = NonNullable<PagedTasks["data"]>["pages"][number]["data"][number];
+
+/** What the list's foot needs to offer the next page (round 10). */
+export type MoreTasks = {
+  /** The server holds rows the list has not asked for yet. */
+  hasMore: boolean;
+  /** The page just asked for is on its way. */
+  loading: boolean;
+  /** The page just asked for failed. */
+  error: boolean;
+  onShowMore: () => void;
+  onRetry: () => void;
+};
+
+/**
+ * A paged task list's rows and its foot (round 10: "Show more").
+ *
+ * `useTasksPaged` holds the pages and asks for the next one only while the
+ * server says `has_more`. The rows are the pages in order with any task
+ * already listed dropped, since a task that changes between two requests
+ * can move across a page boundary.
+ *
+ * Args:
+ *   result: A `useTasksPaged` result.
+ *
+ * Returns:
+ *   The loaded rows and the foot's state.
+ */
+export function pagedTasks(result: PagedTasks): { rows: TaskRow[]; more: MoreTasks } {
+  const seen = new Set<string>();
+  const rows: TaskRow[] = [];
+  for (const page of result.data?.pages ?? []) {
+    for (const row of page.data) {
+      if (seen.has(row.task_id)) continue;
+      seen.add(row.task_id);
+      rows.push(row);
+    }
+  }
+  const askForNext = () => void result.fetchNextPage();
+  return {
+    rows,
+    more: {
+      hasMore: result.hasNextPage,
+      loading: result.isFetchingNextPage,
+      error: result.isFetchNextPageError,
+      onShowMore: askForNext,
+      onRetry: askForNext,
+    },
+  };
 }
 
 type TaskListPanelProps = {
@@ -183,7 +161,107 @@ type TaskListPanelProps = {
    *  the admin-wide-list's "No organisation" when the caller passes it). */
   showOwner?: boolean;
   ownerlessLabel?: string;
+  /** What an empty list shows, in the list's frame; nothing when absent. */
+  empty?: ReactNode;
+  /** The list's foot: "Show more" while the server holds more rows. */
+  more?: MoreTasks;
+  /** The foot row's right end, shown in every state (the archived toggle). */
+  footEnd?: ReactNode;
 };
+
+/**
+ * One task row with its menu (owner, round 12): the row's link, and beside
+ * it, for the task's owner only, the control that opens Rename and Archive.
+ * Rename turns the row into the name's field; Archive, once confirmed,
+ * folds the row away (`onArchived`). An archived task offers Rename only.
+ */
+function TaskRowWithMenu({
+  row,
+  projectNames,
+  showProjectPrefix,
+  showOwner,
+  ownerlessLabel,
+  onArchived,
+}: {
+  row: TaskListItem;
+  projectNames?: ReadonlyMap<string, string>;
+  showProjectPrefix: boolean;
+  showOwner: boolean;
+  ownerlessLabel?: string;
+  onArchived: () => void;
+}) {
+  const update = useUpdateTask(row.task_id);
+  const archive = useArchiveTask(row.task_id);
+  const [editing, setEditing] = useState(false);
+  const control = useRef<HTMLButtonElement>(null);
+  const isOwner = row.is_owner ?? true;
+  const archived = row.status === "archived";
+  const pending = update.isPending || archive.isPending;
+  // The header's "Add to project", shared (owner, round 12).
+  const addToProject = useAddToProjectStep(row.task_id, row.project_ids);
+
+  if (editing) {
+    return (
+      <RowRenameField
+        name={row.name}
+        label={COPY.taskSettings}
+        fieldLabel={`${TASK.one} name`}
+        rename={(next, done) => update.mutate({ name: next }, { onSuccess: done.onSuccess, onError: done.onError })}
+        renameError={`The ${TASK.lower} couldn't be renamed. Try again.`}
+        pending={pending}
+        onClose={() => {
+          setEditing(false);
+          window.setTimeout(() => control.current?.focus(), 0);
+        }}
+      />
+    );
+  }
+
+  return (
+    <>
+      <TaskListRow
+        to={rowDestination(row)}
+        name={row.name}
+        capabilityKey={row.capability}
+        projectNames={showProjectPrefix ? projectNameList(row.project_ids, projectNames) : null}
+        showProjectPrefix={showProjectPrefix}
+        sourceCount={row.source_count}
+        updatedAt={row.updated_at}
+        latestRun={statusRun(row)}
+        activeRun={row.active_run}
+        isOwner={isOwner}
+        ownerName={row.owner_display ?? null}
+        showOwner={showOwner}
+        ownerlessLabel={ownerlessLabel}
+        archived={archived}
+      />
+      {isOwner && (
+        <RowMenuControl
+          label={COPY.taskSettings}
+          name={row.name}
+          controlRef={control}
+          pending={pending}
+          onRename={() => setEditing(true)}
+          archive={
+            archived
+              ? undefined
+              : (_, done) =>
+                  archive.mutate(undefined, {
+                    onSuccess: () => {
+                      done.onSuccess();
+                      onArchived();
+                    },
+                    onError: done.onError,
+                  })
+          }
+          archiveSentence={`Archiving removes this ${TASK.lower} from your active ${TASK.lowerMany}.`}
+          archiveError={`The ${TASK.lower} couldn't be archived. Try again.`}
+          steps={[addToProject]}
+        />
+      )}
+    </>
+  );
+}
 
 /** Shared task list body: loading, empty, and rows. */
 export function TaskListPanel({
@@ -196,56 +274,97 @@ export function TaskListPanel({
   loaded = true,
   showOwner = false,
   ownerlessLabel,
+  empty,
+  more,
+  footEnd,
 }: TaskListPanelProps) {
+  // After "Show more", focus moves to the first row that arrived, so a
+  // keyboard reader carries on reading where the list grew rather than at a
+  // button that may now be gone.
+  const listRef = useRef<HTMLUListElement>(null);
+  const focusFrom = useRef<number | null>(null);
+  useEffect(() => {
+    const from = focusFrom.current;
+    if (from === null || rows.length <= from) return;
+    focusFrom.current = null;
+    listRef.current?.querySelectorAll<HTMLAnchorElement>(":scope > li a[href]")[from]?.focus();
+  }, [rows.length]);
+
+  // An archived row folds away where it stood (owner, round 12).
+  const { shown, depart } = useDepartingRows(rows, (row) => row.task_id);
+
+  const foot = (start?: ReactNode) => <ListFootRow start={start} end={footEnd} />;
+
   if (isPending) {
     return (
-      <div aria-busy="true" aria-label={`Loading ${TASK.lowerMany}`} className="space-y-2">
-        {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className="h-14 animate-pulse border border-line bg-paper-2" />
-        ))}
-      </div>
+      <>
+        <ListSkeleton label={`Loading ${TASK.lowerMany}`} />
+        {foot()}
+      </>
     );
   }
 
   if (isError) {
     return (
-      <Card role="alert" className="max-w-md p-5 text-body text-navy">
-        Your {TASK.lowerMany} couldn't be loaded.{" "}
-        <button
-          type="button"
-          className="cursor-pointer font-bold text-blue hover:underline"
-          onClick={() => onRetry?.()}
-        >
-          Retry
-        </button>
-      </Card>
+      <>
+        <ListError actionLabel="Retry" onRetry={() => onRetry?.()}>
+          Your {TASK.lowerMany} couldn't be loaded.
+        </ListError>
+        {foot()}
+      </>
     );
   }
 
-  if (loaded && rows.length === 0) return null;
-
-  if (rows.length === 0) return null;
+  if (rows.length === 0) {
+    return (
+      <>
+        {loaded ? (empty ?? null) : null}
+        {foot()}
+      </>
+    );
+  }
 
   return (
-    <ul role="list" className="border border-line-2 bg-paper">
-      {rows.map((row) => (
-        <li key={row.task_id} className="border-b border-line last:border-b-0">
-          <TaskListRow
-            to={rowDestination(row)}
-            name={row.name}
-            capabilityKey={row.capability}
-            projectName={
-              showProjectPrefix ? projectPrefix(row.project_ids, projectNames) || null : null
-            }
-            showProjectPrefix={showProjectPrefix}
-            sourceCount={row.source_count}
-            updatedAt={row.updated_at}
-            latestRun={statusRun(row)}
-            ownerDisplay={showOwner ? (row.owner_display ?? null) : undefined}
-            ownerlessLabel={ownerlessLabel}
+    <>
+      <ul
+        ref={listRef}
+        role="list"
+        className={`${LIST_FRAME_CLASS} ${showOwner ? taskListGridClassWithOwner : taskListGridClass}`}
+      >
+        {shown.map(({ row, leaving }) => (
+          <li key={row.task_id} className={`${taskListItemClass} group border-b border-line last:border-b-0`}>
+            <RowFold leaving={leaving} subgrid>
+              <TaskRowWithMenu
+                row={row}
+                projectNames={projectNames}
+                showProjectPrefix={showProjectPrefix}
+                showOwner={showOwner}
+                ownerlessLabel={ownerlessLabel}
+                onArchived={() => depart(row.task_id)}
+              />
+            </RowFold>
+          </li>
+        ))}
+      </ul>
+      {/* A page after the first that fails offers Retry under the rows. */}
+      {more?.error === true && (
+        <div className="mt-4">
+          <ListError actionLabel="Retry" onRetry={more.onRetry}>
+            Your {TASK.lowerMany} couldn't be loaded.
+          </ListError>
+        </div>
+      )}
+      {foot(
+        more !== undefined && !more.error && more.hasMore ? (
+          <ShowMore
+            loading={more.loading}
+            onShowMore={() => {
+              focusFrom.current = rows.length;
+              more.onShowMore();
+            }}
           />
-        </li>
-      ))}
-    </ul>
+        ) : null,
+      )}
+    </>
   );
 }

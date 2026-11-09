@@ -14,7 +14,20 @@ const twMerge = extendTailwindMerge({
       // asserts the two lists are equal, so the next token cannot repeat the
       // 028 failure by being added to only one of them.
       "font-size": [
-        { text: ["caption", "meta", "body", "lead", "heading", "title", "display"] },
+        {
+          text: [
+            "caption",
+            "meta",
+            "body",
+            "lead",
+            "heading",
+            "title",
+            "display",
+            // The splash page's two responsive headline sizes (lead ruling P5).
+            "hero",
+            "hero-2",
+          ],
+        },
       ],
     },
   },

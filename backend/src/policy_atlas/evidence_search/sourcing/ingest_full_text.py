@@ -55,13 +55,14 @@ import trafilatura
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.api.stage_vocabulary import activity
 from policy_atlas.core.embeddings import (
     AdaptivePool,
     EmbeddingBackend,
     StubEmbeddingBackend,
     embed_pending_chunks,
 )
-from policy_atlas.core.liveness import publish_current_tick
+from policy_atlas.core.liveness import publish_progress
 from policy_atlas.core.markup import strip_markup
 from policy_atlas.core.schema import (
     source_screening_result,
@@ -1765,14 +1766,12 @@ def _run_stage(
     total = len(eligible_ids)
 
     def publish(ingested_now: int) -> None:
-        # ``fetched`` cannot be observed on this path (the worker fetches and
-        # parses in one call); the web-api spec allows it to be null.
-        publish_current_tick(
-            stage="ingest",
-            note=f"{ingested_now} of {total} read.",
-            fetched=None,
-            parsed=ingested_now,
+        # The stage comes from the bound context (the harness binds ``ingest``).
+        publish_progress(
+            activity=activity("ingest.progress", done=ingested_now, total=total),
+            done=ingested_now,
             total=total,
+            unit="documents",
         )
 
     # Send. The inline client runs every document on this thread and this

@@ -6,6 +6,7 @@ import type { components } from "../../api/gen/types";
 import { PlanCard } from "./PlanCard";
 import * as mutations from "../../api/mutations";
 import * as queries from "../../api/queries";
+import * as planStart from "./planStart";
 
 type PlanDraft = components["schemas"]["PlanDraft"];
 type PlanOut = components["schemas"]["PlanOut"];
@@ -19,7 +20,21 @@ vi.mock("../../api/mutations", () => ({
   usePatchPlan: vi.fn(),
 }));
 
+vi.mock("./planStart", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./planStart")>()),
+  useScopingPlanStart: vi.fn(),
+}));
+
+const scopingStart = vi.fn();
+
 beforeEach(() => {
+  scopingStart.mockReset();
+  vi.mocked(planStart.useScopingPlanStart).mockReturnValue({
+    kind: "build",
+    action: { label: "Confirm and build baseline", onClick: scopingStart, disabled: false },
+    timeBand: null,
+    notice: null,
+  });
   vi.mocked(mutations.useStartRun).mockReturnValue(
     { mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useStartRun>,
   );
@@ -73,12 +88,44 @@ describe("PlanCard — ready actions", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders Review the plan and Start search when approved and ready", () => {
+  it("renders Review the plan and the green Start the search when approved and ready", () => {
     mockPlanQuery({ plan: basePlan(), status: "approved", version: 1 });
     renderCard();
     expect(screen.getByTestId("plan-ready-actions")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Review the plan" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start search" }).className).toContain("bg-green");
+    const start = screen.getByRole("button", { name: "Start the search" });
+    // The Button's own start tone and entry size (N18), not a class string.
+    expect(start.className).toContain("bg-green");
+    expect(start.className).toContain("cutout");
+    expect(start.className).toContain("text-body");
+  });
+
+  it("says what the plan is from the draft's own fields", () => {
+    mockPlanQuery({
+      plan: basePlan({ search_effort: "standard", analysis_depth: "standard", time_band: "~20 to 40 min" }),
+      status: "approved",
+      version: 1,
+    });
+    renderCard();
+    expect(screen.getByText("Search plan · Standard report · ~20 to 40 min")).toBeInTheDocument();
+  });
+
+  it("starts the run from the card", async () => {
+    mockPlanQuery({ plan: basePlan(), status: "approved", version: 1 });
+    const startRunMutate = vi.fn();
+    vi.mocked(mutations.useStartRun).mockReturnValue(
+      { mutate: startRunMutate, isPending: false } as unknown as ReturnType<typeof mutations.useStartRun>,
+    );
+    const user = userEvent.setup();
+    renderCard();
+    await user.click(screen.getByRole("button", { name: "Start the search" }));
+    expect(startRunMutate).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables Start while a planner turn is streaming (N9)", () => {
+    mockPlanQuery({ plan: basePlan(), status: "approved", version: 1 });
+    renderCard({ streaming: true });
+    expect(screen.getByRole("button", { name: "Start the search" })).toBeDisabled();
   });
 
   it("calls onReviewPlan when Review the plan is clicked", async () => {
@@ -114,7 +161,7 @@ describe("PlanCard — ready actions", () => {
     const user = userEvent.setup();
     renderCard({ overlay: { geography: "Nowhereland" }, onDiscardOverlay });
 
-    await user.click(screen.getByRole("button", { name: "Start search" }));
+    await user.click(screen.getByRole("button", { name: "Start the search" }));
     expect(
       screen.getByText("Those plan edits couldn't be saved: Geography must be a known ISO country."),
     ).toBeInTheDocument();
@@ -126,11 +173,11 @@ describe("PlanCard — ready actions", () => {
 });
 
 describe("PlanCard — non-owner read-only (task 033 phase 10c, rubric 37)", () => {
-  it("keeps Review the plan but hides Start search for a non-owner", () => {
+  it("keeps Review the plan but hides Start the search for a non-owner", () => {
     mockPlanQuery({ plan: basePlan(), status: "approved", version: 1 });
     renderCard({ isOwner: false });
     expect(screen.getByRole("button", { name: "Review the plan" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Start search" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start the search" })).not.toBeInTheDocument();
   });
 
   it("Review the plan still opens the plan document for a non-owner", async () => {
@@ -148,20 +195,33 @@ describe("PlanCard — options scoping (task 044)", () => {
     return {
       capability: "options_scoping",
       plan: null,
-      scoping: { ready: overrides.ready ?? true, steps: [] },
+      scoping: { ready: overrides.ready ?? true, steps: [], time_band: "~20 to 40 min" },
       status: overrides.status ?? "approved",
       version: 1,
     } as unknown as PlanOut;
   }
 
-  it("offers only Review the plan — its own start actions live in the opened document", async () => {
+  it("starts the baseline from the card with Confirm and build the baseline (N18)", async () => {
     mockPlanQuery(scopingPlanOut());
     const onReviewPlan = vi.fn();
     const user = userEvent.setup();
     renderCard({ onReviewPlan });
+    // The annex's scoping summary line (round 10: the annex wins over the build).
+    expect(screen.getByText("Scoping plan · ~20 to 40 min")).toBeInTheDocument();
+    const start = screen.getByRole("button", { name: "Confirm and build the baseline" });
+    expect(start.className).toContain("bg-green");
+    await user.click(start);
+    expect(scopingStart).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: "Review the plan" }));
     expect(onReviewPlan).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("button", { name: "Start search" })).not.toBeInTheDocument();
+  });
+
+  it("leaves every later scoping start to the plan document", () => {
+    mockPlanQuery(scopingPlanOut());
+    vi.mocked(planStart.useScopingPlanStart).mockReturnValue({ kind: "longlist_built", options: 12 });
+    renderCard();
+    expect(screen.queryByRole("button", { name: "Confirm and build the baseline" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Review the plan" })).toBeInTheDocument();
   });
 
   it("stays hidden until the scoping draft is ready", () => {

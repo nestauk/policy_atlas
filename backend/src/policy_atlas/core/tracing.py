@@ -23,7 +23,7 @@ import openai
 import structlog
 from langfuse import Langfuse, propagate_attributes
 
-from policy_atlas.core import embeddings
+from policy_atlas.core import embeddings, liveness
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.usage import UsageResult, usage_details, usage_metadata
 from policy_atlas.evidence_search.corpus import theme_grouping
@@ -248,6 +248,14 @@ def _retry_wait_s(exc: BaseException) -> float:
     return DEFAULT_RETRY_WAIT_S
 
 
+def _verb(step: str) -> str | None:
+    # The word list is a leaf module; imported here so the core package does
+    # not load the API package at import time (task 058, N1).
+    from policy_atlas.api.stage_vocabulary import STEP_VERBS
+
+    return STEP_VERBS.get(step)
+
+
 def traced_attempts[T](
     client: Langfuse | None,
     *,
@@ -255,6 +263,7 @@ def traced_attempts[T](
     step: str,
     call: Callable[[], T],
     session_id: uuid.UUID | None = None,
+    before: Callable[[Any], None] | None = None,
     update: Callable[[Any, T], None] | None = None,
     after: Callable[[Any, T], None] | None = None,
     sleep: Callable[[float], None] = time.sleep,
@@ -279,6 +288,8 @@ def traced_attempts[T](
         call: Zero-argument function that makes the provider request and
             returns the parsed site-specific result.
         session_id: Optional Langfuse session id to attach to the trace.
+        before: Optional callback that records input on each attempt's open
+            observation before the provider request starts.
         update: Optional callback that records input, output, model and
             metadata on the successful attempt's observation. Its metadata is
             added to the attempt's metadata, not put in its place.
@@ -296,30 +307,41 @@ def traced_attempts[T](
     """
     logical_call_id = uuid.uuid4().hex[:12]
     for attempt in range(1, MODEL_CALL_ATTEMPTS + 1):
+        verb = _verb(step)
+        if verb is not None:
+            liveness.publish_verb(verb)
+        liveness.model_call_opened()
         try:
-            if client is None:
-                return call()
-            with (
-                _session_scope(session_id),
-                _observation(client, name=name, as_type="generation") as span,
-            ):
-                span.update(
-                    metadata={
-                        "step": step,
-                        "attempt": attempt,
-                        "logical_call_id": logical_call_id,
-                    }
-                )
-                try:
-                    result = call()
-                except Exception as exc:
-                    span.update(level="ERROR", status_message=f"{type(exc).__name__}: {exc}")
-                    raise
-                if update is not None:
-                    update(span, result)
-                if after is not None:
-                    after(span, result)
-                return result
+            try:
+                if client is None:
+                    return call()
+                with (
+                    _session_scope(session_id),
+                    _observation(client, name=name, as_type="generation") as span,
+                ):
+                    span.update(
+                        metadata={
+                            "step": step,
+                            "attempt": attempt,
+                            "logical_call_id": logical_call_id,
+                        }
+                    )
+                    if before is not None:
+                        before(span)
+                    try:
+                        result = call()
+                    except Exception as exc:
+                        span.update(
+                            level="ERROR", status_message=f"{type(exc).__name__}: {exc}"
+                        )
+                        raise
+                    if update is not None:
+                        update(span, result)
+                    if after is not None:
+                        after(span, result)
+                    return result
+            finally:
+                liveness.model_call_closed()
         except Exception as exc:
             if attempt == MODEL_CALL_ATTEMPTS or not _retryable(exc):
                 raise

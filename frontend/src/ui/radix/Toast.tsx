@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useMemo, useState } from "react
 import type { ReactNode } from "react";
 
 import { cn } from "../brand/cn";
+import { CloseButton } from "../brand/CloseButton";
 
 /*
  * Toast (Radix copy-in) — the 500-error surface and transient confirmations.
@@ -13,7 +14,7 @@ type ToastTone = "default" | "error";
 
 /** The toast's surface: Paper, a hairline border (colour added by the caller), the navy overlay shadow, square corners. */
 export const TOAST_CLASS = cn(
-  "flex items-start gap-3 border bg-paper p-4 shadow-[0_10px_30px_rgba(15,41,74,0.14)]",
+  "flex items-start gap-3 border bg-paper p-4 shadow-overlay",
   // Enters from below, the way it leaves: 200ms, strong ease-out.
   "transition-[opacity,transform] duration-200 ease-out-strong starting:translate-y-2 starting:opacity-0",
 );
@@ -86,11 +87,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 </button>
               </ToastPrimitive.Action>
             )}
-            <ToastPrimitive.Close
-              aria-label="Dismiss"
-              className="cursor-pointer text-grey hover:text-navy"
-            >
-              ✕
+            <ToastPrimitive.Close asChild>
+              <CloseButton aria-label="Dismiss" className="-my-1.5 -mr-2" />
             </ToastPrimitive.Close>
           </ToastPrimitive.Root>
         ))}

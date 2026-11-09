@@ -192,6 +192,11 @@ class EvidenceItemOut(BaseModel):
         appraisal_tier: Optional appraisal tier label.
         cited: Whether this source is cited in the artefact.
         url: Optional source URL.
+        full_text_url: The address the full text was collected from (an
+            http(s) link a reader can open), or `None` when no full text was
+            collected.
+        full_text_status: Where the full text's fetch stands: `queued`
+            while the ingest is pending (task 058, round 14).
     """
 
     source_id: uuid.UUID
@@ -219,6 +224,18 @@ class EvidenceItemOut(BaseModel):
     # the provider's LLM-written description (flagged as such).
     abstract: str | None = None
     abstract_source: Literal["provider", "llm_description"] | None = None
+    # Task 058, round 10: the publisher country by its one display name, the
+    # value the Landscape chart's row shows and the `country` filter takes;
+    # null when the provider sent none (the chart's "Not reported").
+    country: str | None = None
+    # Task 058, round 12: where the full text came from, for the All sources
+    # "Full text" link; null unless the text was collected.
+    full_text_url: str | None = None
+    # Task 058, round 14: where the full text's fetch stands. `queued` is a
+    # fetch handed to the ingest queue and not yet back ("Collecting…").
+    full_text_status: Literal[
+        "not_attempted", "queued", "ingested", "fetch_failed", "parse_failed"
+    ] = "not_attempted"
 
 
 class FindingBaseOut(BaseModel):
@@ -364,6 +381,11 @@ class DecisionOut(BaseModel):
         capability_run_id: The walk the underlying event belongs to, when
             the event carries a run (task 045) — lets the thread tell a
             hidden child walk's lines from its parent's. Null otherwise.
+        actor_display: The display name of the person who acted (task 058,
+            round 10), never an email; null for Policy Atlas's own acts. The
+            summary already names them ("You" for the reader).
+        actor_is_viewer: Whether the person who acted is the reader; null
+            when no person acted (Policy Atlas's acts, a step's line).
     """
 
     sequence: int
@@ -373,6 +395,8 @@ class DecisionOut(BaseModel):
     decided_by: DecidedBy | None = None
     detail: dict[str, Any] | None = None
     capability_run_id: uuid.UUID | None = None
+    actor_display: str | None = None
+    actor_is_viewer: bool | None = None
 
 
 class CitationOut(BaseModel):
@@ -386,9 +410,6 @@ class CitationOut(BaseModel):
             citation resolves to one (joins to the sources/dossier surface).
         source_title: Cited source's title (envelope metadata).
         quote: The quoted span from the source.
-        grounding_tier: Optional grounding-judge tier label.
-        grounding_rationale: The grounding judge's recorded reason for the
-            tier, when one was persisted with the verdict.
         appraisal_label: Optional appraisal label.
         evidence_type: The cited document's classified evidence type — the
             input the appraisal rubric scores from.
@@ -401,8 +422,6 @@ class CitationOut(BaseModel):
     source_id: uuid.UUID | None = None
     source_title: str
     quote: str
-    grounding_tier: str | None = None
-    grounding_rationale: str | None = None
     appraisal_label: str | None = None
     evidence_type: str | None = None
     text_basis: str | None = None
@@ -478,6 +497,9 @@ class ClaimOut(BaseModel):
         span: Character offsets `[start, end]` into the block's `prose`, or
             `None`.
         citations: Citations attached to this claim (citation-type only).
+        grounding_tier: The grounding judge's verdict on the claim, when it
+            was checked (task 058, round 13: the claim's, not each citation's).
+        grounding_rationale: The judge's recorded reason for the verdict.
         theme: Named themes or groups referenced by a theme claim.
     """
 
@@ -486,6 +508,8 @@ class ClaimOut(BaseModel):
     text: str
     span: tuple[int, int] | None = None
     citations: list[CitationOut] = Field(default_factory=list)
+    grounding_tier: str | None = None
+    grounding_rationale: str | None = None
     weakly_grounded: bool | None = None
     gap: GapOut | None = None
     theme: ThemeRefOut | None = None
@@ -660,23 +684,58 @@ class CoverageOut(BaseModel):
 
 
 class CoverageQueryOut(BaseModel):
-    """One completed query and its result count for a public backend."""
+    """One completed query and its result count for a public backend.
+
+    Args:
+        query: The query as written.
+        results: The records the call returned.
+        query_id: The query's key for the sources filter
+            (`GET /tasks/{id}/evidence?query=`; task 058, round 12).
+    """
 
     query: str
     results: int
+    query_id: int
+
+
+class CoveragePassOut(BaseModel):
+    """One citations or lookup pass of a finished search (task 058, round 11).
+
+    Args:
+        pass_: `citations` (the works citing the best-connected sources) or
+            `lookup` (cited works or documents fetched by id). Serialised as
+            `pass`.
+        query: The pass in words, as a finished search names it: "Followed
+            citations from 40 sources", "Looked up 120 cited works",
+            "Looked up 30 cited documents". Never its ids.
+        results: The records the pass's calls returned.
+        query_id: The pass's key for the sources filter
+            (`GET /tasks/{id}/evidence?query=`; task 058, round 12): the
+            records every call of the pass returned.
+    """
+
+    model_config = ConfigDict(populate_by_name=True, serialize_by_alias=True)
+
+    pass_: Literal["citations", "lookup"] = Field(alias="pass")
+    query: str
+    results: int
+    query_id: int
 
 
 class CoverageBackendDetailOut(BaseModel):
     """Post-run source counts for one public backend.
 
     ``relevant`` is deliberately task-wide in C.1; per-query relevance
-    was not recorded and is therefore absent.
+    was not recorded and is therefore absent. ``queries`` are the written
+    searches (topic and semantic); ``passes`` the citations and lookup passes
+    in the order they ran (round 11). ``results`` counts both.
     """
 
     backend: str
     results: int
     relevant: int
     queries: list[CoverageQueryOut] = Field(default_factory=list)
+    passes: list[CoveragePassOut] = Field(default_factory=list)
 
 
 class ChunkContextOut(BaseModel):
@@ -775,12 +834,16 @@ class LonglistThemeOut(BaseModel):
         name: Theme name.
         description: One-line description.
         option_ids: The theme's options, in display order.
+        document_count: The theme's distinct documents across its options,
+            each counted once (task 058, round 14): the rows
+            `GET /tasks/{id}/evidence?theme=` lists.
     """
 
     theme_id: uuid.UUID
     name: str
     description: str
     option_ids: list[uuid.UUID] = Field(default_factory=list)
+    document_count: int = 0
 
 
 class ExclusionOut(BaseModel):
@@ -869,10 +932,14 @@ class OptionProfileOut(BaseModel):
         lines: The eight lines, in display order.
         settings: The delivery setting, main first, then the second; empty
             when none is named (R41).
+        acts_on: Whom the option acts on directly, the model's words in its
+            order (task 058, round 12); empty for a whole-system instrument and
+            for a profile written before round 12.
     """
 
     lines: list[ProfileLineOut]
     settings: list[str]
+    acts_on: list[str] = Field(default_factory=list)
 
 
 class AuthorityOut(BaseModel):
@@ -1056,12 +1123,16 @@ class ShortlistOut(BaseModel):
         stale: The proposal does not match the plan's current risk appetite,
             or a built longlist has no proposal yet. The view then asks the
             user to press Suggest more to re-propose.
+        note_stale: The note was written against other places than the
+            shortlist now holds (task 058, round 14): `POST
+            /tasks/{id}/shortlist/note` rewrites it. `false` with no note.
     """
 
     note: str | None = None
     provenance: dict[str, Any] = Field(default_factory=dict)
     places_target: int = 5
     stale: bool
+    note_stale: bool = False
 
 
 class LonglistOut(BaseModel):
@@ -1180,6 +1251,10 @@ class OptionDocumentOut(BaseModel):
         evidence_type: Its evidence type, when classified.
         tier: Its quality tier label, when appraised.
         year: Its publication year, when the metadata has one.
+        authors: Its authors' names, in order, as the reference line names
+            them (task 058, round 12); empty when unknown.
+        venue: Where it was published, as the evidence row's `venue`
+            (task 058, round 12), or `None`.
         place: Where it was studied: its where-tried top level.
         programme_name: The programme name of its first member record under
             the option (by role order); `null` when none is given or the
@@ -1200,6 +1275,8 @@ class OptionDocumentOut(BaseModel):
     evidence_type: str | None = None
     tier: str | None = None
     year: int | None = None
+    authors: list[str] = Field(default_factory=list)
+    venue: str | None = None
     place: str | None = None
     programme_name: str | None = None
     tried_on_kind: str | None = None
@@ -1258,7 +1335,8 @@ class PlaceSentenceOut(BaseModel):
     """One place of an option's evaluating documents and its sentence (task 046, amendment 4, R80).
 
     Args:
-        place: The place: a country's short English name, or "No single place".
+        place: The place: a country's short English name, or after the
+            countries "Several countries", "Place not stated" or "Other".
         sentence: What the evaluations in that place are.
         generated: The sentence was generated and passed the trace check;
             ``false`` for the code-built template.
@@ -1352,3 +1430,48 @@ class OptionAddedOut(BaseModel):
 
     option: OptionOut
     opened_run: LatestRun | None = None
+
+
+#: Where an option's own search stands (task 058, N22): no child walk yet,
+#: the walk running or paused, the walk finished with a result, or the walk
+#: ended without one (failed, aborted or interrupted).
+OptionSearchStatus = Literal["queued", "searching", "searched", "failed"]
+
+
+class OptionProgressOut(BaseModel):
+    """One option row while the longlist is being built (task 058, N22).
+
+    Args:
+        option_id: The option's identity.
+        name: Its name.
+        description: Its one-line description.
+        origin: Where it came from.
+        state: Included or excluded.
+        merged_into_option_id: The kept option a duplicate was folded into,
+            or `None`.
+        search_status: Where the option's own search stands.
+        found: How many sources that search found (its acquire count), or
+            `None` until the search has finished acquiring.
+    """
+
+    option_id: uuid.UUID
+    name: str
+    description: str
+    origin: OptionOrigin
+    state: OptionState
+    merged_into_option_id: uuid.UUID | None = None
+    search_status: OptionSearchStatus
+    found: int | None = None
+
+
+class OptionsOut(BaseModel):
+    """The `options` read: every option row of the task, with its search (N22).
+
+    Served from the end of the suggest stage, before the longlist exists; an
+    empty list before suggest has written any option.
+
+    Args:
+        options: The task's options, oldest first.
+    """
+
+    options: list[OptionProgressOut] = Field(default_factory=list)

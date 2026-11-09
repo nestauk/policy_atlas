@@ -1,5 +1,6 @@
 import { LIFECYCLE_LABELS } from "../lib/vocabulary";
 import type { components } from "../api/gen/types";
+import { rememberedChoice } from "../lib/remembered";
 
 /** The generated contract inlines the run-status union rather than naming it. */
 type RunStatus = components["schemas"]["LatestRun"]["status"];
@@ -103,7 +104,85 @@ export function lifecycleTabs(
     label: LIFECYCLE_LABELS[tab],
     to: `${base}${TAB_PATHS[tab]}`,
     locked: !open.includes(tab),
+    // The option cards are the Result's (owner, round 14): the Result tab
+    // stays current on them, its rule full.
+    ...(tab === "result" ? { activePrefix: RESULT_PREFIXES.map((path) => `${base}${path}`) } : {}),
   }));
+}
+
+/** Every path the Result tab owns: its views and the option cards. */
+const RESULT_PREFIXES = ["/result", "/options"] as const;
+
+/**
+ * Which Sources view the Sources tab opens on (annex § Owner round after the
+ * trace, item 8): the view whose step has landed. While an Evidence search
+ * runs, All sources until classification completes, then Landscape, then
+ * Themes once mapping completes; with no run live, Themes (the Sources
+ * index) as before. A scoping walk keeps the index.
+ *
+ * Args:
+ *   status: The live run's status, if any.
+ *   stages: The live run's stage frames.
+ *   evidenceSearch: True when the task is an Evidence search.
+ *
+ * Returns:
+ *   The path after `/sources`: `"/all"`, `"/landscape"` or `""`.
+ */
+export function sourcesLanding(
+  status: RunStatus | null | undefined,
+  stages: readonly { stage: string; status: string }[],
+  evidenceSearch: boolean,
+): "" | "/all" | "/landscape" {
+  if (!evidenceSearch || (status !== "running" && status !== "paused")) return "";
+  const done = (stage: string) => stages.some((entry) => entry.stage === stage && entry.status === "completed");
+  if (done("characterise")) return "";
+  // Classifying is one step of two stages (classify, then appraise): it has
+  // completed once neither of them is still open.
+  const classifying = stages.filter((entry) => entry.stage === "classify" || entry.stage === "appraise");
+  const classified = done("classify") && classifying.every((entry) => entry.status !== "started");
+  return classified ? "/landscape" : "/all";
+}
+
+/** The subtab paths after `/sources` ("" is Themes, the index). */
+export type SourcesSubtab = "" | "/landscape" | "/all" | "/findings";
+
+const SOURCES_SUBTABS: readonly SourcesSubtab[] = ["", "/landscape", "/all", "/findings"];
+
+/**
+ * The Sources subtab a reader last chose on a task (owner, round 10), kept
+ * under `policy-atlas:sources-subtab:<taskId>` (Themes stored as "themes").
+ * Before the reader has chosen one, the Sources tab lands by stage
+ * (`sourcesLanding`); once they pick a subtab on this task, the Sources tab
+ * returns them there, live or done, until they pick another.
+ */
+export const sourcesSubtabChoice = rememberedChoice<SourcesSubtab>("sources-subtab", {
+  write: (subtab) => (subtab === "" ? "themes" : subtab),
+  read: (stored) => {
+    const subtab = stored === "themes" ? "" : stored;
+    return SOURCES_SUBTABS.find((candidate) => candidate === subtab) ?? null;
+  },
+});
+
+/** Point the Sources tab's link at the subtab the reader last chose on this
+ *  task (owner, round 10: kept per task in `localStorage`), or, before they
+ *  have chosen one or when the storage cannot be read, at `sourcesLanding`'s
+ *  view; any `?chat=` is kept, and the tab stays marked on every Sources
+ *  view. */
+export function withSourcesLanding<T extends { tab: string; to: string }>(
+  items: T[],
+  landing: "" | "/all" | "/landscape",
+): Array<T & { activePrefix?: string }> {
+  return items.map((item) => {
+    if (item.tab !== "sources") return item;
+    const [path, query] = item.to.split("?");
+    const taskId = /\/tasks\/([^/]+)\/sources$/.exec(path)?.[1];
+    const chosen = taskId === undefined ? null : sourcesSubtabChoice.read(decodeURIComponent(taskId));
+    return {
+      ...item,
+      to: `${path}${chosen ?? landing}${query === undefined ? "" : `?${query}`}`,
+      activePrefix: path,
+    };
+  });
 }
 
 /**
@@ -156,8 +235,28 @@ export function taskDestination(
 ): string {
   const base = `/tasks/${taskId}`;
   // Task 045: a scoping task with a longlist opens on it, whatever its
-  // latest walk is doing.
-  return status === "succeeded" || options?.hasLonglist === true ? `${base}/result` : base;
+  // latest walk is doing. A degraded finish opens the report like a
+  // succeeded one (task 058, N14).
+  return hasResult(status) || options?.hasLonglist === true ? `${base}/result` : base;
+}
+
+/**
+ * The lifecycle tab a path inside the task belongs to, or `null` outside it.
+ *
+ * Args:
+ *   pathname: The current location's path.
+ *   base: The task's root path (`/tasks/:taskId`).
+ *
+ * Returns:
+ *   The tab whose page the path is on (Sources' subviews count as Sources).
+ */
+export function tabOfPath(pathname: string, base: string): LifecycleTab | null {
+  if (pathname === base || pathname === `${base}/`) return "agent";
+  if (!pathname.startsWith(`${base}/`)) return null;
+  const segment = pathname.slice(base.length + 1).split("/")[0];
+  // An option card is the Result's (round 14).
+  if (segment === "options") return "result";
+  return LIFECYCLE_TABS.find((tab) => tab !== "agent" && TAB_PATHS[tab] === `/${segment}`) ?? null;
 }
 
 /** The Result's view switch once a scoping task has a longlist (task 045,

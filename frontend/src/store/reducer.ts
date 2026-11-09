@@ -1,7 +1,10 @@
 import type { SseFrame } from "../api/sseFrame";
 import {
   GLOBAL_LIVENESS_KEY,
+  type LiveSearchQuery,
   type LiveSection,
+  type LiveSource,
+  type LiveSourceNote,
   type ResolvedDecision,
   type RunStreamState,
   type StageEntry,
@@ -21,26 +24,155 @@ import {
  * That set resets whenever the sequence actually advances. Together this
  * makes folding the same frame stream twice, or resuming the fold from
  * any mid-stream cursor (however the redelivery is sliced), produce the
- * same final state. `tick` frames are the deliberate exception: they
- * carry no `sequence` at all, update only the transient `liveness` slice,
- * and never advance `lastSequence`.
+ * same final state. The nine ephemeral frame types are the deliberate
+ * exception: they carry no `sequence` at all and never advance
+ * `lastSequence`. `tick` updates only the transient `liveness` slice;
+ * `artefact.section_delta` and `artefact.section_revising` update only a
+ * section's `draft` and `revising` (task 058, N7);
+ * `artefact.section_sources` and `artefact.section_claim` update only its
+ * `sources` and `claims` (task 058, evidence shown live);
+ * `artefact.section_card` appends to its `cards` (task 058, round 7);
+ * `artefact.source_note` adds to the run's `liveSourceNotes`, one per source
+ * (round 8); `search.query` adds or updates a row of `liveSearchQueries` and
+ * `characterise.themes` sets `liveThemes`, `liveOptions` or
+ * `liveOptionThemes` by its `stage` (rounds 9 and 11). A replay carries none of them, so folding a replay rebuilds
+ * `prose` and `citations` alone.
  */
 /** Task 045 (A3): a stage frame names its walk; one from a different walk
  *  than the tracked run (a longlist walk's option search) is not this
- *  timeline's. A frame without a run id (older events) still applies. */
+ *  timeline's. A frame without a run id (older events) still applies. Ticks
+ *  name their walk too (round 11). */
 export function isOtherRunsStage(state: RunStreamState, runId: string | null): boolean {
   return runId !== null && state.run !== null && runId !== state.run.id;
 }
 
 export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): RunStreamState {
   if (frame.type === "tick") {
+    // A tick names its walk (round 11): a longlist walk's option searches run
+    // `acquire` too, and their lines are not the tracked walk's.
+    if (isOtherRunsStage(state, frame.capability_run_id ?? null)) return state;
     const key = frame.stage ?? GLOBAL_LIVENESS_KEY;
-    const entry: StageLiveness = { note: frame.note, occurredAt: frame.occurred_at };
-    // The counts are omitted from the wire when a tick carries none.
-    if (typeof frame.fetched === "number") entry.fetched = frame.fetched;
-    if (typeof frame.parsed === "number") entry.parsed = frame.parsed;
-    if (typeof frame.total === "number") entry.total = frame.total;
+    const entry: StageLiveness = {
+      activity: frame.activity,
+      heartbeat: frame.heartbeat,
+      dropped: frame.dropped,
+      occurredAt: frame.occurred_at,
+    };
+    // Null on the wire means "no such value for this tick"; leave it out.
+    if (frame.done !== null) entry.done = frame.done;
+    if (frame.total !== null) entry.total = frame.total;
+    if (frame.unit !== null) entry.unit = frame.unit;
+    if (frame.section !== null) entry.section = frame.section;
     return { ...state, liveness: { ...state.liveness, [key]: entry } };
+  }
+
+  if (frame.type === "artefact.section_delta") {
+    const section = state.liveSections[frame.index];
+    if (section === undefined) {
+      // No skeleton yet: hold the text until the skeleton arrives.
+      const held = state.pendingDrafts[frame.index] ?? "";
+      return {
+        ...state,
+        pendingDrafts: {
+          ...state.pendingDrafts,
+          [frame.index]: frame.mode === "append" ? held + frame.text : frame.text,
+        },
+      };
+    }
+    // A completed section's prose is the record; a late delta never
+    // reopens it.
+    if (section.state === "filled") return state;
+    const draft = frame.mode === "append" ? (section.draft ?? "") + frame.text : frame.text;
+    const next: LiveSection = { ...section, draft };
+    // A replaced draft is new text: citations bound to the old one, and
+    // cards from the old reply, go.
+    if (frame.mode === "replace") {
+      delete next.claims;
+      delete next.cards;
+    }
+    return {
+      ...state,
+      liveSections: { ...state.liveSections, [frame.index]: next },
+    };
+  }
+
+  if (frame.type === "artefact.section_sources") {
+    const section = state.liveSections[frame.index];
+    if (section === undefined || section.state === "filled") return state;
+    return {
+      ...state,
+      liveSections: {
+        ...state.liveSections,
+        [frame.index]: { ...section, sources: liveSources(frame.sources) },
+      },
+    };
+  }
+
+  if (frame.type === "artefact.section_claim") {
+    const section = state.liveSections[frame.index];
+    if (section === undefined || section.state === "filled") return state;
+    const claim = { start: frame.start, end: frame.end, sources: liveSources(frame.sources) };
+    return {
+      ...state,
+      liveSections: {
+        ...state.liveSections,
+        [frame.index]: { ...section, claims: [...(section.claims ?? []), claim] },
+      },
+    };
+  }
+
+  if (frame.type === "artefact.section_card") {
+    const section = state.liveSections[frame.index];
+    if (section === undefined || section.state === "filled") return state;
+    const card = { title: frame.title, prose: frame.prose };
+    return {
+      ...state,
+      liveSections: {
+        ...state.liveSections,
+        [frame.index]: { ...section, cards: [...(section.cards ?? []), card] },
+      },
+    };
+  }
+
+  if (frame.type === "artefact.source_note") {
+    // One note per source, in the order written: a reconnect's snapshot
+    // sends the notes again, and a repeat replaces rather than doubles.
+    const note: LiveSourceNote = { sourceId: frame.source_id, title: frame.title, note: frame.note };
+    const notes = state.liveSourceNotes ?? [];
+    const at = notes.findIndex((existing) => existing.sourceId === note.sourceId);
+    const next = at === -1 ? [...notes, note] : notes.map((existing, i) => (i === at ? note : existing));
+    return { ...state, liveSourceNotes: next };
+  }
+
+  if (frame.type === "search.query") {
+    // One row per (backend, query, kind), in the order first sent: the frame
+    // sent when the query comes back updates its row, and a reconnect's
+    // snapshot repeats rows rather than doubling them.
+    const row: LiveSearchQuery = { backend: frame.backend, query: frame.query, kind: frame.kind, results: frame.results };
+    const rows = state.liveSearchQueries ?? [];
+    const at = rows.findIndex(
+      (existing) => existing.backend === row.backend && existing.query === row.query && existing.kind === row.kind,
+    );
+    const next = at === -1 ? [...rows, row] : rows.map((existing, i) => (i === at ? row : existing));
+    return { ...state, liveSearchQueries: next };
+  }
+
+  if (frame.type === "characterise.themes") {
+    // One frame, three stages (round 11): the Evidence search's themes, the
+    // longlist's options and the longlist's themes, each in its own slot.
+    const names = frame.themes.map((theme) => ({ label: theme.label, description: theme.description }));
+    const slot = frame.stage === "longlist" ? "liveOptions" : frame.stage === "theme" ? "liveOptionThemes" : "liveThemes";
+    return { ...state, [slot]: names };
+  }
+
+  if (frame.type === "artefact.section_revising") {
+    const section = state.liveSections[frame.index];
+    if (section === undefined || section.state === "filled") return state;
+    const revising = frame.spans.map(({ start, end }) => ({ start, end }));
+    return {
+      ...state,
+      liveSections: { ...state.liveSections, [frame.index]: { ...section, revising } },
+    };
   }
 
   if (frame.sequence < state.lastSequence) {
@@ -95,7 +227,7 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
         frame.status === "aborted" ||
         frame.status === "interrupted" ||
         frame.status === "degraded";
-      return {
+      const next: RunStreamState = {
         ...base,
         run: {
           id: frame.capability_run_id,
@@ -111,7 +243,18 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
         stages: isNewRun ? [] : base.stages,
         liveness: isNewRun ? {} : base.liveness,
         liveSections: isNewRun ? {} : base.liveSections,
+        pendingDrafts: isNewRun ? {} : base.pendingDrafts,
       };
+      // A new run's notes, queries and themes start empty (task 058, rounds
+      // 8 and 9).
+      if (isNewRun) {
+        delete next.liveSourceNotes;
+        delete next.liveSearchQueries;
+        delete next.liveThemes;
+        delete next.liveOptions;
+        delete next.liveOptionThemes;
+      }
+      return next;
     }
 
     case "stage.started":
@@ -120,7 +263,13 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
         ...base,
         stages: [
           ...base.stages,
-          { stage: frame.stage, label: frame.label, status: "started", blurb: frame.blurb },
+          {
+            stage: frame.stage,
+            label: frame.label,
+            status: "started",
+            blurb: frame.blurb,
+            startedAt: frame.occurred_at,
+          },
         ],
       };
 
@@ -128,13 +277,19 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
       if (isOtherRunsStage(base, frame.capability_run_id)) return base;
       return {
         ...base,
-        stages: replaceStartedStage(base.stages, frame.stage, {
-          stage: frame.stage,
-          label: frame.label,
-          status: "completed",
-          summary: frame.summary,
-          seconds: frame.seconds,
-        }),
+        stages: replaceStartedStage(
+          base.stages,
+          frame.stage,
+          {
+            stage: frame.stage,
+            label: frame.label,
+            status: "completed",
+            summary: frame.summary,
+            seconds: frame.seconds,
+            counts: frame.counts,
+          },
+          frame.occurred_at,
+        ),
       };
 
     case "stage.failed":
@@ -144,28 +299,39 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
       if (isOtherRunsStage(base, frame.capability_run_id)) return base;
       return {
         ...base,
-        stages: replaceStartedStage(base.stages, frame.stage, {
-          stage: frame.stage,
-          label: frame.label,
-          status: frame.skipped ? "skipped" : "failed",
-          summary: { reason: frame.reason },
-        }),
+        stages: replaceStartedStage(
+          base.stages,
+          frame.stage,
+          {
+            stage: frame.stage,
+            label: frame.label,
+            status: frame.skipped ? "skipped" : "failed",
+            summary: { reason: frame.reason },
+          },
+          frame.occurred_at,
+        ),
       };
 
     case "artefact.skeleton":
+      // Drafts that streamed in before the skeleton (held in
+      // `pendingDrafts`) are folded into their sections here.
       return {
         ...base,
         liveSections: Object.fromEntries(
-          frame.sections.map((section) => [
-            section.index,
-            {
+          frame.sections.map((section) => {
+            const held = base.pendingDrafts[section.index];
+            const live: LiveSection = {
               index: section.index,
               title: section.title,
               focus: section.focus,
+              role: section.role,
               state: "planned",
-            } satisfies LiveSection,
-          ]),
+            };
+            if (held !== undefined) live.draft = held;
+            return [section.index, live];
+          }),
         ),
+        pendingDrafts: {},
       };
 
     case "artefact.section_started": {
@@ -192,12 +358,46 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
         delete remainingSections[frame.index];
         return { ...base, liveSections: remainingSections };
       }
+      const settled: LiveSection = { ...section };
+      delete settled.draft;
+      delete settled.revising;
+      delete settled.sources;
+      delete settled.claims;
+      delete settled.cards;
+      // The checked citations stay until the committed report replaces the
+      // live view (task 058, round 7). A section with none carries none.
+      delete settled.citations;
+      delete settled.checkedClaims;
+      if (frame.claims !== undefined && frame.claims.length > 0) {
+        // Round 13: the checker's verdict, per claim.
+        settled.checkedClaims = frame.claims.map((claim) => ({
+          claimId: claim.claim_id ?? null,
+          start: claim.start,
+          end: claim.end,
+          tier: claim.tier ?? null,
+          rationale: claim.rationale ?? null,
+        }));
+      }
+      if (frame.citations !== undefined && frame.citations.length > 0) {
+        settled.citations = frame.citations.map((citation) => ({
+          start: citation.start,
+          end: citation.end,
+          n: citation.n,
+          sourceId: citation.source_id,
+          title: citation.title,
+          // Round 8: absent on a frame recorded before the fields existed.
+          citationId: citation.citation_id ?? null,
+          claimId: citation.claim_id ?? null,
+          chunkId: citation.chunk_id ?? null,
+          quote: citation.quote ?? "",
+        }));
+      }
       return {
         ...base,
         liveSections: {
           ...base.liveSections,
           [frame.index]: {
-            ...section,
+            ...settled,
             title: frame.title,
             prose: frame.prose,
             state: "filled",
@@ -245,6 +445,11 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
   }
 }
 
+/** The wire's `{source_id, title}` pairs as the store keeps them. */
+function liveSources(sources: readonly { source_id: string; title: string }[]): LiveSource[] {
+  return sources.map(({ source_id, title }) => ({ sourceId: source_id, title }));
+}
+
 /**
  * Report whether live presentation sections must be labelled as an
  * incomplete draft after a terminal run outcome.
@@ -266,21 +471,29 @@ export function hasTerminalPartialLiveArtefact(state: RunStreamState): boolean {
 }
 
 /** Find the most recent `started` entry for `stage` and replace it in
- *  place; append instead if none is found (defensive — shouldn't happen
- *  given the server's start-before-terminal ordering). */
+ *  place, keeping its `startedAt`; append instead if none is found
+ *  (defensive — shouldn't happen given the server's start-before-terminal
+ *  ordering), dating the start back by `seconds` when the frame has them. */
 function replaceStartedStage(
   stages: StageEntry[],
   stage: StageEntry["stage"],
-  replacement: StageEntry,
+  replacement: Omit<StageEntry, "startedAt">,
+  occurredAt: string,
 ): StageEntry[] {
   for (let index = stages.length - 1; index >= 0; index--) {
     if (stages[index].stage === stage && stages[index].status === "started") {
       const next = stages.slice();
-      next[index] = replacement;
+      next[index] = { ...replacement, startedAt: stages[index].startedAt };
       return next;
     }
   }
-  return [...stages, replacement];
+  return [...stages, { ...replacement, startedAt: fallbackStartedAt(occurredAt, replacement.seconds) }];
+}
+
+function fallbackStartedAt(occurredAt: string, seconds: number | null | undefined): string {
+  const ended = Date.parse(occurredAt);
+  if (typeof seconds !== "number" || Number.isNaN(ended)) return occurredAt;
+  return new Date(ended - seconds * 1000).toISOString();
 }
 
 function assertNever(value: never): never {

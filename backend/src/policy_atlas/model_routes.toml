@@ -76,12 +76,15 @@ synthesise_write_block_summary = { tier = "standard", reasoning_effort = "none",
 synthesise_write_artefact_summary = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
 synthesise_judge_summary = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
 synthesise_section_turn = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }   # section turns and the repair share this step (D10)
+synthesise_section_emit = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }   # the streamed final turn (task 058, D1): tools kept with tool_choice none, no response_format (the reply is parsed as the emit_section arguments), outside the retry loop
 synthesise_write_key_findings = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
 synthesise_write_case_studies = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }
 synthesise_write_source_note = { tier = "fast", reasoning_effort = "medium", timeout_s = 30 }
 synthesise_write_intro = { tier = "fast", reasoning_effort = "medium", timeout_s = 30 }
 judge_grounding = { tier = "fast", reasoning_effort = "medium", timeout_s = 120 }
 # --- Conversation and agents -----------------------------------------------
+task_title = { tier = "fast", reasoning_effort = "low", timeout_s = 20 }   # one short line from the confirmed question (task 058, round 14)
+chat_title = { tier = "fast", reasoning_effort = "low", timeout_s = 20 }   # one short line from the chat's first message (task 058, round 14)
 chat = { tier = "standard", reasoning_effort = "none", timeout_s = 120 }   # the tool turn, the prose stream and the final parse share this step
 agent_route = { tier = "standard", reasoning_effort = "medium", timeout_s = 60 }
 agent_triage = { tier = "fast", reasoning_effort = "medium", timeout_s = 60 }
@@ -104,6 +107,7 @@ longlist_constrain = { tier = "standard", reasoning_effort = "none", timeout_s =
 longlist_distinct = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
 longlist_authority = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
 longlist_shortlist = { tier = "frontier", reasoning_effort = "low", timeout_s = 60 }
+shortlist_note = { tier = "standard", reasoning_effort = "low", timeout_s = 30 }   # the not-covered note written alone from the places (task 058, round 14; owner 2026-11-09: standard at low, the frontier call was slow)
 option_profile_line = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
 option_profile_potential_impact = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
 option_profile_ambition = { tier = "standard", reasoning_effort = "none", timeout_s = 60 }   # was frontier/low; owner read the replay 2026-11-02 (task 056 P5 1b)
@@ -203,6 +207,7 @@ synthesise_propose_sections = { timeout_s = 15 }     # n 30, p99 4.3 s (floor)
 synthesise_write_block_summary = { timeout_s = 15 }  # n 254, p99 2.7 s (floor)
 synthesise_judge_summary = { timeout_s = 15 }        # n 277, p99 2.3 s (floor)
 synthesise_section_turn = { timeout_s = 25 }         # n 424, p99 11.0 s (repair shares the step)
+synthesise_section_emit = { timeout_s = 25 }         # inherits the section turn's bound as the gap allowed between chunks (task 058 plan, owner item 2)
 synthesise_write_source_note = { timeout_s = 15 }    # n 33, p99 1.8 s (floor)
 longlist_assign = { timeout_s = 50 }                 # n 71, p99 22.6 s
 option_profile_line = { timeout_s = 85 }             # n 65, p99 41.7 s (above today's 60)

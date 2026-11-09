@@ -3,7 +3,8 @@ import { Link } from "react-router";
 
 import { prefersReducedMotion } from "../../lib/motion";
 import { scrub } from "../../lib/scrub";
-import { referenceAuthorsLine, REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
+import { REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
+import { referenceAuthorsShort } from "../../ui/brand/reference";
 import type { Selection } from "./DetailPanel";
 import { CitationMarker, CitationSheet } from "./Documents";
 import { VERDICT_LABEL } from "./tocModel";
@@ -215,7 +216,7 @@ function SourceList({ taskId, sources }: { taskId: string; sources: Report["sour
     <>
       <ol className={`mt-3 max-w-[44em] space-y-1.5 ${REPORT_BODY_CLASS}`}>
         {sources.map((source) => {
-          const authors = referenceAuthorsLine((source.authors ?? []).map((name) => ({ name })));
+          const authors = referenceAuthorsShort((source.authors ?? []).map((name) => ({ name })));
           const title = source.title ?? source.citation;
           return (
             <li key={source.n} id={`toc-source-${source.n}`} className="flex gap-2">

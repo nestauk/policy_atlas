@@ -1,6 +1,5 @@
 import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { components } from "../../api/gen/types";
-import { Link, useLocation, useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 
 import { UPLOAD_MESSAGE, uploadMessage, useTocUpload, useTocUploading } from "../../api/mutations";
 import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns, useTask, useToc, useTocUploadFile, useTocUploads } from "../../api/queries";
@@ -30,39 +29,44 @@ import type {
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { conflictSentences, errorCode, isConflictCode } from "../../lib/errors";
-import { ReauthRedirect } from "../../ui/feedback";
-import { groupSearchDecisions } from "../decisionsPresentation";
+import { ReauthRedirect, ReconnectingBanner } from "../../ui/feedback";
+import { Arrival, ArrivalProvider, useFirstPaintDone } from "../../ui/motion/arrivals";
+import { prefersReducedMotion } from "../../ui/motion/motion";
+import { useEasedHeight } from "../streamPacing";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
 import { hasLonglist, isScoping } from "../scopingActivity";
 import { ChatAnswer } from "./chat/ChatMessages";
 import { JumpToEnd } from "./chat/JumpToEnd";
 import { useFooterReveal } from "./chat/useFooterReveal";
 import { usePinToBottom } from "./chat/usePinToBottom";
-import { sessionAnsweredCheckIn } from "../../store/thread";
 import { AnsweredCheckIn } from "./AnsweredCheckIn";
-import { CheckInCard } from "./CheckInCard";
+import { CheckInCard, SettledGateCard } from "./CheckInCard";
 import { BASELINE_GATE_KIND } from "./checkInPresentation";
-import { PartCard, type PartState, confirmTarget, derivePartStates } from "./PartCard";
+import type { components } from "../../api/gen/types";
+import { PartCard, type PartState, type PlanStep, confirmTarget, derivePartStates, planSteps, settledSummary } from "./PartCard";
+import { ActionLine } from "./ActionLine";
+import { GrowBox } from "./GrowBox";
 import { PlanCard } from "./PlanCard";
 import type { PlanOverlay } from "./planOverlay";
-import { COMPONENT_LABEL, RUN_BLOCK_STATUS } from "./planVocabulary";
-import { RunningCard, RunningCardDock } from "./RunningCard";
+import { PastRunLine, RunTrace } from "./RunTrace";
+import { usePacedText, PacedReply } from "./PacedReply";
 import { TocTrace } from "./TocTrace";
 import { TocCodeText } from "../toc/codeLinks";
 import { CitationMarker } from "../toc/Documents";
 import { AttachFileButton, UploadPreview } from "../toc/uploads";
-import {
-  completedSignposts,
-  elapsedSeconds,
-  formatElapsed,
-  runFinishedSignpost,
-  finishedNotice,
-  walkKind,
-  type WalkKind,
-} from "./runProgress";
 
 /** The server page-size cap; one task_agent conversation fits comfortably. */
 const TRANSCRIPT_PAGE_SIZE = 200;
+
+/** The kinds a walk itself writes, so an untagged one inside its window is
+ *  its own. Any other event with no walk (round 15: `shortlist.note_updated`,
+ *  a shortlist or longlist action, a task's lifecycle) is housekeeping that
+ *  stays in History, never placed in a walk's block by its time. */
+const WALK_KIND_PREFIXES = ["component.", "search.", "run.", "steering.", "checkin."] as const;
+
+function placedByTime(kind: string): boolean {
+  return WALK_KIND_PREFIXES.some((prefix) => kind.startsWith(prefix));
+}
 
 /**
  * Assign each run its turn boundary and each decision its run block. TaskAgent
@@ -116,11 +120,13 @@ export function threadInputs(
           : undefined
         : typeof tagged === "string" && runIds.has(tagged)
           ? tagged
-          : orderedRuns.findLast(
-            (run) =>
-              run.started_at <= decision.occurred_at &&
-              (run.ended_at === null || run.ended_at === undefined || decision.occurred_at <= run.ended_at),
-          )?.capability_run_id;
+          : placedByTime(decision.kind)
+            ? orderedRuns.findLast(
+              (run) =>
+                run.started_at <= decision.occurred_at &&
+                (run.ended_at === null || run.ended_at === undefined || decision.occurred_at <= run.ended_at),
+            )?.capability_run_id
+            : undefined;
     if (ownerId !== undefined && !childIds.has(ownerId)) {
       runDecisions.push({ decision, capabilityRunId: ownerId });
     }
@@ -159,10 +165,7 @@ export function baselineGateInput(
   const resolved = stream.decisions.find((entry) => entry.checkInId === checkIn.check_in_id) ?? null;
   if (resolved === null) return { checkIn, decision: null };
   const optionId = resolved.response["option_id"];
-  const label =
-    (checkIn.options ?? []).find((option) => option.id === optionId)?.label ??
-    sessionAnsweredCheckIn(checkIn.check_in_id)?.chosenOptionLabel ??
-    null;
+  const label = (checkIn.options ?? []).find((option) => option.id === optionId)?.label ?? null;
   return {
     // A resolved decision is definitive: the read model may still be showing
     // the pre-decision row until its refetch lands.
@@ -289,7 +292,7 @@ export function Composer({
           }}
           placeholder={placeholder}
           disabled={disabled}
-          className="max-h-60 min-h-14 flex-1 resize-y overflow-y-auto border border-line-2 bg-paper px-3 py-2.5 text-lead [field-sizing:content] focus-visible:outline-2 focus-visible:outline-blue disabled:bg-ground disabled:text-grey"
+          className="max-h-60 min-h-14 flex-1 resize-y overflow-y-auto border border-line-2 bg-paper px-3 py-2.5 text-lead [field-sizing:content] disabled:bg-ground disabled:text-grey"
         />
         {onAttach !== undefined && (
           <AttachFileButton
@@ -364,62 +367,116 @@ function UploadThumb({ text }: { text: string }) {
   );
 }
 
-function UserBubble({ text }: { text: string }) {
+/** The user's message. It rises only when it arrives after the thread's
+ *  first paint; the stored row that replaces a streamed one shares its id
+ *  (the client turn id), so it appears in place and nothing animates twice. */
+function UserBubble({ text, turnId }: { text: string; turnId: string }) {
   // A code-authored Task Agent line (task 054, J3) has no user message.
   if (text === "") return null;
   return (
-    <div className="anim-rise ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5">
+    <Arrival arrivalId={`user:${turnId}`} className="ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5">
       {text.startsWith(UPLOAD_MESSAGE) && <UploadThumb text={text} />}
       <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{scrub(text)}</p>
-    </div>
+    </Arrival>
   );
 }
 
-/** TaskAgent replies are plain text — no box (binding record: task_agent-stage
- *  `.task_agent`); only part cards and the plan card are bordered. */
 type CitedSource = components["schemas"]["CitedSourceOut"];
 
 /** "[1]" or "[1,2]" in a reply that cites its sources (task 054: the sense check). */
 const SOURCE_MARKER = /\[(\d+(?:,\d+)*)\]/g;
 
+/** TaskAgent replies are plain text — no box (binding record: task_agent-stage
+ *  `.task_agent`); only part cards and the plan card are bordered. The reply
+ *  rises in as it arrives and its words come at a steady pace (round 9).
+ *
+ *  It grows smoothly (owner, round 12: "Drafting the plan" was jittery): its
+ *  own box eases to each new line's height, so what is under it (the action
+ *  line while it streams, the part card once it is stored) glides down
+ *  rather than jumping a line and being clipped by the thread's ease. A
+ *  streamed turn mounts the box before its first words (`text` empty) and
+ *  keeps the gap to the action line inside it (`gapBelow`), so the first
+ *  line opens the same way. A cut under reduced motion.
+ *
+ *  A theory of change's stored reply links its box and connection codes, and
+ *  a reply that cites its sources lists them under it (task 054). */
 function TaskAgentBubble({
   text,
+  turnId,
+  streamed,
+  gapBelow = false,
   taskId,
   tocCodes,
   sources = [],
 }: {
   text: string;
+  turnId: string;
+  streamed: boolean;
+  gapBelow?: boolean;
   taskId?: string;
   tocCodes?: ReadonlySet<string>;
   sources?: CitedSource[];
 }) {
-  const plain = (piece: string) =>
-    tocCodes !== undefined && taskId !== undefined ? <TocCodeText text={piece} taskId={taskId} codes={tocCodes} /> : scrub(piece);
+  const [box, content] = useEasedHeight(!prefersReducedMotion());
   const cited = sources.length > 0 && taskId !== undefined;
+  const linked = tocCodes !== undefined && taskId !== undefined;
   return (
-    <div className="anim-rise mr-8">
-      <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">
-        {cited ? <CitedText text={text} taskId={taskId} sources={sources} plain={plain} /> : plain(text)}
-      </p>
-      {cited && (
-        <ol className="mt-3 max-w-prose-measure space-y-1 text-body text-ink-2">
-          {sources.map((source) => (
-            <li key={source.n}>
-              <span className="mr-1 text-grey">[{source.n}]</span>
-              {source.url ? (
-                <a href={source.url} target="_blank" rel="noreferrer" className="text-blue hover:underline">
-                  {scrub(source.title)}
-                </a>
+    <Arrival arrivalId={`reply:${turnId}`} className="mr-8">
+      <div ref={box}>
+        <div ref={content}>
+          {text !== "" && (
+            <p className={cn("max-w-prose-measure whitespace-pre-wrap text-lead text-ink", gapBelow && "pb-6")}>
+              {cited || linked ? (
+                <LinkedReply turnId={turnId} text={text} streamed={streamed} taskId={taskId} tocCodes={tocCodes} sources={sources} />
               ) : (
-                scrub(source.title)
+                <PacedReply turnId={turnId} text={text} streamed={streamed} />
               )}
-              {source.year && <span className="text-grey"> ({source.year})</span>}
-            </li>
-          ))}
-        </ol>
-      )}
-    </div>
+            </p>
+          )}
+          {cited && (
+            <ol className="mt-3 max-w-prose-measure space-y-1 text-body text-ink-2">
+              {sources.map((source) => (
+                <li key={source.n}>
+                  <span className="mr-1 text-grey">[{source.n}]</span>
+                  {source.url ? (
+                    <a href={source.url} target="_blank" rel="noreferrer" className="text-blue hover:underline">
+                      {scrub(source.title)}
+                    </a>
+                  ) : (
+                    scrub(source.title)
+                  )}
+                  {source.year && <span className="text-grey"> ({source.year})</span>}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      </div>
+    </Arrival>
   );
+}
+
+/** A reply with its theory-of-change codes linked and its "[n]" markers as
+ *  citation buttons, revealed at the same pace as a plain reply. */
+function LinkedReply({
+  turnId,
+  text,
+  streamed,
+  taskId,
+  tocCodes,
+  sources,
+}: {
+  turnId: string;
+  text: string;
+  streamed: boolean;
+  taskId: string;
+  tocCodes?: ReadonlySet<string>;
+  sources: CitedSource[];
+}) {
+  const revealed = usePacedText(turnId, text, streamed).text;
+  const plain = (piece: string) =>
+    tocCodes !== undefined ? <TocCodeText text={piece} taskId={taskId} codes={tocCodes} /> : scrub(piece);
+  return sources.length > 0 ? <CitedText text={revealed} taskId={taskId} sources={sources} plain={plain} /> : <>{plain(revealed)}</>;
 }
 
 /** The reply with each "[n]" marker as a button that opens the citation sidebar. */
@@ -451,6 +508,16 @@ function CitedText({
   }
   pieces.push(<Fragment key={`t${last}`}>{plain(text.slice(last))}</Fragment>);
   return <>{pieces}</>;
+}
+
+/** The action line under a streaming planner reply: the shared one. */
+function PlannerActionLine({ label, live, turnId }: { label: string; live: boolean; turnId: string }) {
+  return <ActionLine label={label} live={live} arrivalId={`action:${turnId}`} />;
+}
+
+/** Whether a turn on its way shows the planner's action line. */
+function actionShown(turn: OptimisticTaskAgentTurn): boolean {
+  return turn.status !== "failed" && turn.progressLabel !== undefined;
 }
 
 /** One recorded gate decision, as a quiet line rather than a card: the
@@ -505,8 +572,10 @@ function DurableTurn({
   onRetry,
   retryDisabled,
   partState,
+  steps,
+  plan,
+  scopingPlan,
   onSend,
-  onPrefill,
   tocCodes,
 }: {
   taskId: string;
@@ -517,21 +586,24 @@ function DurableTurn({
   onRetry: (input: { message: string; clientTurnId: string }) => void;
   retryDisabled: boolean;
   partState: PartState | undefined;
+  /** The plan's steps, for the stepper above the active part card. */
+  steps: PlanStep[];
+  /** The task's current plans, so a settled part names its outcome. */
+  plan?: components["schemas"]["PlanDraft"] | null;
+  scopingPlan?: components["schemas"]["ScopingPlanDraft"] | null;
   onSend: (message: string) => void;
-  onPrefill: (message: string) => void;
 }) {
-  // A button-confirm turn's record is the ✓ on its part card — the canned
+  // A button-confirm turn's record is its settled part card — the canned
   // marker bubble would only duplicate it (binding record: task_agent-stage).
   const isConfirmTurn = confirmTarget(turn.user_message) !== null;
   // A turn stored before task 044 carries no kind: it is a reply.
   const kind = turn.kind ?? "reply";
-  const taskAgentText = [turn.reply, turn.part?.body]
-    .filter((piece): piece is string => piece != null && piece !== "")
-    .join("\n\n");
+  // A part's body renders inside its card, under its title (annex scene 11).
+  const taskAgentText = turn.reply ?? "";
   if (kind === "answer") {
     return (
       <div className="space-y-6">
-        <UserBubble text={turn.user_message} />
+        <UserBubble text={turn.user_message} turnId={turn.client_turn_id} />
         <ChatAnswer
           taskId={taskId}
           turn={taskAgentAnswerRow(turn)}
@@ -543,12 +615,13 @@ function DurableTurn({
       </div>
     );
   }
+  // A gate decision is said once, in the settled part card's language
+  // (round 10, finding 8): no user bubble beside it, no "recorded" line.
   if (kind === "decision" && turn.decision != null) {
     return (
-      <div className="space-y-6">
-        {!isConfirmTurn && <UserBubble text={turn.user_message} />}
-        <DecisionLine label={turn.decision.label} planVersion={turn.decision.plan_version} />
-      </div>
+      <Arrival arrivalId={`decision:${turn.client_turn_id}`}>
+        <SettledGateCard label={turn.decision.label} />
+      </Arrival>
     );
   }
   // Task 045: a confirmed longlist verb (add · exclude · include again) is
@@ -557,23 +630,32 @@ function DurableTurn({
   if (kind === "action" && turn.action != null) {
     return (
       <div className="space-y-6">
-        <UserBubble text={turn.user_message} />
-        {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} taskId={taskId} tocCodes={tocCodes} sources={turn.sources} />}
-        <DecisionLine label={actionLine(turn.action)} planVersion={null} />
+        <UserBubble text={turn.user_message} turnId={turn.client_turn_id} />
+        {turn.status === "completed" && taskAgentText !== "" && (
+          <TaskAgentBubble text={taskAgentText} turnId={turn.client_turn_id} streamed={false} taskId={taskId} tocCodes={tocCodes} sources={turn.sources} />
+        )}
+        <Arrival arrivalId={`decision:${turn.client_turn_id}`}>
+          <DecisionLine label={actionLine(turn.action)} planVersion={null} />
+        </Arrival>
       </div>
     );
   }
   return (
     <div className="space-y-6">
-      {!isConfirmTurn && <UserBubble text={turn.user_message} />}
-      {turn.status === "completed" && taskAgentText !== "" && <TaskAgentBubble text={taskAgentText} taskId={taskId} tocCodes={tocCodes} sources={turn.sources} />}
+      {!isConfirmTurn && <UserBubble text={turn.user_message} turnId={turn.client_turn_id} />}
+      {turn.status === "completed" && taskAgentText !== "" && (
+        <TaskAgentBubble text={taskAgentText} turnId={turn.client_turn_id} streamed={false} taskId={taskId} tocCodes={tocCodes} sources={turn.sources} />
+      )}
       {turn.part != null && partState !== undefined && (
         <PartCard
+          arrivalId={`part:${turn.client_turn_id}`}
           part={turn.part}
+          partName={steps.find((step) => step.id === turn.part?.id)?.name}
           state={partState}
           disabled={retryDisabled}
+          steps={steps}
+          summary={settledSummary(turn.part, partState, plan, scopingPlan)}
           onSend={onSend}
-          onPrefill={onPrefill}
         />
       )}
       {turn.status === "pending" && (
@@ -601,162 +683,127 @@ function DurableTurn({
   );
 }
 
-/** A run block in the thread: a quiet divider row naming the run and its
- *  outcome, with any steering decisions echoed inside it. */
-interface PresentedRunDecision {
-  sequence: number;
-  summary: string;
-  count: number;
-}
-
-/** Convert the decision-log feed into quiet, user-facing thread echoes.
- * Search grouping delegates to the shared decision presentation helper; the
- * remaining adjacent duplicate collapse is limited to this compact rail. */
-export function presentRunDecisions(
-  decisions: TaskAgentThreadDecision[],
-  stages: StageEntry[],
-): PresentedRunDecision[] {
-  const labelled = decisions.flatMap((decision) => {
-    if (decision.kind !== "component.completed") return [decision];
-    const detail = decision.detail;
-    const component =
-      detail !== null && typeof detail === "object" && !Array.isArray(detail)
-        ? [detail.component, detail.stage, detail.registry_component].find(
-            (value): value is string => typeof value === "string",
-          )
-        : undefined;
-    const stageLabel =
-      (component === undefined ? undefined : [...stages].reverse().find((stage) => stage.stage === component)?.label)
-      ?? (component === undefined ? undefined : COMPONENT_LABEL[component]);
-    return stageLabel === undefined ? [] : [{ ...decision, summary: `Completed: ${stageLabel}` }];
-  });
-
-  const searchGrouped: PresentedRunDecision[] = [];
-  for (let index = 0; index < labelled.length; index += 1) {
-    const entry = labelled[index];
-    if (entry.kind !== "search.executed" || labelled[index - 1]?.kind === "search.executed") continue;
-    const consecutive: TaskAgentThreadDecision[] = [];
-    for (let cursor = index; labelled[cursor]?.kind === "search.executed"; cursor += 1) {
-      consecutive.push(labelled[cursor]);
-    }
-    const grouped = groupSearchDecisions(consecutive)[0];
-    if (grouped !== undefined) {
-      searchGrouped.push({
-        sequence: grouped.sequence,
-        summary: entry.summary.replace(/\.$/, ""),
-        count: consecutive.length,
-      });
-    }
-  }
-  const nonSearch = labelled
-    .filter((entry) => entry.kind !== "search.executed")
-    .map((entry) => ({ sequence: entry.sequence, summary: entry.summary, count: 1 }));
-  const ordered = [...searchGrouped, ...nonSearch].sort((left, right) => left.sequence - right.sequence);
-
-  return ordered.reduce<PresentedRunDecision[]>((entries, entry) => {
-    const previous = entries.at(-1);
-    if (previous !== undefined && previous.summary === entry.summary) {
-      previous.count += entry.count;
-      return entries;
-    }
-    entries.push(entry);
-    return entries;
-  }, []);
+/** A turn on its way: the user's words (a confirm turn shows none; its
+ *  settled card is the record), the reply as it streams with the action
+ *  line under it, or the failure with its Retry. */
+function InFlightTurn({
+  turn,
+  composerDisabled,
+  onDiscard,
+  onRetry,
+}: {
+  turn: OptimisticTaskAgentTurn;
+  composerDisabled: boolean;
+  onDiscard: () => void;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="space-y-6">
+      {/* Button-confirm turns never show a bubble — durable turns hide
+          them too; the settled part card is the record. */}
+      {confirmTarget(turn.userMessage) === null && <UserBubble text={turn.userMessage} turnId={turn.clientTurnId} />}
+      {/* The reply and the action line under it are one block, so the
+          reply's box can open the gap between them as its first line
+          lands (round 12). */}
+      {((turn.reply !== undefined && turn.reply !== "") || actionShown(turn)) && (
+        <div>
+          <TaskAgentBubble
+            text={turn.reply ?? ""}
+            turnId={turn.clientTurnId}
+            streamed
+            gapBelow={actionShown(turn)}
+          />
+          {actionShown(turn) && (
+            <PlannerActionLine label={turn.progressLabel ?? ""} live={turn.status === "pending"} turnId={turn.clientTurnId} />
+          )}
+        </div>
+      )}
+      {turn.status === "failed" && (
+        <Arrival arrivalId={`failed:${turn.clientTurnId}`} className="mr-8 border border-line bg-paper px-3.5 py-2.5">
+          <p className="text-body text-ink">
+            {isConflictCode(turn.errorCode)
+              ? conflictSentences[turn.errorCode]
+              : "That turn couldn't be processed. Your draft so far is unchanged."}
+          </p>
+          {turn.errorCode === "stale_turn" || turn.errorCode === "already_answered" ? (
+            // Retrying the same client_turn_id can never clear a
+            // stale_turn conflict, and an already-answered check-in
+            // will not un-answer itself — offer the refresh instead.
+            // Both render inline, right where the message was typed;
+            // neither becomes a toast.
+            <Button
+              size="sm"
+              variant="secondary"
+              className="mt-2"
+              onClick={onDiscard}
+            >
+              Refresh conversation
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="mt-2"
+              disabled={composerDisabled}
+              onClick={onRetry}
+            >
+              Retry
+            </Button>
+          )}
+        </Arrival>
+      )}
+    </div>
+  );
 }
 
 function AnsweredCheckIns({
   answered,
   checkIns,
+  stages,
 }: {
   answered: ResolvedDecision[];
   checkIns: ReturnType<typeof useCheckIns>["data"];
+  stages: StageEntry[];
 }) {
   return answered.map((decision) => (
     <AnsweredCheckIn
       key={decision.checkInId}
       decision={decision}
       checkIn={checkIns?.data.find((checkIn) => checkIn.check_in_id === decision.checkInId)}
+      stages={stages}
     />
   ));
 }
 
-function RunFinishedNotice({
-  taskId,
-  status,
-  kind = "evidence_search",
-}: {
-  taskId: string;
-  status: RunStatus | undefined;
-  kind?: WalkKind;
-}) {
-  const notice = runFinishedSignpost(taskId, status, kind);
-  if (notice === null) return null;
-  const words = finishedNotice(kind, status);
-  return (
-    <div className="anim-rise mr-8 border-2 border-[#17A88D] bg-[#DDF2EE] px-4 py-3">
-      <p className="max-w-prose-measure text-lead text-navy">
-        {words.before}{" "}
-        <Link to={notice.href} className="font-semibold text-blue underline">
-          {notice.label}
-        </Link>{" "}
-        {words.after}
-      </p>
-    </div>
-  );
-}
-
+/** A past run in the thread: the ended card (its finish, wall time and
+ *  link, its steps folded when the read carries them; round 11) and the
+ *  check-ins it answered. The event-log echoes ("Executed a search
+ *  query × 55", "Recorded a steering decision") that used to sit here are
+ *  audit rows for the History tab, not conversation (owner, 2026-11-05). */
 function RunBlock({
   taskId,
   run,
-  decisions,
   stages,
   answered,
   checkIns,
   capability,
+  hasFindings,
 }: {
   taskId: string;
   run: TaskAgentThreadRun;
-  decisions: TaskAgentThreadDecision[];
   stages: StageEntry[];
   capability?: string | null;
+  hasFindings: boolean;
   answered: ResolvedDecision[];
   checkIns: ReturnType<typeof useCheckIns>["data"];
 }) {
-  const status = RUN_BLOCK_STATUS[run.status] ?? null;
-  // Task 045: a parentless option search (the chat verb *add*'s own search)
-  // keeps a block, headed as what it is, with its stage rows only.
-  const optionSearch = run.purpose === "targeted";
-  const presentedDecisions = presentRunDecisions(
-    optionSearch ? decisions.filter((decision) => decision.kind === "component.completed") : decisions,
-    stages,
-  );
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2 text-caption text-grey">
-        <span aria-hidden="true" className="h-px flex-1 bg-line" />
-        <span>
-          {optionSearch ? "Option search" : "Analysis run"}
-          {status !== null ? ` — ${status}` : ""}
-        </span>
-        <span aria-hidden="true" className="h-px flex-1 bg-line" />
-      </div>
-      {presentedDecisions.map((decision) => (
-        <div
-          key={decision.sequence}
-          className="mx-4 border-l-2 border-l-yellow bg-yellow-tint/50 px-3 py-2"
-        >
-          <p className="text-body text-ink">
-            {scrub(decision.summary)}{decision.count > 1 ? ` × ${decision.count}` : ""}
-          </p>
-        </div>
-      ))}
-      <AnsweredCheckIns answered={answered} checkIns={checkIns} />
-      {/* The chat's own destination once the run lands (owner, 2026-08-05):
-          a completed run's last word shouldn't be a quiet stage echo. */}
-      {/* Its kind is its own run's (task 045, A8) — never the live stream's. */}
-      {!optionSearch && (
-        <RunFinishedNotice taskId={taskId} status={run.status} kind={walkKind(capability, [], run.purpose)} />
-      )}
+    <div className="space-y-6">
+      {/* Its words follow its own run's kind (task 045, A8), never the live stream's. */}
+      <Arrival arrivalId={`run:${run.capability_run_id}`}>
+        <PastRunLine run={run} taskId={taskId} capability={capability} hasFindings={hasFindings} />
+      </Arrival>
+      <AnsweredCheckIns answered={answered} checkIns={checkIns} stages={stages} />
     </div>
   );
 }
@@ -774,6 +821,7 @@ export function TaskAgentPane({
   stream,
   isOwner,
   onReviewPlan,
+  compact = false,
   planOverlay,
   onOverlayApplied,
   onDiscardOverlay,
@@ -789,6 +837,9 @@ export function TaskAgentPane({
    *  every colleague the owner's mutation surface. */
   isOwner: boolean;
   onReviewPlan?: () => void;
+  /** The sidebar's pane: the same thread and run trace, with the check-in
+   *  card at the sidebar's reduced width. */
+  compact?: boolean;
   planOverlay?: PlanOverlay;
   onOverlayApplied?: () => void;
   /** Clears the same overlay state as `onOverlayApplied` — wired to the
@@ -852,13 +903,14 @@ export function TaskAgentPane({
   const checkInsQuery = useCheckIns(taskId, "all");
   const funnel = useFunnel(taskId);
   const [message, setMessage] = useState("");
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [runMinimised, setRunMinimised] = useState(false);
-  const [cardOffscreen, setCardOffscreen] = useState(false);
-  const [nowMs, setNowMs] = useState(() => Date.now());
   useComposerSeed(setMessage);
 
-  const durableTurns = (transcript.data?.data ?? []) as TaskAgentThreadTurn[];
+  // A turn still streaming (or re-read after a dropped connection) shows as
+  // its local row until it lands, so its durable row is held back meanwhile.
+  const inFlightIds = new Set(transcript.optimisticTurns.map((turn) => turn.clientTurnId));
+  const durableTurns = ((transcript.data?.data ?? []) as TaskAgentThreadTurn[]).filter(
+    (turn) => !inFlightIds.has(turn.client_turn_id),
+  );
   const { boundaries, runDecisions } = threadInputs(
     durableTurns,
     runsQuery.data?.data ?? [],
@@ -883,7 +935,20 @@ export function TaskAgentPane({
   );
   const latestTurnIndex =
     durableTurns.length > 0 ? Math.max(...durableTurns.map((turn) => turn.turn_index)) : null;
-  const partStates = derivePartStates(durableTurns);
+  // A part card settles the moment the user answers it (owner, 2026-11-05):
+  // the user's turns still on their way count as its answer until the
+  // durable turns catch up. A failed one does not: its choice was not
+  // recorded, so the card opens again beside the failure's Retry.
+  const partStates = derivePartStates(
+    durableTurns,
+    transcript.optimisticTurns.filter((turn) => turn.status !== "failed").map((turn) => turn.userMessage),
+  );
+  const steps = planSteps(
+    planQuery.data?.capability ?? durableTurns.at(-1)?.capability,
+    durableTurns,
+    partStates,
+  );
+  const streaming = transcript.isSubmitting;
 
   const runActive = runStatus === "running" || runStatus === "paused";
   // Task 044 Phase 5.5: a scoping walk parked on the baseline gate keeps the
@@ -907,14 +972,20 @@ export function TaskAgentPane({
   // never renders for (child-owned queries like the plan card, disclosure
   // toggles, font loads).
   const scrollRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
+  // The thread makes room for what arrives (task 058, round 9; the animation
+  // sweep's entry 1): its box eases to the content's new height over 300 ms
+  // on the strong ease-out, growth only (a settling card eases its own
+  // shrink), and the pin follows the eased box, so the thread glides up as a
+  // new block is revealed rather than jumping by its height. Not on the
+  // first paint or a task switch; a cut under reduced motion.
+  const firstPaintDone = useFirstPaintDone(transcript.data !== undefined, taskId);
+  const [roomRef, contentRef] = useEasedHeight(firstPaintDone && !prefersReducedMotion(), true);
   // The site footer lives in `WorkspaceView`, under both columns (038 V8),
   // and opens only on a deliberate nudge past the transcript's end.
   const footer = useFooterReveal(onAtBottomChange);
   // The transcript opens at its end and stays there while new turns land
   // (shared with the chat pane).
-  const pin = usePinToBottom(scrollRef, contentRef, taskId);
+  const pin = usePinToBottom(scrollRef, roomRef, taskId);
 
   // The plan card sits at its chronological position: right after the last
   // task_agent turn (approval always comes from a turn; turns are 409-fenced
@@ -948,104 +1019,104 @@ export function TaskAgentPane({
   // an added option's search is not the baseline.
   const liveRunPurpose =
     (runsQuery.data?.data ?? []).find((run) => run.capability_run_id === liveRunId)?.purpose ?? null;
-  const liveKind = walkKind(planQuery.data?.capability, stream.stages, liveRunPurpose);
   const threadHasLiveRun = thread.some(
     (item) => item.type === "run_block" && item.run.capability_run_id === liveRunId,
   );
   const hasFindings = typeof funnel.data?.findings === "number" && funnel.data.findings > 0;
-  const runTicking = runStatus === "running" || runStatus === "paused";
-  const liveElapsed = formatElapsed(
-    elapsedSeconds(stream.run?.startedAt, stream.run?.endedAt, nowMs),
-  );
 
-  useEffect(() => {
-    if (!runTicking || !cardOffscreen) return undefined;
-    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, [runTicking, cardOffscreen]);
-
-  useEffect(() => {
-    const card = cardRef.current;
-    const root = scrollRef.current;
-    if (card === null || root === null || typeof IntersectionObserver === "undefined") {
-      setCardOffscreen(false);
-      return undefined;
-    }
-    const observer = new IntersectionObserver(
-      ([entry]) => setCardOffscreen(entry !== undefined && !entry.isIntersecting),
-      { root, threshold: 0 },
-    );
-    observer.observe(card);
-    return () => observer.disconnect();
-  }, [liveRunId, threadHasLiveRun]);
-
-  const liveCard =
+  // The run trace (task 058, owner 2026-11-05): the one place the live run
+  // shows, in the Agent tab and the sidebar alike.
+  const liveTrace =
     stream.run === null ? null : (
-      <div key="live-run" ref={cardRef}>
-        <RunningCard
-          taskId={taskId}
-          status={stream.run.status}
-          stages={stream.stages}
-          liveness={stream.liveness}
-          plan={stream.plan?.plan}
-          startedAt={stream.run.startedAt}
-          endedAt={stream.run.endedAt}
-          hasFindings={hasFindings}
-          minimised={runMinimised}
-          onMinimisedChange={setRunMinimised}
-          onSeePlan={onReviewPlan}
-          capability={planQuery.data?.capability}
-          purpose={liveRunPurpose}
-        />
-      </div>
+      <RunTrace
+        taskId={taskId}
+        status={stream.run.status}
+        stages={stream.stages}
+        liveness={stream.liveness}
+        plan={stream.plan?.plan}
+        startedAt={stream.run.startedAt}
+        endedAt={stream.run.endedAt}
+        hasFindings={hasFindings}
+        capability={planQuery.data?.capability}
+        purpose={liveRunPurpose}
+        isOwner={isOwner}
+        ownerName={taskQuery.data?.owner_display ?? null}
+        checkInWaiting={stream.pendingCheckIn !== null}
+        onSeePlan={onReviewPlan}
+        streamOpen={stream.connectionStatus === "connected"}
+      />
     );
-  const signpostBubbles = completedSignposts(stream.stages, taskId, hasFindings).map(
-    (signpost) => (
-      <div key={signpost.href} className="anim-rise mr-8">
-        <p className="max-w-prose-measure text-lead text-ink">
-          {signpost.message}{" "}
-          <Link to={signpost.href} className="font-semibold text-blue hover:underline">
-            {signpost.label} →
-          </Link>
-        </p>
-      </div>
-    ),
-  );
 
   const send = (input: { message: string; clientTurnId: string }) => {
     const trimmed = input.message.trim();
     if (trimmed.length === 0 || composerDisabled) return;
     setMessage("");
-    void transcript
-      .send({ message: trimmed, clientTurnId: input.clientTurnId })
-      .then((result) => setSuggestions(result?.suggestions ?? []))
-      .catch(() => setSuggestions([]));
+    // A failure stays on its own row with a retry; nothing to do here.
+    void transcript.send({ message: trimmed, clientTurnId: input.clientTurnId }).catch(() => undefined);
   };
+
+  // The opening turn (task 058, N9): the New Task screen navigates here at
+  // once with the question, and this tab streams the planner's first reply.
+  // The turn id was minted there, so the server's idempotency covers a
+  // repeated mount; the navigation state is cleared once it is sent.
+  const location = useLocation();
+  const navigate = useNavigate();
+  const opening = (location.state as { openingTurn?: { message: string; clientTurnId: string } } | null)
+    ?.openingTurn;
+  const openingSent = useRef<string | null>(null);
+  const transcriptLoaded = transcript.data !== undefined;
+  const { send: sendTurn } = transcript;
+  useEffect(() => {
+    if (opening === undefined || !transcriptLoaded || !isOwner) return;
+    if (openingSent.current === opening.clientTurnId) return;
+    openingSent.current = opening.clientTurnId;
+    void navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+    void sendTurn(opening).catch(() => undefined);
+  }, [opening, transcriptLoaded, isOwner, sendTurn, navigate, location.pathname, location.search]);
 
   // An uploaded diagram: its bubble and "Reading…" show in the chat while it is read, then
   // the message it sends becomes the plan's starting point (task 054, increment 5).
   // The upload sends its own message once read, so it completes even if this chat closes.
   const attach = (file: File, note = "") => upload.mutate({ file, note });
-  // A file picked on the new-task page arrives in the route state; upload it once.
-  const location = useLocation();
-  const navigate = useNavigate();
+  // A file picked on the new-task page arrives in the route state instead of an
+  // opening turn (the upload's note is its opening); upload it once.
   const handOff = (location.state as Partial<TocUploadHandOff> | null)?.tocFile instanceof File ? (location.state as TocUploadHandOff) : null;
   const handedOff = useRef(false);
   useEffect(() => {
-    if (handOff === null || handedOff.current || !isToc || transcript.data === undefined) return;
+    if (handOff === null || handedOff.current || !isToc || !transcriptLoaded) return;
     handedOff.current = true;
     void navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
     attach(handOff.tocFile, handOff.note);
   });
 
+  // The planner's clarifying question and its quick replies come from the
+  // stored turn (N10), so they survive a reload. They belong to the latest
+  // turn only, and a turn that carries a part card answers through the card.
+  const lastItem = thread.at(-1);
+  const askingTurn =
+    lastItem?.type === "task_agent_turn" && lastItem.turn.status === "completed" && lastItem.turn.part == null
+      ? lastItem.turn
+      : null;
+  const suggestions = askingTurn?.suggestions ?? [];
+  const question = askingTurn?.question ?? null;
+
   // The landing (no conversation yet) is a bare centred prompt — no pane
   // heading, no helper copy (Claude design concept; owner, 2026-08-05).
   const landing =
-    transcript.data !== undefined && thread.length === 0 && transcript.optimisticTurns.length === 0 && picked === null && handOff === null;
+    transcript.data !== undefined &&
+    thread.length === 0 &&
+    transcript.optimisticTurns.length === 0 &&
+    opening === undefined &&
+    picked === null &&
+    handOff === null;
 
   return (
     <UploadFiles.Provider value={uploadFiles}>
     <section aria-label="Task Agent conversation" className="flex h-full min-h-0 flex-col">
+      {/* A lapsed stream on the Agent tab (owner, round 11): the run status
+          bar's reconnecting line, at the top of this column so it starts
+          after the rail. In the sidebar the page's own bar carries it. */}
+      {!compact && <ReconnectingBanner connectionStatus={stream.connectionStatus} />}
       {/* The scroll region spans the whole pane so its scrollbar sits at the
           pane's edge like every other tab's; the reading column is inside. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -1060,11 +1131,13 @@ export function TaskAgentPane({
         onWheel={footer.onWheel}
         onTouchStart={footer.onTouchStart}
         onTouchMove={footer.onTouchMove}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto py-4 [scrollbar-gutter:stable]"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto py-4 [overflow-anchor:none] [scrollbar-gutter:stable]"
       >
         {/* Bottom-anchor: pushes a short thread to the composer end; the
             landing prompt sits in the top third (1:2 spacer split). */}
         <div aria-hidden="true" className={landing ? "flex-[1]" : "mt-auto"} />
+        <ArrivalProvider settled={firstPaintDone} scopeKey={taskId}>
+        <div ref={roomRef}>
         <div ref={contentRef} className={cn("space-y-6", LIFECYCLE_PAGE_CLASS)}>
         {transcript.isPending && (
           <div role="status" className="anim-breathe text-body text-grey">
@@ -1093,7 +1166,11 @@ export function TaskAgentPane({
           </h2>
         )}
 
-        {thread.flatMap((item, index) => {
+        {(() => {
+          // One list (round 14): a turn on its way and the stored turn that
+          // replaces it share their key and their GrowBox, so the swap eases
+          // in place; the plan card stays after both, never jumping between.
+          const durable = thread.flatMap((item, index) => {
           const rendered =
             item.type === "gate_check_in" ? (
               <CheckInCard
@@ -1104,24 +1181,25 @@ export function TaskAgentPane({
                 isOwner={isOwner}
               />
             ) : item.type === "gate_decision" ? (
-              <DecisionLine
-                key={`gate-decision-${item.decision.checkInId}`}
-                label={item.decision.label}
-                planVersion={item.decision.planVersion}
-              />
+              <Arrival key={`gate-decision-${item.decision.checkInId}`} arrivalId={`gate-decision:${item.decision.checkInId}`}>
+                <SettledGateCard label={item.decision.label} />
+              </Arrival>
             ) : item.type === "task_agent_turn" ? (
+              <GrowBox key={`turn-${item.turn.client_turn_id}`} arrivalId={`turn:${item.turn.client_turn_id}`}>
               <DurableTurn
-                key={`turn-${item.turn.turn_index}`}
                 taskId={taskId}
                 turn={item.turn}
                 isLatest={item.turn.turn_index === latestTurnIndex}
                 onRetry={send}
                 retryDisabled={composerDisabled}
                 partState={partStates.get(item.turn.turn_index)}
+                steps={steps}
+                plan={planQuery.data?.plan}
+                scopingPlan={planQuery.data?.scoping}
                 onSend={(text) => send({ message: text, clientTurnId: crypto.randomUUID() })}
-                onPrefill={setMessage}
                 tocCodes={tocCodes}
               />
+              </GrowBox>
             ) : isToc ? (
               <TocTrace
                 key={`run-${item.run.capability_run_id}`}
@@ -1140,20 +1218,20 @@ export function TaskAgentPane({
                 }
                 status={item.run.status}
               />
-            ) : item.run.capability_run_id === liveRunId && liveCard !== null ? (
-              <div key="live-run-block" className="space-y-6">
-                {liveCard}
-                <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} />
-                {signpostBubbles}
-                <RunFinishedNotice taskId={taskId} status={stream.run?.status} kind={liveKind} />
+            ) : item.run.capability_run_id === liveRunId && liveTrace !== null ? (
+              <GrowBox key="live-run-block" arrivalId={`run:${liveRunId}`}>
+              <div className="space-y-6">
+                <Arrival arrivalId={`run:${liveRunId}`}>{liveTrace}</Arrival>
+                <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} stages={stream.stages} />
               </div>
+              </GrowBox>
             ) : (
               <RunBlock
                 key={`run-${item.run.capability_run_id}`}
                 taskId={taskId}
+                hasFindings={hasFindings}
                 run={item.run}
                 capability={planQuery.data?.capability}
-                decisions={item.decisions}
                 stages={stream.stages}
                 answered={
                   item.run.capability_run_id === stream.run?.id ? streamDecisions : []
@@ -1161,56 +1239,36 @@ export function TaskAgentPane({
                 checkIns={checkInsQuery.data}
               />
             );
-          return index === planCardAt - 1
-            ? [rendered, <PlanCard key="plan-card" taskId={taskId} runActive={runActive} started={planStarted} isOwner={isOwner} onReviewPlan={onReviewPlan} overlay={planOverlay} onOverlayApplied={onOverlayApplied} onDiscardOverlay={onDiscardOverlay} />]
-            : [rendered];
-        })}
-
-        {transcript.optimisticTurns.map((turn: OptimisticTaskAgentTurn) => (
-          <div key={turn.clientTurnId} className="space-y-6">
-            {/* Button-confirm turns never show a bubble — durable turns hide
-                them too; the ✓ on the part card is the record. */}
-            {confirmTarget(turn.userMessage) === null && <UserBubble text={turn.userMessage} />}
-            {turn.status === "failed" && (
-              <div className="mr-8 border border-line bg-paper px-3.5 py-2.5">
-                <p className="text-body text-ink">
-                  {isConflictCode(turn.errorCode)
-                    ? conflictSentences[turn.errorCode]
-                    : "That turn couldn't be processed. Your draft so far is unchanged."}
-                </p>
-                {turn.errorCode === "stale_turn" || turn.errorCode === "already_answered" ? (
-                  // Retrying the same client_turn_id can never clear a
-                  // stale_turn conflict, and an already-answered check-in
-                  // will not un-answer itself — offer the refresh instead.
-                  // Both render inline, right where the message was typed;
-                  // neither becomes a toast.
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="mt-2"
-                    onClick={() => transcript.discard(turn.clientTurnId)}
-                  >
-                    Refresh conversation
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="mt-2"
-                    disabled={composerDisabled}
-                    onClick={() => void transcript.retry(turn.clientTurnId)}
-                  >
-                    Retry
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
-        ))}
+          return [{ rendered, index }];
+          });
+          const planCard = (
+            <PlanCard key="plan-card" taskId={taskId} runActive={runActive} streaming={streaming} started={planStarted} isOwner={isOwner} onReviewPlan={onReviewPlan} overlay={planOverlay} onOverlayApplied={onOverlayApplied} onDiscardOverlay={onDiscardOverlay} />
+          );
+          const inFlight = transcript.optimisticTurns.map((turn: OptimisticTaskAgentTurn) => (
+            <GrowBox key={`turn-${turn.clientTurnId}`} arrivalId={`turn:${turn.clientTurnId}`}>
+              <InFlightTurn
+                turn={turn}
+                composerDisabled={composerDisabled}
+                onDiscard={() => transcript.discard(turn.clientTurnId)}
+                onRetry={() => void transcript.retry(turn.clientTurnId)}
+              />
+            </GrowBox>
+          ));
+          // The plan card follows the last turn; with turns on their way and
+          // nothing after the stored ones, it follows those too.
+          const planAfterInFlight = inFlight.length > 0 && planCardAt >= thread.length;
+          return [
+            ...durable.flatMap(({ rendered, index }) =>
+              index === planCardAt - 1 && !planAfterInFlight ? [rendered, planCard] : [rendered],
+            ),
+            ...inFlight,
+            ...(planAfterInFlight && planCardAt > 0 ? [planCard] : []),
+          ];
+        })()}
 
         {picked !== null && (
           <>
-            <UserBubble text={uploadMessage(picked.name, pickedNote)} />
+            <UserBubble text={uploadMessage(picked.name, pickedNote)} turnId={`upload:${picked.name}`} />
             <div role="status" className="anim-breathe mr-8 flex items-center gap-2 px-3.5 text-body text-grey">
               <span aria-hidden="true" className="h-2 w-2 bg-blue" />
               Reading your diagram… this takes about half a minute.
@@ -1223,31 +1281,39 @@ export function TaskAgentPane({
           </p>
         )}
 
-        {transcript.isSubmitting && (
-          <div role="status" className="anim-breathe mr-8 flex items-center gap-2 px-3.5 text-body text-grey">
-            <span aria-hidden="true" className="h-2 w-2 bg-blue" />
-            Planning…
-          </div>
-        )}
-
-        {/* Suggestion chips send a task_agent turn (task 033 phase 10c,
-            contract § 11 / rubric 37) — owner-only, hidden for a colleague
-            rather than left clickable to a 403. */}
-        {isOwner && suggestions.length > 0 && !transcript.isSubmitting && !composerFenced && (
-          <div className="flex flex-wrap gap-1.5">
+        {/* The planner's question, then its quick replies (N10). The chips
+            send a task_agent turn (task 033 phase 10c, contract § 11 / rubric
+            37) — owner-only, hidden for a colleague rather than left
+            clickable to a 403. */}
+        {isOwner && suggestions.length > 0 && !streaming && !composerFenced && (
+          <Arrival arrivalId={`suggestions:${askingTurn?.client_turn_id ?? ""}`} className="mr-8 space-y-2">
+            {question !== null && question !== "" && (
+              <p className="max-w-prose-measure text-body font-semibold text-navy">{scrub(question)}</p>
+            )}
+            <div className="flex flex-wrap gap-1.5">
             {suggestions.map((suggestion) => (
               <button
                 key={suggestion}
                 type="button"
                 onClick={() => send({ message: suggestion, clientTurnId: crypto.randomUUID() })}
-                className="anim-rise cursor-pointer border border-blue-tint bg-blue-tint px-2.5 py-1 text-caption font-semibold text-blue hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-blue"
+                className="cursor-pointer border border-blue-tint bg-blue-tint px-2.5 py-1 text-caption font-semibold text-blue hover:bg-blue-tint-2"
               >
                 {scrub(suggestion)}
               </button>
             ))}
-          </div>
+            </div>
+          </Arrival>
         )}
 
+        {!isToc && liveTrace !== null && !threadHasLiveRun && (
+          <GrowBox key="live-run-fallback" arrivalId={`run:${liveRunId}`}>
+          <div className="space-y-6">
+            <Arrival arrivalId={`run:${liveRunId}`}>{liveTrace}</Arrival>
+            <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} stages={stream.stages} />
+          </div>
+          </GrowBox>
+        )}
+        {/* A waiting check-in sits under the run's trace. */}
         {stream.pendingCheckIn !== null && stream.pendingCheckIn.kind !== BASELINE_GATE_KIND && (
           <CheckInCard
             key={stream.pendingCheckIn.check_in_id}
@@ -1255,6 +1321,7 @@ export function TaskAgentPane({
             checkIn={stream.pendingCheckIn}
             stages={stream.stages}
             isOwner={isOwner}
+            compact={compact}
           />
         )}
         {/* The walk started but the run list has not caught up yet. */}
@@ -1265,34 +1332,15 @@ export function TaskAgentPane({
             Reviewing the theory…
           </p>
         )}
-        {!isToc && liveCard !== null && !threadHasLiveRun && (
-          <div key="live-run-fallback" className="space-y-6">
-            {liveCard}
-            <AnsweredCheckIns answered={streamDecisions} checkIns={checkInsQuery.data} />
-            {signpostBubbles}
-            <RunFinishedNotice taskId={taskId} status={stream.run?.status} kind={liveKind} />
-          </div>
-        )}
         </div>
+        </div>
+        </ArrivalProvider>
         {landing && <div aria-hidden="true" className="flex-[2]" />}
       </div>
       <JumpToEnd visible={!pin.atEnd} onClick={pin.jumpToEnd} />
       </div>
 
       <div className="shrink-0 border-t border-line">
-        {!isToc && stream.run !== null && cardOffscreen && (
-          <RunningCardDock
-            status={stream.run.status}
-            stages={stream.stages}
-            liveness={stream.liveness}
-            plan={stream.plan?.plan}
-            elapsedLabel={liveElapsed}
-            onOpen={() => {
-              setRunMinimised(false);
-              cardRef.current?.scrollIntoView({ block: "nearest" });
-            }}
-          />
-        )}
         <div className={cn("py-3", LIFECYCLE_PAGE_CLASS)}>
         <Composer
           value={message}

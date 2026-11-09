@@ -1,3 +1,7 @@
+import { evidenceTypeLabel, strengthRank } from "../ui/brand/evidence";
+import { referenceCitation, type AuthorshipLike, type ReferenceLike } from "../ui/brand/reference";
+import { formatCount } from "../lib/format";
+
 /**
  * Structural minimums, not the generated contract types.
  *
@@ -7,10 +11,13 @@
  * label and some citations — that is all they ask for.
  */
 
-/** Typography shared across the report body (034 presentation). */
+/** Typography shared across the report body (034 presentation). The part
+ *  heading ("Executive summary", "Full report") is Heading, uppercase,
+ *  Extrabold and tracked (lead ruling, task 058 consistency pass); a section
+ *  heading is Heading, Lead below md. Both are on the named scale. */
 export const REPORT_PART_HEADING_CLASS =
-  "text-[28px] font-extrabold uppercase tracking-[0.06em] leading-[1.2] text-navy max-md:text-[22px]";
-export const REPORT_SECTION_HEADING_CLASS = "text-heading font-bold text-navy max-md:text-[20px]";
+  "text-heading font-extrabold uppercase tracking-label text-navy";
+export const REPORT_SECTION_HEADING_CLASS = "text-heading font-bold text-navy max-md:text-lead";
 export const REPORT_BODY_CLASS = "text-lead text-ink max-md:text-body";
 /** A short label above content ("REPORT", "SOURCES", "INPUT"): never a sentence. */
 export const REPORT_LABEL_CLASS = "text-meta font-bold uppercase tracking-[0.06em] text-grey";
@@ -57,21 +64,6 @@ export type TopSource = {
   note?: string | null;
 };
 
-/**
- * Appraisal labels, strongest first, for the tie-break only.
- *
- * A label outside this list sorts last rather than throwing — an
- * unclassified source is a real state, and the ranking is a convenience, not
- * a place to fail.
- */
-// The labels `appraisal_label` sends (backend `appraise.SCORE_LABELS`), lower-cased.
-const APPRAISAL_ORDER = ["very strong", "strong", "moderate", "limited", "weak", "unrated"] as const;
-
-function appraisalRank(label: string | null): number {
-  if (label === null) return APPRAISAL_ORDER.length;
-  const index = APPRAISAL_ORDER.indexOf(label.toLowerCase() as (typeof APPRAISAL_ORDER)[number]);
-  return index === -1 ? APPRAISAL_ORDER.length : index;
-}
 
 /**
  * The sources the report cites most, at most three.
@@ -138,27 +130,10 @@ export function mostRelevantSources(
     .sort(
       (left, right) =>
         right.citationCount - left.citationCount ||
-        appraisalRank(left.appraisalLabel) - appraisalRank(right.appraisalLabel) ||
+        strengthRank(left.appraisalLabel) - strengthRank(right.appraisalLabel) ||
         left.title.localeCompare(right.title),
     )
     .slice(0, limit);
-}
-
-/** One author (or corporate author) and their institutions (042 wire shape). */
-export type AuthorshipLike = { name: string; institutions?: string[] | null };
-
-/**
- * The reference list's authors line (042 D4): up to three names in full, a
- * longer list becomes the first three plus "et al." Empty names are dropped;
- * no authors at all returns null so the caller renders nothing.
- */
-export function referenceAuthorsLine(
-  authorships: readonly AuthorshipLike[] | null | undefined,
-): string | null {
-  const names = (authorships ?? []).map((a) => a.name).filter((name) => name !== "");
-  if (names.length === 0) return null;
-  if (names.length > 3) return `${names.slice(0, 3).join(", ")} et al.`;
-  return names.join(", ");
 }
 
 export type NumberedAuthorships = {
@@ -280,14 +255,22 @@ export function cardEvidenceMeta(card: CardEvidenceInput): {
   return { strength, design, sinceYear };
 }
 
-/** Chip labels for a case-study card's evidence row (strength · design · since). */
-export function cardEvidenceChipLabels(card: CardEvidenceInput): string[] {
-  const { strength, design, sinceYear } = cardEvidenceMeta(card);
-  return [
-    strength,
-    design,
-    sinceYear != null ? `Since ${sinceYear}` : null,
-  ].filter((part): part is string => part != null && part !== "");
+/**
+ * The cited source a case-study card's evidence type came from: the first
+ * citation of that type, in the order the card's own fields were filled
+ * (round 12). Its dossier holds the classifier's reasoning for the type,
+ * which the artefact does not carry. `null` when no citation names it.
+ */
+export function cardEvidenceSourceId(card: CardEvidenceInput, design: string | null): string | null {
+  if (design === null) return null;
+  for (const claim of card.claims ?? []) {
+    for (const citation of claim.citations ?? []) {
+      if (citation.evidence_type === design && citation.source_id != null && citation.source_id !== "") {
+        return citation.source_id;
+      }
+    }
+  }
+  return null;
 }
 
 function markdownKeyFindingsLine(line: string): string {
@@ -309,9 +292,9 @@ function markdownMostRelevantSources(sources: TopSource[]): string[] {
   const lines: string[] = ["### Most relevant sources", "", MOST_RELEVANT_SOURCES_INTRO, ""];
   for (const source of sources) {
     const facts = [
-      source.citationCount === 1 ? "cited by 1 claim" : `cited by ${source.citationCount} claims`,
+      source.citationCount === 1 ? "cited by 1 claim" : `cited by ${formatCount(source.citationCount)} claims`,
       source.appraisalLabel,
-      source.evidenceType,
+      source.evidenceType === null ? null : evidenceTypeLabel(source.evidenceType),
     ].filter((part): part is string => part != null && part !== "");
     lines.push(`- **${source.title}** — ${facts.join(" · ")}.`);
     if (source.note != null && source.note !== "") lines.push(`  ${source.note}`);
@@ -390,13 +373,7 @@ type MarkdownArtefact = {
   summary?: string | null;
   summary_status?: "pending" | "verified" | "failed" | null;
   sections?: MarkdownSection[];
-  references?: Array<{
-    n: number;
-    title: string;
-    year?: number | null;
-    venue?: string | null;
-    authorships?: AuthorshipLike[] | null;
-  }>;
+  references?: Array<ReferenceLike & { n: number }>;
   most_relevant_notes?: Array<{ source_id: string; note: string }> | null;
   full_report_intro?: string | null;
 };
@@ -459,12 +436,24 @@ function sectionsInReportOrder(sections: MarkdownSection[]): MarkdownSection[] {
 }
 
 /**
- * The report as a markdown file: title, executive summary (In brief + KF +
- * case studies + MRS), full report (roadmap + body sections + references).
- * Unverified summaries are omitted (same honesty as the on-screen callout).
+ * The report as a markdown file, in the page's order (rounds 10 and 11): the
+ * question as the title (the generated title when there is none), the
+ * executive summary (key findings, case studies, the most relevant sources),
+ * the full report (its opening paragraph and body sections), then the
+ * references in the citation form. Unverified summaries are omitted (same
+ * honesty as the on-screen callout).
+ *
+ * Args:
+ *   artefact: The committed report.
+ *   question: The task's question, the page's title; the file's name stays
+ *     the generated title's.
+ *
+ * Returns:
+ *   The Markdown text.
  */
-export function artefactMarkdown(artefact: MarkdownArtefact): string {
-  const lines: string[] = [`# ${artefact.title}`, ""];
+export function artefactMarkdown(artefact: MarkdownArtefact, question?: string | null): string {
+  const heading = question != null && question.trim() !== "" ? question.trim() : artefact.title;
+  const lines: string[] = [`# ${heading}`, ""];
   const ordered = sectionsInReportOrder(artefact.sections ?? []);
   const execSections = ordered.filter(
     (s) => s.role === "key_findings" || s.role === "case_studies",
@@ -486,7 +475,10 @@ export function artefactMarkdown(artefact: MarkdownArtefact): string {
         if (card.prose) {
           lines.push(markdownCaseStudyCardProse(card), "");
         }
-        const facts = cardEvidenceChipLabels(card);
+        const { strength, design, sinceYear } = cardEvidenceMeta(card);
+        const facts = [design === null ? null : evidenceTypeLabel(design), strength, sinceYear != null ? `Since ${sinceYear}` : null].filter(
+          (part): part is string => part != null && part !== "",
+        );
         if (facts.length > 0) lines.push(`_${facts.join(" · ")}_`, "");
       }
     } else {
@@ -497,6 +489,7 @@ export function artefactMarkdown(artefact: MarkdownArtefact): string {
       }
     }
   }
+  // The executive summary's last part, as on the page (owner, round 11).
   lines.push(
     ...markdownMostRelevantSources(
       mergeMostRelevantNotes(
@@ -505,7 +498,6 @@ export function artefactMarkdown(artefact: MarkdownArtefact): string {
       ),
     ),
   );
-
   if (fullReportSections.length > 0) {
     lines.push("## Full report", "");
     const intro = fullReportIntro(fullReportSections.length, artefact.full_report_intro);
@@ -522,16 +514,7 @@ export function artefactMarkdown(artefact: MarkdownArtefact): string {
   if (references.length > 0) {
     lines.push("### References", "");
     for (const reference of references) {
-      const authors = referenceAuthorsLine(reference.authorships);
-      const titled =
-        authors !== null
-          ? `${reference.n}. ${reference.title} — ${authors}`
-          : `${reference.n}. ${reference.title}`;
-      const extra = [
-        reference.year != null ? String(reference.year) : null,
-        reference.venue ?? null,
-      ].filter((part): part is string => part !== null);
-      lines.push(extra.length > 0 ? `${titled} (${extra.join(", ")})` : titled);
+      lines.push(`${reference.n}. ${referenceCitation(reference)}`);
     }
     lines.push("");
   }
@@ -572,4 +555,37 @@ export function csvCell(value: string | number | boolean | null | undefined): st
   // Also defuse markers behind leading whitespace ("\t=SUM…").
   if (/^\s*[=+\-@]/.test(text)) text = `'${text}`;
   return `"${text.replaceAll('"', '""')}"`;
+}
+
+/** The longest source name the "Drawing on" line shows in full. */
+const LIVE_SOURCE_NAME_MAX = 40;
+
+/**
+ * A source's name as the live "Drawing on" line shows it (task 058, owner
+ * 2026-11-05). The server sends the short form ("Smith 2023") when it has
+ * one, else the title; a long title is cut at a word near 40 characters and
+ * ends with an ellipsis.
+ */
+export function liveSourceName(title: string): string {
+  const name = title.trim().replace(/\s+/g, " ");
+  if (name.length <= LIVE_SOURCE_NAME_MAX) return name;
+  const cut = name.slice(0, LIVE_SOURCE_NAME_MAX);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > LIVE_SOURCE_NAME_MAX / 2 ? cut.slice(0, space) : cut).replace(/[\s,.;:–—-]+$/, "")}…`;
+}
+
+/** How many sources the "Drawing on" line names before "and N more". */
+const LIVE_SOURCES_NAMED = 3;
+
+/**
+ * The line under a section being written that says which sources the writer
+ * has read: "Drawing on 4 sources · Smith 2023 · DfE 2022 · Nesta 2021 · and
+ * 1 more". Null when it has read none.
+ */
+export function drawingOnLine(sources: readonly { title: string }[] | undefined): string | null {
+  if (sources === undefined || sources.length === 0) return null;
+  const count = sources.length === 1 ? "1 source" : `${formatCount(sources.length)} sources`;
+  const named = sources.slice(0, LIVE_SOURCES_NAMED).map((source) => liveSourceName(source.title));
+  const rest = sources.length - named.length;
+  return [`Drawing on ${count}`, ...named, ...(rest > 0 ? [`and ${rest} more`] : [])].join(" · ");
 }

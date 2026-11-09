@@ -8,6 +8,7 @@ uses and record each call, so a test can assert the exact call plan.
 
 from __future__ import annotations
 
+import re
 import threading
 import time
 import uuid
@@ -1208,3 +1209,139 @@ def test_landmark_fetches_apply_the_country_post_filter(conn: Connection) -> Non
     ]
     assert len(acquired) == 15 - fetched_abroad
     assert counts["by_backend"]["overton"]["acquired"] == 3 + 15 - fetched_abroad
+
+
+# --- The search as it happens (task 058, round 9) ---
+
+
+def test_the_search_says_it_writes_queries_then_shows_each_query_out_and_back(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests import progress_recorder
+
+    monkeypatch.setattr(search_loop_module, "SEARCH_CONCURRENCY", 1)
+    lines = progress_recorder.install(monkeypatch)
+    queries: list[tuple[str, str, str, int | None]] = []
+    order: list[str] = []
+
+    def record_query(backend: str, query: str, kind: str, results: int | None) -> None:
+        queries.append((backend, query, kind, results))
+        order.append(f"query:{kind}")
+
+    monkeypatch.setattr(liveness, "publish_search_query", record_query)
+    generation = _generation()
+    original = generation.generate_queries
+
+    def generate(payload: Any) -> Any:
+        order.append(f"generate after {len(lines)} line(s)")
+        return original(payload)
+
+    monkeypatch.setattr(generation, "generate_queries", generate)
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    counts = run_search(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=_context(scope_id),
+        backends=[_openalex_with_graph(), _overton_with_landmarks()],
+        generation_backend=generation,
+    )
+
+    # "Writing search queries" before the generation call, with no count.
+    assert lines[0] == {"activity": "Writing search queries"}
+    assert order[0] == "generate after 1 line(s)"
+    assert lines[1]["activity"] == "searching · 0 found"
+
+    # Each entry goes out (results None) then comes back with its count.
+    by_key: dict[tuple[str, str, str], list[int | None]] = {}
+    for backend, query, kind, results in queries:
+        by_key.setdefault((backend, query, kind), []).append(results)
+    assert all(
+        states == [None, states[-1]] and states[-1] is not None for states in by_key.values()
+    )
+    keys = list(by_key)
+    topic = [query for backend, query, kind in keys if backend == "openalex" and kind == "topic"]
+    assert topic == [
+        variant
+        for query in QUERIES
+        for variant in (query, f"({query}) AND {SR_CLAUSE}", f"({query}) AND {RCT_CLAUSE}")
+    ]
+    semantic = [query for backend, query, kind in keys if kind == "semantic"]
+    assert semantic == ["Test intent", *PARAPHRASES, *QUERIES]
+    assert [query for backend, query, kind in keys if backend == "overton" and kind == "topic"] == [
+        "Test intent",
+        *PARAPHRASES,
+    ]
+    # The id passes are described in words, never by their ids.
+    passes = {
+        key: by_key[key][-1] for key in keys if key[2] in ("citations", "lookup")
+    }
+    chased = next(query for _, query, kind in passes if kind == "citations")
+    assert passes == {
+        ("openalex", "Looking up 3 cited works", "lookup"): 3,
+        ("openalex", chased, "citations"): 405,
+        ("overton", "Looking up 15 cited documents", "lookup"): 15,
+    }
+    assert chased.startswith("Following citations from ") and chased.endswith(" sources")
+    assert not any(
+        "|" in query or "openalex.org" in query or "ov-" in query for _, query, _ in keys
+    )
+
+    # The line names the query out, counts what came back, and never goes down.
+    search_lines = [line for line in lines[1:] if line.get("unit") == "documents"]
+    activities = [line["activity"] for line in search_lines]
+    assert any(re.fullmatch(r"searching · \d+ found · query 0", a) for a in activities)
+    assert any(re.fullmatch(r"following citations · [\d,]+ found", a) for a in activities)
+    last_query_line = max(
+        i for i, a in enumerate(activities) if " · query" in a or a.startswith("following")
+    )
+    assert all(line["total"] is None for line in search_lines[: last_query_line + 1])
+    found = [line["done"] for line in search_lines[: last_query_line + 1]]
+    assert found == sorted(found)
+
+    # Then the kept pool is counted against the candidates the search found,
+    # so the count never reads as a drop (lead ruling, round 9).
+    after = search_lines[last_query_line + 1 :]
+    keeping = [line for line in after if line["activity"].startswith("keeping ")]
+    assert all(line["activity"].startswith(("keeping ", "searching ")) for line in after)
+    candidates = max(line["done"] for line in search_lines[: last_query_line + 1])
+    candidates = max(
+        [candidates, *(line["done"] for line in after if line["activity"].startswith("searching "))]
+    )
+    assert keeping and all(line["total"] == candidates for line in keeping)
+    assert [line["done"] for line in keeping] == list(range(1, counts["acquired"] + 1))
+    assert keeping[-1]["activity"] == f"keeping {counts['acquired']:,} of {candidates:,} candidates"
+    assert counts["acquired"] <= candidates
+
+
+def test_an_option_search_publishes_no_query_frames(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Lead ruling, round 9: only the run the user started shows its queries."""
+    from tests import progress_recorder
+
+    lines = progress_recorder.install(monkeypatch)
+    queries: list[Any] = []
+    monkeypatch.setattr(liveness, "publish_search_query", lambda *args: queries.append(args))
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id, purpose="targeted")
+    run_search(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=_context(scope_id),
+        backends=[_openalex_with_graph(), _overton_with_landmarks()],
+        generation_backend=_generation(),
+    )
+    assert queries == []
+    assert lines[0] == {"activity": "Writing search queries"}
+    assert any(line["activity"].startswith("keeping ") for line in lines)
+
+
+def test_a_long_query_is_cut_on_a_word_for_the_line() -> None:
+    long = "school breakfast provision and attainment in primary schools across England and Wales"
+    cut = search_loop_module._short_query(long)
+    assert cut == "school breakfast provision and attainment in primary schools…"
+    assert len(cut) <= search_loop_module.QUERY_LINE_CHARS + 1
+    assert search_loop_module._short_query("short query") == "short query"

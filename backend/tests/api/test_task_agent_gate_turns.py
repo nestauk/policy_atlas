@@ -95,9 +95,10 @@ class _ReadyScopingAgent:
         inputs: ScopingInputs | None = None,
         session_id: uuid.UUID | None = None,
         conversation_id: uuid.UUID | None = None,
+        on_delta: Callable[[str], None] | None = None,
     ) -> ScopingTurnWire:
         """Return one ready scoping turn, optionally failing the first call."""
-        del profile, previous_draft, session_id, conversation_id
+        del profile, previous_draft, session_id, conversation_id, on_delta
         self.messages.append(turns[-1]["text"] if turns else "")
         self.baseline_states.append(
             inputs.baseline_state if inputs is not None else NO_BASELINE_STATE
@@ -744,7 +745,9 @@ def test_a_failure_after_the_decision_leaves_it_durable_and_the_retry_replans(
             failed = task_agent_turn(
                 client, owner, task_id, "Change it", client_turn_id=client_turn_id
             )
-            assert failed.status_code == 500, failed.text
+            # Task 058, N9: a planner failure is the stream's failed line.
+            assert failed.status_code == 200, failed.text
+            assert failed.json()["type"] == "failed"
             assert _walk_status(engine, walk_id) == "aborted"
             assert len(_decision_events(engine, task_id)) == 1
             assert _rows(engine, task_id)[-1]["status"] == "failed"
@@ -1026,7 +1029,10 @@ def test_the_approving_branch_refuses_a_run_that_started_meanwhile(
             assert _walk_status(engine, walk_id) == "aborted"
             refused = task_agent_turn(client, owner, task_id, "Make it England")
 
-        assert refused.status_code == 409, refused.text
+        # Task 058, N9: the fence is re-checked after the planner call, so the
+        # refusal is the stream's failed line, not a 409.
+        assert refused.status_code == 200, refused.text
+        assert refused.json()["type"] == "failed"
         assert refused.json()["error"]["code"] == "run_active"
         assert len(_plans(engine, task_id)) == 1
         assert _rows(engine, task_id)[-1]["status"] == "failed"

@@ -19,7 +19,12 @@ def test_tasks_create_list_get_archive_and_owner_404(engine: Engine, tmp_path: P
         task_id = create_task(client, owner)
         listed = client.get("/api/v1/tasks?page=1&page_size=1", headers=owner)
         assert listed.status_code == 200
-        assert listed.json()["pagination"] == {"page": 1, "page_size": 1, "total_items": 1}
+        assert listed.json()["pagination"] == {
+            "page": 1,
+            "page_size": 1,
+            "total_items": 1,
+            "has_more": False,
+        }
         assert listed.json()["data"][0]["task_id"] == task_id
         assert client.get(f"/api/v1/tasks/{task_id}", headers=owner).status_code == 200
 
@@ -49,7 +54,29 @@ def test_tasks_create_list_get_archive_and_owner_404(engine: Engine, tmp_path: P
             == 200
         )
         assert client.get("/api/v1/tasks", headers=owner).json()["data"] == []
-        assert client.get("/api/v1/tasks?status=archived", headers=owner).status_code == 200
+        archived = client.get("/api/v1/tasks?status=archived", headers=owner)
+        assert archived.status_code == 200
+        assert [row["task_id"] for row in archived.json()["data"]] == [task_id]
+
+
+def test_tasks_list_pages_newest_first_and_says_when_more_remain(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Task 058, round 10: a "Show more" control reads `has_more`, newest first."""
+    with api_client(tmp_path) as (client, owner, _):
+        made = [create_task(client, owner) for _ in range(3)]
+        first = client.get("/api/v1/tasks?page=1&page_size=2", headers=owner).json()
+        second = client.get("/api/v1/tasks?page=2&page_size=2", headers=owner).json()
+        assert first["pagination"]["has_more"] is True
+        assert second["pagination"]["has_more"] is False
+        listed = [row["task_id"] for row in first["data"] + second["data"]]
+        assert sorted(listed) == sorted(made)
+        # A rename is a write; the renamed task leads the list.
+        assert (
+            client.patch(f"/api/v1/tasks/{made[0]}", headers=owner, json={"name": "Touched"})
+        ).status_code == 200
+        top = client.get("/api/v1/tasks?page=1&page_size=1", headers=owner).json()
+        assert top["data"][0]["task_id"] == made[0]
 
 
 def test_tasks_reject_page_sizes_over_contract_cap(engine: Engine, tmp_path: Path) -> None:

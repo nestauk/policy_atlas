@@ -82,4 +82,24 @@ describe("optimistic task_agent transcript", () => {
     expect(retried.turns).toEqual([optimisticTurn]);
     expect(retryInputForOptimisticTurn(retried, optimisticTurn.clientTurnId)).toBeNull();
   });
+
+  it("fills the pending turn from the stream: the progress label and the deltas joined (task 058, N9)", () => {
+    let state = reduceOptimisticTranscript(initialOptimisticTranscriptState, { type: "submitted", turn: optimisticTurn });
+    state = reduceOptimisticTranscript(state, { type: "progress", clientTurnId: optimisticTurn.clientTurnId, label: "Drafting the plan" });
+    state = reduceOptimisticTranscript(state, { type: "delta", clientTurnId: optimisticTurn.clientTurnId, text: "I will focus " });
+    state = reduceOptimisticTranscript(state, { type: "delta", clientTurnId: optimisticTurn.clientTurnId, text: "on attendance." });
+    expect(state.turns[0]).toMatchObject({
+      status: "pending",
+      progressLabel: "Drafting the plan",
+      reply: "I will focus on attendance.",
+    });
+  });
+
+  it("keeps what streamed when the connection drops, and is not a retryable failure", () => {
+    let state = reduceOptimisticTranscript(initialOptimisticTranscriptState, { type: "submitted", turn: optimisticTurn });
+    state = reduceOptimisticTranscript(state, { type: "delta", clientTurnId: optimisticTurn.clientTurnId, text: "Half a reply" });
+    state = reduceOptimisticTranscript(state, { type: "interrupted", clientTurnId: optimisticTurn.clientTurnId });
+    expect(state.turns[0]).toMatchObject({ status: "interrupted", reply: "Half a reply" });
+    expect(retryInputForOptimisticTurn(state, optimisticTurn.clientTurnId)).toBeNull();
+  });
 });

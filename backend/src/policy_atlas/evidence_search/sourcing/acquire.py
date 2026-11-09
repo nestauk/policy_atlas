@@ -13,7 +13,7 @@ emits a ``search.executed`` governance event; every acquire run writes one
 """
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, NamedTuple, Protocol
@@ -22,7 +22,8 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core import events
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import events, liveness
 from policy_atlas.core.embeddings import (
     EmbeddingBackend,
     StubEmbeddingBackend,
@@ -429,6 +430,38 @@ _MAPPERS = {
     "overton": _map_overton_document,
 }
 
+#: The raw-record field each mapper reads as ``backend_record_id`` (one key
+#: per mapper, kept beside it).
+_RECORD_ID_KEYS = {
+    "openalex": "id",
+    "overton": "policy_document_id",
+}
+
+
+def returned_record_ids(backend_name: str, records: list[dict[str, Any]]) -> list[str]:
+    """The backend record ids one search call returned, in order, once each.
+
+    Written on ``search.executed`` as ``record_ids`` (task 058, round 12) so a
+    reader can filter the sources table to what one query returned: the
+    values match ``source_snapshot.metadata.backend_record_id``.
+
+    Args:
+        backend_name: The backend that ran the call.
+        records: The call's raw records.
+
+    Returns:
+        The ids, without blanks or repeats.
+    """
+    key = _RECORD_ID_KEYS[backend_name]
+    ids: list[str] = []
+    seen: set[str] = set()
+    for record in records:
+        value = record.get(key) if isinstance(record, Mapping) else None
+        if isinstance(value, str) and value and value not in seen:
+            seen.add(value)
+            ids.append(value)
+    return ids
+
 
 def _chunk_text(envelope: dict[str, Any]) -> str:
     """The text in hand: title + best available summary."""
@@ -536,6 +569,30 @@ class _Candidate(NamedTuple):
     chash: str
 
 
+def publish_acquire_progress(
+    found: int, round_index: int, *, candidates: int | None = None
+) -> None:
+    """Publish the acquire stage's running count (task 058, N2).
+
+    Args:
+        found: Records acquired so far on this pass.
+        round_index: 1 for the first search on a scope, 2 or more after.
+        candidates: The distinct records the search's calls returned, when
+            the search counted them as it ran (round 9). The line then reads
+            "keeping {kept} of {found} candidates", counting ``done`` against
+            that ``total``, so the count the search showed never reads as a drop.
+    """
+    if candidates is not None:
+        line = activity("acquire.keeping", kept=found, found=candidates)
+        liveness.publish_progress(activity=line, done=found, total=candidates, unit="documents")
+        return
+    if round_index >= 2:
+        line = activity("acquire.searching_again", pass_number=round_index, found=found)
+    else:
+        line = activity("acquire.searching", found=found)
+    liveness.publish_progress(activity=line, done=found, total=None, unit="documents")
+
+
 def acquire_sources(
     conn: Connection,
     *,
@@ -550,6 +607,8 @@ def acquire_sources(
     search_guidance: list[str] | None = None,
     pools: dict[str, list[tuple[dict[str, Any], str, str]]] | None = None,
     caps: dict[str, int] | None = None,
+    round_index: int = 1,
+    search_found: int | None = None,
 ) -> dict[str, Any]:
     """Acquire metadata-only sources for an evidence scope over the given backends.
 
@@ -580,6 +639,11 @@ def acquire_sources(
         caps: Maximum persisted records for each backend's ranked pool. When
             omitted (or missing a backend), there is no cut: this is what a
             caller that only has executed calls gets.
+        round_index: 1 on a fresh scope, 2 or more when the search is run
+            again on the same scope; it picks the progress line's wording.
+        search_found: The distinct records the search returned, when it
+            counted them (round 9); the progress line then reads "keeping
+            {kept} of {search_found} candidates".
 
     Returns:
         Counts dict: ``acquired``, ``already_acquired``, ``skipped_unusable``,
@@ -837,6 +901,9 @@ def acquire_sources(
 
         counts["acquired"] += 1
         acquired_tss_by_verb.setdefault(verb, []).append(str(tss_id))
+        # Task 058, N2: the running count of records kept so far.
+        found = sum(b["acquired"] for b in by_backend.values())
+        publish_acquire_progress(found, round_index, candidates=search_found)
 
     for call in executed_calls:
         backend = backend_by_name[call.backend_name]
@@ -859,6 +926,11 @@ def acquire_sources(
             "result_count": result_count,
             "error": error,
             "evidence_scope_id": str(context.scope_id),
+            # Round 12: what the call returned, for the sources table's
+            # filter by query (ok calls only; passes too).
+            "record_ids": returned_record_ids(backend.name, call.records)
+            if call.status == "ok"
+            else [],
         }
         if post_filter_excluded is not None:
             event_payload["post_filter_excluded"] = post_filter_excluded

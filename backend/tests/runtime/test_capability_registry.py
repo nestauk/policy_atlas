@@ -100,6 +100,8 @@ def test_each_capability_resolves_its_own_task_agent_profile() -> None:
         "constraints",
         "depth",
         "appetite",
+        "who_can_act",
+        "your_options",
     }
     assert not es.no_primary_parts
     assert scoping.no_primary_parts == {"depth"}

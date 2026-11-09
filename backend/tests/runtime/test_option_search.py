@@ -23,7 +23,7 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.api.routers import sse
 from policy_atlas.core import events
-from policy_atlas.core.schema import capability_run, conversation, evidence_scope, option
+from policy_atlas.core.schema import capability_run, conversation, evidence_scope, option, runs
 from policy_atlas.evidence_search.assess import classify as classify_module
 from policy_atlas.evidence_search.assess.classify import MAX_CONCURRENT_CLASSIFY
 from policy_atlas.evidence_search.assess.classify_prompt import ClassifyWire
@@ -229,6 +229,14 @@ def child_run_plan(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[[Any], 
     yield install
 
 
+@pytest.fixture(autouse=True)
+def _no_progress_poll_outlives_its_test() -> Iterator[None]:
+    """Stop any fan-out progress poll a test left running (round 12)."""
+    yield
+    for parent in list(option_search._progress_polls):
+        option_search._stop_progress_poll(parent)
+
+
 # --- the walk end to end on the stub backends -------------------------------
 
 
@@ -316,7 +324,27 @@ def test_a_stub_longlist_walk_fans_out_after_suggest_and_joins_before_the_screen
             ("stage.started", "option_searches"),
             ("stage.completed", "option_searches"),
         ]
-        assert frames[1]["summary"] == {"total": 3, "finished": 3, "failed": 0}
+        # Both name the walk (task 058, round 11): the events have no component
+        # run, so a null id would let them through any run filter.
+        assert {frame["capability_run_id"] for frame in frames} == {
+            str(outcome.capability_run_id)
+        }
+        # The join's row also counts the sources the children acquired (task
+        # 058, N2): the children's own acquire rows, never the parent's.
+        parent_runs = {step.run_id for step in outcome.steps}
+        child_acquired = sum(
+            int(entry["payload"].get("acquired", 0))
+            for entry in log
+            if entry["event_type"] == "component.completed"
+            and entry["payload"].get("component") == "acquire"
+            and entry["run_id"] not in parent_runs
+        )
+        assert frames[1]["summary"] == {
+            "total": 3,
+            "finished": 3,
+            "failed": 0,
+            "sources": child_acquired,
+        }
     finally:
         if task_id is not None:
             _await_children_ended(engine, task_id)
@@ -526,6 +554,57 @@ def test_the_fan_out_runs_once_across_a_resume(engine: Engine, child_run_plan: A
         _cleanup(engine, task_id)
 
 
+def test_a_resume_past_the_join_publishes_no_count(
+    engine: Engine, child_run_plan: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Task 058 review: a finished stage's count is not sent again on a resume."""
+    task_id: uuid.UUID | None = None
+    ticks: list[dict[str, Any]] = []
+
+    class FakeHub:
+        def publish_tick(self, task_id: uuid.UUID, **payload: Any) -> None:
+            ticks.append(payload)
+
+    monkeypatch.setattr(option_search, "tick_hub", FakeHub())
+    monkeypatch.setattr(option_search, "OPTION_SEARCH_JOIN_POLL", 0.05)
+    try:
+        child_run_plan(lambda *args, **kwargs: None)
+        plan = _longlist_plan("Own")
+        task_id, scope_id, plan_id = _seed_longlist(engine, plan)
+        parent = _seed_walk(engine, task_id, scope_id, plan_id)
+        _seed_option(engine, task_id, "Own", "added_by_you")
+        plan_row = {"plan_id": plan_id, "version": 1, "payload": plan.model_dump(mode="json")}
+        children = option_search.dispatch_option_searches(
+            engine,
+            task_id=task_id,
+            parent_id=parent,
+            plan_row=plan_row,
+            suggest_run_id=None,
+            backends=_runner_backends(),
+            session_id=task_id,
+        )
+        option_search.join_option_searches(
+            engine, task_id=task_id, parent_id=parent, child_ids=children, timeout=10
+        )
+        ticks.clear()
+
+        again = option_search.dispatch_option_searches(
+            engine,
+            task_id=task_id,
+            parent_id=parent,
+            plan_row=plan_row,
+            suggest_run_id=None,
+            backends=_runner_backends(),
+            session_id=task_id,
+        )
+
+        assert again == children
+        assert ticks == []
+        assert parent not in option_search._progress_polls
+    finally:
+        _cleanup(engine, task_id)
+
+
 # --- failure, the timeout and the conversation ------------------------------
 
 
@@ -653,6 +732,203 @@ def test_the_join_timeout_marks_stragglers_interrupted(
             }
     finally:
         release.set()
+        _cleanup(engine, task_id)
+
+
+def test_the_join_publishes_finished_searches_and_acquired_sources(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    task_id: uuid.UUID | None = None
+    ticks: list[tuple[uuid.UUID, dict[str, Any]]] = []
+
+    class FakeHub:
+        def publish_tick(self, task_id: uuid.UUID, **payload: Any) -> None:
+            ticks.append((task_id, payload))
+
+    monkeypatch.setattr(option_search, "tick_hub", FakeHub())
+    try:
+        task_id, scope_id, plan_id = _seed_longlist(engine, _longlist_plan())
+        parent = _seed_walk(engine, task_id, scope_id, plan_id)
+        statuses = ("succeeded", "degraded", "failed")
+        acquired = (7, 5, 2)
+        children: list[uuid.UUID] = []
+        with engine.begin() as conn:
+            for status, count in zip(statuses, acquired, strict=True):
+                child = seed_walk(
+                    conn,
+                    task_id,
+                    scope_id=scope_id,
+                    plan_id=plan_id,
+                    parent=parent,
+                    status=status,
+                ).walk_id
+                children.append(child)
+                run_id = uuid.uuid4()
+                conn.execute(
+                    runs.insert().values(
+                        run_id=run_id,
+                        task_id=task_id,
+                        status="succeeded",
+                        started_at=now(),
+                        capability_run_id=child,
+                    )
+                )
+                events.append(
+                    conn,
+                    task_id=task_id,
+                    run_id=run_id,
+                    event_type="component.completed",
+                    payload={"component": "acquire", "acquired": count},
+                )
+
+        outcome = option_search.join_option_searches(
+            engine,
+            task_id=task_id,
+            parent_id=parent,
+            child_ids=children,
+            timeout=0,
+        )
+
+        assert (outcome.finished, outcome.total) == (2, 3)
+        assert ticks[-1] == (
+            task_id,
+            {
+                "stage": "option_searches",
+                "activity": "2 of 3 searches done · 14 sources",
+                "done": 2,
+                "total": 3,
+                "unit": "searches",
+                "run_id": parent,
+            },
+        )
+        with engine.connect() as conn:
+            completed = next(
+                entry["payload"]
+                for entry in events.read(conn, task_id)
+                if entry["event_type"] == "component.completed"
+                and entry["payload"].get("component") == "option_searches"
+            )
+        assert completed == {
+            "component": "option_searches",
+            "capability_run_id": str(parent),
+            "total": 3,
+            "finished": 2,
+            "failed": 1,
+            "sources": 14,
+        }
+    finally:
+        _cleanup(engine, task_id)
+
+
+def test_the_count_shows_from_the_fan_out_and_stays_current_until_the_join(
+    engine: Engine, child_run_plan: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Round 12: the first tick goes out at the fan-out, before the walk's own
+    search, and a poll keeps it current; the join takes over and stops it."""
+    task_id: uuid.UUID | None = None
+    release = threading.Event()
+    opened = threading.Event()
+    ticks: list[dict[str, Any]] = []
+
+    class FakeHub:
+        def publish_tick(self, task_id: uuid.UUID, **payload: Any) -> None:
+            ticks.append(payload)
+
+    def stuck_child(*args: Any, **kwargs: Any) -> None:
+        _open_row(engine, kwargs)
+        opened.set()
+        release.wait(timeout=30)
+        runner_module._finish_run(
+            engine,
+            [],
+            [],
+            status="succeeded",
+            capability_run_id=kwargs["capability_run_id"],
+            task_id=kwargs["task_id"],
+        )
+
+    monkeypatch.setattr(option_search, "tick_hub", FakeHub())
+    monkeypatch.setattr(option_search, "OPTION_SEARCH_JOIN_POLL", 0.05)
+    try:
+        child_run_plan(stuck_child)
+        plan = _longlist_plan("Own")
+        task_id, scope_id, plan_id = _seed_longlist(engine, plan)
+        parent = _seed_walk(engine, task_id, scope_id, plan_id)
+        _seed_option(engine, task_id, "Own", "added_by_you")
+        children = option_search.dispatch_option_searches(
+            engine,
+            task_id=task_id,
+            parent_id=parent,
+            plan_row={"plan_id": plan_id, "version": 1, "payload": plan.model_dump(mode="json")},
+            suggest_run_id=None,
+            backends=_runner_backends(),
+            session_id=task_id,
+        )
+        # At the fan-out itself, before anything else runs.
+        assert ticks[0] == {
+            "stage": "option_searches",
+            "activity": "0 of 1 searches done · 0 sources",
+            "done": 0,
+            "total": 1,
+            "unit": "searches",
+            "run_id": parent,
+        }
+        assert opened.wait(timeout=10)
+        deadline = time.monotonic() + 5
+        while len(ticks) < 3 and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert len(ticks) >= 3, "the poll keeps the count current while the walk searches"
+        assert parent in option_search._progress_polls
+        release.set()
+        joined = option_search.join_option_searches(
+            engine, task_id=task_id, parent_id=parent, child_ids=children, timeout=10
+        )
+        assert (joined.total, joined.finished) == (1, 1)
+        assert parent not in option_search._progress_polls
+        assert ticks[-1]["activity"] == "1 of 1 searches done · 0 sources"
+    finally:
+        release.set()
+        _cleanup(engine, task_id)
+
+
+def test_the_progress_poll_ends_by_itself_once_every_search_has_ended(
+    engine: Engine, child_run_plan: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A walk resumed past its join never joins again: the poll still stops."""
+    task_id: uuid.UUID | None = None
+    monkeypatch.setattr(option_search, "OPTION_SEARCH_JOIN_POLL", 0.05)
+    try:
+        plan = _longlist_plan("Own")
+        task_id, scope_id, plan_id = _seed_longlist(engine, plan)
+        parent = _seed_walk(engine, task_id, scope_id, plan_id)
+        _seed_option(engine, task_id, "Own", "added_by_you")
+
+        def quick_child(*args: Any, **kwargs: Any) -> None:
+            _open_row(engine, kwargs)
+            runner_module._finish_run(
+                engine,
+                [],
+                [],
+                status="succeeded",
+                capability_run_id=kwargs["capability_run_id"],
+                task_id=kwargs["task_id"],
+            )
+
+        child_run_plan(quick_child)
+        option_search.dispatch_option_searches(
+            engine,
+            task_id=task_id,
+            parent_id=parent,
+            plan_row={"plan_id": plan_id, "version": 1, "payload": plan.model_dump(mode="json")},
+            suggest_run_id=None,
+            backends=_runner_backends(),
+            session_id=task_id,
+        )
+        deadline = time.monotonic() + 10
+        while parent in option_search._progress_polls and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert parent not in option_search._progress_polls
+    finally:
         _cleanup(engine, task_id)
 
 

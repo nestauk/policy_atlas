@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -43,7 +44,7 @@ from policy_atlas.runtime.task_agent_prompt import (
     PlanDraftWire,
 )
 from policy_atlas.runtime.task_plan import TIME_BANDS, TaskPlan, compose
-from tests.api.resource_support import api_client, create_task
+from tests.api.resource_support import api_client, create_task, post_turn
 
 
 class CountingTaskAgent(StubTaskAgentBackend):
@@ -62,12 +63,13 @@ class CountingTaskAgent(StubTaskAgentBackend):
         inputs: Any = None,
         session_id: uuid.UUID | None = None,
         conversation_id: uuid.UUID | None = None,
+        on_delta: Callable[[str], None] | None = None,
     ) -> TaskAgentTurnWire:
         """Record and delegate the deterministic task_agent turn."""
         del conversation_id
         self.calls.append((turns, previous_draft))
         self.session_ids.append(session_id)
-        return super().turn(profile, turns, previous_draft)
+        return super().turn(profile, turns, previous_draft, on_delta=on_delta)
 
 
 class FailOnceTaskAgent(CountingTaskAgent):
@@ -82,13 +84,19 @@ class FailOnceTaskAgent(CountingTaskAgent):
         inputs: Any = None,
         session_id: uuid.UUID | None = None,
         conversation_id: uuid.UUID | None = None,
+        on_delta: Callable[[str], None] | None = None,
     ) -> TaskAgentTurnWire:
         """Fail once, then use the ordinary deterministic reply."""
         if not self.calls:
             self.calls.append((turns, previous_draft))
             raise RuntimeError("planned test failure")
         return super().turn(
-            profile, turns, previous_draft, session_id=session_id, conversation_id=conversation_id
+            profile,
+            turns,
+            previous_draft,
+            session_id=session_id,
+            conversation_id=conversation_id,
+            on_delta=on_delta,
         )
 
 
@@ -108,10 +116,16 @@ class PartTaskAgent(CountingTaskAgent):
         inputs: Any = None,
         session_id: uuid.UUID | None = None,
         conversation_id: uuid.UUID | None = None,
+        on_delta: Callable[[str], None] | None = None,
     ) -> TaskAgentTurnWire:
         """Return the ordinary stub turn with the configured structured part."""
         turn = super().turn(
-            profile, turns, previous_draft, session_id=session_id, conversation_id=conversation_id
+            profile,
+            turns,
+            previous_draft,
+            session_id=session_id,
+            conversation_id=conversation_id,
+            on_delta=on_delta,
         )
         return turn.model_copy(update={"part": self.part})
 
@@ -195,8 +209,15 @@ def test_draft_projection_derives_time_band_and_deduplicates_public_stages() -> 
     projected = draft_from_plan(plan)
     assert [step.stage for step in projected.steps].count("acquire") == 1
     assert [step.stage for step in projected.steps].count("screen") == 1
-    assert projected.steps[0].label == "Searching sources"
-    assert projected.steps[1].blurb == "Every title and abstract, against your question."
+    # Task 058 (N17): the server table is the one source of stage copy; search
+    # and screen are two card rows with their own labels (owner round 8).
+    assert projected.steps[0].label == "Searching"
+    assert projected.steps[0].row == "search"
+    assert projected.steps[0].blurb == "Querying the databases and collecting candidates."
+    assert projected.steps[1].label == "Screening"
+    assert projected.steps[1].row == "screen"
+    assert projected.steps[1].blurb == "Reading each abstract against the question."
+    assert projected.steps[2].row == "categorise"
     # The screen_full collapse is a plan-steps presentation rule only: live
     # stage frames keep the pre-027 behaviour (no second "screen" stage row).
     assert (
@@ -224,13 +245,15 @@ def test_task_agent_turn_is_durable_idempotent_and_ready_turn_persists_plan(
     with api_client(tmp_path, {get_task_agent_backend: lambda: stub}) as (client, owner, _):
         task_id = create_task(client, owner)
         turn_id = str(uuid.uuid4())
-        first = client.post(
+        first = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "How can cities reduce heat risk?", "client_turn_id": turn_id},
         )
         _reset_turn_locks()
-        duplicate = client.post(
+        duplicate = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "How can cities reduce heat risk?", "client_turn_id": turn_id},
@@ -241,13 +264,19 @@ def test_task_agent_turn_is_durable_idempotent_and_ready_turn_persists_plan(
 
         transcript = client.get(f"/api/v1/tasks/{task_id}/task-agent-turns", headers=owner)
         assert transcript.status_code == 200
-        assert transcript.json()["pagination"] == {"page": 1, "page_size": 50, "total_items": 1}
+        assert transcript.json()["pagination"] == {
+            "page": 1,
+            "page_size": 50,
+            "total_items": 1,
+            "has_more": False,
+        }
         assert transcript.json()["data"][0]["turn_index"] == 0
         assert transcript.json()["data"][0]["status"] == "completed"
         conversation_id = first.json()["conversation_id"]
         assert transcript.json()["data"][0]["conversation_id"] == conversation_id
 
-        ready = client.post(
+        ready = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
@@ -322,12 +351,14 @@ def test_task_agent_part_round_trips_and_replays_idempotently(
     with api_client(tmp_path, {get_task_agent_backend: lambda: stub}) as (client, owner, _):
         task_id = create_task(client, owner)
         turn_id = str(uuid.uuid4())
-        first = client.post(
+        first = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "How can cities reduce heat risk?", "client_turn_id": turn_id},
         )
-        replay = client.post(
+        replay = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "How can cities reduce heat risk?", "client_turn_id": turn_id},
@@ -364,7 +395,8 @@ def test_task_agent_part_with_snake_case_option_id_is_kept(tmp_path: Path) -> No
         _,
     ):
         task_id = create_task(client, owner)
-        response = client.post(
+        response = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
@@ -451,7 +483,8 @@ def test_malformed_task_agent_part_degrades_to_prose_and_logs_once(
         _,
     ):
         task_id = create_task(client, owner)
-        response = client.post(
+        response = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
@@ -464,6 +497,25 @@ def test_malformed_task_agent_part_degrades_to_prose_and_logs_once(
     assert warnings == [(("task_agent_part_dropped",), {"reason": reason})]
 
 
+@pytest.mark.parametrize("part_id", ["who_can_act", "your_options"])
+def test_scoping_profile_keeps_the_planner_proposed_part_ids(part_id: str) -> None:
+    """Task 058, N18: the two ids the scoping planner proposes are not dropped."""
+    from policy_atlas.runtime import capability_registry
+
+    profile = capability_registry.spec_for(capability_registry.OPTIONS_SCOPING).load_task_agent()
+    part = PartProposalWire(
+        id=part_id,
+        step_label="Plan · 1 of 3",
+        title="Card",
+        options=[
+            PartOptionWire(id="first_choice", label="First", primary=True),
+            PartOptionWire(id="second_choice", label="Second", primary=False),
+        ],
+    )
+    kept = task_agent._validated_part(part, profile)
+    assert kept is not None and kept.id == part_id
+
+
 def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
     engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -472,7 +524,8 @@ def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
     stub = CountingTaskAgent()
     with api_client(tmp_path, {get_task_agent_backend: lambda: stub}) as (client, owner, _):
         task_id = create_task(client, owner)
-        first = client.post(
+        first = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
@@ -480,7 +533,8 @@ def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
                 "client_turn_id": str(uuid.uuid4()),
             },
         )
-        approved = client.post(
+        approved = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "Compare intervention options", "client_turn_id": str(uuid.uuid4())},
@@ -530,7 +584,8 @@ def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
             "message": "the plan predates your latest Task Agent message — review it, then start",
         }
 
-        reapproved = client.post(
+        reapproved = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "Ready to proceed", "client_turn_id": str(uuid.uuid4())},
@@ -571,7 +626,8 @@ def test_legacy_approved_plan_without_a_source_turn_index_stays_startable(
     stub = CountingTaskAgent()
     with api_client(tmp_path, {get_task_agent_backend: lambda: stub}) as (client, owner, _):
         task_id = create_task(client, owner)
-        first = client.post(
+        first = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
@@ -579,7 +635,8 @@ def test_legacy_approved_plan_without_a_source_turn_index_stays_startable(
                 "client_turn_id": str(uuid.uuid4()),
             },
         )
-        approved = client.post(
+        approved = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "Compare intervention options", "client_turn_id": str(uuid.uuid4())},
@@ -641,7 +698,8 @@ def test_task_agent_rehydrates_after_restart_and_get_plan_reads_stored_draft(
     stub = CountingTaskAgent()
     with api_client(tmp_path, {get_task_agent_backend: lambda: stub}) as (client, owner, _):
         task_id = create_task(client, owner)
-        first = client.post(
+        first = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
@@ -664,7 +722,8 @@ def test_task_agent_rehydrates_after_restart_and_get_plan_reads_stored_draft(
         }
 
         second_message = "A comparison of intervention options"
-        second = client.post(
+        second = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": second_message, "client_turn_id": str(uuid.uuid4())},
@@ -698,12 +757,20 @@ def test_failed_turn_retries_in_place_and_stale_rules_are_honest(
     with api_client(tmp_path, {get_task_agent_backend: lambda: stub}) as (client, owner, _):
         task_id = create_task(client, owner)
         turn_id = str(uuid.uuid4())
-        failed = client.post(
+        failed = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "Recoverable task_agent failure", "client_turn_id": turn_id},
         )
-        assert failed.status_code == 500
+        # Task 058, N9: the failure arrives after the headers, as one failed line.
+        assert failed.status_code == 200
+        assert failed.events[-1] == {
+            "type": "failed",
+            "error": {"code": "task_agent_turn_failed", "message": "Task Agent turn failed"},
+            "turn_index": 0,
+        }
+        assert [event["type"] for event in failed.events].count("failed") == 1
         listed = client.get(f"/api/v1/tasks/{task_id}/task-agent-turns", headers=owner)
         assert listed.json()["data"] == [
             {
@@ -712,6 +779,7 @@ def test_failed_turn_retries_in_place_and_stale_rules_are_honest(
                 "client_turn_id": turn_id,
                 "user_message": "Recoverable task_agent failure",
                 "reply": None,
+                "question": None,
                 "suggestions": [],
                 "part": None,
                 "capability": "evidence_search",
@@ -728,13 +796,15 @@ def test_failed_turn_retries_in_place_and_stale_rules_are_honest(
                 "sources": [],
             }
         ]
-        retried = client.post(
+        retried = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "Recoverable task_agent failure", "client_turn_id": turn_id},
         )
         assert retried.status_code == 200
-        mismatch = client.post(
+        mismatch = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "Different message", "client_turn_id": turn_id},
@@ -765,7 +835,8 @@ def test_failed_turn_retries_in_place_and_stale_rules_are_honest(
                     ),
                 ],
             )
-        stale = client.post(
+        stale = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "old failed", "client_turn_id": str(old_id)},
@@ -821,7 +892,8 @@ def test_pending_staleness_fresh_pending_and_transcript_ownership(
                     )
                 )
             )
-        blocked = client.post(
+        blocked = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "a distinct new turn", "client_turn_id": str(uuid.uuid4())},
@@ -872,7 +944,8 @@ def test_task_agent_turn_409s_while_walk_active_or_parked(engine: Engine, tmp_pa
                 )
             )
         try:
-            paused = client.post(
+            paused = post_turn(
+                client,
                 f"/api/v1/tasks/{task_id}/task-agent-turns",
                 headers=owner,
                 json={"message": "Steer this walk", "client_turn_id": str(uuid.uuid4())},
@@ -886,7 +959,8 @@ def test_task_agent_turn_409s_while_walk_active_or_parked(engine: Engine, tmp_pa
                     .where(capability_run.c.capability_run_id == run_id)
                     .values(status="running")
                 )
-            running = client.post(
+            running = post_turn(
+                client,
                 f"/api/v1/tasks/{task_id}/task-agent-turns",
                 headers=owner,
                 json={"message": "Steer this walk again", "client_turn_id": str(uuid.uuid4())},
@@ -900,7 +974,8 @@ def test_task_agent_turn_409s_while_walk_active_or_parked(engine: Engine, tmp_pa
                     .where(capability_run.c.capability_run_id == run_id)
                     .values(status="succeeded", ended_at=datetime.now(UTC))
                 )
-            succeeded = client.post(
+            succeeded = post_turn(
+                client,
                 f"/api/v1/tasks/{task_id}/task-agent-turns",
                 headers=owner,
                 json={"message": "Replan now", "client_turn_id": str(uuid.uuid4())},
@@ -935,6 +1010,7 @@ def test_run_starting_mid_task_agent_call_fails_turn_and_persists_no_plan(
             inputs: Any = None,
             session_id: uuid.UUID | None = None,
             conversation_id: uuid.UUID | None = None,
+            on_delta: Callable[[str], None] | None = None,
         ) -> TaskAgentTurnWire:
             wire = super().turn(
                 profile,
@@ -942,6 +1018,7 @@ def test_run_starting_mid_task_agent_call_fails_turn_and_persists_no_plan(
                 previous_draft,
                 session_id=session_id,
                 conversation_id=conversation_id,
+                on_delta=on_delta,
             )
             if wire.ready and self.task_id is not None:
                 scope_id = uuid.uuid4()
@@ -975,7 +1052,8 @@ def test_run_starting_mid_task_agent_call_fails_turn_and_persists_no_plan(
     with api_client(tmp_path, {get_task_agent_backend: lambda: stub}) as (client, owner, _):
         task_id = create_task(client, owner)
         stub.task_id = task_id
-        first = client.post(
+        first = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
@@ -985,12 +1063,16 @@ def test_run_starting_mid_task_agent_call_fails_turn_and_persists_no_plan(
         )
         assert first.status_code == 200
 
-        conflicted = client.post(
+        conflicted = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "Proceed with the full review.", "client_turn_id": str(uuid.uuid4())},
         )
-        assert conflicted.status_code == 409
+        # Task 058, N9: the fence is re-checked after the planner call, so the
+        # refusal is the stream's failed line, not a 409.
+        assert conflicted.status_code == 200
+        assert conflicted.json()["type"] == "failed"
         assert conflicted.json()["error"]["code"] == "run_active"
 
         with engine.begin() as conn:
@@ -1017,7 +1099,8 @@ def test_closed_task_agent_conversation_creates_seeded_successor(
     stub = CountingTaskAgent()
     with api_client(tmp_path, {get_task_agent_backend: lambda: stub}) as (client, owner, _):
         task_id = create_task(client, owner)
-        first = client.post(
+        first = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
@@ -1025,7 +1108,8 @@ def test_closed_task_agent_conversation_creates_seeded_successor(
                 "client_turn_id": str(uuid.uuid4()),
             },
         )
-        approved = client.post(
+        approved = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={"message": "Compare intervention options", "client_turn_id": str(uuid.uuid4())},
@@ -1042,7 +1126,8 @@ def test_closed_task_agent_conversation_creates_seeded_successor(
                 conn, task_id=uuid.UUID(task_id), closed_at=datetime.now(UTC)
             )
 
-        successor = client.post(
+        successor = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
@@ -1062,7 +1147,8 @@ def test_closed_task_agent_conversation_creates_seeded_successor(
         # task 038, V9: session_id groups by task, not by task_agent conversation.
         assert stub.session_ids[-1] == uuid.UUID(task_id)
 
-        follow_up = client.post(
+        follow_up = post_turn(
+            client,
             f"/api/v1/tasks/{task_id}/task-agent-turns",
             headers=owner,
             json={
@@ -1083,13 +1169,15 @@ def test_closed_task_agent_conversation_creates_seeded_successor(
 def _approve_stub_plan(client: TestClient, owner: dict[str, str]) -> str:
     """Drive the stub task_agent to a ready approved plan and return the task id."""
     task_id = create_task(client, owner)
-    first = client.post(
+    first = post_turn(
+        client,
         f"/api/v1/tasks/{task_id}/task-agent-turns",
         headers=owner,
         json={"message": "How can cities reduce heat risk?", "client_turn_id": str(uuid.uuid4())},
     )
     assert first.status_code == 200
-    ready = client.post(
+    ready = post_turn(
+        client,
         f"/api/v1/tasks/{task_id}/task-agent-turns",
         headers=owner,
         json={
@@ -1145,7 +1233,7 @@ def test_patch_plan_persists_academic_only_scope(engine: Engine, tmp_path: Path)
     assert "overton" not in filters
 
 
-def test_patch_plan_404s_without_a_plan(tmp_path: Path) -> None:
+def test_patch_plan_404s_without_a_plan(engine: Engine, tmp_path: Path) -> None:
     _reset_turn_locks()
     with api_client(tmp_path) as (client, owner, _):
         task_id = create_task(client, owner)
@@ -1157,7 +1245,7 @@ def test_patch_plan_404s_without_a_plan(tmp_path: Path) -> None:
         assert response.status_code == 404
 
 
-def test_patch_plan_422s_unknown_geography(tmp_path: Path) -> None:
+def test_patch_plan_422s_unknown_geography(engine: Engine, tmp_path: Path) -> None:
     _reset_turn_locks()
     with api_client(tmp_path, {get_task_agent_backend: lambda: StubTaskAgentBackend()}) as (
         client,
@@ -1173,7 +1261,9 @@ def test_patch_plan_422s_unknown_geography(tmp_path: Path) -> None:
         assert response.status_code == 422
 
 
-def test_patch_plan_apo_geography_token_sets_publisher_source(tmp_path: Path) -> None:
+def test_patch_plan_apo_geography_token_sets_publisher_source(
+    engine: Engine, tmp_path: Path
+) -> None:
     """Test mod, task 039: the APO token requires grey_lit_only scope and sets
     publisher_source; the alternate casing/spelled-out form resolves the same
     way."""
@@ -1196,7 +1286,7 @@ def test_patch_plan_apo_geography_token_sets_publisher_source(tmp_path: Path) ->
 
 
 def test_patch_plan_apo_geography_token_accepts_spelled_out_mixed_case(
-    tmp_path: Path,
+    engine: Engine, tmp_path: Path,
 ) -> None:
     _reset_turn_locks()
     with api_client(tmp_path, {get_task_agent_backend: lambda: StubTaskAgentBackend()}) as (
@@ -1220,7 +1310,7 @@ def test_patch_plan_apo_geography_token_accepts_spelled_out_mixed_case(
 
 
 def test_patch_plan_apo_geography_token_422s_without_grey_lit_only_scope(
-    tmp_path: Path,
+    engine: Engine, tmp_path: Path,
 ) -> None:
     _reset_turn_locks()
     with api_client(tmp_path, {get_task_agent_backend: lambda: StubTaskAgentBackend()}) as (
@@ -1237,7 +1327,9 @@ def test_patch_plan_apo_geography_token_422s_without_grey_lit_only_scope(
         assert response.status_code == 422
 
 
-def test_patch_plan_apo_cleared_by_later_country_geography_edit(tmp_path: Path) -> None:
+def test_patch_plan_apo_cleared_by_later_country_geography_edit(
+    engine: Engine, tmp_path: Path
+) -> None:
     _reset_turn_locks()
     with api_client(tmp_path, {get_task_agent_backend: lambda: StubTaskAgentBackend()}) as (
         client,
@@ -1259,7 +1351,7 @@ def test_patch_plan_apo_cleared_by_later_country_geography_edit(tmp_path: Path) 
         assert patched.json()["plan"]["scope_constraints"]["publisher_source"] is None
 
 
-def test_patch_plan_apo_cleared_by_later_backend_scope_edit(tmp_path: Path) -> None:
+def test_patch_plan_apo_cleared_by_later_backend_scope_edit(engine: Engine, tmp_path: Path) -> None:
     _reset_turn_locks()
     with api_client(tmp_path, {get_task_agent_backend: lambda: StubTaskAgentBackend()}) as (
         client,
@@ -1279,3 +1371,54 @@ def test_patch_plan_apo_cleared_by_later_backend_scope_edit(tmp_path: Path) -> N
         )
         assert patched.status_code == 200, patched.text
         assert patched.json()["plan"]["scope_constraints"]["publisher_source"] is None
+
+
+def test_question_and_suggestions_survive_a_transcript_read(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Task 058, N10: the clarifying question and its chips come back on reload."""
+    _reset_turn_locks()
+    with api_client(tmp_path, {get_task_agent_backend: CountingTaskAgent}) as (client, owner, _):
+        task_id = create_task(client, owner)
+        posted = post_turn(
+            client,
+            f"/api/v1/tasks/{task_id}/task-agent-turns",
+            headers=owner,
+            json={
+                "message": "How can cities reduce heat risk?",
+                "client_turn_id": str(uuid.uuid4()),
+            },
+        )
+        listed = client.get(f"/api/v1/tasks/{task_id}/task-agent-turns", headers=owner)
+    turn = posted.json()
+    assert turn["question"] == "What decision should this evidence review inform?"
+    stored = listed.json()["data"][0]
+    assert stored["question"] == turn["question"]
+    assert stored["suggestions"] == turn["suggestions"] and len(stored["suggestions"]) == 3
+
+
+def test_a_turn_stored_before_the_row_key_reads_back_with_todays_steps() -> None:
+    """Task 058 polish: stored plan steps are re-stamped with the server's copy on read.
+
+    A turn stored before this slice carries steps with the old labels and no
+    `row`; the transcript read fills today's label, blurb and row so the row
+    validates and shows the current words.
+    """
+    from policy_atlas.api.routers.task_agent import _with_current_steps
+
+    stored = {
+        "reply": "ok",
+        "plan": {
+            "steps": [
+                {"stage": "acquire", "label": "Searching sources", "blurb": "old"},
+                {"stage": "classify", "label": "Sorting by evidence type", "blurb": "old"},
+            ],
+            "ready": True,
+        },
+    }
+    out = _with_current_steps(stored)
+    assert [s["row"] for s in out["plan"]["steps"]] == ["search", "categorise"]
+    assert [s["label"] for s in out["plan"]["steps"]] == ["Searching", "Classifying"]
+    assert out["plan"]["ready"] is True
+    assert _with_current_steps({"reply": "no plan"}) == {"reply": "no plan"}
+

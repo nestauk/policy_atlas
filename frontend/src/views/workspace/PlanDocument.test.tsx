@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -79,7 +80,13 @@ function fullPlan(): PlanDraft {
     backend_scope: "both",
     steering_mode: "moderate",
     time_band: "2-3 days",
-    steps: [{ label: "Search the literature", blurb: "Cast a wide net", stage: "acquire" }],
+    // The server's steps (task 058, N17): the labels and the card rows are
+    // its words; search and screen share one row.
+    steps: [
+      { stage: "acquire", label: "Searching and screening", blurb: "Querying academic and policy databases.", row: "search_screen" },
+      { stage: "screen", label: "Searching and screening", blurb: "Checking each title and abstract against your question.", row: "search_screen" },
+      { stage: "synthesise", label: "Writing", blurb: "A cited report, checked claim by claim.", row: "synthesise" },
+    ],
   };
 }
 
@@ -183,8 +190,8 @@ function fullScopingPlan(overrides: Partial<ScopingPlanDraft> = {}): ScopingPlan
     steer_point_defaults: [],
     assumptions: [],
     steps: [
-      { stage: "acquire", label: "Searching sources", blurb: "Queries out to academic and policy databases." },
-      { stage: "synthesise", label: "Writing the baseline", blurb: "Setting out what happens if nothing changes." },
+      { stage: "acquire", label: "Searching and screening", blurb: "Queries out to academic and policy databases.", row: "search_screen" },
+      { stage: "synthesise", label: "Writing the baseline", blurb: "Setting out what happens if nothing changes.", row: "synthesise" },
     ],
     time_band: "10-15 minutes",
     baseline_confirmed: null,
@@ -272,9 +279,12 @@ describe("PlanDocument", () => {
     }
     expect(screen.queryByText("How findings are grouped")).toBeNull();
     expect(screen.getByText("Plan steps")).toBeInTheDocument();
-    expect(screen.getByText("Expected run time: ~10-20 min")).toBeInTheDocument();
-    expect(screen.getByText("Searching")).toBeInTheDocument();
+    // The band is the plan draft's own (task 058, N20: one table, on the server).
+    expect(screen.getByText("Expected run time: 2-3 days")).toBeInTheDocument();
+    // One line per card row, in the server's words.
+    expect(screen.getAllByText("Searching and screening")).toHaveLength(1);
     expect(screen.getByText("Querying academic and policy databases.")).toBeInTheDocument();
+    expect(screen.getByText("Writing")).toBeInTheDocument();
     expect(screen.getByText("2015–2024")).toBeInTheDocument();
     expect(screen.getByText("Source geography")).toBeInTheDocument();
     expect(screen.getByText("Academic + Policy (OpenAlex, Overton)")).toBeInTheDocument();
@@ -293,20 +303,117 @@ describe("PlanDocument", () => {
     expect(screen.getAllByText(COPY.notDecided).length).toBeGreaterThan(0);
   });
 
-  it("updates expected run time and agreed steps from local settings", () => {
+  it("keeps the plan draft's own band while local settings change (N20)", () => {
     mockUsePlan({ data: planOut(fullPlan()) });
     renderPlan(vi.fn(), { search_effort: "rapid", analysis_depth: "deep" });
-    expect(screen.getByText("Expected run time: ~75-90 min")).toBeInTheDocument();
-    expect(screen.getByText("Extracting findings")).toBeInTheDocument();
-    expect(screen.getByText("Grouping findings")).toBeInTheDocument();
+    expect(screen.getByText("Expected run time: 2-3 days")).toBeInTheDocument();
     expect(screen.getByText("Custom")).toBeInTheDocument();
   });
 
-  it("adapts the searching step to the selected sources filter", () => {
+  it("closes on Escape, and says so at the side panel's top right (task 058, N15)", async () => {
     mockUsePlan({ data: planOut(fullPlan()) });
-    renderPlan(vi.fn(), { backend_scope: "academic_only" });
-    expect(screen.getByText("Querying academic databases.")).toBeInTheDocument();
-    expect(screen.queryByText("Querying academic and policy databases.")).toBeNull();
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument taskId={TASK_ID} placement="side" onClose={onClose} overlay={{}} onOverlayChange={vi.fn()} />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByText("Esc closes")).toBeNull();
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // Owner, round 13: a press anywhere outside the plan closes it, as the
+  // shared Sheet's outside press does; focus goes back to "See plan".
+  it("closes on a press outside it, not on one inside it, in its menus or on a control that opens it", async () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <button type="button" data-plan-opener="">
+          See plan
+        </button>
+        <p>The page</p>
+        <PlanDocument taskId={TASK_ID} placement="side" onClose={onClose} overlay={{}} onOverlayChange={vi.fn()} />
+      </TooltipProvider>,
+    );
+    await user.click(screen.getByRole("heading", { name: "Search plan" }));
+    await user.click(screen.getByRole("button", { name: "See plan" }));
+    await user.click(screen.getAllByRole("button", { name: "Edit" })[1]);
+    await user.click(screen.getByRole("button", { name: "Search scope" }));
+    await user.click(screen.getByRole("option", { name: "Focused" }));
+    expect(onClose).not.toHaveBeenCalled();
+    await user.click(screen.getByText("The page"));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives focus back to the control that opened it when it closes", async () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    const user = userEvent.setup();
+    function Host() {
+      const [open, setOpen] = useState(false);
+      return (
+        <TooltipProvider delayDuration={0}>
+          <button type="button" data-plan-opener="" onClick={() => setOpen(true)}>
+            See plan
+          </button>
+          {open && (
+            <PlanDocument taskId={TASK_ID} placement="side" onClose={() => setOpen(false)} overlay={{}} onOverlayChange={vi.fn()} />
+          )}
+        </TooltipProvider>
+      );
+    }
+    render(<Host />);
+    await user.click(screen.getByRole("button", { name: "See plan" }));
+    await user.click(screen.getByRole("button", { name: "Close the search plan" }));
+    expect(screen.queryByRole("dialog", { name: "Search plan" })).toBeNull();
+    expect(screen.getByRole("button", { name: "See plan" })).toHaveFocus();
+  });
+
+  // Owner, round 14: every open starts at the plan's top, its title in view.
+  it("opens at its own top, and goes back there when its content first arrives", () => {
+    const set = vi.fn();
+    const original = Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop");
+    Object.defineProperty(Element.prototype, "scrollTop", {
+      configurable: true,
+      get: () => 0,
+      set(value: number) {
+        if ((this as Element).getAttribute("data-testid") === "plan-pane") set(value);
+      },
+    });
+    mockUsePlan({ isPending: true, data: undefined });
+    const view = render(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument taskId={TASK_ID} placement="side" onClose={vi.fn()} overlay={{}} onOverlayChange={vi.fn()} />
+      </TooltipProvider>,
+    );
+    expect(set).toHaveBeenCalledWith(0);
+    set.mockClear();
+    mockUsePlan({ data: planOut(fullPlan()) });
+    view.rerender(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument taskId={TASK_ID} placement="side" onClose={vi.fn()} overlay={{}} onOverlayChange={vi.fn()} />
+      </TooltipProvider>,
+    );
+    expect(set).toHaveBeenCalledWith(0);
+    if (original !== undefined) Object.defineProperty(Element.prototype, "scrollTop", original);
+  });
+
+  it("leaves Escape to a field being edited", async () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument taskId={TASK_ID} placement="side" onClose={onClose} overlay={{}} onOverlayChange={vi.fn()} />
+      </TooltipProvider>,
+    );
+    await user.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    await user.click(screen.getByRole("textbox"));
+    await user.keyboard("{Escape}");
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("picks a settings option from the app-chrome menu, not a native select", async () => {
@@ -840,8 +947,10 @@ describe("PlanDocument — options scoping (task 044)", () => {
     renderPlan();
     expect(screen.getByText("Risk appetite")).toBeInTheDocument();
     const select = screen.getByRole("combobox", { name: "Risk appetite" });
-    expect(select).toHaveValue("mostly_tried");
-    await userEvent.selectOptions(select, "open_to_untested");
+    expect(select).toHaveTextContent(/^Balanced:/);
+    // Round 12: the app's dropdown, not the browser's.
+    await userEvent.click(select);
+    await userEvent.click(screen.getByRole("option", { name: /^Ambitious:/ }));
     expect(patchMutate).toHaveBeenCalledWith({ scoping: { risk_appetite: "open_to_untested" } });
   });
 

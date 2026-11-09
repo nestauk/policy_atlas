@@ -581,7 +581,7 @@ def test_exclude_is_proposed_then_applied_on_assent_and_writes_what_the_button_w
         assert proposed.status_code == 200, proposed.text
         body = proposed.json()
         assert body["reply"] == (
-            "Exclude *Mentoring*? Reason: *volunteers cannot deliver it*. Confirm to apply."
+            "Exclude Mentoring? Reason: volunteers cannot deliver it. Confirm to apply."
         )
         assert body["kind"] == "reply" and body["action"] is None
         assert body["part"]["id"] == "longlist_action"
@@ -601,7 +601,7 @@ def test_exclude_is_proposed_then_applied_on_assent_and_writes_what_the_button_w
             "label": "Mentoring",
             "capability_run_id": None,
         }
-        assert action["reply"] == "Excluded *Mentoring*."
+        assert action["reply"] == "Excluded Mentoring."
         assert agent.longlist_sort_inputs[1]["pending"] == {
             "verb": "exclude",
             "label": "Mentoring",
@@ -664,7 +664,7 @@ def test_the_button_confirms_include_again_without_a_second_sort(
         )
         assert excluded.status_code == 200, excluded.text
         proposed = _turn(client, owner2.headers, built.task_id, "Bring the youth guarantee back")
-        assert proposed.json()["reply"] == "Include *Youth guarantee* again? Confirm to apply."
+        assert proposed.json()["reply"] == "Include Youth guarantee again? Confirm to apply."
         assert _option_row(engine, guarantee).state == "excluded"
 
         confirmed = _turn(client, owner2.headers, built.task_id, _CONFIRM)
@@ -697,7 +697,7 @@ def test_a_question_never_applies_and_keeps_the_pending_action(
         )
         proposed = _turn(client, owner2.headers, built.task_id, "Drop mentoring")
         assert proposed.json()["reply"] == (
-            "Exclude *Mentoring*? Reason: *none given*. Confirm to apply."
+            "Exclude Mentoring? Reason: none given. Confirm to apply."
         )
         asked = _turn(client, owner2.headers, built.task_id, "Should we? Is there UK evidence?")
         assert asked.status_code == 200, asked.text
@@ -733,8 +733,8 @@ def test_a_different_verb_replaces_the_pending_action_and_other_keeps_it(
             client, owner2.headers, built.task_id, "No, exclude the guarantee, too costly"
         )
         assert replaced.json()["reply"] == (
-            "This replaces the earlier proposal to exclude *Mentoring*. "
-            "Exclude *Youth guarantee*? Reason: *too costly*. Confirm to apply."
+            "This replaces the earlier proposal to exclude Mentoring. "
+            "Exclude Youth guarantee? Reason: too costly. Confirm to apply."
         )
         unmatched = _turn(client, owner2.headers, built.task_id, "Exclude the other one")
         assert unmatched.json()["reply"] == longlist_turns.WHICH_OPTION_REPLY
@@ -743,8 +743,8 @@ def test_a_different_verb_replaces_the_pending_action_and_other_keeps_it(
         assert pending["option_id"] == str(guarantee)
         kept = _turn(client, owner2.headers, built.task_id, "Hmm, not sure")
         assert kept.json()["reply"] == (
-            f"{longlist_turns.OTHER_REPLY}\n\nStill waiting: Exclude *Youth guarantee*? "
-            "Reason: *too costly*. Confirm to apply."
+            f"{longlist_turns.OTHER_REPLY}\n\nStill waiting: Exclude Youth guarantee? "
+            "Reason: too costly. Confirm to apply."
         )
         assert _latest_row(engine, built.task_id).task_agent_state["pending"]["option_id"] == str(
             guarantee
@@ -789,7 +789,7 @@ def test_add_proposes_a_design_then_mints_it_and_opens_a_parentless_walk(
         )
         assert proposed.status_code == 200, proposed.text
         assert proposed.json()["reply"] == (
-            "Add *Wage subsidy* — Employers are paid part of a young recruit's wage? "
+            "Add Wage subsidy — Employers are paid part of a young recruit's wage? "
             "Design: a wage subsidy for six months; for 16 to 24 year olds. "
             "Confirm to add it and search for it."
         )
@@ -983,3 +983,28 @@ def test_the_stub_sort_defaults_to_other() -> None:
     sort = agent.sort_longlist_turn("anything", [], pending=None)
     assert sort.kind == "other" and sort.assents_to_pending is False
     assert agent.longlist_sort_calls == 1
+
+
+def test_no_sorting_turn_sentence_carries_an_asterisk() -> None:
+    """Task 058, N20: the names are plain text, so no reply shows literal asterisks."""
+    design = OptionDesign(
+        name="Wage subsidy",
+        description="Employers are paid part of a recruit's wage.",
+        design_features=["Paid for six months"],
+    )
+    pending = longlist_turns.PendingAction(
+        verb="exclude", option_id=uuid.uuid4(), label="Mentoring", reason="too costly"
+    )
+    sentences = [
+        longlist_turns.exclude_proposal("Mentoring", None),
+        longlist_turns.include_proposal("Mentoring"),
+        longlist_turns.add_proposal(design),
+        longlist_turns.proposal_sentence(pending),
+        longlist_turns.still_waiting(pending),
+        longlist_turns._applied_reply("exclude", "Mentoring"),
+        longlist_turns._applied_reply("include_again", "Mentoring"),
+        longlist_turns._applied_reply("add", "Mentoring"),
+        longlist_turns._already_reply("Mentoring", "excluded"),
+        longlist_turns._replaced_prefix(pending),
+    ]
+    assert all("*" not in sentence for sentence in sentences)

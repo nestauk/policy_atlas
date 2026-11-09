@@ -173,7 +173,7 @@ describe("detail panel", () => {
     renderResult();
     const panel = openLink(3);
     await user.click(within(panel).getAllByTestId("balance-block")[0] as HTMLElement);
-    expect(within(screen.getByRole("dialog")).getByText("Where this comes from")).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog")).getByText("Evidence for this claim")).toBeInTheDocument();
   });
 
   it("says what makes a connection critical on hover", async () => {
@@ -210,7 +210,7 @@ describe("detail panel", () => {
     expect(marker.className).toContain("citation-marker");
     await user.click(marker);
     const sheet = screen.getByRole("dialog");
-    expect(within(sheet).getByText("Where this comes from")).toBeInTheDocument();
+    expect(within(sheet).getByText("Evidence for this claim")).toBeInTheDocument();
     expect(within(sheet).getByText(/brands moved to brand-only adverts/)).toBeInTheDocument();
     expect(within(sheet).getByText(SHARED_DOC_TITLE)).toBeInTheDocument();
     expect(queries.useTocDocumentContext).toHaveBeenCalledWith(TASK_ID, expect.stringContaining("0000e0002"), null);
@@ -303,10 +303,10 @@ describe("detailed information", () => {
     const [marker] = within(info).getAllByRole("button", { name: "Citations 3" });
     expect(marker?.className).toContain("citation-marker");
     await user.click(marker as HTMLElement);
-    expect(within(screen.getByRole("dialog")).getByText("Where this comes from")).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog")).getByText("Evidence for this claim")).toBeInTheDocument();
     expect(queries.useTocDocumentContext).toHaveBeenCalledWith(TASK_ID, "00000000-0000-4000-8000-0000000e0003", null);
     // The source list reads as the Evidence search's references: number, title, then authors, year and venue.
-    expect(info.querySelector("#toc-source-3")?.textContent).toBe("[3]Source 3 — Ann Smith, Bo Lee (2020) · Obesity Reviews");
+    expect(info.querySelector("#toc-source-3")?.textContent).toBe("[3]Source 3 — Smith A, Lee B (2020) · Obesity Reviews");
   });
 
   it("lists the set-aside pathways in one line, after the pathways", () => {
@@ -401,7 +401,7 @@ describe("detail panel documents", () => {
     expect(within(panel).getAllByText(/^Smith et al\. · 20\d\d · quasi-experiment/).length).toBeGreaterThan(0);
     await user.click(within(panel).getByRole("button", { name: "Children's exposure after Chile's Law 20.606" }));
     expect(queries.useTocDocumentContext).toHaveBeenCalledWith(TASK_ID, expect.stringContaining("0000e"), null);
-    expect(screen.getByText("Where this comes from")).toBeInTheDocument();
+    expect(screen.getByText("Evidence for this claim")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open the source" })).toHaveAttribute("href", expect.stringContaining("example.org"));
   });
 });

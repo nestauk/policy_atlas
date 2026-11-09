@@ -6,6 +6,8 @@ import { SOURCES_LABELS } from "../lib/vocabulary";
 import { WIDE_PAGE_CLASS } from "./listPageChrome";
 import { isToc } from "./scopingActivity";
 import { ThemesView } from "./ThemesView";
+import { GROWING_RULE_ACTIVE_CLASS, GROWING_RULE_CLASS } from "../ui/brand/Nav";
+import { sourcesSubtabChoice, type SourcesSubtab } from "./lifecycle";
 
 /**
  * The Sources tab's first page: Themes, or (for a theory of change, which has
@@ -36,27 +38,47 @@ export function SourcesLayout() {
   const base = `/tasks/${taskId}/sources`;
   const hasFindings = typeof funnel.data?.findings === "number" && funnel.data.findings > 0;
 
-  const tabs = [
-    ...(isToc(task.data) ? [] : [{ label: SOURCES_LABELS.themes, to: base, end: true }]),
-    { label: SOURCES_LABELS.landscape, to: `${base}/landscape`, end: false },
-    { label: SOURCES_LABELS.all, to: `${base}/all`, end: false },
-    ...(hasFindings ? [{ label: SOURCES_LABELS.findings, to: `${base}/findings`, end: false }] : []),
+  const tabs: Array<{ label: string; subtab: SourcesSubtab; end: boolean }> = [
+    ...(isToc(task.data) ? [] : [{ label: SOURCES_LABELS.themes, subtab: "" as const, end: true }]),
+    { label: SOURCES_LABELS.landscape, subtab: "/landscape", end: false },
+    { label: SOURCES_LABELS.all, subtab: "/all", end: false },
+    ...(hasFindings ? [{ label: SOURCES_LABELS.findings, subtab: "/findings" as const, end: false }] : []),
   ];
 
   return (
-    <div className={`${WIDE_PAGE_CLASS} min-h-full py-6`}>
+    <div className={`${WIDE_PAGE_CLASS} min-h-full py-8`}>
       <div className="bg-paper">
-        <nav aria-label="Sources" className="flex border-b border-line">
-          {tabs.map((tab, index) => (
+        {/* DESIGN.md § Navigation: Meta Grey at the medium weight, the active tab
+            Extrabold Navy over the growing 3px Electric Blue rule, a Line
+            hairline under the row (an inset shadow, so the rule sits on it
+            without overflowing the scroller); one line, scrolling sideways
+            when it does not fit (task 058, landscape polish entry 16). */}
+        <nav
+          aria-label="Sources"
+          className="flex overflow-x-auto shadow-[inset_0_-1px_0_var(--color-line)] [scrollbar-width:none]"
+        >
+          {tabs.map((tab) => (
             <NavLink
               key={tab.label}
-              to={tab.to}
+              to={`${base}${tab.subtab}`}
               end={tab.end}
+              // The reader's choice wins over the stage-driven landing from
+              // now on, on this task (owner, round 10).
+              onClick={() => sourcesSubtabChoice.remember(taskId, tab.subtab)}
               className={({ isActive }) =>
                 cn(
-                  "flex-1 px-4 py-2.5 text-center text-meta font-extrabold uppercase tracking-[0.06em] no-underline max-md:px-2 max-md:text-caption",
-                  index > 0 && "border-l border-line",
-                  isActive ? "bg-navy text-white" : "text-grey hover:text-navy",
+                  "flex-1 shrink-0 whitespace-nowrap border-b-[3px] border-transparent px-4 py-2.5 text-center text-meta no-underline max-md:px-2.5",
+                  "transition-colors duration-150 ease-[ease] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue",
+                  // The tab language of the whole app (owner, consistency
+                  // pass): the rule grows from the left edge to the centre
+                  // on hover and focus, and runs full width when active.
+                  GROWING_RULE_CLASS,
+                  isActive
+                    ? cn(GROWING_RULE_ACTIVE_CLASS, "font-extrabold text-navy")
+                    : // Inactive reads as greyed (owner, round 11): Grey at
+                      // the medium weight (Averta, with no 500, sets it
+                      // Regular), Navy on hover; Grey is AA on white.
+                      "font-medium text-grey hover:text-navy",
                 )
               }
             >

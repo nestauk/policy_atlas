@@ -25,4 +25,15 @@ describe("useDocumentTitle", () => {
     });
     expect(document.title).toBe("● Sources · Policy Atlas");
   });
+
+  it("reads '● Report ready · <task>' when a finished run is unseen, over the check-in marker (task 058, N14)", () => {
+    renderHook(() => useDocumentTitle("Childcare take-up", "Sources"), {
+      wrapper: ({ children }) => (
+        <TitleMarkerProvider active>
+          <TitleMarkerProvider ready="Report ready">{children}</TitleMarkerProvider>
+        </TitleMarkerProvider>
+      ),
+    });
+    expect(document.title).toBe("● Report ready · Childcare take-up · Policy Atlas");
+  });
 });

@@ -7,14 +7,14 @@ from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 import structlog
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import Connection
 
 from policy_atlas.api.app import ApiConflict, ApiUnprocessable
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import (
-    PAGE_SIZE_DEFAULT,
+    LIST_PAGE_SIZE_DEFAULT,
     PAGE_SIZE_MAX,
     Page,
     PageMeta,
@@ -62,6 +62,11 @@ router = APIRouter(
 
 public_read_router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 
+#: The 403 message when someone other than the owner adds the task to a
+#: project or takes it out of one (task 058, round 10). Plain words: the
+#: Share page shows it as it is.
+PROJECTS_OWNER_ONLY = "Only the task's owner can change its projects."
+
 
 @router.get("", response_model=Page[TaskOut])
 def list_tasks(
@@ -74,7 +79,7 @@ def list_tasks(
     project_id: Annotated[uuid.UUID | None, Query()] = None,
     owner_email: Annotated[str | None, Query(max_length=OWNER_EMAIL_MAX)] = None,
     page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
+    page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = LIST_PAGE_SIZE_DEFAULT,
 ) -> Page[TaskOut]:
     """List the tasks the caller may see, with derived latest-run state.
 
@@ -517,9 +522,17 @@ def update_task(
         ApiConflict: 409 `visibility_conflict` when setting `visibility` on a
             task that belongs to a project.
     """
-    access = accessible_task(
-        conn, task_id=task_id, user_id=user.user_id, write=True, for_update=True
-    )
+    try:
+        access = accessible_task(
+            conn, task_id=task_id, user_id=user.user_id, write=True, for_update=True
+        )
+    except HTTPException as exc:
+        # A colleague who can see the row and tries to move it between
+        # projects is told why in words the Share page can show (task 058,
+        # round 10); the code stays `forbidden`.
+        if exc.status_code == 403 and "project_ids" in payload.model_fields_set:
+            raise HTTPException(status_code=403, detail=PROJECTS_OWNER_ONLY) from None
+        raise
     changes = payload.model_dump(exclude_unset=True)
     if "visibility" in changes:
         # i.5, enforced against the row already loaded. A task in a

@@ -20,6 +20,7 @@ from __future__ import annotations
 import functools
 import hashlib
 import json
+import threading
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, wait
@@ -33,7 +34,9 @@ from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
-from policy_atlas.core import tracing
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import liveness, tracing
+from policy_atlas.core.done_callbacks import add_done_callback_in_context
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import CallBudget
 from policy_atlas.core.prompt_fields import parse_guidance_channel
@@ -877,6 +880,32 @@ def _run_windows(
     errors: dict[tuple[int, int], Exception] = {}
     usage_totals = UsageAccumulator()
 
+    # Task 058, N2: one count per window, on the pool's own future; the serial
+    # retry below never publishes. The interventions profile counts abstracts
+    # (one window each); the findings profile counts windows.
+    if liveness.current_stage() == "extract_interventions":
+        progress_key, progress_unit = "extract_interventions.progress", "abstracts"
+    else:
+        progress_key, progress_unit = "extract.progress", "windows"
+    done = 0
+    lock = threading.Lock()
+
+    def publish_done(finished: Future[Any] | None) -> None:
+        nonlocal done
+        with lock:
+            if finished is not None:
+                done += 1
+            n = done
+        liveness.publish_progress(
+            activity=activity(progress_key, done=n, total=baseline),
+            done=n,
+            total=baseline,
+            unit=progress_unit,
+        )
+
+    if baseline:
+        publish_done(None)
+
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_EXTRACT) as executor:
         submitted: list[tuple[tuple[int, int], Future[Any]]] = []
         for key in tasks:
@@ -888,12 +917,11 @@ def _run_windows(
             docs[doc_index].sent_evidence_type = (
                 payload.primary_evidence_type or UNCLASSIFIED_EVIDENCE_TYPE
             )
-            submitted.append((
-                key,
-                tracing.submit_with_context(
-                    executor, extraction_backend.extract, payload
-                ),
-            ))
+            future = tracing.submit_with_context(
+                executor, extraction_backend.extract, payload
+            )
+            add_done_callback_in_context(future, publish_done)
+            submitted.append((key, future))
         wait([future for _, future in submitted])
         for key, future in submitted:
             try:
@@ -1692,8 +1720,26 @@ def _build_summary(
             }
         )
 
+    # Task 058, N2: the integers the done row shows.
+    finding_count = sum(
+        doc.finding_count
+        for run in profile_runs
+        for doc in run.docs
+        if doc.status == "extracted"
+    )
+    documents_extracted = sum(
+        1
+        for doc in base_docs
+        if any(
+            profile_docs_by_id[run.profile_id][doc.tss_id].status == "extracted"
+            for run in profile_runs
+        )
+    )
+
     return {
         "docs": docs_summary,
+        "finding_count": finding_count,
+        "documents": documents_extracted,
         "counts": {
             "selected": selected,
             "basis": _basis_counts(base_docs),

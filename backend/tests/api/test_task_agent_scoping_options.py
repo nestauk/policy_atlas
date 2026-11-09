@@ -66,6 +66,7 @@ class _OptionsScopingAgent(StubScopingTaskAgentBackend):
         inputs: Any = None,
         session_id: uuid.UUID | None = None,
         conversation_id: uuid.UUID | None = None,
+        on_delta: Callable[[str], None] | None = None,
     ) -> TaskAgentTurnWire:
         turn = super().turn(
             profile,
@@ -74,6 +75,7 @@ class _OptionsScopingAgent(StubScopingTaskAgentBackend):
             inputs=inputs,
             session_id=session_id,
             conversation_id=conversation_id,
+            on_delta=on_delta,
         )
         assert isinstance(turn, ScopingTurnWire)
         if self.options is not None:

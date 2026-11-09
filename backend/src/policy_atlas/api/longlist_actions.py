@@ -42,6 +42,7 @@ from policy_atlas.api.longlist_start import LonglistRefused
 from policy_atlas.api.read_models.repository import (
     OPTION_ADDED,
     OPTION_EXCLUDED,
+    OPTION_EXCLUSION_REASON_ADDED,
     OPTION_INCLUDED,
     OPTION_SHORTLISTED,
     OPTION_UNSHORTLISTED,
@@ -55,7 +56,7 @@ from policy_atlas.api.routers.runs import (
     _search_reservations,
 )
 from policy_atlas.core import events
-from policy_atlas.core.schema import option
+from policy_atlas.core.schema import event_log, option
 from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.runtime.agent_backend import AgentBackend
 from policy_atlas.runtime.capability_registry import (
@@ -147,6 +148,29 @@ def _event(
     )
 
 
+def _excluded_by(conn: Connection, *, task_id: uuid.UUID, row: Any) -> str | None:
+    """Who excluded the option, when it stands excluded by a person's decision.
+
+    The actor of the option's latest exclusion event; ``None`` when the option
+    is not excluded, or was excluded by a constraint rather than a person.
+    """
+    exclusion = row.exclusion if isinstance(row.exclusion, dict) else {}
+    if row.state != "excluded" or exclusion.get("by") != "user":
+        return None
+    latest = conn.execute(
+        select(event_log.c.payload)
+        .where(
+            event_log.c.task_id == task_id,
+            event_log.c.event_type == OPTION_EXCLUDED,
+            event_log.c.payload["option_id"].astext == str(row.option_id),
+        )
+        .order_by(event_log.c.sequence.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    actor = latest.get("actor") if isinstance(latest, dict) else None
+    return actor if isinstance(actor, str) else None
+
+
 def exclude_option(
     conn: Connection,
     *,
@@ -165,6 +189,11 @@ def exclude_option(
     place. A set-aside stays set aside, so including the option again never
     makes it a candidate again (S9).
 
+    Excluding again, when the option stands excluded by this same user (task
+    058, round 13): with a reason, the stored reason is filled in and one
+    ``option.exclusion_reason_added`` event is written instead of a second
+    exclusion; with none, nothing changes.
+
     Args:
         conn: The caller's open transaction, holding the task row lock.
         task_id: The options-scoping task.
@@ -181,6 +210,30 @@ def exclude_option(
     # A reason is optional on the button and the verb alike (owner, 2026-09-24):
     # a blank one is recorded empty, never invented.
     text = clean_text(reason)
+    already_mine = _excluded_by(conn, task_id=task_id, row=row) == actor
+    if already_mine and not text:
+        # Excluding again with no reason changes nothing (round 13): the
+        # standing exclusion and its reason are kept, and History stays as it is.
+        return
+    if already_mine:
+        # Round 13 (lead): a reason after the user's own exclusion fills the
+        # reason in; the exclusion stands, and History says so once.
+        conn.execute(
+            option.update()
+            .where(option.c.task_id == task_id, option.c.option_id == option_id)
+            .values(exclusion={**row.exclusion, "reason": text}, updated_at=datetime.now(UTC))
+        )
+        _event(
+            conn,
+            task_id=task_id,
+            event_type=OPTION_EXCLUSION_REASON_ADDED,
+            actor=actor,
+            row=row,
+            verb="exclusion_reason",
+            reason=text,
+        )
+        log.info("option.exclusion_reason_added", task_id=str(task_id), option_id=str(option_id))
+        return
     place: dict[str, Any] = (
         {}
         if row.shortlist_state == "set_aside"

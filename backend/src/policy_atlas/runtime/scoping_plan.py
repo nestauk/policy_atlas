@@ -294,6 +294,7 @@ ACQUIRE_ONLY_KEY = "acquire_only"
 SCOPING_STEPS: tuple[PlanStep, ...] = (
     PlanStep(
         label="Baseline",
+        row="baseline",
         blurb=(
             "What is in place, the trend, who is affected and what is "
             "contested, from Overton and OpenAlex. The run pauses for you to "
@@ -303,6 +304,7 @@ SCOPING_STEPS: tuple[PlanStep, ...] = (
     ),
     PlanStep(
         label="Longlist",
+        row="longlist",
         blurb=(
             "Suggest options, search widely, read every abstract for the "
             "interventions it covers, cluster them into options, apply your "
@@ -312,6 +314,7 @@ SCOPING_STEPS: tuple[PlanStep, ...] = (
     ),
     PlanStep(
         label="Shortlist",
+        row="shortlist",
         blurb=(
             "Policy Atlas proposes about five places for close reading, one "
             "reason each, mixed to your risk appetite. Add, remove, ask for "
@@ -321,6 +324,25 @@ SCOPING_STEPS: tuple[PlanStep, ...] = (
         stage="shortlist",
     ),
 )
+
+
+def with_current_steps(data: Any) -> Any:
+    """Replace a stored plan's steps with today's copy of each, by stage.
+
+    Shared by the runtime ``ScopingPlan`` and the wire ``ScopingPlanDraft``,
+    so both read a plan stored before a step field existed (``row``, task 058).
+    A step whose stage the code does not know is left as it is.
+    """
+    if not isinstance(data, Mapping) or not isinstance(data.get("steps"), list):
+        return data
+    by_stage = {step.stage: step for step in SCOPING_STEPS}
+    steps = [
+        by_stage[step["stage"]].model_dump()
+        if isinstance(step, Mapping) and step.get("stage") in by_stage
+        else step
+        for step in data["steps"]
+    ]
+    return {**data, "steps": steps}
 
 
 def _clean(field_name: str) -> AfterValidator:
@@ -636,6 +658,19 @@ class ScopingPlan(BaseModel):
     steer_point_defaults: list[ScopingSteerPointDefault] = Field(default_factory=list)
     assumptions: list[Annotated[str, _clean("assumptions")]] = Field(default_factory=list)
     steps: list[PlanStep] = Field(default_factory=lambda: list(SCOPING_STEPS))
+
+    @model_validator(mode="before")
+    @classmethod
+    def steps_are_the_codes(cls, data: Any) -> Any:
+        """Replace a stored plan's steps with today's copy of each, by stage.
+
+        The steps are code-supplied presentation, never the model's: a plan
+        saved before a step field existed (``row``, task 058) still validates,
+        and every reader shows today's words (2026-11-09: opening an older
+        scoping task failed its live-updates stream on the missing ``row``).
+        A step whose stage the code does not know is left as it is.
+        """
+        return with_current_steps(data)
     time_band: str = BASELINE_TIME_BAND
     source_turn_index: int | None = None
     baseline_confirmed: BaselineConfirmed | None = None
