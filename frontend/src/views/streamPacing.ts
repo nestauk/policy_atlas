@@ -252,9 +252,9 @@ export function useFollowTail(anchorRef: RefObject<HTMLElement | null>, active: 
   }, [anchorRef, active]);
 }
 
-/** Marks an eased box while its height animation runs, so a box around it
- *  follows the in-between heights instead of easing them again. */
-export const EASING_ATTR = "data-easing";
+/** The boxes `useEasedHeight` eases. A box switching its own clip on and
+ *  off is not a change of the content around it. */
+const easedBoxes = new WeakSet<Element>();
 
 /** Eased boxes waiting to measure a change, run together deepest first. */
 let pendingMeasures: { depth: number; measure: () => void }[] = [];
@@ -298,37 +298,38 @@ const EASE_OUT_STRONG = "cubic-bezier(0.23, 1, 0.32, 1)";
  * that grows or shrinks moves the text below it smoothly (task 058, owner
  * round 8: repairs of several claims).
  *
+ * The box eases only what it owes its content, never a fixed height: when
+ * the content changes by some amount, the content's bottom margin starts at
+ * minus that amount and eases to nothing over 300 ms (Web Animations, strong
+ * ease-out), with the box clipping while it runs. The box keeps its natural
+ * height (the content's height less what it still owes), so content that
+ * grows smoothly under it (a box inside this one easing a reply's new line)
+ * shows at once, and only what just arrived is held back (owner, 2026-11-09:
+ * the action line under a streaming reply dropped out of view; boxes that
+ * eased to a fixed height froze while the reply's own box grew, and clipped
+ * it). A change during an ease carries on from what is still owed.
+ *
  * The content is watched with a MutationObserver, whose callback runs as a
  * microtask after the DOM changes and before the browser lays out and
- * paints; each change of the content's height starts a 300 ms height
- * animation on the box (Web Animations, strong ease-out) from wherever the
- * box is now, so a change during a change carries on from the current
- * height. (A ResizeObserver would start the animation inside its own
+ * paints. (A ResizeObserver would start the animation inside its own
  * delivery, resizing the boxes around it that other observers watch, and
- * the browser reports that as a "ResizeObserver loop"; round 9.) The box clips
- * while it animates and is left alone otherwise. Off (`active` false) it does
- * nothing, and the caller turns it off under reduced motion.
+ * the browser reports that as a "ResizeObserver loop"; round 9.) Boxes nest
+ * (round 12: the thread around a streamed reply), and a change is measured
+ * deepest box first (round 14), so a box inside this one starts its own ease
+ * before this one measures, and this one sees only what that one did not
+ * absorb. A ResizeObserver only reads: it keeps the height to measure from
+ * current while the content changes with no DOM change here.
  *
  * With `growOnly` a shrink passes straight through (the Task Agent thread,
- * task 058 round 9: a settling card eases its own height, and two height
- * animations would chase each other).
- *
- * Boxes nest (round 12: the thread around a streamed reply). The change is
- * measured after every observer has heard it, the deepest box first
- * (round 14), so an eased box inside this one that hears the same change
- * starts its own ease first and this box eases only what that one does not
- * absorb. A box inside this one that starts easing while this one is
- * mid-ease retargets this one to where both settle (owner, 2026-11-09: the
- * thread's box finished short and chased the reply's new line with a fresh
- * clip, which hid the action line under the reply). A ResizeObserver only
- * reads: it keeps the height to ease from current while the content grows
- * without a DOM change here (the inner box opening); and a grow-only box
- * whose ease ends short of content that grew under it carries on from
- * there.
+ * task 058 round 9: a settling card eases its own height). With `opens` the
+ * box opens from nothing when it mounts (a block arriving in the thread,
+ * round 14). Off (`active` false) it does nothing, and the caller turns it
+ * off under reduced motion.
  *
  * Args:
  *   active: True while the height should ease.
  *   growOnly: Ease growth only; a shrink is a cut.
+ *   opens: Open from nothing on mount.
  *
  * Returns:
  *   The refs for the box and for its content (the box's only child).
@@ -336,97 +337,67 @@ const EASE_OUT_STRONG = "cubic-bezier(0.23, 1, 0.32, 1)";
 export function useEasedHeight(
   active: boolean,
   growOnly = false,
+  opens = false,
 ): [RefObject<HTMLDivElement | null>, RefObject<HTMLDivElement | null>] {
   const box = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
-  useEffect(() => {
+  const toOpen = useRef(opens);
+  // A layout effect, so a box that opens is closed before its first paint.
+  useLayoutEffect(() => {
     const outer = box.current;
     const inner = content.current;
     if (!active || outer === null || inner === null || typeof MutationObserver === "undefined") return undefined;
-    if (typeof outer.animate !== "function") return undefined;
-    let last = inner.offsetHeight;
+    if (typeof inner.animate !== "function") return undefined;
+    // Exact heights: a whole-pixel reading rounds a nested box's eased height
+    // and shows this box a change of a pixel that never happened.
+    const height = () => inner.getBoundingClientRect().height;
+    let last = height();
     let running: Animation | null = null;
     let queued = false;
-    const selector = `[${EASING_ATTR}]`;
+    // What the box still owes its content mid-ease (negative: it is still
+    // giving back a shrink).
+    const owed = () => (running === null ? 0 : -(Number.parseFloat(getComputedStyle(inner).marginBottom) || 0));
     const release = () => {
       running?.cancel();
       running = null;
       outer.style.overflow = "";
-      outer.removeAttribute(EASING_ATTR);
+      outer.style.display = "";
     };
-    // Where the content settles once every box easing inside it has finished:
-    // its height now, plus what each outermost such box has still to grow.
-    const settled = () => {
-      let height = inner.offsetHeight;
-      for (const box of inner.querySelectorAll<HTMLElement>(selector)) {
-        const above = box.parentElement?.closest(selector) ?? null;
-        if (above !== null && inner.contains(above)) continue;
-        const content = box.firstElementChild as HTMLElement | null;
-        if (content !== null) height += Math.max(0, content.offsetHeight - box.getBoundingClientRect().height);
-      }
-      return height;
-    };
-    const ease = (from: number, next: number) => {
+    const ease = (gap: number) => {
       running?.cancel();
-      last = next;
       outer.style.overflow = "clip";
-      outer.setAttribute(EASING_ATTR, "");
-      const animation = outer.animate([{ height: `${from}px` }, { height: `${next}px` }], {
+      // The content's margin must stay inside the box, not collapse through it.
+      if (getComputedStyle(outer).display === "block") outer.style.display = "flow-root";
+      const animation = inner.animate([{ marginBottom: `${-gap}px` }, { marginBottom: "0px" }], {
         duration: EASE_HEIGHT_MS,
         easing: EASE_OUT_STRONG,
       });
       running = animation;
       animation.onfinish = () => {
         if (running !== animation) return;
-        running = null;
-        // On a grow-only box (the thread), content that grew under the ease
-        // with no DOM change here (a nested box opening) carries on from
-        // where this one stopped. Only growth, and only there: a box whose
-        // content follows its own height would chase itself.
-        const now = settled();
-        if (growOnly && now - next >= 1) {
-          ease(next, now);
-          return;
-        }
-        last = inner.offsetHeight;
+        toOpen.current = false;
         release();
       };
     };
     const measure = () => {
       queued = false;
-      const next = inner.offsetHeight;
-      if (Math.abs(next - last) < 1) return;
-      // A box inside this one is easing its own change: the content's height
-      // is that box's in-between height, which this box follows rather than
-      // chasing with an ease of its own (round 14: the turn's box chased the
-      // reply's and clipped the action line under it).
-      if (inner.querySelector(selector) !== null) {
-        if (running === null) {
-          last = next;
-          return;
-        }
-        // Mid-ease here too: ease on to where both settle, from here, so this
-        // box never finishes short of the nested one and chases it.
-        const target = settled();
-        const here = outer.getBoundingClientRect().height;
-        if (growOnly && target < here) {
-          release();
-          last = next;
-        } else {
-          ease(here, target);
-        }
-        return;
-      }
-      if (growOnly && next < last) {
-        // A shrink passes through: drop any growth still running.
-        release();
-        last = next;
-        return;
-      }
-      ease(running !== null ? outer.getBoundingClientRect().height : last, next);
+      const next = height();
+      const change = next - last;
+      last = next;
+      if (Math.abs(change) < 1 || (growOnly && change < 0)) return;
+      ease(owed() + change);
     };
+    // Cleared once opened, not here: a development remount (StrictMode runs
+    // the effect twice) cancels the first open and must open again.
+    if (toOpen.current && last >= 1) ease(last);
+    easedBoxes.add(outer);
     const depth = depthOf(outer);
-    const observer = new MutationObserver(() => {
+    const observer = new MutationObserver((records) => {
+      // A box inside this one clipping or letting go: no new content. (Its
+      // `onfinish` runs after the browser has moved the animations on a
+      // frame, so measuring then would read the box inside's growth over
+      // that frame as new content, and clip it.)
+      if (records.every((record) => record.attributeName === "style" && easedBoxes.has(record.target as Element))) return;
       if (queued) return;
       queued = true;
       scheduleMeasure(depth, measure);
@@ -438,12 +409,13 @@ export function useEasedHeight(
       typeof ResizeObserver === "undefined"
         ? null
         : new ResizeObserver(() => {
-            if (running === null && !queued) last = inner.offsetHeight;
+            if (!queued) last = height();
           });
     follower?.observe(inner);
     return () => {
       observer.disconnect();
       follower?.disconnect();
+      easedBoxes.delete(outer);
       release();
     };
   }, [active, growOnly]);

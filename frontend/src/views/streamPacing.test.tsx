@@ -1,5 +1,5 @@
 import { act, render, renderHook } from "@testing-library/react";
-import { memo, useRef } from "react";
+import { StrictMode, memo, useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createInitialRunStreamState } from "../store";
@@ -259,226 +259,211 @@ describe("useFollowTail: the scroll rule", () => {
   });
 });
 
-// Round 9: the thread makes room by easing growth only, and it watches the
-// DOM (a MutationObserver), so it never resizes boxes inside another
-// observer's delivery.
-// Round 12: an eased box inside another (a streamed reply in the Task Agent
-// thread). The outer one measures a microtask later, so the inner one
-// absorbs the change first, and an outer ease that ends short of content
-// that grew under it carries on.
-describe("useEasedHeight — nested boxes", () => {
-  function Box({ lines, nested = false }: { lines: number; nested?: boolean }) {
-    const [box, content] = useEasedHeight(true, true);
+// `useEasedHeight` in jsdom: heights come from a stubbed
+// `getBoundingClientRect`, and `animate` records what each box asked for.
+// The box eases only what it owes its content (the content's bottom margin,
+// from minus the change to nothing), never a fixed height of its own.
+type Made = { el: HTMLElement; keyframes: unknown; animation: { cancel: () => void; onfinish: (() => void) | null; cancelled: boolean } };
+
+function stubBoxes(heightOf: (el: HTMLElement) => number) {
+  const made: Made[] = [];
+  const restoreAnimate = HTMLElement.prototype.animate;
+  HTMLElement.prototype.animate = function (this: HTMLElement, keyframes: unknown) {
+    const animation = {
+      cancelled: false,
+      onfinish: null as (() => void) | null,
+      cancel() {
+        this.cancelled = true;
+      },
+    };
+    made.push({ el: this, keyframes, animation });
+    return animation as unknown as Animation;
+  } as typeof HTMLElement.prototype.animate;
+  const rect = vi
+    .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+    .mockImplementation(function (this: HTMLElement) {
+      return { height: heightOf(this) } as DOMRect;
+    });
+  return {
+    made,
+    restore() {
+      rect.mockRestore();
+      HTMLElement.prototype.animate = restoreAnimate;
+    },
+  };
+}
+
+async function flushMeasures() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+function Lines({ count }: { count: number }) {
+  return (
+    <>
+      {Array.from({ length: count }, (_, index) => (
+        <p key={index}>line</p>
+      ))}
+    </>
+  );
+}
+
+describe("useEasedHeight — what it owes", () => {
+  function Box({ lines, growOnly = false }: { lines: number; growOnly?: boolean }) {
+    const [box, content] = useEasedHeight(true, growOnly);
     return (
       <div ref={box}>
         <div ref={content}>
-          {Array.from({ length: lines }, (_, index) => (
-            <p key={index}>line</p>
-          ))}
-          {nested && (
-            <div data-easing="">
-              <p>a reply's new line, easing in its own box</p>
-            </div>
-          )}
+          <Lines count={lines} />
         </div>
       </div>
     );
   }
 
-  it("eases on to where a box inside it settles when that box starts easing mid-way (2026-11-09)", async () => {
+  it("holds back what the content grew by and lets it out, with the box clipping meanwhile", async () => {
     let height = 20;
-    const made: { keyframes: unknown }[] = [];
-    const animate = vi.fn((keyframes: unknown) => {
-      made.push({ keyframes });
-      return { cancel: vi.fn(), onfinish: null } as unknown as Animation;
-    });
-    const restoreAnimate = HTMLElement.prototype.animate;
-    HTMLElement.prototype.animate = animate as unknown as typeof HTMLElement.prototype.animate;
-    // Every box reads `height`; the nested box's content is 30 px tall.
-    const offset = vi
-      .spyOn(HTMLElement.prototype, "offsetHeight", "get")
-      .mockImplementation(function (this: HTMLElement) {
-        return this.tagName === "P" ? 30 : height;
-      });
-    // This box is 40 px on screen mid-ease; the nested box has eased to 10 px.
-    const rect = vi
-      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
-      .mockImplementation(function (this: HTMLElement) {
-        const nestedBox = this.hasAttribute("data-easing") && this.parentElement?.closest("[data-easing]") !== null;
-        return { height: nestedBox ? 10 : 40 } as DOMRect;
-      });
+    const stub = stubBoxes(() => height);
     const view = render(<Box lines={1} />);
     height = 40;
     view.rerender(<Box lines={2} />);
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(made.at(-1)?.keyframes).toEqual([{ height: "20px" }, { height: "40px" }]);
-    // Mid-ease, a box inside starts its own: the content measures 50 px with
-    // that box clipped to 10 of its 30, so both settle at 70.
+    await flushMeasures();
+    expect(stub.made.at(-1)?.keyframes).toEqual([{ marginBottom: "-20px" }, { marginBottom: "0px" }]);
+    const box = view.container.firstElementChild as HTMLElement;
+    expect(stub.made.at(-1)?.el).toBe(box.firstElementChild);
+    expect(box.style.overflow).toBe("clip");
+    act(() => stub.made.at(-1)?.animation.onfinish?.());
+    expect(box.style.overflow).toBe("");
+    stub.restore();
+  });
+
+  it("gives a shrink back smoothly, or lets it straight through when it eases growth only", async () => {
+    let height = 40;
+    const stub = stubBoxes(() => height);
+    const view = render(<Box lines={2} />);
+    height = 20;
+    view.rerender(<Box lines={1} />);
+    await flushMeasures();
+    expect(stub.made.at(-1)?.keyframes).toEqual([{ marginBottom: "20px" }, { marginBottom: "0px" }]);
+    view.unmount();
+    stub.made.length = 0;
+    height = 40;
+    const grow = render(<Box lines={2} growOnly />);
+    height = 20;
+    grow.rerender(<Box lines={1} growOnly />);
+    await flushMeasures();
+    expect(stub.made).toEqual([]);
+    stub.restore();
+  });
+
+  it("carries on from what it still owes when the content changes mid-ease", async () => {
+    let height = 20;
+    const stub = stubBoxes(() => height);
+    const view = render(<Box lines={1} />);
+    height = 40;
+    view.rerender(<Box lines={2} />);
+    await flushMeasures();
+    // Mid-ease it still owes 15 of the 20 px; another 10 px land.
+    const content = view.container.firstElementChild?.firstElementChild as HTMLElement;
+    content.style.marginBottom = "-15px";
     height = 50;
-    view.rerender(<Box lines={2} nested />);
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(made.at(-1)?.keyframes).toEqual([{ height: "40px" }, { height: "70px" }]);
-    rect.mockRestore();
-    offset.mockRestore();
-    HTMLElement.prototype.animate = restoreAnimate;
+    view.rerender(<Box lines={3} />);
+    await flushMeasures();
+    expect(stub.made.at(-1)?.keyframes).toEqual([{ marginBottom: "-25px" }, { marginBottom: "0px" }]);
+    stub.restore();
   });
 
-  it("carries on from where its ease stopped when the content grew under it", async () => {
-    let height = 20;
-    const made: { keyframes: unknown; animation: { cancel: () => void; onfinish: (() => void) | null } }[] = [];
-    const animate = vi.fn((keyframes: unknown) => {
-      const animation = { cancel: vi.fn(), onfinish: null as (() => void) | null };
-      made.push({ keyframes, animation });
-      return animation as unknown as Animation;
-    });
-    const restoreAnimate = HTMLElement.prototype.animate;
-    HTMLElement.prototype.animate = animate as unknown as typeof HTMLElement.prototype.animate;
-    const spy = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(() => height);
-    const view = render(<Box lines={1} />);
-    height = 40;
-    view.rerender(<Box lines={2} />);
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(made.at(-1)?.keyframes).toEqual([{ height: "20px" }, { height: "40px" }]);
-    // A nested box opened while this one eased: no DOM change here.
-    height = 60;
-    act(() => made.at(-1)?.animation.onfinish?.());
-    expect(made.at(-1)?.keyframes).toEqual([{ height: "40px" }, { height: "60px" }]);
-    spy.mockRestore();
-    HTMLElement.prototype.animate = restoreAnimate;
-  });
-
-  it("leaves to a nested box a change it absorbed before this one measured", async () => {
-    let height = 20;
-    const animate = vi.fn(() => ({ cancel: vi.fn(), onfinish: null }) as unknown as Animation);
-    const restoreAnimate = HTMLElement.prototype.animate;
-    HTMLElement.prototype.animate = animate as unknown as typeof HTMLElement.prototype.animate;
-    const spy = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(() => height);
-    const view = render(<Box lines={1} />);
-    // A box nested inside mounts later, so its observer hears the change
-    // after this one; it starts its ease, holding the content at its old
-    // height, before this box measures.
-    const nested = new MutationObserver(() => {
-      height = 20;
-    });
-    nested.observe(view.container, { subtree: true, childList: true });
-    height = 40;
-    view.rerender(<Box lines={2} />);
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(animate).not.toHaveBeenCalled();
-    nested.disconnect();
-    spy.mockRestore();
-    HTMLElement.prototype.animate = restoreAnimate;
+  it("opens from nothing on mount, and again after a development remount", () => {
+    function Opening() {
+      const [box, content] = useEasedHeight(true, false, true);
+      return (
+        <div ref={box}>
+          <div ref={content}>
+            <Lines count={2} />
+          </div>
+        </div>
+      );
+    }
+    const stub = stubBoxes(() => 48);
+    render(
+      <StrictMode>
+        <Opening />
+      </StrictMode>,
+    );
+    const live = stub.made.filter((made) => !made.animation.cancelled);
+    expect(live.map((made) => made.keyframes)).toEqual([[{ marginBottom: "-48px" }, { marginBottom: "0px" }]]);
+    stub.restore();
   });
 });
 
-// Round 14: the thread's box is created long before a reply's box inside
-// it, so its observer hears every change first; it must still measure after
-// the reply's box has started easing the change.
-describe("useEasedHeight — an outer box created first", () => {
+// Round 12: an eased box inside another (a streamed reply in the Task Agent
+// thread, inside its turn, inside the thread). Round 14: the outer box is
+// created first, but measures after the inner one, so the inner one absorbs
+// its change first. Owner, 2026-11-09: the action line under a streaming
+// reply dropped out of view, because the turn's box eased to a fixed height,
+// froze there while the reply's box grew, and restarted on every word.
+describe("useEasedHeight — a box inside another", () => {
   function Inner({ lines }: { lines: number }) {
     const [box, content] = useEasedHeight(true);
     return (
       <div ref={box} data-box="inner">
-        <div ref={content}>
-          {Array.from({ length: lines }, (_, index) => (
-            <p key={index}>line</p>
-          ))}
+        <div ref={content} data-content="inner">
+          <Lines count={lines} />
         </div>
       </div>
     );
   }
-  function Outer({ showInner, lines }: { showInner: boolean; lines: number }) {
-    const [box, content] = useEasedHeight(true, true);
+  function Outer({ lines, growOnly = false }: { lines: number; growOnly?: boolean }) {
+    const [box, content] = useEasedHeight(true, growOnly);
     return (
       <div ref={box} data-box="outer">
-        <div ref={content} data-content="outer">{showInner && <Inner lines={lines} />}</div>
-      </div>
-    );
-  }
-
-  it("leaves the change to the inner box, which eases it first", async () => {
-    let absorbed = false;
-    let grown = false;
-    const calls: string[] = [];
-    const restoreAnimate = HTMLElement.prototype.animate;
-    HTMLElement.prototype.animate = function (this: HTMLElement) {
-      const which = this.getAttribute("data-box") ?? "other";
-      calls.push(which);
-      if (which === "inner") absorbed = true;
-      return { cancel: vi.fn(), onfinish: null } as unknown as Animation;
-    } as typeof HTMLElement.prototype.animate;
-    const spy = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) {
-      // The outer box's content is taller once the line lands, unless the
-      // inner box is easing it from its old height.
-      if (this.getAttribute("data-content") === "outer") return grown && !absorbed ? 40 : 20;
-      return grown ? 40 : 20;
-    });
-    const view = render(<Outer showInner={false} lines={1} />);
-    view.rerender(<Outer showInner lines={1} />);
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    calls.length = 0;
-    grown = true;
-    view.rerender(<Outer showInner lines={2} />);
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(calls).toEqual(["inner"]);
-    spy.mockRestore();
-    HTMLElement.prototype.animate = restoreAnimate;
-  });
-});
-
-describe("useEasedHeight — growth only", () => {
-  function Box({ lines }: { lines: number }) {
-    const [box, content] = useEasedHeight(true, true);
-    return (
-      <div ref={box}>
-        <div ref={content}>
-          {Array.from({ length: lines }, (_, index) => (
-            <p key={index}>line</p>
-          ))}
+        <div ref={content} data-content="outer">
+          <Inner lines={lines} />
+          <p>the action line</p>
         </div>
       </div>
     );
   }
 
-  it("eases the box from its old height when the content grows, and lets a shrink through", async () => {
-    let height = 20;
-    const animate = vi.fn(() => ({ cancel: vi.fn(), onfinish: null }) as unknown as Animation);
-    const restoreAnimate = HTMLElement.prototype.animate;
-    HTMLElement.prototype.animate = animate as unknown as typeof HTMLElement.prototype.animate;
-    const spy = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(() => height);
-    const view = render(<Box lines={1} />);
-    height = 40;
-    view.rerender(<Box lines={2} />);
-    await act(async () => {
-      await Promise.resolve();
+  it("leaves a reply's new line to the reply's box and never freezes or restarts around it", async () => {
+    // The inner box absorbs its line: until it eases it out, the outer
+    // content keeps its old height.
+    let innerLines = 1;
+    let absorbed = 1;
+    const stub = stubBoxes((el) => {
+      if (el.dataset.content === "inner") return innerLines * 20;
+      if (el.dataset.content === "outer") return absorbed * 20 + 20;
+      return 0;
     });
-    expect(animate).toHaveBeenCalledWith([{ height: "20px" }, { height: "40px" }], expect.objectContaining({ duration: 300 }));
-    animate.mockClear();
-    height = 20;
-    view.rerender(<Box lines={1} />);
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(animate).not.toHaveBeenCalled();
-    spy.mockRestore();
-    HTMLElement.prototype.animate = restoreAnimate;
+    const view = render(<Outer lines={1} />);
+    const animations = () => stub.made.map((made) => (made.el.dataset.content ?? "?") + JSON.stringify(made.keyframes));
+    innerLines = 2;
+    view.rerender(<Outer lines={2} />);
+    await flushMeasures();
+    expect(animations()).toEqual(['inner[{"marginBottom":"-20px"},{"marginBottom":"0px"}]']);
+    // Frames pass: the inner box lets its line out and the outer content
+    // grows with it, with no DOM change; then a word lands that adds no line.
+    absorbed = 2;
+    view.rerender(<Outer lines={2} />);
+    await flushMeasures();
+    expect(animations()).toHaveLength(1);
+    // Nothing ever animates a box's own height.
+    expect(stub.made.every((made) => !JSON.stringify(made.keyframes).includes("height"))).toBe(true);
+    stub.restore();
+  });
+
+  it("ignores a box inside it clipping or letting go", async () => {
+    let outer = 40;
+    const stub = stubBoxes((el) => (el.dataset.content === "outer" ? outer : 20));
+    const view = render(<Outer lines={1} growOnly />);
+    // The inner box's ease finishes after the browser moved the animations
+    // on a frame: the outer content reads taller than the outer last saw.
+    outer = 46;
+    const inner = view.container.querySelector<HTMLElement>('[data-box="inner"]');
+    inner?.style.setProperty("overflow", "clip");
+    await flushMeasures();
+    expect(stub.made).toEqual([]);
+    stub.restore();
   });
 });

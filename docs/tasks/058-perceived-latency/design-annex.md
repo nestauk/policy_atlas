@@ -2616,12 +2616,20 @@ Owner notes on the live app after the review stack, applied in the review conver
   shared plan-panel state holds `closing` for the exit before it unmounts; a cut under reduced
   motion (`planPanel.tsx`, `dock-out` / `sink-out`, `PLAN_EXIT_MS`).
 - **The action line stays in view while the planner's reply streams.** "Drafting the plan" and
-  its turning mark dropped under the composer's edge when the reply wrapped a new line. Cause: the
-  thread's grow-only height box, mid-ease for an arrival, finished short of the reply's own
-  easing box and chased it with a fresh clip, hiding the bottom of the thread (the action line)
-  for up to 300 ms at every wrap. Now a box that is mid-ease when a box inside it starts easing
-  retargets to where both settle, and carries on only to that settled height (`useEasedHeight`,
-  `settled()`).
+  its turning mark dropped under the composer's edge when the reply wrapped a new line. The
+  lead's first reading (the thread's box finishing short and chasing) was wrong; the owner saw
+  it again, and a frontend-designer pass reproduced it frame by frame on the mock app (16 clipped
+  frames, up to 25 px, at 1280×600; 36 at 400×700). Cause: every eased box animated a fixed
+  height, which froze the box for 300 ms; the turn's own box (`GrowBox`, between the thread's
+  and the reply's) sat frozen while the reply's box eased in a new line, so the bottom of the
+  turn, the action line, was cut off; the first fix restarted that ease on every word and made
+  the stall longer. Fix: a box eases only what it owes its content (the content's bottom margin
+  from minus the change to nothing over 300 ms, the box clipping meanwhile) and keeps its natural
+  height, so growth inside it shows at once and only what just arrived is held back; heights
+  read exactly; a box's own clip toggling is not a content change; `GrowBox` opens through the
+  same hook (`opens`). The nested-box bookkeeping (`data-easing`, `settled()`, the carry-on) is
+  deleted. After: 0 clipped frames across nine runs in six setups (sizes, bursty deltas, 4× CPU
+  throttle, a footer nudge). Screenshots: `research/screenshots/round16/action-line-*.png`.
 - **The dossier's "Full text" links to the document**, as the Sources table's does: the word is
   the link to `full_text_url` when the text was collected, opening in a new tab, named "Full text
   (opens the document in a new tab)"; plain without an address. The link moved into `DepthMark`
