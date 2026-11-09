@@ -2605,3 +2605,24 @@ its fallback, the marks line in both boxes, the method's one column), `ArtefactV
   constraint" / "Excluded by you". The Evidence section's constraint notices say "Does not meet:"
   instead of "Breaks:"; the word "Breaks" is gone from the product.
 
+## Round 16, the plan's exit, the action line, the dossier's link (owner, 2026-11-09)
+
+Owner notes on the live app after the review stack, applied in the review conversation.
+
+- **The plan document leaves the way it came.** It opened with motion (16 px from its edge,
+  260 ms; centred, rising 8 px) and closed with a cut, in the Agent tab and over a results tab
+  alike. Now it leaves as the citation and document sheets do: 200 ms, faster than it came, back
+  to its edge (docked) or sinking 8 px (centred), fading; over a tab the scrim fades with it. The
+  shared plan-panel state holds `closing` for the exit before it unmounts; a cut under reduced
+  motion (`planPanel.tsx`, `dock-out` / `sink-out`, `PLAN_EXIT_MS`).
+- **The action line stays in view while the planner's reply streams.** "Drafting the plan" and
+  its turning mark dropped under the composer's edge when the reply wrapped a new line. Cause: the
+  thread's grow-only height box, mid-ease for an arrival, finished short of the reply's own
+  easing box and chased it with a fresh clip, hiding the bottom of the thread (the action line)
+  for up to 300 ms at every wrap. Now a box that is mid-ease when a box inside it starts easing
+  retargets to where both settle, and carries on only to that settled height (`useEasedHeight`,
+  `settled()`).
+- **The dossier's "Full text" links to the document**, as the Sources table's does: the word is
+  the link to `full_text_url` when the text was collected, opening in a new tab, named "Full text
+  (opens the document in a new tab)"; plain without an address. The link moved into `DepthMark`
+  (`href`), one home for both, and its style is the `text-link` utility (out of `sources.css`).

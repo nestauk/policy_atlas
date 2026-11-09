@@ -791,6 +791,28 @@ describe("SourceDossierBody authorships (042)", () => {
   });
 });
 
+describe("SourceDossierBody: Full text links to the document (2026-11-09)", () => {
+  it("links the word to the collected text's address, as the table does, and leaves it plain without one", () => {
+    const read = { ...mockEvidence[5], read_in_full: true, full_text_url: "https://example.org/read.pdf" };
+    const view = render(
+      <MemoryRouter>
+        <SourceDossierBody source={read} findings={[]} findingsPending={false} />
+      </MemoryRouter>,
+    );
+    const link = screen.getByRole("link", { name: "Full text (opens the document in a new tab)" });
+    expect(link).toHaveAttribute("href", "https://example.org/read.pdf");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    view.rerender(
+      <MemoryRouter>
+        <SourceDossierBody source={{ ...read, full_text_url: null }} findings={[]} findingsPending={false} />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole("link", { name: /Full text/ })).toBeNull();
+    expect(screen.getByText("Full text")).toBeInTheDocument();
+  });
+});
+
 describe("SourceDossierBody, one type scale (round 12)", () => {
   const cited = mockSourceDossiers[mockEvidence[7].source_id];
   const breakfast = mockSourceDossiers[mockEvidence[2].source_id];

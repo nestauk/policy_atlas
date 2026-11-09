@@ -317,7 +317,10 @@ const EASE_OUT_STRONG = "cubic-bezier(0.23, 1, 0.32, 1)";
  * measured after every observer has heard it, the deepest box first
  * (round 14), so an eased box inside this one that hears the same change
  * starts its own ease first and this box eases only what that one does not
- * absorb. A ResizeObserver only
+ * absorb. A box inside this one that starts easing while this one is
+ * mid-ease retargets this one to where both settle (owner, 2026-11-09: the
+ * thread's box finished short and chased the reply's new line with a fresh
+ * clip, which hid the action line under the reply). A ResizeObserver only
  * reads: it keeps the height to ease from current while the content grows
  * without a DOM change here (the inner box opening); and a grow-only box
  * whose ease ends short of content that grew under it carries on from
@@ -344,6 +347,25 @@ export function useEasedHeight(
     let last = inner.offsetHeight;
     let running: Animation | null = null;
     let queued = false;
+    const selector = `[${EASING_ATTR}]`;
+    const release = () => {
+      running?.cancel();
+      running = null;
+      outer.style.overflow = "";
+      outer.removeAttribute(EASING_ATTR);
+    };
+    // Where the content settles once every box easing inside it has finished:
+    // its height now, plus what each outermost such box has still to grow.
+    const settled = () => {
+      let height = inner.offsetHeight;
+      for (const box of inner.querySelectorAll<HTMLElement>(selector)) {
+        const above = box.parentElement?.closest(selector) ?? null;
+        if (above !== null && inner.contains(above)) continue;
+        const content = box.firstElementChild as HTMLElement | null;
+        if (content !== null) height += Math.max(0, content.offsetHeight - box.getBoundingClientRect().height);
+      }
+      return height;
+    };
     const ease = (from: number, next: number) => {
       running?.cancel();
       last = next;
@@ -361,14 +383,13 @@ export function useEasedHeight(
         // with no DOM change here (a nested box opening) carries on from
         // where this one stopped. Only growth, and only there: a box whose
         // content follows its own height would chase itself.
-        const now = inner.offsetHeight;
+        const now = settled();
         if (growOnly && now - next >= 1) {
           ease(next, now);
           return;
         }
-        last = now;
-        outer.style.overflow = "";
-        outer.removeAttribute(EASING_ATTR);
+        last = inner.offsetHeight;
+        release();
       };
     };
     const measure = () => {
@@ -379,16 +400,26 @@ export function useEasedHeight(
       // is that box's in-between height, which this box follows rather than
       // chasing with an ease of its own (round 14: the turn's box chased the
       // reply's and clipped the action line under it).
-      if (inner.querySelector(`[${EASING_ATTR}]`) !== null) {
-        if (running === null) last = next;
+      if (inner.querySelector(selector) !== null) {
+        if (running === null) {
+          last = next;
+          return;
+        }
+        // Mid-ease here too: ease on to where both settle, from here, so this
+        // box never finishes short of the nested one and chases it.
+        const target = settled();
+        const here = outer.getBoundingClientRect().height;
+        if (growOnly && target < here) {
+          release();
+          last = next;
+        } else {
+          ease(here, target);
+        }
         return;
       }
       if (growOnly && next < last) {
         // A shrink passes through: drop any growth still running.
-        running?.cancel();
-        running = null;
-        outer.style.overflow = "";
-        outer.removeAttribute(EASING_ATTR);
+        release();
         last = next;
         return;
       }
@@ -413,9 +444,7 @@ export function useEasedHeight(
     return () => {
       observer.disconnect();
       follower?.disconnect();
-      running?.cancel();
-      outer.style.overflow = "";
-      outer.removeAttribute(EASING_ATTR);
+      release();
     };
   }, [active, growOnly]);
   return [box, content];

@@ -47,23 +47,41 @@ export function StrengthMark({
 }
 
 /**
- * A read depth as the dossier and chat write it: its tone square (green
- * full text, yellow abstract, red neither), then the word. The Sources
- * table's cell builds its own link and hover around the same square.
+ * A read depth as the Sources table, the dossier and chat write it: its
+ * tone square (green full text, yellow abstract, red neither), then the
+ * word. With `href` (the document's own address, once the text was
+ * collected; round 12, and the dossier too on 2026-11-09) the word is the
+ * link to it, opening in a new tab as the report's addresses do. The table
+ * builds its own hover around the same square for the other depths.
  */
 export function DepthMark({
   depth,
+  href,
   squareClassName,
   wordClassName,
 }: {
   depth: ReadDepth;
+  /** A safe address for the document (`safeHref`), or none. */
+  href?: string;
   squareClassName?: string;
   wordClassName?: string;
 }) {
   return (
     <>
       <ToneSquare colour={readDepthColour(depth)} className={squareClassName} testId="status-mark" />
-      <span className={wordClassName}>{depth}</span>
+      {href !== undefined ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`${depth} (opens the document in a new tab)`}
+          className={cn("text-link", wordClassName)}
+        >
+          {depth}
+        </a>
+      ) : (
+        <span className={wordClassName}>{depth}</span>
+      )}
     </>
   );
 }

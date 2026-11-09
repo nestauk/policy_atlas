@@ -2,7 +2,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useEffect, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 
 import { cn } from "../brand/cn";
-import { prefersReducedMotion } from "../motion/motion";
+import { exitRuns } from "../motion/motion";
 import { CloseButton } from "../brand/CloseButton";
 
 /*
@@ -13,12 +13,6 @@ import { CloseButton } from "../brand/CloseButton";
 
 /** How long the sheet takes to leave: faster than it came (260 ms). */
 const SHEET_EXIT_MS = 200;
-
-/** Whether the exit can run (not under reduced motion, nor where Web
- *  Animations are missing, as in the tests' jsdom). */
-function exitRuns(): boolean {
-  return typeof document !== "undefined" && typeof document.body?.animate === "function" && !prefersReducedMotion();
-}
 
 /** The scrim a sheet lays over the page: Navy at 40%, fading in over 200 ms
  *  and out with the sheet. The plan document over a tab takes it too (owner,

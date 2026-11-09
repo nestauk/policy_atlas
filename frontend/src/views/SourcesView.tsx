@@ -699,36 +699,27 @@ const STACKED_ONLY = "@min-[54rem]/sources:hidden";
  * "Title only" carry their reason on hover, out of the tab order.
  */
 function DepthValue({ item, depth }: { item: EvidenceItem; depth: ReadDepth }) {
-  const mark = <ToneSquare colour={readDepthColour(depth)} className="sources-tone" testId="status-mark" />;
   if (item.read_in_full) {
-    const href = item.full_text_url ? safeHref(item.full_text_url) : undefined;
     return (
       <span className="text-navy">
-        {mark}
-        {href ? (
-          <a
-            href={href}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`${depth} (opens the document in a new tab)`}
-            className="sources-text-link"
-          >
-            {depth}
-          </a>
-        ) : (
-          depth
-        )}
+        <DepthMark depth={depth} href={fullTextHref(item)} squareClassName="sources-tone" />
       </span>
     );
   }
   return (
     <Tooltip content={<p>{scrub(readDepthHint(item) ?? "")}</p>}>
       <button type="button" tabIndex={-1} aria-label={`${depth}: why`} className="sources-hint text-grey">
-        {mark}
+        <ToneSquare colour={readDepthColour(depth)} className="sources-tone" testId="status-mark" />
         <span className="reason-word">{depth}</span>
       </button>
     </Tooltip>
   );
+}
+
+/** The document's own address once its text was collected, made safe, or
+ *  none: the "Full text" word links to it in the table and the dossier. */
+function fullTextHref(item: Pick<EvidenceItem, "read_in_full" | "full_text_url">): string | undefined {
+  return item.read_in_full && item.full_text_url ? safeHref(item.full_text_url) : undefined;
 }
 
 /** A set the funnel opened the table on (round 13): the applied Navy chip,
@@ -1547,7 +1538,7 @@ export function SourceDossierBody({
         )}
         {depth !== null && (
           <DetailRow label={STATUS_COLUMN_HEADER}>
-            <DepthMark depth={depth} squareClassName="sources-tone" />
+            <DepthMark depth={depth} href={fullTextHref(source)} squareClassName="sources-tone" />
             {source.cited && <CitedMark />}
           </DetailRow>
         )}

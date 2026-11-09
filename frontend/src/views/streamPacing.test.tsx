@@ -267,7 +267,7 @@ describe("useFollowTail: the scroll rule", () => {
 // absorbs the change first, and an outer ease that ends short of content
 // that grew under it carries on.
 describe("useEasedHeight — nested boxes", () => {
-  function Box({ lines }: { lines: number }) {
+  function Box({ lines, nested = false }: { lines: number; nested?: boolean }) {
     const [box, content] = useEasedHeight(true, true);
     return (
       <div ref={box}>
@@ -275,10 +275,59 @@ describe("useEasedHeight — nested boxes", () => {
           {Array.from({ length: lines }, (_, index) => (
             <p key={index}>line</p>
           ))}
+          {nested && (
+            <div data-easing="">
+              <p>a reply's new line, easing in its own box</p>
+            </div>
+          )}
         </div>
       </div>
     );
   }
+
+  it("eases on to where a box inside it settles when that box starts easing mid-way (2026-11-09)", async () => {
+    let height = 20;
+    const made: { keyframes: unknown }[] = [];
+    const animate = vi.fn((keyframes: unknown) => {
+      made.push({ keyframes });
+      return { cancel: vi.fn(), onfinish: null } as unknown as Animation;
+    });
+    const restoreAnimate = HTMLElement.prototype.animate;
+    HTMLElement.prototype.animate = animate as unknown as typeof HTMLElement.prototype.animate;
+    // Every box reads `height`; the nested box's content is 30 px tall.
+    const offset = vi
+      .spyOn(HTMLElement.prototype, "offsetHeight", "get")
+      .mockImplementation(function (this: HTMLElement) {
+        return this.tagName === "P" ? 30 : height;
+      });
+    // This box is 40 px on screen mid-ease; the nested box has eased to 10 px.
+    const rect = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        const nestedBox = this.hasAttribute("data-easing") && this.parentElement?.closest("[data-easing]") !== null;
+        return { height: nestedBox ? 10 : 40 } as DOMRect;
+      });
+    const view = render(<Box lines={1} />);
+    height = 40;
+    view.rerender(<Box lines={2} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(made.at(-1)?.keyframes).toEqual([{ height: "20px" }, { height: "40px" }]);
+    // Mid-ease, a box inside starts its own: the content measures 50 px with
+    // that box clipped to 10 of its 30, so both settle at 70.
+    height = 50;
+    view.rerender(<Box lines={2} nested />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(made.at(-1)?.keyframes).toEqual([{ height: "40px" }, { height: "70px" }]);
+    rect.mockRestore();
+    offset.mockRestore();
+    HTMLElement.prototype.animate = restoreAnimate;
+  });
 
   it("carries on from where its ease stopped when the content grew under it", async () => {
     let height = 20;

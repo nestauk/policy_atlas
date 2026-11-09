@@ -896,6 +896,7 @@ export function PlanDocument({
   placement = "side",
   runActive = false,
   readOnly = false,
+  closing = false,
   onClose,
   onDock,
   onStarted,
@@ -906,6 +907,9 @@ export function PlanDocument({
   /** Centre overlay vs docked side panel. */
   placement?: "center" | "side";
   runActive?: boolean;
+  /** True while the plan leaves (`usePlanPanel().closing`): it plays its
+   *  exit, the way it came, before the caller unmounts it. */
+  closing?: boolean;
   /** After Start search the plan is a record — visible, not editable. */
   readOnly?: boolean;
   onClose: () => void;
@@ -1062,14 +1066,20 @@ export function PlanDocument({
       role="dialog"
       aria-modal={placement === "center"}
       aria-label={scopingPlan ? "Scoping plan" : "Search plan"}
+      data-state={closing ? "closed" : "open"}
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden bg-navy text-white",
         // It arrives (task 058, round 9; the lead's ruling on the animation
         // sweep's proposal 3): docked, from the edge it docks to; centred,
-        // rising in place. A cut under reduced motion.
+        // rising in place. It leaves the way it came, faster, as a sheet
+        // does (owner, 2026-11-09). A cut under reduced motion.
         placement === "side"
-          ? cn("anim-dock-in min-w-0 flex-1 border-l border-navy-line", READING_COLUMN_MAX_W)
-          : "anim-centre-in w-full",
+          ? cn(
+              "anim-dock-in min-w-0 flex-1 border-l border-navy-line",
+              "data-[state=closed]:animate-[dock-out_200ms_var(--ease-drawer)_forwards]",
+              READING_COLUMN_MAX_W,
+            )
+          : "anim-centre-in w-full data-[state=closed]:animate-[sink-out_200ms_var(--ease-out-strong)_forwards]",
       )}
     >
       {placement === "center" && (

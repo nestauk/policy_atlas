@@ -268,13 +268,20 @@ function ShellPlanPanel({ taskId }: { taskId: string }) {
     <>
     {/* Over a tab the plan dims the page with the sheets' scrim (owner,
         round 14); a press on it is a press outside the plan, which closes
-        it. The Agent tab's plan sits beside the thread with no scrim. */}
-    <div aria-hidden="true" data-testid="plan-scrim" className={SHEET_SCRIM_CLASS} />
+        it, and the scrim fades out with the plan as a sheet's does. The
+        Agent tab's plan sits beside the thread with no scrim. */}
+    <div
+      aria-hidden="true"
+      data-testid="plan-scrim"
+      data-state={plan.closing ? "closed" : "open"}
+      className={SHEET_SCRIM_CLASS}
+    />
     <div className="absolute inset-y-0 right-0 z-50 flex min-h-0 w-[min(46rem,55%)] shadow-overlay max-md:left-0 max-md:w-auto">
       <PlanDocument
         taskId={taskId}
         placement="side"
         readOnly
+        closing={plan.closing}
         runActive={status === "running" || status === "paused"}
         onClose={plan.closePlan}
         overlay={{}}

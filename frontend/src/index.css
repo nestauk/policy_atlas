@@ -687,6 +687,38 @@
   }
 }
 
+/* The plan document leaves the way it came (owner, 2026-11-09), faster, as a
+   sheet does: docked, 16 px back to its edge over 200 ms on the drawer
+   curve; centred, sinking 8 px over 200 ms on the strong ease-out. Both
+   fade. The global reduced-motion rule makes both a cut. */
+@keyframes dock-out {
+  to {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+@keyframes sink-out {
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* A value that is a link to the document (round 12; one home 2026-11-09):
+   the word in Navy over a Line 2 underline that turns Navy on hover, as the
+   report's addresses do. "Full text" in the Sources table and the source
+   dossier takes it. */
+@utility text-link {
+  text-decoration: underline;
+  text-decoration-color: var(--color-line-2);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 150ms ease;
+  &:hover {
+    text-decoration-color: var(--color-navy);
+  }
+}
+
 /* A value with a reason behind it (rounds 11 and 12): a dotted Grey
    underline under the word, with the help cursor on its trigger, so the
    hover is found. One class for the Sources table and the report. */

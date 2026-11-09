@@ -14,3 +14,10 @@ export function prefersReducedMotion(): boolean {
 export function canAnimate(element: HTMLElement | null): boolean {
   return element !== null && typeof element.animate === "function" && !prefersReducedMotion();
 }
+
+/** Whether a surface's exit can run before it unmounts (a sheet, the plan
+ *  document): not under reduced motion, nor where Web Animations are
+ *  missing, as in the tests' jsdom. */
+export function exitRuns(): boolean {
+  return typeof document !== "undefined" && canAnimate(document.body);
+}

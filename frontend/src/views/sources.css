@@ -155,20 +155,6 @@
   color: var(--color-ink);
 }
 
-/* "Full text" as the link to the document (round 12): the word in Navy
-   over a Line 2 underline that turns Navy on hover, as the report's
-   addresses do. */
-.sources-text-link {
-  text-decoration: underline;
-  text-decoration-color: var(--color-line-2);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-  transition: text-decoration-color 150ms ease;
-}
-.sources-text-link:hover {
-  text-decoration-color: var(--color-navy);
-}
-
 /* One line per value; a value too long for its column ends in an ellipsis. */
 .sources-nowrap,
 .sources-nowrap > .sources-hint {
