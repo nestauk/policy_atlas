@@ -326,6 +326,25 @@ SCOPING_STEPS: tuple[PlanStep, ...] = (
 )
 
 
+def with_current_steps(data: Any) -> Any:
+    """Replace a stored plan's steps with today's copy of each, by stage.
+
+    Shared by the runtime ``ScopingPlan`` and the wire ``ScopingPlanDraft``,
+    so both read a plan stored before a step field existed (``row``, task 058).
+    A step whose stage the code does not know is left as it is.
+    """
+    if not isinstance(data, Mapping) or not isinstance(data.get("steps"), list):
+        return data
+    by_stage = {step.stage: step for step in SCOPING_STEPS}
+    steps = [
+        by_stage[step["stage"]].model_dump()
+        if isinstance(step, Mapping) and step.get("stage") in by_stage
+        else step
+        for step in data["steps"]
+    ]
+    return {**data, "steps": steps}
+
+
 def _clean(field_name: str) -> AfterValidator:
     """A text that is not empty and not padded with whitespace."""
     return AfterValidator(lambda value: _require_clean_string(value, field_name=field_name))
@@ -651,16 +670,7 @@ class ScopingPlan(BaseModel):
         scoping task failed its live-updates stream on the missing ``row``).
         A step whose stage the code does not know is left as it is.
         """
-        if not isinstance(data, Mapping) or not isinstance(data.get("steps"), list):
-            return data
-        by_stage = {step.stage: step for step in SCOPING_STEPS}
-        steps = [
-            by_stage[step["stage"]].model_dump()
-            if isinstance(step, Mapping) and step.get("stage") in by_stage
-            else step
-            for step in data["steps"]
-        ]
-        return {**data, "steps": steps}
+        return with_current_steps(data)
     time_band: str = BASELINE_TIME_BAND
     source_turn_index: int | None = None
     baseline_confirmed: BaselineConfirmed | None = None

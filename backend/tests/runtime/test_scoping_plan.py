@@ -644,3 +644,19 @@ def test_a_plan_stored_before_the_row_key_still_validates_with_todays_steps() ->
     assert [step.label for step in plan.steps] == [step.label for step in SCOPING_STEPS]
     assert [step.blurb for step in plan.steps] == [step.blurb for step in SCOPING_STEPS]
 
+
+
+def test_a_draft_stored_before_the_row_key_still_validates_with_todays_steps() -> None:
+    """A stored turn's ``scoping_plan`` draft takes today's steps too.
+
+    2026-11-09: the Agent tab's history (``GET .../task-agent-turns``) failed
+    with a 500 on a turn stored before task 058: its draft steps had no
+    ``row``, and the wire draft model had no step replacement.
+    """
+    from policy_atlas.runtime.scoping_plan import SCOPING_STEPS
+
+    stored = [
+        {"label": "Old", "blurb": "Old", "stage": step.stage} for step in SCOPING_STEPS
+    ]
+    draft = contract.ScopingPlanDraft.model_validate({"steps": stored})
+    assert draft.steps == list(SCOPING_STEPS)
