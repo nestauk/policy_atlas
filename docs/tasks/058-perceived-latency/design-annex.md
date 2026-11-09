@@ -1775,6 +1775,7 @@ Rulings on the build (agent, for the lead):
 | 9e | build, round 12 (owner live-run notes, evening) | 2026-11-06 | the scoping planner's Something else option and its question decision (lead prompt change, v7); the header name at Heading with the capability under it; the planner's reply in its own eased box; the sidebar and Agent tab reading a closed Task Agent conversation; done scoping rows linking; the stepper counting decisions; groups closed by default with Navy names, the count right-aligned, Show/Hide on the right edge, rules around the controls row, no contents nav, shortlisted first, the theme-and-lever hover, levers counted; the option card as what it is, Evidence (places first) and What it could take with a code-built sentence, the estimate behind an i, the dossier over the card, the card opening at its top, Set aside by you; the shared Select for every dropdown; the gate card without the key assumption; the public link reaching the longlist and shortlist read-only; the report's expand state (watched, fresh, kept across tabs), badges reordered with the table's strength tone and a working classification hover, the citation sheet on one scale; Sources tones (green, yellow, red), Full text linking to the document, Cited under the status, the two-row filter bar, Download CSV and the page size on the foot line, 25 a page, How the sources were found as a section, queries filtering the table; the list gap fixed by a subgrid, the Projects list paged and ordered by the server, row menus for rename and archive; the backend's option-search count from dispatch, combined and Estimating, places split into Several countries / Place not stated / Other, full_text_url, query_id and record ids, projects by last activity, the card export | lead |
 | 9f | build, round 13 (owner live-run notes, 2026-11-06, late) and consolidation batch A | 2026-11-06 | the shared disclosure word, reference line, info hover and remembered choices (batch A); the longlist row's plain document count, the group heading shared by the list and grid with its shortlisted count, View as, the columns choice on the controls row, a wider Add an option, uncovered levers as a Body line, Other for the lever that fits none, the shortlist control as a circled check, Exclude only on the card and one-click with Add a reason after, excluding a theme or lever at its heading, the option card's documents without authors and in the References style with a link to the filtered table, the profile table at one size in a logical order, Your target and outcomes first with its values on two lines, no abstracts note; the New page's Project field (always shown, with New project…) and the scoping search field with one-line explanations; Share's two explanation lines; Landscape's published-country note in an i, the funnel rows Appraised and Full text accessed clickable, Relevant in the screening filter, the scoping task's Themes subtab from the longlist, the loading skeleton's bars in every column; the backend's depth and appraised filters, distinct appraised counts, a reason added after an exclusion updating in place; the page's scrollbar gutter kept | lead |
 | 9g | build, round 14 (owner live-run notes, 2026-11-07 to 09) | 2026-11-09 | a task named from the refined question at the step 1 decision and a chat titled from its first message (lead prompts task_title_v1, chat_title_v1), the header revealing the new name like streamed text; the shortlist's not-covered note with one writer (shortlist_note_v1; the shortlist prompt v2 writes no note) refreshed once on opening and after a pause, 'Written before your latest changes'; the References numbers blue and opening the source, the method as one designed section at the prose width, the report titled with the plan's question, the boxes on the shared marks line; tabs opening at their top, the plan's scrim on non-Agent tabs and the plan opening at its top, the Task Agent's three measured jumps fixed with one growing block per turn, the action line never under the composer, the status bar gated on loaded data, chats on the paced reveal with the mark and activity line and References in the report's form, the header naming the project, the sidebar trace's links right-aligned, the Result tab active on option cards; Collecting… from the row's queued status, the whole queries line as the trigger, Not reported linking (country=none), scoping theme headings filtering the table with distinct counts; the task list's timer kept, the New page's searchable multi-select of the user's finished searches, the foot reorganised, the archive sentence naming the solo tasks; one ProjectPicker; projects archiving their solo tasks, own searches linkable anywhere and never flagged, depth and theme filters, the mock's ingest stage | lead |
+| 9h | build, round 15 (owner live-run notes, 2026-11-09) | 2026-11-09 | the option card's exclusion block at the top as labelled facts with plain words (no 'Breaks'), the rows' one short exclusion phrase, the breadcrumb naming the origin, the note step on the standard tier, run-less History events kept out of the thread | lead |
 | 10 | review, agent pass | | | lead |
 | 11 | review, owner pass | | | owner |
 
@@ -2477,3 +2478,31 @@ its fallback, the marks line in both boxes, the method's one column), `ArtefactV
   reads "Choose a project first", with no extra line. Choosing a project enables it and lists that
   project's completed searches; changing the project clears the picks it does not hold, and going
   back to None clears them all.
+
+## Round 15, the option card's exclusion at the top (owner, 2026-11-09)
+
+- An excluded option's card (by a constraint, by Policy Atlas or by the reader) shows its
+  exclusion at the top, under the title, description and header line and above How it works,
+  not among the Evidence section's notices: the same words and controls ("Excluded:" in Red, the
+  exclusion line, "Add a reason" while it invites one), in the notices' flat form with a Line-2
+  rule at its left. Include again stays in the card's action row by the breadcrumb.
+- Screenshot: `research/screenshots/round15-scoping-card-excluded-1280.png`.
+- **Rows say who, in one phrase** (owner): an excluded row and an excluded tile's tooltip read
+  "Excluded by a constraint", "Excluded by you", or "Excluded with the theme <name>" / "Excluded
+  with the lever <name>" (`exclusionPhrase`); no constraint's words, no reason.
+- **The card's exclusion as labelled facts** (owner; lead correction: `by` is "constrain" or
+  "user" only): the Red heading line "Does not meet a constraint" or "Excluded by you" (· with the
+  theme <name>), then "Constraint" (when there is one) and "Why" (Policy Atlas's or the reader's
+  reason, "Add a reason" after it while it invites one); labels in Meta Grey at a fixed width; no
+  By row; "Breaks" is gone (`exclusionFacts`).
+- **The card's breadcrumb follows its origin** (owner): opened from the Shortlist page it reads
+  "Shortlist / <option>" and links back there (the option links carry `{ from: "shortlist" }` in
+  their state); from the longlist, or on a direct load, "Longlist / <option>". Browser Back
+  returns to the same page.
+- Screenshots: `research/screenshots/round15-scoping-card-excluded-1280.png`,
+  `research/screenshots/round15-scoping-excluded-open-1280.png` (and `-shut-`).
+- **Lead rulings, same round**: rows inside an excluded group carry no exclusion phrase (the
+  group's heading names the theme or lever); rows in the "Options" group keep "Excluded by a
+  constraint" / "Excluded by you". The Evidence section's constraint notices say "Does not meet:"
+  instead of "Breaks:"; the word "Breaks" is gone from the product.
+
