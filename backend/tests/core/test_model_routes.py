@@ -671,3 +671,24 @@ def test_import_time_selection_follows_the_variable() -> None:
 
 def test_route_is_cached_per_process() -> None:
     assert model_routes.route() is model_routes.route()
+
+
+def test_first_content_s_is_optional_and_a_route_may_override_it(tmp_path: Path) -> None:
+    """Task 054's 058 alignment (A11): a streamed step's time-to-first-content limit."""
+    with_limit = MINIMAL.replace("timeout_s = 120 }", "timeout_s = 120, first_content_s = 45 }")
+    route = load_route(_write(tmp_path, "r.toml", with_limit), "r", {})
+    assert route.first_content_for("synthesis") == 45
+    assert route.first_content_for("screen") is None
+    assert route.timeout_for("synthesis") == 120
+    override = with_limit + "[routes.r.steps]\nsynthesis = { first_content_s = 9 }\n"
+    assert load_route(_write(tmp_path, "o.toml", override), "r", {}).first_content_for(
+        "synthesis"
+    ) == 9
+    bad = with_limit.replace("first_content_s = 45", "first_content_s = 0")
+    with pytest.raises(RuntimeError, match="'first_content_s' is 0"):
+        load_route(_write(tmp_path, "bad.toml", bad), "r", {})
+    # The committed file sets it on the report step only.
+    committed = load_route(ROUTE_FILE, "bedrock", {})
+    assert [step for step in committed.steps if committed.first_content_for(step)] == [
+        "toc_report"
+    ]

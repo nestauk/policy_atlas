@@ -521,6 +521,9 @@ def _toc_node(name: str) -> Any:
             # (C5), and picks a searchless link's documents by embedding (C27).
             kwargs["ranker"] = state["ranking_backend"]
             kwargs["embedder"] = state["embedding_backend"]
+        if name == "toc_report":
+            # The report's live frames (task 054's 058 alignment, S6).
+            kwargs["progress"] = state["progress_emitter"]
         return _run_scope_component(state, ScopeContext, functools.partial(step, **kwargs))
 
     return run

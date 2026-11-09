@@ -41,6 +41,8 @@ from policy_atlas.core.schema import event_log
 from policy_atlas.core.usage import UsageAccumulator
 from policy_atlas.evidence_search.sourcing.acquire import normalize_doi
 from policy_atlas.options_scoping.context import ScopeContext
+from policy_atlas.runtime.progress import ProgressEmitter
+from policy_atlas.runtime.toc_plan import TOC_CHECK_MODE_KEY
 from policy_atlas.theory_of_change import sense_check, store
 from policy_atlas.theory_of_change.backend import TocBackend
 from policy_atlas.theory_of_change.check.grade import (
@@ -65,6 +67,8 @@ from policy_atlas.theory_of_change.check.shared import (
 from policy_atlas.theory_of_change.draft import walk_toc_plan
 from policy_atlas.theory_of_change.proposals import open_proposals
 from policy_atlas.theory_of_change.report_prompt import TOC_REPORT_PROMPT_VERSION, ReportResponse
+from policy_atlas.theory_of_change.report_stream import ReportFrames, report_layout, write_streamed
+from policy_atlas.theory_of_change.review import latest_report
 
 log = structlog.get_logger()
 
@@ -495,6 +499,10 @@ def _source_entry(
         "evidence_id": evidence_id,
         "quote": quote,
         "finding": " ".join((quote or "").split()[:FINDING_WORDS]),
+        # The short name a pending [n] shows while the report is written (S5).
+        "label": f"{_who(authors, organisation)} {year}"
+        if authors and year
+        else title or venue or "",
     }
 
 
@@ -579,6 +587,18 @@ def programme_judgements(
     return verdict, about
 
 
+def streams_to_page(conn: Connection, *, task_id: uuid.UUID, context: ScopeContext) -> bool:
+    """Whether this report streams to the page: only a task's first report does (S7b, A22).
+
+    "Update the report" (a check walk in report mode) and any check while a
+    stored report exists write silently, with the ordinary call, so the old
+    report stays in place until the new one is stored.
+    """
+    if context.context.get(TOC_CHECK_MODE_KEY) == "report":
+        return False
+    return latest_report(conn, task_id) is None
+
+
 def toc_report_scope(
     conn: Connection,
     *,
@@ -587,8 +607,12 @@ def toc_report_scope(
     context: ScopeContext,
     backend: TocBackend,
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
+    progress: ProgressEmitter | None = None,
 ) -> dict[str, Any]:
     """Write Detailed information as a short narrative report (C38).
+
+    A first report streams to the page as it is written (task 054's 058
+    alignment, S4 to S7b; :mod:`policy_atlas.theory_of_change.report_stream`).
 
     Args:
         conn: Open connection inside the component transaction.
@@ -597,6 +621,7 @@ def toc_report_scope(
         context: The check walk's intent record.
         backend: The ToC model seam.
         now: The clock the method note reads (a test can fix it).
+        progress: The writer of the report's saved live frames, or ``None``.
 
     Returns:
         ``report`` (the five sections, assembled), the removal counts, the
@@ -800,37 +825,58 @@ def toc_report_scope(
     supporting = [row.text for row in rows.band_items if row.band == "supporting"]
     if supporting:
         theory["supporting_activities"] = supporting
-    response: ReportResponse | None = _ask(
-        "toc_report",
-        lambda: backend.report(
-            plan={k: v for k, v in plan_fields.items() if v},
-            theory=theory,
-            rows=[
-                {
-                    k: row[k]
-                    for k in (
-                        "code",
-                        "statement",
-                        "conditions",
-                        "importance",
-                        "verdict",
-                        "sources",
-                    )
-                }
-                for row in table
-            ],
-            sources=[
-                {
-                    "n": s["n"],
-                    "citation": s["short"],
-                    "connections": sorted(bears[s["n"]]),
-                    "finding": s["finding"],
-                }
-                for s in sources
-            ],
-        ),
-        usage,
-    )
+    inputs: dict[str, Any] = {
+        "plan": {k: v for k, v in plan_fields.items() if v},
+        "theory": theory,
+        "rows": [
+            {
+                k: row[k]
+                for k in (
+                    "code",
+                    "statement",
+                    "conditions",
+                    "importance",
+                    "verdict",
+                    "sources",
+                )
+            }
+            for row in table
+        ],
+        "sources": [
+            {
+                "n": s["n"],
+                "citation": s["short"],
+                "connections": sorted(bears[s["n"]]),
+                "finding": s["finding"],
+            }
+            for s in sources
+        ],
+    }
+
+    def ask() -> ReportResponse | None:
+        return _ask("toc_report", lambda: backend.report(**inputs), usage)
+
+    response: ReportResponse | None
+    if streams_to_page(conn, task_id=task_id, context=context):
+        # A first report streams to the page, field by field (S4 to S6). The
+        # answer is the same as the ordinary call's, and the code below edits
+        # it exactly as before (A12).
+        frames = ReportFrames(
+            emitter=progress,
+            parts=report_layout(
+                verdict_label=verdict["label"] if verdict is not None else None,
+                found_routes=bool(expandable),
+                supporting_activities=bool(supporting),
+            ),
+            verdict_headline=verdict["headline"] if verdict is not None else None,
+            sources=[(str(s["n"]), s["label"]) for s in sources],
+            route_labels={way["key"]: str(way["label"] or way["key"]) for way in expandable},
+        )
+        response = write_streamed(backend, inputs, frames, usage, ask)
+    else:
+        # An update, or a check while a report stands: the old report stays on
+        # the page until the new one is stored, so nothing streams (S7b).
+        response = ask()
     if response is None:
         raise RuntimeError("toc_report: the report call failed")
 

@@ -36,6 +36,11 @@
 # that sets nothing keeps them. Streamed chat is the exception to the retry:
 # its timeout bounds the wait between chunks, and it is never tried twice.
 #
+# first_content_s (optional, streamed steps only) is how many seconds a streamed
+# call may wait for the first words of its answer before the app gives up on the
+# stream and makes the step's ordinary call instead. A route's step table may
+# override it like timeout_s.
+#
 # To try models without editing this file, point an env variable
 # POLICY_ATLAS_MODEL_ROUTE_FILE at a second file with its own [routes.*] tables;
 # they replace or add routes by name. [steps] always comes from this file.
@@ -129,7 +134,11 @@ toc_judge = { tier = "standard", reasoning_effort = "none", timeout_s = 300 }
 toc_figures = { tier = "fast", reasoning_effort = "medium", timeout_s = 300 }   # one small call per judged document (C37)
 toc_pick = { tier = "fast", reasoning_effort = "medium", timeout_s = 300 }   # one small call per link (C28)
 toc_summarise = { tier = "standard", reasoning_effort = "none", timeout_s = 300 }
-toc_report = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }   # the narrative report (C38)
+# toc_report streams (task 054's 058 alignment, A11). first_content_s is how long the
+# streamed call may wait for its first words before the step gives up on the stream
+# and makes its ordinary call; timeout_s still bounds the wait between pieces. 45 s:
+# measured 7.4-10.1 s on 3 real reports, 2026-11-09; research/report-synthesis-feasibility/report-ttfc-probe/
+toc_report = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300, first_content_s = 45 }   # the narrative report (C38)
 toc_review = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }   # the shape review after edits (C45)
 toc_sense_check = { tier = "standard", reasoning_effort = "none", timeout_s = 300 }   # can the theory work at all (red team)
 toc_import = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }   # one vision call reads the user's diagram

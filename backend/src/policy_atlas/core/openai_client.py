@@ -9,6 +9,7 @@ guards used after a ``parse`` or ``create`` call.
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -603,6 +604,117 @@ class JsonArrayObjectDecoder:
                 closed.append("".join(self._object))
                 self._object = None
             elif self._depth == 2 and self._in_array:
+                self._in_array = False
+                self.done = True
+            self._depth -= 1
+            return
+        if char == "," and self._depth == 1:
+            self._expect_key = True
+        elif char == ":" and self._depth == 1:
+            self._value_pending = True
+        elif self._depth == 1 and not char.isspace():
+            self._value_pending = False
+
+
+class JsonArrayStringDecoder:
+    """Hand back each string of one top-level array field as soon as it closes.
+
+    In plain terms: the same idea as :class:`JsonArrayObjectDecoder`, for an
+    array of plain strings (the theory-of-change report's
+    ``supporting_activities``, task 054). Feed each piece of the streamed JSON
+    text to :meth:`feed`; whenever one string inside the named array is
+    complete, it is returned already decoded (``\\n`` becomes a line break,
+    ``\\u00e9`` becomes ``é``). Only a key of the outermost object counts, and
+    quotes or brackets inside strings are text, not structure. Once the
+    array closes, :attr:`done` is true and every later piece returns nothing.
+
+    Args:
+        field_name: The top-level key whose array of strings to follow.
+    """
+
+    def __init__(self, field_name: str) -> None:
+        self._field_name = field_name
+        self._depth = 0
+        self._in_string = False
+        self._escape = False
+        self._string_is_key = False
+        self._raw_key: list[str] = []
+        self._expect_key = False
+        self._last_key: str | None = None
+        self._value_pending = False
+        self._in_array = False
+        self._item: list[str] | None = None
+        self.done = False
+
+    def feed(self, fragment: str) -> list[str]:
+        """Consume one piece of the JSON text.
+
+        Args:
+            fragment: The next piece of the streamed JSON text.
+
+        Returns:
+            Each string of the array that closed in this piece, decoded, in
+            order (often none).
+        """
+        closed: list[str] = []
+        for char in fragment:
+            if self.done:
+                break
+            if self._in_string:
+                if self._item is not None:
+                    self._item.append(char)
+                self._string_char(char, closed)
+            else:
+                self._structural_char(char)
+        return closed
+
+    def _string_char(self, char: str, closed: list[str]) -> None:
+        if self._escape:
+            self._escape = False
+            if self._string_is_key:
+                self._raw_key.append(char)
+            return
+        if char == "\\":
+            self._escape = True
+            return
+        if char == '"':
+            self._in_string = False
+            if self._string_is_key:
+                self._last_key = "".join(self._raw_key)
+                self._expect_key = False
+            elif self._item is not None:
+                closed.append(json.loads("".join(self._item)))
+                self._item = None
+            return
+        if self._string_is_key:
+            self._raw_key.append(char)
+
+    def _structural_char(self, char: str) -> None:
+        if char == '"':
+            self._in_string = True
+            self._string_is_key = self._depth == 1 and self._expect_key
+            self._raw_key = []
+            if self._depth == 1:
+                self._value_pending = False
+            elif self._depth == 2 and self._in_array:
+                self._item = ['"']
+            return
+        if char in "{[":
+            opens_array = (
+                char == "["
+                and self._depth == 1
+                and self._value_pending
+                and self._last_key == self._field_name
+            )
+            self._depth += 1
+            if self._depth == 1:
+                self._expect_key = char == "{"
+            if self._depth == 2:
+                self._value_pending = False
+                self._in_array = opens_array
+            return
+        if char in "}]":
+            if self._depth == 2 and self._in_array:
                 self._in_array = False
                 self.done = True
             self._depth -= 1

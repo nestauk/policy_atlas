@@ -6134,7 +6134,9 @@ def _run_step_attempt(
                     ),
                     progress_emitter=(
                         ProgressEmitter(engine, task_id=task_id, run_id=run_id)
-                        if registry_component == "synthesise"
+                        # The ToC report streams to the page too (task 054's
+                        # 058 alignment, S6).
+                        if registry_component in ("synthesise", "toc_report")
                         else None
                     ),
                     stage=stamped,
