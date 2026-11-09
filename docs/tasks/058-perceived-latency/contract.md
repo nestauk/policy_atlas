@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in
 [docs/specs/](../../specs/index.md).
 
-> **Status: revision 2 approved (before planning): 2026-11-04 · Shabeer Rauf (owner). Plan approved (before implementation): 2026-11-04 · Shabeer Rauf (owner), draft 3 after the plan-stage review. ADR: [0044](../../adr/0044-live-activity-streamed-sections-one-copy-source.md), Accepted 2026-11-04. Design phase closed; the build opens in a fresh conversation with task-cycle-build on plan Phase 0.** Revision 1 approved 2026-11-04 · Shabeer Rauf (owner), with three gate rulings folded (two routes to the agent; per-stage timings; no labels that restate the page; annex v3). The contract-stage adversarial review the same day (Codex, 18 findings; the record stays local under `research/`, not committed: owner, 2026-11-04, the findings live in the contract) is folded as revision 2: every finding accepted, some narrowed; the material changes are N1/N2 (counts from loops, heartbeats), N4/N7 (the draft replays on connect), N9 (streaming by content negotiation, not a breaking change), N22/N23 (an options read replaces the provisional longlist and the child-walk join), N25 (the measure defined so it is falsifiable) and G1 (the complete interface list). **A plan draft was committed before this review finished (finding 5); it is revised from revision 2 and stays unconfirmed until the owner re-approves.** Owner at revision 2 (2026-11-04): the frontend and backend always deploy together, so no compatibility shims and no kept-beside-the-new fields or responses (N9 and D2 revised); the fast-tier strict gate dropped. Branch
+> **Status: amended at the review, 2026-11-09 · Shabeer Rauf (owner): proposals A1 to A9 accepted as written (§ Amendments at the review); G3 and G4 crossed on the owner's request and ratified there. Revision 2 approved (before planning): 2026-11-04 · Shabeer Rauf (owner). Plan approved (before implementation): 2026-11-04 · Shabeer Rauf (owner), draft 3 after the plan-stage review. ADR: [0044](../../adr/0044-live-activity-streamed-sections-one-copy-source.md), Accepted 2026-11-04. Design phase closed; the build opens in a fresh conversation with task-cycle-build on plan Phase 0.** Revision 1 approved 2026-11-04 · Shabeer Rauf (owner), with three gate rulings folded (two routes to the agent; per-stage timings; no labels that restate the page; annex v3). The contract-stage adversarial review the same day (Codex, 18 findings; the record stays local under `research/`, not committed: owner, 2026-11-04, the findings live in the contract) is folded as revision 2: every finding accepted, some narrowed; the material changes are N1/N2 (counts from loops, heartbeats), N4/N7 (the draft replays on connect), N9 (streaming by content negotiation, not a breaking change), N22/N23 (an options read replaces the provisional longlist and the child-walk join), N25 (the measure defined so it is falsifiable) and G1 (the complete interface list). **A plan draft was committed before this review finished (finding 5); it is revised from revision 2 and stays unconfirmed until the owner re-approves.** Owner at revision 2 (2026-11-04): the frontend and backend always deploy together, so no compatibility shims and no kept-beside-the-new fields or responses (N9 and D2 revised); the fast-tier strict gate dropped. Branch
 > `task/058-perceived-latency`. Design pass done 2026-11-04 in the same conversation under the
 > frontend variant of the cycle (PR #113): grounding (nine explorer reports, four research
 > notes, seven experiments, all under `research/`, gitignored), a scripted mock
@@ -313,15 +313,57 @@ PRODUCT.md.
 
 | Gate | What | Status |
 |---|---|---|
-| G1 | Public interface, the complete list (the frontend and backend deploy together, so a replaced field or response is acceptable; owner, 2026-11-04): `tick` is reshaped to `stage`, `activity`, `done`, `total`, `unit`, `section`, `heartbeat`, `dropped`, `ephemeral` (the ingest-only `note`, `fetched`, `parsed` are removed); new ephemeral frames `artefact.section_delta {index, text, mode}` and `artefact.section_revising {index, spans}`; `TaskAgentTurnOut.question` (nullable); `TaskOut.active_run.stage` and `.stage_label`; new `GET /tasks/{id}/options` returning `{options: [{option_id, name, description, origin, state, merged_into_option_id, search_status, found}]}`; `POST /tasks/{id}/task-agent-turns` responds with the chat route's event stream instead of a JSON body. `RunOut` and `GET /longlist` do not change. Generated types regenerate; `make drift-check` green. | approved at this contract, revised at the review |
-| G2 | Prompt hash re-pin: `section_prompt.py` changes only in the final turn's call shape (the wire's docstrings are hashed); the planner prompt changes only its time-band table; `prompt_hashes.json` re-pinned with the diff in `verification.md`. The judge, the repair and the research turns are untouched. | approved at this contract |
-| G3 | No schema change. If a need turns out to need one, stop. | binding |
-| G4 | No new dependency. The Markdown renderer is not needed (prose is plain text). | binding |
-| G5 | Spec amendments S1 to S5, applied in the build with a line in the spec log. | owner at this contract |
-| G6 | Polish round budget (D11): three owner rounds at build end and three after review. | approved at this contract |
-| G7 | Staging run of the fixed questions before merge, with the N25 measures. | binding |
+| G1 | Public interface, the complete list (the frontend and backend deploy together, so a replaced field or response is acceptable; owner, 2026-11-04): `tick` is reshaped to `stage`, `activity`, `done`, `total`, `unit`, `section`, `heartbeat`, `dropped`, `ephemeral` (the ingest-only `note`, `fetched`, `parsed` are removed); new ephemeral frames `artefact.section_delta {index, text, mode}` and `artefact.section_revising {index, spans}`; `TaskAgentTurnOut.question` (nullable); `TaskOut.active_run.stage` and `.stage_label`; new `GET /tasks/{id}/options` returning `{options: [{option_id, name, description, origin, state, merged_into_option_id, search_status, found}]}`; `POST /tasks/{id}/task-agent-turns` responds with the chat route's event stream instead of a JSON body. `RunOut` and `GET /longlist` changed as listed in A1. Generated types regenerate; `make drift-check` green. | approved at this contract, revised at the review (A1, 2026-11-09) |
+| G2 | Prompt hash re-pin: `section_prompt.py` changes only in the final turn's call shape (the wire's docstrings are hashed); the planner prompt changes only its time-band table; `prompt_hashes.json` re-pinned with the diff in `verification.md`. The judge, the repair and the research turns are untouched. | approved at this contract; widened at the review (A2) |
+| G3 | No schema change. If a need turns out to need one, stop. | crossed on the owner's request (round 11); ratified 2026-11-09 (A3) |
+| G4 | No new dependency. The Markdown renderer is not needed (prose is plain text). | crossed on the owner's request (round 11); ratified 2026-11-09 (A4) |
+| G5 | Spec amendments S1 to S5, applied in the build with a line in the spec log. | owner at this contract; B1 to B13 at the review |
+| G6 | Polish round budget (D11): three owner rounds at build end and three after review. | approved at this contract; owner-driven rounds 2 to 16 recorded (A5) |
+| G7 | Staging run of the fixed questions before merge, with the N25 measures. | skipped by the owner, 2026-11-09 (A6) |
 
 Egress unchanged: the same model route, one more streamed call shape on an existing step.
+
+## Amendments at the review (owner, 2026-11-09)
+
+The review stack's proposals A1 to A9, accepted by the owner as written and recorded here;
+the specs took B1 to B13 the same day (web-api spec log, 2026-11-09).
+
+- **A1, G1.** The public interface also gained: `PlanStep.row`; `stage.completed.counts`;
+  `tick.capability_run_id`; the ephemeral frames `artefact.section_sources`,
+  `artefact.section_claim`, `artefact.section_card`, `artefact.source_note`, `search.query`,
+  `characterise.themes`; `artefact.skeleton` sections' `role`; `section_completed.citations[]`
+  and `.claims[]`; `RunOut.stages`; `ProjectOut.archived_at`, `.last_activity_at`,
+  `.solo_task_count`; `POST /projects/{id}/archive`; `GET /projects?status=`;
+  `PageMeta.has_more`; `DecisionOut.actor_display`, `.actor_is_viewer`; evidence rows'
+  `country`, `full_text_url`, `full_text_status` and the `country=`, `query=`, `depth=`,
+  `appraised=`, `theme=` parameters; `CoverageBackendDetailOut.passes`,
+  `CoverageQueryOut.query_id`; `ClaimOut.grounding_tier` and `.grounding_rationale` (moved off
+  `CitationOut`); `LonglistThemeOut.document_count`, `OptionDocumentOut.authors`, `.venue`,
+  `OptionProfileOut.acts_on`; `ShortlistOut.note_stale`; `POST /tasks/{id}/shortlist/note`;
+  the chat stream's `conversation.titled`; the list page size 20 for tasks and projects.
+- **A2, G2.** Seven prompt files re-pinned, not two: the section prompt at v12 (the
+  `write_section` ready tool and the streamed write turn, a behaviour change), the planner
+  prompt cut to the plain voice with its bands from `task_plan.py` (hashed from the review on),
+  the scoping planner v7, the option profile v5, the shortlist prompt v2 (no note), and two new
+  prompt files (the shortlist note; task and chat titles).
+- **A3, G3.** One nullable column, `project.archived_at` (migration `c4e8a2f6d1b3`), on the
+  owner's round-11 request. Ratified.
+- **A4, G4.** `d3-geo`, `topojson-client`, `world-atlas` and their two type packages for the
+  Landscape map, round 11; no advisories. Ratified.
+- **A5, G6.** Rounds 2 to 16 and two consolidation batches, each from the owner's own live-run
+  notes: owner-driven.
+- **A6, G7 and N25.** The staging run and the fixed-question measures were skipped by the owner
+  on 2026-11-09; the rubric's measure items read "not measured, owner decision".
+- **A7, N6 and D1.** The final turn is the `write_section` ready tool plus a streamed write
+  turn with the tools kept and `tool_choice` none, not a strict `json_schema` response (owner
+  go, 2026-11-05); key findings, the introduction and the case studies stream too (ADR 0044
+  § Amendments).
+- **A8, needs ruled otherwise during polish** (each ruling in the annex): N5, N8, N11, N12 and
+  D8, N13, N14, N15, N16, N18, N2 and N21, N23, and the paused and stopped words.
+- **A9, § Out of scope built on the owner's notes**, ratified as owner-driven scope: the option
+  card and shortlist view rework, the shortlist note step and route, the History read model,
+  task and chat titles, projects paging, archive and ordering, evidence filters and the map,
+  the list pages, Share, the New page.
 
 ## Public / private boundary
 

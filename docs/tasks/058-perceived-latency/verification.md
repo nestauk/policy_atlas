@@ -1178,6 +1178,22 @@ planner prompt substitutes). The seven files the build re-pinned, for the record
 (new), `title_prompt.py` (new); their hashes are the diff of `scripts/prompt_hashes.json` against
 `origin/dev`.
 
+### Owner decisions at step 9 (2026-11-09)
+
+The owner took every item in `spec-changes-proposed.md` (local) in one sitting:
+
+- **C1 accepted:** the Claude adversarial reader stands for the Codex lane (spend cap); no re-run.
+- **C2 keep:** the options read stays on the public leg while the longlist is built (B13).
+- **C3 keep:** the blue "Shortlisted" words on the option card.
+- **C4 keep both:** the status bar's and the section's turning marks on the Result tab.
+- **C5 keep:** the Search plan card from decision 1.
+- **C6 go:** `react-router` bumped to 7.18.5 (clears GHSA-qwww-vcr4-c8h2, fixed in 7.18.2) in this PR.
+- **C7 sibling:** the title traces stay their own root traces in the task's session.
+- **C8 nod:** no further owner polish round beyond the notes already taken (round 16 landed the
+  same day); the rubric's D11 line records it.
+- **A1 to A9 and B1 to B13 accepted as written:** applied to `contract.md` (§ Amendments at
+  the review; the gate table) and `docs/specs/system/web-api.md` (its 2026-11-09 log line).
+
 ## Rubric status (step 7)
 
 Judged by the contract verifier (fresh context) and adjudicated by the lead; "owner-ruled" means
@@ -1205,7 +1221,7 @@ contract amendment.
 | 30 to 32 | Pass; 31 owner-asked | Options read tenancy tests; `RunOut.stages` added against the contract text (A1); the longlist during the build. |
 | 33 | Not measured, owner decision | § N25 measures. |
 | 34 | Pass | 36 Playwright journeys at the reviewed head (the last gate row). |
-| 35 | Partial, owner decision pending | Agent passes at build end and at the review (the design lane and its fix pass); the owner's rounds at build end were 2 to 15; the owner said no more live checks on 2026-11-09 (C8 asks for the sign-off line). Screenshots under the gitignored `research/screenshots/`. |
+| 35 | Met, by owner decision | Agent passes at build end and at the review (the design lane and its fix pass); the owner's rounds were 2 to 16, each from live-run notes; the owner closed the polish on 2026-11-09 (C8: "nod"). Screenshots under the gitignored `research/screenshots/`. |
 
 ## Deferred work
 

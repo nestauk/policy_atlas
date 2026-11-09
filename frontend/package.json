@@ -32,7 +32,7 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-oidc-context": "^3.3.1",
-    "react-router": "^7.18.1",
+    "react-router": "^7.18.5",
     "recharts": "^3.9.2",
     "tailwind-merge": "^3.6.0",
     "topojson-client": "^3.1.0",
