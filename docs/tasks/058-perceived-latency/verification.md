@@ -202,6 +202,10 @@ review records them as an owner decision, not a gap.
   Same round, later: the finished search-queries block opens the live block's table (one
   `QueriesTable`; the Database column and flat rows deleted; owner: one layout, the live one). The plan over a results tab is fixed to the viewport's full height, as the sheets are
   (it stopped at the task header). Overton's group above OpenAlex's in the queries table.
+  The jitter after a decision card is answered: two older causes (the scroll offset clamped by a
+  layout read inside React's commit and never re-pinned; a new block's gap arriving in one
+  frame), both fixed with the probe's evidence (annex § Round 16; commit 90f17449); gate on the
+  combined tree: frontend 1,823 passed, build, Playwright 36.
 
 ## Evidence shown live (owner, 2026-11-05)
 

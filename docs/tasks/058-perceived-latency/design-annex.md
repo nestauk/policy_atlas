@@ -2642,3 +2642,18 @@ Owner notes on the live app after the review stack, applied in the review conver
   document sheets do (owner: "currently it stops at the task header"): fixed to the viewport's
   right edge over the headers, under the same scrim.
 - **Overton's group above OpenAlex's** in the search queries table, live and finished (owner).
+- **The jitter after a decision card is answered** (owner: "a slight jitter that came back").
+  The frontend-designer probe (every block's position per frame, sampled after paint; a
+  reversal is a move one way and back within 6 frames, both at least 1.5 px) found two older
+  causes, present before the action-line fix too (46 reversals before it, 37 after, 19 now, the
+  rest being two intended motions meeting). One: when a turn loses its action line, two
+  components read layout inside React's commit while the turn is 48 px shorter, the scroll
+  region's offset is clamped there, the turn's box then eases the height back and the pin's
+  ResizeObserver sees no size change, so the thread bounced 48 px down and 37 back. The pin now
+  also watches DOM changes and, once the eased boxes have measured (`afterEasedHeights`), puts a
+  reader who was exactly at the end back there before paint. Two: a new turn inserted above the
+  plan card brought its 24 px gap (`space-y-6`) in one frame, so the card dropped 23 px and slid
+  back; a block that opens now eases its own bottom margin from 0 with it, even while empty.
+  Videos: `research/screenshots/round16/decision-settle-{before,after}.webm`. Left as noted:
+  pinned content wobbles under 1 px during eases (`scrollTop` is whole, eased heights are not);
+  `PartCard`'s `useSettleMotion` reads layout on every commit (the pin now repairs any such read).
