@@ -19,6 +19,10 @@ timestamp: 2026-11-03
   it.
 - A test helper that mints tokens with a fixed lifetime sets a deadline on every test that
   uses them; size it to the slowest walk under a loaded gate (600 s), not to a demo.
+- Tests that never ask for the `engine` fixture used to depend on an earlier test migrating
+  the worker's database; adding tests reshuffled the order and exposed it (task 058).
+  `conftest` now migrates each worker's database once before any test, and a one-file run
+  with `-p no:xdist` gets the same.
 
 # Why
 

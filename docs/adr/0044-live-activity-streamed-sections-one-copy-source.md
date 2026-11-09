@@ -1,6 +1,8 @@
 # ADR 0044 — Live activity from coalesced ticks, streamed report sections, the planner's reply as a stream, and one server source of progress copy
 
-- **Status:** Accepted — 2026-11-04 (Shabeer Rauf, owner, task 058 plan gate).
+- **Status:** Accepted — 2026-11-04 (Shabeer Rauf, owner, task 058 plan gate). Amended at the
+  review stack, 2026-11-09 (§ Amendments at the review); the owner accepts the amendments with
+  the pull request.
 - **Date:** 2026-11-04
 - **Task:** [058-perceived-latency](../tasks/058-perceived-latency/contract.md) (contract
   revision 2 and plan draft 3 both approved 2026-11-04; design annex version 5)
@@ -80,3 +82,55 @@ and replace-don't-layer because the frontend and backend deploy together.
   task before and after review.
 - Measured success: zero silent gaps over 30 s on a healthy run, first streamed prose within
   5 s of the writing turn, on the fixed questions before and after, on laptop and staging.
+
+## Amendments at the review (2026-11-09)
+
+The build's fifteen owner polish rounds changed four decisions and three consequences. The
+review stack (contract verifier, adversarial reader) found the text above contradicted by the
+code; this section records what ships. The decisions above are left as written for the record.
+
+1. **Decision 2, the writer's final turn.** Not a strict `json_schema` response with no tools.
+   On a live run the model emitted its forced tool call on turn 2 in one burst, so nothing
+   streamed (owner question 1, 2026-11-05; `research/exp-stream-cache-probe.md`). What ships:
+   the writer calls a no-argument `write_section` tool when it has gathered enough; the next
+   turn streams with the six tools kept, `tool_choice` "none" and no `response_format`, so the
+   cached prompt prefix is reused; the reply is parsed as the `emit_section` arguments (a code
+   fence is stripped first). The key findings, the introduction and the case studies stream the
+   same way (rounds 7 and 8). A stream failure still re-runs the turn once without streaming;
+   the count of those fallbacks now rides in the synthesis component's completed payload as
+   `stream_fallbacks` (review finding: one real fallback on 2026-11-06 was visible only in the
+   trace). The section prompt moved to `synthesise_section_v12`, a behaviour change, not a
+   call-shape re-pin.
+2. **Decision 6, the run strip.** The run status bar is a button that opens the Task Agent
+   and steps aside while the sidebar shows it (owner round 8); the paused state and the
+   reconnecting line live on it. The nav's Plan control left (owner round 2); the plan opens
+   from the card.
+3. **Decision 7, the longlist read.** `GET /longlist` gained `LonglistThemeOut.document_count`,
+   `OptionProfileOut.acts_on`, `OptionDocumentOut.authors` and `.venue` (rounds 12 and 13), and
+   `RunOut` gained `stages` (round 11) so an earlier walk's card keeps its steps. The options
+   read is as decided.
+4. **Decision 1, the tick.** The tick also carries `capability_run_id` so a longlist walk's
+   page tells its option searches' lines from its own (round 11); eight more ephemeral frames
+   joined the two: `artefact.section_sources`, `artefact.section_claim`,
+   `artefact.section_card`, `artefact.source_note`, `search.query`, `characterise.themes`
+   (rounds 6 to 9). The hub's memory of them is swept on the 600 s TTL whether or not a model
+   call is open (review finding).
+5. **Consequence "No schema change".** One column was added: `project.archived_at`
+   (migration `c4e8a2f6d1b3`, owner request in round 11, 2026-11-06; archiving a project
+   archives its solo tasks that are in no other project, owner round 14, and skips a task whose
+   walk is running or paused, review finding). ADR 0031 anticipated the column. The contract's
+   G3 and G4 gates (the column; `d3-geo`, `topojson-client`, `world-atlas` for the Landscape map,
+   round 11) are ratified by the owner at the review's human gate, not by this record.
+6. **Consequence "re-pinned for a call-shape change only".** Seven prompt files were re-pinned
+   (verification.md § Prompt-hash re-pin): the section prompt (v12), the planner prompt (bands,
+   plain copy; the band table `task_plan.py` is now hashed too), the scoping planner (v7), the
+   option profile (v5), the shortlist prompt (v2, writing no note), and two new files, the
+   shortlist note and the task and chat titles.
+7. **Consequence "Measured success".** The fixed-question measures were not run: the owner
+   chose the live checks on the dev app through rounds 6 to 15 instead (2026-11-09). No
+   before-and-after figure exists; the capture tool stays for a later measurement.
+8. **Structural note from the adversarial lane.** The live frames and the durable event log are
+   two channels with no shared clock: live state is add-only across a reconnect unless a
+   `replace` resets it (now sent whenever a draft exists, empty or not), and the hub is one
+   process's memory (a second API replica would turn ticks off with nothing failing a test;
+   `docs/deferred.md` § Web app carries the seam).

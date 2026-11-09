@@ -712,3 +712,39 @@ file-plus-exit-code shape.
 4. **Docker Desktop VM wedge** (socket answers 500s, VM never boots, "no route
    to host 192.168.65.7"): `docker desktop restart` also hung; `pkill -9 -f
    com.docker` + relaunch recovered in ~1 min.
+
+## 2026-11-09 — Codex spend cap: a job died mid-apply in the build and the adversarial lane never ran at the review (task 058)
+
+**What happened:** on 2026-11-05 the Codex workspace spend cap ended a job in Phase 1 after it
+had applied part of its change set, with no file list in the result; every later Codex seam was
+re-routed to `deep-reasoner`. At the review on 2026-11-09 the `codex-rescue` adversarial job
+failed in 8 s with the same cap message, so the Tier-3 heterogeneous pair was a fresh Claude
+reader on an adversarial brief plus `/code-review medium`: same family, two contexts.
+
+**Rules:** (1) `git status` after every Codex job, and give each Codex partial a finishing brief
+that names what was found applied. (2) Check the cap before the review stack opens (one
+`codex-rescue` probe); when it is on, record the substitution in `verification.md` § Review
+findings as an owner decision at step 9 (accept the same-family stand-in, or lift the cap and
+re-run), never as a lane that ran.
+
+## 2026-11-09 — A frontend-designer pass that must also screenshot transient states hits its 150-turn limit before reporting (task 058)
+
+**What happened:** brief O (card, strip, tab marks, title, task row) reached the agent's
+`maxTurns` while taking mock-state screenshots and reported only on a resume; the review's
+design lane spent 434K tokens and 124 tool uses on one screenshot round of 242 files.
+
+**Rule:** screenshots of transient mock states are their own brief (a builder or fast-worker with
+the scenario list), after the design pass reports; a design pass takes at most one round of a
+few named states.
+
+## 2026-11-09 — Review-stack token budget at 5.5× the routine ceiling on a 10× diff (task 058)
+
+**What happened:** the slice's diff was about 66K code lines across 430 files (fifteen owner
+polish rounds across the whole app). The five reasoning-class lanes spent 1.38M tokens against
+the 250K routine ceiling: security 234K, adversarial stand-in 176K, contract verifier 227K,
+`/code-review medium` 309K, design lane 434K. Fast-worker spend was 70K. Each lane was scoped
+by pathspec and read by surface, so the cost was the diff, not a fan-out.
+
+**Rules:** (1) the ceiling scales with the diff; record the ratio in `verification.md` rather
+than trimming lanes to fit. (2) A build that runs polish rounds across the whole app should
+land the consolidation batches as their own earlier PR, so the review reads one slice.

@@ -4,7 +4,7 @@ Evidence for one slice. Filled during the build (task-cycle-build, steps 5 and 6
 review stack adds **Review findings** and **Rubric status** at step 7. Public-safe: no
 secrets, no raw source text, no unredacted traces.
 
-> Status: **Phases 0 to 9 built and committed (2026-11-05); the build pauses at two owner gates.** (1) Phase 10, the polish cycle: the agent pass and up to three owner rounds on the live dev app, in their own conversation (D11). (2) Phase 11, the measures: skipped by the owner on 2026-11-09 (§ N25 measures). Phase 10 ran as polish rounds 6 to 15 plus consolidation batches A and B (2026-11-05 to 09), all committed with green gates; the build is complete and the review stack runs next, in a fresh conversation. Everything deterministic is done: every need N1 to N24 and N26 is implemented and tested; `make verify` and the mock journeys are green at `HEAD`.
+> Status: **Review stack run and adjudicated (2026-11-09, conversation C): five lanes plus the lead's trace lane, 50 findings adjudicated, 36 fixed in this phase, the rest declined with a reason, deferred as seams or passed to the owner (§ Review findings). Durable records written (ADR 0044 amended, deferred.md, knowledge, failure log, readiness and environment). Open for the owner at step 9: the contract's G3 and G4 gates (the archive column; the three map packages), the Codex lane's substitution, and the proposals in the local `spec-changes-proposed.md`.** The build: Phases 0 to 9 (2026-11-05), the polish cycle as rounds 1 to 15 plus consolidation batches A and B (2026-11-05 to 09), Phase 11's measures skipped by the owner (§ N25 measures). Every need N1 to N24 and N26 is implemented and tested; `make verify` and the mock journeys are green at the reviewed head (the last rows of the gate table).
 
 ## Commands run
 
@@ -51,6 +51,8 @@ secrets, no raw source text, no unredacted traces.
 | Round 11 (owner live-run notes, 2026-11-06; six builders: backend and store, the workspace, Options scoping, the report page, Sources and Landscape, the lists) | lead: `make verify && pnpm e2e` on the combined tree | pass | backend 4,373 passed, 1 skipped (6 min 3 s), mypy 470 files, ruff; infra 113; prompt-guard 41 unchanged; drift-check OK; frontend 103 files / 1,546 passed, build; Playwright 35 passed. Items: the square's pulse deeper with a scale and the citation wave as a visible sequence; scoping rows linking to Sources and Landscape; the baseline card keeping its link and steps once the longlist starts (`RunOut.stages`); ticks and the option-search stage naming their walk; option and theme names while clustering (`characterise.themes.stage`); the shortlist count reading the shortlist after the step; the shortlist toggle saying Remove on hover; the option card in three blocks and the longlist row cut down after a UX audit (`research/longlist-ux-review.md`); most relevant sources and case studies back in cards above the Full report, the date on its own line, the sources count linking to References, the method as a ruled table, blue x-height bullets; the Sources hover affordance and strength tone, the filter bar, the finished queries line with saved citation passes (`passes`), greyed inactive subtabs, clickable funnel rows, the population line removed, a List / Map choropleth (`d3-geo`, `topojson-client`, `world-atlas`); Archived as a quiet foot link in the open scope and Find as a magnifier; the name-and-menu header for tasks and projects, projects archivable (`project.archived_at`, migration c4e8a2f6d1b3), the reconnecting line in the run status bar's frame. Open: D1; the two live Searching rows on a longlist walk are the walk's own broad search beside the option searches (display ruling pending); scoping rulings 1, 4 and 42 vs the built longlist (owner). |
 | Round 10 (owner, 2026-11-06; six builders from five read-only reviews: the report page, the Sources table and Landscape years, the list rows, Share and History, Options scoping, and the backend) | lead: `make verify && pnpm e2e` on the combined tree | pass | backend 4,365 passed, 1 skipped (7 min 17 s), mypy 470 files, ruff; okf-validate 200; infra 113; prompt-guard 41 unchanged; drift-check OK; frontend 100 files / 1,480 passed, build; Playwright 35 passed. Items: the question as the report's title on both pages, the facts line, references with addresses, markers as the one control with tooltip and sorted numbers, a heading outline, ruled lists, print without chrome; visible Sources filters with Country and a year range, fixed columns, a stacked phone row, the years drag range, the subtab remembered per task; the row's accessible name carrying its status, the name cell widened, dates as "5 Nov", Show more paging and an Archived view, the switcher's growing rule; History grouped by day with sentences naming the step and the actor, runs folded behind Show steps; Share reordered with a two-step public confirm and no blue fill; the longlist as one component with rows moving into themes, one primary on the shortlist page, the gate card in the settled language, scoping trace links; the backend's history sentences, the run touching the task's date, has_more paging, the country filter, the refusal message, the gate heading and the scoping mock. Open: D1 (themes open by default; switch `THEMES_OPEN_BY_DEFAULT`). |
 
+| Step-7 open gate, the review's self-verify (2026-11-09, `a3e583c3`) | `make verify` | pass | backend 4,407 passed, 1 skipped (9 min 31 s); mypy 478 files; ruff; okf-validate 202; infra 113; prompt-guard 43 unchanged; drift-check OK; frontend 120 files / 1,808 passed, build OK; eslint 1 pre-existing warning (`SplashField.tsx:181`, not this slice's). Settles the verifier's L4: the last build commits had been gated by `frontend-verify` only. |
+| Step-7 fixes gate (2026-11-09, the reviewed tree) | `make verify`, then `make frontend-verify && make drift-check && pnpm e2e` after the OpenAPI regeneration and three journey updates | pass | backend 4,431 passed, 1 skipped (6 min 33 s); mypy 478 files; ruff; okf-validate 202; infra 113; prompt-guard 44 unchanged (`task_plan.py` newly pinned, `planner_v12`); the first `drift-check` failed on the archive route's docstring (regenerated with `make openapi-sync`); frontend 120 files / 1,815 passed, build OK, drift-check OK; Playwright 36 passed after three assertions followed the design fixes (the citation sheet highlights the quote's words without its stop; the theme item's disclosure word; the mock plan's ingest row in scene 1). |
 (The gate map's step-6 exit is this command; it is re-run after the owner-gated phases.)
 
 ## Checks beyond the build
@@ -774,7 +776,7 @@ Filled per phase as it lands; the flagged deviations are in § Review handoff.
   report's moved to the claim (round 13).
 - **D1 build-time check, done 2026-11-05** (`research/exp-luna-strict-check.md`, two live calls,
   cents): Luna accepted the streamed strict `json_schema` response with the raw
-  `SectionProseWire` schema (what the section call sends) and with the strict-transformed one
+  `SectionProseWire` schema (what the section call sent before the streaming fix) and with the strict-transformed one
   (what the planner sends); both streamed `prose` ahead of `claims` (first payload 1.031 s and
   0.896 s, last chunk 1.824 s and 1.783 s), validated, and carried usage on the last chunk. The
   strict-transformed schema makes the model fill every optional claim field with `[]`/`null`
@@ -883,9 +885,12 @@ adjudicated at step 7).
    put a copy of `STAGE_COUNTS` in the client (the frontend-designer flagged it), so the frame
    now carries `counts: [{value, noun}]` and the client renders them as given. The mock keeps a
    copy of the table to build its frames (a private fixture). Spec table updated.
-4. **Grouped stages share a label.** `acquire` and `screen` both carry "Searching and
-   screening", `classify` and `appraise` both "Categorising", so every surface that shows
-   a stage label (the run status bar, the task list, the sidebar line) shows the row's name.
+4. **Grouped stages share a label.** `classify` and `appraise` share one row, so every
+   surface that shows a stage label (the run status bar, the task list, the sidebar line)
+   shows the row's name. As first built `acquire` and `screen` also shared a row ("Searching
+   and screening") and the shared row was "Categorising". The owner changed this: round 8
+   split search and screen into two rows, "Searching" and "Screening", and owner round 2
+   renamed the classify and appraise row "Classifying". That is what ships.
 
 ### Open proposals from the frontend passes (for the polish cycle and the owner)
 
@@ -897,10 +902,10 @@ adjudicated at step 7).
 - `STAGE_ROW` and `STAGE_COUNTS` have no backend coverage test of their own yet (the vocabulary
   test covers labels and blurbs; the route-step verb test covers verbs).
 - `planStart.ts` `START_SEARCH_CLASS` (the plan document's own Start button) could move to
-  `Button variant="start"`.
+  `Button variant="start"` (done).
 - Add a `role` to `ArtefactSectionSkeleton` so key findings is not recognised by index and
   title; add a phase key to the writer tick so the client does not compare the server's text
-  against "Writing".
+  against "Writing". (`role` on `ArtefactSectionSkeleton`: done, round 7/8.)
 - The `funnel` query does not refresh on ingest ticks (only evidence and landscape).
 
 ### Knowledge candidates (014 retro)
@@ -924,6 +929,269 @@ adjudicated at step 7).
   once per worker before any test).
 - The hub's queue drain: the SSE loop took one tick per 0.4 s poll; with deltas it must
   drain the whole queue per poll or the 32-slot queue evicts prose.
+
+## Review findings (step 7, conversation C, 2026-11-09)
+
+The review ran in a fresh conversation. Base: `origin/dev` (the local `dev` was one commit
+behind, PR #113; the branch also carries two small `.claude/skills/task-cycle-*` edits that
+record the owner's 2026-11-04 "do not commit review records" rule, read once by the adjudicator
+and left as process-record commits). Self-verify gate before any lane: `make verify` green at
+`a3e583c3` (first row of the table below).
+
+### Lanes and cost
+
+| Lane | Reviewer | Tokens | Findings |
+|---|---|---:|---|
+| Contract verifier | `contract-verifier` (Opus, read-only) | 227K | 3 high, 7 medium, 6 low; 16 owner-ruled contract items; the spec rows list |
+| Security | `agent-skills:security-auditor` | 234K | 1 medium, 4 low, 4 informational; no critical or high |
+| Adversarial (Codex stand-in) | `deep-reasoner` on the adversarial brief | 176K | 1 high, 6 medium, 5 low, 2 informational, one structural note |
+| `/code-review medium` | the Claude half of the pair | 309K | 10 findings |
+| Design lane | `frontend-designer`, read-only, 242 screenshots | 434K | 8 material fixes, 5 lower, 5 annex inconsistencies, 4 copy proposals |
+| Trace lane | the lead, Langfuse (dev) | — | 4 findings |
+| Fix builders | 2 × `deep-reasoner`, `frontend-designer`, `fast-worker` | 193K + 206K + 295K + 70K | — |
+
+**The Codex adversarial lane did not run.** The `codex-rescue` job (`task-mw8meh61-h0vfk9`)
+failed in 8 s on the workspace spend cap, as every Codex seam had in the build. A fresh Claude
+reader on the same adversarial brief stood in, so the Tier 3 pair was two Claude contexts, not two
+model families. Owner decision at step 9 (proposal C1): accept the substitution or lift the cap and
+the lead re-runs the Codex lane before merge. The reasoning-class spend (1.38M) is 5.5 times the
+routine ceiling on a diff about ten times a routine slice (66K code lines, 430 files; fifteen
+owner polish rounds across the app); recorded in `docs/agentic-ops/failure-log.md`.
+
+### Trace lane (the lead reading Langfuse for content)
+
+- **A real stream fallback, visible only in the trace.** On 2026-11-06 22:47 UTC (trace
+  `5d466d7f…`) a `synthesise:section_emit` turn ended in `ReadTimeout` after 32 s; a non-streamed
+  `synthesise:section_turn` (2,227 output tokens) followed, then the judge and the repair as normal.
+  So N6's fallback path worked once in real use, but the count lived in memory
+  (`stream_fallbacks`) and a warning log line, and the fallback turn is indistinguishable by trace
+  name from a research turn. **Fixed:** the synthesis component's completed payload carries
+  `stream_fallbacks` per run (`synthesise.py` reads the backend's counter at entry and records
+  the difference; a ponytail comment names the ceiling: two synthesis runs in one process can
+  mis-attribute one). Test: `test_the_rollup_counts_only_this_runs_stream_fallbacks`.
+- **The shortlist note refresh carried no session.** Seven `shortlist:note` generations since
+  2026-11-08 have no `sessionId`; `api/routers/longlist.py`'s refresh route opened
+  `trace_scope(user_id=...)` only. The build's "not proven by test" claim was false. **Fixed:**
+  `session_id=task_id` on the scope; test `test_a_note_refresh_carries_the_tasks_session`.
+- **The title generations are sibling root traces, not nested.** `chat:title` and
+  `task_agent:title` are root traces with one generation each in the task's session (parent
+  `None`), one second before `run:chat` or after the `task_agent:turn` spans. Adopted as built;
+  the record now says "sibling in the session" (proposal C7 asks the owner whether to nest).
+- **The unreproduced extra progress card** (round 15) stays a known unverified item: nothing in
+  the server, the stream, the hub or the reducer produces it, and the owner's task id, view and
+  screenshot are still needed.
+
+### Adjudication
+
+Every finding was adopted, declined with a reason, deferred to `docs/deferred.md` § Perceived
+latency, or passed to the owner (`spec-changes-proposed.md`, local). Convergent findings across
+lanes are marked ◆.
+
+**Adopted and fixed in this phase (backend; builders A and B):**
+
+1. ◆ One unserialisable hub message closed the stream for every reader and replayed on reconnect
+   (security M; pydantic raises on a lone surrogate, which the streaming decoder passes through).
+   `sse.py` skips a message it cannot encode and logs its type only; `liveness.py` makes every
+   text that enters memory UTF-8 encodable (`_clean`). Two tests.
+2. ◆ The model's query text was normalised on the writer's path only (security L, verifier M5).
+   `normalise_query` moved to `core/liveness.py` with a `limit`; the hub applies it to every
+   search query (`SEARCH_QUERY_MAX = 300` for the frame, a lead decision: the Search queries table
+   shows whole queries; 120 stays the activity line's bound) and keys its memory on the clean text;
+   `search_loop._short_query` normalises before its cut. Four tests.
+3. ◆ Hub memory was swept only while a model call was open (security L, adversarial 12). The
+   sweep is armed whenever any task has memory, so the 600 s TTL holds for a run that died; the
+   runner's `run_plan` `except` path now calls `tick_hub.end_run` too. Test: a dead run is
+   forgotten after the TTL.
+4. ◆ A reconnect during the fallback kept a stale draft and case-study cards doubled on every
+   reconnect (adversarial 3). The snapshot sends `replace` with the draft's text whenever a draft
+   exists, empty or not, before sources, claims and cards; the reducer already clears claims and
+   cards on `replace`. Hub tests updated; reducer test: two cards, not four.
+5. A full subscriber queue evicted appends for good (adversarial 6, the half adopted). On
+   `QueueFull` the hub empties the queue and refills it from the task's remembered state, draft
+   first (`_remembered`, shared with the snapshot); messages fanned out before the resync are
+   numbered and skipped so no text arrives twice. Ceiling: a resync longer than 32 messages is cut
+   after the draft items. The poll-rate half is deferred (owner-tuned feel; measure first).
+6. Counts could go backwards and a late callback recreated an ended stage (adversarial 8). The
+   hub keeps the larger `done` for the same stage and total; `end_stage` marks the key ended and
+   `publish_tick` ignores it until `task_liveness` binds the stage again (`open_stage`: the
+   synthesise summaries pass and steering reruns reuse a stage key legitimately). Two tests; two
+   test fakes gained a no-op `open_stage`.
+7. Within one poll, live frames were written before durable rows committed earlier (adversarial
+   9): the durable tail goes first. Test added.
+8. A heartbeat never refreshed the stage entry, so the TTL dropped it mid-call (code review 3):
+   an open call keeps its entry fresh. Test at 700 s.
+9. ◆ The streamed turns sent no heartbeats (adversarial 5; the 32 s silent gap in the 2026-11-06
+   trace). `synthesis_backend._open_model_call` brackets all four streamed calls with the same
+   `model_call_opened`/`model_call_closed` pair `traced_attempts` uses. Test on the section stream,
+   streamed and fallback paths.
+10. The fallback left the section blank until `section_completed` (adversarial 11). Each
+    fallback publishes its parsed result once as a `replace` (the case studies as cards). Four
+    tests updated.
+11. ◆ The planner's streamed turn retried only connection errors before the first token
+    (adversarial 4, code review 1): it now retries whatever `tracing._retryable` retries (429,
+    5xx), waits `Retry-After` up to 30 s, and counts `started` only once reply text reached the
+    client. Attempts stay at two (a test the chat path shares pins it; lead decision, recorded).
+    Four tests.
+12. The task title was generated inside the stream worker while it held the turn lock (code
+    review 2): it runs through `in_background` as `patch_plan` does; the rename still reaches the
+    page as a `task.updated` frame (`task.renamed` maps to it). Test: `completed` does not wait for
+    the title.
+13. An abort chosen from a check-in card option lost its option id (code review 8): `extra` flows
+    to `_persist_abort`; History can quote the card's words. Test extended.
+14. Resuming a longlist walk past the join republished the fan-out count for a finished stage
+    (code review 4): no poll when `component.completed` exists for the stage and walk. Test.
+15. ◆ Archiving a project archived tasks that were mid-run (adversarial HIGH): the project route
+    now skips a solo task whose latest walk is running or paused or whose dispatch is reserved,
+    the same check the task route makes (the query exists in two places; one helper later). Test:
+    `archived_task_count == 0`, the task stays active. Ceiling: `solo_task_count` in the confirm
+    sentence still counts a mid-run task, so it can say one more than gets archived.
+16. The summaries pass published `done` one ahead (code review 7): `done` counts finished blocks.
+17. The shortlist note's link check was dropped silently (verifier M6). A re-ask would need new
+    prompt text (lead-only, not written at the review), so the one writer takes a link out
+    instead (`without_links`: a Markdown link keeps its words, any other word with a link mark is
+    dropped) and logs it. Test `test_a_note_with_a_link_has_the_link_taken_out` replaces the
+    removed dev test under a true name. Ceiling: the sentence can read ragged; a note re-ask is
+    lead work for a later slice.
+18. The planner prompt's text was built from an unhashed table and its version did not move
+    through three content changes (verifier M1): `task_plan.py` is now in the hash guard's pinned
+    set (44 files) and the version is `planner_v12` (lead; the 038 like-for-like ruling was
+    038-only). Hash diff below.
+19. `--token` on `scripts/stream_capture.py` removed; `--token-env` is the one way (security I).
+20. Stale text (verifier L2): the `synthesise_section_emit` route comment (it kept the tools and
+    sends no schema), the vocabulary test's temporary allowance, the `WorkspaceView` comment, the
+    flagged deviation 4 wording, the open proposals already done, the D1 Luna bullet.
+21. `STAGE_ROW` and `STAGE_COUNTS` have a coverage test against the stage keys (verifier M7).
+
+**Adopted and fixed in this phase (frontend; builder C, design lane):** fifteen items, all applied
+(`frontend-designer`, 295K tokens; it hit its 150-turn limit once on the screenshot round and
+finished on a resume; 127 screenshots of one round under
+`research/screenshots/review-design-fixes/`, not reviewed by the agent, no reshoot):
+
+1. ◆ The four `<details>` with the browser's triangle (check-in steer, citation sheet theme item,
+   check-in bundle queries, chat references) use `DisclosureChevron` (batch B rule).
+2. The fold mark holds still when the stream is not connected (`LiveMark still`; the trace, the
+   run status bar and the live section's action line). Lead ruling, now in DESIGN.md § Shapes:
+   the mark turns while the stream is open and the run is live (heartbeats count as data); it
+   holds still when the connection is down or motion is reduced. Test: no animation frames while
+   the stream is closed.
+3. The strength word prints the tier's name (`strengthTierName`), the same case on every surface.
+4. The citation sheet's quote matches with and without its trailing stop; on no match it shows the
+   quote at Body Navy only (round 12 ruling), never the passage twice. Three tests.
+5. No "Show 0 documents" disclosure; the mock's cards and rows agree on the count.
+6. "Paused · waiting on you" never splits in the sidebar trace.
+7. No doubled full stop after a quoted sentence in History (`stopAfter`).
+8. The report's three source counts agree: the server's `source_count` is the References count
+   and the view read it right; the mock fixture was wrong (46 → 3; funnel cited 12 → 3).
+9. The stepper's text "✓" is the icon module's `CheckIcon`.
+10. One `prefersReducedMotion` (`ui/motion/motion.ts`); `PartCard`'s copy deleted.
+11. Off-token colours and raw shadows defined once as tokens (`--color-hover-fill`,
+    `--color-green-deep`, `--color-yellow-deep`, four tint edges, `--shadow-overlay`,
+    `--shadow-tooltip` beside `--shadow-paper`) and referenced from twelve files; no visual change.
+12. The mock plan carries the `ingest` step in the real order; the mock's theme counts sum their
+    options.
+13. DESIGN.md: the longlist meta line's stale "5 documents evaluated it" → the round-13 count;
+    § Shapes carries the ruling from item 2.
+14. Copy (lead): a finished row with no documents reads "No documents" ("No documents yet" while
+    building); the theme item reads "Identified across N sources" with the shared Show/Hide
+    disclosure; Share's heading is "Projects".
+15. Code review 9 and 10: `useArchiveProject`'s docstring states the server's behaviour once;
+    `formatMinutes` folded into `formatElapsed(seconds, { withSeconds })`.
+
+Left as built by the agent and recorded as seams: the Findings table keeps its own quote
+fallback (italic Grey over the passage) and the Sources table draws its own tick and cross SVGs;
+`auth/DevTokenLoginPanel.tsx` keeps two raw colours (auth is off limits to agents); the
+whitespace-normalised quote match still extends the highlight by up to 20 characters.
+
+**Declined, with the reason:**
+
+- The failed streamed call's usage is "lost" (adversarial 2, part): usage arrives on a stream's
+  final chunk; a stream cut by the timeout has none. Honest absence; the ERROR generation marks it.
+- Caps on the hub's lists (security, adversarial 12): bounded by the run's own counts (option
+  searches publish no query frames, round 9; about 25 notes; a section's claims and cards);
+  recorded as a seam, one line if ever needed.
+- Attempts on the planner stream at `MODEL_CALL_ATTEMPTS` (3): the chat path shares the pinned
+  "at most once" test; two attempts with the wider predicate is the change the finding asked for.
+- The "Querying academic databases." blurb (verifier M7): removed by the owner's one-voice rewrite
+  of every blurb (N17), not dropped.
+
+**Deferred to `docs/deferred.md` § Perceived latency (task 058 seams):** the live channel's
+database poll per wake-up; one blocked executor thread per planner or chat stream (pre-existing
+pattern on chat, six threads on the 2-vCPU task); `cursor=0` replay cost and no per-user stream
+cap; the planner lock taken before authorisation (pre-existing); offset paging skips under a
+moving sort (tasks and projects); the projects list's triple membership scan; a timer thread per
+coalesce window; chat's per-citation verdict; the case study's bold arriving at the swap; the hub
+lists' run-bound size; the lost usage of a timed-out stream; the load-sensitive width test.
+
+**Passed to the owner (`spec-changes-proposed.md`, local; decided at step 9):** the contract's
+gates G1 (about forty interface items beyond the list; `RunOut.stages` and the longlist read
+changed against the text), G2 (seven re-pins; section v12 is a behaviour change), **G3 (the
+`project.archived_at` migration, owner-requested in round 11, never ratified on the record)**,
+**G4 (three map packages, likewise)**, G6 (owner rounds 2 to 15), G7 and N25 (skipped); the
+sixteen needs the owner ruled otherwise during polish; the § Out-of-scope items built on the
+owner's notes; thirteen spec row groups for `web-api.md`; and eight decisions (C1 to C8): the
+Codex substitution, in-progress options on the public leg, the blue "Shortlisted" words, two
+turning marks on the Result tab, when the plan card appears, the pre-existing `react-router`
+advisory (GHSA-qwww-vcr4-c8h2, fixed in 7.18.2; found by the review's `pnpm audit`), the sibling
+title traces, and whether a second owner polish round is wanted. The three new packages carry no
+advisories.
+
+**Flagged deviations re-examined (task-cycle-review rule):** 1 `PlanStep.row` adopted as-is
+(G1 amendment A1); 2 the stage derived in the harness adopted as-is; 3 `stage.completed.counts`
+adopted as-is (A1); 4 grouped stages' labels: the owner changed them in rounds 2 and 8, the
+deviation text was corrected to what ships.
+
+**Known unverified items re-examined:** the extra progress card (still unreproduced; owner input
+needed); the two trace nestings (both read on the instance: one false and fixed, one "sibling by
+design"); chat's per-citation verdict (deferred seam); the D1 Luna check (text corrected to the
+pre-fix schema); the Codex family flip (did not happen in the build or the review: C1).
+
+**Fake-done check on this phase's fixes:** no test relaxed or deleted without its replacement
+named here (the shortlist link test is replaced under a true name; `test_liveness` scheduling and
+snapshot tests were rewritten for the new behaviour, each asserting more); no swallowed error
+added (the SSE skip logs the type and continues, by design); no stub returns. `/simplify` and
+`ponytail-review` were not run as separate passes: `/code-review medium` carried the reuse and
+simplification angles (findings 9 and 10 of its ten) and their fixes are applied.
+
+### Prompt-hash re-pin at the review
+
+`python3 scripts/prompt_hash_guard.py --update` on 2026-11-09 (44 files, 43 before):
+`runtime/task_agent_prompt.py` `1968366b…` → `e3c152b1…` (`PLANNER_PROMPT_VERSION`
+`planner_v11` → `planner_v12`, the version comment only; the prompt text is unchanged since the
+build's third re-pin); `runtime/task_plan.py` newly pinned at `7ebc3859…` (the band table the
+planner prompt substitutes). The seven files the build re-pinned, for the record (verifier M2):
+`section_prompt.py` (v12), `task_agent_prompt.py` (three times), `task_agent_scoping_prompt.py`
+(v7), `option_profile_prompt.py` (v5), `shortlist_prompt.py` (v2), `shortlist_note_prompt.py`
+(new), `title_prompt.py` (new); their hashes are the diff of `scripts/prompt_hashes.json` against
+`origin/dev`.
+
+## Rubric status (step 7)
+
+Judged by the contract verifier (fresh context) and adjudicated by the lead; "owner-ruled" means
+the annex records the owner's later ruling and `spec-changes-proposed.md` A8 carries the
+contract amendment.
+
+| # | Status | Evidence |
+|---|---|---|
+| 1 | Pass, with owner-ruled deviations | N1 to N24 and N26 built and tested; N25 skipped by the owner; sixteen needs ruled otherwise during polish (A8). |
+| 2 | Pass | The gate table: build-open baseline, the combined backend gate for Phases 1 to 4 (frontend red by design until Phase 6), Phase 9, every round, the step-7 open gate and the step-7 fixes gate. |
+| 3 | **Holds only with the owner's ratification** | G3: `project.archived_at` (owner request, round 11; A3). G4: `d3-geo`, `topojson-client`, `world-atlas` (round 11; A4). G1 exceeded by about forty items and G2 by five re-pins (A1, A2). No CI, prod config or auth change; no compatibility shim. |
+| 4 | Pass | `drift-check: OK` in every gate row; `prompt-guard` green on 44 files. |
+| 5 | Pass after the review | Deleted or moved tests and their replacements: `RunningCard.test.tsx` → `RunTrace.test.tsx`; `landingPresentation.test.ts` → `ui/brand/taskStatus.test.ts`; `presentRunDecisions` tests deleted with the feature (owner); the F6 case-studies test → the streamed card tests; the N17 client vocabulary tests (`planVocabulary.test.ts`: `timeBandFor`, `stepsForAnalysisDepth`, `acquireSearchBlurb`, `COMPONENT_LABEL`; `journey/presentation.test.ts`: approved summary keys) → `tests/api/test_stage_vocabulary.py` (every stage key has a presentation; every route step has a verb; every key has a row and a counts entry, added at the review) and `tests/runtime/test_task_agent.py` plus `tests/runtime/test_task_plan.py` (the bands and totals pinned); the shortlist note's link test → `test_a_note_with_a_link_has_the_link_taken_out` (review). Two option-profile tests skip verb lines (recorded in the Phases 6 to 8 row). No `skip` or `xfail` added. |
+| 6 | Partial, by owner decision | Gates, commands, prompt-hash diffs (build and review), screenshots (gitignored research folder), the polish log and the owner's rulings are recorded; the N25 measures, the staging run and a live fallback count are not measured (owner, 2026-11-09); the fallback count is now durable for later runs. |
+| 7 | Pass | `docs/deferred.md` § Perceived latency (task 058 seams): D6, D7, D9, D12, D13, D14 and the review's seams; thirteen earlier lines discharged or reworded. |
+| 8 | Pass, with one substitution and the human gate open | Contract verifier, one security lane, `/code-review medium`, the design lane and the trace lane ran; the Codex adversarial lane failed on the spend cap and a fresh Claude reader stood in (C1); `/simplify` folded into the code review's cleanup angles (recorded); the contract- and plan-stage adversarial reviews are folded into those documents; ADR 0044 Accepted and amended; the human deep review is step 9. |
+| 9 to 13 | Pass vs the latest ruling | Hub tests (coalescing, heartbeats, bounds, TTL, child walks, and the review's resync, clamp and ended-stage tests); route-step verbs; `freshness.ts`; `RunTrace` tests. The live screening line rests on the owner's runs. |
+| 14 | Pass vs the owner's call shape | Fallback once, counted and now durable; decoder surrogate tests; heartbeats around the streamed turns (review). Not `json_schema` (A7). |
+| 15 | Pass in code; spec rows pending | Reducer replay tests; the review's empty-replace and no-doubled-cards tests; nine ephemeral frames vs the spec's three (B1 to B3). |
+| 16 | Pass vs owner rulings | Live region; the footer and claim-marker clauses owner-overridden (A8). |
+| 17, 18 | Pass | Stream refusals before headers, disconnect, one terminal event; the review's 429 and 5xx retry tests; the reload case. |
+| 19 to 24 | Pass or owner-overridden | Pre-writing states; the status bar as a button (A8); the sidebar trace; tab marks (Sources mark removed, A8); the Plan control off the nav (A8); Sources default by completed step (A8). |
+| 25 | Pass | One server table; no client label literal; nineteen keys in the spec; the row and counts coverage test (review). |
+| 26 to 29 | Pass or owner-overridden | Planner's order, no reason line, one "Looks right" button (A8); check-in shape; bands from one table (now hashed); "so far" dropped (A8). |
+| 30 to 32 | Pass; 31 owner-asked | Options read tenancy tests; `RunOut.stages` added against the contract text (A1); the longlist during the build. |
+| 33 | Not measured, owner decision | § N25 measures. |
+| 34 | Pass | 36 Playwright journeys at the reviewed head (the last gate row). |
+| 35 | Partial, owner decision pending | Agent passes at build end and at the review (the design lane and its fix pass); the owner's rounds at build end were 2 to 15; the owner said no more live checks on 2026-11-09 (C8 asks for the sign-off line). Screenshots under the gitignored `research/screenshots/`. |
 
 ## Deferred work
 
