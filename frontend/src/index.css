@@ -575,6 +575,8 @@
   /* Report (PDF) from the Download menu: the whole canvas as a picture, in place of the bar and the live canvas. */
   #toc-canvas:has(.toc-print-image) > :not(.toc-print-image) { display: none !important; }
   .toc-print-image { display: block; width: 100%; height: auto; break-inside: avoid; }
+}
+
 /* ---------------------------------------------------------------------------
  * Task 058, brief P: the report while it is written.
  *
