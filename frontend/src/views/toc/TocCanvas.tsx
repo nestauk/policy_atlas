@@ -537,7 +537,7 @@ export function TocCanvas({
   };
 
   return (
-    <div ref={boxRef} className="toc-canvas h-[640px] min-w-0 flex-1 bg-paper-2 lg:h-full" role="group" aria-label="Theory of change canvas">
+    <div ref={boxRef} className="toc-canvas h-[640px] min-w-0 flex-1 bg-paper-2 max-lg:basis-auto lg:h-full" role="group" aria-label="Theory of change canvas">
       <ReactFlow
         nodes={nodes}
         edges={edges}
