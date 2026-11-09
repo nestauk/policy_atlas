@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .chat import AnswerPayloadOut
 from .tasks import LatestRun
@@ -446,6 +446,19 @@ class ScopingPlanDraft(BaseModel):
     baseline_confirmed: BaselineConfirmedOut | None = None
     risk_appetite: ScopingRiskAppetite | None = None
     ready: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def steps_are_the_codes(cls, data: Any) -> Any:
+        """Replace stored steps with today's copy, as ``ScopingPlan`` does.
+
+        2026-11-09: a chat turn stored before task 058 carried a draft whose
+        steps had no ``row``, and loading the Agent tab's history failed (500).
+        """
+        # ponytail: lazy import, the runtime module imports this one.
+        from policy_atlas.runtime.scoping_plan import with_current_steps
+
+        return with_current_steps(data)
 
 
 class ScopingPlanPatch(BaseModel):
