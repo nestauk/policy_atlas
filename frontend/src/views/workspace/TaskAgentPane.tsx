@@ -53,6 +53,16 @@ import { PastRunLine, RunTrace } from "./RunTrace";
 /** The server page-size cap; one task_agent conversation fits comfortably. */
 const TRANSCRIPT_PAGE_SIZE = 200;
 
+/** The kinds a walk itself writes, so an untagged one inside its window is
+ *  its own. Any other event with no walk (round 15: `shortlist.note_updated`,
+ *  a shortlist or longlist action, a task's lifecycle) is housekeeping that
+ *  stays in History, never placed in a walk's block by its time. */
+const WALK_KIND_PREFIXES = ["component.", "search.", "run.", "steering.", "checkin."] as const;
+
+function placedByTime(kind: string): boolean {
+  return WALK_KIND_PREFIXES.some((prefix) => kind.startsWith(prefix));
+}
+
 /**
  * Assign each run its turn boundary and each decision its run block. TaskAgent
  * turns are 409-fenced while a run executes or parks, so a turn's receipt
@@ -99,11 +109,13 @@ export function threadInputs(
           : undefined
         : typeof tagged === "string" && runIds.has(tagged)
           ? tagged
-          : orderedRuns.findLast(
-            (run) =>
-              run.started_at <= decision.occurred_at &&
-              (run.ended_at === null || run.ended_at === undefined || decision.occurred_at <= run.ended_at),
-          )?.capability_run_id;
+          : placedByTime(decision.kind)
+            ? orderedRuns.findLast(
+              (run) =>
+                run.started_at <= decision.occurred_at &&
+                (run.ended_at === null || run.ended_at === undefined || decision.occurred_at <= run.ended_at),
+            )?.capability_run_id
+            : undefined;
     if (ownerId !== undefined && !childIds.has(ownerId)) {
       runDecisions.push({ decision, capabilityRunId: ownerId });
     }

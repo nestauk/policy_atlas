@@ -99,6 +99,17 @@ describe("threadInputs", () => {
     expect(runDecisions).toEqual([{ decision: decisions[0], capabilityRunId: "r1" }]);
   });
 
+  // Round 15: refreshing the shortlist note writes a History event with no
+  // walk; it must not land in the thread by its time.
+  it("places a run-less housekeeping event nowhere, whatever its time", () => {
+    const runs = [run("shortlist", "2026-11-07T10:00:00Z", null)];
+    const note = { ...decision(4, "2026-11-07T10:05:00Z"), kind: "shortlist.note_updated" };
+    const proposed = { ...decision(5, "2026-11-07T10:06:00Z"), kind: "shortlist.proposed" };
+    const own = { ...decision(6, "2026-11-07T10:07:00Z"), kind: "component.completed" };
+    const { runDecisions } = threadInputs([], runs, [note, proposed, own]);
+    expect(runDecisions).toEqual([{ decision: own, capabilityRunId: "shortlist" }]);
+  });
+
   it("gives a run with no preceding turn a null boundary", () => {
     const runs = [run("r1", "2026-07-28T09:00:00Z", null)];
     const { boundaries } = threadInputs([turn(0, "2026-07-28T10:00:00Z")], runs, []);
