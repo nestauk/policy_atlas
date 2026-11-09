@@ -4,7 +4,7 @@ Evidence for one slice. Filled during the build (task-cycle-build, steps 5 and 6
 review stack adds **Review findings** and **Rubric status** at step 7. Public-safe: no
 secrets, no raw source text, no unredacted traces.
 
-> Status: **Phases 0 to 9 built and committed (2026-11-05); the build pauses at two owner gates.** (1) Phase 10, the polish cycle: the agent pass and up to three owner rounds on the live dev app, in their own conversation (D11). (2) Phase 11, the measures: the four fixed questions before and after on the laptop, and the staging baseline (P16), each a real run whose cost the owner approves (plan Phase 0). Step 6's exit (the measures, the Luna strict check, the polish log, live-dev screenshots) follows those; the review stack then runs in a fresh conversation. Everything deterministic is done: every need N1 to N24 and N26 is implemented and tested; `make verify` and the mock journeys are green at `HEAD`.
+> Status: **Phases 0 to 9 built and committed (2026-11-05); the build pauses at two owner gates.** (1) Phase 10, the polish cycle: the agent pass and up to three owner rounds on the live dev app, in their own conversation (D11). (2) Phase 11, the measures: skipped by the owner on 2026-11-09 (§ N25 measures). Phase 10 ran as polish rounds 6 to 15 plus two consolidation batches (2026-11-05 to 09); the review stack runs next, in a fresh conversation. Everything deterministic is done: every need N1 to N24 and N26 is implemented and tested; `make verify` and the mock journeys are green at `HEAD`.
 
 ## Commands run
 
@@ -82,10 +82,15 @@ uv run --project backend python scripts/stage_walls.py --capture research/captur
 
 ## N25 measures
 
-Not yet run: the four fixed questions before and after (laptop) and the staging baseline
-(P16) each run real model calls and were gated on the owner's go at plan time. The capture
-tool and the gap measure are built and tested (Phase 0). The "before" captures must run on
-`dev` (the old tick shape, mapped by the capture client), the "after" on this branch.
+**Skipped by owner decision (2026-11-09): "I'd rather skip the fixed question runs, I've done
+enough runs with my checks."** The four fixed questions before and after (laptop) and the
+staging baseline (P16) each run real model calls and were gated on the owner's go at plan
+time; the owner chose not to spend them. The capture tool and the gap measure are built and
+tested (Phase 0) and stay for a later measurement. What stands as live evidence instead: the
+owner's own live runs on the dev app through polish rounds 6 to 15 (2026-11-05 to 09), whose
+notes drove those rounds and whose fixes were each gated; one builder's live-app check on task
+7f311800 (round 15). The rubric's latency-measure items are therefore **not measured**; the
+review records them as an owner decision, not a gap.
 
 ## Polish log (D11)
 
@@ -754,9 +759,18 @@ Filled per phase as it lands; the flagged deviations are in § Review handoff.
 
 ## Known unverified items
 
-- No run of either capability has been watched on the live app with the new code; every
-  surface is verified by unit tests, the mock journeys and screenshots of the mock. The first
-  live runs are the N25 "after" runs.
+- The N25 fixed-question measures were skipped by the owner (2026-11-09, § N25 measures);
+  both capabilities were watched on the live dev app by the owner through rounds 6 to 15, and
+  the owner's notes from those runs drove the rounds. No before/after figure exists for the
+  perceived-latency targets.
+- Not reproduced: the owner's report (round 15) of a new progress card in the Task Agent
+  thread on each shortlist-note refresh. The server, the stream, the hub, the reducer and a
+  live-app run on task 7f311800 were all clean; the thread's placement rule was tightened
+  anyway. Needs the task, the view and a screenshot.
+- Not proven by test: that the `chat:title` generation nests inside the chat turn's trace and
+  that a note refresh carries the task's session id (round 14 backend report).
+- Chat's turn citations still carry a per-citation verdict (the chat API's shape); the
+  report's moved to the claim (round 13).
 - **D1 build-time check, done 2026-11-05** (`research/exp-luna-strict-check.md`, two live calls,
   cents): Luna accepted the streamed strict `json_schema` response with the raw
   `SectionProseWire` schema (what the section call sends) and with the strict-transformed one
