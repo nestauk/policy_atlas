@@ -31,7 +31,7 @@ are done (spec-prep 2026-06-22; refreshed 2026-07-03); `[ ]` items are open gate
   model-call step; ADR 0043) merged to `dev` on 2026-11-04 (PR #111); 058 (perceived latency:
   a live activity line from coalesced ticks, streamed report sections and planner reply, one
   server source of progress copy, the longlist from the first minute, fifteen owner polish
-  rounds across the app; ADR 0044) reviewed on `task/058-perceived-latency` as of 2026-11-09 —
+  rounds across the app; ADR 0044) merged to `dev` on 2026-11-09 (PR #115) —
   system live at `v3.policyatlas.uk`; the next slice is the newest `docs/tasks/NNN-*/contract.md` and
   its `task/NNN-slug` branch).
 - [x] Verification plan for first implementation slices — per-task `verification.md` from

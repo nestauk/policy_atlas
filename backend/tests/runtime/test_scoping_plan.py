@@ -619,3 +619,28 @@ def test_a_question_change_changes_the_longlist_inputs() -> None:
     plan = build_scoping_plan(_ready_draft(), linked_task_ids=[])
     edited = plan.model_copy(update={"question": f"{plan.question} in rural areas"})
     assert longlist_inputs(edited) != longlist_inputs(plan)
+
+
+def test_a_plan_stored_before_the_row_key_still_validates_with_todays_steps() -> None:
+    """A stored plan's steps are stamped with the server's words before validation.
+
+    2026-11-09: opening an older scoping task failed its live-updates stream
+    with a 500. The replay validated the stored plan against today's model,
+    whose steps require the ``row`` key task 058 added, and the stored steps
+    had none. The steps are code-supplied, so the plan model replaces each
+    stored step with today's copy for its stage before validating.
+    """
+    from policy_atlas.runtime import capability_registry as registry
+    from policy_atlas.runtime.scoping_plan import SCOPING_STEPS
+
+    stored = build_scoping_plan(_ready_draft()).model_dump(mode="json")
+    stored["steps"] = [
+        {**{key: value for key, value in step.items() if key != "row"}, "label": "Old"}
+        for step in stored["steps"]
+    ]
+    assert all("row" not in step for step in stored["steps"])
+    plan = registry.expect_scoping_plan(registry.validate_plan(registry.OPTIONS_SCOPING, stored))
+    assert [step.row for step in plan.steps] == [step.row for step in SCOPING_STEPS]
+    assert [step.label for step in plan.steps] == [step.label for step in SCOPING_STEPS]
+    assert [step.blurb for step in plan.steps] == [step.blurb for step in SCOPING_STEPS]
+

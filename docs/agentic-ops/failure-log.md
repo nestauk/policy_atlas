@@ -748,3 +748,21 @@ by pathspec and read by surface, so the cost was the diff, not a fan-out.
 **Rules:** (1) the ceiling scales with the diff; record the ratio in `verification.md` rather
 than trimming lanes to fit. (2) A build that runs polish rounds across the whole app should
 land the consolidation batches as their own earlier PR, so the review reads one slice.
+
+## 2026-11-09 — A required field added to a stored model broke the live-updates stream for every older task (task 058, found after merge)
+
+**What happened:** task 058 added `row` to the plan step and made it required. The Agent
+transcript read was taught to re-stamp stored steps, but the live-updates stream's replay
+validates each stored plan on its own path, and twelve other readers validate stored plans
+too. The first older scoping task the owner opened after the merge failed its stream with a
+500 ("3 validation errors for ScopingPlan: steps.0.row Field required"), so the page sat on
+"reconnecting to live updates" and the Agent tab never loaded. Dev data only; nothing on
+staging carried the old shape yet.
+
+**Rules:** (1) a field added to a model that is read back from the database is a stored-data
+change, whatever the deploy-together rule says about the wire: either it has a default, or the
+model fills it before validation, in the model, never in one reader. (2) The verifier's check
+"documented but not built" needs a twin, "built for new rows only": grep every `validate_plan`
+(and every `model_validate` of a stored payload) when a stored model gains a required field.
+(3) Open an older task of each capability on the dev app before the PR closes; the review's
+live checks were all on fresh runs.
