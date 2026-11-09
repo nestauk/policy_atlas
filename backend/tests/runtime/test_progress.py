@@ -249,9 +249,10 @@ def test_progress_emitter_case_studies_slot_and_citations_survive_replay(
         assert completed[1]["citations"] == [body_citation]
         assert completed[0]["citations"] == []
         assert completed[2]["title"] == "Case studies"
-        # A citation recorded without the round-8 fields replays with them empty.
+        # A citation recorded without the round-8 fields (or the chunk id,
+        # 2026-11-09) replays with them empty.
         assert completed[2]["citations"] == [
-            {**card_citation, "citation_id": None, "claim_id": None, "quote": ""}
+            {**card_citation, "citation_id": None, "claim_id": None, "chunk_id": None, "quote": ""}
         ]
     finally:
         _cleanup(engine, task_id)
