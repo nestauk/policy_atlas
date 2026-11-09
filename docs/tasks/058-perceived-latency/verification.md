@@ -210,6 +210,8 @@ review records them as an owner decision, not a gap.
   carries each citation's `chunk_id` and the live sheet reads the passage by chunk and quote
   (chat's route) until the report commits; the quote shows at once; a 4xx is not retried. Backend:
   the frame builder's test asserts the chunk ids; OpenAPI and the generated types regenerated.
+  DESIGN.md distilled from 20,486 to 8,930 words (frontend-designer in its documenter role; no
+  rule lost, history and implementation detail out; annex § Round 16).
 
 ## Evidence shown live (owner, 2026-11-05)
 

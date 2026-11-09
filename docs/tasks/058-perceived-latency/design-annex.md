@@ -2669,3 +2669,13 @@ Owner notes on the live app after the review stack, applied in the review conver
   under it only while a read is in flight, and a 4xx on a passage read is not retried. A frame
   recorded before the field existed still shows the quote with the note "The surrounding
   passage is read once the report is complete."
+- **DESIGN.md distilled** (owner: "the design.md has become quite bloated during this task"):
+  20,486 words to 8,930 (the frontmatter and the six principles unchanged word for word); the
+  round-by-round history (173 round mentions to 0) and the implementation detail the code owns
+  (class names, test ids, per-surface widths and offsets, query parameters, copy lists) deleted;
+  every rule kept, the per-surface walkthroughs cut to their distinctive rules under one
+  "Signature surfaces" heading; new system-level homes for Disclosure, Lists and Tables; the
+  defined-once homes as one table. This annex stays the record of how each rule came to be.
+  The documenter's "kept, unsure" consolidations, the rules found only here, and nine
+  contradictions in the old text (resolved toward the code) are listed in the review
+  conversation's report for the owner.
