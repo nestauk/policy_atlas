@@ -703,6 +703,9 @@ def test_first_content_s_is_optional_and_a_route_may_override_it(tmp_path: Path)
     bad = with_limit.replace("first_content_s = 45", "first_content_s = 0")
     with pytest.raises(RuntimeError, match="'first_content_s' is 0"):
         load_route(_write(tmp_path, "bad.toml", bad), "r", {})
-    # The committed file sets it on the report step only.
+    # The committed file sets it on the two streamed ToC steps only (the report; the draft, S12).
     committed = load_route(ROUTE_FILE, "bedrock", {})
-    assert [step for step in committed.steps if committed.first_content_for(step)] == ["toc_report"]
+    assert sorted(step for step in committed.steps if committed.first_content_for(step)) == [
+        "toc_draft",
+        "toc_report",
+    ]

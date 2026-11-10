@@ -135,6 +135,9 @@ from policy_atlas.theory_of_change.review_prompt import (
     build_review_messages,
 )
 
+#: The route step the draft call uses.
+DRAFT_STEP = "toc_draft"
+
 #: What a stub report stream may be scripted with: text pieces, with an
 #: exception among them to fail mid-stream.
 type ScriptedStream = Iterable[str | BaseException]
@@ -156,6 +159,27 @@ class TocBackend(Protocol):
         problems: list[str] | None = None,
     ) -> UsageResult[DraftResponse]:
         """Write the first draft (``toc_draft_v1``)."""
+        ...
+
+    def draft_stream(
+        self,
+        *,
+        plan: dict[str, object],
+        existing_theory: str | None,
+        problems: list[str] | None = None,
+        on_text: Callable[[str], None],
+        first_content_s: float | None,
+    ) -> UsageResult[DraftResponse]:
+        """Write the same draft as :meth:`draft`, streamed (task 054, S12).
+
+        One call, never retried. Each piece of the answer's JSON text goes to
+        ``on_text`` as it arrives; the whole text is then parsed into
+        :class:`DraftResponse` as :meth:`draft` parses it.
+
+        Raises:
+            FirstContentTimeout: If no words came within ``first_content_s``.
+            Exception: On any stream or parse failure; the caller falls back.
+        """
         ...
 
     def discover(
@@ -356,9 +380,45 @@ class OpenAITocBackend:
         return self._call(
             build_draft_messages(plan, existing_theory=existing_theory, problems=problems),
             response_format=DraftResponse,
-            step="toc_draft",
+            step=DRAFT_STEP,
             max_output_tokens=TOC_DRAFT_MAX_OUTPUT_TOKENS,
             prompt_version=TOC_DRAFT_PROMPT_VERSION,
+        )
+
+    def draft_stream_request(self, messages: list[ChatCompletionMessageParam]) -> dict[str, Any]:
+        """The streamed draft call's request: :meth:`draft`'s request, streamed (task 054, S12).
+
+        Args:
+            messages: The draft call's messages (:func:`build_draft_messages`).
+
+        Returns:
+            Keyword arguments for ``chat.completions.create``.
+        """
+        return self._stream_request(
+            messages,
+            step=DRAFT_STEP,
+            response_format=DraftResponse,
+            max_output_tokens=TOC_DRAFT_MAX_OUTPUT_TOKENS,
+        )
+
+    def draft_stream(
+        self,
+        *,
+        plan: dict[str, object],
+        existing_theory: str | None,
+        problems: list[str] | None = None,
+        on_text: Callable[[str], None],
+        first_content_s: float | None,
+    ) -> UsageResult[DraftResponse]:
+        """See :class:`TocBackend`. Traced as one Langfuse generation, attempt 1."""
+        return self._stream_parse(
+            build_draft_messages(plan, existing_theory=existing_theory, problems=problems),
+            step=DRAFT_STEP,
+            response_format=DraftResponse,
+            max_output_tokens=TOC_DRAFT_MAX_OUTPUT_TOKENS,
+            prompt_version=TOC_DRAFT_PROMPT_VERSION,
+            on_text=on_text,
+            first_content_s=first_content_s,
         )
 
     def discover(
@@ -558,33 +618,18 @@ class OpenAITocBackend:
     ) -> dict[str, Any]:
         """The streamed report call's request: :meth:`report`'s request, streamed (A12).
 
-        The same keyword arguments ``chat.completions.parse`` sends for the
-        report (the route step's model, effort, timeout and cache mode, the
-        messages, the token cap, and the strict JSON schema that ``parse``
-        derives from :class:`ReportResponse`), plus ``stream`` and
-        ``stream_options``.
-
         Args:
             messages: The report call's messages (:func:`build_report_messages`).
 
         Returns:
             Keyword arguments for ``chat.completions.create``.
         """
-        step = REPORT_STEP
-        cache = cache_mode_for(step)
-        return {
-            "messages": with_system_breakpoint(messages) if cache == "breakpoint" else messages,
-            "response_format": type_to_response_format_param(ReportResponse),
-            **openai_kwargs(
-                route().model_for(step),
-                reasoning_effort=route().effort_for(step),
-                prompt_cache=cache,
-                timeout_s=route().timeout_for(step),
-            ),
-            "max_completion_tokens": TOC_REPORT_MAX_OUTPUT_TOKENS,
-            "stream": True,
-            "stream_options": {"include_usage": True},
-        }
+        return self._stream_request(
+            messages,
+            step=REPORT_STEP,
+            response_format=ReportResponse,
+            max_output_tokens=TOC_REPORT_MAX_OUTPUT_TOKENS,
+        )
 
     def report_stream(
         self,
@@ -597,15 +642,74 @@ class OpenAITocBackend:
         first_content_s: float | None,
     ) -> UsageResult[ReportResponse]:
         """See :class:`TocBackend`. Traced as one Langfuse generation, attempt 1."""
-        step = REPORT_STEP
-        messages = build_report_messages(plan=plan, theory=theory, rows=rows, sources=sources)
-        request = self.report_stream_request(messages)
+        return self._stream_parse(
+            build_report_messages(plan=plan, theory=theory, rows=rows, sources=sources),
+            step=REPORT_STEP,
+            response_format=ReportResponse,
+            max_output_tokens=TOC_REPORT_MAX_OUTPUT_TOKENS,
+            prompt_version=TOC_REPORT_PROMPT_VERSION,
+            on_text=on_text,
+            first_content_s=first_content_s,
+        )
+
+    def _stream_request(
+        self,
+        messages: list[ChatCompletionMessageParam],
+        *,
+        step: str,
+        response_format: type[BaseModel],
+        max_output_tokens: int,
+    ) -> dict[str, Any]:
+        """A step's ordinary request, streamed.
+
+        The same keyword arguments ``chat.completions.parse`` sends for the
+        step (the route step's model, effort, timeout and cache mode, the
+        messages, the token cap, and the strict JSON schema that ``parse``
+        derives from the answer format), plus ``stream`` and ``stream_options``.
+        """
+        cache = cache_mode_for(step)
+        return {
+            "messages": with_system_breakpoint(messages) if cache == "breakpoint" else messages,
+            "response_format": type_to_response_format_param(response_format),
+            **openai_kwargs(
+                route().model_for(step),
+                reasoning_effort=route().effort_for(step),
+                prompt_cache=cache,
+                timeout_s=route().timeout_for(step),
+            ),
+            "max_completion_tokens": max_output_tokens,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        }
+
+    def _stream_parse[T: BaseModel](
+        self,
+        messages: list[ChatCompletionMessageParam],
+        *,
+        step: str,
+        response_format: type[T],
+        max_output_tokens: int,
+        prompt_version: str,
+        on_text: Callable[[str], None],
+        first_content_s: float | None,
+    ) -> UsageResult[T]:
+        """Make one streamed call and parse its whole text as the ordinary call does.
+
+        Each text piece goes to ``on_text`` on this thread (:func:`consume`);
+        the call is traced as one Langfuse generation, attempt 1.
+        """
+        request = self._stream_request(
+            messages,
+            step=step,
+            response_format=response_format,
+            max_output_tokens=max_output_tokens,
+        )
         model = route().model_for(step)
         metadata = {
             "step": step,
             "attempt": 1,
             "streamed": True,
-            "prompt_version": TOC_REPORT_PROMPT_VERSION,
+            "prompt_version": prompt_version,
             "reasoning_effort": route().effort_for(step),
             "prompt_cache": cache_mode_for(step),
         }
@@ -630,14 +734,14 @@ class OpenAITocBackend:
             if stream is not None:
                 stream.close()
 
-        def run(span: Any | None) -> UsageResult[ReportResponse]:
+        def run(span: Any | None) -> UsageResult[T]:
             if span is not None:
                 span.update(input={"messages": messages}, model=model, metadata=metadata)
             text = consume(
                 pieces(), first_content_s=first_content_s, on_fragment=on_text, cancel=cancel
             )
             log_usage(f"{step}.usage", held.get("usage"))
-            wire = ReportResponse.model_validate_json(text)
+            wire = response_format.model_validate_json(text)
             usage = token_usage_from_provider(held.get("usage"))
             if span is not None:
                 span.update(
@@ -650,7 +754,7 @@ class OpenAITocBackend:
         if self._langfuse_client is None:
             return run(None)
         with tracing._observation(
-            self._langfuse_client, name="toc:report", as_type="generation"
+            self._langfuse_client, name=f"toc:{step.removeprefix('toc_')}", as_type="generation"
         ) as span:
             return run(span)
 
@@ -726,8 +830,16 @@ def stub_draft(plan: dict[str, object]) -> DraftResponse:
     )
 
 
-#: Characters per piece of the stub's streamed report.
+#: Characters per piece of the stub's streamed report and draft.
 STUB_PIECE = 40
+
+
+def _pieces(script: ScriptedStream) -> Iterator[str]:
+    """A scripted stream's text pieces; an exception among them is raised there."""
+    for piece in script:
+        if isinstance(piece, BaseException):
+            raise piece
+        yield piece
 
 
 class StubTocBackend:
@@ -752,6 +864,7 @@ class StubTocBackend:
       link and cites that link's first source; a reason for every row.
     - ``report_stream``: the ``report`` answer as JSON in small pieces, or
       the queued script (see :meth:`report_stream`).
+    - ``draft_stream``: the ``draft`` answer the same way (see :meth:`draft_stream`).
     - ``sense_check``: plausible, too little evidence, no warning or note.
     - ``theory_verdict``: plausible, too little evidence.
     - ``import_theory``: a three-box chain with two drawn arrows.
@@ -791,6 +904,42 @@ class StubTocBackend:
         """See :class:`StubTocBackend`."""
         queued = self._next("draft", {"plan": plan, "existing_theory": existing_theory})
         return (queued or stub_draft(plan)), None
+
+    def draft_stream(
+        self,
+        *,
+        plan: dict[str, object],
+        existing_theory: str | None,
+        problems: list[str] | None = None,
+        on_text: Callable[[str], None],
+        first_content_s: float | None,
+    ) -> UsageResult[DraftResponse]:
+        """See :class:`StubTocBackend`.
+
+        A queued ``draft_stream`` item scripts the stream as one for
+        :meth:`report_stream` does. With nothing queued, :meth:`draft`'s
+        answer is sent as JSON in small pieces, so a keyless run shows the
+        draft being drawn.
+        """
+        script = self._script(
+            "draft_stream",
+            lambda: self.draft(plan=plan, existing_theory=existing_theory, problems=problems)[0],
+        )
+        text = consume(_pieces(script), first_content_s=first_content_s, on_fragment=on_text)
+        return DraftResponse.model_validate_json(text), None
+
+    def _script(self, name: str, answer: Callable[[], BaseModel]) -> ScriptedStream:
+        """A stream's pieces: the queued script under ``name``, else ``answer()`` in pieces."""
+        with self._lock:
+            self.calls[name] += 1
+            queue = self._queues.get(name)
+            item = queue.pop(0) if queue else None
+        if isinstance(item, BaseException):
+            raise item
+        if item is None:
+            text = answer().model_dump_json()
+            return [text[at : at + STUB_PIECE] for at in range(0, len(text), STUB_PIECE)]
+        return cast(ScriptedStream, item() if callable(item) else item)
 
     def discover(
         self,
@@ -1052,28 +1201,11 @@ class StubTocBackend:
         nothing queued, :meth:`report`'s answer is sent as JSON in small
         pieces, so a keyless run shows the report being written.
         """
-        with self._lock:
-            self.calls["report_stream"] += 1
-            queue = self._queues.get("report_stream")
-            item = queue.pop(0) if queue else None
-        if isinstance(item, BaseException):
-            raise item
-        if item is None:
-            wire, _ = self.report(plan=plan, theory=theory, rows=rows, sources=sources)
-            text = wire.model_dump_json()
-            script: ScriptedStream = [
-                text[at : at + STUB_PIECE] for at in range(0, len(text), STUB_PIECE)
-            ]
-        else:
-            script = item() if callable(item) else item
-
-        def pieces() -> Iterator[str]:
-            for piece in script:
-                if isinstance(piece, BaseException):
-                    raise piece
-                yield piece
-
-        text = consume(pieces(), first_content_s=first_content_s, on_fragment=on_text)
+        script = self._script(
+            "report_stream",
+            lambda: self.report(plan=plan, theory=theory, rows=rows, sources=sources)[0],
+        )
+        text = consume(_pieces(script), first_content_s=first_content_s, on_fragment=on_text)
         return ReportResponse.model_validate_json(text), None
 
     def report(

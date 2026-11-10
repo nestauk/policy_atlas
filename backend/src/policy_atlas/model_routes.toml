@@ -126,7 +126,10 @@ option_profile_place_sentences = { tier = "fast", reasoning_effort = "medium", t
 # the branch's client timeout (the planner: 180 s, as before): the draft, the report and
 # the vision import take minutes.
 task_agent_toc = { tier = "standard", reasoning_effort = "none", timeout_s = 180 }
-toc_draft = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300 }   # Sol, for the owner's latency and quality comparison with Terra (2026-11-06)
+# toc_draft streams onto the canvas (task 054, S12); first_content_s as on toc_report below.
+# 90 s: Sol thinks before it writes the first box; first words measured at 30.2, 31.8 and
+# 38.6 s on 3 real drafts, 2026-11-10; research/draft-stream-probe/
+toc_draft = { tier = "frontier", reasoning_effort = "medium", timeout_s = 300, first_content_s = 90 }   # Sol, for the owner's latency and quality comparison with Terra (2026-11-06)
 # ToC timeouts measured from Langfuse, 2026-10-25 to 2026-11-10: each is about 1.5-2x the slowest
 # answered call (slowest: merge 32 s bar one 222 s outlier, choose 35, discover 27, judge 3, figures 9,
 # pick 11, summarise 62, review 26, sense check 11, verdict 17, import 48). A healthy call cut off

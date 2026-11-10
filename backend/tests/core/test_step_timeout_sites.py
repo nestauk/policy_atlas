@@ -65,11 +65,13 @@ NOT_WRAPPED: dict[tuple[str, str], str] = {
         "round 8); its timeout bounds the gap between chunks; one non-streamed run of "
         "write_full_report_intro (with its own retries) on failure"
     ),
-    ("theory_of_change/backend.py", "OpenAITocBackend.report_stream"): (
+    ("theory_of_change/backend.py", "OpenAITocBackend._stream_parse"): (
         "exempt-stream: the theory of change report reaches the user field by field as it "
-        "is written (task 054's 058 alignment, S4); its timeout bounds the gap between "
+        "is written (task 054's 058 alignment, S4), and the first draft box by box and "
+        "connection by connection (task 054, S12); its timeout bounds the gap between "
         "chunks and first_content_s the wait for the first words; one non-streamed run of "
-        "report (with its own retries) on failure, in report_stream.write_streamed"
+        "report or draft (with its own retries) on failure, in report_stream.write_streamed "
+        "and draft_stream.draft_streamed"
     ),
     ("runtime/task_agent.py", "OpenAITaskAgentBackend._stream_attempt"): (
         "exempt-stream: the planner reply reaches the user as it arrives; one traced "

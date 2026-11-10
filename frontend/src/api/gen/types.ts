@@ -1093,6 +1093,12 @@ export interface paths {
         /**
          * Create Run
          * @description Dispatch an approved plan off the request path and return its walk row.
+         *
+         *     Starting a theory of change also names the task from the plan's question,
+         *     unless the user has named it (task 058, round 14, as Evidence search and
+         *     options scoping name theirs when the question part is confirmed). Its
+         *     Task Agent has no question part: Start is where the user confirms the
+         *     question, and the plan is fixed once the draft exists (S7).
          */
         post: operations["create_run_api_v1_tasks__task_id__runs_post"];
         delete?: never;
@@ -6192,6 +6198,44 @@ export interface components {
             state: "proposed" | "added_by_you" | "set_aside";
         };
         /**
+         * SketchBox
+         * @description One box of the theory of change draft as the model wrote it (task 054, S12).
+         *
+         *     Args:
+         *         key: The model's key for the box in this draft ("b1", "b2", ...), not a
+         *             stored id; connections name their ends by it.
+         *         layer: The box's column on the canvas.
+         *         text: The box's words.
+         */
+        SketchBox: {
+            /** Key */
+            key: string;
+            /**
+             * Layer
+             * @enum {string}
+             */
+            layer: "input" | "output" | "outcome_short" | "outcome_long" | "impact" | "failure_outcome";
+            /** Text */
+            text: string;
+        };
+        /**
+         * SketchLink
+         * @description One connection of the draft as the model wrote it (task 054, S12).
+         *
+         *     Args:
+         *         key: The model's key for the connection ("l1", ...).
+         *         source: The draft key of the box it starts from.
+         *         target: The draft key of the box it leads to.
+         */
+        SketchLink: {
+            /** Key */
+            key: string;
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
+        };
+        /**
          * SourceDossierOut
          * @description The optional source dossier, including provenance and latest citations.
          */
@@ -6310,7 +6354,7 @@ export interface components {
             /** Tag Type */
             tag_type: string;
         };
-        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["TaskUpdatedFrame"] | components["schemas"]["TickFrame"] | components["schemas"]["ArtefactSectionDeltaFrame"] | components["schemas"]["ArtefactSectionRevisingFrame"] | components["schemas"]["ArtefactSectionSourcesFrame"] | components["schemas"]["ArtefactSectionClaimFrame"] | components["schemas"]["ArtefactSectionCardFrame"] | components["schemas"]["ArtefactSourceNoteFrame"] | components["schemas"]["SearchQueryFrame"] | components["schemas"]["CharacteriseThemesFrame"];
+        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["TaskUpdatedFrame"] | components["schemas"]["TickFrame"] | components["schemas"]["ArtefactSectionDeltaFrame"] | components["schemas"]["ArtefactSectionRevisingFrame"] | components["schemas"]["ArtefactSectionSourcesFrame"] | components["schemas"]["ArtefactSectionClaimFrame"] | components["schemas"]["ArtefactSectionCardFrame"] | components["schemas"]["ArtefactSourceNoteFrame"] | components["schemas"]["SearchQueryFrame"] | components["schemas"]["CharacteriseThemesFrame"] | components["schemas"]["TocSketchFrame"];
         /**
          * StageCompletedFrame
          * @description A component reached its terminal (successful) outcome.
@@ -8190,6 +8234,42 @@ export interface components {
         TocRevisionOut: {
             /** Revision */
             revision: number;
+        };
+        /**
+         * TocSketchFrame
+         * @description Ephemeral: the theory of change's first draft while it is written (task 054, S12).
+         *
+         *     Sent whole each time a box or connection closes in the model's answer:
+         *     each frame replaces the one before. The boxes come first, then the
+         *     connections; a connection names its ends by the boxes' draft keys, and
+         *     only after both boxes were sent. An empty frame (no boxes, no
+         *     connections) means the draft is being written again: the page drops
+         *     its sketch. The stored graph (`GET /toc`, read when the `toc_draft`
+         *     stage completes) replaces the sketch; its ids are not the draft keys. A
+         *     reconnect gets the sketch so far. Display-only: never persisted, no
+         *     `id:` line, no `sequence`.
+         */
+        TocSketchFrame: {
+            /** Boxes */
+            boxes: components["schemas"]["SketchBox"][];
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Links */
+            links: components["schemas"]["SketchLink"][];
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "toc.sketch";
         };
         /**
          * TocStudyIn

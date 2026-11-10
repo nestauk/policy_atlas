@@ -47,6 +47,7 @@ from policy_atlas.api.contract import (
     StageStartedFrame,
     TaskUpdatedFrame,
     TickFrame,
+    TocSketchFrame,
 )
 from policy_atlas.api.deps import get_current_user, get_engine, get_settings
 from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
@@ -85,6 +86,7 @@ from policy_atlas.core.liveness import (
     SourceRef,
     ThemesFound,
     Tick,
+    TocSketch,
     tick_hub,
 )
 from policy_atlas.core.schema import event_log, runs, task_plan
@@ -764,6 +766,7 @@ def _encode_ephemeral(message: HubMessage) -> str:
             | ArtefactSourceNoteFrame
             | SearchQueryFrame
             | CharacteriseThemesFrame
+            | TocSketchFrame
         ) = (
             TickFrame(
                 type="tick",
@@ -835,6 +838,21 @@ def _encode_ephemeral(message: HubMessage) -> str:
                 for label, description in message.themes
             ],
             occurred_at=message.occurred_at,
+        )
+    elif isinstance(message, TocSketch):
+        frame = TocSketchFrame.model_validate(
+            {
+                "type": "toc.sketch",
+                "boxes": [
+                    {"key": key, "layer": layer, "text": text}
+                    for key, layer, text in message.boxes
+                ],
+                "links": [
+                    {"key": key, "source": source, "target": target}
+                    for key, source, target in message.links
+                ],
+                "occurred_at": message.occurred_at,
+            }
         )
     else:
         frame = ArtefactSectionClaimFrame(

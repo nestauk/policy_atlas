@@ -23,6 +23,7 @@ const SSE_FRAME_TYPES: ReadonlySet<SseFrame["type"]> = new Set([
   "artefact.source_note",
   "search.query",
   "characterise.themes",
+  "toc.sketch",
 ] satisfies SseFrame["type"][]);
 
 /**

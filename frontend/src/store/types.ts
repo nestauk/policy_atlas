@@ -196,6 +196,15 @@ export interface LiveTheme {
   description: string | null;
 }
 
+/** The theory of change's first draft while it is written (`toc.sketch`,
+ *  task 054, S12): the boxes and connections so far, keyed by the model's
+ *  draft keys (not stored ids). Display-only: the stored graph (`GET /toc`,
+ *  read once the draft stage completes) replaces it. */
+export interface LiveSketch {
+  boxes: { key: string; layer: components["schemas"]["SketchBox"]["layer"]; text: string }[];
+  links: { key: string; source: string; target: string }[];
+}
+
 /** One case-study card as it closes in the streamed reply (task 058, round 7). */
 export interface LiveCard {
   title: string;
@@ -272,6 +281,11 @@ export interface RunStreamState {
    *  assigned to them (`characterise.themes` with `stage: "theme"`). Absent
    *  until then; cleared when a new run starts (task 058, round 11). */
   liveOptionThemes?: LiveTheme[];
+  /** The theory of change draft's sketch while it is written (`toc.sketch`):
+   *  each frame replaces it, an empty one removes it (the draft is written
+   *  again). Absent until the first box; cleared when a new run starts
+   *  (task 054, S12). */
+  liveSketch?: LiveSketch;
   /** Transient: latest tick per stage. Never sequence-gated, never replayed
    *  (a fresh mount/reconnect starts this slice empty regardless of
    *  cursor). */

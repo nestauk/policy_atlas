@@ -8253,6 +8253,62 @@
         "title": "ShortlistStateOut",
         "type": "object"
       },
+      "SketchBox": {
+        "description": "One box of the theory of change draft as the model wrote it (task 054, S12).\n\nArgs:\n    key: The model's key for the box in this draft (\"b1\", \"b2\", ...), not a\n        stored id; connections name their ends by it.\n    layer: The box's column on the canvas.\n    text: The box's words.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "layer": {
+            "enum": [
+              "input",
+              "output",
+              "outcome_short",
+              "outcome_long",
+              "impact",
+              "failure_outcome"
+            ],
+            "title": "Layer",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "layer",
+          "text"
+        ],
+        "title": "SketchBox",
+        "type": "object"
+      },
+      "SketchLink": {
+        "description": "One connection of the draft as the model wrote it (task 054, S12).\n\nArgs:\n    key: The model's key for the connection (\"l1\", ...).\n    source: The draft key of the box it starts from.\n    target: The draft key of the box it leads to.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "source",
+          "target"
+        ],
+        "title": "SketchLink",
+        "type": "object"
+      },
       "SourceDossierOut": {
         "description": "The optional source dossier, including provenance and latest citations.",
         "properties": {
@@ -8661,7 +8717,8 @@
             "stage.failed": "#/components/schemas/StageFailedFrame",
             "stage.started": "#/components/schemas/StageStartedFrame",
             "task.updated": "#/components/schemas/TaskUpdatedFrame",
-            "tick": "#/components/schemas/TickFrame"
+            "tick": "#/components/schemas/TickFrame",
+            "toc.sketch": "#/components/schemas/TocSketchFrame"
           },
           "propertyName": "type"
         },
@@ -8725,6 +8782,9 @@
           },
           {
             "$ref": "#/components/schemas/CharacteriseThemesFrame"
+          },
+          {
+            "$ref": "#/components/schemas/TocSketchFrame"
           }
         ]
       },
@@ -13218,6 +13278,49 @@
         "title": "TocRevisionOut",
         "type": "object"
       },
+      "TocSketchFrame": {
+        "description": "Ephemeral: the theory of change's first draft while it is written (task 054, S12).\n\nSent whole each time a box or connection closes in the model's answer:\neach frame replaces the one before. The boxes come first, then the\nconnections; a connection names its ends by the boxes' draft keys, and\nonly after both boxes were sent. An empty frame (no boxes, no\nconnections) means the draft is being written again: the page drops\nits sketch. The stored graph (`GET /toc`, read when the `toc_draft`\nstage completes) replaces the sketch; its ids are not the draft keys. A\nreconnect gets the sketch so far. Display-only: never persisted, no\n`id:` line, no `sequence`.",
+        "properties": {
+          "boxes": {
+            "items": {
+              "$ref": "#/components/schemas/SketchBox"
+            },
+            "title": "Boxes",
+            "type": "array"
+          },
+          "ephemeral": {
+            "const": true,
+            "default": true,
+            "title": "Ephemeral",
+            "type": "boolean"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/SketchLink"
+            },
+            "title": "Links",
+            "type": "array"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "type": {
+            "const": "toc.sketch",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "boxes",
+          "links",
+          "occurred_at"
+        ],
+        "title": "TocSketchFrame",
+        "type": "object"
+      },
       "TocStudyIn": {
         "additionalProperties": false,
         "description": "A study the user adds to a link: a DOI or a web address (C42).",
@@ -16921,7 +17024,7 @@
         ]
       },
       "post": {
-        "description": "Dispatch an approved plan off the request path and return its walk row.",
+        "description": "Dispatch an approved plan off the request path and return its walk row.\n\nStarting a theory of change also names the task from the plan's question,\nunless the user has named it (task 058, round 14, as Evidence search and\noptions scoping name theirs when the question part is confirmed). Its\nTask Agent has no question part: Start is where the user confirms the\nquestion, and the plan is fixed once the draft exists (S7).",
         "operationId": "create_run_api_v1_tasks__task_id__runs_post",
         "parameters": [
           {

@@ -2,7 +2,9 @@
 
 ``toc_draft`` reads the walk's plan, asks the model for a draft, runs the E1
 structure checks, retries once with the problems named, and writes the graph
-through :mod:`policy_atlas.theory_of_change.store`.
+through :mod:`policy_atlas.theory_of_change.store`. A draft written onto an
+empty canvas is drawn on the page as it is written
+(:mod:`policy_atlas.theory_of_change.draft_stream`, task 054, S12).
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ from policy_atlas.core.schema import (
     toc_box,
     toc_link,
 )
-from policy_atlas.core.usage import UsageAccumulator
+from policy_atlas.core.usage import UsageAccumulator, UsageResult
 from policy_atlas.options_scoping.context import ScopeContext
 from policy_atlas.runtime.capability_registry import (
     THEORY_OF_CHANGE,
@@ -38,6 +40,7 @@ from policy_atlas.theory_of_change.draft_prompt import (
     DraftPathwayWire,
     DraftResponse,
 )
+from policy_atlas.theory_of_change.draft_stream import SketchFrames, draft_streamed
 from policy_atlas.theory_of_change.graph import (
     Box,
     Graph,
@@ -577,19 +580,35 @@ def toc_draft_scope(
             for part in (sketch_text(sketched, sketched_links), imported and imported["text"])
             if part
         )
-    draft, call_usage = backend.draft(plan=data, existing_theory=existing)
+    # Drawn live only when the draft becomes the canvas as written: the user's own
+    # boxes or diagram keep their place, and the draft only fills them in (S12).
+    sketch = SketchFrames() if not sketched and not as_drawn(plan) else None
+
+    def ask(problems: list[str] | None = None) -> UsageResult[DraftResponse]:
+        if sketch is None:
+            return backend.draft(plan=data, existing_theory=existing, problems=problems)
+        return draft_streamed(
+            backend, plan=data, existing_theory=existing, problems=problems, frames=sketch
+        )
+
+    draft, call_usage = ask()
     usage.add(call_usage)
     draft = with_trimmed_conditions(draft)
     problems = draft_problems(draft)
     attempts = 1
     if problems:
         log.info("toc_draft.retry", problems=problems)
-        draft, call_usage = backend.draft(plan=data, existing_theory=existing, problems=problems)
+        if sketch is not None:
+            # The page drops the failed draft and draws the retry from the start.
+            sketch.reset()
+        draft, call_usage = ask(problems)
         usage.add(call_usage)
         draft = with_trimmed_conditions(draft)
         attempts = 2
         problems = draft_problems(draft)
         if problems:
+            if sketch is not None:
+                sketch.reset()
             raise DraftFailure("the draft failed its structure checks: " + "; ".join(problems))
     # An uploaded diagram: the canvas starts with the user's own boxes and arrows;
     # what the draft added to complete the theory waits as one suggestion
