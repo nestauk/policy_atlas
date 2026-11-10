@@ -150,11 +150,26 @@ STEP_TIMEOUT_S: dict[str, float] = {
     "synthesise_write_intro": 30.0,
     # Task 054: the branch's client timeouts (the planner's shared client: 180 s).
     **{step: 300.0 for step in STEP_TIER_AND_EFFORT if step.startswith("toc_")},
+    # Measured tails, 2026-11-10 (a request Bedrock never answers held its step 300 s).
+    **{
+        "toc_merge": 60.0,
+        "toc_choose": 60.0,
+        "toc_discover": 45.0,
+        "toc_judge": 20.0,
+        "toc_figures": 20.0,
+        "toc_pick": 30.0,
+        "toc_summarise": 90.0,
+        "toc_review": 60.0,
+        "toc_sense_check": 30.0,
+        "toc_import": 90.0,
+        "toc_verdict": 45.0,
+    },
     "task_agent_toc": 180.0,
     "task_title": 20.0,
     "shortlist_note": 30.0,
     "chat_title": 20.0,
 }
+
 
 def _default() -> Route:
     return load_route(ROUTE_FILE, "openai-direct", {})
@@ -363,7 +378,7 @@ def test_timeout_shapes_fail_loud(tmp_path: Path, text: str, match: str) -> None
         (MINIMAL.replace('tier = "mini",', 'tier = "mini", temperature = 1,'), "unknown key"),
         (MINIMAL + '[routes.r.steps]\nscreen = { reasoning_effort = "max" }\n', "not one of"),
         (MINIMAL + '[routes.r.steps]\nscreen = { model = "mini", extra = 1 }\n', "unknown key"),
-        (MINIMAL + '[routes.r.steps]\nscreen = {}\n', "empty table"),
+        (MINIMAL + "[routes.r.steps]\nscreen = {}\n", "empty table"),
         (MINIMAL + '[routes.r.steps]\nscreen = ""\n', "empty model"),
         (MINIMAL + '[routes.r.steps]\nscreen = { model = "" }\n', "'model' is empty"),
         (MINIMAL + '[routes.r.knobs]\nreasoning_effort = "none"\n', "'knobs' was retired"),
@@ -429,7 +444,7 @@ def test_overlay_replaces_and_adds_routes_but_not_steps(tmp_path: Path) -> None:
         tmp_path,
         "replace.toml",
         '[routes.r]\nopenai_base_url = "https://other.test/v1"\napi_key_env = "OPENAI_API_KEY"\n'
-        '[routes.r.text]\n'
+        "[routes.r.text]\n"
         'mini = "m-mini-x"\nstandard = "m-std"\n[routes.r.embeddings]\nbackend = "openai"\n'
         'model = "e"\nprofile = "p"\n[routes.r.search_queries]\nbackend = "openai"\n',
     )
@@ -681,14 +696,13 @@ def test_first_content_s_is_optional_and_a_route_may_override_it(tmp_path: Path)
     assert route.first_content_for("screen") is None
     assert route.timeout_for("synthesis") == 120
     override = with_limit + "[routes.r.steps]\nsynthesis = { first_content_s = 9 }\n"
-    assert load_route(_write(tmp_path, "o.toml", override), "r", {}).first_content_for(
-        "synthesis"
-    ) == 9
+    assert (
+        load_route(_write(tmp_path, "o.toml", override), "r", {}).first_content_for("synthesis")
+        == 9
+    )
     bad = with_limit.replace("first_content_s = 45", "first_content_s = 0")
     with pytest.raises(RuntimeError, match="'first_content_s' is 0"):
         load_route(_write(tmp_path, "bad.toml", bad), "r", {})
     # The committed file sets it on the report step only.
     committed = load_route(ROUTE_FILE, "bedrock", {})
-    assert [step for step in committed.steps if committed.first_content_for(step)] == [
-        "toc_report"
-    ]
+    assert [step for step in committed.steps if committed.first_content_for(step)] == ["toc_report"]

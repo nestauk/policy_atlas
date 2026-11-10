@@ -23,6 +23,7 @@ from policy_atlas.api.deps import (
     get_executor,
     get_runner_backends,
     get_settings,
+    get_title_backend,
 )
 from policy_atlas.api.routers.access import accessible_task
 from policy_atlas.api.routers.common import (
@@ -36,10 +37,12 @@ from policy_atlas.api.routers.common import (
 )
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
+from policy_atlas.api.titles import TitleWriter, in_background, name_task_from_question
 from policy_atlas.core import tracing
 from policy_atlas.core.schema import capability_run, task_agent_transcript
 from policy_atlas.runtime.capability_registry import (
     THEORY_OF_CHANGE,
+    expect_toc_plan,
     latest_approved_plan_row,
     validate_plan,
 )
@@ -337,8 +340,17 @@ def create_run(
     settings: Annotated[Settings, Depends(get_settings)],
     executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
     backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
+    titles: Annotated[TitleWriter, Depends(get_title_backend)],
 ) -> RunOut:
-    """Dispatch an approved plan off the request path and return its walk row."""
+    """Dispatch an approved plan off the request path and return its walk row.
+
+    Starting a theory of change also names the task from the plan's question,
+    unless the user has named it (task 058, round 14, as Evidence search and
+    options scoping name theirs when the question part is confirmed). Its
+    Task Agent has no question part: Start is where the user confirms the
+    question, and the plan is fixed once the draft exists (S7).
+    """
+    toc_question: str | None = None
     with _dispatch_lock:
         with engine.begin() as conn:
             access = accessible_task(
@@ -386,6 +398,8 @@ def create_run(
                     )
                 )
             }
+            if access.row["capability"] == THEORY_OF_CHANGE:
+                toc_question = expect_toc_plan(approved_plan).question
             _dispatching_tasks.add(task_id)
         executor.submit(
             _dispatch_run,
@@ -396,6 +410,17 @@ def create_run(
             backends=backends,
             user_id=user.user_id,
         )
+    if toc_question is not None:
+        question = toc_question
+
+        def _name_task() -> None:
+            # Under the user's scope, opened in the new thread as the Task
+            # Agent turn's naming does (context variables do not cross a
+            # thread start). A restart with the same question makes no call.
+            with tracing.trace_scope(user_id=user.user_id):
+                name_task_from_question(engine, titles, task_id=task_id, question=question)
+
+        in_background(_name_task, name=f"policy-atlas-task-title-{task_id}")
     created = _await_new_run(engine, task_id=task_id, existing_ids=existing_ids)
     # Once the runtime row exists, the database's ``running`` count owns
     # capacity accounting; keeping the launch reservation would double-count.

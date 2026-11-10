@@ -101,6 +101,9 @@ export function useRunStream(taskId: string): RunStreamState {
  *   task, debounced so a cold full-history replay is one refresh;
  * - a child walk's (an option search's) `stage.completed` / `run.status`:
  *   the options query only, in the same debounce window (task 058, N23);
+ * - a `task.updated` frame (a rename, by the user or by Policy Atlas): the
+ *   task and the task lists, debounced the same way, so a model-written
+ *   name shows as it lands rather than at the next refresh;
  * - an `ingest` tick: the Sources list and the Landscape, at most once per
  *   `INGEST_REFRESH_THROTTLE_MS` (task 058, N16). No other tick refreshes
  *   anything.
@@ -133,6 +136,7 @@ function useRunStreamConnection(taskId: string, connect: boolean): RunStreamStat
     let closed = false;
     let invalidateTimer: ReturnType<typeof setTimeout> | null = null;
     let ingestTimer: ReturnType<typeof setTimeout> | null = null;
+    let renameTimer: ReturnType<typeof setTimeout> | null = null;
     // This connection's frames folded on their own, so a frame can be told
     // apart as a child walk's (a longlist's option search) as it lands.
     let folded = createInitialRunStreamState();
@@ -154,6 +158,18 @@ function useRunStreamConnection(taskId: string, connect: boolean): RunStreamStat
       if (!fromChild) parentPending = true;
       if (invalidateTimer !== null) clearTimeout(invalidateTimer);
       invalidateTimer = setTimeout(flushInvalidate, RUN_STREAM_INVALIDATE_DEBOUNCE_MS);
+    };
+
+    const flushRename = () => {
+      renameTimer = null;
+      void queryClient.invalidateQueries({ queryKey: queryKeys.task(taskId) });
+      void queryClient.invalidateQueries({ queryKey: ["tasks", "list"] });
+    };
+
+    // Debounced: a cold full-history replay carries every past rename.
+    const scheduleRename = () => {
+      if (renameTimer !== null) clearTimeout(renameTimer);
+      renameTimer = setTimeout(flushRename, RUN_STREAM_INVALIDATE_DEBOUNCE_MS);
     };
 
     const flushIngestRefresh = () => {
@@ -190,6 +206,8 @@ function useRunStreamConnection(taskId: string, connect: boolean): RunStreamStat
         setState((previous) => reduceRunStreamFrame(previous, frame));
         if (frame.type === "stage.completed" || frame.type === "run.status") {
           scheduleInvalidate(isOtherRunsStage(folded, frame.capability_run_id));
+        } else if (frame.type === "task.updated") {
+          scheduleRename();
         } else if (frame.type === "tick" && frame.stage === "ingest") {
           scheduleIngestRefresh();
         }
@@ -200,6 +218,7 @@ function useRunStreamConnection(taskId: string, connect: boolean): RunStreamStat
       closed = true;
       if (invalidateTimer !== null) clearTimeout(invalidateTimer);
       if (ingestTimer !== null) clearTimeout(ingestTimer);
+      if (renameTimer !== null) clearTimeout(renameTimer);
       connection.close();
     };
   }, [taskId, auth, queryClient, connect]);

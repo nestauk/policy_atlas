@@ -223,6 +223,22 @@ describe("RunStreamProvider / useRunStream", () => {
     expect(invalidatedKeys()).toHaveLength(4);
   });
 
+  it("task.updated frames (a rename) refresh the task and the task lists once", async () => {
+    const { invalidatedKeys } = mountWithSpy();
+    const renamed = (name: string, sequence: number): SseFrame => ({
+      type: "task.updated", name, question: null, status: null,
+      occurred_at: "2026-07-21T10:00:00Z", sequence,
+    } as SseFrame);
+    act(() => {
+      sseState.onFrame?.(renamed("Old", 1));
+      sseState.onFrame?.(renamed("New", 2));
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(RUN_STREAM_INVALIDATE_DEBOUNCE_MS);
+    });
+    expect(invalidatedKeys()).toEqual([["tasks", TASK_ID, "detail"], ["tasks", "list"]]);
+  });
+
   it("a tick from any other stage refreshes nothing", async () => {
     const { invalidateQueries } = mountWithSpy();
     act(() => sseState.onFrame?.(tick("classify")));

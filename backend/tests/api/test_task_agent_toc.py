@@ -8,13 +8,17 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.engine import Engine
 
-from policy_atlas.api.deps import get_task_agent_backend
+from policy_atlas.api.deps import get_executor, get_task_agent_backend, get_title_backend
+from policy_atlas.api.routers import runs as runs_router
 from policy_atlas.api.toc_start import mint_scope
-from policy_atlas.core.schema import task_agent_transcript, task_plan
+from policy_atlas.core import events
+from policy_atlas.core.schema import task, task_agent_transcript, task_plan
+from policy_atlas.runtime.agent_backend import StubAgentBackend
 from policy_atlas.runtime.capability_registry import latest_approved_plan_row
 from policy_atlas.runtime.task_agent import StubTaskAgentBackend
 from policy_atlas.theory_of_change import store
@@ -26,6 +30,7 @@ from tests.api.resource_support import (
     task_agent_turn,
     task_agent_turn_ok,
 )
+from tests.api.test_longlist_start import RecordingExecutor
 from tests.helpers import seed_walk
 
 QUESTION = "Fewer children living with obesity in Leeds"
@@ -169,3 +174,52 @@ def test_a_turn_while_the_draft_is_written_is_refused(engine: Engine, tmp_path: 
         refused = task_agent_turn(client, owner, task_id, "A question")
         assert refused.status_code == 409
         assert refused.json()["error"]["code"] == "run_active"
+
+
+def _name_and_renames(engine: Engine, task_id: str) -> tuple[str, list[dict[str, Any]]]:
+    tid = uuid.UUID(task_id)
+    with engine.connect() as conn:
+        name = conn.execute(select(task.c.name).where(task.c.task_id == tid)).scalar_one()
+        renames = [
+            entry["payload"]
+            for entry in events.read(conn, tid)
+            if entry["event_type"] == "task.renamed"
+        ]
+    return str(name), renames
+
+
+def test_start_names_the_task_from_the_plan_question_unless_the_user_named_it(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Task 058, round 14, for the theory of change: Start confirms the question."""
+    # The naming thread, run inline so the test reads its result.
+    monkeypatch.setattr(runs_router, "in_background", lambda work, *, name: work())
+    titles = StubAgentBackend(title_responses="Childhood obesity in Leeds")
+    overrides = {
+        **_overrides(),
+        get_title_backend: lambda: titles,
+        get_executor: lambda: RecordingExecutor(status="succeeded"),
+    }
+    with api_client(tmp_path, overrides) as (client, owner, _other):
+        named = _toc_task(client, owner)
+        task_agent_turn_ok(client, owner, named, QUESTION)
+        # The plan's approval in the turn names nothing: the theory of change
+        # has no question part, so the name waits for Start.
+        assert titles.title_calls == []
+        started = client.post(f"/api/v1/tasks/{named}/runs", headers=owner, json={})
+        assert started.status_code == 201, started.text
+        assert titles.title_calls == [("task", QUESTION)]
+
+        kept = _toc_task(client, owner)
+        renamed = client.patch(f"/api/v1/tasks/{kept}", headers=owner, json={"name": "Mine"})
+        assert renamed.status_code == 200, renamed.text
+        task_agent_turn_ok(client, owner, kept, QUESTION)
+        started = client.post(f"/api/v1/tasks/{kept}/runs", headers=owner, json={})
+        assert started.status_code == 201, started.text
+
+    name, [rename] = _name_and_renames(engine, named)
+    assert name == "Childhood obesity in Leeds"
+    assert rename["actor"] == "agent" and rename["question"] == QUESTION
+    # The user's own name stands, and no title call was made for it.
+    assert _name_and_renames(engine, kept)[0] == "Mine"
+    assert len(titles.title_calls) == 1
