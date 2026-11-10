@@ -76,8 +76,27 @@ export function strengthTone(tier: string | null | undefined): StrengthTone | nu
 }
 
 /** The palette colour a tone square takes: the palette's own green, yellow
- *  and red (round 12; no new colours). */
-export type ToneColour = "green" | "yellow" | "red";
+ *  and red (round 12; no new colours), and Line 2 grey for a value with too
+ *  little behind it (the theory of change's "Not enough evidence"). */
+export type ToneColour = "green" | "yellow" | "red" | "grey";
+
+/** Each tone as its `index.css` token, for a surface drawn in SVG or inline
+ *  styles (the theory of change's canvas lines and evidence balance). */
+export const TONE_VAR: Readonly<Record<ToneColour, string>> = {
+  green: "var(--color-green)",
+  yellow: "var(--color-yellow)",
+  red: "var(--color-red)",
+  grey: "var(--color-line-2)",
+};
+
+/** The same tones as hex, for a file read outside the app (the draw.io
+ *  export has no CSS variables). A test holds them to `index.css`. */
+export const TONE_HEX: Readonly<Record<ToneColour, string>> = {
+  green: "#18a48c",
+  yellow: "#fdb633",
+  red: "#eb003b",
+  grey: "#d3d3d8",
+};
 
 const STRENGTH_COLOURS: Record<StrengthTone, ToneColour> = { strong: "green", moderate: "yellow", weak: "red" };
 
@@ -104,7 +123,7 @@ export function strengthTierColour(tier: string | null | undefined): ToneColour 
  *   The square's classes.
  */
 export function toneSquareClass(colour: ToneColour): string {
-  const fill = colour === "green" ? "bg-green" : colour === "yellow" ? "bg-yellow" : "bg-red";
+  const fill = colour === "green" ? "bg-green" : colour === "yellow" ? "bg-yellow" : colour === "red" ? "bg-red" : "bg-line-2";
   return `inline-block size-1.5 shrink-0 ${fill}`;
 }
 

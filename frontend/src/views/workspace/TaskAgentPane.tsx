@@ -1,3 +1,4 @@
+import { PaperclipIcon } from "../../ui/brand/icons";
 import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router";
 
@@ -361,7 +362,7 @@ function UploadThumb({ text }: { text: string }) {
       imageClassName="max-h-40 max-w-[16rem] border border-line bg-paper object-contain"
       pdf={(url) => (
         <a href={url} target="_blank" rel="noreferrer" className="mb-2 inline-flex items-center gap-2 border border-line bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy">
-          <span aria-hidden="true">📄</span>
+          <PaperclipIcon aria-hidden="true" />
           {name}
         </a>
       )}

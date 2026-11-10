@@ -1,6 +1,5 @@
 import type { components } from "../../api/gen/types";
-import { cn } from "./cn";
-import { toneSquareClass, type ToneColour } from "./evidence";
+import { TONE_HEX, TONE_VAR, type ToneColour } from "./evidence";
 import { ToneSquare } from "./EvidenceMarks";
 
 /*
@@ -21,13 +20,10 @@ export type TocSupport = Schemas["TocDocumentOut"]["support"];
 /** The theory's overall verdict: can it work, and what does the evidence say. */
 export type TocTheoryVerdict = Pick<Schemas["TocTheoryVerdictOut"], "mechanism" | "evidence">;
 
-/** A verdict square's colour: a palette tone, or Line 2 grey for too little evidence. */
-export type VerdictColour = ToneColour | "grey";
-
 /** Each connection verdict's square: supports green, mixed yellow, against
  *  red, not enough evidence grey. The leaning verdicts take their side's tone;
  *  the canvas tells them apart by the line's dash. */
-export const VERDICT_COLOUR: Readonly<Record<TocVerdict, VerdictColour>> = {
+export const VERDICT_COLOUR: Readonly<Record<TocVerdict, ToneColour>> = {
   supported: "green",
   leaning_supports: "green",
   not_sure_mixed: "yellow",
@@ -36,9 +32,20 @@ export const VERDICT_COLOUR: Readonly<Record<TocVerdict, VerdictColour>> = {
   against: "red",
 };
 
+/** Each verdict's colour as its CSS token: the canvas's lines and
+ *  arrowheads, the line key and the evidence balance. */
+export const VERDICT_VAR: Readonly<Record<TocVerdict, string>> = mapVerdicts(TONE_VAR);
+
+/** Each verdict's colour as hex, for the draw.io export. */
+export const VERDICT_HEX: Readonly<Record<TocVerdict, string>> = mapVerdicts(TONE_HEX);
+
+function mapVerdicts(values: Readonly<Record<ToneColour, string>>): Record<TocVerdict, string> {
+  return Object.fromEntries(Object.entries(VERDICT_COLOUR).map(([verdict, colour]) => [verdict, values[colour]])) as Record<TocVerdict, string>;
+}
+
 /** Each document support's square, as the evidence balance colours it; a
  *  document not about the step has none. */
-export const SUPPORT_COLOUR: Readonly<Record<TocSupport, VerdictColour | null>> = {
+export const SUPPORT_COLOUR: Readonly<Record<TocSupport, ToneColour | null>> = {
   strong: "green",
   weak: "green",
   mixed: "yellow",
@@ -57,21 +64,17 @@ export const SUPPORT_COLOUR: Readonly<Record<TocSupport, VerdictColour | null>> 
  * Returns:
  *   The square's colour.
  */
-export function theoryVerdictColour(verdict: TocTheoryVerdict): VerdictColour {
+export function theoryVerdictColour(verdict: TocTheoryVerdict): ToneColour {
   if (verdict.mechanism === "implausible" || verdict.evidence === "against") return "red";
   if (verdict.evidence === "mixed") return "yellow";
   if (verdict.evidence === "supports") return "green";
   return "grey";
 }
 
-/**
- * A verdict's 6 px square: the shared `ToneSquare` for a palette tone, and
- * the same square in Line 2 for too little evidence. Decorative; `data-tone`
- * names its colour. The surface sets the spacing through `className`.
- */
-export function VerdictSquare({ colour, className }: { colour: VerdictColour; className?: string }) {
-  if (colour !== "grey") return <ToneSquare colour={colour} className={className} testId="verdict-mark" />;
-  return <span aria-hidden="true" data-testid="verdict-mark" data-tone="grey" className={cn(toneSquareClass("green"), "bg-line-2", className)} />;
+/** A verdict's 6 px square: the shared `ToneSquare`. Decorative; `data-tone`
+ *  names its colour. The surface sets the spacing through `className`. */
+export function VerdictSquare({ colour, className }: { colour: ToneColour; className?: string }) {
+  return <ToneSquare colour={colour} className={className} testId="verdict-mark" />;
 }
 
 /**
@@ -80,7 +83,7 @@ export function VerdictSquare({ colour, className }: { colour: VerdictColour; cl
  * that wraps in a narrow cell keeps its square beside its first line. The
  * surface sets the word's weight.
  */
-export function VerdictMark({ colour, word, className }: { colour: VerdictColour | null; word: string; className?: string }) {
+export function VerdictMark({ colour, word, className }: { colour: ToneColour | null; word: string; className?: string }) {
   return (
     <span className={className}>
       {colour !== null && <VerdictSquare colour={colour} className="mr-1.5 mb-[0.15em]" />}

@@ -141,21 +141,6 @@
   --color-violet-tint: #efedfc; /* the higher level word on a profile line (046) */
   --color-aqua-tint: #e6f5f7; /* the lower level word on a profile line (046) */
 
-  /* Evidence verdicts (task 054 theory of change, C36): colour means the
-     verdict and nothing else. The canvas lines take the shared tones (owner,
-     2026-11-09, decision 7: the palette's green, yellow and red, and Line 2
-     for not enough evidence); the dash patterns tell the verdicts apart.
-     Words take the tone square in ink (`ui/brand/verdictTones.tsx`); the
-     "-text" twins below have no reader left in the views. */
-  --color-verdict-confident: var(--color-green);
-  --color-verdict-mixed: var(--color-yellow);
-  --color-verdict-little: var(--color-line-2);
-  --color-verdict-against: var(--color-red);
-  --color-verdict-confident-text: #0d7a67;
-  --color-verdict-mixed-text: #8f6100;
-  --color-verdict-little-text: #646363;
-  --color-verdict-against-text: #b0300e;
-
   /* Nesta = 0 radius, everywhere */
   /* Motion curves (design-engineering pass, 2026-09-05): the built-in CSS
      easings are too weak for UI. Strong ease-out for anything entering or
@@ -539,12 +524,12 @@
   stroke-width: 2;
   stroke-linecap: round;
 }
-.react-flow .toc-edge--supported { stroke: var(--color-verdict-confident); }
-.react-flow .toc-edge--not_sure_mixed { stroke: var(--color-verdict-mixed); }
-.react-flow .toc-edge--not_sure_insufficient { stroke: var(--color-verdict-little); stroke-dasharray: 6 5; }
-.react-flow .toc-edge--against { stroke: var(--color-verdict-against); stroke-dasharray: 2 5; }
-.react-flow .toc-edge--leaning_supports { stroke: var(--color-verdict-confident); stroke-dasharray: 12 5; }
-.react-flow .toc-edge--leaning_against { stroke: var(--color-verdict-against); stroke-dasharray: 12 5; }
+/* A verdict's line takes its tone from `ui/brand/verdictTones.tsx` (an
+   inline stroke); these set only its dash. */
+.react-flow .toc-edge--not_sure_insufficient { stroke-dasharray: 6 5; }
+.react-flow .toc-edge--against { stroke-dasharray: 2 5; }
+.react-flow .toc-edge--leaning_supports { stroke-dasharray: 12 5; }
+.react-flow .toc-edge--leaning_against { stroke-dasharray: 12 5; }
 .react-flow .toc-edge--pending { stroke: var(--color-line-2); animation: toc-pulse 1.6s ease-in-out infinite; }
 .react-flow .toc-edge--unchecked { stroke: var(--color-line-2); }
 /* Keyboard focus on a box or a connection: DESIGN's 2px blue outline, offset 2px. */
@@ -566,12 +551,6 @@
 @media (prefers-reduced-motion: reduce) {
   .toc-edge--pending { animation: none; }
 }
-.toc-verdict-supported { color: var(--color-verdict-confident-text); }
-.toc-verdict-not_sure_mixed { color: var(--color-verdict-mixed-text); }
-.toc-verdict-not_sure_insufficient { color: var(--color-verdict-little-text); }
-.toc-verdict-against { color: var(--color-verdict-against-text); }
-.toc-verdict-leaning_supports { color: var(--color-verdict-confident-text); }
-.toc-verdict-leaning_against { color: var(--color-verdict-against-text); }
 /* PDF: the panel is hidden (aside), the canvas and toolbar stay. */
 .toc-print-image { display: none; }
 @media print {

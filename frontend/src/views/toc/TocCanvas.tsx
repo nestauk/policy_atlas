@@ -1,6 +1,6 @@
 import "@xyflow/react/dist/style.css";
 
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   BaseEdge,
   ControlButton,
@@ -22,7 +22,9 @@ import {
 } from "@xyflow/react";
 
 import { prefersReducedMotion } from "../../lib/motion";
+import { ExitFullScreenIcon, FitIcon, FullScreenIcon } from "../../ui/brand/icons";
 import { scrub } from "../../lib/scrub";
+import { VERDICT_VAR } from "../../ui/brand/verdictTones";
 import type { Selection } from "./DetailPanel";
 import { imageBounds } from "./exports";
 import { CriticalMark } from "./ReadingGuide";
@@ -33,7 +35,6 @@ import {
   layoutToc,
   linkTip,
   routeEdge,
-  VERDICT_VAR,
   visibleLinkIds,
 } from "./tocModel";
 import type { Preview } from "./Suggestions";
@@ -249,6 +250,8 @@ function TocEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, t
         markerEnd={markerEnd}
         interactionWidth={18}
         className={`toc-edge toc-edge--${kind}${data.selected ? " toc-edge--selected" : ""}`}
+        // A checked connection takes its verdict's shared tone; the class sets its dash.
+        style={kind === data.verdict ? { stroke: VERDICT_VAR[data.verdict] } : undefined}
       />
       {data.critical && <CriticalMark x={markX} y={markY} />}
       {data.attention && <circle data-testid="toc-edge-attention" cx={markX} cy={data.critical ? markY - 16 : markY} r={5.5} className="pointer-events-none fill-blue stroke-paper" strokeWidth={2} />}
@@ -257,18 +260,11 @@ function TocEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, t
 }
 
 /**
- * A glyph in the canvas's zoom controls, drawn as `ui/brand/icons.tsx` draws
- * (a 16-unit grid, the 1.5 stroke, round joins) for the two controls the
- * canvas adds to React Flow's. Its own fill stays off: React Flow fills its
- * control glyphs with the text colour.
+ * The two controls the canvas adds to React Flow's zoom controls take the
+ * shared icons. Their fill stays off: React Flow fills its control glyphs
+ * with the text colour, so the class outranks its rule.
  */
-function ControlGlyph({ children }: { children: ReactNode }) {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ fill: "none" }}>
-      {children}
-    </svg>
-  );
-}
+const CONTROL_GLYPH_CLASS = "fill-none!";
 
 const nodeTypes = { box: BoxView, label: LabelView };
 const edgeTypes = { toc: TocEdgeView };
@@ -616,15 +612,11 @@ export function TocCanvas({
         <Controls showInteractive={false} showFitView={false}>
           {/* Our own fit button: the whole diagram, below the start zoom when it must be. */}
           <ControlButton onClick={() => setFitWhole((count) => count + 1)} title="Fit the whole diagram" aria-label="Fit the whole diagram">
-            <ControlGlyph>
-              <rect x="3.5" y="3.5" width="9" height="9" />
-            </ControlGlyph>
+            <FitIcon className={CONTROL_GLYPH_CLASS} />
           </ControlButton>
           {canFullscreen && (
             <ControlButton onClick={toggleFullscreen} title={fullscreen ? "Exit full screen" : "Full screen"} aria-label={fullscreen ? "Exit full screen" : "Full screen"}>
-              <ControlGlyph>
-                {fullscreen ? <path d="M6 2.5V6H2.5M10 2.5V6h3.5M6 13.5V10H2.5M10 13.5V10h3.5" /> : <path d="M2.5 6V2.5H6M13.5 6V2.5H10M2.5 10v3.5H6M13.5 10v3.5H10" />}
-              </ControlGlyph>
+              {fullscreen ? <ExitFullScreenIcon className={CONTROL_GLYPH_CLASS} /> : <FullScreenIcon className={CONTROL_GLYPH_CLASS} />}
             </ControlButton>
           )}
         </Controls>

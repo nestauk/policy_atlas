@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as queries from "../../api/queries";
 import { createInitialRunStreamState, type LiveSection, type RunStreamState, type StageEntry } from "../../store";
+import { ToastProvider } from "../../ui/radix/Toast";
 import { TooltipProvider } from "../../ui/radix/Tooltip";
 import { forgetReportExpand } from "../ArtefactOutline";
 import * as taskLive from "../taskLive";
@@ -102,9 +103,11 @@ function page(theory: TocGraph) {
   vi.mocked(queries.useTocEvidence).mockReturnValue({ data: tocEvidenceFixture() } as unknown as ReturnType<typeof queries.useTocEvidence>);
   return (
     <MemoryRouter>
-      <TooltipProvider delayDuration={0}>
-        <TocResult taskId={TASK_ID} />
-      </TooltipProvider>
+      <ToastProvider>
+        <TooltipProvider delayDuration={0}>
+          <TocResult taskId={TASK_ID} />
+        </TooltipProvider>
+      </ToastProvider>
     </MemoryRouter>
   );
 }

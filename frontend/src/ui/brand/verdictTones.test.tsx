@@ -1,7 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { SUPPORT_COLOUR, theoryVerdictColour, VERDICT_COLOUR, VerdictMark, VerdictSquare } from "./verdictTones";
+import { TONE_HEX, TONE_VAR } from "./evidence";
+import { SUPPORT_COLOUR, theoryVerdictColour, VERDICT_COLOUR, VERDICT_HEX, VERDICT_VAR, VerdictMark, VerdictSquare } from "./verdictTones";
 
 describe("the theory of change's verdict tones", () => {
   it("gives each verdict a palette tone, and not enough evidence the Line 2 grey (§ 8)", () => {
@@ -15,6 +16,13 @@ describe("the theory of change's verdict tones", () => {
     });
     expect(SUPPORT_COLOUR.not_about).toBeNull();
     expect(SUPPORT_COLOUR.refutes).toBe("red");
+  });
+
+  it("reads every verdict colour, on the canvas and in the export, from the same tones", () => {
+    for (const [verdict, colour] of Object.entries(VERDICT_COLOUR)) {
+      expect(VERDICT_VAR[verdict as keyof typeof VERDICT_VAR]).toBe(TONE_VAR[colour]);
+      expect(VERDICT_HEX[verdict as keyof typeof VERDICT_HEX]).toBe(TONE_HEX[colour]);
+    }
   });
 
   it("reads the theory's verdict from what it says, never its words", () => {

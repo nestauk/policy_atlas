@@ -11,13 +11,15 @@ import type { LiveSection } from "../../store";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { QUIET_CONTROL_CLASS } from "../../ui/brand/inlineActions";
+import { useToast } from "../../ui/radix/Toast";
 import { theoryVerdictColour, VerdictSquare } from "../../ui/brand/verdictTones";
 import { REPORT_BODY_CLASS } from "../artefactPresentation";
 import { ReportExpandScope, seedReportExpanded } from "../ArtefactOutline";
-import { LiveDraft, SourceDossier, usePrefersReducedMotion } from "../ArtefactView";
+import { LiveDraft, SeePlanLink, SourceDossier, usePrefersReducedMotion } from "../ArtefactView";
 import { DownloadMenu } from "../DownloadMenu";
+import { usePlanPanel } from "../planPanel";
 import { usePublicView } from "../publicView";
-import { REPORT_DATELINE_CLASS, REPORT_TITLE_CLASS, ReportFacts, ReportKindRow, ReportPage, type ReportFact } from "../reportPage";
+import { REPORT_ACTIONS_CLASS, REPORT_DATELINE_CLASS, REPORT_TITLE_CLASS, ReportFacts, ReportKindRow, ReportPage, type ReportFact } from "../reportPage";
 import { useTaskLive } from "../taskLive";
 import { ActionLine } from "../workspace/ActionLine";
 import { codeTargets, liveSections, LiveReportBody, ReportBody, reportSections, type SourceRows } from "./DetailedInformation";
@@ -120,6 +122,13 @@ function HeaderParts({
 /** The theory-of-change Result tab: the report page (task 054, A14), with the
  *  header, the canvas with its bar and detail panel, and the report under it.
  *  The report's expand state is the task's, as the Evidence search's is. */
+/** The report's Download menu; a download that cannot be made says so in
+ *  the page's error toast. Only a signed-in reader has it. */
+function TocDownload({ graph }: { graph: TocGraph }) {
+  const { toast } = useToast();
+  return <DownloadMenu items={tocDownloads(graph, (message) => toast({ title: message, tone: "error" }))} />;
+}
+
 export function TocResult({ taskId }: { taskId: string }) {
   return (
     <ReportExpandScope taskId={taskId}>
@@ -134,6 +143,7 @@ function TocPage({ taskId }: { taskId: string }) {
   const evidence = useTocEvidence(taskId);
   const funnel = useFunnel(taskId);
   const isPublicView = usePublicView();
+  const planPanel = usePlanPanel();
   // The run stream, while the reader is signed in (the public link has none).
   const stream = useTaskLive()?.stream ?? null;
   const reduceMotion = usePrefersReducedMotion();
@@ -314,7 +324,7 @@ function TocPage({ taskId }: { taskId: string }) {
           {/* Download arrives with the committed report (058). */}
           {report !== null && !isPublicView && (
             <span className={arriving}>
-              <DownloadMenu items={tocDownloads(graph)} />
+              <TocDownload graph={graph} />
             </span>
           )}
         </ReportKindRow>
@@ -327,6 +337,13 @@ function TocPage({ taskId }: { taskId: string }) {
           <p className={cn(REPORT_DATELINE_CLASS, arriving)}>
             Last updated <time dateTime={lastUpdated}>{formatDate(lastUpdated, "long")}</time>
           </p>
+        )}
+        {/* The action line under the title, as Evidence search's: the plan
+            card leaves on start, so the report links back to the plan. */}
+        {!isPublicView && (
+          <div className={REPORT_ACTIONS_CLASS}>
+            <SeePlanLink onClick={planPanel.openPlan} />
+          </div>
         )}
         <div className={arriving}>
           <ReportFacts facts={facts} />

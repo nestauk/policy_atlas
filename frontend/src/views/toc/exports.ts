@@ -5,6 +5,8 @@
 import { toPng, toSvg } from "html-to-image";
 
 import { scrub } from "../../lib/scrub";
+import { TONE_HEX } from "../../ui/brand/evidence";
+import { VERDICT_HEX } from "../../ui/brand/verdictTones";
 import { csvCell, downloadFilename, triggerTextDownload, triggerUrlDownload } from "../artefactPresentation";
 import { BOX_H, BOX_W, HEADER_H, layoutToc, VERDICT_LABEL, visibleLinkIds } from "./tocModel";
 import type { TocGraph, Verdict } from "./types";
@@ -42,15 +44,17 @@ export function referencesCsv(graph: TocGraph): string {
   ].join("\r\n");
 }
 
-// draw.io has no CSS variables: the verdict colours and dashes from index.css, written out.
-const DRAWIO_EDGE: Record<Verdict, string> = {
-  supported: "strokeColor=#18a48c;",
-  leaning_supports: "strokeColor=#18a48c;dashed=1;dashPattern=12 5;",
-  not_sure_mixed: "strokeColor=#f0a823;",
-  not_sure_insufficient: "strokeColor=#b4b4bb;dashed=1;dashPattern=6 5;",
-  leaning_against: "strokeColor=#d93a12;dashed=1;dashPattern=12 5;",
-  against: "strokeColor=#d93a12;dashed=1;dashPattern=2 5;",
+// draw.io has no CSS variables: the verdicts' shared tones as hex, and the
+// canvas's dashes, written out.
+const DRAWIO_DASH: Record<Verdict, string> = {
+  supported: "",
+  leaning_supports: "dashed=1;dashPattern=12 5;",
+  not_sure_mixed: "",
+  not_sure_insufficient: "dashed=1;dashPattern=6 5;",
+  leaning_against: "dashed=1;dashPattern=12 5;",
+  against: "dashed=1;dashPattern=2 5;",
 };
+const drawioEdge = (verdict: Verdict) => `strokeColor=${VERDICT_HEX[verdict]};${DRAWIO_DASH[verdict]}`;
 const NAVY = "#0f294a";
 const GREY = "#646363";
 
@@ -96,13 +100,13 @@ export function drawioXml(graph: TocGraph): string {
   }
   for (const link of graph.links) {
     if (!kept.has(link.link_id) || !placed.has(link.source_box_id) || !placed.has(link.target_box_id)) continue;
-    const style = link.state === "unchecked" ? "strokeColor=#d3d3d8;" : DRAWIO_EDGE[link.verdict];
+    const style = link.state === "unchecked" ? `strokeColor=${TONE_HEX.grey};` : drawioEdge(link.verdict);
     cells.push(
       `<mxCell id="${xml(link.link_id)}" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;endArrow=block;endFill=1;strokeWidth=2;${style}" edge="1" parent="1" source="${xml(link.source_box_id)}" target="${xml(link.target_box_id)}"><mxGeometry relative="1" as="geometry"/></mxCell>`,
     );
   }
-  const key = (Object.keys(DRAWIO_EDGE) as Verdict[])
-    .map((verdict) => `<font color="${/#[0-9a-f]{6}/.exec(DRAWIO_EDGE[verdict])?.[0] ?? GREY}">■</font> ${xml(VERDICT_LABEL[verdict])}`)
+  const key = (Object.keys(DRAWIO_DASH) as Verdict[])
+    .map((verdict) => `<font color="${VERDICT_HEX[verdict]}">■</font> ${xml(VERDICT_LABEL[verdict])}`)
     .join("<br>");
   text("key", `Evidence for each connection<br>${key}`, 0, bottom + 10, 260, 120, "fontStyle=0;verticalAlign=top;");
   const title = xml(graph.report?.title ?? "Theory of change");

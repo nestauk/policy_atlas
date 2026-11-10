@@ -1,9 +1,10 @@
-import { useState, type ReactElement } from "react";
+import { useState } from "react";
 
 import type { components } from "../../api/gen/types";
 import { useOptionVerb, useShortlistVerb } from "../../api/mutations";
 import { actionFailedNotice } from "../../lib/errors";
-import { CheckCircleIcon, ExcludeIcon, ICON_CHROME, UndoIcon } from "../../ui/brand/icons";
+import { ACTION_CONTROL_CLASS, ActionGlyph, WithTooltip } from "../../ui/brand/actionControls";
+import { CheckCircleIcon, ICON_CHROME } from "../../ui/brand/icons";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { QUIET_CONTROL_CLASS } from "../../ui/brand/inlineActions";
@@ -274,26 +275,9 @@ export function OptionActionButton({
   return excluded ? control : <WithTooltip note={EXCLUDE_OPTION_TOOLTIP}>{control}</WithTooltip>;
 }
 
-/** Exclude and Include again as quiet text controls with a 12 px glyph
- *  before the words, in the control's colour (round 13, owner). */
-export const ACTION_CONTROL_CLASS = cn(
-  QUIET_CONTROL_CLASS,
-  "inline-flex items-center gap-1.5 text-meta disabled:cursor-not-allowed disabled:opacity-40",
-);
-
 /** The list row's shortlist toggle glyph; a group's control draws its
  *  glyph at the same size, so the two make one column (round 13, owner). */
 export const TOGGLE_GLYPH_SIZE = ICON_CHROME;
-
-/** The glyph before an Exclude or Include again control; after the words,
- *  at `TOGGLE_GLYPH_SIZE`, on a group's control (round 13). */
-export function ActionGlyph({ include, size = 12 }: { include: boolean; size?: number }) {
-  return include ? (
-    <UndoIcon size={size} className="shrink-0" />
-  ) : (
-    <ExcludeIcon size={size} className="shrink-0" />
-  );
-}
 
 /**
  * Exclude or Include again on the page's action column (round 13, owner):
@@ -332,17 +316,6 @@ export function EdgeAction({
         </span>
       </button>
     </WithTooltip>
-  );
-}
-
-/** A control with a tooltip in the system's skin, or the control alone
- *  when there is no note. */
-export function WithTooltip({ note, children }: { note?: string; children: ReactElement }) {
-  if (note === undefined) return children;
-  return (
-    <TooltipProvider delayDuration={250}>
-      <Tooltip content={<p className="text-meta">{note}</p>}>{children}</Tooltip>
-    </TooltipProvider>
   );
 }
 

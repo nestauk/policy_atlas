@@ -14,13 +14,14 @@ import { COPY, PROJECT, TASK } from "../lib/vocabulary";
 import { Button, buttonVariants } from "../ui/brand/Button";
 import { Card } from "../ui/brand/Card";
 import { CloseButton } from "../ui/brand/CloseButton";
+import { PaperclipIcon } from "../ui/brand/icons";
 import { MultiSelect } from "../ui/brand/MultiSelect";
 import { cn } from "../ui/brand/cn";
 import { LINK_CLASS } from "../ui/brand/inlineActions";
 import { CAPTION_LABEL_CLASS } from "../ui/brand/label";
 import { useMakeProject } from "./projectActions";
 import { ProjectPicker } from "./ProjectPicker";
-import { AttachFileButton, PaperclipGlyph } from "./toc/uploads";
+import { AttachFileButton } from "./toc/uploads";
 import type { TocUploadHandOff } from "./workspace/TaskAgentPane";
 
 /** Step one: pick a kind of work. Two of the four can run. */
@@ -135,7 +136,7 @@ function AttachTheory({ file, onFile }: { file: File | null; onFile: (file: File
   if (file !== null) {
     return (
       <div className="flex min-w-0 shrink-0 items-center gap-2 border border-line bg-paper py-1 pr-1 pl-3">
-        {url !== null ? <img src={url} alt="" className="h-10 w-14 object-contain" /> : <PaperclipGlyph className="shrink-0 text-grey" />}
+        {url !== null ? <img src={url} alt="" className="h-10 w-14 object-contain" /> : <PaperclipIcon className="shrink-0 text-grey" />}
         <span className="max-w-[14rem] truncate text-meta font-semibold text-navy">{file.name}</span>
         <CloseButton aria-label={`Remove ${file.name}`} onClick={() => onFile(null)} />
       </div>

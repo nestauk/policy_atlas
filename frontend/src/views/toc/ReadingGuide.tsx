@@ -1,5 +1,6 @@
 import { scrub } from "../../lib/scrub";
-import { VERDICT_LABEL, VERDICT_VAR, VERDICTS } from "./tocModel";
+import { VERDICT_VAR } from "../../ui/brand/verdictTones";
+import { VERDICT_LABEL, VERDICTS } from "./tocModel";
 import type { TocGraph, Verdict } from "./types";
 
 /** The critical connection's mark: a warning triangle with an exclamation point, drawn centred on (x, y). */

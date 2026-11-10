@@ -6,10 +6,10 @@ import { scrub } from "../../lib/scrub";
 import { DisclosureToggle } from "../../ui/brand/DisclosureToggle";
 import { evidenceTypeLabel } from "../../ui/brand/evidence";
 import { referenceAuthorsShort, SOURCE_TITLE_LINK_CLASS } from "../../ui/brand/reference";
-import { SUPPORT_COLOUR, VERDICT_COLOUR, VerdictMark, VerdictSquare } from "../../ui/brand/verdictTones";
+import { SUPPORT_COLOUR, VERDICT_COLOUR, VERDICT_VAR, VerdictMark, VerdictSquare } from "../../ui/brand/verdictTones";
 import { Tooltip } from "../../ui/radix/Tooltip";
 import { CITATION_MARKER_CLASS, CitationProvenanceBlock, ProvenanceSheet, SourceDossier } from "../ArtefactView";
-import { evidenceBalance, figureGroups, figureHeadline, SUPPORT_LABEL, VERDICT_LABEL, VERDICT_VAR } from "./tocModel";
+import { evidenceBalance, figureGroups, figureHeadline, SUPPORT_LABEL, VERDICT_LABEL } from "./tocModel";
 import type { SourceType, Support, TocDocument, TocFigure, Verdict } from "./types";
 
 /**

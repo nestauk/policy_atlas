@@ -1,21 +1,9 @@
 import type { ReactNode } from "react";
 
 import { blobUrl } from "../../lib/blobUrl";
+import { PaperclipIcon } from "../../ui/brand/icons";
 
 // The user's own theory-of-change diagram (task 054, increment 5): the paperclip that picks it, and its preview.
-
-/**
- * The paperclip: an attached diagram. Drawn as `ui/brand/icons.tsx` draws (a
- * 16-unit grid, the 1.5 stroke, round joins, `currentColor`); it belongs in
- * that module once it serves a second view.
- */
-export function PaperclipGlyph({ size = 16, className }: { size?: number; className?: string }) {
-  return (
-    <svg aria-hidden="true" focusable="false" width={size} height={size} viewBox="0 0 16 16" className={className} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m14 7.33-5.67 5.67a3.33 3.33 0 0 1-4.67-4.67L9.33 2.67a2.33 2.33 0 0 1 3.33 3.33l-5.67 5.67a1.33 1.33 0 0 1-2-2L10 4.67" />
-    </svg>
-  );
-}
 
 /** A paperclip label that opens the file picker for a PNG, JPEG or PDF diagram. */
 export function AttachFileButton({
@@ -35,7 +23,7 @@ export function AttachFileButton({
 }) {
   return (
     <label title={title} className={className}>
-      <PaperclipGlyph className={iconClassName} />
+      <PaperclipIcon className={iconClassName} />
       {children}
       <input
         type="file"

@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as queries from "../../api/queries";
+import { ToastProvider } from "../../ui/radix/Toast";
 import { TooltipProvider } from "../../ui/radix/Tooltip";
 import { REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_PART_HEADING_CLASS, REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
 import { forgetReportExpand } from "../ArtefactOutline";
@@ -29,6 +30,11 @@ vi.mock("../../api/queries", () => ({
   useSourceRecords: vi.fn(() => ({ data: undefined, isPending: false })),
 }));
 const mutate = vi.fn();
+// The canvas picture cannot be made in jsdom: a download of it fails.
+vi.mock("html-to-image", () => ({
+  toPng: vi.fn(() => Promise.reject(new Error("no canvas"))),
+  toSvg: vi.fn(() => Promise.reject(new Error("no canvas"))),
+}));
 vi.mock("../../api/mutations", () => ({ useTocEdit: vi.fn(() => ({ mutate, isPending: false })) }));
 
 function renderResult(graph: TocGraph = tocGraphFixture(), evidence = tocEvidenceFixture()) {
@@ -42,9 +48,11 @@ function renderResult(graph: TocGraph = tocGraphFixture(), evidence = tocEvidenc
   } as unknown as ReturnType<typeof queries.useTocDocumentContext>);
   return render(
     <MemoryRouter>
-      <TooltipProvider delayDuration={0}>
-        <TocResult taskId={TASK_ID} />
-      </TooltipProvider>
+      <ToastProvider>
+        <TooltipProvider delayDuration={0}>
+          <TocResult taskId={TASK_ID} />
+        </TooltipProvider>
+      </ToastProvider>
     </MemoryRouter>,
   );
 }
@@ -463,6 +471,23 @@ describe("detailed information", () => {
     expect(within(screen.getAllByRole("menu").at(-1) as HTMLElement).getAllByRole("menuitem").map((item) => item.firstChild?.textContent)).toEqual(["Report (PDF)", "Image (PNG)", "Image (SVG)", "Diagram file (draw.io)", "References (CSV)", "Theory (JSON)"]);
     await user.click(screen.getByRole("menuitem", { name: /Report \(PDF\)/ }));
     await waitFor(() => expect(print).toHaveBeenCalled());
+  });
+
+  it("says so in an error toast when a download cannot be made", async () => {
+    const user = userEvent.setup();
+    const alert = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+    renderResult();
+    await user.click(screen.getByRole("button", { name: "Download" }));
+    await user.click(screen.getByRole("menuitem", { name: /Image \(PNG\)/ }));
+    expect(await screen.findByText("The download could not be made. Try again.")).toBeInTheDocument();
+    expect(alert).not.toHaveBeenCalled();
+  });
+
+  it("links back to the plan on the report's action line, as Evidence search does", async () => {
+    const user = userEvent.setup();
+    renderResult();
+    const header = screen.getByRole("heading", { level: 1 }).closest("header") as HTMLElement;
+    await user.click(within(header).getByRole("button", { name: "See the plan" }));
   });
 
   it("offers no Download before the report is committed", () => {

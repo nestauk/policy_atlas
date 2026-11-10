@@ -18,16 +18,6 @@ export const VERDICT_LABEL: Record<Verdict, string> = {
 /** The legend's order: supports to against, then not enough evidence. */
 export const VERDICTS: readonly Verdict[] = ["supported", "leaning_supports", "not_sure_mixed", "leaning_against", "against", "not_sure_insufficient"];
 
-/** The CSS variable that colours a verdict's dot and arrowhead (defined once in `index.css`). */
-export const VERDICT_VAR: Record<Verdict, string> = {
-  supported: "var(--color-verdict-confident)",
-  leaning_supports: "var(--color-verdict-confident)",
-  leaning_against: "var(--color-verdict-against)",
-  not_sure_mixed: "var(--color-verdict-mixed)",
-  not_sure_insufficient: "var(--color-verdict-little)",
-  against: "var(--color-verdict-against)",
-};
-
 /** What makes a connection critical: the rule in the backend's `critical_link` (C6, C36). */
 export const CRITICAL_DEFINITION =
   "The step on the routes to the impact with the weakest evidence. None is marked when every step is supported.";

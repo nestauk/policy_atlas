@@ -2,12 +2,12 @@ import { useState } from "react";
 
 import type { components } from "../../api/gen/types";
 import { scrub } from "../../lib/scrub";
+import { ACTION_CONTROL_CLASS, ActionGlyph, WithTooltip } from "../../ui/brand/actionControls";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { QUIET_CONTROL_CLASS } from "../../ui/brand/inlineActions";
 import { OutlineSwitch } from "../../ui/brand/OutlineSwitch";
 import { Select } from "../../ui/brand/Select";
-import { ACTION_CONTROL_CLASS, ActionGlyph, WithTooltip } from "../longlist/optionActions";
 import { DocumentItem, VerdictWords } from "./Documents";
 import { CheckButton, type Editor, FIELD_CLASS, FIELD_LABEL_CLASS } from "./Editing";
 import { SUPPORT_LABEL } from "./tocModel";

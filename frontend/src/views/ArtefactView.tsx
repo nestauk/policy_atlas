@@ -3041,7 +3041,7 @@ export function ReportToBe({
 }
 
 /** The Result tab's small link to the plan document. Not printed. */
-function SeePlanLink({ onClick, className }: { onClick: () => void; className?: string }) {
+export function SeePlanLink({ onClick, className }: { onClick: () => void; className?: string }) {
   return (
     <button type="button" onClick={onClick} className={cn(QUIET_CONTROL_CLASS, "print-hide text-meta", className)}>
       See the plan
