@@ -24,6 +24,7 @@ import {
   exclusionPhrase,
   uncoveredLevers,
 } from "./longlistPresentation";
+import { useOwnerWord } from "./ownerWord";
 import { useRegroupTransition } from "./regroupTransition";
 import { GroupHeading } from "./GroupHeading";
 import { LABEL_CLASS } from "../../ui/brand/label";
@@ -74,6 +75,7 @@ export function LonglistGrid({
   line?: GridLine;
 }) {
   const task = useTask(taskId);
+  const who = useOwnerWord(taskId);
   const actions = useOptionActions(taskId, isRunActive(task.data));
   const listed = useMemo(
     () => (longlist.options ?? []).filter((option) => showExcluded || option.state !== "excluded"),
@@ -223,7 +225,7 @@ export function LonglistGrid({
                                   Grey, its exclusion line as the tooltip, no
                                   words on the tile (round 13, owner). */}
                               {option.state === "excluded" ? (
-                                <ExcludedMark line={option.exclusion == null ? "" : exclusionPhrase(option.exclusion)} />
+                                <ExcludedMark line={option.exclusion == null ? "" : exclusionPhrase(option.exclusion, who)} />
                               ) : (
                                 <ShortlistToggle
                                   actions={actions}

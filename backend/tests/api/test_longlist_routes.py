@@ -2077,6 +2077,20 @@ def test_the_proposal_is_stale_when_the_plan_s_appetite_moves(conn: Connection) 
     assert listed.plan_inputs_changed is False
 
 
+def test_the_longlist_carries_the_current_plan_s_heading_words(conn: Connection) -> None:
+    """A public link cannot read the plan, so the longlist repeats these three."""
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    walk.build(_Scripted())
+    cautious = scoping_plan().model_copy(update={"risk_appetite": "tried_only"})
+    _approve_version(conn, walk, 3, cautious)
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    assert listed.question == cautious.question
+    assert listed.where == cautious.where.text
+    assert listed.risk_appetite == "tried_only"
+
+
 def test_an_outcome_change_makes_the_plan_inputs_changed(conn: Connection) -> None:
     walk = _Walk(conn)
     walk.option("Youth guarantee", origin="added_by_you")

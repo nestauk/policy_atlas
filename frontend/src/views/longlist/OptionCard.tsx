@@ -7,6 +7,7 @@ import { errorCode } from "../../lib/errors";
 import { scrub } from "../../lib/scrub";
 import { isRunActive } from "../scopingActivity";
 import { useDocumentTitle } from "../../lib/title";
+import { usePublicView } from "../publicView";
 import { Button } from "../../ui/brand/Button";
 import { Card } from "../../ui/brand/Card";
 import { cn } from "../../ui/brand/cn";
@@ -48,6 +49,7 @@ import {
   originLabel,
   relationLabel,
 } from "./longlistPresentation";
+import { useOwnerWord } from "./ownerWord";
 import { AddReason, invitesReason, OptionActionButton, ShortlistToggle, useOptionActions } from "./optionActions";
 import { RetryCard } from "../../ui/feedback/RetryCard";
 import { LINK_CLASS, PROSE_LINK_CLASS } from "../../ui/brand/inlineActions";
@@ -432,8 +434,10 @@ export function OptionCard() {
   // bug: it opened at the foot), once per option.
   useOpenAtTop(titleRef, optionId);
   const task = useTask(taskId);
-  const plan = usePlan(taskId);
+  // The plan is an owner-only read; the public link never asks for it.
+  const plan = usePlan(usePublicView() ? "" : taskId);
   const option = useOption(taskId, optionId);
+  const who = useOwnerWord(taskId);
   // Task 045 (F15): a refused exclude / include says so under the header.
   const actions = useOptionActions(taskId, isRunActive(task.data));
   // A document's dossier, open over the card (round 12): Close or Back
@@ -535,7 +539,7 @@ export function OptionCard() {
   // works, the counts in the evidence line, so the grey line is where the
   // option came from and how it relates to others.
   const headerLine = [
-    originLabel(item.origin, item.from_section),
+    originLabel(item.origin, item.from_section, who),
     ...(item.relations ?? []).map(relationLabel),
     ...((item.also_found_as ?? []).length > 0 ? [`also found as: ${(item.also_found_as ?? []).join(", ")}`] : []),
   ].join(" · ");
@@ -579,7 +583,7 @@ export function OptionCard() {
             "Add a reason" after the Why value while it invites one. */}
         {excluded && item.exclusion != null && (
           <ExclusionBlock
-            facts={exclusionFacts(item.exclusion)}
+            facts={exclusionFacts(item.exclusion, who)}
             addReason={
               invitesReason(item.exclusion) ? (
                 <AddReason actions={actions} optionId={optionId} current={item.exclusion.reason ?? ""} />

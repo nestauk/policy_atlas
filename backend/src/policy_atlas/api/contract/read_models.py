@@ -15,7 +15,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .sse import DecidedBy
-from .task_agent import ExtractProfile, OptionDesignOut
+from .task_agent import ExtractProfile, OptionDesignOut, ScopingRiskAppetite
 from .tasks import LatestRun
 
 #: The longest user text an option route accepts (the option's words, a reason).
@@ -1161,6 +1161,12 @@ class LonglistOut(BaseModel):
             the longlist was built from in a field the longlist reads, so a
             rebuild would give a different longlist. A change to the risk
             appetite alone leaves it false (task 055, A6).
+        question: The current approved plan's question (the page heading).
+        where: The current approved plan's setting, e.g. "England".
+        risk_appetite: The current approved plan's risk appetite.
+
+    The last three repeat plan fields so a public link, which cannot read
+    the owner-only plan, shows the same heading and words as the owner.
     """
 
     run_id: uuid.UUID
@@ -1179,6 +1185,9 @@ class LonglistOut(BaseModel):
     depth_label: Literal["scoping pass"] = "scoping pass"
     shortlist: ShortlistOut
     plan_inputs_changed: bool = False
+    question: str | None = None
+    where: str | None = None
+    risk_appetite: ScopingRiskAppetite | None = None
 
 
 class EvidenceProfileOut(BaseModel):
