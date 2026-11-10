@@ -245,7 +245,7 @@ The mock rulings were accepted on 2026-11-09. The polish passes (phase 8) record
 - The report's contents sit inside the paper, at the right of Summary to Supporting activities. The canvas and the Assumptions table use the full width (as before phase 6). The contents stay on the right.
 - The verdict line has a rule in its tone (2px, as Evidence search's claim rule), not a tone square.
 - Report lists use the shared square bullet (`BulletList`), as in the other capabilities. The detail panel and suggestions take the bullet shape only.
-- A connection being searched or checked keeps the grey line and shows a small ink dot travelling from its source to its target (still at the middle under reduced motion). Blue was tried and dropped, because it read like a verdict colour. The canvas key shows "Being checked" only while a check runs.
+- A connection being searched or checked is a thicker, darker grey line that breathes on the shared 1.6 s rhythm, arrowhead included (still under reduced motion). Blue was dropped because it read like a verdict colour; a travelling dot was dropped as too busy. The canvas key shows "Being checked" only while a check runs.
 - "What to test first" is numbered in the live report too, so its markers do not change when the finished report replaces it.
 - The task is named by Policy Atlas at Start (`task_title`), as in Evidence search and Options scoping.
 - The first draft is drawn live on the canvas (S12).

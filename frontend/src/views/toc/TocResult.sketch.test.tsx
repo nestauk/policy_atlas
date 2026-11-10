@@ -150,7 +150,6 @@ describe("the live draft on the canvas (S12)", () => {
     expect(document.querySelectorAll(".react-flow__edge")).toHaveLength(1);
     expect(document.querySelector(".toc-edge--unchecked")).not.toBeNull();
     expect(document.querySelector(".toc-edge--pending")).toBeNull();
-    expect(screen.queryByTestId("toc-edge-dot")).toBeNull();
     // The boxes are written; no box is marked while the connections are.
     expect(screen.queryByTestId("toc-box-writing")).toBeNull();
   });
@@ -222,47 +221,25 @@ describe("a connection being checked (owner, 2026-11-10)", () => {
   const checking = () => tocGraphFixture({ check_status: "checking" });
   const pendingEdge = () => document.querySelector(".toc-edge--pending")?.closest("g") as SVGGElement;
 
-  it("keeps the grey line, with an ink dot travelling its path on the 1.6 s loop", () => {
+  it("is the darker grey, with no inline colour and no blue anywhere on the connections", () => {
     expect(checking().links.some((link) => link.state === "checking")).toBe(true);
     render(page(checking()));
-    const edge = pendingEdge();
-    const line = edge.querySelector(".toc-edge--pending") as SVGPathElement;
+    const line = pendingEdge().querySelector(".toc-edge--pending") as SVGPathElement;
     expect(line.getAttribute("style") ?? "").not.toContain("stroke");
-    const dot = within(edge as unknown as HTMLElement).getByTestId("toc-edge-dot");
-    expect(dot).toHaveClass("fill-ink");
-    const motion = dot.querySelector("animateMotion") as SVGElement;
-    expect(motion).toHaveAttribute("path", line.getAttribute("d"));
-    expect(motion).toHaveAttribute("dur", "1.6s");
-    expect(motion).toHaveAttribute("repeatCount", "indefinite");
-    // No blue anywhere on the connections, arrowheads included.
     expect(document.querySelector(".react-flow__edges")?.innerHTML ?? "").not.toContain("--color-blue");
     expect(document.querySelector(".react-flow")?.querySelector("defs")?.innerHTML ?? "").not.toContain("--color-blue");
   });
 
-  it("holds the dot still at the middle under reduced motion", () => {
-    const original = window.matchMedia;
-    window.matchMedia = ((query: string) => ({ matches: query.includes("reduce"), media: query, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia;
-    try {
-      render(page(checking()));
-      const motion = within(pendingEdge() as unknown as HTMLElement).getByTestId("toc-edge-dot").querySelector("animateMotion") as SVGElement;
-      expect(motion).toHaveAttribute("keyPoints", "0.5;0.5");
-      expect(motion).toHaveAttribute("fill", "freeze");
-      expect(motion).not.toHaveAttribute("repeatCount");
-    } finally {
-      window.matchMedia = original;
-    }
-  });
-
-  it("keys the dot only while a connection is being checked", () => {
+  it("keys the pulsing grey line only while a connection is being checked", () => {
     const { unmount } = render(page(checking()));
     const entry = within(screen.getByRole("list", { name: "Line key" })).getByText("Being checked").closest("li") as HTMLElement;
-    expect(entry.querySelector("line")).toHaveAttribute("stroke", "var(--color-line-2)");
-    expect(within(entry).getByTestId("toc-edge-dot")).toBeInTheDocument();
+    const sample = within(entry).getByTestId("toc-key-checking");
+    expect(sample).toHaveAttribute("stroke", "var(--color-grey)");
+    expect(sample).toHaveClass("anim-breathe");
     unmount();
     const checked = tocGraphFixture({ check_status: "checked" });
     render(page({ ...checked, links: checked.links.map((link) => ({ ...link, state: "checked" as const })) }));
     expect(within(screen.getByRole("list", { name: "Line key" })).queryByText("Being checked")).toBeNull();
-    expect(screen.queryByTestId("toc-edge-dot")).toBeNull();
   });
 });
 

@@ -517,9 +517,9 @@
    evidence grey dashed; Leaning against long red dashes; Not
    confident dotted red. The critical link carries a warning triangle
    (CriticalMark), not a thicker line. A connection being searched or
-   checked keeps the still grey of an unchecked one, with an ink dot
-   travelling along it (`TravellingDot`; owner, 2026-11-10: blue read as a
-   verdict colour); the dot sits still at the middle under reduced motion.
+   checked is a thicker, darker grey line that breathes on the shared 1.6 s
+   rhythm, arrowhead included (owner, 2026-11-10: blue read as a verdict
+   colour, a travelling dot was too busy); still under reduced motion.
    An unchecked one is a still grey line. Scoped under .react-flow so the library's own edge
    styles, loaded later, do not win. */
 .react-flow .toc-edge {
@@ -533,7 +533,14 @@
 .react-flow .toc-edge--against { stroke-dasharray: 2 5; }
 .react-flow .toc-edge--leaning_supports { stroke-dasharray: 12 5; }
 .react-flow .toc-edge--leaning_against { stroke-dasharray: 12 5; }
-.react-flow .toc-edge--pending { stroke: var(--color-line-2); }
+.react-flow .toc-edge--pending {
+  stroke: var(--color-grey);
+  stroke-width: 3;
+  animation: breathe 1.6s ease-in-out infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
 .react-flow .toc-edge--unchecked { stroke: var(--color-line-2); }
 /* Keyboard focus on a box or a connection: DESIGN's 2px blue outline, offset 2px. */
 .react-flow .react-flow__node-box:focus-visible,

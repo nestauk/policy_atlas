@@ -1,6 +1,4 @@
-import { useState } from "react";
 
-import { prefersReducedMotion } from "../../lib/motion";
 import { scrub } from "../../lib/scrub";
 import { VERDICT_VAR } from "../../ui/brand/verdictTones";
 import { VERDICT_LABEL, VERDICTS } from "./tocModel";
@@ -27,31 +25,6 @@ export function CriticalIcon() {
 }
 
 /** One trip of the dot along a connection being checked: the shared 1.6 s rhythm. */
-const DOT_TRIP = "1.6s";
-
-/**
- * A connection being searched or checked (owner, 2026-11-10): a small ink
- * dot travels along the line's own path, source to target, on a loop, at a
- * steady pace (constant motion is linear). The line stays the plain grey of
- * "Needs evidence", so no colour reads as a verdict. Under reduced motion
- * the dot sits still at the middle of the path.
- *
- * Args:
- *   path: The connection's SVG path.
- */
-export function TravellingDot({ path }: { path: string }) {
-  const [reduced] = useState(prefersReducedMotion);
-  return (
-    <circle r={3.5} data-testid="toc-edge-dot" className="pointer-events-none fill-ink" aria-hidden="true">
-      {reduced ? (
-        <animateMotion path={path} dur="1ms" keyPoints="0.5;0.5" keyTimes="0;1" calcMode="linear" fill="freeze" />
-      ) : (
-        <animateMotion path={path} dur={DOT_TRIP} repeatCount="indefinite" calcMode="linear" />
-      )}
-    </circle>
-  );
-}
-
 /** Each verdict's dash on the canvas; a solid line has none. */
 const DASH: Record<Verdict, string | undefined> = {
   supported: undefined,
@@ -97,9 +70,8 @@ export function VerdictLegend({ checking = false }: { checking?: boolean }) {
       </li>
       {checking && (
         <li className="inline-flex items-center gap-1.5">
-          <svg width="34" height="8" aria-hidden="true" overflow="visible">
-            <line x1="0" y1="4" x2="34" y2="4" stroke="var(--color-line-2)" strokeWidth={3} />
-            <TravellingDot path="M0,4 L34,4" />
+          <svg width="34" height="8" aria-hidden="true">
+            <line x1="0" y1="4" x2="34" y2="4" stroke="var(--color-grey)" strokeWidth={3} className="anim-breathe" data-testid="toc-key-checking" />
           </svg>
           Being checked
         </li>

@@ -29,7 +29,7 @@ import { VERDICT_VAR } from "../../ui/brand/verdictTones";
 import type { Selection } from "./DetailPanel";
 import { imageBounds } from "./exports";
 import { useGlide, type GlideTarget } from "./glide";
-import { CriticalMark, TravellingDot } from "./ReadingGuide";
+import { CriticalMark } from "./ReadingGuide";
 import {
   BOX_H,
   BOX_W,
@@ -283,7 +283,6 @@ function TocEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, t
         // A checked connection takes its verdict's shared tone; the class sets its dash.
         style={kind === data.verdict ? { stroke: VERDICT_VAR[data.verdict] } : undefined}
       />
-      {data.pending && !data.live && <TravellingDot path={path} />}
       {data.critical && <CriticalMark x={markX} y={markY} />}
       {data.attention && <circle data-testid="toc-edge-attention" cx={markX} cy={data.critical ? markY - 16 : markY} r={5.5} className="pointer-events-none fill-blue stroke-paper" strokeWidth={2} />}
     </g>
@@ -602,7 +601,7 @@ export function TocCanvas({
           type: MarkerType.ArrowClosed,
           width: 14,
           height: 14,
-          color: isLive || pending || (unchecked && !reviewing) ? "var(--color-line-2)" : reviewing ? (link.origin === "imported" ? "var(--color-navy)" : "var(--color-blue)") : VERDICT_VAR[link.verdict],
+          color: pending && !isLive ? "var(--color-grey)" : isLive || (unchecked && !reviewing) ? "var(--color-line-2)" : reviewing ? (link.origin === "imported" ? "var(--color-navy)" : "var(--color-blue)") : VERDICT_VAR[link.verdict],
         },
         data: {
           span: sameColumn ? 0 : (columnOf.get(link.target_box_id) ?? 0) - (columnOf.get(link.source_box_id) ?? 0),
