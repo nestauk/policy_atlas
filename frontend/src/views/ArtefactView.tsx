@@ -1653,8 +1653,11 @@ export type DraftRun = {
 type DraftSpan = { start: number; end: number };
 
 /** How a draft is laid out: paragraphs apart by blank lines, or the key
- *  findings' list, one item per line. */
-type DraftLayout = "prose" | "list";
+ *  findings' list, one item per line; "numbered" is the same list with the
+ *  report's numbers in place of the squares, for a list the committed
+ *  report numbers (the theory of change's "What to test first"), so the
+ *  markers hold through the swap. */
+type DraftLayout = "prose" | "list" | "numbered";
 
 /** Blank lines part paragraphs; any line break parts list items. */
 const PARAGRAPH_BREAK = /\n[ \t]*\n\s*/g;
@@ -1741,7 +1744,7 @@ export function draftBlocks(
     }
   });
 
-  const separator = layout === "list" ? LINE_BREAK : PARAGRAPH_BREAK;
+  const separator = layout === "prose" ? PARAGRAPH_BREAK : LINE_BREAK;
   const blocks: DraftRun[][] = [[]];
   const piece = (run: DraftRun, from: number, to: number, last: boolean): DraftRun | null => {
     const text = run.text.slice(from, to);
@@ -1761,7 +1764,7 @@ export function draftBlocks(
     const out = piece(run, from, run.text.length, true);
     if (out !== null) blocks[blocks.length - 1].push(out);
   }
-  if (layout === "list") {
+  if (layout !== "prose") {
     for (const block of blocks) {
       const first = block[0];
       const marker = first === undefined ? null : ITEM_MARKER.exec(first.text);
@@ -2005,7 +2008,7 @@ function DraftProse({
   className?: string;
 }) {
   const blocks = draftBlocks(draft, revising, claims, layout, settling);
-  const list = layout === "list";
+  const list = layout !== "prose";
   const tailStart = blocks.at(-1)?.[0]?.start ?? 0;
   const cuts = (batches ?? []).filter((cut) => cut > tailStart);
   const render = (runs: DraftRun[], at: number) =>
@@ -2015,6 +2018,19 @@ function DraftProse({
       <DraftBlockView runs={runs} list={list} heldRevising={heldRevising} cuts={cuts} />
     );
   const rootClass = `max-w-prose-measure ${REPORT_BODY_CLASS} ${checking ? "draft-checking" : ""} ${className}`;
+  if (layout === "numbered") {
+    // The committed list's own numbers and spacing (`DetailedInformation`'s
+    // `LIST`), so nothing moves when it replaces this one.
+    return (
+      <div data-testid="draft-prose" aria-hidden={ariaHidden || undefined} className={rootClass}>
+        <ol className="mt-2 list-decimal space-y-1.5 pl-5">
+          {blocks.map((runs, at) => (
+            <li key={at}>{render(runs, at)}</li>
+          ))}
+        </ol>
+      </div>
+    );
+  }
   if (list) {
     return (
       <div data-testid="draft-prose" aria-hidden={ariaHidden || undefined} className={rootClass}>

@@ -24,10 +24,12 @@ import {
 import { prefersReducedMotion } from "../../lib/motion";
 import { ExitFullScreenIcon, FitIcon, FullScreenIcon } from "../../ui/brand/icons";
 import { scrub } from "../../lib/scrub";
+import { cn } from "../../ui/brand/cn";
 import { VERDICT_VAR } from "../../ui/brand/verdictTones";
 import type { Selection } from "./DetailPanel";
 import { imageBounds } from "./exports";
-import { CriticalMark } from "./ReadingGuide";
+import { useGlide, type GlideTarget } from "./glide";
+import { CriticalMark, TravellingDot } from "./ReadingGuide";
 import {
   BOX_H,
   BOX_W,
@@ -108,6 +110,14 @@ interface BoxData extends Record<string, unknown> {
   connecting: boolean;
   /** Part of a hovered suggestion: drawn faded. */
   ghost: boolean;
+  /** The first draft while it is written: no codes, not a control (S12). */
+  live: boolean;
+  /** The box the draft is writing: a blue border, breathing. */
+  newest: boolean;
+  /** Written after the sketch was first shown: it rises in. */
+  arriving: boolean;
+  /** The stored graph that replaced a sketch: its codes fade in. */
+  landed: boolean;
 }
 interface EdgeData extends Record<string, unknown> {
   /** Columns from source to target; 0 inside one column. */
@@ -129,6 +139,9 @@ interface EdgeData extends Record<string, unknown> {
   critical: boolean;
   selected: boolean;
   tip: string;
+  /** The sketch's connections: still Line 2, no verdict and no dot (S12). */
+  live: boolean;
+  arriving: boolean;
 }
 interface LabelData extends Record<string, unknown> {
   text: string;
@@ -181,7 +194,9 @@ function BoxView({ data }: NodeProps<BoxNode>) {
       className={[
         // Rounded corners stay (owner, contract W2); the paper weight and the
         // Line 2 hairline are the cards' (DESIGN.md § Elevation).
-        "relative flex cursor-pointer items-center rounded-lg border bg-paper px-3.5 text-meta font-semibold leading-snug text-navy shadow-paper",
+        "relative flex items-center rounded-lg border bg-paper px-3.5 text-meta font-semibold leading-snug text-navy shadow-paper",
+        data.live ? "cursor-default" : "cursor-pointer",
+        data.arriving ? "anim-rise" : "",
         box.code !== null ? "pt-3.5" : "",
         data.selected || data.connecting ? "border-blue ring-4 ring-blue-tint" : "border-line-2",
         data.dim ? "opacity-20" : "",
@@ -192,7 +207,9 @@ function BoxView({ data }: NodeProps<BoxNode>) {
       {HANDLES.map((handle) => (
         <Handle key={handle.id} id={handle.id} type={handle.type} position={handle.position} className={HANDLE_CLASS} />
       ))}
-      {box.code !== null && <span className="absolute left-3.5 top-0.5 text-caption leading-none text-grey">{box.code}</span>}
+      {/* The box being written: a blue border breathing over the hairline, on the one 1.6 s rhythm (still under reduced motion). */}
+      {data.newest && <span aria-hidden="true" data-testid="toc-box-writing" className="pointer-events-none absolute -inset-px rounded-lg border-2 border-blue anim-breathe" />}
+      {box.code !== null && <span className={cn("absolute left-3.5 top-0.5 text-caption leading-none text-grey", data.landed && "anim-swap-in")}>{box.code}</span>}
       <span className="line-clamp-3">{scrub(box.text)}</span>
       {data.needsEvidence && <span className="absolute bottom-0.5 right-3 text-caption font-normal italic leading-none text-grey">Needs evidence</span>}
     </div>
@@ -238,10 +255,23 @@ function TocEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, t
     : data.span > 0
       ? (({ path: p, labelX, labelY }) => [p, labelX, labelY] as const)(routeEdge(sourceX, sourceY, targetX, targetY, data.span))
       : getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 10 });
-  const kind = data.ghost ? "preview" : data.pending ? "pending" : data.suggested ? "suggested" : data.drawn ? "drawn" : data.unchecked ? "unchecked" : data.verdict;
+  // The sketch's connections are plain grey: no verdict yet, and not being checked.
+  const kind = data.live
+    ? "unchecked"
+    : data.ghost
+      ? "preview"
+      : data.pending
+        ? "pending"
+        : data.suggested
+          ? "suggested"
+          : data.drawn
+            ? "drawn"
+            : data.unchecked
+              ? "unchecked"
+              : data.verdict;
   return (
-    <g>
-      <title>{data.tip}</title>
+    <g className={data.arriving ? "anim-swap-in" : undefined}>
+      {!data.live && <title>{data.tip}</title>}
       {/* The selected connection gets the boxes' blue halo, under its own line. */}
       {data.selected && <path d={path} data-testid="toc-edge-halo" className="toc-edge-halo" />}
       <BaseEdge
@@ -253,6 +283,7 @@ function TocEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, t
         // A checked connection takes its verdict's shared tone; the class sets its dash.
         style={kind === data.verdict ? { stroke: VERDICT_VAR[data.verdict] } : undefined}
       />
+      {data.pending && !data.live && <TravellingDot path={path} />}
       {data.critical && <CriticalMark x={markX} y={markY} />}
       {data.attention && <circle data-testid="toc-edge-attention" cx={markX} cy={data.critical ? markY - 16 : markY} r={5.5} className="pointer-events-none fill-blue stroke-paper" strokeWidth={2} />}
     </g>
@@ -294,33 +325,47 @@ const HANDLES = [
  * that zoom it starts at the left edge, vertically centred, so the user pans
  * right. Also serves full-screen changes; the fit button uses FitTo.
  */
-function ViewFitter({ boxes, bounds, refit }: { boxes: number; bounds: Bounds; refit: number }) {
+function ViewFitter({ boxes, bounds, refit, live }: { boxes: number; bounds: Bounds; refit: number; live: boolean }) {
   const { setViewport } = useReactFlow();
   const store = useStoreApi();
   const ready = useStore((state) => state.width > 0 && state.height > 0);
   const { x, y, width, height } = bounds;
   // The load, a new box count or full screen fit the view; a pathway change only pans to it.
   const fittedFor = useRef<string | null>(null);
+  // Whether the last fit was the sketch's: its next fits ease, the swap's too.
+  const wasLive = useRef(false);
   useEffect(() => {
     if (!ready) return;
     const { width: viewW, height: viewH, transform } = store.getState();
-    const key = `${boxes}:${refit}`;
+    // The sketch fits afresh as it grows (a new connection can widen it), and
+    // its end fits afresh too, so the stored graph takes the same start view.
+    const key = live ? `${boxes}:${refit}:live:${width}x${height}` : `${boxes}:${refit}`;
     if (fittedFor.current === key) {
       const zoom = transform[2];
       void setViewport({ x: viewW / 2 - (x + width / 2) * zoom, y: viewH / 2 - (y + height / 2) * zoom, zoom }, { duration: prefersReducedMotion() ? 0 : 300 });
       return;
     }
+    const first = fittedFor.current === null;
     fittedFor.current = key;
+    // While the draft is drawn (and at its swap) the view eases to each new fit, as the boxes glide.
+    const options = !first && (live || wasLive.current) && !prefersReducedMotion() ? { duration: 300 } : undefined;
+    wasLive.current = live;
     const fitted = getViewportForBounds({ x, y, width, height }, viewW, viewH, 0.1, 2, VIEW_PADDING);
+    if (live) {
+      // The sketch grows down and to the right from the top-left corner at
+      // the start zoom, so a new row never moves the boxes already drawn.
+      void setViewport({ x: START_INSET - x * MIN_START_ZOOM, y: START_INSET - y * MIN_START_ZOOM, zoom: MIN_START_ZOOM }, options);
+      return;
+    }
     if (fitted.zoom >= MIN_START_ZOOM) {
-      void setViewport(fitted);
+      void setViewport(fitted, options);
       return;
     }
     // Centred when it fits the view's height; otherwise from its top row, so a
     // tall theory on a phone starts at its first boxes, not cut through them.
     const top = Math.max((viewH - height * MIN_START_ZOOM) / 2, START_INSET);
-    void setViewport({ x: START_INSET - x * MIN_START_ZOOM, y: top - y * MIN_START_ZOOM, zoom: MIN_START_ZOOM });
-  }, [ready, boxes, x, y, width, height, refit, setViewport, store]);
+    void setViewport({ x: START_INSET - x * MIN_START_ZOOM, y: top - y * MIN_START_ZOOM, zoom: MIN_START_ZOOM }, options);
+  }, [ready, boxes, x, y, width, height, refit, live, setViewport, store]);
   return null;
 }
 
@@ -366,6 +411,7 @@ export function TocCanvas({
   onSelect,
   editing,
   preview,
+  live = null,
 }: {
   graph: TocGraph;
   /** "all" or one kept pathway's id. */
@@ -378,6 +424,13 @@ export function TocCanvas({
   editing: CanvasEditing | null;
   /** A hovered suggestion's route, drawn faded (owner, 2026-11-04). */
   preview: Preview | null;
+  /**
+   * The first draft while it is written (`toc.sketch`, S12): the graph is
+   * the sketch, drawn in the stored graph's columns, read-only, the box
+   * being written breathing blue. `enterAll`: the sketch first showed
+   * on this page (not on opening it), so its first box rises in too.
+   */
+  live?: { enterAll: boolean } | null;
 }) {
   const graph = withPreview(theory, preview);
   // Where a box is while dragged and until the saved position comes back (its revision moves on).
@@ -395,6 +448,7 @@ export function TocCanvas({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [connecting, editing]);
+  const isLive = live !== null;
   const computed = layoutToc(graph);
   const revisionOf = new Map(graph.boxes.map((box) => [box.box_id, box.revision]));
   const layout = {
@@ -405,6 +459,26 @@ export function TocCanvas({
     }),
   };
   const movedIds = new Set(layout.boxes.filter((placed) => placed.moved).map((placed) => placed.id));
+  // The sketch is laid out again with each box and connection: its boxes,
+  // headings and line glide to their new places, and a stored box starts
+  // where its sketch was (the same layer and words).
+  const layerOf = new Map(graph.boxes.map((box) => [box.box_id, `${box.layer}|${box.text}`]));
+  const targets = new Map<string, GlideTarget>([
+    ...layout.boxes.map((placed) => [placed.id, { x: placed.x, y: placed.y, key: `box:${layerOf.get(placed.id) ?? placed.id}` }] as const),
+    ...layout.headings.map((heading, index) => [`col-${index}`, { x: heading.x, y: HEADER_H - 36, key: `col-${index}` }] as const),
+    ...(layout.lineY === null ? [] : [["line", { x: 0, y: layout.lineY, key: "line" }] as const]),
+  ]);
+  const [reduced] = useState(prefersReducedMotion);
+  const glided = useGlide(targets, isLive, reduced);
+  const at = (id: string, fallback: { x: number; y: number }) => glided.get(id) ?? fallback;
+  const glidedLineY = layout.lineY === null ? null : at("line", { x: 0, y: layout.lineY }).y;
+  // What the sketch had when it first showed holds still; what is written after rises in.
+  const [shownAtStart] = useState(() => new Set(live?.enterAll === true ? [] : [...graph.boxes.map((box) => box.box_id), ...graph.links.map((link) => link.link_id)]));
+  const [sawLive, setSawLive] = useState(isLive);
+  if (isLive && !sawLive) setSawLive(true);
+  const landed = sawLive && !isLive;
+  // The box being written, while the boxes are (the connections come after them).
+  const newestId = isLive && graph.links.length === 0 ? (graph.boxes.at(-1)?.box_id ?? null) : null;
   // A box the user added whose connections no check has judged yet; nothing to say before the first check.
   const needsEvidence = (box: TocBox) =>
     graph.check_status !== "none" && box.origin === "user" && graph.links.filter((link) => link.source_box_id === box.box_id || link.target_box_id === box.box_id).every((link) => link.state === "unchecked");
@@ -466,8 +540,11 @@ export function TocCanvas({
   }, []);
 
   const nodes: Array<BoxNode | LabelNode> = [
-    ...layout.headings.map((heading, index) => labelNode(`col-${index}`, heading.x, HEADER_H - 36, { text: heading.label })),
-    ...(layout.lineY === null ? [] : [labelNode("line-label", 0, layout.lineY + 10, { text: "If it goes wrong" })]),
+    ...layout.headings.map((heading, index) => {
+      const place = at(`col-${index}`, { x: heading.x, y: HEADER_H - 36 });
+      return labelNode(`col-${index}`, place.x, place.y, { text: heading.label });
+    }),
+    ...(glidedLineY === null ? [] : [labelNode("line-label", 0, glidedLineY + 10, { text: "If it goes wrong" })]),
     // The accountability ceiling (C35): what the programme directly influences, and what it contributes to.
     labelNode("ceiling-left", layout.ceilingX - 8 - LABEL_W, ceilingLabelY, { text: "Directly influenced", alignRight: true }, true),
     labelNode("ceiling-right", layout.ceilingX + 8, ceilingLabelY, { text: "Contributes to" }, true),
@@ -478,7 +555,7 @@ export function TocCanvas({
         {
           id: placed.id,
           type: "box",
-          position: { x: placed.x, y: placed.y },
+          position: at(placed.id, placed),
           width: BOX_W,
           height: BOX_H,
           handles: HANDLES,
@@ -489,9 +566,15 @@ export function TocCanvas({
             needsEvidence: needsEvidence(box),
             connecting: connectFrom === placed.id,
             ghost: placed.id.startsWith(PREVIEW),
+            live: isLive,
+            newest: placed.id === newestId,
+            arriving: isLive && !shownAtStart.has(placed.id),
+            landed,
           },
-          draggable: editing !== null && !connecting,
+          draggable: editing !== null && !connecting && !isLive,
           connectable: false,
+          // The sketch is not a control: no focus, no click (S12).
+          ...(isLive ? { selectable: false, focusable: false } : {}),
         },
       ];
     }),
@@ -519,8 +602,7 @@ export function TocCanvas({
           type: MarkerType.ArrowClosed,
           width: 14,
           height: 14,
-          // A connection being checked: the live blue, its arrowhead breathing with its line.
-          color: pending ? "var(--color-blue)" : unchecked && !reviewing ? "var(--color-line-2)" : reviewing ? (link.origin === "imported" ? "var(--color-navy)" : "var(--color-blue)") : VERDICT_VAR[link.verdict],
+          color: isLive || pending || (unchecked && !reviewing) ? "var(--color-line-2)" : reviewing ? (link.origin === "imported" ? "var(--color-navy)" : "var(--color-blue)") : VERDICT_VAR[link.verdict],
         },
         data: {
           span: sameColumn ? 0 : (columnOf.get(link.target_box_id) ?? 0) - (columnOf.get(link.source_box_id) ?? 0),
@@ -535,14 +617,17 @@ export function TocCanvas({
           critical: link.critical,
           selected: selection?.kind === "link" && selection.id === link.link_id,
           tip: linkTip(link),
+          live: isLive,
+          arriving: isLive && !shownAtStart.has(link.link_id),
         },
         selectable: false,
-        focusable: !link.link_id.startsWith(PREVIEW),
+        focusable: !isLive && !link.link_id.startsWith(PREVIEW),
         ariaLabel: linkTip(link),
       };
     });
 
   const clickBox = (id: string) => {
+    if (isLive) return;
     if (connecting) {
       if (connectFrom === null) setConnectFrom(id);
       else if (connectFrom !== id) {
@@ -555,13 +640,19 @@ export function TocCanvas({
   };
 
   return (
-    <div ref={boxRef} className="toc-canvas h-[640px] min-w-0 flex-1 bg-paper-2 max-lg:basis-auto lg:h-full" role="group" aria-label="Theory of change canvas">
+    <div
+      ref={boxRef}
+      className="toc-canvas h-[640px] min-w-0 flex-1 bg-paper-2 max-lg:basis-auto lg:h-full"
+      role="group"
+      aria-label="Theory of change canvas"
+      aria-busy={isLive || undefined}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        nodesDraggable={editing !== null && !connecting}
+        nodesDraggable={editing !== null && !connecting && !isLive}
         nodesConnectable={false}
         elementsSelectable={false}
         minZoom={MIN_ZOOM}
@@ -585,13 +676,15 @@ export function TocCanvas({
         onNodeClick={(_, node) => {
           if (node.type === "box") clickBox(node.id);
         }}
-        onEdgeClick={(_, edge) => onSelect({ kind: "link", id: edge.id })}
+        onEdgeClick={(_, edge) => {
+          if (!isLive) onSelect({ kind: "link", id: edge.id });
+        }}
         // Keyboard: Enter or Space on a focused box or connection acts as a click.
         onKeyDown={(event) => {
           if (event.key !== "Enter" && event.key !== " ") return;
           const target = event.target as Element;
           const id = target.getAttribute("data-id");
-          if (id === null) return;
+          if (id === null || isLive) return;
           if (target.classList.contains("react-flow__node-box")) clickBox(id);
           else if (target.classList.contains("react-flow__edge")) onSelect({ kind: "link", id });
           else return;
@@ -599,7 +692,7 @@ export function TocCanvas({
         }}
         onPaneClick={() => onSelect(null)}
       >
-        <Dividers lineY={layout.lineY} ceilingX={layout.ceilingX} />
+        <Dividers lineY={glidedLineY} ceilingX={layout.ceilingX} />
         <ExportDividers graph={graph} lineY={layout.lineY} ceilingX={layout.ceilingX} />
         {connecting && (
           <p className="pointer-events-none absolute left-3 top-3 z-10 bg-paper px-2.5 py-1 text-meta font-semibold text-blue">
@@ -607,7 +700,7 @@ export function TocCanvas({
           </p>
         )}
         <FitTo count={focus?.count ?? 0} rect={focus === null ? null : rectOf(focus.target)} minZoom={0.5} maxZoom={FOCUS_MAX_ZOOM} padding={0.25} duration={400} />
-        <ViewFitter boxes={layout.boxes.length} bounds={bounds} refit={refit} />
+        <ViewFitter boxes={layout.boxes.length} bounds={bounds} refit={refit} live={isLive} />
         {/* The fit button: the whole graph (or the chosen pathway) in view, however far out that takes the zoom. */}
         <FitTo count={fitWhole} rect={bounds} minZoom={MIN_ZOOM} maxZoom={2} padding={VIEW_PADDING} duration={300} />
         <Controls showInteractive={false} showFitView={false}>

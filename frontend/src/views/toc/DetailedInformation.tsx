@@ -584,7 +584,7 @@ export function LiveReportBody({
         {marked.text.trim() === "" ? (
           <PlaceholderLines index={section.index} still={still} />
         ) : (
-          <LiveDraft draft={marked.text} claims={marked.claims} complete={false} layout={isListPart(key) ? "list" : "prose"} />
+          <LiveDraft draft={marked.text} claims={marked.claims} complete={false} layout={key === "tests" ? "numbered" : isListPart(key) ? "list" : "prose"} />
         )}
       </SectionDisclosure>
     );

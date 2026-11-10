@@ -241,6 +241,16 @@ Blurbs as in `research/mock/brief.md`. The ToC plan has no steps, so the blurbs 
 ### Owner sign-off
 The mock rulings were accepted on 2026-11-09. The polish passes (phase 8) record their rulings here.
 
+**Owner pass on the live app, 2026-11-10:**
+- The report's contents sit inside the paper, at the right of Summary to Supporting activities. The canvas and the Assumptions table use the full width (as before phase 6). The contents stay on the right.
+- The verdict line has a rule in its tone (2px, as Evidence search's claim rule), not a tone square.
+- Report lists use the shared square bullet (`BulletList`), as in the other capabilities. The detail panel and suggestions take the bullet shape only.
+- A connection being searched or checked keeps the grey line and shows a small ink dot travelling from its source to its target (still at the middle under reduced motion). Blue was tried and dropped, because it read like a verdict colour. The canvas key shows "Being checked" only while a check runs.
+- "What to test first" is numbered in the live report too, so its markers do not change when the finished report replaces it.
+- The task is named by Policy Atlas at Start (`task_title`), as in Evidence search and Options scoping.
+- The first draft is drawn live on the canvas (S12).
+- Per-request timeouts of each ToC step are about 1.5 to 2 times its slowest answered call (measured 2026-10-25 to 2026-11-10). A healthy call cut off costs one more try.
+
 ## 9. Acceptance items for this pass
 
 Each item names its check. "Test" means a new or changed automated test, named in `verification.md`.

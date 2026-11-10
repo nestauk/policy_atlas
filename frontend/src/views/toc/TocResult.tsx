@@ -7,7 +7,7 @@ import { useFunnel, useTask, useToc, useTocEvidence, useTocProposals } from "../
 import { formatDate } from "../../lib/dates";
 import { formatCount } from "../../lib/format";
 import { scrub } from "../../lib/scrub";
-import type { LiveSection } from "../../store";
+import type { LiveSection, LiveSketch } from "../../store";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { QUIET_CONTROL_CLASS } from "../../ui/brand/inlineActions";
@@ -30,7 +30,7 @@ import { pendingCount, type Preview, Suggestions } from "./Suggestions";
 import { ReadingGuide, VerdictLegend } from "./ReadingGuide";
 import { TocCanvas } from "./TocCanvas";
 import { usePanelWidth } from "../workspace/usePanelWidth";
-import { tocTitle } from "./tocModel";
+import { sketchGraph, tocTitle } from "./tocModel";
 import type { TocGraph } from "./types";
 
 type Report = NonNullable<TocGraph["report"]>;
@@ -50,6 +50,9 @@ function reportKey(report: Report | null): string | null {
 
 /** The header's prose: the report's own measure and size. */
 const HEADER_P = `mt-3 max-w-[56em] ${REPORT_BODY_CLASS}`;
+
+/** The canvas between a draft that failed its checks and its retry (S12). */
+const EMPTY_SKETCH: LiveSketch = { boxes: [], links: [] };
 
 /** The steps an "Update the report" walk runs (`toc_plan`, C45): a walk
  *  whose steps are only these rewrites the report and searches nothing. */
@@ -247,7 +250,35 @@ function TocPage({ taskId }: { taskId: string }) {
   }, [wanted, graph, setParams]);
   // Before any draft the owner may draw their own theory here; the draft keeps it as drawn.
   const sketching = graph != null && graph.check_status === "none" && canEdit;
-  if (graph == null || (graph.boxes.length === 0 && !sketching)) {
+
+  // The first draft drawn while it is written (S12). The stream's sketch is
+  // held until the stored graph has boxes, so the swap shows no empty
+  // canvas: the stage's end comes before `GET /toc` returns the graph, and
+  // a new walk (the check that follows) clears the stream's sketch. An
+  // empty sketch while the draft runs means it is written again, so the
+  // held one goes; a failed draft drops it.
+  const streamSketch = stream?.liveSketch ?? null;
+  const draftStage = stages.findLast((entry) => entry.stage === "toc_draft");
+  const draftFailed = draftStage?.status === "failed" || runStatus === "failed" || runStatus === "aborted" || runStatus === "interrupted";
+  const stored = graph != null && graph.boxes.length > 0;
+  const [held, setHeld] = useState<{ sketch: LiveSketch | null; retired: LiveSketch | null }>({ sketch: null, retired: null });
+  const reset = streamSketch === null && draftStage?.status === "started";
+  if (streamSketch !== null && streamSketch !== held.sketch && streamSketch !== held.retired && !stored && !draftFailed) {
+    setHeld({ sketch: streamSketch, retired: held.retired });
+  } else if (held.sketch !== null && (stored || draftFailed)) {
+    // Retired: the stream may keep the replaced sketch until its walk ends.
+    setHeld({ sketch: null, retired: held.sketch === EMPTY_SKETCH ? held.retired : held.sketch });
+  } else if (held.sketch !== null && held.sketch !== EMPTY_SKETCH && reset) {
+    // Written again: the canvas empties and the retry is drawn from its first box.
+    setHeld({ sketch: EMPTY_SKETCH, retired: held.sketch });
+  }
+  const drawing = held.sketch !== null && graph != null && !stored && !draftFailed ? held.sketch : null;
+  // The page showed its empty state before the first box: the canvas then
+  // arrives, and the first box rises in with it.
+  const [sawEmpty, setSawEmpty] = useState(false);
+
+  if (graph == null || (graph.boxes.length === 0 && !sketching && drawing === null)) {
+    if (graph != null && !sawEmpty && graph.check_status === "drafting") setSawEmpty(true);
     return (
       <ReportPage className="md:max-w-[1180px]">
         <p aria-busy={toc.isPending} className="text-body text-grey">
@@ -317,12 +348,18 @@ function TocPage({ taskId }: { taskId: string }) {
   const titlePart = parts.get("title");
   const liveTitle = showLive && titlePart !== undefined ? (titlePart.state === "filled" ? (titlePart.prose ?? "") : (titlePart.draft ?? "")) : "";
   const entries = report !== null ? reportSections(report) : showLive ? liveSections(parts) : undefined;
+  // What the canvas draws: the sketch while the draft is written, else the stored graph.
+  const shown = drawing !== null ? sketchGraph(drawing, graph) : graph;
+  // The page first showed its empty state: what replaces it fades in once.
+  const appeared = sawEmpty ? "anim-swap-in" : "";
+  // The key's "Being checked" shows only while a connection is being checked.
+  const checkingNow = graph.links.some((link) => link.state === "checking");
 
   return (
     // The contents sit inside the paper beside the report's narrative, so the
     // canvas and the Assumptions table keep the paper's width (owner, 2026-11-10).
     <ReportPage entries={entries} contents="within" className="md:max-w-[1180px]">
-      <header>
+      <header className={appeared}>
         <ReportKindRow kind="Report">
           {/* Download arrives with the committed report (058). */}
           {report !== null && !isPublicView && (
@@ -399,12 +436,13 @@ function TocPage({ taskId }: { taskId: string }) {
         )}
       </header>
       {/* The full-screen area: the bar, what it opens, and the canvas with its detail panel. */}
-      <div id="toc-canvas" className="mt-6 flex scroll-mt-4 flex-col border border-line bg-paper [&:fullscreen]:overflow-y-auto">
+      <div id="toc-canvas" className={cn("mt-6 flex scroll-mt-4 flex-col border border-line bg-paper [&:fullscreen]:overflow-y-auto", appeared)}>
+        {/* While the draft is drawn the bar is the reader's: no edits on a sketch. */}
         <CanvasBar
-          graph={graph}
-          pathway={pathway}
+          graph={shown}
+          pathway={drawing !== null ? "all" : pathway}
           onPathway={setPathway}
-          editor={canEdit ? editor : null}
+          editor={canEdit && drawing === null ? editor : null}
           mode={mode}
           onMode={setMode}
           onAddBox={() => setAdding(true)}
@@ -440,10 +478,11 @@ function TocPage({ taskId }: { taskId: string }) {
         )}
         <div className="flex min-h-0 lg:h-[640px] max-lg:flex-col [:fullscreen>&]:h-auto [:fullscreen>&]:flex-1">
         <TocCanvas
-          graph={graph}
-          preview={preview}
-          pathway={pathway}
-          selection={selection}
+          graph={shown}
+          live={drawing !== null ? { enterAll: sawEmpty } : null}
+          preview={drawing !== null ? null : preview}
+          pathway={drawing !== null ? "all" : pathway}
+          selection={drawing !== null ? null : selection}
           focus={focus}
           onSelect={(target) => {
             setSelection(target);
@@ -454,7 +493,7 @@ function TocPage({ taskId }: { taskId: string }) {
             );
           }}
           editing={
-            canEdit
+            canEdit && drawing === null
               ? {
                   mode,
                   onMove: (boxId, revision, x, y) => {
@@ -473,17 +512,19 @@ function TocPage({ taskId }: { taskId: string }) {
               : null
           }
         />
-        {selection === null && suggestionsOpen && (
+        {drawing === null && selection === null && suggestionsOpen && (
           <SidePanel label="Suggestions" panel={panel} onClose={() => { setSuggestionsChoice(false); setPreview(null); }}>
             <Suggestions proposals={proposals.data ?? []} editor={editor} onPreview={setPreview} checkNew={graph.check_status !== "none" && graph.check_status !== "drafted"} />
           </SidePanel>
         )}
-        {selection !== null && (
+        {drawing === null && selection !== null && (
           <DetailPanel taskId={taskId} graph={graph} evidence={evidence.data} selection={selection} editor={canEdit ? editor : null} onClose={() => setSelection(null)} panel={panel} />
         )}
         </div>
       </div>
-      <VerdictLegend />
+      <div className={appeared}>
+        <VerdictLegend checking={drawing === null && checkingNow} />
+      </div>
       {/* The report under the canvas: live while it is written, then the
           committed report in its place. Before writing starts, nothing. */}
       {(showLive || report !== null) && (

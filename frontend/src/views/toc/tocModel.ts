@@ -1,3 +1,4 @@
+import type { LiveSketch } from "../../store";
 import type { BoxLayer, Origin, Support, TocBox, TocDocument, TocFigure, TocGraph, TocLink, TocPathway, Verdict } from "./types";
 
 /*
@@ -461,4 +462,65 @@ export function pathwayTitles(graph: Pick<TocGraph, "pathways">): Map<string, st
     titles.set(pathway.pathway_id, pathway.kind === "success" ? `Pathway ${(n += 1)} · ${pathway.label}` : `If it goes wrong · ${pathway.label}`);
   }
   return titles;
+}
+
+/** Ids of the sketch's boxes and connections, from the model's draft keys. */
+export const SKETCH = "sketch:";
+
+/**
+ * The first draft while it is written (`toc.sketch`, task 054, S12) as a
+ * graph the canvas can lay out, so the sketch takes the same columns and
+ * rows the stored graph will. A connection that ends in an outcome if it
+ * goes wrong goes on a failure pathway, as the draft's own pathways put it,
+ * so those boxes sit under the line from the first; the rest are on no
+ * pathway, which the layout draws as one success route. Display only: no
+ * codes, no verdicts.
+ *
+ * Args:
+ *   sketch: The boxes and connections so far.
+ *   base: The stored graph (empty while the draft runs), for its other fields.
+ *
+ * Returns:
+ *   The sketch as a graph; box and link ids are `sketch:` plus the draft key.
+ */
+export function sketchGraph(sketch: LiveSketch, base: TocGraph): TocGraph {
+  const keys = new Set(sketch.boxes.map((box) => box.key));
+  const failure = new Set(sketch.boxes.filter((box) => box.layer === "failure_outcome").map((box) => box.key));
+  const boxes = sketch.boxes.map(
+    (box) =>
+      ({
+        box_id: SKETCH + box.key,
+        code: null,
+        layer: box.layer,
+        text: box.text,
+        origin: "drafted",
+        revision: 0,
+        position: null,
+        result_criteria: { definition: null, indicator: null },
+      }) as unknown as TocBox,
+  );
+  // A connection is sent only after both its boxes; a stray end is dropped, not drawn.
+  const drawn = sketch.links.filter((link) => keys.has(link.source) && keys.has(link.target));
+  const links = drawn.map(
+    (link) =>
+      ({
+        link_id: SKETCH + link.key,
+        code: null,
+        source_box_id: SKETCH + link.source,
+        target_box_id: SKETCH + link.target,
+        verdict: "not_sure_insufficient",
+        state: "unchecked",
+        pending_count: 0,
+        critical: false,
+        origin: "drafted",
+        sentence: "",
+        conditions: [],
+      }) as unknown as TocLink,
+  );
+  const failing = drawn.filter((link) => failure.has(link.target) || failure.has(link.source));
+  const pathways: TocPathway[] =
+    failing.length === 0
+      ? []
+      : [{ pathway_id: `${SKETCH}failure`, kind: "failure", status: "kept", label: "", link_ids: failing.map((link) => SKETCH + link.key), origin: "drafted", broken: false, reason: null } as unknown as TocPathway];
+  return { ...base, boxes, links, pathways, report: null };
 }

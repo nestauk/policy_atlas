@@ -89,11 +89,13 @@ describe("canvas", () => {
     expect(edge(9)?.querySelector(".toc-edge--pending")).not.toBeNull(); // still checking
   });
 
-  it("draws a connection being checked in the live blue, its arrowhead too (owner, 2026-11-10)", () => {
+  it("draws a connection being checked in the unchecked grey, its arrowhead too, with a travelling dot (owner, 2026-11-10)", () => {
     renderResult();
     const pending = edge(9)?.querySelector(".toc-edge--pending");
-    expect(pending?.getAttribute("marker-end")).toContain("color-blue");
-    expect(edge(1)?.querySelector(".toc-edge--supported")?.getAttribute("marker-end")).not.toContain("color-blue");
+    expect(pending?.getAttribute("marker-end")).toContain("color-line-2");
+    expect(pending?.getAttribute("marker-end")).not.toContain("color-blue");
+    expect(edge(9)?.querySelector('[data-testid="toc-edge-dot"]')).not.toBeNull();
+    expect(edge(1)?.querySelector('[data-testid="toc-edge-dot"]')).toBeNull();
   });
 
   it("marks the critical connection with a warning triangle, not a thicker line", () => {
