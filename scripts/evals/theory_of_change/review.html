@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ToC longlist review</title>
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #fff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e2e1dc;
+  --accent: #2557d6; --sel: #eaf0ff;
+  --supports: #1f8a4c; --partly: #c98a12; --insufficient: #8a8a85; --against: #c7372f;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #161615; --panel: #1f1f1d; --ink: #ecebe6; --muted: #9b9a94; --line: #34332f;
+          --accent: #7aa2ff; --sel: #23304d; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.45 system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--ink); }
+.app { display: grid; grid-template-columns: 360px 1fr; height: 100vh; }
+aside { border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; background: var(--panel); }
+.filters { padding: 12px; border-bottom: 1px solid var(--line); display: grid; gap: 8px; }
+.filters input, .filters select { width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: inherit; }
+.filters .row { display: flex; gap: 8px; }
+.count { color: var(--muted); font-size: 12px; }
+.list { overflow: auto; flex: 1; }
+.item { padding: 9px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.item:hover { background: var(--bg); }
+.item.sel { background: var(--sel); }
+.item .t { font-weight: 600; font-size: 13px; }
+.item .m { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.chip { display: inline-block; padding: 0 6px; border-radius: 9px; font-size: 11px; border: 1px solid var(--line); margin-right: 4px; }
+.chip.keep { border-color: var(--supports); color: var(--supports); }
+.chip.drop, .chip.duplicate { border-color: var(--against); color: var(--against); }
+.chip.reserve { border-color: var(--partly); color: var(--partly); }
+.chip.x { border-color: var(--accent); color: var(--accent); }
+main { overflow: auto; padding: 20px 24px 60px; }
+h1 { font-size: 19px; margin: 0 0 4px; }
+.sub { color: var(--muted); margin-bottom: 12px; }
+.bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 16px; }
+.bar input { flex: 1; min-width: 200px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); font: inherit; }
+button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+button.on { outline: 2px solid var(--accent); }
+button.keep { color: var(--supports); } button.reserve { color: var(--partly); } button.drop { color: var(--against); }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+.tabs button { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; }
+.tabs button.on { outline: none; border-bottom-color: var(--accent); color: var(--accent); }
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+/* Each side scrolls on its own; the pair sticks to the top once the header scrolls away. */
+.split { position: sticky; top: 0; height: calc(100vh - 24px); }
+.split > .card { overflow: auto; min-height: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.figs img { width: 100%; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 8px; cursor: zoom-in; background: #fff; }
+.layers { display: grid; gap: 8px; grid-auto-flow: column; grid-auto-columns: minmax(130px, 1fr); overflow-x: auto; }
+.layer h4 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.box { border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 5px; padding: 5px 7px; margin-bottom: 6px; font-size: 12px; background: var(--bg); cursor: default; }
+.box .id { color: var(--muted); font-size: 10px; }
+.box.hl { outline: 2px solid var(--accent); }
+.v-supports { border-left-color: var(--supports) !important; } .v-partly { border-left-color: var(--partly) !important; }
+.v-insufficient { border-left-color: var(--insufficient) !important; } .v-against { border-left-color: var(--against) !important; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; background: var(--line); }
+.dot.supports { background: var(--supports); } .dot.partly { background: var(--partly); }
+.dot.insufficient { background: var(--insufficient); } .dot.against { background: var(--against); }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; }
+tr.hl td { background: var(--sel); }
+.facts td:first-child { color: var(--muted); width: 180px; }
+.note { color: var(--muted); font-size: 12px; }
+ul.q { margin: 4px 0; padding-left: 18px; font-size: 12px; }
+a { color: var(--accent); }
+.zoom { position: fixed; inset: 0; background: rgba(0,0,0,.8); display: none; overflow: auto; z-index: 9; cursor: zoom-out; }
+.zoom img { display: block; margin: 20px auto; max-width: none; background: #fff; }
+.legend { font-size: 12px; color: var(--muted); margin: 0 0 8px; }
+@media (max-width: 900px) { .app { grid-template-columns: 1fr; } aside { max-height: 40vh; } .split { grid-template-columns: 1fr; position: static; height: auto; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="filters">
+      <input id="q" placeholder="Search title, topic, country…">
+      <div class="row">
+        <select id="fd"><option value="">All decisions</option></select>
+        <select id="fl"><option value="">All evidence levels</option><option>A</option><option>B</option><option>C</option></select>
+      </div>
+      <div class="row">
+        <select id="ff"><option value="">All families</option></select>
+        <select id="fx"><option value="">Extracted or not</option><option value="1">Extracted</option><option value="0">Not extracted</option></select>
+      </div>
+      <div class="count" id="count"></div>
+    </div>
+    <div class="list" id="list"></div>
+  </aside>
+  <main id="main"><p class="note">Pick a candidate on the left.</p></main>
+</div>
+<div class="zoom" id="zoom"><img alt=""></div>
+<script>
+const LAYERS = ["input", "activity", "output", "outcome_short", "outcome_long", "impact", "vision", "context"];
+const ORDER = {keep: 0, reserve: 1, unverified: 2, duplicate: 3, drop: 4};
+let D, sel = null, tab = "theory";
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const file = p => "/file/" + p.split("/").map(encodeURIComponent).join("/");
+// The agents wrote paths relative to the repo, to this folder or to downloads/: strip to this folder.
+const local = p => (p || "").replace(/\(.*?\)/g, "").split(";").map(s => s.trim()).filter(Boolean)
+  .map(s => s.replace(/^scripts\/evals\/theory_of_change\//, "")).map(s => /^(downloads|cases)\//.test(s) ? s : "downloads/" + s);
+
+async function load() {
+  D = await (await fetch("/api/data")).json();
+  const fam = [...new Set(D.rows.map(r => r.family))], dec = [...new Set(D.rows.map(r => r.decision))];
+  $("ff").innerHTML = '<option value="">All families</option>' + fam.map(f => `<option>${f}</option>`).join("");
+  const cur = $("fd").value;
+  $("fd").innerHTML = '<option value="">All decisions</option>' + dec.sort((a, b) => ORDER[a] - ORDER[b]).map(d => `<option>${d}</option>`).join("");
+  $("fd").value = cur;
+  list();
+  if (sel) show(sel);
+}
+
+function list() {
+  const q = $("q").value.toLowerCase(), fd = $("fd").value, fl = $("fl").value, ff = $("ff").value, fx = $("fx").value;
+  const rows = D.rows.filter(r =>
+    (!q || [r.id, r.title, r.topic, r.country, r.organisation].join(" ").toLowerCase().includes(q)) &&
+    (!fd || r.decision === fd) && (!fl || r.evidence_level === fl) && (!ff || r.family === ff) &&
+    (!fx || String(+!!(D.cases[r.id] && D.cases[r.id].boxes)) === fx));
+  $("count").textContent = `${rows.length} of ${D.rows.length} candidates`;
+  $("list").innerHTML = rows.map(r => `<div class="item ${r.id === sel ? "sel" : ""}" data-id="${esc(r.id)}">
+    <div class="t">${esc(r.title || r.id)}</div>
+    <div class="m"><span class="chip ${esc(r.decision)}">${esc(r.decision)}</span>${r.evidence_level ? `<span class="chip">${esc(r.evidence_level)}</span>` : ""}${D.cases[r.id] && D.cases[r.id].boxes ? '<span class="chip x">extracted</span>' : ""}
+    ${esc(r.country)} · ${esc(r.year)} · ${esc(r.topic)}</div></div>`).join("");
+}
+
+function verdict(v) { return v ? v.scale : ""; }
+
+function theory(c) {
+  if (!c || !c.boxes) return '<p class="note">Not extracted yet. Run <code>extract.py</code> for this case (about 0.10 USD).</p>';
+  const by = {}; c.boxes.forEach(b => (by[b.layer] = by[b.layer] || []).push(b));
+  const name = {}; c.boxes.forEach(b => name[b.id] = b.label); (c.containers || []).forEach(k => name[k.id] = "[group] " + k.label);
+  const layers = LAYERS.filter(l => by[l]).map(l => `<div class="layer"><h4>${l.replace("_", " ")}</h4>${by[l].map(b =>
+    `<div class="box v-${verdict(b.verdict)}" data-box="${esc(b.id)}" title="${esc(b.verdict ? b.verdict.raw : "")}"><span class="id">${esc(b.id)}${b.container ? " · " + esc(b.container) : ""}</span><br>${esc(b.label)}</div>`).join("")}</div>`).join("");
+  const links = c.links.map(l => `<tr data-s="${esc(l.source)}" data-t="${esc(l.target)}"><td>${esc(l.id)}</td>
+    <td>${esc(name[l.source] || l.source)} ${l.two_way ? "⇄" : "→"} ${esc(name[l.target] || l.target)}</td>
+    <td>${esc(l.confidence)}</td><td>${l.verdict ? `<span class="dot ${l.verdict.scale}"></span>${esc(l.verdict.raw)}${l.verdict.page ? ` <span class="note">p.${l.verdict.page}</span>` : ""}` : ""}</td></tr>`).join("");
+  const asm = (c.assumptions || []).map(a => `<tr><td>${esc(a.id)}</td><td>${esc(a.kind)}: ${esc(a.text)}</td><td>${esc((a.links || []).join(", ") || [a.from_layer, a.to_layer].filter(Boolean).join(" → "))}</td><td>${a.verdict ? `<span class="dot ${a.verdict.scale}"></span>${esc(a.verdict.raw)}` : ""}</td></tr>`).join("");
+  const k = c.conclusions || {}, t = c.transcription || {};
+  return `<p class="legend"><span class="dot supports"></span>supports <span class="dot partly"></span>partly <span class="dot insufficient"></span>insufficient <span class="dot against"></span>against · colour on a box = verdict on that box · ${esc(c.file)}</p>
+    <div class="layers">${layers}</div>
+    <h3>Links (${c.links.length})</h3><table><tr><th>id</th><th>link</th><th>reading</th><th>source verdict</th></tr>${links}</table>
+    ${asm ? `<h3>Assumptions and risks</h3><table>${asm}</table>` : ""}
+    <h3>Key claims (${(c.key_claims || []).length}, the unit of scoring)</h3>
+    <table><tr><th>id</th><th>claim</th><th>covers</th><th>source verdict</th></tr>${(c.key_claims || []).map(k => `<tr><td>${esc(k.id)}</td><td>${esc(k.claim)}${k.where ? ` <span class="note">${esc(k.where)}</span>` : ""}</td>
+      <td>${esc((k.refs || []).join(", "))}</td><td>${k.verdict ? `<span class="dot ${k.verdict.scale}"></span>${esc(k.verdict.raw)}${k.verdict.page ? ` <span class="note">p.${k.verdict.page}</span>` : ""}` : ""}</td></tr>`).join("")}</table>
+    <h3>Conclusions</h3>
+    ${k.overall ? `<p><span class="dot ${k.overall.scale}"></span><b>${esc(k.overall.scale)}</b>: “${esc(k.overall.quote || k.overall.raw)}” ${k.overall.page ? `<span class="note">p.${k.overall.page}</span>` : ""}</p>` : ""}
+    <p>${esc(k.summary)}</p>
+    ${(k.weakest_links || []).length ? `<p class="note">Weakest: ${esc(k.weakest_links.join(", "))}</p>` : ""}
+    <h3>Short brief (the main test input, hand-written)</h3>
+    ${c.short_brief ? `<table class="facts">${["intervention_first", "outcome_first", "notes"].map(f => `<tr><td>${f.replace("_", " ")}</td><td>${esc(c.short_brief[f])}</td></tr>`).join("")}</table>
+      <p class="note">${esc(c.short_brief.written_by)} · ${esc(c.short_brief.date)} · ${esc(c.short_brief.based_on)}</p>` : '<p class="note">Not written yet (cases/&lt;id&gt;/brief.json).</p>'}
+    <h3>Rich brief (model draft; a second test condition)</h3>
+    <table class="facts">${["intended_change", "population", "place", "time_horizon", "intervention", "outcome_first", "intervention_first"].map(f => `<tr><td>${f.replace("_", " ")}</td><td>${esc(c.brief && c.brief[f])}</td></tr>`).join("")}</table>
+    <h3>Transcription</h3><p class="note">${esc(t.method)} · ${esc(t.date)}${t.checked_by ? " · checked by " + esc(t.checked_by) : " · not checked by hand"}</p>
+    ${(t.open_questions || []).length ? `<ul class="q">${t.open_questions.map(q => `<li>${esc(q)}</li>`).join("")}</ul>` : ""}`;
+}
+
+function show(id) {
+  sel = id; list();
+  const r = D.rows.find(x => x.id === id), c = D.cases[id], src = c && c.source;
+  const figs = src && src.figures ? src.figures : local(r.figure_png);
+  const docs = src ? [src.file] : local(r.local_file);
+  const facts = Object.entries(r).filter(([k, v]) => v && !["decision", "reason"].includes(k));
+  $("main").innerHTML = `<h1>${esc(r.title || r.id)}</h1>
+    <div class="sub">${esc(r.organisation)} · ${esc(r.year)} · ${esc(r.country)} · ${esc(r.topic)} · evidence ${esc(r.evidence_level || "?")} · ${esc(r.timing)} · ${esc(r.box_count)} boxes</div>
+    <div class="bar"><span class="chip ${esc(r.decision)}">${esc(r.decision)}</span>
+      ${["keep", "reserve", "drop"].map(d => `<button class="${d} ${r.decision === d ? "on" : ""}" data-d="${d}">${d[0].toUpperCase() + d.slice(1)}</button>`).join("")}
+      <input id="reason" value="${esc(r.reason)}" placeholder="Reason (saved with the decision)"></div>
+    <div class="tabs">${[["theory", "Figure and theory"], ["facts", "Facts"], ["source", "Sources"]].map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? "on" : ""}">${l}</button>`).join("")}</div>
+    <div id="tab"></div>`;
+  const body = {
+    theory: `<div class="split"><div class="card figs">${figs.length ? figs.map(f => `<img src="${file(f)}" alt="figure" loading="lazy"><div class="note">${esc(f)}</div>`).join("") : '<p class="note">No figure image.</p>'}
+      <p class="note">${esc(r.figure_page)}</p></div><div class="card">${theory(c)}</div></div>`,
+    facts: `<div class="card"><table class="facts">${facts.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${/^https?:/.test(v) ? `<a href="${esc(v)}" target="_blank" rel="noopener">${esc(v)}</a>` : esc(v)}</td></tr>`).join("")}</table></div>`,
+    source: `<div class="card"><p>${r.doc_url ? `<a href="${esc(r.doc_url)}" target="_blank" rel="noopener">Original document</a>` : ""}${r.landing_url ? ` · <a href="${esc(r.landing_url)}" target="_blank" rel="noopener">Landing page</a>` : ""}</p>
+      <p>Local copies: ${docs.map(d => `<a href="${file(d)}" target="_blank">${esc(d)}</a>`).join(" · ") || "none"}</p>
+      ${src ? `<p class="note">Retrieved ${esc(src.retrieved)} · ${esc(src.notes)}</p>` : ""}
+      ${docs[0] && docs[0].endsWith(".pdf") ? `<iframe src="${file(docs[0])}#page=${parseInt(r.figure_page) || 1}" style="width:100%;height:80vh;border:1px solid var(--line)"></iframe>` : ""}</div>`,
+  };
+  $("tab").innerHTML = body[tab];
+}
+
+document.addEventListener("click", async e => {
+  const it = e.target.closest(".item"); if (it) return show(it.dataset.id);
+  const t = e.target.closest("[data-tab]"); if (t) { tab = t.dataset.tab; return show(sel); }
+  const img = e.target.closest(".figs img"); if (img) { $("zoom").querySelector("img").src = img.src; $("zoom").style.display = "block"; return; }
+  if (e.target.closest("#zoom")) { $("zoom").style.display = "none"; return; }
+  const b = e.target.closest("[data-d]");
+  if (b) {
+    const res = await fetch("/api/decision", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({id: sel, decision: b.dataset.d, reason: $("reason").value})});
+    if (!res.ok) alert(await res.text()); else load();
+  }
+});
+document.addEventListener("mouseover", e => {
+  document.querySelectorAll(".hl").forEach(x => x.classList.remove("hl"));
+  const tr = e.target.closest("tr[data-s]");
+  if (tr) { tr.classList.add("hl"); [tr.dataset.s, tr.dataset.t].forEach(id => document.querySelectorAll(`[data-box="${CSS.escape(id)}"]`).forEach(x => x.classList.add("hl"))); }
+  const bx = e.target.closest("[data-box]");
+  if (bx) { bx.classList.add("hl"); document.querySelectorAll(`tr[data-s="${CSS.escape(bx.dataset.box)}"], tr[data-t="${CSS.escape(bx.dataset.box)}"]`).forEach(x => x.classList.add("hl")); }
+});
+["q", "fd", "fl", "ff", "fx"].forEach(id => $(id).addEventListener("input", list));
+load();
+</script>
+</body>
+</html>

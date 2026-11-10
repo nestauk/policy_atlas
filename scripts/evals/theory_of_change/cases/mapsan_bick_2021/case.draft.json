@@ -1,0 +1,1084 @@
+{
+ "meta": {
+  "id": "mapsan_bick_2021",
+  "title": "Using path analysis to test theory of change: a quantitative process evaluation of the MapSan trial",
+  "organisation": "London School of Hygiene and Tropical Medicine; Water & Sanitation for the Urban Poor",
+  "year": 2021,
+  "country": "Mozambique",
+  "topic": "Shared sanitation, hygiene and sanitation management",
+  "intervention_type": "programme",
+  "timing": "reconstructed",
+  "doc_url": "https://researchonline.lshtm.ac.uk/id/eprint/4661693/8/Bick_etal_2021_Using-path-analysis-to-test.pdf",
+  "landing_url": "https://doi.org/10.1186/s12889-021-11364-w",
+  "licence": "CC BY 4.0",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "ex_post_evaluation",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Improve child health and user wellbeing through improved shared sanitation in low-income urban settlements.",
+  "population": "Residents of compounds sharing sanitation facilities, including young children enrolled in the MapSan trial, their caregivers, other adult residents and compound leaders.",
+  "place": "Low-income informal settlements of Maputo, Mozambique; intervention delivery covered 11 bairros.",
+  "time_horizon": "Facilities were handed over during a 14-month period in 2015–2016. This process evaluation assessed conditions 24–42 months after intervention delivery.",
+  "intervention": "WSUP replaced existing poor-quality pit latrines with shared pour-flush toilets connected to septic tanks, targeting one cabin per 20 users. Single-cabin shared latrines were intended for up to 20 users and multi-cabin communal sanitation blocks for larger compounds. Local community-based organisations provided compound-level training and household-level hygiene promotion; recipient compounds reported a median of three visits, with a range of one to eight. Users were expected to contribute to construction costs.",
+  "context": "Compounds comprise houses around communal space, with owners and renters sharing facilities and sometimes an informal compound leader. Existing sanitation was generally poor. Informal settlements face poverty, infrastructure constraints and a high disease burden; shared sanitation is an important practical option.",
+  "outcome_first": "Develop a theory of change for improving child health and sanitation-related wellbeing among residents of compounds sharing toilets in low-income informal settlements of Maputo, Mozambique. Account for the challenges of sustaining shared services in this setting.",
+  "intervention_first": "Develop a theory of change for the MapSan intervention in low-income informal settlements of Maputo, Mozambique. The programme replaced poor-quality shared latrines with pour-flush toilets and septic tanks and provided compound training and household hygiene-promotion visits. Its intended beneficiaries were compound residents, including young children, and its aims were improved child health and user wellbeing."
+ },
+ "containers": [],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "Compound received intervention latrine",
+   "layer": "output",
+   "container": null,
+   "verdict": {
+    "raw": "Overall, the sanitation infrastructure was implemented as intended",
+    "scale": "supports",
+    "quote": "97% of intervention compounds (270/279) received intervention latrines",
+    "page": 7,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "b2",
+   "label": "Compound received household visits",
+   "layer": "output",
+   "container": null,
+   "verdict": {
+    "raw": "93% of intervention compounds (252/270) received the household-level behaviour change intervention component, involving a median of three visits (range 1–8)",
+    "scale": "supports",
+    "quote": "93% of intervention compounds (252/270) received the household-level behaviour change intervention component",
+    "page": 7,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "b3",
+   "label": "Compound sanitation committee set up",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "very few compounds formed a committee to manage sanitation, with slightly more in intervention compounds (16% vs. 9% control; χ2(1) = 6.0, p = 0.014)",
+    "scale": "partly",
+    "quote": "very few compounds formed a committee to manage sanitation",
+    "page": 9,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "b4",
+   "label": "Respondent cleans latrine",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "individual cleaning frequency (surveyed individual personally cleaned the latrine twice/week) was significantly higher among intervention respondents (58% vs. 47%; χ2(1) = 14, p < 0.001), however data suggest cleaning duties were not shared equally among respondents (ICC = 0.18)",
+    "scale": "supports",
+    "quote": "individual cleaning frequency ... was significantly higher among intervention respondents",
+    "page": 9,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "b5",
+   "label": "Latrine cleaned daily",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "Frequent collective cleaning (latrine being cleaned on a daily basis) was also reported more often by intervention respondents (78% vs. 65%; χ2(1) = 19, p < 0.001).",
+    "scale": "supports",
+    "quote": "reported more often by intervention respondents (78% vs. 65%",
+    "page": 9,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "b6",
+   "label": "Cleaning rota agreed and adhered to",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "Compounds were unlikely to have and adhere to a formal rota for cleaning latrines (11% intervention vs. 5% control; χ2(1) = 6.1, p = 0.013)",
+    "scale": "partly",
+    "quote": "Compounds were unlikely to have and adhere to a formal rota for cleaning latrines",
+    "page": 9,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "b7",
+   "label": "Compound has maintenance fund",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "or to form a fund for sanitation maintenance and repairs – occurring in 4% (11/ 270) of intervention compounds and no control compounds",
+    "scale": "partly",
+    "quote": "occurring in 4% (11/ 270) of intervention compounds and no control compounds",
+    "page": 9,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "b8",
+   "label": "Repairs made",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "Slightly more intervention respondents reported that money was spent on latrine repairs in the past year (19% vs. 13% control; χ2(1) = 6.9, p = 0.008).",
+    "scale": "partly",
+    "quote": "Slightly more intervention respondents reported that money was spent on latrine repairs",
+    "page": 9,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "b9",
+   "label": "Latrine is clean",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "almost twice as likely to be observably clean (86% vs. 45%; χ2(1) = 150, p < 0.001)",
+    "scale": "supports",
+    "quote": "almost twice as likely to be observably clean",
+    "page": 9,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "b10",
+   "label": "Latrine is well maintained",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "twice as likely to be well-maintained i.e. have a slab/floor in good condition (96% vs. 47%; χ2(1) = 240, p < 0.001)",
+    "scale": "supports",
+    "quote": "twice as likely to be well-maintained",
+    "page": 9,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "b11",
+   "label": "Latrine is private",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "intervention latrines were much more likely to be private i.e. have a working door and inside lock (76% vs. 8% control; χ2(1) = 500, p < 0.001)",
+    "scale": "supports",
+    "quote": "intervention latrines were much more likely to be private",
+    "page": 8,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "b12",
+   "label": "Latrine is accessible",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "not all households had a key, resulting in fewer intervention respondents having access to their latrine than control respondents (94% vs. 99%; χ2(1) = 12, p = 0.001)",
+    "scale": "against",
+    "quote": "fewer intervention respondents having access to their latrine than control respondents",
+    "page": 9,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "b13",
+   "label": "HWF with soap and water",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "only 10% (78/777) of latrines had an HWF with both soap and water, regardless of trial arm",
+    "scale": "against",
+    "quote": "only 10% (78/777) of latrines had an HWF with both soap and water, regardless of trial arm",
+    "page": 9,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "b14",
+   "label": "HWWS",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "few intervention latrines had signs of soap use at an HWF (17%, 67/399), with no difference from control (χ2(1) = 0.12, p = 0.729)",
+    "scale": "against",
+    "quote": "with no difference from control",
+    "page": 9,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "b15",
+   "label": "Compound size: > 20 members",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b16",
+   "label": "Intervention type: CSB",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b17",
+   "label": "Gender: female",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b18",
+   "label": "Age: > 30 years",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b19",
+   "label": "Resident < 5 years",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b20",
+   "label": "Relatives in compound",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b21",
+   "label": "Compound has chefe",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b22",
+   "label": "Relative household wealth tercile",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b2",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l2",
+   "source": "b2",
+   "target": "b3",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l3",
+   "source": "b2",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l4",
+   "source": "b4",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l5",
+   "source": "b2",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l6",
+   "source": "b3",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Formation of a compound sanitation committee also did not explain variance in participant behaviours.",
+    "scale": "against",
+    "quote": "did not explain variance in participant behaviours",
+    "page": 13,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "l7",
+   "source": "b6",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l8",
+   "source": "b5",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l9",
+   "source": "b1",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "large improvements to sanitation quality (latrine cleanliness, privacy, maintenance) were mainly driven by direct effects of intervention facilities, and not by indirect pathways including participant behaviours",
+    "scale": "supports",
+    "quote": "mainly driven by direct effects of intervention facilities",
+    "page": 12,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "l10",
+   "source": "b2",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l11",
+   "source": "b3",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Formation of a compound sanitation committee also did not explain variance in participant behaviours.",
+    "scale": "against",
+    "quote": "did not explain variance in participant behaviours",
+    "page": 13,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "l12",
+   "source": "b7",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l13",
+   "source": "b8",
+   "target": "b10",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "contributions of compound members towards repairs did not translate into maintenance of latrines, assessed by condition of the slab/floor",
+    "scale": "against",
+    "quote": "did not translate into maintenance of latrines",
+    "page": 12,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "l14",
+   "source": "b1",
+   "target": "b10",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "large improvements to sanitation quality (latrine cleanliness, privacy, maintenance) were mainly driven by direct effects of intervention facilities, and not by indirect pathways including participant behaviours",
+    "scale": "supports",
+    "quote": "mainly driven by direct effects of intervention facilities",
+    "page": 12,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "l15",
+   "source": "b8",
+   "target": "b11",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "In large compounds, spending towards repairs was associated with maintenance of the latrine door and lock – moving parts expected to wear down – suggesting minor repairs were being made, prioritising privacy.",
+    "scale": "supports",
+    "quote": "spending towards repairs was associated with maintenance of the latrine door and lock",
+    "page": 12,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "l16",
+   "source": "b1",
+   "target": "b11",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "large improvements to sanitation quality (latrine cleanliness, privacy, maintenance) were mainly driven by direct effects of intervention facilities, and not by indirect pathways including participant behaviours",
+    "scale": "supports",
+    "quote": "mainly driven by direct effects of intervention facilities",
+    "page": 12,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "l17",
+   "source": "b1",
+   "target": "b12",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "➔Accessibility (direct) -0.053 (-0.080, -0.026) <0.001",
+    "scale": "against",
+    "quote": "➔Accessibility (direct)",
+    "page": 12,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "l18",
+   "source": "b1",
+   "target": "b13",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l19",
+   "source": "b2",
+   "target": "b13",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l20",
+   "source": "b3",
+   "target": "b13",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l21",
+   "source": "b2",
+   "target": "b14",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "The ineffectiveness of the household-level behaviour change component at altering handwashing behaviour, with an apparent negative effect for some participants, may play a critical role in determining the intervention’s health benefits.",
+    "scale": "against",
+    "quote": "ineffectiveness of the household-level behaviour change component at altering handwashing behaviour",
+    "page": 13,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "l22",
+   "source": "b13",
+   "target": "b14",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l23",
+   "source": "b17",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "Women were 25–35% more likely to clean latrines, confirming accounts of division of cleaning responsibilities along gendered lines in this and other urban informal settlements",
+    "scale": "supports",
+    "quote": "Women were 25–35% more likely to clean latrines",
+    "page": 13,
+    "studies": [
+     "Bick et al. 2021",
+     "10.1186/s12889-016-4009-6",
+     "10.1186/1471-2458-14-1260",
+     "10.3390/ijerph15102222"
+    ]
+   }
+  },
+  {
+   "id": "l24",
+   "source": "b18",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l25",
+   "source": "b19",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "The idea that more transient residents contributed little to cleaning [31] was refuted: length of residence was negatively associated with self-reported individual cleaning frequency.",
+    "scale": "supports",
+    "quote": "length of residence was negatively associated with self-reported individual cleaning frequency",
+    "page": 13,
+    "studies": [
+     "Bick et al. 2021",
+     "10.3390/ijerph15102222"
+    ]
+   }
+  },
+  {
+   "id": "l26",
+   "source": "b20",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "In large compounds, members without family relations in their compound were more likely to spend money on repairs",
+    "scale": "supports",
+    "quote": "members without family relations in their compound were more likely to spend money on repairs",
+    "page": 13,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "l27",
+   "source": "b21",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "presence of a compound chefe affected soap and water availability and adherence to a cleaning rota, supporting qualitative findings that compound leaders can facilitate collective decision-making and resolve conflict",
+    "scale": "supports",
+    "quote": "presence of a compound chefe affected soap and water availability and adherence to a cleaning rota",
+    "page": 13,
+    "studies": [
+     "Bick et al. 2021",
+     "10.1186/s12889-016-4009-6",
+     "10.3390/ijerph15102222"
+    ]
+   }
+  },
+  {
+   "id": "l28",
+   "source": "b21",
+   "target": "b13",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "presence of a compound chefe affected soap and water availability and adherence to a cleaning rota, supporting qualitative findings that compound leaders can facilitate collective decision-making and resolve conflict",
+    "scale": "supports",
+    "quote": "presence of a compound chefe affected soap and water availability and adherence to a cleaning rota",
+    "page": 13,
+    "studies": [
+     "Bick et al. 2021",
+     "10.1186/s12889-016-4009-6",
+     "10.3390/ijerph15102222"
+    ]
+   }
+  },
+  {
+   "id": "l29",
+   "source": "b22",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "assumption",
+   "text": "Community recognises need for improved sanitation",
+   "links": [],
+   "from_layer": "context",
+   "to_layer": "output",
+   "verdict": null
+  },
+  {
+   "id": "a2",
+   "kind": "assumption",
+   "text": "Households are willing to contribute for shared sanitation",
+   "links": [],
+   "from_layer": "context",
+   "to_layer": "output",
+   "verdict": null
+  },
+  {
+   "id": "a3",
+   "kind": "assumption",
+   "text": "Tenants are able to reach agreement with landlord on division of responsibilities",
+   "links": [],
+   "from_layer": "context",
+   "to_layer": "output",
+   "verdict": null
+  },
+  {
+   "id": "a4",
+   "kind": "assumption",
+   "text": "Cleaning rota is adhered to",
+   "links": [
+    "l7"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Compounds were unlikely to have and adhere to a formal rota for cleaning latrines (11% intervention vs. 5% control; χ2(1) = 6.1, p = 0.013)",
+    "scale": "partly",
+    "quote": "Compounds were unlikely to have and adhere to a formal rota",
+    "page": 9,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "a5",
+   "kind": "assumption",
+   "text": "Households are willing to pay for repairs and maintenance",
+   "links": [
+    "l12"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Slightly more intervention respondents reported that money was spent on latrine repairs in the past year (19% vs. 13% control; χ2(1) = 6.9, p = 0.008).",
+    "scale": "partly",
+    "quote": "Slightly more intervention respondents reported that money was spent on latrine repairs",
+    "page": 9,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "a6",
+   "kind": "assumption",
+   "text": "Households are willing to pay for MHM bin, HWF and soap, cleaning consumables",
+   "links": [
+    "l19",
+    "l20"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a7",
+   "kind": "assumption",
+   "text": "Households continue to make payments for any repairs and consumables",
+   "links": [],
+   "from_layer": "outcome_short",
+   "to_layer": "outcome_long",
+   "verdict": null
+  },
+  {
+   "id": "a8",
+   "kind": "assumption",
+   "text": "Evidence from previous studies that committees are effective mechanism to increase community capacity to manage shared sanitation",
+   "links": [
+    "l6",
+    "l11",
+    "l20"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Formation of a compound sanitation committee also did not explain variance in participant behaviours.",
+    "scale": "against",
+    "quote": "did not explain variance in participant behaviours",
+    "page": 13,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  }
+ ],
+ "context": [
+  "Approximately 70% of Maputo residents live in informal settlements and 89% use onsite, non-sewered sanitation.",
+  "Compounds include homeowners and renters; an informal chefe de composto may manage sanitation.",
+  "Substantial out-migration occurred after compound selection. At survey, only 56% of intervention compounds still had at least 12 members, and only 57% of CSBs served more than 20 users.",
+  "CSBs had built-in handwashing sinks, not necessarily connected to a water supply.",
+  "The 2016 external evaluation reported scaling back planned hygiene promotion because of increased infrastructure costs; many visits reported in this evaluation occurred later, during 2016–2018.",
+  "Infrastructure lifespan and limited economic resources may explain why spending on repairs did not predict slab/floor condition.",
+  "The cross-sectional design cannot establish causal direction or changes over time. Soap residue was a proxy for handwashing, and contextual variation was limited."
+ ],
+ "key_claims": [
+  {
+   "id": "k1",
+   "claim": "MapSan delivered shared sanitation facilities and household visits with high compound-level fidelity, but household participation and individual exposure were much lower than compound coverage.",
+   "refs": [
+    "b1",
+    "b2",
+    "l1",
+    "a1",
+    "a2",
+    "a3"
+   ],
+   "where": "Implementation fidelity: Dose received and Reach; Figures 3–4; pages 7–8",
+   "verdict": {
+    "raw": "Overall, the sanitation infrastructure was implemented as intended. Overall, 57% (292/542) of intervention respondents recalled visits and 13% (73/542) participated, and recall of visits and participation in training differed across several demographic characteristics.",
+    "scale": "partly",
+    "quote": "57% (292/542) of intervention respondents recalled visits and 13% (73/542) participated",
+    "page": 8,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "k2",
+   "claim": "Improved sanitation facilities increase cleanliness, maintenance and privacy mainly through direct infrastructure effects rather than the proposed behavioural mediators.",
+   "refs": [
+    "b9",
+    "b10",
+    "b11",
+    "l9",
+    "l14",
+    "l16"
+   ],
+   "where": "Figures 3, 5–6; Table 2; Participant response and ‘What works?’; pages 8–9, 12–14",
+   "verdict": {
+    "raw": "large improvements to sanitation quality (latrine cleanliness, privacy, maintenance) were mainly driven by direct effects of intervention facilities, and not by indirect pathways including participant behaviours. This finding contradicts the ToC, in which intermediary outcomes were considered part of ‘participant response.’",
+    "scale": "supports",
+    "quote": "mainly driven by direct effects of intervention facilities, and not by indirect pathways including participant behaviours",
+    "page": 12,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "k3",
+   "claim": "Household visits, individual cleaning and cleaning rotas can increase collective cleaning, but this contributes little to the overall improvement in latrine cleanliness.",
+   "refs": [
+    "b4",
+    "b5",
+    "b6",
+    "l3",
+    "l4",
+    "l5",
+    "l7",
+    "l8",
+    "a4"
+   ],
+   "where": "Figures 3, 5–6; Table 2; ‘For whom?’; pages 9, 12–13",
+   "verdict": {
+    "raw": "The large compound model (> 20 members) was more closely aligned to theorised mechanisms, with elements such as having a cleaning rota or maintenance fund playing an important role, but cleaning practices were less effective at maintaining cleanliness.",
+    "scale": "partly",
+    "quote": "cleaning practices were less effective at maintaining cleanliness",
+    "page": 13,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "k4",
+   "claim": "Creating sanitation committees is expected to improve collective management, but committee formation was uncommon and did not explain participant behaviours.",
+   "refs": [
+    "b3",
+    "l2",
+    "l6",
+    "l11",
+    "l20",
+    "a8"
+   ],
+   "where": "Figure 3; grouped path analyses, Figures 5–6; ‘What works?’; pages 9, 13",
+   "verdict": {
+    "raw": "Formation of a compound sanitation committee also did not explain variance in participant behaviours. The committee model may be less appropriate in this setting for compounds with 15 or fewer members, as informal management systems may be sufficient to maintain quality among small groups of people with existing social ties.",
+    "scale": "against",
+    "quote": "Formation of a compound sanitation committee also did not explain variance in participant behaviours.",
+    "page": 13,
+    "studies": [
+     "Bick et al. 2021",
+     "10.3390/ijerph15102222"
+    ]
+   }
+  },
+  {
+   "id": "k5",
+   "claim": "Maintenance funds and spending on repairs are expected to sustain facilities; repair spending did not improve slab/floor maintenance, although it was associated with privacy-related repairs in large compounds.",
+   "refs": [
+    "b7",
+    "b8",
+    "l10",
+    "l12",
+    "l13",
+    "l15",
+    "a5",
+    "a7"
+   ],
+   "where": "Figure 3; Figures 5–6; Table 2; ‘What works?’; pages 9, 12–13",
+   "verdict": {
+    "raw": "contributions of compound members towards repairs did not translate into maintenance of latrines, assessed by condition of the slab/floor. In large compounds, spending towards repairs was associated with maintenance of the latrine door and lock – moving parts expected to wear down – suggesting minor repairs were being made, prioritising privacy.",
+    "scale": "partly",
+    "quote": "did not translate into maintenance of latrines, assessed by condition of the slab/floor",
+    "page": 12,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "k6",
+   "claim": "Household hygiene promotion and provision of handwashing facilities are expected to increase handwashing with soap, but the intervention did not improve soap-and-water availability or the handwashing proxy and had a negative estimated handwashing effect in large compounds.",
+   "refs": [
+    "b13",
+    "b14",
+    "l18",
+    "l19",
+    "l20",
+    "l21",
+    "l22",
+    "a6"
+   ],
+   "where": "Figure 3; Figures 5–6; Table 2; ‘What works?’ and Limitations; pages 9, 12–14",
+   "verdict": {
+    "raw": "The ineffectiveness of the household-level behaviour change component at altering handwashing behaviour, with an apparent negative effect for some participants, may play a critical role in determining the intervention’s health benefits. Uncertainty around paths to handwashing behaviours means the negative effect for some participants remains unexplained.",
+    "scale": "against",
+    "quote": "ineffectiveness of the household-level behaviour change component at altering handwashing behaviour",
+    "page": 13,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "k7",
+   "claim": "Improved facilities are expected to remain accessible to users, but external locks without universal key access reduced accessibility.",
+   "refs": [
+    "b12",
+    "l17"
+   ],
+   "where": "Figure 3; Table 2, small-compound model; pages 9, 12",
+   "verdict": {
+    "raw": "While intervention latrines were more likely to have an outside lock (26% vs. 5%; χ2(1) = 66, p < 0.001), not all households had a key, resulting in fewer intervention respondents having access to their latrine than control respondents (94% vs. 99%; χ2(1) = 12, p = 0.001).",
+    "scale": "against",
+    "quote": "not all households had a key",
+    "page": 9,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "k8",
+   "claim": "Compound size changes how the intervention works and explains differences between single-cabin latrines and communal blocks.",
+   "refs": [
+    "b15",
+    "b16",
+    "b3",
+    "b4",
+    "b5",
+    "b6",
+    "b7",
+    "b8",
+    "b9",
+    "b10",
+    "b11",
+    "b13",
+    "b14"
+   ],
+   "where": "Variation by intervention type; Path analysis; Figures 5–6; Table 2; ‘For whom?’; pages 9, 12–13",
+   "verdict": {
+    "raw": "CSBs and SLs were similarly well-maintained, but CSBs were more often private (88% vs. 73% SL; χ2(1) = 11, p = 0.001) whereas SLs were more often clean (89% vs. 78% CSB; χ2(1) = 7.8, p = 0.005). Analysis of subgroups suggested structural differences by compound size accounted for disparities by type of intervention received.",
+    "scale": "supports",
+    "quote": "structural differences by compound size accounted for disparities by type of intervention received",
+    "page": 13,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "k9",
+   "claim": "Gender, residence duration, family ties and compound leadership affect contributions to cleaning, repairs and collective hygiene management.",
+   "refs": [
+    "b17",
+    "b18",
+    "b19",
+    "b20",
+    "b21",
+    "b22",
+    "l23",
+    "l24",
+    "l25",
+    "l26",
+    "l27",
+    "l28",
+    "l29"
+   ],
+   "where": "‘In what circumstances?’; Figures 5–6; page 13",
+   "verdict": {
+    "raw": "Women were 25–35% more likely to clean latrines. The idea that more transient residents contributed little to cleaning [31] was refuted: length of residence was negatively associated with self-reported individual cleaning frequency. In large compounds, members without family relations in their compound were more likely to spend money on repairs. Presence of a compound chefe affected soap and water availability and adherence to a cleaning rota.",
+    "scale": "supports",
+    "quote": "length of residence was negatively associated with self-reported individual cleaning frequency",
+    "page": 13,
+    "studies": [
+     "Bick et al. 2021",
+     "10.3390/ijerph15102222",
+     "10.1186/s12889-016-4009-6",
+     "10.1186/1471-2458-14-1260"
+    ]
+   }
+  },
+  {
+   "id": "k10",
+   "claim": "Better sanitation quality and hygiene are expected to improve child health and user wellbeing, but this evaluation does not test those final causal steps.",
+   "refs": [],
+   "where": "Figure 1, ceiling of accountability; study scope and Limitations; pages 3–4, 13",
+   "verdict": {
+    "raw": "This study was cross-sectional and examined only a portion of the ToC 24–42 months after intervention delivery; therefore, the causal direction could not be determined, nor variation in intervention effects or demographics over time.",
+    "scale": "not_assessed",
+    "quote": "examined only a portion of the ToC",
+    "page": 13,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  },
+  {
+   "id": "k11",
+   "claim": "The formal management pathway is more evident in communal blocks, while single-cabin latrines show more frequent cleaning and better handwashing indicators despite lacking the blocks’ built-in handwashing sink.",
+   "refs": [
+    "b16",
+    "b3",
+    "b4",
+    "b5",
+    "b6",
+    "b7",
+    "b8",
+    "b13",
+    "b14"
+   ],
+   "where": "Variation by intervention type; page 9",
+   "verdict": {
+    "raw": "Compounds with a CSB were more likely to have a sanitation committee (27% vs. 13% SL; χ2(1) = 6.8, p = 0.009) and maintenance fund (12% vs. 3%; χ2(1) = 9.5, p = 0.002), to have and adhere to a cleaning rota (20% vs. 9%; χ2(1) = 5.2, p = 0.023), and to spend money on repairs (33% vs. 15%; χ2(1) = 19, p < 0.001). SL users were also more likely to have an HWF with soap and water (12% vs. 4% CSB; χ2(1) = 4.2, p = 0.042) and signs of soap use (20% vs. 4% CSB; χ2(1) = 12, p < 0.001), despite an HWF being built into the CSB infrastructure.",
+    "scale": "partly",
+    "quote": "despite an HWF being built into the CSB infrastructure",
+    "page": 9,
+    "studies": [
+     "Bick et al. 2021"
+    ]
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "The MapSan intervention achieved high implementation fidelity and improved intermediary outcomes related to sanitation quality, likely through direct effects of sanitation infrastructure and not behaviour change activities.",
+   "scale": "partly",
+   "quote": "likely through direct effects of sanitation infrastructure and not behaviour change activities",
+   "page": 14,
+   "studies": [
+    "Bick et al. 2021"
+   ]
+  },
+  "weakest_links": [
+   "l6",
+   "l11",
+   "l13",
+   "l21",
+   "a8"
+  ],
+  "strongest_links": [
+   "l9",
+   "l14",
+   "l16"
+  ],
+  "summary": "The intervention was delivered with high fidelity and improved latrine cleanliness, maintenance and privacy, but not handwashing. Path analysis contradicted the proposed emphasis on behavioural mediation: most sanitation-quality gains were associated with direct infrastructure effects, while sanitation committees contributed little and repair spending did not explain slab/floor maintenance. Mechanisms differed by compound size; larger compounds more closely followed the formal management pathway. Gender, residence duration, family ties and compound leadership also influenced particular parameters. These are cross-sectional associations, not established causal effects, and final health and wellbeing outcomes were outside this process evaluation.",
+  "recommendations": [
+   "Use stronger behaviour-focused strategies over the longer term to prevent reversal of sanitation-quality gains associated with infrastructure.",
+   "Consider training and funding a dedicated compound resident to promote hygiene change.",
+   "Develop the ToC before implementation, specify indicators for the intended agents and level of change, and clearly define contextual factors.",
+   "Collect data at multiple time points to improve validity and assess the longevity of effects.",
+   "Consider direct observation of handwashing rather than relying only on soap residue.",
+   "Coordinate path analysis closely with qualitative research to identify plausible alternative pathways and unintended consequences.",
+   "Consider including health outcome variables in the path model to connect process and mechanism evaluation with outcome evaluation.",
+   "Interpret SEM findings cautiously because model specification, measurement and independence assumptions may not hold."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/mapsan_bick_2021_p4.png', 'downloads/pages/mapsan_bick_2021_p6.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "Figure 1 (page 4) and Figure 2 (page 6) represent the same theory at different levels of operationalisation. Figure 2 is transcribed because it specifies the eight alternative path hypotheses tested. Figure 1 supplies the assumptions; its setup, deworming and final health/wellbeing boxes are not duplicated.",
+   "Figures 5 and 6, the final trimmed subgroup models, were not supplied as images. Findings from those analyses are retained through the provided text and Table 2. A complete path-by-path inventory of retained and removed arrows cannot be recovered safely from the supplied material.",
+   "Some thin grey contextual arrows in Figure 2 have crowded or unclear endpoints. Only the contextual links whose endpoints could be identified with reasonable confidence are included; additional grey arrows around relatives, chefe, wealth, rota and repairs require a higher-resolution check.",
+   "Figure 2's grouping-variable brace is not a causal arrow. No links have been added from compound size or intervention type merely because they define subgroup analyses.",
+   "Layer mapping is interpretive: 'Dose received' is mapped to output, 'Participant behaviours' to outcome_short, and 'Intermediary outcomes' to outcome_long. The latter remain intermediary outcomes, not demonstrated long-term health impacts.",
+   "The seven numbered assumptions are transcribed verbatim from Figure 1. For assumptions concerning setup or continuing payments, placement between the selected model's layers is approximate because those setup stages are absent from Figure 2.",
+   "Figure 1 also states the rationale that sanitation interventions can have limited impact because of limited household/community capacity to maintain facilities. This is background rationale rather than an independently evaluated causal step.",
+   "The repair-to-privacy discussion spans pages 12–13; its verdict is indexed to page 12, where the sentence begins.",
+   "The key-claim summaries combine findings across sections and subgroups. The large-compound handwashing estimate is negative, whereas the small-compound estimate is not statistically distinguishable from zero; these do not establish why the negative association occurred.",
+   "The supplied material does not define the A/B/C evidence-level rubric; B is used provisionally for this quantitative, cross-sectional process evaluation."
+  ],
+  "source_sha256": "98f55e08b58c4e88813ee10829c99450432efdc24162e383574aada9755d55b3",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

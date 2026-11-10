@@ -1,0 +1,637 @@
+{
+ "meta": {
+  "id": "cdc_tobacco_initiation_logic_model",
+  "title": "Evaluating Comprehensive State Tobacco Prevention and Control Programs Using an Outcome Indicator Framework",
+  "organisation": "Centers for Disease Control and Prevention; RTI International",
+  "year": 2019,
+  "country": "United States",
+  "topic": "Preventing initiation of tobacco use",
+  "intervention_type": "programme",
+  "timing": "prospective",
+  "doc_url": "https://stacks.cdc.gov/view/cdc/106085/cdc_106085_DS1.pdf",
+  "landing_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8106980",
+  "licence": "",
+  "figure_pages": [],
+  "evidence_level": "C",
+  "verdict_source": "none",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Prevent tobacco use initiation among young people and reduce tobacco-related disease, disability, and deaths.",
+  "population": "Young people, including youth and young adults.",
+  "place": "United States, through state and territorial tobacco prevention and control programs.",
+  "time_horizon": "No fixed intervention or follow-up period is specified; the framework distinguishes short-, intermediate-, and long-term outcomes.",
+  "intervention": "Comprehensive state tobacco prevention and control programs, typically led by state and territorial health departments, supported by National Tobacco Control Program funding and technical assistance and other revenue streams. No standardized dosage is specified.",
+  "context": "Nearly all tobacco use begins during youth and young adulthood. State programs operate in varying local contexts and receive funding from sources including tobacco taxes and Master Settlement Agreement payments.",
+  "outcome_first": "Develop a theory of change for preventing tobacco use initiation among young people in the United States. Show how this could contribute to reducing tobacco-related disease, disability, and deaths across different state and territorial contexts.",
+  "intervention_first": "Develop a theory of change for comprehensive state and territorial tobacco prevention and control programs in the United States. Focus on their aim of preventing tobacco use initiation among young people and reducing subsequent tobacco-related health harms."
+ },
+ "containers": [
+  {
+   "id": "c_activities",
+   "label": "shared connector: Community mobilization; Counter-marketing; School-based prevention; Policy enforcement and regulatory action",
+   "layer": "activity"
+  },
+  {
+   "id": "c_outputs",
+   "label": "brace: completed activities",
+   "layer": "output"
+  }
+ ],
+ "boxes": [
+  {
+   "id": "b_input",
+   "label": "Comprehensive, functioning tobacco control infrastructure with continued support for sustainability",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_a1",
+   "label": "Community mobilization",
+   "layer": "activity",
+   "container": "c_activities",
+   "verdict": null
+  },
+  {
+   "id": "b_a2",
+   "label": "Counter-marketing",
+   "layer": "activity",
+   "container": "c_activities",
+   "verdict": null
+  },
+  {
+   "id": "b_a3",
+   "label": "School-based prevention",
+   "layer": "activity",
+   "container": "c_activities",
+   "verdict": null
+  },
+  {
+   "id": "b_a4",
+   "label": "Policy enforcement and regulatory action",
+   "layer": "activity",
+   "container": "c_activities",
+   "verdict": null
+  },
+  {
+   "id": "b_o1",
+   "label": "Completed activities to reduce and counteract pro-tobacco messages",
+   "layer": "output",
+   "container": "c_outputs",
+   "verdict": null
+  },
+  {
+   "id": "b_o2",
+   "label": "Completed activities to disseminate pro-health messages",
+   "layer": "output",
+   "container": "c_outputs",
+   "verdict": null
+  },
+  {
+   "id": "b_o3",
+   "label": "Completed activities to increase tobacco-free policies and use of antitobacco curricula in schools and colleges/ universities",
+   "layer": "output",
+   "container": "c_outputs",
+   "verdict": null
+  },
+  {
+   "id": "b_o4",
+   "label": "Completed activities to increase restrictions on tobacco product sales and availability",
+   "layer": "output",
+   "container": "c_outputs",
+   "verdict": null
+  },
+  {
+   "id": "b_o5",
+   "label": "Completed activities to increase tobacco price",
+   "layer": "output",
+   "container": "c_outputs",
+   "verdict": null
+  },
+  {
+   "id": "b_1",
+   "label": "Increased knowledge of the dangers of tobacco use, improved attitudes against tobacco use, and support for policies to reduce tobacco use initiation",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_2",
+   "label": "Increased restriction of tobacco use and enforcement of antitobacco policies and programs in schools and on college/ university campuses",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_3",
+   "label": "Increased restriction and enforcement of tobacco product sales, availability, and use",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_4",
+   "label": "Increased policy and enforcement efforts to reduce tobacco industry influence",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_5",
+   "label": "Reduced susceptibility to experimentation with tobacco products",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_6",
+   "label": "Decreased exposure to tobacco marketing and availability of tobacco products",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_7",
+   "label": "Reduced tobacco industry influence",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_8",
+   "label": "Increased price of tobacco products",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_9",
+   "label": "Reduced initiation of tobacco use",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_10",
+   "label": "Reduced tobacco-use prevalence among young people",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_11",
+   "label": "Reduced tobacco-related morbidity and mortality",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_12",
+   "label": "Decreased tobacco-related disparities",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l_01",
+   "source": "c_activities",
+   "target": "b_o1",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l_02",
+   "source": "c_activities",
+   "target": "b_o2",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l_03",
+   "source": "c_activities",
+   "target": "b_o3",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l_04",
+   "source": "c_activities",
+   "target": "b_o4",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l_05",
+   "source": "c_activities",
+   "target": "b_o5",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l_06",
+   "source": "c_outputs",
+   "target": "b_1",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l_07",
+   "source": "c_outputs",
+   "target": "b_2",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l_08",
+   "source": "c_outputs",
+   "target": "b_3",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l_09",
+   "source": "c_outputs",
+   "target": "b_4",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l_10",
+   "source": "b_1",
+   "target": "b_5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l_11",
+   "source": "b_1",
+   "target": "b_8",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l_12",
+   "source": "b_2",
+   "target": "b_5",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l_13",
+   "source": "b_3",
+   "target": "b_6",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l_14",
+   "source": "b_4",
+   "target": "b_7",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l_15",
+   "source": "b_4",
+   "target": "b_8",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l_16",
+   "source": "b_8",
+   "target": "b_7",
+   "two_way": true,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l_17",
+   "source": "b_7",
+   "target": "b_6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l_18",
+   "source": "b_6",
+   "target": "b_5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l_19",
+   "source": "b_8",
+   "target": "b_5",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l_20",
+   "source": "b_5",
+   "target": "b_9",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l_21",
+   "source": "b_9",
+   "target": "b_10",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l_22",
+   "source": "b_9",
+   "target": "b_11",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l_23",
+   "source": "b_9",
+   "target": "b_12",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  }
+ ],
+ "assumptions": [],
+ "context": [
+  "Focus on reducing tobacco-related disparities",
+  "Nearly all tobacco use begins during youth and young adulthood.",
+  "Program objectives, resources, timelines, and community contexts vary across states.",
+  "The framework does not supply infrastructure or process indicators.",
+  "Existing surveillance may lack timely, geographically precise, or subpopulation estimates needed for local evaluation."
+ ],
+ "key_claims": [
+  {
+   "id": "k_01",
+   "claim": "A sustained, functioning tobacco control infrastructure enables comprehensive prevention activities and their delivery.",
+   "refs": [
+    "b_input",
+    "c_activities",
+    "c_outputs"
+   ],
+   "where": "Figure 1; description and application of the framework, pp. 3–4",
+   "verdict": null
+  },
+  {
+   "id": "k_02",
+   "claim": "Comprehensive prevention activities counter pro-tobacco messages and disseminate pro-health messages, building knowledge, attitudes against tobacco use, and support for prevention policies.",
+   "refs": [
+    "c_activities",
+    "b_o1",
+    "b_o2",
+    "b_1",
+    "l_01",
+    "l_02",
+    "l_06"
+   ],
+   "where": "Figure 1; description of the framework, p. 3",
+   "verdict": null
+  },
+  {
+   "id": "k_03",
+   "claim": "School and college prevention activities strengthen tobacco restrictions and enforcement, reducing young people's susceptibility to experimentation.",
+   "refs": [
+    "b_a3",
+    "b_o3",
+    "b_2",
+    "l_03",
+    "l_07",
+    "l_12"
+   ],
+   "where": "Figure 1; description of the framework, p. 3",
+   "verdict": null
+  },
+  {
+   "id": "k_04",
+   "claim": "Restrictions and enforcement concerning tobacco sales, availability, and use reduce exposure to tobacco marketing and product availability.",
+   "refs": [
+    "b_o4",
+    "b_3",
+    "b_6",
+    "l_04",
+    "l_08",
+    "l_13"
+   ],
+   "where": "Figure 1; description of the framework, p. 3",
+   "verdict": null
+  },
+  {
+   "id": "k_05",
+   "claim": "Policy and enforcement efforts reduce tobacco industry influence, which in turn reduces tobacco marketing exposure and product availability.",
+   "refs": [
+    "b_4",
+    "b_7",
+    "b_6",
+    "l_09",
+    "l_14",
+    "l_17"
+   ],
+   "where": "Figure 1; illustrative pathway, p. 5; discussion of measurement gaps, p. 8",
+   "verdict": {
+    "raw": "However, the ability to measure reduced tobacco industry influence at the state level is limited.",
+    "scale": "insufficient",
+    "quote": "the ability to measure reduced tobacco industry influence at the state level is limited",
+    "page": 8,
+    "studies": []
+   }
+  },
+  {
+   "id": "k_06",
+   "claim": "Prevention activities and policy support increase tobacco prices; higher prices and reduced industry influence interact and contribute to reduced susceptibility.",
+   "refs": [
+    "b_o5",
+    "b_1",
+    "b_4",
+    "b_7",
+    "b_8",
+    "l_05",
+    "l_11",
+    "l_15",
+    "l_16",
+    "l_19"
+   ],
+   "where": "Figure 1; description of the framework, p. 3",
+   "verdict": null
+  },
+  {
+   "id": "k_07",
+   "claim": "Changing community and school environments builds tobacco-free norms and reduces young people's susceptibility to experimenting with tobacco.",
+   "refs": [
+    "b_1",
+    "b_2",
+    "b_5",
+    "b_6",
+    "l_10",
+    "l_12",
+    "l_18"
+   ],
+   "where": "Description of the framework, p. 3; Figure 1",
+   "verdict": null
+  },
+  {
+   "id": "k_08",
+   "claim": "Reducing susceptibility and experimentation helps prevent tobacco initiation and progression to established tobacco use.",
+   "refs": [
+    "b_5",
+    "b_9",
+    "l_20"
+   ],
+   "where": "Illustrative outcome pathway and indicator 1.9.c discussion, p. 5",
+   "verdict": {
+    "raw": "Evidence shows that reducing the number of young people who experiment with tobacco will decrease the number who become established tobacco users",
+    "scale": "supports",
+    "quote": "reducing the number of young people who experiment with tobacco will decrease the number who become established tobacco users",
+    "page": 5,
+    "studies": [
+     "U.S. Department of Health and Human Services 2012"
+    ]
+   }
+  },
+  {
+   "id": "k_09",
+   "claim": "Widespread and sustained reductions in tobacco initiation reduce tobacco-use prevalence among young people.",
+   "refs": [
+    "b_9",
+    "b_10",
+    "l_21"
+   ],
+   "where": "Illustrative outcome pathway, p. 5",
+   "verdict": {
+    "raw": "wide-scale and sustained declines in rates of tobacco use initiation can eventually lead to reductions in youth tobacco use prevalence",
+    "scale": "supports",
+    "quote": "can eventually lead to reductions in youth tobacco use prevalence",
+    "page": 5,
+    "studies": [
+     "U.S. Department of Health and Human Services 2014"
+    ]
+   }
+  },
+  {
+   "id": "k_10",
+   "claim": "Sustained reductions in tobacco initiation contribute to population-wide reductions in tobacco-related morbidity and mortality; the model also intends reduced tobacco-related disparities.",
+   "refs": [
+    "b_9",
+    "b_11",
+    "b_12",
+    "l_22",
+    "l_23"
+   ],
+   "where": "Illustrative outcome pathway, p. 5; Figure 1",
+   "verdict": {
+    "raw": "wide-scale and sustained declines in rates of tobacco use initiation can eventually lead to reductions in youth tobacco use prevalence (U.S. Department of Health and Human Services, 2014) and to population-wide declines in tobacco-related morbidity and mortality (Cowling & Yang, 2010).",
+    "scale": "supports",
+    "quote": "to population-wide declines in tobacco-related morbidity and mortality",
+    "page": 5,
+    "studies": [
+     "10.1136/tc.2009.030791"
+    ]
+   }
+  },
+  {
+   "id": "k_11",
+   "claim": "Comprehensive state tobacco control programs prevent initiation, reduce tobacco-use prevalence, and help decrease tobacco-related health care expenditures.",
+   "refs": [
+    "c_activities",
+    "b_9",
+    "b_10"
+   ],
+   "where": "Introduction, p. 2",
+   "verdict": {
+    "raw": "Comprehensive state tobacco prevention and control programs (TCPs), which are typically led by state and territorial health departments and funded through NTCP and other revenue streams (e.g., tobacco taxes, Master Settlement Agreement [MSA] payments, etc.), prevent the initiation of tobacco use, reduce tobacco use prevalence, and help decrease tobacco-related health care expenditures",
+    "scale": "supports",
+    "quote": "prevent the initiation of tobacco use, reduce tobacco use prevalence, and help decrease tobacco-related health care expenditures",
+    "page": 2,
+    "studies": [
+     "10.2105/AJPH.2012.300948",
+     "Institute of Medicine 2007",
+     "10.1016/j.socscimed.2010.11.015",
+     "U.S. Department of Health and Human Services 2012",
+     "U.S. Department of Health and Human Services 2014"
+    ]
+   }
+  },
+  {
+   "id": "k_12",
+   "claim": "The outcome indicator framework helps programs select evidence-informed objectives and measures and plan evaluations, but must be supplemented for process measurement and local surveillance needs.",
+   "refs": [],
+   "where": "Indicator selection example, p. 5; surveillance discussion, p. 6; discussion and state examples, pp. 7–8",
+   "verdict": {
+    "raw": "Many state programs have reported use of the outcome indicator framework to guide not only their evaluation planning but also their strategic planning. This indicator has the highest ratings across all indicator selection criteria and is measured in an existing, ongoing national survey that provides state-level estimates. Although the outcome indicator framework has numerous strengths, it also has limitations. As developed by OSH, the outcome indicator framework does not provide infrastructure or process indicators.",
+    "scale": "partly",
+    "quote": "Many state programs have reported use of the outcome indicator framework to guide not only their evaluation planning but also their strategic planning",
+    "page": 7,
+    "studies": [
+     "Center for Tobacco Policy Research 2012",
+     "Indiana State Department of Health 2016",
+     "10.1136/tc.2009.030809",
+     "California Department of Public Health & California Tobacco Control Program 2016",
+     "10.2105/AJPH.2010.192757"
+    ]
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": null,
+  "weakest_links": [],
+  "strongest_links": [],
+  "summary": "This article presents an evidence-informed, prospective evaluation framework, not a test of the complete causal model. It argues that the framework helps tobacco control programs plan theory-driven evaluations, focus priorities, and align work with national goals. Indiana used it to update strategic objectives, including e-cigarette indicators; California incorporated the approach into local planning and evaluation, and a related approach was used in nutrition, physical activity, and obesity prevention. Limitations include absent infrastructure and process indicators, non-exhaustive outcome indicators, gaps in local and subgroup surveillance, and limited measurement of tobacco industry influence. The article does not rank causal links or report link-level evidence verdicts.",
+  "recommendations": [
+   "Select outcome pathways and indicators collaboratively with stakeholders, taking account of community context, program timelines, and resources.",
+   "Complement outcome indicators with descriptive information on program infrastructure, activities, and outputs.",
+   "Add, modify, or further operationalize indicators to fit program context and evaluation needs.",
+   "Check whether surveillance provides sufficiently timely, precise geographic and subpopulation estimates; supplement data collection when necessary.",
+   "Continue updating the framework for emerging tobacco products, innovative practices, and tobacco-related disparities.",
+   "Develop stronger guidance for identifying populations experiencing disparities and monitoring their outcomes.",
+   "Use the framework with rigorous evaluation and the CDC Framework for Program Evaluation."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/cdc_tobacco_p12.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "The source has no causal-link ratings or evaluation results for the complete model. Indicator ratings concern six selection criteria, including strength of evaluation evidence; their scale words and detailed scores are not supplied here. No indicator rating has been converted into a link verdict.",
+   "Short-term, Intermediate, and Long-term columns are mapped respectively to outcome_short, outcome_long, and impact because the fixed schema has no intermediate-outcome layer.",
+   "The activity boxes feed a shared connector leading to the five output arrows; they are represented as a container rather than as all possible individual activity-to-output links.",
+   "The output brace is represented as a container with arrows to the four short-term outcomes.",
+   "Several connectors overlap or run close to boxes. In particular, links l_12–l_15 and l_19 should be checked against a higher-resolution original; their traced endpoints are recorded with medium confidence.",
+   "The rightmost connector is read as branching from outcome 9 to outcomes 10, 11, and 12. Its routes pass behind or alongside the intervening boxes.",
+   "No clearly visible arrow connects the infrastructure input box to the activity boxes; none has been added.",
+   "The bottom 'Focus on reducing tobacco-related disparities' band is treated as cross-cutting context, not a separate result box. The thin line and small central mark above it do not establish a clear causal arrow endpoint in the supplied rendering.",
+   "The text supports the morbidity and mortality portion of k_10 but does not separately judge whether disparities were reduced.",
+   "The indicator example says on page 5 that an existing national survey provides state-level estimates, while page 6 says NYTS does not provide state-level estimates. The manuscript does not resolve that discrepancy.",
+   "Figure 2 is an example indicator profile, not another theory-of-change diagram. Its image was not supplied, so detailed indicator evidence and ratings cannot be transcribed.",
+   "The article provides no fixed program dosage or evaluation horizon. The exact manuscript URL and reuse licence were not supplied."
+  ],
+  "source_sha256": "ab64b2223606a5588068cf72af820892cdc2c43f98e9d6fba24e4b84d46a283c",
+  "prompt_sha256": "5d1cb40eee82156ea7f23694cb51862a2897d4e42dda82082bf094028453e696"
+ }
+}

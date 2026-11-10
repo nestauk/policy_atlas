@@ -1,0 +1,11 @@
+{
+ "file": "downloads/lffn_wp1_synthesis.html",
+ "doc_url": "https://www.gov.uk/government/publications/local-full-fibre-networks-evaluation-work-package-one-report/synthesis-of-evidence-and-conclusions",
+ "landing_url": "https://www.gov.uk/government/publications/local-full-fibre-networks-evaluation-work-package-one-report",
+ "retrieved": "2026-11-09",
+ "figures": [
+  "downloads/pages/lffn_wp1_synthesis_s3_3.png",
+  "downloads/pages/lffn_wp1_synthesis_initial_toc.png"
+ ],
+ "notes": "Figure(s): section 3.3 Revised theory of change diagram (HTML image). Verdict scale: contribution categories \"Primary / Substantial / Enabling / Marginal / No observable contribution\"; synthesis words \"strong evidence\", \"mixed\", \"limited\", \"no evidence\"; grey boxes on diagram = limited, mixed or no evidence. Timing: retrospective. Verdict painted onto nodes (grey shading); initial ToC PNG rendered but not inspected; SVG needs CSS inlining to render (Prepared from the longlist row; figures rendered by the checking agent.)"
+}

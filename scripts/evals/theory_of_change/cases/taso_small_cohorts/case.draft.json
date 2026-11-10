@@ -1,0 +1,749 @@
+{
+ "meta": {
+  "id": "taso_small_cohorts",
+  "title": "Evaluation of the Higher Education Tutorial Supervisor role at City College Norwich",
+  "organisation": "City College Norwich",
+  "year": 0,
+  "country": "United Kingdom",
+  "topic": "Continuation, wellbeing and attainment of higher education students with self-declared learning difficulties and/or disabilities",
+  "intervention_type": "service",
+  "timing": "retrospective",
+  "doc_url": "https://cdn.taso.org.uk/wp-content/uploads/TASO_Contribution-Analysis_City-College-Norwich_December2023.pdf",
+  "landing_url": "https://taso.org.uk/libraryitem/resources-learning-about-evaluation-with-small-cohorts-pilots-to-test-the-methodologies/",
+  "licence": "",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "ex_post_evaluation",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Improve continuation, wellbeing and attainment among students with self-declared learning difficulties and/or disabilities, and close gaps between these students and their peers.",
+  "population": "Higher education students with self-declared learning difficulties and/or disabilities at City College Norwich.",
+  "place": "City College Norwich, Norwich, England.",
+  "time_horizon": "During students' higher education studies, through degree completion; a fixed intervention duration is not specified. Evaluation interviews took place between November 2022 and January 2023.",
+  "intervention": "A Higher Education Tutorial Supervisor (HETS) provides dedicated academic and pastoral support, including individual tutorials, telephone and email contact, and signposting to other services. The number, frequency and duration of support contacts are not specified.",
+  "context": "City College Norwich is a general further and higher education college with almost 1,000 higher education students. Its Access and Participation Plan identified gaps of 10% in continuation and 6% in attainment between students with self-declared learning difficulties and/or disabilities and their peers. Anecdotal evidence suggested that underrepresented students were not actively engaging with wider college support services. Small cohorts make conventional quantitative impact evaluation difficult.",
+  "outcome_first": "Develop a theory of change for improving continuation, wellbeing and attainment among higher education students with self-declared learning difficulties and/or disabilities at City College Norwich. It should address closing gaps between these students and their peers in a college-based higher education setting.",
+  "intervention_first": "Develop a theory of change for City College Norwich's Higher Education Tutorial Supervisor role, which provides dedicated academic and pastoral support to higher education students with self-declared learning difficulties and/or disabilities. The intended changes are improved continuation, wellbeing and attainment, and smaller gaps between these students and their peers."
+ },
+ "containers": [],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "Students attend 1-1 tutorial / phone call / email with the HETS",
+   "layer": "output",
+   "container": null,
+   "verdict": {
+    "raw": "We had strong evidence that students received individual support from the HETS which included individual tutorials, phone calls and email correspondence.",
+    "scale": "supports",
+    "quote": "strong evidence that students received individual support",
+    "page": 16,
+    "studies": []
+   }
+  },
+  {
+   "id": "b2",
+   "label": "HETS supports with academic policies",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b3",
+   "label": "Students supported financially",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b4",
+   "label": "Students supported with wellbeing",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b5",
+   "label": "Student supported with live assessments",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b6",
+   "label": "Students supported with academic skills",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b7",
+   "label": "Student continuation",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b8",
+   "label": "Students wellbeing improves",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "Students said that self-efficacy, motivation and sense of wellbeing improved as a result of the intervention",
+    "scale": "supports",
+    "quote": "sense of wellbeing improved as a result of the intervention",
+    "page": 39,
+    "studies": []
+   }
+  },
+  {
+   "id": "b9",
+   "label": "Students increase assessment attainment",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b10",
+   "label": "Students increase module attainment",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b11",
+   "label": "Increase in student degree attainment",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b12",
+   "label": "Other Causal Factors: · DSA approved prior to enrolling · External wellbeing support e.g. counsellor · Students accessing library services directly · Tutor support (personal / module)",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b2",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l2",
+   "source": "b1",
+   "target": "b3",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l3",
+   "source": "b1",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l4",
+   "source": "b1",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l5",
+   "source": "b1",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l6",
+   "source": "b2",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l7",
+   "source": "b2",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l8",
+   "source": "b2",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l9",
+   "source": "b3",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l10",
+   "source": "b3",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l11",
+   "source": "b3",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l12",
+   "source": "b4",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l13",
+   "source": "b4",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l14",
+   "source": "b4",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l15",
+   "source": "b5",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l16",
+   "source": "b5",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l17",
+   "source": "b5",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l18",
+   "source": "b6",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l19",
+   "source": "b6",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l20",
+   "source": "b6",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l21",
+   "source": "b7",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l22",
+   "source": "b8",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l23",
+   "source": "b9",
+   "target": "b10",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l24",
+   "source": "b10",
+   "target": "b11",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "assumption",
+   "text": "HETS role must be in place",
+   "links": [],
+   "from_layer": "output",
+   "to_layer": "outcome_short",
+   "verdict": null
+  },
+  {
+   "id": "a2",
+   "kind": "assumption",
+   "text": "HETS must be aware of students with LDD",
+   "links": [],
+   "from_layer": "output",
+   "to_layer": "outcome_short",
+   "verdict": null
+  },
+  {
+   "id": "a3",
+   "kind": "assumption",
+   "text": "Students attend support/engage in communication",
+   "links": [],
+   "from_layer": "output",
+   "to_layer": "outcome_short",
+   "verdict": null
+  },
+  {
+   "id": "a4",
+   "kind": "risk",
+   "text": "Only those aware of their LDD engage with support",
+   "links": [],
+   "from_layer": "output",
+   "to_layer": "outcome_short",
+   "verdict": null
+  },
+  {
+   "id": "a5",
+   "kind": "risk",
+   "text": "Students may not disclose their LDD and not seek support",
+   "links": [],
+   "from_layer": "output",
+   "to_layer": "outcome_short",
+   "verdict": null
+  },
+  {
+   "id": "a6",
+   "kind": "risk",
+   "text": "Students / staff unaware of (extent of) HETS role",
+   "links": [],
+   "from_layer": "output",
+   "to_layer": "outcome_short",
+   "verdict": null
+  },
+  {
+   "id": "a7",
+   "kind": "assumption",
+   "text": "Provided support meets the needs of the student",
+   "links": [],
+   "from_layer": "outcome_short",
+   "to_layer": "outcome_long",
+   "verdict": null
+  },
+  {
+   "id": "a8",
+   "kind": "risk",
+   "text": "HETS role is not aware of the support mechanisms available and HETS not able to support",
+   "links": [],
+   "from_layer": "outcome_short",
+   "to_layer": "outcome_long",
+   "verdict": null
+  },
+  {
+   "id": "a9",
+   "kind": "assumption",
+   "text": "Student self-efficacy, motivation and sense of belonging improves",
+   "links": [],
+   "from_layer": "outcome_long",
+   "to_layer": "impact",
+   "verdict": {
+    "raw": "Data demonstrated a positive student perception of self-efficacy, motivation to study and sense of belongingness for students.",
+    "scale": "supports",
+    "quote": "positive student perception of self-efficacy, motivation to study and sense of belongingness",
+    "page": 9,
+    "studies": []
+   }
+  },
+  {
+   "id": "a10",
+   "kind": "risk",
+   "text": "Support provided does not meet the needs of the student, sufficiently to enhance assessment attainment",
+   "links": [],
+   "from_layer": "outcome_long",
+   "to_layer": "impact",
+   "verdict": null
+  },
+  {
+   "id": "a11",
+   "kind": "assumption",
+   "text": "A positive relationship between the student and the HETS, and strong communication skills, accessibility and responsiveness of the HETS, are important for maximal impact.",
+   "links": [],
+   "from_layer": "outcome_short",
+   "to_layer": "outcome_long",
+   "verdict": {
+    "raw": "In order for this to have maximal impact, it is important for there to be a positive relationship between the student and the HETS, and for the HETS to have strong communication skills and being accessible and responsive.",
+    "scale": "supports",
+    "quote": "important for there to be a positive relationship between the student and the HETS",
+    "page": 16,
+    "studies": []
+   }
+  }
+ ],
+ "context": [
+  "Other causal factors shown in the final figure are DSA approved before enrolment, external wellbeing support, direct access to library services, and personal or module tutor support. No arrows connect this context box to particular results.",
+  "Nine current students with self-declared LDD who had engaged with the HETS were interviewed. All were female volunteers. Two staff focus groups comprised five and nine participants.",
+  "The evaluation could not interview graduates. Pre- and post-intervention data were not available for the final-outcome assessment.",
+  "Evidence was triangulated using student interviews, staff focus groups, Individual Learning Plan records, Virtual Learning Environment announcements, attendance and attainment information, and observation of tutorials.",
+  "Small cohort sizes make outcome metrics sensitive to individual students and limit conventional causal evaluation."
+ ],
+ "key_claims": [
+  {
+   "id": "k1",
+   "claim": "Proactive contact and accessible individual support enable students with self-declared LDD to engage with help they might otherwise not access, or not access as quickly.",
+   "refs": [
+    "b1",
+    "l1",
+    "l2",
+    "l3",
+    "l4",
+    "l5",
+    "a1",
+    "a2",
+    "a3",
+    "a4",
+    "a5",
+    "a6"
+   ],
+   "where": "Main Findings / Evaluation Outcomes, printed p.16; Appendix 4 fidelity assessment, printed p.38",
+   "verdict": {
+    "raw": "We had strong evidence that students received individual support from the HETS which included individual tutorials, phone calls and email correspondence. In most cases, students highlighted that the involvement of the HETS led to support being accessed, which otherwise may not have been possible or as quick without the involvement of the HETS.",
+    "scale": "supports",
+    "quote": "support being accessed, which otherwise may not have been possible or as quick",
+    "page": 16,
+    "studies": []
+   }
+  },
+  {
+   "id": "k2",
+   "claim": "Support with academic policies helps students obtain adjustments and extensions, builds confidence and belonging, and can help them remain on their programme.",
+   "refs": [
+    "b2",
+    "l1",
+    "l6",
+    "l7",
+    "l8"
+   ],
+   "where": "Causal chain A, printed p.9; Main Findings, printed p.16; Appendix 5 supporting narrative 1, printed p.41",
+   "verdict": {
+    "raw": "This grows students' confidence with completing these and provides access to reasonable adjustments through processes such as extenuating circumstances. This also supports students to have a sense of belonging and feel empowered. Supporting with applications for extenuating circumstances can also lead to students remaining on programme.",
+    "scale": "supports",
+    "quote": "can also lead to students remaining on programme",
+    "page": 9,
+    "studies": [
+     "Shaw and Anderson 2018",
+     "Anderson, Carter and Stephenson 2018",
+     "Clouder et al. 2020",
+     "Johnson et al. 2022"
+    ]
+   }
+  },
+  {
+   "id": "k3",
+   "claim": "A trusted HETS relationship and practical help with financial-support applications reassure students and can help them continue studying.",
+   "refs": [
+    "b3",
+    "l2",
+    "l9",
+    "l10",
+    "l11",
+    "a11"
+   ],
+   "where": "Causal chain D, printed p.10; Main Findings, printed p.16",
+   "verdict": {
+    "raw": "This provided reassurance to students that needed financial support as it is often difficult to ask for help. Having a good relationship with the HETS is integral to this support being accessed and can also result in students remaining on programme.",
+    "scale": "supports",
+    "quote": "can also result in students remaining on programme",
+    "page": 10,
+    "studies": []
+   }
+  },
+  {
+   "id": "k4",
+   "claim": "Direct wellbeing support and referral, together with responsive contact, reduce anxiety and improve wellbeing, which can help students continue their studies.",
+   "refs": [
+    "b4",
+    "b8",
+    "l3",
+    "l12",
+    "l13",
+    "l14",
+    "a11"
+   ],
+   "where": "Causal chain E, printed p.10; Main Findings, printed p.16; Appendix 4, printed p.39",
+   "verdict": {
+    "raw": "Students' wellbeing is also supported indirectly by the HETS being accessible and responsive, which reduces students' anxiety with a range of other challenges and/or queries and leads to students feeling more positive. An improvement in students' wellbeing can also lead to students continuing their studies rather than withdrawing.",
+    "scale": "supports",
+    "quote": "reduces students' anxiety",
+    "page": 10,
+    "studies": []
+   }
+  },
+  {
+   "id": "k5",
+   "claim": "Practice and feedback for live assessments improve presentation skills and reduce assessment anxiety.",
+   "refs": [
+    "b5",
+    "l4",
+    "l15",
+    "l16",
+    "l17"
+   ],
+   "where": "Causal chain C, printed p.10; Main Findings, printed p.16",
+   "verdict": {
+    "raw": "Supported students with live assessments, including observing and providing feedback on presentations. This, therefore, allows feedback to improve presentation skills and reduces anxiety around live assessments.",
+    "scale": "supports",
+    "quote": "improve presentation skills and reduces anxiety around live assessments",
+    "page": 10,
+    "studies": []
+   }
+  },
+  {
+   "id": "k6",
+   "claim": "Academic and study-skills support develops students' skills and motivation, reduces worry, and contributes to continuation, wellbeing and module assessment attainment.",
+   "refs": [
+    "b6",
+    "l5",
+    "l18",
+    "l19",
+    "l20"
+   ],
+   "where": "Causal chain B work-through and contribution claim, printed pp.10–11",
+   "verdict": {
+    "raw": "The 1-1 tutorial with the HETS supports students with academic and study skills, and supports students with continuation, wellbeing and module assessment attainment. There is strong evidence from participants that students with a self-declared LDD can experience challenges with areas of academic study and that the intervention helps them develop these skills and improves motivation. However, there is evidence that other factors (tutor support and students accessing the library services directly) that supports students in closing the gap for this causal chain.",
+    "scale": "supports",
+    "quote": "the intervention helps them develop these skills and improves motivation",
+    "page": 11,
+    "studies": []
+   }
+  },
+  {
+   "id": "k7",
+   "claim": "Needs-responsive support builds knowledge, self-efficacy, confidence, motivation and belonging; a positive relationship and good communication are important conditions.",
+   "refs": [
+    "a7",
+    "a8",
+    "a9",
+    "a11",
+    "b2",
+    "b3",
+    "b4",
+    "b5",
+    "b6"
+   ],
+   "where": "Main Findings / Evaluation Outcomes, printed p.16; Appendix 4 intermediate-outcome assessment, printed p.39",
+   "verdict": {
+    "raw": "As a result of this, this research showed that this led to a decrease in students’ anxiety and an increase in student’s knowledge, self-efficacy, confidence, motivation and their sense of belonging. In order for this to have maximal impact, it is important for there to be a positive relationship between the student and the HETS, and for the HETS to have strong communication skills and being accessible and responsive.",
+    "scale": "supports",
+    "quote": "an increase in student’s knowledge, self-efficacy, confidence, motivation and their sense of belonging",
+    "page": 16,
+    "studies": []
+   }
+  },
+  {
+   "id": "k8",
+   "claim": "The support pathways contribute to improved continuation and wellbeing, with more direct effects on outcomes closer to the intervention.",
+   "refs": [
+    "b7",
+    "b8",
+    "l6",
+    "l7",
+    "l9",
+    "l10",
+    "l12",
+    "l13",
+    "l15",
+    "l16",
+    "l18",
+    "l19"
+   ],
+   "where": "Main Findings, printed pp.16–17; Conclusion, printed p.19",
+   "verdict": {
+    "raw": "Specifically, this evaluation offers an insight into an intervention that results in a contribution to students' continuations and improved wellbeing in HE. Whilst verifying the final ToC that we had created (Appendix 5), we found that the closer to the output of the intervention, the more direct impact the intervention had.",
+    "scale": "supports",
+    "quote": "a contribution to students' continuations and improved wellbeing in HE",
+    "page": 19,
+    "studies": [
+     "Ton, Vellema and Ge 2014"
+    ]
+   }
+  },
+  {
+   "id": "k9",
+   "claim": "Support, continuation and improved wellbeing enable better assessment attainment.",
+   "refs": [
+    "b9",
+    "l8",
+    "l11",
+    "l14",
+    "l17",
+    "l20",
+    "l21",
+    "l22",
+    "a9",
+    "a10"
+   ],
+   "where": "Causal-chain findings, printed pp.9–11; Main Findings, printed p.16; Appendix 5 final ToC, printed p.40",
+   "verdict": {
+    "raw": "The final ToC included five causal chains that linked the intervention and the observed result. Strong evidence from stakeholders during the data collection stage and from the research literature was found for all of these.",
+    "scale": "supports",
+    "quote": "Strong evidence from stakeholders during the data collection stage and from the research literature was found for all of these.",
+    "page": 16,
+    "studies": []
+   }
+  },
+  {
+   "id": "k10",
+   "claim": "Better assessment attainment leads to higher module and degree attainment, but the evaluation cannot establish the final-outcome contribution confidently.",
+   "refs": [
+    "b9",
+    "b10",
+    "b11",
+    "l23",
+    "l24"
+   ],
+   "where": "Appendix 4 final-outcome assessment, printed p.39; reflections on confidence of contribution, printed p.18",
+   "verdict": {
+    "raw": "We were not able to speak to students that have completed their degree. Data was not available pre- and post- intervention",
+    "scale": "insufficient",
+    "quote": "Data was not available pre- and post- intervention",
+    "page": 39,
+    "studies": []
+   }
+  },
+  {
+   "id": "k11",
+   "claim": "HETS contributes as part of a wider causal package that includes other college and external support, rather than being the sole cause of improved outcomes.",
+   "refs": [
+    "b12"
+   ],
+   "where": "Causal chain B, printed p.11; Appendix 4 other influencing factors, printed p.39; reflections, printed pp.18–19",
+   "verdict": {
+    "raw": "Evidence has suggested that there are other causal factors which contribute to the observed results. These have been recognised in the final theory of change. We know that the HETS role contributes and why students feel that it had an impact, but we are unable to quantify this impact.",
+    "scale": "supports",
+    "quote": "there are other causal factors which contribute to the observed results",
+    "page": 39,
+    "studies": []
+   }
+  },
+  {
+   "id": "k12",
+   "claim": "The proposed pathways are plausible, were implemented as intended, and depended on immediate- and intermediate-level risks not materialising.",
+   "refs": [
+    "a1",
+    "a2",
+    "a3",
+    "a4",
+    "a5",
+    "a6",
+    "a7",
+    "a8",
+    "a9",
+    "a10"
+   ],
+   "where": "Appendix 4 plausibility and fidelity assessment, printed p.38; Main Findings, printed p.16",
+   "verdict": {
+    "raw": "We confirmed that the intervention was based on a reasoned ToC and was based on research. We were also able to confirm that the activities of the intervention were implemented as outlined in the ToC. This meant that the first two conditions were passed. The evidence suggested that the risks at the immediate and intermediate level outcomes, did not materialise.",
+    "scale": "supports",
+    "quote": "the first two conditions were passed",
+    "page": 16,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "We have strong evidence that suggests the HETS role makes a contribution to closing the observed gaps between students with a self-declared LDD and their peers.",
+   "scale": "supports",
+   "quote": "strong evidence that suggests the HETS role makes a contribution",
+   "page": 1,
+   "studies": []
+  },
+  "weakest_links": [
+   "l23",
+   "l24"
+  ],
+  "strongest_links": [],
+  "summary": "The evaluation found strong evidence for all five support chains and confirmed plausibility and implementation fidelity. Individual support contributed to reduced anxiety and increased knowledge, self-efficacy, confidence, motivation and belonging, and to continuation and improved wellbeing. Effects were more direct nearer the intervention. Other support services and external factors also contributed. The evaluation could explain why the HETS contributed but could not quantify that contribution or establish it as the sole cause. Final-outcome evidence was limited by the absence of graduate interviews and pre- and post-intervention data.",
+  "recommendations": [
+   "Ensure that the HETS approaches students known to have a self-declared LDD, providing reassurance that receiving help is acceptable.",
+   "Support a positive student–HETS relationship, strong communication, accessibility and responsiveness.",
+   "When considering similar roles elsewhere, ensure the underlying assumptions are present and consider risks to successful implementation.",
+   "Allow sufficient time and resources for iterative theory development, data collection, triangulation and repeated contribution analysis.",
+   "Develop more universal terminology and methods for analysing and attributing levels of contribution in contribution analysis."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/taso_small_cohorts_ccn_p41.png', 'downloads/pages/taso_small_cohorts_ccn_p39.png', 'downloads/pages/taso_small_cohorts_ccn_p32.png', 'downloads/pages/taso_small_cohorts_ccn_p25.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "The supplied extract does not establish the publication title, year, document URLs or licence. The title is descriptive, year 0 denotes missing information, and URL and licence fields are empty.",
+   "Evidence-level definitions were not supplied; B is a provisional classification for this triangulated small-n contribution analysis.",
+   "Only the final ToC in Appendix 5 is transcribed. Appendix 1 is the first logic-model version; Appendix 2a and its split versions are detailed HETS pathway diagrams. Appendix 3 presents the alternative, pre-HETS support pathways. These are not additional transcriptions.",
+   "Page references in verdicts use printed page numbers. Figure_pages uses the supplied PDF page numbers.",
+   "The final diagram labels its rows Outputs, Immediate Outcomes, Intermediate Outcomes and Final Outcome. These map respectively to output, outcome_short, outcome_long and impact, even where a box describes a support activity.",
+   "The central arrows in Appendix 5 are crowded. Links l6–l20 represent the drawn support-to-continuation, support-to-wellbeing and support-to-assessment routes; crowded routes have medium transcription confidence. The source repeats arrow number 6 for continuation/wellbeing routes and number 7 for direct assessment routes; record link IDs are unique rather than copies of printed numbers.",
+   "The assessment-table image supplied is PDF p.39, printed p.38. Its visible condition and confidence cells are green. The continuation on PDF p.40, printed p.39, is available only as text, so its colour ratings cannot be transcribed. The final-outcome evidence limitation is recorded from its explicit explanation rather than an assumed colour.",
+   "The source judges the five chains and outcome stages collectively. These judgments are retained in key claims rather than assigned as separate verdicts to every numbered arrow.",
+   "The weakest-link IDs identify the final-outcome portion for which the source explicitly reports evidence limitations. The source does not rank individual numbered arrows as strongest, so strongest_links is empty.",
+   "The top assumption/risk block sits beside assessment attainment, within the figure's Intermediate Outcomes band. It is recorded at the outcome_long-to-impact boundary as the upper-stage assumption block; its precise intended boundary is not explicit.",
+   "The Other Causal Factors frame contains a single text list and has no connecting arrows. It is recorded as a context box, not as an arrow-addressable container.",
+   "The overall low-risk judgment in Appendix 4 is retained on key claim k12; it is not treated as a separate confirmation of every individual risk."
+  ],
+  "source_sha256": "c110b32a7b9f5de50e0ca842d2bc2809758e53b0b83173412a3654e94d19b0b7",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

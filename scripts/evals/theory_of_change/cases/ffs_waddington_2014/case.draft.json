@@ -1,0 +1,762 @@
+{
+ "meta": {
+  "id": "ffs_waddington_2014",
+  "title": "Farmer field schools for improving farming practices and farmer outcomes: a systematic review",
+  "organisation": "The Campbell Collaboration",
+  "year": 2014,
+  "country": "Low- and middle-income countries",
+  "topic": "Agricultural extension, farmer learning and farming outcomes",
+  "intervention_type": "programme",
+  "timing": "synthesis",
+  "doc_url": "https://files.givewell.org/files/DWDA%202009/PAD/Waddington_et_al_2014.pdf ; summary https://3ieimpact.org/sites/default/files/2019-05/srs1_ffs_revise_060814_final_web.pdf",
+  "landing_url": "https://doi.org/10.4073/csr.2014.6",
+  "licence": "",
+  "figure_pages": [],
+  "evidence_level": "A",
+  "verdict_source": "evidence_synthesis",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Improve farming practices, agricultural production and farmers’ incomes, reduce harmful agricultural practices, and empower farmers.",
+  "population": "Farmers in low- and middle-income countries, including disadvantaged farmers such as women; neighbouring non-participant farmers are also intended beneficiaries.",
+  "place": "Low- and middle-income countries worldwide.",
+  "time_horizon": "Training lasts a full agricultural season. The review examines short-term effects and sustainability, including follow-up beyond two years.",
+  "intervention": "Farmer field schools: season-long, usually weekly, facilitator-led participatory agricultural education using discovery-based adult learning. Delivery and curricula vary across programmes.",
+  "context": "A widely implemented alternative to conventional agricultural extension, used by many implementing bodies. At least 10 million farmers in 90 countries had attended. Much of the evaluated provision concerned integrated pest management, but other agricultural curricula were also included.",
+  "outcome_first": "Develop a theory of change for improving farming practices, agricultural production, incomes and wellbeing among farmers in low- and middle-income countries. Include disadvantaged farmers and consider whether benefits reach neighbouring farmers and persist over time.",
+  "intervention_first": "Develop a theory of change for season-long farmer field schools in low- and middle-income countries. The programmes use participatory, facilitator-led agricultural education and aim to improve farmers’ practices, production, incomes and wellbeing, including benefits for disadvantaged farmers and neighbouring non-participants."
+ },
+ "containers": [],
+ "boxes": [
+  {
+   "id": "b_context",
+   "label": "Policy context favourable:\n- Prices of inputs (pesticides, fertilizer); regulations\n- Relationship between private sector producers and extension/training system\n- Market access",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_inception",
+   "label": "Inception\n- Season-long training of facilitators\n- Targeting and farmer group formation\n- Curriculum developed partially by farmers\n- Other inputs: financial, monitoring systems",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_training",
+   "label": "Training\n- Season-long training attended by farmers\n- Facilitation through discovery-based group learning (agro-ecosystems analysis, experimentation, group dynamics, special topic)",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_dissemination",
+   "label": "Dissemination\n- Field days, exchange visits, follow-up\n- Platform building (e.g support to local networks)\n- Training of farmer trainers",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_capacity",
+   "label": "Capacity building: FFS participants acquire knowledge and skills, improved analytical decision-making",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_adoption",
+   "label": "Adoption of new technology and management practices by FFS participants",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_empowerment",
+   "label": "Empowerment outcomes:\nConfidence, decision-making skills and agency\nSocial ties, collaboration and collective action\nEnhanced social status of groups such as women\nGender relations",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_diffusion",
+   "label": "IPM knowledge diffusion to neighbours",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_neighbour_adoption",
+   "label": "Adoption of IPM technology and management practices by neighbours",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_farmer_outcomes",
+   "label": "Agricultural outcomes for FFS farmers improve: yield, input-output ratio, income, health, environment",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_neighbour_outcomes",
+   "label": "Agricultural outcomes for neighbours improve: yield, input-output ratio, income, health, environment",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_sustainability",
+   "label": "Sustainability of practices and outcomes",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b_inception",
+   "target": "b_training",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by evidence",
+    "scale": "supports",
+    "quote": "Links supported by evidence",
+    "page": 143,
+    "studies": []
+   }
+  },
+  {
+   "id": "l2",
+   "source": "b_training",
+   "target": "b_capacity",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by evidence",
+    "scale": "supports",
+    "quote": "field school participants improved their knowledge of farming technology",
+    "page": 144,
+    "studies": []
+   }
+  },
+  {
+   "id": "l3",
+   "source": "b_capacity",
+   "target": "b_adoption",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by evidence",
+    "scale": "supports",
+    "quote": "farmers appear to learn as a result of training, they adopt simple practices such as reduced pesticide use",
+    "page": 153,
+    "studies": []
+   }
+  },
+  {
+   "id": "l4",
+   "source": "b_capacity",
+   "target": "b_empowerment",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Hypothesised links (evidence needed)",
+    "scale": "insufficient",
+    "quote": "The evidence on the impact of FFS on empowerment for FFS participants is inconclusive",
+    "page": 22,
+    "studies": []
+   }
+  },
+  {
+   "id": "l5",
+   "source": "b_adoption",
+   "target": "b_farmer_outcomes",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by evidence",
+    "scale": "supports",
+    "quote": "they experience improvements in outcomes such as yields and revenues",
+    "page": 153,
+    "studies": []
+   }
+  },
+  {
+   "id": "l6",
+   "source": "b_adoption",
+   "target": "b_diffusion",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links not supported by evidence",
+    "scale": "against",
+    "quote": "There is no evidence that neighbouring non-participant farmers benefit from diffusion of IPM knowledge from FFS participants.",
+    "page": 12,
+    "studies": []
+   }
+  },
+  {
+   "id": "l7",
+   "source": "b_dissemination",
+   "target": "b_diffusion",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Hypothesised links (evidence needed)",
+    "scale": "insufficient",
+    "quote": "Hypothesised links (evidence needed)",
+    "page": 143,
+    "studies": []
+   }
+  },
+  {
+   "id": "l8",
+   "source": "b_diffusion",
+   "target": "b_neighbour_adoption",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links not supported by evidence",
+    "scale": "against",
+    "quote": "There was also no evidence for improvements among neighbours on pesticide use, yields or environmental impact quotient.",
+    "page": 18,
+    "studies": []
+   }
+  },
+  {
+   "id": "l9",
+   "source": "b_neighbour_adoption",
+   "target": "b_neighbour_outcomes",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links not supported by evidence",
+    "scale": "against",
+    "quote": "FFS may not have any diffusion effect on yields",
+    "page": 24,
+    "studies": []
+   }
+  },
+  {
+   "id": "l10",
+   "source": "b_farmer_outcomes",
+   "target": "b_sustainability",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "Hypothesised links (evidence needed)",
+    "scale": "insufficient",
+    "quote": "Hypothesised links (evidence needed)",
+    "page": 143,
+    "studies": []
+   }
+  },
+  {
+   "id": "l11",
+   "source": "b_neighbour_outcomes",
+   "target": "b_sustainability",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links not supported by evidence",
+    "scale": "against",
+    "quote": "any initial adoption among neighbouring farmers, in terms of knowledge gains, pesticide use and yields, fell considerably over time",
+    "page": 153,
+    "studies": []
+   }
+  },
+  {
+   "id": "l12",
+   "source": "b_empowerment",
+   "target": "b_sustainability",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Hypothesised links (evidence needed)",
+    "scale": "insufficient",
+    "quote": "Hypothesised links (evidence needed)",
+    "page": 143,
+    "studies": []
+   }
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "assumption",
+   "text": "Facilitators have appropriate characteristics, skills, experience; Facilitators adequately trained; Adequate, timely provision of resources; Appropriate sites and farmers targeted",
+   "links": [
+    "l1"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Six of the seven studies that reported on training of facilitators suggested that there were issues related to a lack of appropriate training, resources and ongoing support of facilitators",
+    "scale": "partly",
+    "quote": "issues related to a lack of appropriate training, resources and ongoing support",
+    "page": 129,
+    "studies": [
+     "DANIDA 2011",
+     "Gottret & Córdoba 2004",
+     "Hofisi 2003",
+     "Pedersen et al. 2008",
+     "Rola & Baril 1997",
+     "Simpson 1997"
+    ]
+   }
+  },
+  {
+   "id": "a2",
+   "kind": "assumption",
+   "text": "Appropriate targeting criteria and procedures used; Farmers are motivated & able to participate, attend majority of sessions; Training implemented according to original FFS principles; Farmers observe FFS practices; Facilitators use appropriate language and concepts",
+   "links": [
+    "l2"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Overall, the review identified several key barriers related to targeting, such as inappropriate selection criteria and targeting procedures, and structural barriers to participation such as gender, poverty and cultural norms.",
+    "scale": "partly",
+    "quote": "inappropriate selection criteria and targeting procedures",
+    "page": 144,
+    "studies": []
+   }
+  },
+  {
+   "id": "a3",
+   "kind": "assumption",
+   "text": "FFS appropriately synchronised with planting season",
+   "links": [
+    "l2"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "assumptions for which evidence not found shown in italics",
+    "scale": "insufficient",
+    "quote": "evidence not found",
+    "page": 143,
+    "studies": []
+   }
+  },
+  {
+   "id": "a4",
+   "kind": "assumption",
+   "text": "Curriculum appropriate and relevant; Farmers perceive relative advantage of FFS practices; Farmers have ability & resources to implement FFS practices; High level of social capital; Access to complementary inputs if needed",
+   "links": [
+    "l3"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "In all cases the lack of access to inputs, capital and/or markets were suggested as factors influencing uptake of FFS practices or final outcomes of the FFS training.",
+    "scale": "partly",
+    "quote": "remained a barrier for FFS farmers to adopt FFS practices and benefit fully from adoption",
+    "page": 149,
+    "studies": [
+     "DANIDA 2011",
+     "Machacha 2008",
+     "Mancini et al. 2007",
+     "Najjar 2009",
+     "Van Der Wiele 2004"
+    ]
+   }
+  },
+  {
+   "id": "a5",
+   "kind": "assumption",
+   "text": "Farmers are convinced others will do the same",
+   "links": [
+    "l3"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "assumptions for which evidence not found shown in italics",
+    "scale": "insufficient",
+    "quote": "evidence not found",
+    "page": 143,
+    "studies": []
+   }
+  },
+  {
+   "id": "a6",
+   "kind": "assumption",
+   "text": "New technology appropriate; Market access & favourable prices; Environmental factors including weather, soil fertility",
+   "links": [
+    "l5"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "assumptions for which evidence not found shown in italics",
+    "scale": "insufficient",
+    "quote": "evidence not found",
+    "page": 143,
+    "studies": []
+   }
+  },
+  {
+   "id": "a7",
+   "kind": "assumption",
+   "text": "Formal activities to institutionalise approach in community; Appropriate farmers targeted; High level of social cohesion and wide reach of social networks; Farmers have opportunities to observe practices implemented by FFS trained farmers",
+   "links": [
+    "l6",
+    "l7"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "In some cases low levels of social capital and cohesion limited communication within the community and presented a barrier to diffusion of FFS messages",
+    "scale": "partly",
+    "quote": "high levels of social capital, in particular among farmers with kinship ties, facilitated sharing of IPM concepts",
+    "page": 153,
+    "studies": [
+     "David 2007",
+     "Gottret & Córdoba 2004",
+     "Palis 2002",
+     "Rola & Baril 1997",
+     "Simpson 1997"
+    ]
+   }
+  },
+  {
+   "id": "a8",
+   "kind": "assumption",
+   "text": "Neighbours perceive relative advantage",
+   "links": [
+    "l8"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "the evidence suggested observability of FFS practices were important for convincing non-FFS farmers to adopt FFS practices",
+    "scale": "supports",
+    "quote": "observability of FFS practices were important",
+    "page": 153,
+    "studies": [
+     "David 2007",
+     "Gottret & Córdoba 2004",
+     "Palis 2002",
+     "Machacha 2008",
+     "Simpson 1997",
+     "Van de Fliert 1993",
+     "Winarto 2004"
+    ]
+   }
+  },
+  {
+   "id": "a9",
+   "kind": "assumption",
+   "text": "FFS enables farmers to continue with FFS practices and deal with new challenges",
+   "links": [
+    "l10",
+    "l11"
+   ],
+   "from_layer": "outcome_long",
+   "to_layer": "impact",
+   "verdict": null
+  }
+ ],
+ "context": [
+  "Prices of inputs, including pesticides and fertilizer, and regulations.",
+  "Relationship between private sector producers and the extension or training system.",
+  "Market access.",
+  "Gender, poverty and cultural norms can restrict participation.",
+  "Existing social capital, cohesion and the reach of social networks affect learning, adoption and diffusion."
+ ],
+ "key_claims": [
+  {
+   "id": "kc1",
+   "claim": "Adequate resources and appropriately trained facilitators are needed to deliver participatory farmer field schools effectively, especially at scale.",
+   "refs": [
+    "b_inception",
+    "b_training",
+    "l1",
+    "a1"
+   ],
+   "where": "Section 5.3, General inputs and Facilitators; Figure 31; summary Figure 13",
+   "verdict": {
+    "raw": "some studies reported a lack of (timely) funding and inadequate provision of resources, including inputs and finances, as potential reasons for implementation failures",
+    "scale": "partly",
+    "quote": "a lack of appropriate training, resources and ongoing support of facilitators",
+    "page": 129,
+    "studies": [
+     "Pedersen et al. 2008",
+     "Najjar 2009",
+     "Winarto 2004",
+     "DANIDA 2011",
+     "Gottret & Córdoba 2004",
+     "Hofisi 2003",
+     "Rola & Baril 1997",
+     "Simpson 1997"
+    ]
+   }
+  },
+  {
+   "id": "kc2",
+   "claim": "Appropriate targeting and accessible, relevant training allow intended farmers to participate and learn; exclusion, competing demands and unsuitable delivery cause attrition.",
+   "refs": [
+    "a2",
+    "a3",
+    "b_training",
+    "l2"
+   ],
+   "where": "Section 6.1, Farmer targeting and participation; summary Figure 13 funnel",
+   "verdict": {
+    "raw": "Overall, the review identified several key barriers related to targeting, such as inappropriate selection criteria and targeting procedures, and structural barriers to participation such as gender, poverty and cultural norms.",
+    "scale": "partly",
+    "quote": "the results, though suggestive of benefits for higher socioeconomic status, were not conclusive",
+    "page": 144,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc3",
+   "claim": "Season-long farmer field school training increases participants’ knowledge of beneficial farming practices.",
+   "refs": [
+    "b_training",
+    "b_capacity",
+    "l2"
+   ],
+   "where": "Figures 13–14 and 31; Section 6.1 Knowledge; summary Figure 13 funnel",
+   "verdict": {
+    "raw": "The finding across three medium-risk-of-bias studies suggested consistent increases in knowledge for FFS farmers of 0.21 standard deviations in test scores over comparison farmers",
+    "scale": "supports",
+    "quote": "Knowledge outcomes improved across all FFS curricula, although they were greatest for IPM-FFS graduates.",
+    "page": 144,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc4",
+   "claim": "Learning leads participants to adopt beneficial practices, but adoption depends on relevant practices, social support and access to resources and complementary inputs.",
+   "refs": [
+    "l3",
+    "b_adoption",
+    "a4",
+    "a5"
+   ],
+   "where": "Section 6.1 adoption discussion; Section 6.4; Figure 31; summary Figure 13 funnel",
+   "verdict": {
+    "raw": "farmers appear to learn as a result of training, they adopt simple practices such as reduced pesticide use in the case of IPM",
+    "scale": "partly",
+    "quote": "field schools involving farmers who were of higher socioeconomic status (measured by education and landholdings) tended to have greater impacts in terms of adoption as well as agricultural outcomes",
+    "page": 149,
+    "studies": [
+     "Dolly 2009",
+     "Gottret & Córdoba 2004",
+     "Palis 2002",
+     "Simpson 1997",
+     "DANIDA 2011",
+     "Machacha 2008",
+     "Mancini et al. 2007",
+     "Najjar 2009",
+     "Van Der Wiele 2004"
+    ]
+   }
+  },
+  {
+   "id": "kc5",
+   "claim": "Adopting improved practices increases participating farmers’ yields, principally in short-term pilot evaluations.",
+   "refs": [
+    "l5",
+    "b_farmer_outcomes",
+    "a6"
+   ],
+   "where": "Figures 19–20; Tables 14–17; Section 6.2",
+   "verdict": {
+    "raw": "a 13 per cent increase in yields on average across medium-risk-of-bias studies",
+    "scale": "supports",
+    "quote": "evidence for publication bias for yields outcomes, suggesting effects may be smaller or non-significant",
+    "page": 149,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc6",
+   "claim": "Improved production and lower input costs increase participating farmers’ net revenues.",
+   "refs": [
+    "l5",
+    "b_farmer_outcomes"
+   ],
+   "where": "Figure 22; Tables 18–19; Section 6.2",
+   "verdict": {
+    "raw": "19 per cent increase in profits or net revenues",
+    "scale": "supports",
+    "quote": "a likely consequence of the combination of both improved agricultural output and reduced costs in terms of pesticide use",
+    "page": 149,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc7",
+   "claim": "Changes in farming practices can reduce environmental harm from participants’ pesticide use.",
+   "refs": [
+    "b_adoption",
+    "l5",
+    "b_farmer_outcomes"
+   ],
+   "where": "Summary of Findings Table 1, environmental outcomes; Figure 31",
+   "verdict": {
+    "raw": "FFS may reduce the environmental impact quotient by 39% on average relative to comparison group",
+    "scale": "supports",
+    "quote": "39% reduction in environmental impact quotient",
+    "page": 22,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc8",
+   "claim": "Capacity building can empower participants through confidence, agency, collaboration and improved social status.",
+   "refs": [
+    "l4",
+    "b_empowerment"
+   ],
+   "where": "Figure 26; Summary of Findings Table 1; Sections 6.1 and Authors’ conclusions; Figure 31",
+   "verdict": {
+    "raw": "The evidence on the impact of FFS on empowerment for FFS participants is inconclusive",
+    "scale": "insufficient",
+    "quote": "A few studies suggest farmers feel greater self-confidence.",
+    "page": 12,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc9",
+   "claim": "Participants’ adoption and dissemination activities spread IPM knowledge to neighbouring non-participants.",
+   "refs": [
+    "l6",
+    "l7",
+    "b_dissemination",
+    "b_diffusion"
+   ],
+   "where": "Section 6.3; Figure 31; summary Figure 13 funnel",
+   "verdict": {
+    "raw": "Overall, studies found no significant change in knowledge among FFS neighbours over comparison farmers.",
+    "scale": "against",
+    "quote": "there is no evidence that diffusion from FFS participants to non-participating neighbour farmers usually happens",
+    "page": 18,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc10",
+   "claim": "Neighbour learning leads to adoption and improved agricultural and environmental outcomes.",
+   "refs": [
+    "l8",
+    "l9",
+    "b_neighbour_adoption",
+    "b_neighbour_outcomes"
+   ],
+   "where": "Summary of Findings Table 1; Figures 19–20 and 32; Section 6.3",
+   "verdict": {
+    "raw": "There was also no evidence for improvements among neighbours on pesticide use, yields or environmental impact quotient.",
+    "scale": "against",
+    "quote": "FFS may not have any diffusion effect on yields",
+    "page": 24,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc11",
+   "claim": "Diffusion depends on observable advantages, social connections and suitable participants; simple practices may diffuse under favourable conditions.",
+   "refs": [
+    "a7",
+    "a8",
+    "l6",
+    "l8"
+   ],
+   "where": "Section 6.3, Contextual factors and Targeting FFS farmers; Figure 31",
+   "verdict": {
+    "raw": "there may have been diffusion in terms of reduced pesticide use and improved yields among cotton growers in the short term (less than two years after FFS training), where field schools targeted participants who were more highly educated",
+    "scale": "partly",
+    "quote": "The findings should be interpreted with caution due to the limited sample size.",
+    "page": 153,
+    "studies": [
+     "David 2007",
+     "Gottret & Córdoba 2004",
+     "Palis 2002",
+     "Rola & Baril 1997",
+     "Simpson 1997",
+     "Machacha 2008",
+     "Van de Fliert 1993",
+     "Winarto 2004"
+    ]
+   }
+  },
+  {
+   "id": "kc12",
+   "claim": "Participants’ and neighbours’ benefits persist over time and can be maintained when programmes scale up.",
+   "refs": [
+    "l10",
+    "l11",
+    "l12",
+    "a9",
+    "b_sustainability"
+   ],
+   "where": "Sections 6.2–6.3; Authors’ conclusions; Figure 31; summary Figure 13 funnel",
+   "verdict": {
+    "raw": "However, there is no evidence of effects on outcomes over the longer term (follow-up surveys greater than two years after implementation) in programmes which have been scaled up nationwide.",
+    "scale": "against",
+    "quote": "even in a few cases where diffusion appeared to occur, the evidence does not suggest diffusion to non-participants is sustained over time",
+    "page": 18,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "The results of meta-analysis provide evidence that FFS are effective in improving intermediate and final outcomes among farmers participating in the training.",
+   "scale": "partly",
+   "quote": "The evidence of positive effects on agricultural outcomes is largely limited to short-term evaluations of pilot programmes.",
+   "page": 12,
+   "studies": []
+  },
+  "weakest_links": [
+   "l4",
+   "l6",
+   "l7",
+   "l8",
+   "l9",
+   "l10",
+   "l11",
+   "l12"
+  ],
+  "strongest_links": [
+   "l2",
+   "l3",
+   "l5"
+  ],
+  "summary": "FFS participants appear to learn, adopt beneficial practices and improve yields and revenues, with positive evidence largely confined to short-term pilot programmes. Neighbouring non-participants generally do not gain IPM knowledge or improve adoption and agricultural outcomes. Positive effects are not established for nationwide scaled-up programmes or longer follow-up. Empowerment evidence is inconclusive. The rigorous evidence base is small, no studies were judged low risk of bias, yields may be affected by publication bias, and qualitative findings are suggestive rather than definitive.",
+  "recommendations": [
+   "Interpret positive participant effects cautiously because the rigorous evidence base is small and contains no low-risk-of-bias studies.",
+   "Consider targeting, participation barriers, facilitator training and implementation quality when designing and delivering FFS.",
+   "Consider social networks and sources of social capital when seeking to facilitate diffusion."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/ffs_waddington_2014_full_p34.png', 'downloads/pages/ffs_waddington_2014_full_p144.png', 'downloads/pages/ffs_waddington_2014_summary_p21.png', 'downloads/pages/ffs_waddington_2014_summary_p34.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "Figure 31 is transcribed as the populated revision of Figure 4. Summary Figure 8 uses a different nine-box presentation, and summary Figure 13 is an attrition funnel; neither is separately transcribed.",
+   "figure_pages retains the supplied file-page numbers: full review 34 and 144, summary 21 and 34. Verdict pages use printed page numbers; Figure 31 is printed page 143 and Figure 4 is printed page 33.",
+   "The full bibliographic title, URLs, licence and evidence-level coding rubric were not supplied on the extracted pages. The title identifies the review; evidence_level A reflects the explicit integrated evidence synthesis but requires checking against the dataset rubric.",
+   "Figure 31 has no explicit input/output/short-term/long-term layer headings. Layers are mapped from intervention components, causal position and outcome descriptions; sustainability is mapped to impact.",
+   "The grey dashed outer frame is not a container because no arrow starts or ends at it.",
+   "Pink assumption panels are represented as assumptions, not result boxes. Their dotted arrows point to causal steps or arrow junctions. The first panel is mapped to l1; the upper-right diffusion panel is mapped to l6 and l7, but its precise junction is crowded.",
+   "The participant agricultural-outcomes-to-sustainability arrow appears dashed and is recorded as evidence needed, with medium reading confidence. The text separately reports no positive effects at longer follow-up and national scale; that finding is retained in kc12.",
+   "Grouped assumption verdicts describe the evidence for the panel or related barriers, not proof that every listed condition holds. Italic statements are separated where visible and marked evidence not found.",
+   "The supported agricultural-outcomes arrow must not be read as separate demonstrated effects on every item in its box. The supplied text gives clear findings for yields, revenues and environmental impact quotient, but no distinct health-effect verdict.",
+   "The summary funnel additionally states that participation barriers may affect 25–40% of potential beneficiaries and perhaps one-third of attendees may not acquire skills. It identifies exclusion of poorer farmers and women, time constraints, dropout, top-down facilitation, unsuitable techniques, unconducive incentives, weak diffusion and inadequate follow-up. These findings are covered by kc1–kc4 and kc9–kc12; the supplied image does not identify study-level sources for its numerical attrition statements.",
+   "Recommendations are limited to implications stated in the supplied excerpts. The complete policy and programme recommendations were not supplied.",
+   "No single study reported all outcomes along the causal chain. Diagram-level verdicts therefore represent the review’s integrated synthesis, not a single study testing the entire pathway."
+  ],
+  "source_sha256": "eb17b22bfa1cc399427a003f6781b469b58e0c0081f95dfe81464c3683be669c",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

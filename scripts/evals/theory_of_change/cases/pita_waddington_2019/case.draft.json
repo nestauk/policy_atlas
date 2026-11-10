@@ -1,0 +1,601 @@
+{
+ "meta": {
+  "id": "pita_waddington_2019",
+  "title": "Citizen engagement interventions: participation, inclusion, transparency and accountability in public services",
+  "organisation": "",
+  "year": 2019,
+  "country": "Low- and middle-income countries",
+  "topic": "Citizen engagement and public service delivery",
+  "intervention_type": "programme",
+  "timing": "synthesis",
+  "doc_url": "https://3ieimpact.org/sites/default/files/2019-06/SR43-PITA-report.pdf",
+  "landing_url": "https://doi.org/10.1002/cl2.1025",
+  "licence": "",
+  "figure_pages": [],
+  "evidence_level": "A",
+  "verdict_source": "evidence_synthesis",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Improve the effectiveness and responsiveness of public services and institutions and citizens’ social and economic wellbeing.",
+  "population": "Citizens using public services, including marginalized groups, and the public officials and service providers responsible for those services.",
+  "place": "Low- and middle-income countries.",
+  "time_horizon": "Varies across programmes; the review searched reports produced from 2000 through 2018. No common intervention duration or follow-up horizon is specified in the supplied material.",
+  "intervention": "Programmes incorporating participation, inclusion, transparency or accountability into public service delivery. The transcribed strand provides individuals and communities with information about their public-service entitlements; delivery frequency and dosage vary and are not specified here.",
+  "context": "The review examines the added value of citizen engagement relative to otherwise similar programmes without these characteristics. Public services commonly operate in resource-poor settings with unequal power, limited administrative capacity and barriers to reaching disadvantaged communities.",
+  "outcome_first": "Develop a theory of change for improving responsive public services and citizens’ social and economic wellbeing in low- and middle-income countries. Consider public-service users, including marginalized groups, and the institutions responsible for serving them.",
+  "intervention_first": "Develop a theory of change for providing citizens with information about their public-service entitlements in low- and middle-income countries. The intended change is more effective and responsive services and improved social and economic wellbeing, including for marginalized groups."
+ },
+ "containers": [],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "Interventions increase individuals’ and common knowledge about rights to services and quality standards",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_merit",
+   "label": "Merit good",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_public",
+   "label": "Public good",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b2",
+   "label": "Organized community engagement (through CSO) builds coalitions of support from political and private actors, strengthens citizens’ voice and power of social sanctions threat",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b3",
+   "label": "Citizens put pressure on service deliverers; change in citizens’ knowledge successfully shifts power balance",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_failure",
+   "label": "Social sanction threat from disjointed citizen voices is not strong enough to trigger service provider behaviour changes to improve service delivery",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b4",
+   "label": "Supply-side actors respond to citizen pressure and implement improvements in efficiency, effectiveness, and/or equity of public service delivery",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "Overall, the interventions do not necessarily improve provider responsiveness, although there is a significant improvement in the case of food subsidies in Indonesia (Banerjee et al., 2018).",
+    "scale": "partly",
+    "quote": "do not necessarily improve provider responsiveness",
+    "page": 57,
+    "studies": [
+     "Banerjee et al. 2018"
+    ]
+   }
+  },
+  {
+   "id": "b5",
+   "label": "Increased access to public services",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "Service access also improves (SMD=0.11, 95%CI=0.05, 0.17; 2 studies) and costs fall (SMD=0.14, 95%CI=0.08, 0.21; one study, Banerjee et al., 2018) across the few studies available measuring those outcomes.",
+    "scale": "supports",
+    "quote": "Service access also improves",
+    "page": 57,
+    "studies": [
+     "Banerjee et al. 2018"
+    ]
+   }
+  },
+  {
+   "id": "b6",
+   "label": "Use of, and satisfaction with, public services increases",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "However, the evidence does not suggest service use typically improves, with partial exception of user satisfaction that increases slightly but not significant across 2 studies (SMD=0.16, 95%CI=-0.03, 0.15; 2 studies).",
+    "scale": "against",
+    "quote": "the evidence does not suggest service use typically improves",
+    "page": 57,
+    "studies": []
+   }
+  },
+  {
+   "id": "b7",
+   "label": "Improved social and economic development outcomes for users",
+   "layer": "impact",
+   "container": null,
+   "verdict": {
+    "raw": "Only a single study (Kasim, 2016) measured any wellbeing or state-society relations outcomes, and did not report any significant changes (Figure 16).",
+    "scale": "against",
+    "quote": "did not report any significant changes",
+    "page": 57,
+    "studies": [
+     "Kasim 2016"
+    ]
+   }
+  },
+  {
+   "id": "b8",
+   "label": "Increased perceptions of State legitimacy and effectiveness",
+   "layer": "impact",
+   "container": null,
+   "verdict": {
+    "raw": "Only a single study (Kasim, 2016) measured any wellbeing or state-society relations outcomes, and did not report any significant changes (Figure 16).",
+    "scale": "against",
+    "quote": "did not report any significant changes",
+    "page": 57,
+    "studies": [
+     "Kasim 2016"
+    ]
+   }
+  },
+  {
+   "id": "b_context",
+   "label": "Demand-side stakeholders: Community leaders; wider community members, including marginalised groups; civil society groups\nSupply-side stakeholders: Public and civil servants; public officials; public service providers\nContext: Low levels of education and capacity amongst frontline supply and demand side stakeholders; high turnover of supply-side stakeholders; resource poor communities; high levels of inequality; weak state capacity or reach; frequent access challenges, due to remoteness and/or insecurity; and endemic corruption.",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b_merit",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l2",
+   "source": "b1",
+   "target": "b_public",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l3",
+   "source": "b_merit",
+   "target": "b3",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l4",
+   "source": "b_merit",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l5",
+   "source": "b_public",
+   "target": "b2",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l6",
+   "source": "b_public",
+   "target": "b_failure",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Social sanction threat from disjointed citizen voices is not strong enough to trigger service provider behaviour changes to improve service delivery",
+    "scale": "supports",
+    "quote": "not strong enough to trigger service provider behaviour changes",
+    "page": 87,
+    "studies": []
+   }
+  },
+  {
+   "id": "l7",
+   "source": "b2",
+   "target": "b3",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l8",
+   "source": "b3",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l9",
+   "source": "b3",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l10",
+   "source": "b4",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l11",
+   "source": "b5",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l12",
+   "source": "b6",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l13",
+   "source": "b6",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l14",
+   "source": "b7",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "assumption",
+   "text": "Assumption: Bottleneck is correctly identified as lack of information amongst users",
+   "links": [
+    "l1",
+    "l2"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a2",
+   "kind": "assumption",
+   "text": "Facilitator: Some engagement with supply-side actors in intervention design and implementation",
+   "links": [
+    "l1",
+    "l2"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a3",
+   "kind": "assumption",
+   "text": "Moderators: Public versus private good targeted; collective community action engaged",
+   "links": [
+    "l1",
+    "l2"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a4",
+   "kind": "assumption",
+   "text": "Moderator: If bottleneck was lack of information about existing access OR about denied access (quantity or quality)",
+   "links": [
+    "l3"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a5",
+   "kind": "assumption",
+   "text": "Assumption: Public service supply chains function effectively enough for service provision; Those accountable for improving service delivery have the authority & control over resource allocation to do so",
+   "links": [
+    "l10"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a6",
+   "kind": "assumption",
+   "text": "Assumption: Sustained support to institutionalise the improvements",
+   "links": [
+    "l13"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  }
+ ],
+ "context": [
+  "Demand-side stakeholders include community leaders, wider community members including marginalized groups, and civil society groups.",
+  "Supply-side stakeholders include public and civil servants, public officials and public service providers.",
+  "Low education and capacity, high public-official turnover, resource poverty, inequality, weak state reach, remoteness, insecurity and endemic corruption affect implementation.",
+  "The evidence base is geographically skewed towards Sub-Saharan Africa and India, with no included studies from North Africa or the Middle East.",
+  "The review evaluates the added value of PITA characteristics and excludes studies combining these with co-interventions to increase service-delivery resources or capacity."
+ ],
+ "key_claims": [
+  {
+   "id": "k1",
+   "claim": "Providing rights information increases citizens’ knowledge and participation in service governance.",
+   "refs": [
+    "b1",
+    "b3",
+    "l3"
+   ],
+   "where": "Section 4.3.1; Figure 15",
+   "verdict": {
+    "raw": "The evidence suggests rights information interventions improve active participation (SMD=0.25, 95%CI0.18, 0.31; 2 studies), as well as knowledge about services (SMD=0.13, 95%CI=0.07, 0.18; 2 studies) and meeting attendance (individual effect estates are positive and significant for Ravallion et al., 2013, and Olken, 2007).",
+    "scale": "supports",
+    "quote": "rights information interventions improve active participation",
+    "page": 57,
+    "studies": [
+     "Ravallion et al. 2013",
+     "Olken 2007"
+    ]
+   }
+  },
+  {
+   "id": "k2",
+   "claim": "Organized collective action and collaborative engagement strengthen citizens’ ability to obtain provider responses; disjointed voices may not create a sufficient sanction threat.",
+   "refs": [
+    "b2",
+    "b_failure",
+    "l5",
+    "l6",
+    "l7",
+    "a2",
+    "a3"
+   ],
+   "where": "Figure 28; implications for policy makers and practitioners",
+   "verdict": {
+    "raw": "Interventions that work through local civil society and stimulate capacity for collective action, particularly amongst vulnerable groups, may be more effective than those that rely on engaging unorganized citizens. Citizen-service provider engagement is more effective when implemented through phased, facilitated processes that are framed collaboratively, as opposed to one-off accountability meetings that are interpreted as confrontational. Social sanction threat from disjointed citizen voices is not strong enough to trigger service provider behaviour changes to improve service delivery.",
+    "scale": "partly",
+    "quote": "may be more effective than those that rely on engaging unorganized citizens",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "k3",
+   "claim": "Pressure generated by rights information induces providers to improve service delivery.",
+   "refs": [
+    "b3",
+    "b4",
+    "l9"
+   ],
+   "where": "Section 4.3.1; Figure 15; Figure 28",
+   "verdict": {
+    "raw": "Overall, the interventions do not necessarily improve provider responsiveness, although there is a significant improvement in the case of food subsidies in Indonesia (Banerjee et al., 2018).",
+    "scale": "partly",
+    "quote": "do not necessarily improve provider responsiveness",
+    "page": 57,
+    "studies": [
+     "Banerjee et al. 2018"
+    ]
+   }
+  },
+  {
+   "id": "k4",
+   "claim": "Rights information improves access to public services and reduces the costs citizens pay.",
+   "refs": [
+    "b5",
+    "l4",
+    "l8",
+    "a4"
+   ],
+   "where": "Section 4.3.1; Figure 15",
+   "verdict": {
+    "raw": "Service access also improves (SMD=0.11, 95%CI=0.05, 0.17; 2 studies) and costs fall (SMD=0.14, 95%CI=0.08, 0.21; one study, Banerjee et al., 2018) across the few studies available measuring those outcomes.",
+    "scale": "supports",
+    "quote": "Service access also improves",
+    "page": 57,
+    "studies": [
+     "Banerjee et al. 2018"
+    ]
+   }
+  },
+  {
+   "id": "k5",
+   "claim": "Improved access and provider responses under rights-information programmes increase service use and satisfaction.",
+   "refs": [
+    "b6",
+    "l10",
+    "l11",
+    "a5"
+   ],
+   "where": "Section 4.3.1; Figure 16",
+   "verdict": {
+    "raw": "However, the evidence does not suggest service use typically improves, with partial exception of user satisfaction that increases slightly but not significant across 2 studies (SMD=0.16, 95%CI=-0.03, 0.15; 2 studies).",
+    "scale": "against",
+    "quote": "the evidence does not suggest service use typically improves",
+    "page": 57,
+    "studies": []
+   }
+  },
+  {
+   "id": "k6",
+   "claim": "Rights-information programmes ultimately improve wellbeing and perceptions of state legitimacy and effectiveness.",
+   "refs": [
+    "b7",
+    "b8",
+    "l12",
+    "l13",
+    "l14",
+    "a6"
+   ],
+   "where": "Section 4.3.1; Figure 16; Figure 28",
+   "verdict": {
+    "raw": "Only a single study (Kasim, 2016) measured any wellbeing or state-society relations outcomes, and did not report any significant changes (Figure 16).",
+    "scale": "against",
+    "quote": "did not report any significant changes",
+    "page": 57,
+    "studies": [
+     "Kasim 2016"
+    ]
+   }
+  },
+  {
+   "id": "k7",
+   "claim": "Across citizen-engagement programmes, engagement improves more reliably than provider action, especially where users do not interact directly with providers.",
+   "refs": [],
+   "where": "Key Findings; Figures 13–14; Section 8.1",
+   "verdict": {
+    "raw": "The average pooled effect on user engagement was an increase of 0.23 standard deviations in the typical outcome measure across all PITA mechanisms and interventions. Yet, the ability of interventions promoting citizen engagement to realize effects on provider actions was limited. Only interventions targeting public services delivered by frontline provider staff, such as healthcare, were able to trigger improvements in service provider staff actions. Interventions targeting services delivered without public interaction, such as infrastructure, may only be effective in triggering provider responses if civil society organizations with high local social capital are engaged to shift the balance of power between service providers and service users.",
+    "scale": "partly",
+    "quote": "the ability of interventions promoting citizen engagement to realize effects on provider actions was limited",
+    "page": 5,
+    "studies": []
+   }
+  },
+  {
+   "id": "k8",
+   "claim": "Citizen engagement improves service access and quality, but does not consistently reduce absenteeism, embezzlement or access costs.",
+   "refs": [],
+   "where": "Section 4.1.1; Figure 9",
+   "verdict": {
+    "raw": "The overall findings suggest some improvement in access for some measures of service delivery (Figure 9). This is demonstrated by an increase in average effects of physical access (SMD=0.08, 95% confidence interval (CI)=0.00, 0.15; 12 studies), and service quality (SMD=0.10, 95%CI=0.03, 018; 16 studies). However, improvements in other outcomes were not apparent, including for absenteeism (SMD=0.02, 95% confidence interval (CI)=-0.19, 0.24; four studies), embezzlement (SMD=0.02, 95% confidence interval (CI)=-0.18, 0.21; four studies) or costs paid for access (SMD=0.07, 95% confidence interval (CI)=-0.11, 0.24; 2 studies).",
+    "scale": "partly",
+    "quote": "some improvement in access for some measures of service delivery",
+    "page": 41,
+    "studies": []
+   }
+  },
+  {
+   "id": "k9",
+   "claim": "Citizen engagement alone produces only limited and inconsistent improvements in service use, wellbeing and state-society relations.",
+   "refs": [],
+   "where": "Key Findings; Section 4.1; implications for policy makers and practitioners; Section 7.6",
+   "verdict": {
+    "raw": "Citizen engagement efforts improved access to and quality of public services by an overall pooled effect size of 0.10 standard deviations, but did not systematically improve service use. Such efforts led to improvements in well-being by 0.10 standard deviations, for some health outcomes (disease incidence) and livelihoods (income), but these overall changes tended to be small in magnitude and were not observable consistently across all outcomes analyzed. Satisfaction with and confidence in state society relations improved in some cases, but the diversity in experiences made it difficult to draw strong conclusions. Citizen engagement interventions alone are not likely to improve key well-being outcomes for citizens. For state-society relations, payment of taxes may increase.",
+    "scale": "partly",
+    "quote": "these overall changes tended to be small in magnitude",
+    "page": 5,
+    "studies": []
+   }
+  },
+  {
+   "id": "k10",
+   "claim": "Intervention design and enabling institutions determine whether engagement translates into improved services and wellbeing.",
+   "refs": [],
+   "where": "Section 4.3; Key Findings; Section 7, CBNRM discussion; Section 8.1",
+   "verdict": {
+    "raw": "Interventions focusing on rights information and community feedback appear may be effective in improving user engagement and service access. Interventions promoting participatory planning can be effective in improve service access, particularly where implementation is fully devolved through community-based natural resource committees, where wellbeing and state-society relations may also increase. On the other hand, interventions promoting performance information are not generally effective in improving any outcomes. Strong local buy-in from front-line service providers for the intervention. Where there were multiple vague and overlapping policies governing natural resource use, officials were more able to adjust or block full implementation of CBNRM in a way that preserved their power and control over resource benefit access. Access to alternative livelihoods such as tourism may still enable communities to realize the joint socio-economic and environmental objectives of CBNRM. Community management may not be appropriate in contexts prone to illegal logging or poaching, where attempts to enforce regulations may endanger community members.",
+    "scale": "partly",
+    "quote": "It is difficult to draw strong conclusions given the small sample sizes available at the individual intervention level.",
+    "page": 57,
+    "studies": []
+   }
+  },
+  {
+   "id": "k11",
+   "claim": "Equitable benefits require context-specific measures to include vulnerable groups, but evidence on differences by sex, poverty and geography is limited.",
+   "refs": [],
+   "where": "Section 4.4; Tables 13–14; implications for policy makers and practitioners",
+   "verdict": {
+    "raw": "Interventions that do not incorporate specific measures to facilitate the inclusion of vulnerable groups may not realize equitable outcomes for those groups in the short-term. The results, presented in Table 13, do not suggest there are differences in outcomes by sex, where outcomes for both men and women are reported in the same studies. Ananthpur et al. (2014) suggests that the positive wellbeing outcomes measured among men are not seen among women. However, there are very few observations where studies report sex disaggregated effects, and when they do the confidence intervals overlap, so any differences can be interpreted as statistically insignificant. The review does not draw conclusions for different populations (socio-economic groups and gender) or geographic groups, due to the small sample of studies that incorporated such analysis across a wide range of geographies, interventions and outcomes.",
+    "scale": "insufficient",
+    "quote": "there are very few observations where studies report sex disaggregated effects",
+    "page": 79,
+    "studies": [
+     "Ananthpur et al. 2014",
+     "Ravallion et al. 2013",
+     "Palladium 2015"
+    ]
+   }
+  },
+  {
+   "id": "k12",
+   "claim": "Engagement improves access more consistently for merit goods than for pure public goods, without reliably increasing service use in either category.",
+   "refs": [],
+   "where": "Section comparing pure public and merit goods; Figure 34",
+   "verdict": {
+    "raw": "The findings show positive effects for all outcome sub-categories (physical access, service cost, quality of service, absenteeism) for merit goods, but insignificant findings for pure public goods outcomes. There are no significant effects for service use variables; pooled effects for merit goods were positive in several cases, including health service use (SMD=0.36, 95%CI=-0.15, 0.88), user satisfaction (SMD=0.07, 95%CI=-0.03, 0.18) and perceived quality of staff (SMD=0.06, 95%CI=-0.06, 0.18), where they were null or negative for health service use, user satisfaction and quality of staff.",
+    "scale": "partly",
+    "quote": "positive effects for all outcome sub-categories ... for merit goods, but insignificant findings for pure public goods outcomes",
+    "page": 114,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "Although interventions to improve governance via the “short route” between service users and service providers are often effective in engaging citizens in service delivery and improving access to and quality of services, citizen engagement interventions alone are not likely to improve key well-being outcomes for citizens.",
+   "scale": "partly",
+   "quote": "citizen engagement interventions alone are not likely to improve key well-being outcomes",
+   "page": 7,
+   "studies": []
+  },
+  "weakest_links": [
+   "l6",
+   "l9"
+  ],
+  "strongest_links": [],
+  "summary": "Interventions usually improve citizen engagement and service access or quality, but are not often able to elicit strong public-service responses. Rights information and stronger accountability components appear relatively promising, although comparisons are tentative given heterogeneity and small samples. In the rights-information strand, participation, knowledge and access improve, provider responsiveness is mixed, and service use, wellbeing and state-society relations do not generally improve. Disjointed citizen voices may fail to create a sufficient social sanction threat. The evidence base limits conclusions about population differences, contextual moderators, generalizability and cost-effectiveness. Most non-randomized studies have selection-bias concerns, and self-reported outcomes create measurement concerns even in randomized studies.",
+  "recommendations": [
+   "Work through local civil society and strengthen capacity for collective action, particularly among vulnerable groups.",
+   "Use phased, facilitated and collaboratively framed citizen-provider engagement rather than one-off confrontational accountability meetings.",
+   "Adapt inclusion measures to local barriers and needs.",
+   "Secure local provider buy-in and attend to whether accountable actors have authority and resources to respond.",
+   "Investigate complementary interventions along the service-delivery supply chain; the review cannot conclusively establish their added value because combined interventions were outside its scope.",
+   "Improve reporting of contextual characteristics, sampling, generalizability and costs, and strengthen preregistration and safeguards against measurement bias."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/pita_waddington_2019_p21.png', 'downloads/pages/pita_waddington_2019_p100.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "The full bibliographic title, organisation, URLs and licence are not supplied. The metadata title is descriptive rather than a verified publication title.",
+   "Figure 28, the supplied refined rights-information theory, is transcribed. Figure 2 is the indicative overview; Figures 29–32 are separate refined theories for performance information, citizen monitoring and feedback, participatory planning, and community-based natural resource management. Those figures were not supplied. The excerpts test all five groups and do not establish which single group is tested most.",
+   "figure_pages uses supplied PDF page numbers 21 and 100. Most verdict page numbers use printed report pagination, including 57, 79, 87 and 114. Executive-summary verdicts use supplied PDF page numbers 5 and 7 because their printed pagination is Roman.",
+   "Figure 28 has no layer headings. Layers are mapped from the indicative theory's description of immediate, intermediate and endpoint outcomes, rather than treating Block numbers as layer headings.",
+   "Dashed arrows are transcribed as drawn, not as inferred arrows. Their meaning is not explicitly defined in a legend. No evidence scale has been assigned solely from dashed styling.",
+   "l6 supports the explicitly drawn failure pathway, not a successful provider response. It is listed among weakest links because the source identifies insufficient sanctions as a failure mechanism.",
+   "Facilitator and moderator bubbles are represented in the assumption schema, whose kind field has no facilitator or moderator option. Their original wording is retained.",
+   "The bottom stakeholder/context rectangle is retained as one context box, without links or a container. The oval assumptions are not boxes.",
+   "The source reports SMD=0.16 with a confidence interval of -0.03 to 0.15 for rights-information user satisfaction. This apparent inconsistency is retained rather than corrected.",
+   "Several claim verdicts combine excerpts from different pages; their page field identifies the principal finding. k2 also draws on printed page 87, k9 on printed pages 41 and 125, k10 on PDF page 5 and printed page 124, and k11 on PDF pages 5 and 7.",
+   "The source does not explicitly rank strongest causal links, so strongest_links is empty. Stage-level pooled outcome effects are not treated as direct estimates of individual causal arrows.",
+   "Only supplied findings are captured. Detailed results in unsupplied forest plots, subgroup tables and refined diagrams cannot be recovered from their titles.",
+   "The meaning of evidence-level categories A, B and C was not specified; A is used for the systematic evidence synthesis."
+  ],
+  "source_sha256": "bd46cbc28c42009bb825962f26919380e86c4b3b1c6cac805aac8cb1954cc3a6",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

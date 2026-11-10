@@ -1,0 +1,13 @@
+{
+ "file": "downloads/agritech_catalyst_interim.pdf",
+ "doc_url": "https://assets.publishing.service.gov.uk/media/5f0851b4e90e0712c7aa02cc/agritech-catalyst-phase-1-report.pdf",
+ "landing_url": "https://www.gov.uk/government/publications/agri-tech-catalyst-atc-programme-interim-impact-evaluation",
+ "retrieved": "2026-11-09",
+ "figures": [
+  "downloads/pages/agritech_catalyst_interim_p32.png",
+  "downloads/pages/agritech_catalyst_interim_p33.png",
+  "downloads/pages/agritech_catalyst_interim_p102.png",
+  "downloads/pages/agritech_catalyst_interim_p106.png"
+ ],
+ "notes": "Figure(s): p32 Figure 3-1 logic model; p33 Figure 3-3 ToC; p102 Figure 8-1 progress table; p106 Figure 8-2 ToC in practice. Verdict scale: \"\u2713\u2713\u2713 strong progress; \u2713\u2713 some evidence of progress; \u2713 limited progress to date\"; Fig 8-2 green enablers / red barriers. Timing: retrospective (original logic model, ToC in practice). Element-level ticks, not per arrow; Fig 8-2 annotations in small coloured text; phase 2 report not downloaded; p33 PNG not inspected (Prepared from the longlist row; figures rendered by the checking agent.)"
+}

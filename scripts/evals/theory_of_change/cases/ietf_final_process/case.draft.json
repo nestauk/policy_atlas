@@ -1,0 +1,827 @@
+{
+ "meta": {
+  "id": "ietf_final_process",
+  "title": "Evaluation of Industrial Energy Transformation Fund: Final Process Evaluation",
+  "organisation": "Department for Energy Security and Net Zero (DESNZ)",
+  "year": 0,
+  "country": "United Kingdom",
+  "topic": "Industrial energy efficiency and decarbonisation",
+  "intervention_type": "fund",
+  "timing": "prospective",
+  "doc_url": "https://assets.publishing.service.gov.uk/media/6972cbf6d8adeaf266040583/ietf-final-process-evaluation.pdf",
+  "landing_url": "https://www.gov.uk/government/publications/evaluation-of-the-industrial-energy-transformation-fund-ietf",
+  "licence": "",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "ex_post_evaluation",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Support industrial decarbonisation and energy efficiency, contributing to the UK's net zero strategy.",
+  "population": "Industrial businesses, including energy-intensive industries and businesses of different sizes.",
+  "place": "United Kingdom; the precise geographical eligibility is not established in the supplied extracts.",
+  "time_horizon": "Phase 1 and Phase 2 delivery, with programme data through August 2024; longer-term effects extend beyond the final process evaluation.",
+  "intervention": "The Industrial Energy Transformation Fund provides matched capital grants for industrial studies and deployment projects, alongside application and delivery support. Phase 1 and Phase 2 awarded approximately £174.1 million and leveraged an estimated £410.6 million in private capital. Individual grant amounts and standard dosage are not specified in the supplied extracts.",
+  "context": "Energy-intensive industries face low margins and intense competition. The fund fills a gap in capital support for relatively mature technologies and operates alongside emissions trading, mandatory efficiency requirements and other government net zero programmes.",
+  "outcome_first": "Develop a theory of change for improving industrial energy efficiency and reducing industrial carbon emissions in the United Kingdom. Focus on industrial businesses, including energy-intensive firms, and distinguish near-term delivery from longer-term change.",
+  "intervention_first": "Develop a theory of change for the Industrial Energy Transformation Fund, which provides matched grants and associated support to industrial businesses in the United Kingdom. Explain how it is intended to improve industrial energy efficiency and support decarbonisation."
+ },
+ "containers": [],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "1. Private Capital",
+   "layer": "input",
+   "container": null,
+   "verdict": {
+    "raw": "Capital, resources, time from applicants, expertise from DESNZ, and third-party contractors have been made available as inputs to the IETF.",
+    "scale": "supports",
+    "quote": "have been made available as inputs to the IETF",
+    "page": 47,
+    "studies": []
+   }
+  },
+  {
+   "id": "b2",
+   "label": "2. DESNZ Capital",
+   "layer": "input",
+   "container": null,
+   "verdict": {
+    "raw": "Phase 1 and Phase 2 awarded funding totalled around £174.1 million",
+    "scale": "supports",
+    "quote": "awarded funding totalled around £174.1 million",
+    "page": 50,
+    "studies": []
+   }
+  },
+  {
+   "id": "b3",
+   "label": "3. Business Time/Expertise/Resource (incl. Contractors)",
+   "layer": "input",
+   "container": null,
+   "verdict": {
+    "raw": "Capital, resources, time from applicants, expertise from DESNZ, and third-party contractors have been made available as inputs to the IETF.",
+    "scale": "supports",
+    "quote": "have been made available as inputs to the IETF",
+    "page": 47,
+    "studies": []
+   }
+  },
+  {
+   "id": "b4",
+   "label": "4. DESNZ Time/Expertise/Resource",
+   "layer": "input",
+   "container": null,
+   "verdict": {
+    "raw": "Capital, resources, time from applicants, expertise from DESNZ, and third-party contractors have been made available as inputs to the IETF.",
+    "scale": "supports",
+    "quote": "have been made available as inputs to the IETF",
+    "page": 47,
+    "studies": []
+   }
+  },
+  {
+   "id": "b5",
+   "label": "5. Businesses submit good-quality applications to the scheme",
+   "layer": "activity",
+   "container": null,
+   "verdict": {
+    "raw": "Applicants have submitted good quality proposals to the scheme and these proposals have been converted into good quality projects.",
+    "scale": "supports",
+    "quote": "Applicants have submitted good quality proposals",
+    "page": 74,
+    "studies": []
+   }
+  },
+  {
+   "id": "b6",
+   "label": "6. Good-quality projects receive provisional grants from DESNZ subject to their match-funding with private capital",
+   "layer": "activity",
+   "container": null,
+   "verdict": {
+    "raw": "The IETF has allocated grant funding to ‘good quality’ projects across the portfolio",
+    "scale": "supports",
+    "quote": "allocated grant funding to ‘good quality’ projects",
+    "page": 47,
+    "studies": []
+   }
+  },
+  {
+   "id": "b7",
+   "label": "7. Ineligible projects are signposted to other potential sources of funding",
+   "layer": "activity",
+   "container": null,
+   "verdict": {
+    "raw": "The DESNZ team made efforts to signpost applicants to other relevant sources of funding.",
+    "scale": "partly",
+    "quote": "made efforts to signpost applicants",
+    "page": 47,
+    "studies": []
+   }
+  },
+  {
+   "id": "b8",
+   "label": "8. Grants allocated to good quality FEED studies",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b9",
+   "label": "9. Grants are allocated to good quality Energy Efficiency Deployment Projects",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b10",
+   "label": "10. Grants are allocated to good quality Transformational Decarbonisation Projects",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b11",
+   "label": "11. BEIS facilitates knowledge sharing",
+   "layer": "activity",
+   "container": null,
+   "verdict": {
+    "raw": "There is evidence that DESNZ has facilitated knowledge sharing events between industry participants and industrial clusters, primarily through technology showcase events.",
+    "scale": "supports",
+    "quote": "DESNZ has facilitated knowledge sharing events",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "b12",
+   "label": "12. Supporting industry in building a pipeline of projects by co-funding feasibility and engineering studies (financial barrier is overcome)",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "This suggests that studies have been effective in supporting firms to overcome financial barriers.",
+    "scale": "supports",
+    "quote": "effective in supporting firms to overcome financial barriers",
+    "page": 59,
+    "studies": []
+   }
+  },
+  {
+   "id": "b13",
+   "label": "13. Improving the energy efficiency of industrial processes by bringing payback of projects within an investable range for company decision-makers (financial barrier is overcome)",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b14",
+   "label": "14. Incentivising early movers by making the low-carbon investment financially more attractive than the carbon-intensive option (financial barrier is overcome)",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b15",
+   "label": "15. Demonstrating the viability of a range of transformational technologies that can be replicated across UK industry and generating new learning and government knowledge of the costs, risks and benefits of these technologies (capability barrier is overcome)",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "There is some emerging evidence to demonstrate that capability barriers have been overcome",
+    "scale": "partly",
+    "quote": "some emerging evidence",
+    "page": 74,
+    "studies": []
+   }
+  },
+  {
+   "id": "b16",
+   "label": "16. High quality IETF-funded studies are completed which enable decision making on deployment",
+   "layer": "output",
+   "container": null,
+   "verdict": {
+    "raw": "There is strong evidence that IETF grants have supported the completion of high-quality studies.",
+    "scale": "supports",
+    "quote": "completion of high-quality studies",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "b17",
+   "label": "17. IETF-funded EE tech became operational as expected",
+   "layer": "output",
+   "container": null,
+   "verdict": {
+    "raw": "There is evidence that some IETF funded EE and DD deployment projects are now operational as expected, and good indications that the majority of active projects are progressing towards operation as expected.",
+    "scale": "partly",
+    "quote": "some IETF funded EE and DD deployment projects are now operational",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "b18",
+   "label": "18. IETF-funded DD tech became operational as expected",
+   "layer": "output",
+   "container": null,
+   "verdict": {
+    "raw": "There is evidence that some IETF funded EE and DD deployment projects are now operational as expected, and good indications that the majority of active projects are progressing towards operation as expected.",
+    "scale": "partly",
+    "quote": "some IETF funded EE and DD deployment projects are now operational",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "b19",
+   "label": "19. Knowledge is gained by project beneficiaries, consultants, engineers about 'best practice' deploying DD tech and associated costs and benefits",
+   "layer": "output",
+   "container": null,
+   "verdict": {
+    "raw": "Decarbonisation projects were more likely to report learning than EE, though some energy efficiency projects also reported learnings, study projects were more likely to report learning than deployment projects.",
+    "scale": "partly",
+    "quote": "Decarbonisation projects were more likely to report learning than EE",
+    "page": 74,
+    "studies": []
+   }
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l2",
+   "source": "b2",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l3",
+   "source": "b3",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l4",
+   "source": "b4",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l5",
+   "source": "b5",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l6",
+   "source": "b4",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "The DESNZ team made efforts to signpost applicants to other relevant sources of funding.",
+    "scale": "partly",
+    "quote": "made efforts to signpost applicants",
+    "page": 47,
+    "studies": []
+   }
+  },
+  {
+   "id": "l7",
+   "source": "b4",
+   "target": "b11",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "DESNZ allocated resources to supporting projects in showcasing their project outputs.",
+    "scale": "supports",
+    "quote": "allocated resources to supporting projects",
+    "page": 55,
+    "studies": []
+   }
+  },
+  {
+   "id": "l8",
+   "source": "b6",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l9",
+   "source": "b6",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l10",
+   "source": "b6",
+   "target": "b10",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l11",
+   "source": "b8",
+   "target": "b12",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "grants were consistently reported by beneficiaries as essential to enable exploratory studies, by derisking and incentivising matched internal investment.",
+    "scale": "supports",
+    "quote": "essential to enable exploratory studies",
+    "page": 59,
+    "studies": []
+   }
+  },
+  {
+   "id": "l12",
+   "source": "b12",
+   "target": "b16",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Beneficiaries consistently reported that studies helped firms to better understand technologies and costs, with many progressing to further feasibility and development stages, as well as developing business strategies based on the opportunities identified in studies.",
+    "scale": "supports",
+    "quote": "studies helped firms to better understand technologies and costs",
+    "page": 59,
+    "studies": []
+   }
+  },
+  {
+   "id": "l13",
+   "source": "b9",
+   "target": "b13",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "All three stakeholders agree, which provides relatively compelling evidence to support the programme theory set out in the Theory of Change.",
+    "scale": "supports",
+    "quote": "relatively compelling evidence",
+    "page": 63,
+    "studies": []
+   }
+  },
+  {
+   "id": "l14",
+   "source": "b13",
+   "target": "b17",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "there is clear evidence that IETF funding has accelerated energy efficiency deployment projects that otherwise may not have been undertaken or would have been delayed by several years.",
+    "scale": "supports",
+    "quote": "clear evidence that IETF funding has accelerated energy efficiency deployment projects",
+    "page": 74,
+    "studies": []
+   }
+  },
+  {
+   "id": "l15",
+   "source": "b10",
+   "target": "b14",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "All decarbonisation deployment interviewees were positive about the impact of the IETF grant for their projects and identified the funding as important for overcoming anticipated poor payback periods.",
+    "scale": "supports",
+    "quote": "important for overcoming anticipated poor payback periods",
+    "page": 63,
+    "studies": []
+   }
+  },
+  {
+   "id": "l16",
+   "source": "b14",
+   "target": "b18",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Only three DD projects had concluded at the point of the evaluation fieldwork. As a result, there is very little substantive evidence to interrogate.",
+    "scale": "insufficient",
+    "quote": "very little substantive evidence to interrogate",
+    "page": 63,
+    "studies": []
+   }
+  },
+  {
+   "id": "l17",
+   "source": "b18",
+   "target": "b19",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l18",
+   "source": "b19",
+   "target": "b15",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Wider knowledge spillovers to industry from projects have been observed, predominantly through relationships with the industry supply chain.",
+    "scale": "partly",
+    "quote": "predominantly through relationships with the industry supply chain",
+    "page": 74,
+    "studies": []
+   }
+  },
+  {
+   "id": "l19",
+   "source": "b11",
+   "target": "b15",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Beneficiaries reported these as having some benefit for promoting the IETF to new applicants and providing project ideas. The impact of these events within wider industry is less clear at this stage.",
+    "scale": "partly",
+    "quote": "The impact of these events within wider industry is less clear",
+    "page": 48,
+    "studies": []
+   }
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "assumption",
+   "text": "Businesses have sufficiently experienced and knowledgeable staff and/or contractors to prepare good-quality applications and the pre-application and application process is designed effectively by DESNZ so that business awareness of the scheme is high, application windows are sufficiently long, application requirements are clear and adequate guidance and support is provided to applicants.",
+   "links": [
+    "l3",
+    "l4"
+   ],
+   "from_layer": "input",
+   "to_layer": "activity",
+   "verdict": {
+    "raw": "smaller applicants were not always able to fully overcome their resource challenges with the quality of bids suffering in several cases.",
+    "scale": "partly",
+    "quote": "not always able to fully overcome their resource challenges",
+    "page": 57,
+    "studies": []
+   }
+  },
+  {
+   "id": "a2",
+   "kind": "assumption",
+   "text": "There is sufficient grant funding available from the IETF pot to invest in projects and the scheme is effective in leveraging private capital or finance from businesses in line with the scheme's eligibility requirements and the scheme's assessment process is well-designed to ensure that only good-quality projects receive provisional grants.",
+   "links": [
+    "l1",
+    "l2",
+    "l5"
+   ],
+   "from_layer": "input",
+   "to_layer": "activity",
+   "verdict": {
+    "raw": "The strict matched funding thresholds resulted in leveraging of private matched funding.",
+    "scale": "supports",
+    "quote": "resulted in leveraging of private matched funding",
+    "page": 57,
+    "studies": []
+   }
+  },
+  {
+   "id": "a3",
+   "kind": "assumption",
+   "text": "Successful FEED/feasibility studies are delivered as planned.",
+   "links": [
+    "l11",
+    "l12"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "There is strong evidence that IETF grants have supported the completion of high-quality studies.",
+    "scale": "supports",
+    "quote": "strong evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "a4",
+   "kind": "assumption",
+   "text": "The risk of financial loss for a business investing in DD technologies is abated and becomes financially viable for businesses.",
+   "links": [
+    "l16"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a5",
+   "kind": "assumption",
+   "text": "Knowledge about DD tech, including deployment best practices and costs and benefits is gained and shared across organisational boundaries, through DESNZ stakeholder engagement events, published case studies of successful deployment projects and organically from the movement of consultants and engineers involved with IETF projects to non-IETF-funded firms.",
+   "links": [
+    "l18",
+    "l19"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Evidence suggests that knowledge sharing has predominantly been internal within firms, but there are also some spillovers to wider industry primarily through project supply chains and consortium partners.",
+    "scale": "partly",
+    "quote": "predominantly been internal within firms",
+    "page": 48,
+    "studies": []
+   }
+  }
+ ],
+ "context": [
+  "The ETS represents a medium- to long-term financial pressure for companies; ESOS creates mandatory efficiency requirements.",
+  "The fund supports relatively mature technologies rather than predominantly innovation or energy generation.",
+  "Predictable, guaranteed funding periods were considered important for long-term business investment decisions.",
+  "Engineering and supply-chain factors, and long grant-contracting timelines, delayed some deployments.",
+  "The evaluation had a low survey response, beneficiary-heavy sampling, limited spillover evidence and no counterfactual comparison beyond three withdrawn applicants.",
+  "Beneficiary accounts of grant additionality may be affected by self-reporting bias."
+ ],
+ "key_claims": [
+  {
+   "id": "k1",
+   "claim": "Public and private capital, staff time and expertise are made available to deliver the fund.",
+   "refs": [
+    "b1",
+    "b2",
+    "b3",
+    "b4"
+   ],
+   "where": "Inputs; Table 2, pp. 50–51; conclusions, p. 74",
+   "verdict": {
+    "raw": "Programme data demonstrates that DESNZ time and capital, private capital and the time and resources of applicants and their supply chain have been directed into the IETF.",
+    "scale": "supports",
+    "quote": "have been directed into the IETF",
+    "page": 74,
+    "studies": []
+   }
+  },
+  {
+   "id": "k2",
+   "claim": "Business resources and DESNZ guidance and support enable good-quality applications, but limited resources constrain smaller applicants.",
+   "refs": [
+    "b5",
+    "l3",
+    "l4",
+    "a1"
+   ],
+   "where": "Application Process, pp. 31–36; ToCS indicator #5, pp. 55–57; Figure 15",
+   "verdict": {
+    "raw": "Smaller businesses faced challenges in submitting quality applications due to limited resources, but evidence suggests that they were able to use DESNZ’s proactive support measures, such as clear documentation and accessible communication channels to partially helped them overcome these obstacles.",
+    "scale": "partly",
+    "quote": "Smaller businesses faced challenges",
+    "page": 56,
+    "studies": []
+   }
+  },
+  {
+   "id": "k3",
+   "claim": "Matched funding and rigorous assessment convert suitable applications into good-quality funded projects.",
+   "refs": [
+    "b6",
+    "b8",
+    "b9",
+    "b10",
+    "l1",
+    "l2",
+    "l5",
+    "l8",
+    "l9",
+    "l10",
+    "a2"
+   ],
+   "where": "Table 2, p. 50; ToCS indicator #6, p. 57; conclusions, p. 74",
+   "verdict": {
+    "raw": "Applications were scored against a range of criteria by technical and commercial assessors to develop a consolidated score for each application, which were then balanced with a moderation panel review ensuring grants were directed to a portfolio of high-quality projects.",
+    "scale": "supports",
+    "quote": "ensuring grants were directed to a portfolio of high-quality projects",
+    "page": 57,
+    "studies": []
+   }
+  },
+  {
+   "id": "k4",
+   "claim": "DESNZ resources support signposting of ineligible applicants to other funding.",
+   "refs": [
+    "b7",
+    "l6"
+   ],
+   "where": "Activities summary, p. 47; ineligible projects section, p. 53",
+   "verdict": {
+    "raw": "The DESNZ team made efforts to signpost applicants to other relevant sources of funding.",
+    "scale": "partly",
+    "quote": "made efforts to signpost applicants",
+    "page": 47,
+    "studies": []
+   }
+  },
+  {
+   "id": "k5",
+   "claim": "DESNZ resources enable knowledge-sharing events and project showcases.",
+   "refs": [
+    "b11",
+    "l7"
+   ],
+   "where": "ToCS indicator #11, p. 55; Figure 20 discussion, p. 65",
+   "verdict": {
+    "raw": "exactly half (50%) of the 34 respondents agreed that they have shared knowledge and learning from their project through DESNZ events (or other government stakeholder engagement events).",
+    "scale": "supports",
+    "quote": "exactly half (50%) of the 34 respondents",
+    "page": 65,
+    "studies": []
+   }
+  },
+  {
+   "id": "k6",
+   "claim": "Study grants reduce financial risk and enable completed studies that inform deployment decisions and a future project pipeline.",
+   "refs": [
+    "b8",
+    "b12",
+    "b16",
+    "l11",
+    "l12",
+    "a3"
+   ],
+   "where": "Figure 17 and studies discussion, p. 59; ToCS indicators #12 and #16, p. 61; conclusions, p. 74",
+   "verdict": {
+    "raw": "Studies have begun to lead to a pipeline of projects in the sector, though evidence is still emerging in this area",
+    "scale": "partly",
+    "quote": "evidence is still emerging",
+    "page": 74,
+    "studies": []
+   }
+  },
+  {
+   "id": "k7",
+   "claim": "Energy efficiency grants shorten payback periods and accelerate deployment that might otherwise not occur.",
+   "refs": [
+    "b9",
+    "b13",
+    "b17",
+    "l13",
+    "l14"
+   ],
+   "where": "ToCS indicators #13 and #17, pp. 62–63; conclusions, p. 74",
+   "verdict": {
+    "raw": "there is clear evidence that IETF funding has accelerated energy efficiency deployment projects that otherwise may not have been undertaken or would have been delayed by several years.",
+    "scale": "supports",
+    "quote": "clear evidence",
+    "page": 74,
+    "studies": []
+   }
+  },
+  {
+   "id": "k8",
+   "claim": "Decarbonisation grants improve investment viability and encourage earlier adoption of novel equipment.",
+   "refs": [
+    "b10",
+    "b14",
+    "l15",
+    "a4"
+   ],
+   "where": "ToCS indicators #14 and #18, pp. 63–64; conclusions, p. 74",
+   "verdict": {
+    "raw": "Funding for decarbonisation deployment projects has supported organisations to try novel technologies for existing processes that they otherwise may not have considered.",
+    "scale": "supports",
+    "quote": "supported organisations to try novel technologies",
+    "page": 74,
+    "studies": []
+   }
+  },
+  {
+   "id": "k9",
+   "claim": "Overcoming financial barriers leads to operational deployment assets, although many projects are not yet complete.",
+   "refs": [
+    "b17",
+    "b18",
+    "l14",
+    "l16"
+   ],
+   "where": "Outputs summary, p. 48; deployment discussion, p. 59; DD pathway, p. 63",
+   "verdict": {
+    "raw": "There is evidence that some IETF funded EE and DD deployment projects are now operational as expected, and good indications that the majority of active projects are progressing towards operation as expected.",
+    "scale": "partly",
+    "quote": "some IETF funded EE and DD deployment projects are now operational",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "k10",
+   "claim": "Funded projects build knowledge and capability through personnel time, equipment access and external expertise, with greater learning reported in decarbonisation and study projects.",
+   "refs": [
+    "b19",
+    "l17"
+   ],
+   "where": "Capability findings, p. 48; conclusions, p. 74",
+   "verdict": {
+    "raw": "Learning among projects across the portfolio was often reported to have been limited, reflecting the high TRL level and deliverability requirements within the application. However, learning and capability development was reported by a range of projects across the portfolio. Decarbonisation projects were more likely to report learning than EE, though some energy efficiency projects also reported learnings, study projects were more likely to report learning than deployment projects.",
+    "scale": "partly",
+    "quote": "Decarbonisation projects were more likely to report learning than EE",
+    "page": 74,
+    "studies": []
+   }
+  },
+  {
+   "id": "k11",
+   "claim": "Programme knowledge-sharing events reduce capability barriers beyond individual projects.",
+   "refs": [
+    "b11",
+    "b15",
+    "l19",
+    "a5"
+   ],
+   "where": "Capability summary, p. 48; ToCS indicator #15, pp. 64–65; conclusions, p. 74",
+   "verdict": {
+    "raw": "Beneficiaries reported these as having some benefit for promoting the IETF to new applicants and providing project ideas. The impact of these events within wider industry is less clear at this stage.",
+    "scale": "partly",
+    "quote": "The impact of these events within wider industry is less clear",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "k12",
+   "claim": "Knowledge spreads through supply chains, consultants, consortium partners and trade bodies, helping overcome wider industry capability barriers.",
+   "refs": [
+    "b19",
+    "b15",
+    "l18",
+    "a5"
+   ],
+   "where": "Capability summary, p. 48; ToCS indicator #15, p. 64 onward; conclusions, p. 74",
+   "verdict": {
+    "raw": "Wider knowledge spillovers to industry from projects have been observed, predominantly through relationships with the industry supply chain. Equipment suppliers who provided technology solutions are learning from IETF projects, whilst a consultant eco-system has formed around the programme which was identified as a key mechanism for project level learning and spillovers to wider industry.",
+    "scale": "partly",
+    "quote": "predominantly through relationships with the industry supply chain",
+    "page": 74,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "Overall, the IETF Theory of Change broadly holds true at this stage of delivery (noting most projects are still live and not yet complete). There is strong evidence to support that the IETF Theory of Change remains fit for purpose.",
+   "scale": "supports",
+   "quote": "the IETF Theory of Change broadly holds true",
+   "page": 74,
+   "studies": []
+  },
+  "weakest_links": [
+   "l18",
+   "l19",
+   "a5"
+  ],
+  "strongest_links": [
+   "l11",
+   "l12",
+   "l13",
+   "l14",
+   "l15"
+  ],
+  "summary": "The tested early stages broadly hold and no clear changes are required. Inputs and activities occurred as expected. Evidence for overcoming financial barriers is strong: studies inform investment, energy efficiency funding accelerates deployment, and decarbonisation grants encourage novel technology adoption. Capability evidence is mixed: learning varies by project type, is often internal, and wider spillovers occur mainly through supply chains and consultants. Most projects remain live; evidence on completed DD deployment and wider industry effects is limited.",
+  "recommendations": [
+   "No clear changes to the tested Theory of Change are required.",
+   "Consider organisation-size-specific workshops or briefing events, including events specifically for SMEs.",
+   "Refine application and delivery processes to strengthen the fund's contribution to industrial decarbonisation.",
+   "Provide predictable longer-term funding to support strategic business investment decisions."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/ietf_final_process_p16.png', 'downloads/pages/ietf_final_process_p49.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "The publication year, document URLs and licence are absent from the supplied material. Year 0 is a placeholder, not a source date.",
+   "Figure 10 is the in-scope extract of Figure 1, not a different theory. Only its complete boxes 1–19 are transcribed because these are the steps tested by the evaluation. The clipped later-stage boxes at its upper edge and Figure 1's boxes 20–31 are outside this transcription.",
+   "Figures 14, 18 and 19 are causal-pathway extracts of the same theory. Their captions and accompanying findings were supplied, but their images were not.",
+   "Barrier boxes 12–15 are mapped to outcome_short because the schema has no barrier-overcome layer. Boxes 16–19 retain the source's output classification even though they are drawn above the barrier boxes.",
+   "The figure's BEIS label in box 11 is retained; the narrative identifies the department as now DESNZ. Figure labels also differ from narrative descriptions of FEED/feasibility and Transformational/Deep Decarbonisation projects.",
+   "Arrow colours express prior causal confidence, not findings and not transcription confidence. Green: l1, l2, l5, l6, l8, l9, l10, l11, l12, l13, l15. Amber: l3, l4, l7, l14, l16, l17, l19. Red: l18. These priors have not been converted into empirical verdicts.",
+   "Joined arrows encode AND conditions: business and DESNZ resources jointly feed box 5; private capital, DESNZ capital and good-quality applications jointly feed box 6. Separate source-target records preserve these endpoints, but the schema has no explicit junction/AND field.",
+   "The dashed green signposting arrow is retained. Background bands and the extract's outer frame are not arrow endpoints and are not containers.",
+   "The supplied text omits several detailed findings pages, including much of pp. 51–54, 58, 60, 62 and 66–70. Claims and verdicts therefore use the supplied summaries and available pathway discussions rather than reconstructing missing findings.",
+   "Evidence level B is used for the mixed-method process evaluation without a counterfactual; the supplied notes do not define the A/B/C classification.",
+   "The exact geographical eligibility and standard grant dosage cannot be established from the supplied extracts."
+  ],
+  "source_sha256": "24fef5dfab3bbbc4a5cce826396f10ac8ca1326dd355e22556f5e6c491a2a67e",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

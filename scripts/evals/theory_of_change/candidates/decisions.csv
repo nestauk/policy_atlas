@@ -1,0 +1,54 @@
+id,decision,reason
+advice_services_allmark_2012,keep,"A; synthesis; line thickness = volume of evidence per arrow; welfare advice and health; no open licence (cite, transcribe facts only)"
+agep_zambia,duplicate,same as agep_zambia_2017
+agep_zambia_2017,keep,A; prospective ToC with effects per outcome; 15-16 boxes; Zambia; girls' empowerment
+agnutrition_masset_2012,keep,"A; synthesis; 7 boxes, evidence along the chain; agriculture and nutrition"
+agritech_catalyst_interim,keep,A; tick scale per outcome; innovation grants; columns-only (layer-level scoring)
+au_crc_program_impact_2021,drop,"economic accounting diagram, not a ToC; copyright forbids reuse"
+au_plain_packaging_pir_2016,drop,no diagram (text only)
+au_safe_active_streets_2026,drop,no diagram (text only)
+beas_pilot_process,keep,A; green/amber/red on boxes and arrows (includes links that did not hold); 28 boxes; net zero/business advice service
+building_choices_hmpps,keep,"A; red/amber/green plus strength of evidence for 27 outcomes, mechanisms and assumptions; justice; dense (~60), may need splitting"
+ca_housing_first_toc_test_2022,keep,A; path model with a coefficient on each arrow; ~9 boxes; Canada; homelessness
+ca_nrcan_energy_innovation_2019,reserve,A (prose per outcome); energy R&D; net zero already has 4 kept
+ca_universal_broadband_fund_2025,keep,A (prose per outcome); 8 boxes; Canada; digital; small case for the size spread
+ca_youth_justice_initiative_2016,keep,A (prose per outcome); 18 boxes; Canada; youth justice
+cai_desnz,keep,"A; evidence test met Yes/Partially/No per claim; net zero/consumer advice; large (~60), may need splitting"
+cct_health_gaarder_2010,reserve,A (nine assumptions tested); cash transfers already has 2 kept; paywalled source
+cdc_tobacco_initiation_logic_model,keep,"B; prospective; true box-and-arrow, 22 boxes; US; tobacco control"
+cdd_white_2018,keep,"A; synthesis; positive/no effect/no data per chain stage, assumption verdicts; governance; links that failed"
+ct_ipv_buller_2018,keep,"A; synthesis; ~22 boxes, evidence per pathway; cash transfers and intimate partner violence"
+dcms_opportunity_mission_toc,keep,B; prospective; evidence review grades links strong/moderate/weak; culture and sport (only candidate for the topic); ~45 boxes
+ees_vcse_energy_efficiency,reserve,A but only 2 links judged; net zero already has 4 kept
+eu_regio_large_enterprises_wp4,keep,A; tick/~/x on each arrow plus 10-box generic ToCs; EU; innovation and R&D support
+family_hubs_innovation_fund,keep,A; High/Med/Low per criterion; early years (only candidate for the topic); columns-only
+ffs_waddington_2014,keep,A; synthesis; revised ToC marks each arrow supported / not supported / evidence needed; pair with hypothesised chain; agriculture
+gb_advice_services_health_2012,duplicate,same as advice_services_allmark_2012
+gb_housing_health_toc_2014,duplicate,same as housing_health_thomson_2014
+gb_loneliness_psych_review_2025,drop,no diagram (text only)
+gb_mens_sheds_2019,duplicate,same as mens_sheds_kelly_2019
+ggss_ggl_eval,reserve,A but ~70 boxes; net zero already has 4 kept
+hnes_eval,reserve,A but interim: all claims inconclusive; ~65 boxes; net zero already has 4 kept
+housing_first_final_synthesis,drop,no ToC in the report
+housing_health_thomson_2014,keep,"A; synthesis; each arrow 'supported by data' or 'hypothesised', studies named in boxes; housing and health"
+ietf_final_process,keep,A; verdict per pathway; 31 numbered boxes with prior confidence on arrows; pair with ietf_phase1_process; net zero/industry fund
+lffn_wp1_synthesis,keep,"A; contribution category per claim, unsupported boxes greyed on revised diagram; digital infrastructure; ~48 boxes"
+malaysia_ssb_2025,duplicate,same as my_ssb_tax_2024
+mapsan_bick_2021,keep,A; reconstructed ToC with evidence per link; ~25 boxes; Mozambique; sanitation
+mens_sheds_kelly_2019,keep,A; synthesis; arrow thickness = number of papers per link; 29-33 boxes; loneliness/men's health; CC BY
+mesas_mup_scotland,keep,"A; pair in one report (Fig 1 original, Fig 8 populated with verdicts per step); 13 boxes; health/alcohol regulation; trial case"
+my_ssb_tax_2024,reserve,agents disagree on A vs B; columns-only; sugar tax (check by hand: would add a fiscal regulation outside the UK)
+nesta_visit_a_heat_pump,keep,B; prospective; Nesta's own ToC (owner's organisation); key assumption overturned in narrative; home decarbonisation
+nsa_pathways_sharma_2021,reserve,"A but ~60 small boxes, figure too small to transcribe"
+peer_mentoring_dwp,drop,verdicts per claim but no diagram
+pita_waddington_2019,keep,A; synthesis; initial ToC plus revised ToCs with the failed pathway in red; governance/public services
+prospera_pip_garciaguerra_2019,keep,A; retrospective programme impact pathway; 18 boxes each with findings and references; Mexico; cash transfers and nutrition
+psds_phase3,reserve,A but verdict wording not yet read; net zero already has 4 kept
+snack_mali_pip_leport_2019,reserve,A but figure too small to transcribe
+socpresc_pa_jacobsen_2025,duplicate,same as dk_social_prescribing_pa_2025
+ssb_tax_evaluation_review_ng_2021,drop,"C, no readable figure"
+tackling_loneliness_transport,keep,A; Strong/Moderate/Weak per statement (one weak); 38 boxes; transport and loneliness
+taso_small_cohorts,keep,"A; condition confirmed and confidence per link; ~10 boxes, 11 numbered links; higher education"
+uniformed_youth_fund_impact,keep,"A; two ratings per claim (contribution strength, confidence); youth/wellbeing fund"
+wales_mup_contribution,keep,"default: checked, not chosen yet"
+yef_bam_pilot,drop,no diagram (text only)

@@ -1,0 +1,13 @@
+{
+ "file": "downloads/intl_ffs_full.pdf",
+ "doc_url": "https://files.givewell.org/files/DWDA%202009/PAD/Waddington_et_al_2014.pdf ; summary https://3ieimpact.org/sites/default/files/2019-05/srs1_ffs_revise_060814_final_web.pdf",
+ "landing_url": "https://doi.org/10.4073/csr.2014.6",
+ "retrieved": "2026-11-09",
+ "figures": [
+  "downloads/pages/ffs_waddington_2014_full_p34.png",
+  "downloads/pages/ffs_waddington_2014_full_p144.png",
+  "downloads/pages/ffs_waddington_2014_summary_p21.png",
+  "downloads/pages/ffs_waddington_2014_summary_p34.png"
+ ],
+ "notes": "Figure(s): full review 34 (Fig 4 hypothesised chain), 144 (Fig 31 populated ToC); summary 21 (Fig 8), 34 (Fig 13 funnel). Verdict scale: three-level arrow legend: \"Links supported by evidence\" / \"Links not supported by evidence\" / \"Hypothesised links (evidence needed)\"; assumptions in italics = \"evidence not found\"; text: \"no evidence of positive effects\" at scale, \"diffusion does not happen\". Timing: synthesis. Best example: link verdicts are drawn on the diagram itself; Fig 31 has many dashed pink assumption arrows that are hard to trace; summary and full review use different box sets (9 vs 7 outcome boxes). Also Overton/OpenAlex row 30. (Prepared from the longlist row; figures rendered by the checking agent.)"
+}

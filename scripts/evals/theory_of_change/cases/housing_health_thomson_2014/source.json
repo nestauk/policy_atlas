@@ -1,0 +1,11 @@
+{
+ "file": "downloads/gb_housing_health_toc_2014.pdf",
+ "doc_url": "http://eprints.gla.ac.uk/99992/1/99992.pdf",
+ "landing_url": "https://doi.org/10.1016/j.socscimed.2014.11.043",
+ "retrieved": "2026-11-09",
+ "figures": [
+  "downloads/pages/housing_health_toc_2014_p5.png",
+  "downloads/pages/housing_health_toc_2014_p7.png"
+ ],
+ "notes": "Figure(s): 5 (Fig 1 warmth and energy efficiency); 6 (Fig 2 neighbourhood renewal); 7 (Fig 3 overall model). Verdict scale: two-level arrow legend: \"Links supported by data\" / \"Links implied in data or hypothesised by review authors\"; boxes say \"Improved\" / \"Little/no change\" / \"Reduced\". Timing: synthesis. Overton/OpenAlex row 26. ToC is built from the review rather than tested; dense small text in boxes; three separate models. (Prepared from the longlist row; figures rendered by the checking agent.)"
+}

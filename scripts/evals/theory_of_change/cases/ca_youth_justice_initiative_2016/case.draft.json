@@ -1,0 +1,683 @@
+{
+ "meta": {
+  "id": "ca_youth_justice_initiative_2016",
+  "title": "Youth Justice Initiative Evaluation",
+  "organisation": "Department of Justice Canada",
+  "year": 2016,
+  "country": "Canada",
+  "topic": "Youth justice",
+  "intervention_type": "programme",
+  "timing": "prospective",
+  "doc_url": "https://www.justice.gc.ca/eng/rp-pr/cp-pm/eval/rep-rap/2016/yji-ijj/p8.html",
+  "landing_url": "https://www.justice.gc.ca/eng/rp-pr/cp-pm/eval/rep-rap/2016/yji-ijj/toc-tdm.html",
+  "licence": "",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "ex_post_evaluation",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Support a fair and accessible youth justice system that holds young people accountable proportionately, promotes rehabilitation and reintegration, and supports prevention of further crime.",
+  "population": "Young people aged 12 to 17 involved in Canada's criminal justice system, including young people convicted of violent offences who have mental health needs.",
+  "place": "Canada, across provinces and territories",
+  "time_horizon": "The evaluation examines 2009-10 to 2013-14; the Initiative's objectives are comprehensive and long-term.",
+  "intervention": "The Youth Justice Initiative combines federal contributions to provinces and territories, funding for innovative projects, and federal policy, research and liaison work supporting implementation of the Youth Criminal Justice Act. Funding is ongoing or project-based; there is no uniform participant-level dosage.",
+  "context": "The federal government enacts criminal legislation, while provinces and territories administer youth justice. Youth crime rates declined during the evaluation period, but pre-trial detention, disproportionate Aboriginal youth involvement, and limited services outside major urban centres remained concerns.",
+  "outcome_first": "Develop a theory of change for a fair and accessible youth justice system for young people aged 12 to 17 involved in the criminal justice system in Canada. Account for the division of responsibilities between federal, provincial and territorial governments.",
+  "intervention_first": "Develop a theory of change for Canada's Youth Justice Initiative, which combines federal funding and policy support for youth justice. Explain how it is intended to support a fair and accessible justice system for young people aged 12 to 17 involved in the criminal justice system across Canada."
+ },
+ "containers": [
+  {
+   "id": "c1",
+   "label": "Shared connector: immediate outcomes of YJSFP, IRCS, YJF and Policy",
+   "layer": "outcome_short"
+  },
+  {
+   "id": "c2",
+   "label": "Shared connector: intermediate outcomes",
+   "layer": "outcome_long"
+  }
+ ],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "YJSFP",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b2",
+   "label": "IRCS",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b3",
+   "label": "YJF",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b4",
+   "label": "Policy",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b5",
+   "label": "F-P/T agreements and knowledge sharing opportunities\n\nFunding to provinces and territories to assist in sustaining a range of high priority youth justice services (e.g., rehabilitation and reintegration, alternatives to court, alternatives to custody)",
+   "layer": "output",
+   "container": null,
+   "verdict": {
+    "raw": "the YJSFP has produced the expected outputs and achieved its anticipated immediate outcomes",
+    "scale": "supports",
+    "quote": "has produced the expected outputs",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b6",
+   "label": "F-P/T agreements and knowledge sharing opportunities\n\nFunding provided to provinces and territories to build/maintain capacity and to deliver therapeutic services, rehabilitative, reintegration services to violent youth with mental health needs\n\nFunded projects to support delivery of specialized services (e.g., training)",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b7",
+   "label": "Funding provided for innovative projects for youth in conflict with the law through three streams: YJ Main Fund, Drug Treatment, and Guns, Gangs and Drugs\n\nFunding for projects that provide information/education, help build capacity, and support establishment of community links\n\nOpportunities for dissemination of information and knowledge transfer",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b8",
+   "label": "Knowledge sharing opportunities among those involved in the youth justice system\n\nEvidence-based advice on youth justice\n\nLegislative/policy proposals",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b9",
+   "label": "Continued alignment with federal policy objectives\nContinuation of high priority services and programs in the provinces and territories",
+   "layer": "outcome_short",
+   "container": "c1",
+   "verdict": {
+    "raw": "the YJSFP has produced the expected outputs and achieved its anticipated immediate outcomes",
+    "scale": "supports",
+    "quote": "achieved its anticipated immediate outcomes",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b10",
+   "label": "Capacity to offer specialized services\nAccess to specialized services\nOpportunities for collaboration and knowledge development",
+   "layer": "outcome_short",
+   "container": "c1",
+   "verdict": {
+    "raw": "the IRCS Program appears to be meeting its immediate outcomes by contributing substantially to an increased provincial and territorial capacity to provide specialized services, youth gaining access to those services, and opportunities for collaboration and knowledge development",
+    "scale": "supports",
+    "quote": "appears to be meeting its immediate outcomes",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b11",
+   "label": "Increased responsiveness to emerging issues\nIncreased community involvement\nIncreased collaboration and knowledge development",
+   "layer": "outcome_short",
+   "container": "c1",
+   "verdict": {
+    "raw": "there is evidence that the YJF has contributed to these outcomes",
+    "scale": "supports",
+    "quote": "the YJF has contributed to these outcomes",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b12",
+   "label": "Increased opportunities for information sharing and knowledge transfer\nLegislation and policy that respond to federal government priorities",
+   "layer": "outcome_short",
+   "container": "c1",
+   "verdict": {
+    "raw": "the Policy Unit has produced legislation and policy that responds to federal government priorities, and has undertaken a range of successful activities to foster information sharing and knowledge transfer",
+    "scale": "supports",
+    "quote": "a range of successful activities to foster information sharing and knowledge transfer",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b13",
+   "label": "Enhanced availability and use of opportunities for extrajudicial measures, rehabilitation and reintegration of young persons into their communities",
+   "layer": "outcome_long",
+   "container": "c2",
+   "verdict": {
+    "raw": "the YJI has contributed substantially to the ability of the provinces and territories to provide these measures and programs through its funding",
+    "scale": "supports",
+    "quote": "has contributed substantially",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b14",
+   "label": "GOC has responsive and appropriate policies, practices and legal framework",
+   "layer": "outcome_long",
+   "container": "c2",
+   "verdict": {
+    "raw": "there appears to be wide agreement that programs in support of the YCJA have responded successfully to recognized emerging needs including alternatives to formal court proceedings and custody, increased and more diverse rehabilitative opportunities, and initiatives responding to issues such as FASD and cyberbullying",
+    "scale": "partly",
+    "quote": "responded successfully to recognized emerging needs",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b15",
+   "label": "Strengthened links among youth justice and stakeholders",
+   "layer": "outcome_long",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b16",
+   "label": "More integrated and coordinated approach to youth justice",
+   "layer": "impact",
+   "container": null,
+   "verdict": {
+    "raw": "Almost all Justice Canada key informants and provincial and territorial representatives agreed that YJI had contributed to a more integrated and coordinated approach to youth justice",
+    "scale": "supports",
+    "quote": "YJI had contributed to a more integrated and coordinated approach",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b17",
+   "label": "Improved responsiveness of the youth justice system",
+   "layer": "impact",
+   "container": null,
+   "verdict": {
+    "raw": "there is evidence that the youth justice system is better equipped as a result of the YJI to respond effectively to youth crimes in keeping with the YCJA, and there is evidence that the response has improved as a result",
+    "scale": "partly",
+    "quote": "there is evidence that the response has improved as a result",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b18",
+   "label": "Fair and accessible youth justice system",
+   "layer": "vision",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l2",
+   "source": "b2",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l3",
+   "source": "b3",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l4",
+   "source": "b4",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l5",
+   "source": "b5",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "appears to be meeting its immediate outcomes by contributing substantially to efforts to continue to offer programs and services in keeping with YJCA objectives",
+    "scale": "supports",
+    "quote": "contributing substantially to efforts to continue to offer programs and services",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "l6",
+   "source": "b6",
+   "target": "b10",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "the IRCS Program appears to be meeting its immediate outcomes by contributing substantially to an increased provincial and territorial capacity to provide specialized services, youth gaining access to those services, and opportunities for collaboration and knowledge development",
+    "scale": "supports",
+    "quote": "contributing substantially to an increased provincial and territorial capacity",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "l7",
+   "source": "b7",
+   "target": "b11",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "YJF funding and other YJI activities were found to have made a positive contribution by engaging community-based programs and services, fostering innovation, and encouraging sharing of information and promising practices",
+    "scale": "supports",
+    "quote": "were found to have made a positive contribution",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "l8",
+   "source": "b8",
+   "target": "b12",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "In the evaluation period, this advice has led to important amendments to the YCJA, and funding and other decisions in keeping with YCJAobjectives.",
+    "scale": "supports",
+    "quote": "this advice has led to important amendments to the YCJA",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "l9",
+   "source": "c1",
+   "target": "b13",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l10",
+   "source": "c1",
+   "target": "b14",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l11",
+   "source": "c1",
+   "target": "b15",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l12",
+   "source": "c2",
+   "target": "b16",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l13",
+   "source": "c2",
+   "target": "b17",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l14",
+   "source": "b16",
+   "target": "b18",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l15",
+   "source": "b17",
+   "target": "b18",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "risk",
+   "text": "Alternative programs are vulnerable to tight budget restrictions, are not always available because of high cost, and are sometimes unavailable outside larger urban centres; courts do not always take advantage of them.",
+   "links": [
+    "l9",
+    "l13"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Key informant interviews supported both these findings, pointing to the high value placed on the programs, but noting that the courts do not always take advantage of them in their sentencing, and that the programs are vulnerable to tight budget restrictions and not always available because of the high cost.",
+    "scale": "supports",
+    "quote": "the courts do not always take advantage of them",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "a2",
+   "kind": "risk",
+   "text": "Reduced consultation with provincial and territorial partners can diminish the quality of the working relationship.",
+   "links": [
+    "l11",
+    "l12"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "A recent decline in policy consultation with provincial and territorial government counterparts was widely characterized as detrimental to what has been a positive working relationship in past years.",
+    "scale": "supports",
+    "quote": "widely characterized as detrimental",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "a3",
+   "kind": "risk",
+   "text": "Reductions in federal contributions can reduce the capacity to offer alternative programs and services, especially in smaller jurisdictions.",
+   "links": [
+    "l5",
+    "l6",
+    "l9"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "There is evidence that especially in smaller jurisdictions, a reduction in federal contributions would have a direct negative impact on the capacity to offer the alternative programs and services envisioned under the YCJA.",
+    "scale": "supports",
+    "quote": "a direct negative impact on the capacity to offer the alternative programs and services",
+    "page": null,
+    "studies": []
+   }
+  }
+ ],
+ "context": [
+  "The federal government legislates criminal law; provinces and territories administer the youth justice system.",
+  "Police-reported youth crime rates fell by 35 percent between 2010 and 2014.",
+  "The federal YJSFP contribution was reduced by 20 percent in 2013-14 due to federal budget restraints.",
+  "Persistently high pre-trial detention rates and disproportionate charging and custody rates for Aboriginal youth remained challenges.",
+  "Services and trained providers were less available in rural, remote and isolated areas.",
+  "The 2012 amendments to the Youth Criminal Justice Act formed a major part of policy work during the evaluation period."
+ ],
+ "key_claims": [
+  {
+   "id": "k1",
+   "claim": "Federal youth justice service funding sustains provincial and territorial priority programs aligned with federal youth justice objectives.",
+   "refs": [
+    "b1",
+    "b5",
+    "b9",
+    "l5"
+   ],
+   "where": "Section 4.2.1.1, Youth Justice Services Funding Program; Tables 4 and 5",
+   "verdict": {
+    "raw": "the YJSFP has produced the expected outputs and achieved its anticipated immediate outcomes. The terms of the YJSFP funding and a well-established process of reporting and assessment of claims ensure that this funding has been used for programs and services and other related allowable expenses in keeping with YJI objectives.",
+    "scale": "supports",
+    "quote": "achieved its anticipated immediate outcomes",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k2",
+   "claim": "IRCS funding expands specialized service capacity and access for violent young offenders with mental health needs and supports professional collaboration and learning.",
+   "refs": [
+    "b2",
+    "b6",
+    "b10",
+    "l6"
+   ],
+   "where": "Section 4.2.1.1, Intensive Rehabilitative Custody and Supervision Program; Table 7",
+   "verdict": {
+    "raw": "Justice Canada and provincial and territorial officials agree that the Part A funds are used to put in place therapeutic and educational programs and procedures that would not otherwise be offered. In summary, the IRCS Program appears to be meeting its immediate outcomes by contributing substantially to an increased provincial and territorial capacity to provide specialized services, youth gaining access to those services, and opportunities for collaboration and knowledge development.",
+    "scale": "supports",
+    "quote": "programs and procedures that would not otherwise be offered",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k3",
+   "claim": "Funding innovative community projects produces useful information, tests new services, increases community involvement and improves young people's lives in the short term.",
+   "refs": [
+    "b3",
+    "b7",
+    "b11",
+    "l7"
+   ],
+   "where": "Section 4.2.1.1, Youth Justice Fund, project evaluations and case studies; Table 8",
+   "verdict": {
+    "raw": "All of these were assessed by the project evaluators as having successfully produced and disseminated materials that were received as being of good quality and as valuable by users (youth and youth service providers) surveyed or interviewed. Evaluators of the projects were uniform in finding that the programs and services were considered as valuable by users and partners, and that they had resulted, at least in the short term, in improvements in the lives of the youth being served. The evaluations in about half the cases pointed to areas for improvement, typically in areas such as communications between the service providers and their partners in the justice system and other community agencies, and the need for more resources to expand capacity and improve post-program follow-up.",
+    "scale": "supports",
+    "quote": "at least in the short term, in improvements in the lives of the youth being served",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k4",
+   "claim": "Innovative pilot projects remain effective and sustainable after Youth Justice Fund funding ends.",
+   "refs": [
+    "b7",
+    "b11"
+   ],
+   "where": "Section 4.2.1.1, Youth Justice Fund, project evaluations and case studies",
+   "verdict": {
+    "raw": "The longer-term impacts of the projects are unknown at this point, as is the extent to which the pilot projects have been sustained beyond the YJF funding period.",
+    "scale": "insufficient",
+    "quote": "The longer-term impacts of the projects are unknown",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k5",
+   "claim": "Federal policy analysis and advice lead to legislation and policy decisions that respond to federal youth justice priorities.",
+   "refs": [
+    "b4",
+    "b8",
+    "b12",
+    "l8"
+   ],
+   "where": "Sections 4.2.1.1, Policy Development, Research and Liaison and Outreach; 5.2, Policy",
+   "verdict": {
+    "raw": "Evidence from a review of available documents and key informant interviews indicates that the Policy Unit is actively engaged in knowledge-sharing activities, and has been providing valued advice on youth justice issues and policies. In the evaluation period, this advice has led to important amendments to the YCJA, and funding and other decisions in keeping with YCJAobjectives.",
+    "scale": "supports",
+    "quote": "this advice has led to important amendments to the YCJA",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k6",
+   "claim": "Knowledge sharing, training and collaboration strengthen stakeholder links and coordination, but reduced policy consultation damages those relationships.",
+   "refs": [
+    "b12",
+    "b15",
+    "b16",
+    "l11",
+    "l12",
+    "a2"
+   ],
+   "where": "Sections 4.2.1.1, Policy; 4.2.1.2, A more integrated and coordinated approach to youth justice with strengthened links among youth justice personnel and stakeholders",
+   "verdict": {
+    "raw": "Almost all Justice Canada key informants and provincial and territorial representatives agreed that YJI had contributed to a more integrated and coordinated approach to youth justice. A recent decline in policy consultation with provincial and territorial government counterparts was widely characterized as detrimental to what has been a positive working relationship in past years.",
+    "scale": "partly",
+    "quote": "contributed to a more integrated and coordinated approach",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k7",
+   "claim": "YJI support increases the availability and use of alternatives to court and custody and rehabilitation and reintegration services.",
+   "refs": [
+    "b13",
+    "l9",
+    "a1"
+   ],
+   "where": "Sections 4.2.1.2 and 5.2, Enhanced availability and use of opportunities for extrajudicial measures, rehabilitation and reintegration",
+   "verdict": {
+    "raw": "the YJI has contributed substantially to the ability of the provinces and territories to provide these measures and programs through its funding. Data on the extent of use of these services by young persons in the last five years by provinces and territories was not available to evaluators. However, the evaluation has demonstrated (see section 4.1.1) that there has been progress in the use of extrajudicial measures and community-based sentencing options and sanctions as against charges and custodial sentences, which indicates that the use of these alternatives has increased along with their availability.",
+    "scale": "partly",
+    "quote": "there has been progress in the use of extrajudicial measures and community-based sentencing options",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k8",
+   "claim": "The Act and YJI-supported programs produce more responsive and appropriate policies and practices, although important needs and partner concerns remain.",
+   "refs": [
+    "b14",
+    "l10",
+    "a2"
+   ],
+   "where": "Section 4.2.1.2, GOC has responsive and appropriate policies, practices and legal framework",
+   "verdict": {
+    "raw": "The Act and the supporting programs under the YJI have enabled provinces and territories to reduce the number and proportion of young persons receiving custodial sentences, and have helped develop a capacity to provide alternatives that are widely viewed as being better suited to addressing youth justice requirements than was the case under the YOA. This evaluation has already reported on some remaining challenges, including persistently high pre-trial detention rates, disproportionately high charging and custodial rates for Aboriginal youth, and emerging issues such as cybercrime and the need for resources and infrastructure to provide for more programs and services outside large urban centres.",
+    "scale": "partly",
+    "quote": "better suited to addressing youth justice requirements",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k9",
+   "claim": "Better-equipped youth justice services improve the system's response, including alternatives to detention, but access gaps and over-use of pre-trial detention limit progress.",
+   "refs": [
+    "b17",
+    "l13",
+    "a1"
+   ],
+   "where": "Section 4.2.1.2, Improved responsiveness of the youth justice system; Summerville Project example",
+   "verdict": {
+    "raw": "there is evidence that the youth justice system is better equipped as a result of the YJI to respond effectively to youth crimes in keeping with the YCJA, and there is evidence that the response has improved as a result. It appears that there remain challenges in making alternative programs available and accessible, especially in remote and isolated parts of the country. It is also evident that the apparent over-use of pre-trial detention must be addressed.",
+    "scale": "partly",
+    "quote": "there is evidence that the response has improved as a result",
+    "page": null,
+    "studies": [
+     "Sprott 2012",
+     "Clark and Landau 2012"
+    ]
+   }
+  },
+  {
+   "id": "k10",
+   "claim": "Federal contributions cause longer-term improvements in the youth justice system and ultimately a fair and accessible system.",
+   "refs": [
+    "b18",
+    "l14",
+    "l15"
+   ],
+   "where": "Section 5.4, Measuring Outcomes",
+   "verdict": {
+    "raw": "there is limited data available linking on-the-ground developments in the administration of youth justice to the programs and services that the YJI funds in part. What this means is that evaluators are limited in their ability to establish a causal link between YJI contributions and improvements in the justice system response to youth justice issues.",
+    "scale": "insufficient",
+    "quote": "limited in their ability to establish a causal link",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k11",
+   "claim": "Continued federal support is needed to maintain youth justice alternatives, particularly in smaller jurisdictions, although the sufficiency of current resources is uncertain.",
+   "refs": [
+    "a3",
+    "l5",
+    "l6",
+    "l9"
+   ],
+   "where": "Sections 4.1, Relevance; 4.2.2.1, Unfulfilled need; 5.1; 5.3",
+   "verdict": {
+    "raw": "The evaluation has found that by both of these measures, the YJI continues to be relevant. The evaluation was unable to determine conclusively whether or not YJI resources were sufficient to meet its objectives, mainly because YJI objectives are comprehensive and long-term and rely heavily on programs and services that are the responsibility of provincial and territorial governments. There is evidence that especially in smaller jurisdictions, a reduction in federal contributions would have a direct negative impact on the capacity to offer the alternative programs and services envisioned under the YCJA.",
+    "scale": "partly",
+    "quote": "a reduction in federal contributions would have a direct negative impact",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k12",
+   "claim": "Supporting community alternatives can provide an economical substitute for court and custody, beyond the Initiative's own administrative efficiency.",
+   "refs": [],
+   "where": "Sections 4.2.2, Efficiency and economy; 5.3",
+   "verdict": {
+    "raw": "On the whole, the YJI appears to be operating efficiently, with low administrative costs, and with actual spending corresponding reasonably to budgeted costs. With available data, the evaluation was not able to assess the economy of the YJI from this perspective. However, it is plausible, given the high cost of custody, that alternative community-based programs and services offer an economical alternative, other factors being equal.",
+    "scale": "insufficient",
+    "quote": "the evaluation was not able to assess the economy of the YJI from this perspective",
+    "page": null,
+    "studies": [
+     "Zhang 2013"
+    ]
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "there is evidence that the youth justice system is better equipped as a result of the YJI to respond effectively to youth crimes in keeping with the YCJA, and there is evidence that the response has improved as a result",
+   "scale": "partly",
+   "quote": "the youth justice system is better equipped as a result of the YJI",
+   "page": null,
+   "studies": []
+  },
+  "weakest_links": [],
+  "strongest_links": [],
+  "summary": "The Initiative continues to be relevant and aligned with federal roles and priorities. Its funding components contributed to continuation of priority services, specialized service capacity and access, innovation, community involvement and knowledge sharing. The Policy Unit provided valued advice and supported legislative change. Availability of alternatives and coordination improved, but limited rural and remote access, high pre-trial detention and disproportionate Aboriginal youth involvement remained concerns. Reduced provincial and territorial policy consultation harmed working relationships. The Initiative appeared administratively efficient, but resource sufficiency and system-level economy could not be established. Limited outcome data constrained causal attribution of longer-term improvements to federal contributions.",
+  "recommendations": [
+   "The Policy Implementation Directorate and the YJSIS should work with the Evaluation Division and provincial and territorial partners to develop comprehensive data sources to support evaluation of YJI outcomes, particularly longer-term outcomes."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/ca_youth_justice_initiative_2016_fig5.jpg']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "The source is HTML. Figure_pages uses the supplied p8 Appendix A identifier, not a verified printed page number; verdict page numbers are unavailable.",
+   "The provided findings and conclusions contain gaps and truncated passages. Recommendation 1 and some findings cannot be recovered from the supplied text.",
+   "Each output panel and each immediate-outcome panel is one drawn box containing several statements; these statements were not split into separate boxes.",
+   "The four activity labels have arrows of their own and no boxes inside them, so they are transcribed as activity boxes.",
+   "The shared connector beneath the immediate outcomes is transcribed as a container feeding three intermediate-outcome arrows. The connector beneath the intermediate outcomes is transcribed as a container feeding two long-term-outcome arrows.",
+   "Source layers are mapped as follows: Immediate Outcomes to outcome_short, Intermediate Outcomes to outcome_long, Long-Term Outcomes to impact, and Ultimate Outcome to vision.",
+   "The source does not explicitly rank strongest and weakest causal links. Those lists are therefore empty; longer-term attribution and pilot sustainability are identified as evidence gaps in the key claims.",
+   "The ultimate outcome is not explicitly judged achieved. The general limitation on causal attribution is retained as a key-claim verdict rather than assigned to either individual ultimate-outcome arrow.",
+   "Document URLs and licence were not supplied. Evidence level B is a provisional classification of this mixed-method evaluation; no evidence-level rubric was supplied.",
+   "The full bibliographic identity of Sprott 2012 is not recoverable from the supplied excerpt.",
+   "Other figures and tables describe trends or funding rather than alternative theories of change; only Appendix A is transcribed."
+  ],
+  "source_sha256": "fd31c4e157fdb5f7422f5aa25810ca53a9b1372d3b3237424fcb7eeee2e0aa7c",
+  "prompt_sha256": "5d1cb40eee82156ea7f23694cb51862a2897d4e42dda82082bf094028453e696"
+ }
+}

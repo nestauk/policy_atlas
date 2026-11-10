@@ -1,0 +1,10 @@
+{
+ "file": "downloads/html_other/ca_yji_2016_p5_p6_p8.html",
+ "doc_url": "https://www.justice.gc.ca/eng/rp-pr/cp-pm/eval/rep-rap/2016/yji-ijj/p8.html",
+ "landing_url": "https://www.justice.gc.ca/eng/rp-pr/cp-pm/eval/rep-rap/2016/yji-ijj/toc-tdm.html",
+ "retrieved": "2026-11-09",
+ "figures": [
+  "downloads/pages/ca_youth_justice_initiative_2016_fig5.jpg"
+ ],
+ "notes": "Figure(s): Appendix A (HTML image fig5_en.jpg). Verdict scale: unscaled prose per logic-model outcome, e.g. 'has contributed substantially', 'progress'. Timing: prospective. Section 4.2 is 'organized according to the YJI logic model'; text equivalent of the model is in the HTML; verdicts are prose, not a scale (Prepared from the longlist row; figures rendered by the checking agent.) 2026-11-09: the first draft had only p8 (Appendix A), so no findings. p5.html (4. Evaluation Findings) and p6.html (5. Conclusions) were downloaded from the same report and joined with p8 into one file, in that order."
+}

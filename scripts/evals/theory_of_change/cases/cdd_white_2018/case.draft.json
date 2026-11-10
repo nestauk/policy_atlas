@@ -1,0 +1,645 @@
+{
+ "meta": {
+  "id": "cdd_white_2018",
+  "title": "Community-driven development: does it build social cohesion or infrastructure? A mixed-method evidence synthesis",
+  "organisation": "International Initiative for Impact Evaluation (3ie)",
+  "year": 2018,
+  "country": "21 low- and middle-income countries",
+  "topic": "Community-driven development, infrastructure, social welfare, social cohesion and governance",
+  "intervention_type": "programme",
+  "timing": "synthesis",
+  "doc_url": "https://lshtm-eprints-repo-prod.lshtm-eprints.cdl.cosector.com/4647488/1/wp30-cdd.pdf",
+  "landing_url": "https://www.3ieimpact.org/evidence-hub/publications/working-papers/community-driven-development-does-it-build-social-cohesion",
+  "licence": "© International Initiative for Impact Evaluation (3ie), 2018; reuse licence not supplied",
+  "figure_pages": [],
+  "evidence_level": "A",
+  "verdict_source": "evidence_synthesis",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Improve social welfare and reduce poverty, while improving local governance and social cohesion.",
+  "population": "Communities in low- and middle-income countries, particularly poor and vulnerable populations; reconstruction programmes also target conflict-affected populations.",
+  "place": "23 programmes across 21 low- and middle-income countries.",
+  "time_horizon": "Varies across programmes; no common intervention or follow-up duration is specified in the supplied material.",
+  "intervention": "Community-driven development programmes provide external funding for community-managed local development projects, supported by outreach, facilitation and training. Communities identify, implement and maintain projects, usually contributing cash, materials or labour. Required contributions ranged from 5 to 50 per cent of project cost, most commonly below 25 per cent; grant amounts and training dosage varied.",
+  "context": "Programmes evolved from responses to the social costs of structural adjustment into alternative delivery mechanisms for public infrastructure, with later emphasis on decentralisation and post-conflict reconstruction. The synthesis covers 25 impact evaluations and implementation evidence from 88 documents.",
+  "outcome_first": "Develop a theory of change for improving social welfare, local governance and social cohesion in poor and conflict-affected communities in low- and middle-income countries. Consider the constraints on equitable and sustainable local development.",
+  "intervention_first": "Develop a theory of change for community-driven development programmes in low- and middle-income countries. These programmes externally fund community-managed development projects and aim to improve social welfare, local governance and social cohesion."
+ },
+ "containers": [],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "Awareness raising",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b2",
+   "label": "Block grant allocated",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b3",
+   "label": "Block grant applied for",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b4",
+   "label": "Training and facilitation",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b5",
+   "label": "Community participation in project",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b6",
+   "label": "Learning by doing",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b7",
+   "label": "Public good created and maintained, e.g. roads, schools, health centres",
+   "layer": "output",
+   "container": null,
+   "verdict": {
+    "raw": "CDD programmes have made a substantial contribution to improving the quantity of small-scale infrastructure. ... However, there are sometimes challenges in maintaining projects, such as limited community capacity, and recurrent expenses are not always met.",
+    "scale": "partly",
+    "quote": "a substantial contribution to improving the quantity of small-scale infrastructure",
+    "page": 5,
+    "studies": []
+   }
+  },
+  {
+   "id": "b8",
+   "label": "Improvement in social cohesion",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "Fifteen impact evaluations reported on bonding social capital or community-level social cohesion. None of them found a significant impact, with the effect size commonly close to zero.",
+    "scale": "against",
+    "quote": "None of them found a significant impact",
+    "page": 25,
+    "studies": []
+   }
+  },
+  {
+   "id": "b9",
+   "label": "Improvement in governance",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "There are some examples of significant impacts – for example, on participation in local governance in Sierra Leone – but the average effect is insignificant for all six programmes, as is the overall average effect.",
+    "scale": "against",
+    "quote": "the overall average effect",
+    "page": 25,
+    "studies": []
+   }
+  },
+  {
+   "id": "b10",
+   "label": "Improvement in welfare outcomes",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "They slightly improve health- and water-related outcomes, but not education.",
+    "scale": "partly",
+    "quote": "slightly improve health- and water-related outcomes, but not education",
+    "page": 37,
+    "studies": []
+   }
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b3",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l2",
+   "source": "b2",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l3",
+   "source": "b3",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l4",
+   "source": "b4",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l5",
+   "source": "b5",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l6",
+   "source": "b5",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l7",
+   "source": "b6",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "The pathways of change leading to improvement in social cohesion are particularly unclear.",
+    "scale": "insufficient",
+    "quote": "particularly unclear",
+    "page": 38,
+    "studies": []
+   }
+  },
+  {
+   "id": "l8",
+   "source": "b6",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l9",
+   "source": "b7",
+   "target": "b10",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "The lack of impact on higher-order outcomes can be explained by CDD’s focus on infrastructure, without providing complementary inputs to address context-specific challenges in health and education.",
+    "scale": "partly",
+    "quote": "without providing complementary inputs",
+    "page": 37,
+    "studies": []
+   }
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "assumption",
+   "text": "Targeting is accurate.",
+   "links": [],
+   "from_layer": "input",
+   "to_layer": "activity",
+   "verdict": {
+    "raw": "This approach has been successful in achieving greater allocation of resources to poorer areas, but not always to the poorest communities in those areas.",
+    "scale": "partly",
+    "quote": "but not always to the poorest communities",
+    "page": 6,
+    "studies": []
+   }
+  },
+  {
+   "id": "a2",
+   "kind": "assumption",
+   "text": "Awareness raising is carried out.",
+   "links": [],
+   "from_layer": "input",
+   "to_layer": "activity",
+   "verdict": null
+  },
+  {
+   "id": "a3",
+   "kind": "assumption",
+   "text": "Community has skills and social capital to apply for programme.",
+   "links": [],
+   "from_layer": "input",
+   "to_layer": "activity",
+   "verdict": {
+    "raw": "The elite are both more likely to know about the programme and more likely to have the skills and the networks necessary to submit a proposal.",
+    "scale": "partly",
+    "quote": "more likely to have the skills and the networks necessary to submit a proposal",
+    "page": 31,
+    "studies": []
+   }
+  },
+  {
+   "id": "a4",
+   "kind": "assumption",
+   "text": "Community projects are in line with community preferences and needs.",
+   "links": [],
+   "from_layer": "input",
+   "to_layer": "activity",
+   "verdict": null
+  },
+  {
+   "id": "a5",
+   "kind": "assumption",
+   "text": "Programme is well implemented.",
+   "links": [],
+   "from_layer": "activity",
+   "to_layer": "output",
+   "verdict": null
+  },
+  {
+   "id": "a6",
+   "kind": "assumption",
+   "text": "Facilitation and training are of high quality and appropriate duration.",
+   "links": [],
+   "from_layer": "activity",
+   "to_layer": "output",
+   "verdict": null
+  },
+  {
+   "id": "a7",
+   "kind": "assumption",
+   "text": "Men, women and marginalised people are aware of and participate in all stages of the project.",
+   "links": [],
+   "from_layer": "activity",
+   "to_layer": "output",
+   "verdict": {
+    "raw": "We find that the assumption that the entire community is involved in decision-making is not valid.",
+    "scale": "against",
+    "quote": "is not valid",
+    "page": 37,
+    "studies": []
+   }
+  },
+  {
+   "id": "a8",
+   "kind": "assumption",
+   "text": "Community members have financial resources, time and labour to participate.",
+   "links": [],
+   "from_layer": "activity",
+   "to_layer": "output",
+   "verdict": {
+    "raw": "Contribution requirements can restrict benefits received by poor and marginalised participants.",
+    "scale": "partly",
+    "quote": "can restrict benefits",
+    "page": 38,
+    "studies": []
+   }
+  },
+  {
+   "id": "a9",
+   "kind": "assumption",
+   "text": "Community lacks social cohesion and ability to manage community projects.",
+   "links": [],
+   "from_layer": "output",
+   "to_layer": "outcome_long",
+   "verdict": {
+    "raw": "CDD programmes may actually be users rather than producers of social capital.",
+    "scale": "partly",
+    "quote": "users rather than producers of social capital",
+    "page": 38,
+    "studies": []
+   }
+  },
+  {
+   "id": "a10",
+   "kind": "assumption",
+   "text": "Participatory process builds trust between community members and with leaders.",
+   "links": [],
+   "from_layer": "output",
+   "to_layer": "outcome_long",
+   "verdict": {
+    "raw": "For all three aspects of social cohesion outcomes, the overall effects were very small and never significant.",
+    "scale": "against",
+    "quote": "very small and never significant",
+    "page": 25,
+    "studies": []
+   }
+  },
+  {
+   "id": "a11",
+   "kind": "assumption",
+   "text": "Complementary inputs are present, e.g. teachers and health workers.",
+   "links": [],
+   "from_layer": "output",
+   "to_layer": "outcome_long",
+   "verdict": {
+    "raw": "complementary inputs have not always been provided to address context-specific challenges to social welfare.",
+    "scale": "partly",
+    "quote": "have not always been provided",
+    "page": 5,
+    "studies": []
+   }
+  },
+  {
+   "id": "a12",
+   "kind": "assumption",
+   "text": "Systems are in place for maintenance.",
+   "links": [],
+   "from_layer": "output",
+   "to_layer": "outcome_long",
+   "verdict": {
+    "raw": "CDD programmes have put in place different institutional and financial mechanisms for operating and maintaining community projects. However, there are sometimes challenges in maintaining projects, such as limited community capacity, and recurrent expenses are not always met.",
+    "scale": "partly",
+    "quote": "recurrent expenses are not always met",
+    "page": 5,
+    "studies": []
+   }
+  }
+ ],
+ "context": [
+  "Community elites or prime movers can facilitate applications and influence project decisions.",
+  "Class, caste, ethnicity, age and sex can reflect, reinforce and reproduce exclusion and inequality within geographically defined communities.",
+  "Gendered cultural norms and socio-economic barriers constrain participation in the public sphere.",
+  "Time constraints, perceived benefits, contribution requirements, agency engagement and project relevance affect participation.",
+  "Targeting conflict victims and ex-combatants can be contentious and can increase social tension."
+ ],
+ "key_claims": [
+  {
+   "id": "k1",
+   "claim": "Targeting and accessible application procedures direct grants towards poor and conflict-affected communities, but design choices can exclude the poorest.",
+   "refs": [
+    "b1",
+    "b2",
+    "b3",
+    "l1",
+    "a1",
+    "a3",
+    "a4"
+   ],
+   "where": "Sections 5.1–5.1.1, PDF pp. 30–32",
+   "verdict": {
+    "raw": "geographical targeting of CDD programmes led to allocation of resources to poorer areas, but not always the poorest communities in those areas. ... Better-off communities were far more likely to apply for funding under the Tanzania Social Action Fund. ... the allocation of funds was more pro-poor at the local level. ... conflict victims and non-victims were equally likely to benefit. There is also evidence that the programme resulted in conflict victims having lower acceptance of ex-combatants. ... The type of project selected by the community determines which households benefit from the project.",
+    "scale": "partly",
+    "quote": "poorer areas, but not always the poorest communities",
+    "page": 30,
+    "studies": []
+   }
+  },
+  {
+   "id": "k2",
+   "claim": "Awareness raising and facilitation enable broad community involvement in decisions, rather than participation being confined to a small minority.",
+   "refs": [
+    "b1",
+    "b4",
+    "b5",
+    "l2",
+    "l3",
+    "l4",
+    "a7"
+   ],
+   "where": "Figure 6; sections 4.1.1 and 5.2; Figure 8, Social cohesion—Activities",
+   "verdict": {
+    "raw": "On average, 73 per cent had heard of the CDD programme, but only 57 per cent were aware of the meetings related to it. Forty-one per cent attended the meetings, but only 16 per cent spoke at the meeting and a slightly lower percentage were aware of the cost of the project. ... the overall average effect across all six programmes is not significant. ... Although measures were taken to improve the participation of marginalised groups within a community, there is no evidence on their impact. There is also no information about how programme implementers facilitated the participation of different ethnic and religious groups living in a community.",
+    "scale": "against",
+    "quote": "community participation declines along the chain of participation in decision-making",
+    "page": 26,
+    "studies": []
+   }
+  },
+  {
+   "id": "k3",
+   "claim": "Rules and facilitation increase women's participation and ultimately their benefits and public empowerment.",
+   "refs": [
+    "b4",
+    "b5",
+    "a7"
+   ],
+   "where": "Summary, PDF p. 6; sections 5.3 and 6.1, PDF pp. 32 and 38",
+   "verdict": {
+    "raw": "women are only half as likely as men to be aware of CDD programmes, even less likely to attend the community meetings and even more less likely to speak at the meetings. ... Mandating women’s participation through programme rules, such as quotas for female membership on project committees, have generally, though not always, achieved greater representation for women. ... there is no evidence to show that increasing women’s representation in meetings or on project committees has helped them benefit more from CDD-financed activities. There is also no evidence to show that increasing women’s participation empowers them to take on a more active role in public life, beyond the scope of the project.",
+    "scale": "partly",
+    "quote": "generally, though not always, achieved greater representation for women",
+    "page": 38,
+    "studies": []
+   }
+  },
+  {
+   "id": "k4",
+   "claim": "Communities have the resources to contribute to projects and the capacity and arrangements to sustain them.",
+   "refs": [
+    "b5",
+    "b7",
+    "a8",
+    "a12"
+   ],
+   "where": "Sections 3, 5.1.1 and 6.2; Figure 8, Sustainability column",
+   "verdict": {
+    "raw": "The inability to pay can limit the participation of poorer communities and poorer groups within communities. ... a significant improvement in the number and range of community contributions occurred after the rules changed. ... the 10 per cent contribution requirement in Armenia still deterred the poorest rural communities from applying for new schools or water facilities. ... Project documents have revealed that communities face numerous challenges in maintaining projects. However, programmes such as KALAHI–CIDSS in the Philippines have used good practices that are worth learning from.",
+    "scale": "partly",
+    "quote": "communities face numerous challenges in maintaining projects",
+    "page": 38,
+    "studies": []
+   }
+  },
+  {
+   "id": "k5",
+   "claim": "Participating in project management produces learning and stronger collective and managerial skills.",
+   "refs": [
+    "b5",
+    "b6",
+    "l5"
+   ],
+   "where": "Section 4, PDF p. 25; Figure 8, Social cohesion—Capacity development",
+   "verdict": {
+    "raw": "Five impact evaluations assessed skills related to social capital, such as better mobilisation, managerial and other related skills. All of the studies except one (Sierra Leone) reported insignificant impacts. However, even in Sierra Leone, the average effect is small.",
+    "scale": "against",
+    "quote": "All of the studies except one (Sierra Leone) reported insignificant impacts",
+    "page": 25,
+    "studies": []
+   }
+  },
+  {
+   "id": "k6",
+   "claim": "Participatory learning builds trust, cooperation and social connections within communities and with leaders and government.",
+   "refs": [
+    "b6",
+    "b8",
+    "l7",
+    "a9",
+    "a10"
+   ],
+   "where": "Figure 5; section 4; Figure 8, Social cohesion—Intermediate and Final outcomes; section 6.1",
+   "verdict": {
+    "raw": "Fifteen impact evaluations reported on bonding social capital or community-level social cohesion. None of them found a significant impact, with the effect size commonly close to zero. ... Ten impact evaluations reported bridging social capital with the local leadership. All but one case (Poverty Reduction Fund in St Lucia) are insignificant. ... Five studies report on bridging social capital with government. It is always insignificant, with a negative but insignificant overall average effect. ... The pathways of change leading to improvement in social cohesion are particularly unclear.",
+    "scale": "against",
+    "quote": "the overall effects were very small and never significant",
+    "page": 25,
+    "studies": []
+   }
+  },
+  {
+   "id": "k7",
+   "claim": "Participatory project experience improves governance and participation in wider decision-making.",
+   "refs": [
+    "b6",
+    "b9",
+    "l8",
+    "a10"
+   ],
+   "where": "Figure 5; section 4; sections 6.1–6.2",
+   "verdict": {
+    "raw": "There are some examples of significant impacts – for example, on participation in local governance in Sierra Leone – but the average effect is insignificant for all six programmes, as is the overall average effect. ... Attempts to reform governance have run into problems, especially when they have tried to create parallel structures.",
+    "scale": "against",
+    "quote": "the average effect is insignificant for all six programmes",
+    "page": 25,
+    "studies": []
+   }
+  },
+  {
+   "id": "k8",
+   "claim": "Community-managed grants create usable small-scale infrastructure at acceptable quality and lower delivery cost.",
+   "refs": [
+    "b2",
+    "b5",
+    "b7",
+    "l6",
+    "a5"
+   ],
+   "where": "Sections 3.1 and 3.4; summary; Figure 8, Facilities column and Energy row",
+   "verdict": {
+    "raw": "CDD programmes have made a substantial contribution to improving the quantity of small-scale infrastructure. ... Construction quality of infrastructure is generally comparable to that of other investments, but there are exceptions when it is inferior. ... CDD programmes have sometimes, but not always, been more cost-effective than alternative delivery mechanisms ... There is limited evidence on cost-effectiveness. The available evidence suggests that local government is systematically cheaper.",
+    "scale": "partly",
+    "quote": "sometimes, but not always, been more cost-effective",
+    "page": 21,
+    "studies": []
+   }
+  },
+  {
+   "id": "k9",
+   "claim": "Education infrastructure improves school access, attendance and learning when complementary inputs are available.",
+   "refs": [
+    "b7",
+    "b10",
+    "l9",
+    "a11"
+   ],
+   "where": "Figure 3; section 3; Figure 8, Education row",
+   "verdict": {
+    "raw": "CDD programmes improve facilities for education, health, water and sanitation. They slightly improve health- and water-related outcomes, but not education. ... The lack of impact on higher-order outcomes can be explained by CDD’s focus on infrastructure, without providing complementary inputs to address context-specific challenges in health and education.",
+    "scale": "partly",
+    "quote": "but not education",
+    "page": 37,
+    "studies": []
+   }
+  },
+  {
+   "id": "k10",
+   "claim": "Health facilities and complementary investments improve service use and health outcomes.",
+   "refs": [
+    "b7",
+    "b10",
+    "l9",
+    "a11"
+   ],
+   "where": "Figure 3; section 3.2; Figure 8, Health row",
+   "verdict": {
+    "raw": "Overall, health outcomes improved marginally, but there is significant variability across programmes. ... The Bolivia Social Investment Fund’s investments in health centres and water supply systems resulted in a significant reduction in the mortality of children under five years of age. ... The National Rural Infrastructure Project in Senegal led to an improvement in the nutritional status of children in poor households. ... The CDR programme in Liberia did not lead to an improvement in either access or health outcomes ... the size and kind of investments made in health are important for improving access to services and outcomes.",
+    "scale": "partly",
+    "quote": "health outcomes improved marginally",
+    "page": 20,
+    "studies": []
+   }
+  },
+  {
+   "id": "k11",
+   "claim": "Water and sanitation investments improve access and reduce the time spent collecting water.",
+   "refs": [
+    "b7",
+    "b10",
+    "l9"
+   ],
+   "where": "Figure 3; section 3.2.3; Figure 8, WASH row",
+   "verdict": {
+    "raw": "Evidence from eight programmes shows WASH community projects have a significant impact on improving access to improved water and sanitation. ... a focus on rehabilitation in some cases meant investments did not result in increased access. ... Investments in WASH infrastructure have reduced the time required for collecting water, which studies of three programmes have measured. ... The time saved mainly benefited women, as they were usually assigned this task.",
+    "scale": "supports",
+    "quote": "a significant impact on improving access to improved water and sanitation",
+    "page": 20,
+    "studies": []
+   }
+  },
+  {
+   "id": "k12",
+   "claim": "Economic and transport investments improve infrastructure use, employment, incomes and household assets.",
+   "refs": [
+    "b7",
+    "b10",
+    "l9",
+    "a12"
+   ],
+   "where": "Section 3.3; Figure 8, Infrastructure and Economic rows",
+   "verdict": {
+    "raw": "CDD programmes have not had an overall impact on economic outcomes. They had no effect on income and expenditure in the six programmes where this outcome was assessed. On average, there was also no effect on employment for the three programmes where it was assessed. ... the Philippine KALAHI–CIDSS programme is an exception, with a 4 percentage-point increase in the likelihood of employment. ... Data from four programmes show that they lead to an increase in asset ownership. However, these results are driven entirely by the large impact of the National Fadama Development Project in Nigeria ... There is no improvement in the use of infrastructure, including transport infrastructure. However, there is variability across programmes.",
+    "scale": "against",
+    "quote": "have not had an overall impact on economic outcomes",
+    "page": 21,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "CDD programmes improve facilities for education, health, water and sanitation. They slightly improve health- and water-related outcomes, but not education. ... CDD programmes have no impact on social cohesion or governance. This is a consistent finding across contexts.",
+   "scale": "partly",
+   "quote": "no impact on social cohesion or governance",
+   "page": 37,
+   "studies": []
+  },
+  "weakest_links": [
+   "a7",
+   "l7",
+   "a10"
+  ],
+  "strongest_links": [],
+  "summary": "CDD substantially increases small-scale infrastructure, but this does not consistently translate into higher-order welfare outcomes. Water access and water-collection time improve, health effects are modest and variable, and education and economic outcomes generally do not improve. Social cohesion and governance effects are consistently negligible. Broad participation in decision-making cannot be assumed: many people know of programmes, but few speak or participate in decisions. Programmes may use existing social capital rather than create it. Inclusion measures have mixed success, and infrastructure maintenance and comparative cost-effectiveness remain concerns.",
+  "recommendations": [
+   "Consider abandoning the objective of building social cohesion and focus instead on sustainable, cost-effective delivery of small-scale infrastructure.",
+   "Establish whether CDD is actually cheaper than delivery through local government or NGOs.",
+   "Assess whether community members are willing and able to make required contributions.",
+   "Use targeting strategies and programme rules to support inclusion, with facilitation, training and additional support to sustain participation.",
+   "Move beyond defining communities as geographical administrative units and consider different groups and gendered power relations.",
+   "Pay explicit attention to the technical, institutional and financial arrangements needed to operate and maintain infrastructure."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/cdd_white_2018_p16.png', 'downloads/pages/cdd_white_2018_p26.png', 'downloads/pages/cdd_white_2018_p37.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "Page references use supplied PDF page numbers; printed pages are ten lower for the principal figures.",
+   "Figure 2 is transcribed as the ToC. Figure 6 is a participation-results chart and Figure 8 is an evidence matrix, not separate box-and-arrow theories.",
+   "Figure 2 has no explicit layer headings. Layers are interpretive: allocated grants are inputs; awareness, application, training and participation are activities; learning and public goods are outputs; the three improvements are longer-term outcomes.",
+   "The allocated-grant and applied-grant routes share a connector into participation. Training joins the same incoming route. These are represented as three source-to-participation links, with medium confidence because the drawing has a shared arrowhead.",
+   "Assumptions are grouped in design and identification, implementation, and impact and sustainability panels, not attached to arrows. Their layer spans are approximate mappings; no panel is treated as a container.",
+   "Figure 8 matrix cells are retained here to avoid forcing its different chain stages onto Figure 2 arrows. Stage order is Activities, Capacity development, Facilities, Access, Intermediate outcomes, Final outcomes, Sustainability. Social cohesion: No effect, No effect, Not applicable, Not applicable, No effect, No effect, No data. Infrastructure: No data, No data, No data, No effect, No effect, No data, No data. Energy: No data at all seven stages. Education: No data, No data, Positive effect, No effect, No effect, No effect, No data. Health: No effect, No data, Positive effect, Positive effect, No effect, Positive effect, No data. WASH: No data, No data, Positive effect, Positive effect, No data, Positive effect, No data. Economic: No data, No data, No data, No data, No effect, No effect, No data.",
+   "Figure 8 findings are covered by key claims k2, k4–k6 and k8–k12. No data cells are not treated as evidence of no effect. Its universally missing sustainability data coexist with qualitative maintenance findings.",
+   "Figure 6's plotted average appears different from the percentages stated in the accompanying text. The key claim preserves the text's 73%, 57%, 41% and 16% rather than estimating values from the plotted line.",
+   "The supplied text gives numerical citation markers but not the underlying references. Study author-year citations and DOIs therefore cannot be recovered reliably; studies arrays are empty.",
+   "The source explicitly identifies unclear social-cohesion pathways and an invalid universal-participation assumption, but does not rank individual arrows as strongest. No strongest-link ranking has been invented.",
+   "Evidence level A is assigned for a synthesis including counterfactual impact evaluations and meta-analysis; definitions for the supplied A/B/C classification were not provided.",
+   "Document and landing URLs, an explicit reuse licence, and a common follow-up horizon were not supplied."
+  ],
+  "source_sha256": "e0237fb806de1b7dfda9408319177e8103620d244debe76b2f331283b2afcf9a",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

@@ -1,0 +1,711 @@
+{
+ "meta": {
+  "id": "tackling_loneliness_transport",
+  "title": "Tackling Loneliness with Transport Evaluation Report",
+  "organisation": "National Centre for Social Research; Department for Transport",
+  "year": 0,
+  "country": "England",
+  "topic": "Transport, social connection and loneliness",
+  "intervention_type": "fund",
+  "timing": "prospective",
+  "doc_url": "https://assets.publishing.service.gov.uk/media/686d582d2557debd867cbe3b/tlwt-fund-evaluation-report.pdf",
+  "landing_url": "https://www.gov.uk/government/publications/tackling-loneliness-with-transport-fund-evaluation",
+  "licence": "",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "ex_post_evaluation",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Alleviate loneliness among people experiencing, or at risk of, loneliness, and develop evidence about the contribution transport can make.",
+  "population": "Different groups at risk of loneliness, including older people, carers, young people, disabled people, people with visual impairments, minority ethnic communities, refugees and asylum seekers.",
+  "place": "England, across multiple regions and both rural and urban settings.",
+  "time_horizon": "Grants awarded in May 2022; pilots originally due to end in May 2023, extended to July 2023. Longer-term effects were anticipated beyond delivery.",
+  "intervention": "The Department for Transport's Tackling Loneliness with Transport Fund provided nearly £5 million in grants to 12 transport-based pilots. Delivery varied by pilot, with at least 49 activities, 38 sub-pilots and 85 delivery partners; there was no common beneficiary dosage.",
+  "context": "The Fund followed the 2018 UK Government Loneliness Strategy and was supported by HM Treasury's Shared Outcomes Fund. Loneliness was recognised as a significant social concern because of its negative effects on health and wellbeing.",
+  "outcome_first": "Develop a theory of change for alleviating loneliness among people experiencing, or at risk of, loneliness in England. Account for diverse population groups and rural and urban circumstances, and distinguish changes achievable during a roughly year-long delivery period from longer-term effects.",
+  "intervention_first": "Develop a theory of change for the Tackling Loneliness with Transport Fund in England. The Fund provided nearly £5 million to 12 transport-based pilots serving diverse groups experiencing, or at risk of, loneliness, with delivery during 2022–2023. Explain how this investment could contribute to alleviating loneliness."
+ },
+ "containers": [
+  {
+   "id": "c_inputs",
+   "label": "bracket: inputs",
+   "layer": "input"
+  },
+  {
+   "id": "c_activities",
+   "label": "bracket: activities",
+   "layer": "activity"
+  }
+ ],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "Reaching and accessing transport",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b2",
+   "label": "Awareness of available transport options",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b3",
+   "label": "Lack of confidence",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b4",
+   "label": "Safety concerns",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b5",
+   "label": "Cost of available transport options",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "i1",
+   "label": "Funds by DfT",
+   "layer": "input",
+   "container": "c_inputs",
+   "verdict": null
+  },
+  {
+   "id": "i2",
+   "label": "Programme administration, DfT personnel and time",
+   "layer": "input",
+   "container": "c_inputs",
+   "verdict": null
+  },
+  {
+   "id": "i3",
+   "label": "Pilot lead and other delivery partners",
+   "layer": "input",
+   "container": "c_inputs",
+   "verdict": null
+  },
+  {
+   "id": "a1",
+   "label": "Identification and recruitment of beneficiaries",
+   "layer": "activity",
+   "container": "c_activities",
+   "verdict": null
+  },
+  {
+   "id": "a2",
+   "label": "Upskill, train and recruit staff and volunteers",
+   "layer": "activity",
+   "container": "c_activities",
+   "verdict": null
+  },
+  {
+   "id": "a3",
+   "label": "Identification of beneficiaries’ needs",
+   "layer": "activity",
+   "container": "c_activities",
+   "verdict": null
+  },
+  {
+   "id": "a4",
+   "label": "Purchasing or renting of equipment/vehicles",
+   "layer": "activity",
+   "container": "c_activities",
+   "verdict": null
+  },
+  {
+   "id": "a5",
+   "label": "Onward granting of projects",
+   "layer": "activity",
+   "container": "c_activities",
+   "verdict": null
+  },
+  {
+   "id": "a6",
+   "label": "Delivery of pilot-specific intervention",
+   "layer": "activity",
+   "container": "c_activities",
+   "verdict": null
+  },
+  {
+   "id": "o1",
+   "label": "Those at risk of loneliness receive interventions",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "o2",
+   "label": "Interactions or journeys made by beneficiaries",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "o3",
+   "label": "Vehicles or transport passes/tickets bought, hired or used",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "o4",
+   "label": "Collaborations formed with transport providers and delivery partners",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "o5",
+   "label": "Transport provider staff and volunteers trained",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "m1",
+   "label": "Increased awareness of available transport options",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "m2",
+   "label": "Increased autonomy when planning and accessing travel",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "m3",
+   "label": "Increased confidence to travel",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "m4",
+   "label": "Reduced anxiety when using public transport",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "m5",
+   "label": "Increase in travel",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "m6",
+   "label": "Increase in social connections",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "m7",
+   "label": "Transport provider staff: improved ability to support people with disabilities",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "m8",
+   "label": "Transport provider staff: better understanding of needs of people with disabilities",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "m9",
+   "label": "Increased physical accessibility of transport",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "m10",
+   "label": "Volunteer outcomes: additional volunteering opportunities and new skills",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "m11",
+   "label": "Existing support services gain new users or re-establish themselves",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "t1",
+   "label": "Reduced loneliness / self-reported loneliness",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "t2",
+   "label": "Generating knowledge and evidence on transport-loneliness connections for DfT and government departments",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "t3",
+   "label": "Reduced emissions and environmental impacts",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "t4",
+   "label": "Improved transport efficiency",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "t5",
+   "label": "Improved transport safety/security",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "t6",
+   "label": "Reduced demand for local public services and primary and emergency care services",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "t7",
+   "label": "Increased economic activity",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "t8",
+   "label": "Sustainability of new and existing organisations and services",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "c_inputs",
+   "target": "c_activities",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l2",
+   "source": "a1",
+   "target": "o1",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l3",
+   "source": "a2",
+   "target": "o1",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l4",
+   "source": "a3",
+   "target": "o1",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l5",
+   "source": "a4",
+   "target": "o3",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l6",
+   "source": "o5",
+   "target": "m7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l7",
+   "source": "o5",
+   "target": "m8",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l8",
+   "source": "m1",
+   "target": "m2",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l9",
+   "source": "m1",
+   "target": "m3",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l10",
+   "source": "m1",
+   "target": "m5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l11",
+   "source": "m1",
+   "target": "t4",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l12",
+   "source": "m3",
+   "target": "t1",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l13",
+   "source": "m6",
+   "target": "t1",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l14",
+   "source": "m9",
+   "target": "t5",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "as1",
+   "kind": "assumption",
+   "text": "Transport services are provided as a mechanism through which beneficiaries can build social connections and alleviate loneliness.",
+   "links": [],
+   "from_layer": "activity",
+   "to_layer": "outcome_short",
+   "verdict": {
+    "raw": "For Living Streets: Walking Connects and the community hubs element of TfWM’s, Let’s Chat (its most engaged with activity), no transport services were provided. It was therefore unfeasible to determine how transport services were provided as a mechanism to build social connection and alleviate loneliness.",
+    "scale": "insufficient",
+    "quote": "It was therefore unfeasible to determine how transport services were provided as a mechanism",
+    "page": 46,
+    "studies": []
+   }
+  },
+  {
+   "id": "as2",
+   "kind": "assumption",
+   "text": "To support someone who is chronically lonely, interventions require extensive relationship building activities and are therefore much more resource-intensive, time for which should be built into project planning.",
+   "links": [],
+   "from_layer": "input",
+   "to_layer": "output",
+   "verdict": null
+  },
+  {
+   "id": "as3",
+   "kind": "risk",
+   "text": "It can be more difficult to achieve initial engagement with people during winter.",
+   "links": [],
+   "from_layer": "activity",
+   "to_layer": "output",
+   "verdict": null
+  },
+  {
+   "id": "as4",
+   "kind": "assumption",
+   "text": "Future projects should consider the greater lead time required to set up pilots, especially those working with new partners and working with people considered to be vulnerable.",
+   "links": [],
+   "from_layer": "input",
+   "to_layer": "activity",
+   "verdict": null
+  }
+ ],
+ "context": [
+  "Public transport could be unreliable, unavailable, unsuitable or impractical for beneficiaries; taxis were perceived as expensive.",
+  "Some beneficiaries' health conditions and accessibility needs made community transport their only viable travel option.",
+  "Access to family transport varied with relatives' availability and location.",
+  "The portfolio was highly heterogeneous, including activities that did not themselves provide transport.",
+  "Delivery season and the time needed to establish partnerships and relationships with vulnerable beneficiaries affected implementation."
+ ],
+ "key_claims": [
+  {
+   "id": "kc1",
+   "claim": "Funding transport-related services can increase social connections and, over the longer term, reduce loneliness.",
+   "refs": [
+    "i1",
+    "a6",
+    "o1",
+    "o2",
+    "m6",
+    "t1",
+    "l13"
+   ],
+   "where": "Section 4.1, contribution statement one; section 6.4",
+   "verdict": {
+    "raw": "Overall, there is weak evidence to conclude that the Fund contributed to increased social connections and reduced feelings of loneliness among primary beneficiaries.",
+    "scale": "insufficient",
+    "quote": "the level of available evidence is not sufficient to make a causal claim",
+    "page": 46,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc2",
+   "claim": "Accessible community transport facilitates socialisation and enables people to maintain or build social connections.",
+   "refs": [
+    "a6",
+    "o2",
+    "m6"
+   ],
+   "where": "Section 4.1, summary of evidence by pilot typology",
+   "verdict": {
+    "raw": "Community transport activities provided accessible transport in a way that facilitates socialisation; however, this is based on a small number of interviews and findings could not be corroborated with other quality evidence sources.",
+    "scale": "insufficient",
+    "quote": "provided accessible transport in a way that facilitates socialisation",
+    "page": 46,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc3",
+   "claim": "Travel companionship helps people use transport to build and maintain social connections.",
+   "refs": [
+    "a6",
+    "o2",
+    "m6"
+   ],
+   "where": "Section 4.1, travel companionship findings",
+   "verdict": {
+    "raw": "Travel companionship activities supported people to use transport that can help them to build and maintain social connections; however, this is based on a small number of interviews and findings could not be corroborated with other quality evidence sources.",
+    "scale": "insufficient",
+    "quote": "supported people to use transport that can help them to build and maintain social connections",
+    "page": 46,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc4",
+   "claim": "Group activities enable people to meet others and share experiences that deepen social connections.",
+   "refs": [
+    "a6",
+    "o2",
+    "m6"
+   ],
+   "where": "Section 4.1; group activity findings ending on page 51",
+   "verdict": {
+    "raw": "Group walking activities can enable people to meet others and share experiences to build deeper social connections. For one, the activity made them realise how lonely they were, however they were able to make “very good friends” who they kept in contact with. Another beneficiary made a friend on the activity, whom they now meet once a week.",
+    "scale": "insufficient",
+    "quote": "findings could not be corroborated with other quality evidence sources",
+    "page": 46,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc5",
+   "claim": "Suitable transport services and supported practice can build travel confidence and reduce travel anxiety.",
+   "refs": [
+    "a6",
+    "m3",
+    "m4"
+   ],
+   "where": "Section 4.2, contribution statement two and typology findings",
+   "verdict": {
+    "raw": "There is weak evidence to conclude that the Fund contributed to increased confidence to travel and reduced reported anxiety using public transport among primary beneficiaries. Qualitative evidence indicates that community transport pilots increased travel confidence. The travel companions pilot did show indicative findings that the pilot increased reported travel confidence and reduced anxiety among beneficiaries, with some continuing to travel by bus. Some Living Streets project staff, volunteers, and beneficiaries reported feeling more confident walking around their local area, with some doing so for everyday journeys.",
+    "scale": "insufficient",
+    "quote": "the level of available evidence is not sufficient to make a causal claim",
+    "page": 51,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc6",
+   "claim": "Transport provision, companionship and local travel reviews can improve travel autonomy and awareness, though the mechanisms and aims differ by service.",
+   "refs": [
+    "a6",
+    "m1",
+    "m2"
+   ],
+   "where": "Section 4.3, contribution statement three and community transport findings",
+   "verdict": {
+    "raw": "There is weak evidence to conclude that the Fund contributed to increased travel awareness and autonomy among primary beneficiaries. There is some indicative evidence that community transport pilots increased beneficiary travel autonomy by visiting familiar places, discovering new places, and attending health appointments; however, this could not be corroborated with any other evidence sources. It was not the aim of community transport pilots to increase travel awareness and, as expected, no evidence was gathered to support this. Regarding travel companionship, there was some indicative qualitative evidence that beneficiary travel autonomy increased through continued use of public transport. Volunteers reported that some beneficiaries were less reliant on friends and family for transport. Increased travel awareness was reported by those Living Streets’ beneficiaries who participated in the Community Street Review (CSR) surveys.",
+    "scale": "insufficient",
+    "quote": "these findings were based on a small number of interviews and could not be corroborated",
+    "page": 53,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc7",
+   "claim": "Travel training and creative travel activities may contribute to loneliness and transport outcomes, but their contribution must be evidenced rather than assumed.",
+   "refs": [],
+   "where": "Sections 4.1–4.3, Devon Travel Training and Tarka Line Creatives",
+   "verdict": {
+    "raw": "There was little data collected on the two Devon pilots (Travel Training and Tarka Line Creatives) resulting in there being limited evidence to draw on.",
+    "scale": "insufficient",
+    "quote": "limited evidence to draw on",
+    "page": 46,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc8",
+   "claim": "Attributing improved social connection to transport requires the activity actually to provide a transport mechanism.",
+   "refs": [
+    "as1"
+   ],
+   "where": "Section 4.1, Walking Connects and TfWM Let’s Chat community hubs",
+   "verdict": {
+    "raw": "No transport services were provided. It was therefore unfeasible to determine how transport services were provided as a mechanism to build social connection and alleviate loneliness.",
+    "scale": "insufficient",
+    "quote": "no transport services were provided",
+    "page": 46,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc9",
+   "claim": "Recruitment and appropriately timed, adequately resourced engagement are needed to reach groups at risk of loneliness.",
+   "refs": [
+    "a1",
+    "a3",
+    "o1",
+    "as2",
+    "as3",
+    "as4"
+   ],
+   "where": "Section 6.3, reaching different types of beneficiaries",
+   "verdict": {
+    "raw": "Disabled beneficiaries living with one or more health conditions were also reached across the fund (54%). Some of these groups, particularly women and disabled people, are at higher risk of reporting loneliness; however, the most at risk age group as identified by previous research was underrepresented, with only 21% of the overall beneficiaries aged 39 and younger.",
+    "scale": "partly",
+    "quote": "the most at risk age group ... was underrepresented",
+    "page": 68,
+    "studies": [
+     "DCMS 2022"
+    ]
+   }
+  },
+  {
+   "id": "kc10",
+   "claim": "Participation can generate interconnected social, health, wellbeing and community benefits that beneficiaries value, with valuations depending on frequency of use.",
+   "refs": [],
+   "where": "Sections 5.1–5.2; Table 5.2; section 5.5.2",
+   "verdict": {
+    "raw": "Beneficiaries from all focus groups tended to provide high valuations of the pilots. The valuations were £1,600 for frequent Bikeworks users, £620 for frequent CTA users, £620 for frequent WCT users, and £130 for a single Living Streets use. Participants reported community integration, inclusivity, learning local history, and activities being “good fun”. Living Streets beneficiaries ranked health and wellbeing above social connections and local history. Other groups perceived outcomes as too closely linked to value separately. The valuations should be interpreted as indications of scale rather than precise estimates and may reflect hypothetical bias.",
+    "scale": "partly",
+    "quote": "Valuations are presented as indications of the scale of individual valuations of benefits, rather than precise estimates.",
+    "page": 59,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc11",
+   "claim": "The benefits generated by funded activities should justify their costs.",
+   "refs": [],
+   "where": "Executive Summary, value for money; sections 5 and 6.5",
+   "verdict": {
+    "raw": "The Benefit to Cost ratio for Bikeworks was 0.87; the same ratio for CTA was 0.23. This implies that the costs outweighed the benefits. Overall VfM assessments were only possible for two pilots. There is a degree of uncertainty in the analysis and findings should be interpreted as indicative.",
+    "scale": "against",
+    "quote": "This implies that the costs outweighed the benefits.",
+    "page": 14,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc12",
+   "claim": "Piloting diverse transport approaches can generate usable evidence about their contribution to loneliness outcomes, provided monitoring and evaluation are sufficiently robust.",
+   "refs": [
+    "t2"
+   ],
+   "where": "Section 6.4; sections 5.5.1–5.5.3",
+   "verdict": {
+    "raw": "While some beneficiary impacts were observed, the evidence often relied heavily on one evidence source and could not be corroborated with other quality sources, resulting in a weak evidence assessment for all contribution statements. Small sample sizes and survey collection methods reduced confidence; pilots’ own evaluations varied in type, quality, and outcomes; and recruitment challenges reduced the interview sample. SROI did prove feasible, albeit with challenges, but consistent survey and cost data were lacking.",
+    "scale": "insufficient",
+    "quote": "a weak evidence assessment for all contribution statements",
+    "page": 68,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "While some beneficiary impacts were observed, the evidence often relied heavily on one evidence source and could not be corroborated with other quality sources, resulting in a weak evidence assessment for all contribution statements. This does not mean that the observed impacts were not positive, or that the Fund specifically did not have an impact on beneficiaries, but that the level of available evidence is not sufficient to make a causal claim.",
+   "scale": "insufficient",
+   "quote": "the level of available evidence is not sufficient to make a causal claim",
+   "page": 68,
+   "studies": []
+  },
+  "weakest_links": [],
+  "strongest_links": [],
+  "summary": "All three contribution statements received a Weak evidence rating. Qualitative findings suggested improvements in social connection, loneliness, travel confidence, anxiety, awareness and autonomy, but these could not generally be corroborated. This is insufficient evidence for causal claims, not evidence that the Fund had no effect. Transport-specific attribution was especially problematic for activities that provided no transport. Beneficiaries valued interconnected outcomes highly, but monetary valuations and benefit-cost findings were indicative and uncertain. The source did not rank individual diagram arrows as strongest or weakest.",
+  "recommendations": [
+   "Allow greater lead time for setting up pilots, particularly when working with new partners and vulnerable people.",
+   "Consider seasonality when starting transport activities; initial engagement may be easier in summer than winter.",
+   "Build time and resources for extensive relationship building into interventions supporting chronically lonely people.",
+   "For similar SROI assessments, secure consistent cost data and a mix of qualitative and quantitative evidence."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/tackling_loneliness_transport_p3.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "The report year, document URL, landing URL and licence were not supplied. Year 0 is a missing-value placeholder, not a publication date.",
+   "Figure page 3 is Appendix B's page numbering, not report page 3. The supplied notes say Appendix B pages 1–2 are text and a page 4 PNG was not inspected; that additional page has not been transcribed.",
+   "This is a partial arrow transcription. All substantive boxes visible on the supplied page are included, but several crowded cyan activity-to-output connectors, magenta output-to-medium-term connectors, and right-hand routes to longer-term outcomes cannot be traced confidently at this resolution. Those unresolved arrows have not been invented.",
+   "The orange collective connector is read as linking the input group to the activity group. Its grouping and arrowhead should be checked against a higher-resolution figure.",
+   "The figure legend explicitly confirms that medium-term outcome 1 contributes to medium-term outcomes 2, 3 and 5; these links are included.",
+   "The source's Medium term outcomes column is mapped to outcome_short. Its mixed Longer term outcomes / impacts column is mapped consistently to outcome_long rather than splitting boxes into unsupported sublayers.",
+   "Primary/secondary beneficiary shading and coloured numbering are figure annotations, not extra boxes or containers. Printed item numbers are omitted from labels and represented by record ids.",
+   "The three evidence judgements apply to multi-step contribution statements, not individual arrows. They are retained on key claims rather than distributed across constituent links.",
+   "The notes mention statement one as Weak; the supplied findings explicitly rate statements two and three Weak as well. All three are mapped to insufficient because the report says the evidence cannot support a causal claim.",
+   "Some raw fields combine source passages from the same finding to preserve subgroup differences and qualifications. No separate published studies were named for the three contribution-statement judgements.",
+   "The supplied text says in section 4.2 that community transport did not aim to increase travel awareness, despite that section addressing confidence and anxiety. This wording has not been silently corrected."
+  ],
+  "source_sha256": "b0d7996b6250047a2373ec14a322e641f69179194bff164baff65a9fe83305e0",
+  "prompt_sha256": "5d1cb40eee82156ea7f23694cb51862a2897d4e42dda82082bf094028453e696"
+ }
+}

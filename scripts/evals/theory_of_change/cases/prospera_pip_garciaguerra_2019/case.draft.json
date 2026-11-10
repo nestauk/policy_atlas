@@ -1,0 +1,954 @@
+{
+ "meta": {
+  "id": "prospera_pip_garciaguerra_2019",
+  "title": "Closing the Nutrition Impact Gap Using Program Impact Pathway Analyses to Inform the Need for Program Modifications in Mexico's Conditional Cash Transfer Program",
+  "organisation": "Instituto Nacional de Salud Pública (INSP); Global Alliance for Improved Nutrition (GAIN)",
+  "year": 2019,
+  "country": "Mexico",
+  "topic": "Maternal and child nutrition within a conditional cash transfer programme",
+  "intervention_type": "programme",
+  "timing": "retrospective",
+  "doc_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC6887996/fullTextXML",
+  "landing_url": "https://doi.org/10.1093/jn/nxz169",
+  "licence": "CC BY-NC 4.0",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "evidence_synthesis",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Improve maternal and child health and nutrition and, in the long term, human capital among low-income families.",
+  "population": "Low-income beneficiary families, particularly pregnant and lactating women and infants and young children.",
+  "place": "Rural and urban Mexico, including indigenous communities.",
+  "time_horizon": "Programme introduced in rural areas in 1997 and extended to urban areas in 2002; the review examines early implementation and short- and medium-term results, with long-term evaluations forthcoming.",
+  "intervention": "Prospera-Oportunidades-Progresa provided cash to female household heads conditional on participation in preventive healthcare and education sessions, alongside fortified food supplements. Nutrivida was provided from the first antenatal visit until one year postpartum for daily consumption. Nutrisano was initially targeted to children aged 4–23 months and underweight children aged 2–4 years; targeting was subsequently changed. Supplements were distributed monthly or every second month, and the recommended daily Nutrisano dose was 44 g. Group education sessions were convened monthly.",
+  "context": "An at-scale social protection programme operating through primary healthcare services. Nutritional problems and sociocultural conditions differed substantially across regions and ethnic groups, and women faced a growing burden of overweight and obesity alongside micronutrient inadequacy.",
+  "outcome_first": "Develop a theory of change for improving maternal and young-child health and nutrition among low-income families in rural and urban Mexico. Consider the longer-term aim of improving human capital and the diversity of local conditions.",
+  "intervention_first": "Develop a theory of change for Mexico's Prospera-Oportunidades-Progresa conditional cash transfer programme, including its nutrition component. Explain how it could improve maternal and young-child health and nutrition among low-income beneficiary families and contribute to longer-term human capital."
+ },
+ "containers": [],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "Requirement: Increased coverage of timely antenatal care (30); access issues among sub-groups (31).",
+   "layer": "activity",
+   "container": null,
+   "verdict": {
+    "raw": "The program successfully improved the timeliness and frequency of antenatal care",
+    "scale": "partly",
+    "quote": "access issues among sub-groups",
+    "page": null,
+    "studies": [
+     "Orozco and Soto 1999",
+     "Gutiérrez et al. 2008"
+    ]
+   }
+  },
+  {
+   "id": "b2",
+   "label": "Increase in antenatal care actions (29,30), but quality of care an issue (31).",
+   "layer": "output",
+   "container": null,
+   "verdict": {
+    "raw": "Increase in antenatal care actions (29,30), but quality of care an issue (31).",
+    "scale": "partly",
+    "quote": "but quality of care an issue",
+    "page": null,
+    "studies": [
+     "Huerta and Hernández 2000",
+     "Orozco and Soto 1999",
+     "Gutiérrez et al. 2008"
+    ]
+   }
+  },
+  {
+   "id": "b3",
+   "label": "Cash: provided to women",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b4",
+   "label": "Requirement: Education sessions, related to healthy pregnancy, nutrition during pregnancy and Nutrivida use ineffective communications approaches (19)",
+   "layer": "activity",
+   "container": null,
+   "verdict": {
+    "raw": "use ineffective communications approaches (19)",
+    "scale": "against",
+    "quote": "ineffective communications approaches",
+    "page": null,
+    "studies": [
+     "Neufeld et al. 2004"
+    ]
+   }
+  },
+  {
+   "id": "b5",
+   "label": "Increased purchase of several nutritious foods, but also of high energy dense food (32,33)",
+   "layer": "output",
+   "container": null,
+   "verdict": {
+    "raw": "Increased purchase of several nutritious foods, but also of high energy dense food (32,33)",
+    "scale": "partly",
+    "quote": "but also of high energy dense food",
+    "page": null,
+    "studies": [
+     "10.1177/156482650302400410",
+     "Angelucci et al. 2011"
+    ]
+   }
+  },
+  {
+   "id": "b6",
+   "label": "[Health and nutrition outcomes in pregnant women not assessed]; Some evidence of increased weight in lactating women (35)...",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "[Health and nutrition outcomes in pregnant women not assessed]; Some evidence of increased weight in lactating women (35)",
+    "scale": "insufficient",
+    "quote": "Health and nutrition outcomes in pregnant women not assessed",
+    "page": null,
+    "studies": [
+     "Neufeld et al. 2008"
+    ]
+   }
+  },
+  {
+   "id": "b7",
+   "label": "Food supplement: Nutrivida for pregnant and lactating women (PLW) distributed irregularly (19).",
+   "layer": "activity",
+   "container": null,
+   "verdict": {
+    "raw": "distributed irregularly (19)",
+    "scale": "partly",
+    "quote": "distributed irregularly",
+    "page": null,
+    "studies": [
+     "Neufeld et al. 2004"
+    ]
+   }
+  },
+  {
+   "id": "b8",
+   "label": "Poor acceptance of Nutrivida by PLW for own consumption (34), prepared for consumption by others in the home",
+   "layer": "output",
+   "container": null,
+   "verdict": {
+    "raw": "Poor acceptance of Nutrivida by PLW for own consumption (34), prepared for consumption by others in the home",
+    "scale": "against",
+    "quote": "Poor acceptance of Nutrivida by PLW for own consumption",
+    "page": null,
+    "studies": [
+     "10.3945/jn.109.113498"
+    ]
+   }
+  },
+  {
+   "id": "b9",
+   "label": "Low proportion of PLW consume Nutrivida (19).",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "Low proportion of PLW consume Nutrivida (19).",
+    "scale": "against",
+    "quote": "Low proportion of PLW consume Nutrivida",
+    "page": null,
+    "studies": [
+     "Neufeld et al. 2004"
+    ]
+   }
+  },
+  {
+   "id": "b10",
+   "label": "Increased consumption of nutritious foods (19); [contribution of Nutrivida too small to be quantified]",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "Increased consumption of nutritious foods (19); [contribution of Nutrivida too small to be quantified]",
+    "scale": "partly",
+    "quote": "contribution of Nutrivida too small to be quantified",
+    "page": null,
+    "studies": [
+     "Neufeld et al. 2004"
+    ]
+   }
+  },
+  {
+   "id": "b11",
+   "label": "Food supplement: Nutrisano for infants and young children (IYC) distributed regularly, not always to appropriate age groups (19)",
+   "layer": "activity",
+   "container": null,
+   "verdict": {
+    "raw": "distributed regularly, not always to appropriate age groups (19)",
+    "scale": "partly",
+    "quote": "not always to appropriate age groups",
+    "page": null,
+    "studies": [
+     "Neufeld et al. 2004"
+    ]
+   }
+  },
+  {
+   "id": "b12",
+   "label": "Nutrisano highly accepted (19,28), but prepared incorrectly and commonly shared",
+   "layer": "output",
+   "container": null,
+   "verdict": {
+    "raw": "Nutrisano highly accepted (19,28), but prepared incorrectly and commonly shared",
+    "scale": "partly",
+    "quote": "but prepared incorrectly and commonly shared",
+    "page": null,
+    "studies": [
+     "Neufeld et al. 2004",
+     "Neufeld et al. 2008"
+    ]
+   }
+  },
+  {
+   "id": "b13",
+   "label": "Moderate proportion of IYC consume Nutrisano but in quantity less than recommended (19)",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "Moderate proportion of IYC consume Nutrisano but in quantity less than recommended (19)",
+    "scale": "partly",
+    "quote": "in quantity less than recommended",
+    "page": null,
+    "studies": [
+     "Neufeld et al. 2004"
+    ]
+   }
+  },
+  {
+   "id": "b14",
+   "label": "Nutrisano contributes to increased micronutrient intake, but no net increase in energy intake (19,36)",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "Nutrisano contributes to increased micronutrient intake, but no net increase in energy intake (19,36)",
+    "scale": "partly",
+    "quote": "increased micronutrient intake, but no net increase in energy intake",
+    "page": null,
+    "studies": [
+     "Neufeld et al. 2004",
+     "10.3945/jn.112.162792"
+    ]
+   }
+  },
+  {
+   "id": "b15",
+   "label": "Lower prevalence of common childhood illnesses (23) and improved micronutrient status (19)",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "Lower prevalence of common childhood illnesses (23) and improved micronutrient status (19)",
+    "scale": "supports",
+    "quote": "Lower prevalence of common childhood illnesses",
+    "page": null,
+    "studies": [
+     "10.1257/0002828041302109",
+     "Neufeld et al. 2004"
+    ]
+   }
+  },
+  {
+   "id": "b16",
+   "label": "Short-term child impact: Increased birthweight (24); Improved child growth and reduction in anemia (23,14,25), some development indicators improved (26); Persistent prevalence of malnutrition (27), variability by state, and higher in Indigenous populations (28)",
+   "layer": "impact",
+   "container": null,
+   "verdict": {
+    "raw": "Improved child growth and reduction in anemia (23,14,25), some development indicators improved (26); Persistent prevalence of malnutrition (27), variability by state, and higher in Indigenous populations (28)",
+    "scale": "partly",
+    "quote": "Persistent prevalence of malnutrition",
+    "page": null,
+    "studies": [
+     "10.1111/j.1365-3156.2008.02157.x",
+     "10.1257/0002828041302109",
+     "10.1001/jama.291.21.2563",
+     "10.1093/jn/138.4.793",
+     "Gertler and Fernald 2004",
+     "Neufeld et al. 2006",
+     "Neufeld et al. 2008"
+    ]
+   }
+  },
+  {
+   "id": "b17",
+   "label": "Long-term impact on human capital reflected in: Lasting impact on height and improved cognitive and school outcomes (forthcoming)",
+   "layer": "impact",
+   "container": null,
+   "verdict": {
+    "raw": "Forthcoming evaluations will provide evidence of impacts of CCT-POP on adult height, and several education and cognition indicators after 20 y of implementation",
+    "scale": "insufficient",
+    "quote": "Forthcoming evaluations will provide evidence",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b18",
+   "label": "Requirement: Education sessions related to use of Nutrisano use ineffective communications approaches (21,28)",
+   "layer": "activity",
+   "container": null,
+   "verdict": {
+    "raw": "use ineffective communications approaches (21,28)",
+    "scale": "against",
+    "quote": "ineffective communications approaches",
+    "page": null,
+    "studies": [
+     "10.1093/jn/137.2.440",
+     "Neufeld et al. 2008"
+    ]
+   }
+  },
+  {
+   "id": "b19",
+   "label": "Persistence of complementary feeding practices not aligned with recommendations (37); some evidence of reduced lactation duration in urban areas (27,35)",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "Persistence of complementary feeding practices not aligned with recommendations (37); some evidence of reduced lactation duration in urban areas (27,35)",
+    "scale": "against",
+    "quote": "some evidence of reduced lactation duration in urban areas",
+    "page": null,
+    "studies": [
+     "WHO 2001",
+     "Neufeld et al. 2006",
+     "Neufeld et al. 2008"
+    ]
+   }
+  },
+  {
+   "id": "b20",
+   "label": "Requirement: Increased coverage of routine care for children (31); vaccination already high",
+   "layer": "activity",
+   "container": null,
+   "verdict": {
+    "raw": "Increased coverage of routine care for children (31); vaccination already high",
+    "scale": "supports",
+    "quote": "Increased coverage of routine care for children",
+    "page": null,
+    "studies": [
+     "Gutiérrez et al. 2008"
+    ]
+   }
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b2",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "The program successfully improved the timeliness and frequency of antenatal care",
+    "scale": "supports",
+    "quote": "a 16.7% increase in antenatal care during the first trimester",
+    "page": null,
+    "studies": [
+     "Huerta and Hernández 2000",
+     "Orozco and Soto 1999"
+    ]
+   }
+  },
+  {
+   "id": "l2",
+   "source": "b2",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "there are insufficient data to assess the extent to which any improvement of pregnancy outcome was mediated through improved dietary intake during pregnancy and/or antenatal care",
+    "scale": "insufficient",
+    "quote": "there are insufficient data",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "l3",
+   "source": "b3",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "the cash transfers increased household consumption (i.e., purchase) of total calories, and of several nutritious foods including fruits, vegetables, and animal-source foods",
+    "scale": "supports",
+    "quote": "the cash transfers increased household consumption",
+    "page": null,
+    "studies": [
+     "10.1177/156482650302400410"
+    ]
+   }
+  },
+  {
+   "id": "l4",
+   "source": "b4",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l5",
+   "source": "b5",
+   "target": "b10",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Evidence suggests that this did translate into increased consumption of these foods by PLW after 1 and 2 y of CCT-POP participation",
+    "scale": "supports",
+    "quote": "did translate into increased consumption of these foods by PLW",
+    "page": null,
+    "studies": [
+     "Angelucci et al. 2011",
+     "Attanasio and Di Maro 2004"
+    ]
+   }
+  },
+  {
+   "id": "l6",
+   "source": "b7",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l7",
+   "source": "b8",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l8",
+   "source": "b9",
+   "target": "b10",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "We did not go on to quantify nutrient intake from Nutrivida because of the very low reported quantities consumed.",
+    "scale": "insufficient",
+    "quote": "very low reported quantities consumed",
+    "page": null,
+    "studies": [
+     "Neufeld et al. 2004"
+    ]
+   }
+  },
+  {
+   "id": "l9",
+   "source": "b10",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "there are insufficient data to assess the extent to which any improvement of pregnancy outcome was mediated through improved dietary intake during pregnancy and/or antenatal care",
+    "scale": "insufficient",
+    "quote": "there are insufficient data",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "l10",
+   "source": "b6",
+   "target": "b16",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l11",
+   "source": "b11",
+   "target": "b12",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l12",
+   "source": "b12",
+   "target": "b13",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l13",
+   "source": "b13",
+   "target": "b14",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Nutrisano contributed to dietary adequacy of iron, zinc, and vitamins A and C but no net increase in energy intake",
+    "scale": "partly",
+    "quote": "but no net increase in energy intake",
+    "page": null,
+    "studies": [
+     "Neufeld et al. 2004",
+     "10.3945/jn.112.162792"
+    ]
+   }
+  },
+  {
+   "id": "l14",
+   "source": "b14",
+   "target": "b15",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l15",
+   "source": "b15",
+   "target": "b16",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l16",
+   "source": "b18",
+   "target": "b19",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l17",
+   "source": "b19",
+   "target": "b14",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l18",
+   "source": "b20",
+   "target": "b15",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "beneficiary women brought their children to routine health care appointments more often than their counterparts without the CCT-POP, translating into 25% lower prevalence of common childhood illness during the first 6 mo of life",
+    "scale": "supports",
+    "quote": "translating into 25% lower prevalence of common childhood illness",
+    "page": null,
+    "studies": [
+     "10.1257/0002828041302109"
+    ]
+   }
+  },
+  {
+   "id": "l19",
+   "source": "b16",
+   "target": "b17",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "assumption",
+   "text": "Increased household purchase of nutritious foods translates into improved home diets for young children.",
+   "links": [],
+   "from_layer": "output",
+   "to_layer": "outcome_short",
+   "verdict": {
+    "raw": "Despite the increased household-level consumption of several nutritious foods (32), the results demonstrated no change in dietary intake from home diet among beneficiary children aged 6−59 mo in rural areas of Mexico",
+    "scale": "against",
+    "quote": "no change in dietary intake from home diet",
+    "page": null,
+    "studies": [
+     "10.1177/156482650302400410",
+     "Rivera-Dommarco et al. 2008",
+     "10.3945/jn.112.162792"
+    ]
+   }
+  },
+  {
+   "id": "a2",
+   "kind": "assumption",
+   "text": "The iron fortificant is sufficiently bioavailable to improve iron status and anemia.",
+   "links": [
+    "l14"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "the bioavailability of reduced iron was low, and that ferrous gluconate and ferrous sulfate provided substantially higher bioavailability",
+    "scale": "against",
+    "quote": "the bioavailability of reduced iron was low",
+    "page": null,
+    "studies": [
+     "10.1093/jn/135.1.64",
+     "10.1097/mpg.0b013e318167b03b",
+     "Neufeld et al. 2003"
+    ]
+   }
+  },
+  {
+   "id": "a3",
+   "kind": "assumption",
+   "text": "A common nutrition-component design across regions adequately addresses the needs of different beneficiary subgroups.",
+   "links": [],
+   "from_layer": "context",
+   "to_layer": "activity",
+   "verdict": {
+    "raw": "the program with its common design across all regions of Mexico was not well adapted to the special needs of some subgroups, particularly indigenous populations",
+    "scale": "against",
+    "quote": "not well adapted to the special needs of some subgroups",
+    "page": null,
+    "studies": [
+     "Neufeld et al. 2006",
+     "Neufeld et al. 2008"
+    ]
+   }
+  },
+  {
+   "id": "a4",
+   "kind": "risk",
+   "text": "Knowledge alone may not be the barrier to supplement use: women understood that Nutrisano was intended for a specific child but disagreed and shared it with other children.",
+   "links": [
+    "l16",
+    "l12"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "knowledge was often not the barrier to consumption",
+    "scale": "supports",
+    "quote": "They did not, however, agree with this principle and shared with all children",
+    "page": null,
+    "studies": [
+     "Neufeld et al. 2004"
+    ]
+   }
+  }
+ ],
+ "context": [
+  "Undernutrition was substantially more prevalent in rural than urban areas and among indigenous populations.",
+  "Rural stunting prevalence ranged from 17% to 38% across states in the evaluation.",
+  "Women's diets were low in micronutrients but adequate or high in energy; low weight was uncommon and overweight and obesity were prevalent.",
+  "Primary healthcare quality and access, particularly for indigenous women, constrained implementation.",
+  "Education was delivered in Spanish even in predominantly indigenous communities where women could have limited Spanish fluency.",
+  "Minimal training was provided to health professionals, whose central role in nutrition communication was underappreciated in the initial design."
+ ],
+ "key_claims": [
+  {
+   "id": "k1",
+   "claim": "Programme conditionalities increase timely antenatal care, but care quality and access constrain the pathway to better pregnancy outcomes.",
+   "refs": [
+    "b1",
+    "b2",
+    "b6",
+    "l1",
+    "l2"
+   ],
+   "where": "Figure 1; Results: Improving pregnancy and lactation outcomes through better care and dietary intake",
+   "verdict": {
+    "raw": "The program successfully improved the timeliness and frequency of antenatal care, with a 16.7% increase in antenatal care during the first trimester, and 4.1% increase in the number of visits attended per woman (30). The quality of antenatal care, however, remains a challenge in the primary healthcare system (31), as does access for some women, particularly indigenous women (39).",
+    "scale": "partly",
+    "quote": "The quality of antenatal care, however, remains a challenge",
+    "page": null,
+    "studies": [
+     "Huerta and Hernández 2000",
+     "Orozco and Soto 1999",
+     "Gutiérrez et al. 2008",
+     "10.1093/heapol/czq085"
+    ]
+   }
+  },
+  {
+   "id": "k2",
+   "claim": "Cash transfers increase food purchases and women's consumption of nutritious foods, but do not ensure an appropriate energy balance.",
+   "refs": [
+    "b3",
+    "b5",
+    "b10",
+    "b6",
+    "l3",
+    "l5",
+    "l9"
+   ],
+   "where": "Figure 1; Results: Improving pregnancy and lactation outcomes through better care and dietary intake",
+   "verdict": {
+    "raw": "the cash transfers increased household consumption (i.e., purchase) of total calories, and of several nutritious foods including fruits, vegetables, and animal-source foods (32). Evidence suggests that this did translate into increased consumption of these foods by PLW after 1 and 2 y of CCT-POP participation (33, 41), but full details of dietary patterns of women were not available. ... the prevalence of overweight was 39.6% and obesity 24.3%, ∼3 percentage points higher than baseline (35).",
+    "scale": "partly",
+    "quote": "the diets of PLW were low in micronutrients but adequate or high in energy",
+    "page": null,
+    "studies": [
+     "10.1177/156482650302400410",
+     "Angelucci et al. 2011",
+     "Attanasio and Di Maro 2004",
+     "Neufeld et al. 2008"
+    ]
+   }
+  },
+  {
+   "id": "k3",
+   "claim": "Nutrivida must reach women and be acceptable and consumed regularly to fill their dietary gaps; irregular receipt and very low consumption undermine this pathway.",
+   "refs": [
+    "b7",
+    "b8",
+    "b9",
+    "b10",
+    "l6",
+    "l7",
+    "l8"
+   ],
+   "where": "Figure 1; Results: Improving pregnancy and lactation outcomes through better care and dietary intake",
+   "verdict": {
+    "raw": "in 2006 only 37.1% of pregnant or lactating women reported having received Nutrivida, slightly higher in rural (41.4%) than urban (28.6%) areas (40). ... only 25% of lactating women reported consuming Nutrivida, of whom ∼60% prepared it according to recommendations (19). We did not go on to quantify nutrient intake from Nutrivida because of the very low reported quantities consumed. ... women reported low acceptance of Nutrivida for their own consumption (34).",
+    "scale": "against",
+    "quote": "only 25% of lactating women reported consuming Nutrivida",
+    "page": null,
+    "studies": [
+     "INSP 2006",
+     "Neufeld et al. 2004",
+     "10.3945/jn.109.113498"
+    ]
+   }
+  },
+  {
+   "id": "k4",
+   "claim": "Nutrisano distribution and acceptance lead to consumption, but sharing, preparation and targeting practices reduce the dose reaching the intended child.",
+   "refs": [
+    "b11",
+    "b12",
+    "b13",
+    "l11",
+    "l12",
+    "a4"
+   ],
+   "where": "Figure 1; Results: Improving child outcomes through better care, dietary practices, and intake",
+   "verdict": {
+    "raw": "Despite high acceptance, coverage of Nutrisano was moderate. The proportion of children aged 6−24 mo who reported consuming Nutrisano regularly (≥4 times/wk) was 50% in rural areas and 33% in urban areas (19, 28). ... the mean amount consumed ... was ∼20 g, just less than half the recommended daily dose of 44 g (28). ... On average, 2.5 family members consumed the Nutrisano that had been targeted to a single child aged 6−23 mo. ... many medical staff prioritized distribution of Nutrisano to children with low weight regardless of age range (21).",
+    "scale": "partly",
+    "quote": "just less than half the recommended daily dose",
+    "page": null,
+    "studies": [
+     "Neufeld et al. 2004",
+     "Neufeld et al. 2008",
+     "10.1093/jn/137.2.440"
+    ]
+   }
+  },
+  {
+   "id": "k5",
+   "claim": "Education must build skills and motivation for appropriate supplement use and child feeding; the original communication approach did not do so.",
+   "refs": [
+    "b4",
+    "b18",
+    "b19",
+    "l16",
+    "l17",
+    "a4"
+   ],
+   "where": "Figure 1; Results: Improving child outcomes through better care, dietary practices, and intake; Discussion",
+   "verdict": {
+    "raw": "The qualitative and ethnographic studies (20, 21) concluded that this was insufficient to educate and motivate women to use the products appropriately. ... Breastfeeding initiation was very high (almost 95%) both in urban and in rural areas (27, 35), and no change was detected in the urban evaluation (not assessed in rural evaluations) (27). In urban areas, however, beneficiary women had shorter total breastfeeding duration (mean 14.0 mo) than women in the comparison communities (mean 16.3 mo) (27). ... the recommendation to begin distribution of Nutrisano at 6 rather than 4 mo was not fully embraced and implemented by some medical staff (21).",
+    "scale": "against",
+    "quote": "insufficient to educate and motivate women to use the products appropriately",
+    "page": null,
+    "studies": [
+     "10.1590/s0036-36342008000400010",
+     "10.1093/jn/137.2.440",
+     "Neufeld et al. 2006",
+     "Neufeld et al. 2008"
+    ]
+   }
+  },
+  {
+   "id": "k6",
+   "claim": "Greater household food purchases need to improve children's home diets, but this change was not found in rural beneficiary children.",
+   "refs": [
+    "b5",
+    "a1"
+   ],
+   "where": "Results: Improving child outcomes through better care, dietary practices, and intake",
+   "verdict": {
+    "raw": "Despite the increased household-level consumption of several nutritious foods (32), the results demonstrated no change in dietary intake from home diet among beneficiary children aged 6−59 mo in rural areas of Mexico (42).",
+    "scale": "against",
+    "quote": "no change in dietary intake from home diet",
+    "page": null,
+    "studies": [
+     "10.1177/156482650302400410",
+     "Rivera-Dommarco et al. 2008",
+     "10.3945/jn.112.162792"
+    ]
+   }
+  },
+  {
+   "id": "k7",
+   "claim": "Consuming Nutrisano increases children's micronutrient intake, although programme use does not consistently increase net energy intake or eliminate deficiency.",
+   "refs": [
+    "b13",
+    "b14",
+    "b15",
+    "l13",
+    "l14"
+   ],
+   "where": "Figure 1; Results: Improving child outcomes through better care, dietary practices, and intake",
+   "verdict": {
+    "raw": "In the rural impact evaluation sample, children who consumed Nutrisano had higher total dietary intakes of energy, iron, zinc, and vitamin A than nonconsumers (36). ... over 90% of no longer breastfed children who consumed Nutrisano had adequate iron, zinc, vitamin A, and vitamin C intakes. ... This study and the year-long supplement consumption study in urban areas found that Nutrisano contributed to dietary adequacy of iron, zinc, and vitamins A and C but no net increase in energy intake (19). Despite these findings, program evaluations revealed minimal impact on anemia (14, 25), and a persistently high prevalence of micronutrient deficiency (19).",
+    "scale": "partly",
+    "quote": "contributed to dietary adequacy of iron, zinc, and vitamins A and C but no net increase in energy intake",
+    "page": null,
+    "studies": [
+     "10.3945/jn.112.162792",
+     "Neufeld et al. 2004",
+     "10.1001/jama.291.21.2563",
+     "10.1093/jn/138.4.793"
+    ]
+   }
+  },
+  {
+   "id": "k8",
+   "claim": "The supplement's iron must be bioavailable and sensorially acceptable to improve iron status; reduced iron performed poorly and reformulation was warranted.",
+   "refs": [
+    "a2",
+    "l14"
+   ],
+   "where": "Table 2; Results: Improving child outcomes through better care, dietary practices, and intake; Discussion",
+   "verdict": {
+    "raw": "the bioavailability of reduced iron was low, and ... ferrous gluconate and ferrous sulfate provided substantially higher bioavailability (44). ... Nutrisano fortified with reduced iron had no impact on iron status or anemia after 4 mo follow-up compared with micronutrient syrup (Table 2). In parallel, studies confirmed that both ferrous sulfate and reduced iron resulted in greater changes to organoleptic properties of the foods than ferrous gluconate (45), which then replaced reduced iron as a fortificant.",
+    "scale": "against",
+    "quote": "had no impact on iron status or anemia after 4 mo follow-up",
+    "page": null,
+    "studies": [
+     "10.1093/jn/135.1.64",
+     "10.1097/mpg.0b013e318167b03b",
+     "Neufeld et al. 2003",
+     "10.1111/j.1750-3841.2007.00581.x",
+     "10.21149/spm.v57i1.7398",
+     "10.3945/jn.110.134957"
+    ]
+   }
+  },
+  {
+   "id": "k9",
+   "claim": "More routine preventive healthcare reduces common childhood illness.",
+   "refs": [
+    "b20",
+    "b15",
+    "l18"
+   ],
+   "where": "Figure 1; Results: Improving child outcomes through better care, dietary practices, and intake",
+   "verdict": {
+    "raw": "beneficiary women brought their children to routine health care appointments more often than their counterparts without the CCT-POP, translating into 25% lower prevalence of common childhood illness during the first 6 mo of life",
+    "scale": "supports",
+    "quote": "25% lower prevalence of common childhood illness",
+    "page": null,
+    "studies": [
+     "10.1257/0002828041302109"
+    ]
+   }
+  },
+  {
+   "id": "k10",
+   "claim": "The programme improves birthweight, child growth and some development outcomes, with smaller effects on anemia and substantial residual malnutrition.",
+   "refs": [
+    "b16",
+    "l10",
+    "l15"
+   ],
+   "where": "Figure 1; Results: Brief overview of the nutrition-related impact of CCT-POP",
+   "verdict": {
+    "raw": "Program participation was associated with a 127.3 g higher birth weight (P = 0.02) and a 4.6% lower prevalence of low birth weight (P = 0.05) (24). Positive impacts in the short and medium term on nutritional status of children, particularly child growth and to a lesser extent anemia have been well documented (14, 25), as has impact on health status (23, 38), and for some indicators of child development (26).",
+    "scale": "partly",
+    "quote": "particularly child growth and to a lesser extent anemia",
+    "page": null,
+    "studies": [
+     "10.1111/j.1365-3156.2008.02157.x",
+     "10.1001/jama.291.21.2563",
+     "10.1093/jn/138.4.793",
+     "10.1257/0002828041302109",
+     "Gutiérrez et al. 2004",
+     "Gertler and Fernald 2004"
+    ]
+   }
+  },
+  {
+   "id": "k11",
+   "claim": "Nutrition programme design must fit regional and sociocultural needs rather than assume one approach works equally well for all beneficiary groups.",
+   "refs": [
+    "a3",
+    "b16"
+   ],
+   "where": "Abstract: Conclusions; Results: Brief overview of the nutrition-related impact of CCT-POP; Discussion",
+   "verdict": {
+    "raw": "the prevalence of undernutrition was substantially higher in rural than in urban areas (27) and among indigenous populations (28). ... the prevalence of stunting in the CCT-POP evaluation ranged from 17% to 38% across various states (28). ... the program with its common design across all regions of Mexico was not well adapted to the special needs of some subgroups, particularly indigenous populations.",
+    "scale": "against",
+    "quote": "not well adapted to the special needs of some subgroups, particularly indigenous populations",
+    "page": null,
+    "studies": [
+     "Neufeld et al. 2006",
+     "Neufeld et al. 2008"
+    ]
+   }
+  },
+  {
+   "id": "k12",
+   "claim": "Early health and nutrition gains are intended to produce lasting improvements in adult height, cognition and schooling, but this long-term step remained untested in the review.",
+   "refs": [
+    "b17",
+    "l19"
+   ],
+   "where": "Figure 1; Results: Brief overview of the nutrition-related impact of CCT-POP",
+   "verdict": {
+    "raw": "Forthcoming evaluations will provide evidence of impacts of CCT-POP on adult height, and several education and cognition indicators after 20 y of implementation (study forthcoming: World Bank).",
+    "scale": "insufficient",
+    "quote": "Forthcoming evaluations will provide evidence",
+    "page": null,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "Despite positive impacts, a high prevalence of malnutrition persisted in the population.",
+   "scale": "partly",
+   "quote": "Despite positive impacts, a high prevalence of malnutrition persisted",
+   "page": null,
+   "studies": []
+  },
+  "weakest_links": [
+   "a2",
+   "a3"
+  ],
+  "strongest_links": [],
+  "summary": "CCT-POP had positive impacts on child health and nutrition and was generally well designed to influence health and dietary intake. Antenatal and young-child healthcare coverage increased, and cash enabled more nutritious food purchases. However, supplement use was not aligned with recommendations, the communications strategy was ineffective and ill-suited to motivating use, and a common design did not adequately address subgroup needs, particularly those of indigenous populations. Nutrisano improved micronutrient intake but its household use limited frequency and quantity consumed; Nutrivida consumption was very low. These findings motivated further research and redesign of the nutrition component.",
+  "recommendations": [
+   "Compare alternatives to Nutrivida and Nutrisano in a randomized trial: micronutrient tablets and powders for women, and micronutrient syrup and powders for children.",
+   "Strengthen the communications component with approaches that develop skills and motivation rather than relying on didactic knowledge transfer.",
+   "Recognize healthcare professionals' central implementation role and improve their nutrition knowledge and communication skills.",
+   "Investigate and address sociocultural and contextual barriers to programme acceptance and use.",
+   "Use a more bioavailable iron fortificant and increased vitamin C to favor absorption; this reformulation was implemented in 2005.",
+   "Begin Nutrisano distribution at six rather than four months to avoid interference with breastfeeding and maintain consistent exclusive-breastfeeding messages; this change had been adopted but was not fully implemented by all staff."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/prospera_pip_garciaguerra_2019_fig1.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "The supplied figure is a small, low-resolution populated diagram. Box labels retain its findings rather than reconstructing unprinted original box wording.",
+   "Figure 1 is supplied from XML without page numbers; figure_pages is empty and verdict page fields are null.",
+   "The figure has no explicit layer headings. Layers are mapped from the roles and positions of boxes; both explicitly labelled short- and long-term impact boxes are mapped to impact.",
+   "The routed arrows from the child-feeding and routine-care boxes are small: b19 to b14 and b20 to b15 are transcribed with medium confidence. The education-to-purchase arrow and the intake-to-child-health arrow also merit higher-resolution checking.",
+   "The maternal health box appears to end with an ellipsis after reference 35; this has been retained.",
+   "The source identifies major weaknesses but does not formally rank strongest or weakest arrows. weakest_links lists the directly judged assumptions on iron bioavailability and common design; the communication and supplement-use weaknesses are retained in box verdicts and key claims.",
+   "Several different works share the short citation Neufeld et al. 2008. Figure reference 28 is the rural nutritional situation assessment; reference 35 is the chapter on urban women and children.",
+   "The overall finding of improved micronutrient status in Figure 1 coexists with text reporting persistent deficiency and little anemia impact; both findings are retained rather than harmonized."
+  ],
+  "source_sha256": "324515ca16a6df80c677b2381a8ab1713a313e23c6c193e96180691eac319e2e",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

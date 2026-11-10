@@ -1,0 +1,836 @@
+{
+ "meta": {
+  "id": "mens_sheds_kelly_2019",
+  "title": "Men's Sheds: A conceptual exploration of the causal pathways for health and well-being",
+  "organisation": "Glasgow Caledonian University",
+  "year": 2019,
+  "country": "International",
+  "topic": "Men's health and well-being",
+  "intervention_type": "programme",
+  "timing": "synthesis",
+  "doc_url": "https://researchonline.gcu.ac.uk/ws/files/27420893/hsc.12765.pdf",
+  "landing_url": "https://doi.org/10.1111/hsc.12765",
+  "licence": "Creative Commons Attribution License",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "evidence_synthesis",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Improve men's health and well-being through a gender-sensitive community-based intervention.",
+  "population": "Men, particularly older retired men, unemployed men, and men marginalised through health problems or negative life changes. Participants in the reviewed studies ranged from 18 to 91 years.",
+  "place": "Predominantly Australia, with studies from the UK, Ireland and an international study including New Zealand and Canada.",
+  "time_horizon": "No common intervention duration or outcome horizon is specified. Only one included study followed changes over two years.",
+  "intervention": "Men's Sheds: communal workshop spaces offering meaningful practical, recreational and social activities in an informal, unstructured setting. Attendance frequency and session dosage are not specified.",
+  "context": "Men have poorer health and lower life expectancy than women but are less likely to seek help. Retirement and unemployment can increase isolation. The movement began in Australia in the 1990s and subsequently expanded internationally.",
+  "outcome_first": "Develop a theory of change for improving health and well-being among men, particularly retired, unemployed and socially marginalised men, in Australia and comparable settings in the UK and Ireland. Account for men's relatively low engagement with formal health services.",
+  "intervention_first": "Develop a theory of change for Men's Sheds, community-based communal workshop spaces for men in Australia and comparable international settings. Explain how this intervention could improve health and well-being, particularly for retired, unemployed and socially marginalised men."
+ },
+ "containers": [],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "Education/ Skills\n- A space for practical and physical activities (e.g. making things)\n- Educational opportunities to learn new skills/ share old skills\n- The provision of health and wellbeing materials, guidance",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b2",
+   "label": "Socialisation/ Interaction\n- A space to socialise and interact with others\n- A space that is not home/ an alternative place to go",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b3",
+   "label": "Inclusivity\n- Equal and inclusive space for all backgrounds and abilities\n- A place of refuge and safety where vulnerable individuals can receive support\n- Alcohol and drug free zone/ a place for recovery",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b4",
+   "label": "Improvement of skills and knowledge that is shared amongst shed members",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b5",
+   "label": "Increased physical movement and activity and decreased sedentary behaviour",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b6",
+   "label": "Participation in meaningful activities that address the loss of workplace identity",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b7",
+   "label": "Improved interaction skills and expansion of social networks",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b8",
+   "label": "Improved health literacy and understanding of social, physical and mental health",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b9",
+   "label": "Replacement of drugs and alcohol with shed activities",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b10",
+   "label": "Engendering of an accepting, safe and supportive environment",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b11",
+   "label": "Improved communication with family members",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b12",
+   "label": "Improved fitness and mobility/ decreased sense of frailty",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b13",
+   "label": "Increased motivation to leave the house/ maintain a daily routine",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b14",
+   "label": "Increased social bonds, quality relationships and friendships",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b15",
+   "label": "Increased health seeking/ improvement behaviours",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b16",
+   "label": "Prevention of anti-social behaviour and re-offending",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b17",
+   "label": "Escape/ respite from personal problems, pressure and responsibility",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b18",
+   "label": "Increased feelings of contentment, safety, security and relaxation",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b19",
+   "label": "Improved relationships outside of the shed (e.g. family)",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b20",
+   "label": "Increased sense of confidence, pride and achievement",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b21",
+   "label": "Decreased social isolation and loneliness/reduction in social avoidance",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b22",
+   "label": "Increased feelings of identity, value and self-worth/esteem",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b23",
+   "label": "Increased happiness and enjoyment",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b24",
+   "label": "Increased sense of purpose and meaning to life",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b25",
+   "label": "Increased feelings of belonging and inclusion",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b26",
+   "label": "Decreased feelings of anxiety, stress depression and suicidal thoughts",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b27",
+   "label": "Improved physical health",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b28",
+   "label": "Improved mental health",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b29",
+   "label": "Improved social wellbeing",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l2",
+   "source": "b1",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l3",
+   "source": "b1",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l4",
+   "source": "b1",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l5",
+   "source": "b2",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l6",
+   "source": "b3",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l7",
+   "source": "b3",
+   "target": "b10",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l8",
+   "source": "b4",
+   "target": "b13",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l9",
+   "source": "b5",
+   "target": "b12",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Crabtree et al [4] found that shed members were walking and standing more while at sheds, which had led to increased mobility and decreased feelings of frailty; this was not mentioned in any other studies.",
+    "scale": "partly",
+    "quote": "this was not mentioned in any other studies",
+    "page": 9,
+    "studies": [
+     "10.1108/WWOP-09-2017-0026"
+    ]
+   }
+  },
+  {
+   "id": "l10",
+   "source": "b6",
+   "target": "b13",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l11",
+   "source": "b7",
+   "target": "b14",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l12",
+   "source": "b8",
+   "target": "b15",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l13",
+   "source": "b9",
+   "target": "b16",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "a study of a Men's Sheds implied that a decrease in alcohol use in shed members could potentially lead to a decrease in instances of violence, however there was no evidence to show this",
+    "scale": "insufficient",
+    "quote": "however there was no evidence to show this",
+    "page": 9,
+    "studies": [
+     "10.1108/JHOM-12-2016-0234",
+     "10.1111/j.1465-3362.2011.00290.x",
+     "10.1111/j.1465-3362.2011.00340.x"
+    ]
+   }
+  },
+  {
+   "id": "l14",
+   "source": "b9",
+   "target": "b17",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l15",
+   "source": "b10",
+   "target": "b18",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l16",
+   "source": "b11",
+   "target": "b19",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Only one of the studies [6] conducted interviews with family members, therefore, the findings were predominantly anecdotal.",
+    "scale": "partly",
+    "quote": "the findings were predominantly anecdotal",
+    "page": 10,
+    "studies": [
+     "10.1016/j.jomh.2010.08.008",
+     "10.1007/s10943-013-9804-0",
+     "10.1111/j.1365-2524.2010.00932.x",
+     "10.1111/hsc.12365"
+    ]
+   }
+  },
+  {
+   "id": "l17",
+   "source": "b12",
+   "target": "b20",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l18",
+   "source": "b12",
+   "target": "b27",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l19",
+   "source": "b13",
+   "target": "b20",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l20",
+   "source": "b13",
+   "target": "b22",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l21",
+   "source": "b22",
+   "target": "b28",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l22",
+   "source": "b23",
+   "target": "b28",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l23",
+   "source": "b23",
+   "target": "b29",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l24",
+   "source": "b24",
+   "target": "b28",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l25",
+   "source": "b24",
+   "target": "b29",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l26",
+   "source": "b25",
+   "target": "b29",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l27",
+   "source": "b26",
+   "target": "b28",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  }
+ ],
+ "assumptions": [],
+ "context": [
+  "The review included 16 papers: 11 Australian, three UK, one Irish and one international.",
+  "Twelve papers were qualitative, two quantitative and two mixed methods; only two used validated health measures.",
+  "Studies predominantly relied on self-reported outcomes, small samples or low survey response rates.",
+  "Participants included men with disabilities, mental health issues, addiction issues and previous criminal convictions.",
+  "Rurality, deprivation, household circumstances and differences among participant subgroups were under-explored."
+ ],
+ "key_claims": [
+  {
+   "id": "kc1",
+   "claim": "Practical and educational activities let men share and develop skills and continue valued work-like roles.",
+   "refs": [
+    "b1",
+    "b4",
+    "b6",
+    "l1",
+    "l3"
+   ],
+   "where": "Section 3.3.2, Education and skills; Section 3.3.3, Mental health",
+   "verdict": {
+    "raw": "The most commonly reported mediating factor for the provision of education and skills was the opportunity for shed members to share and develop their practical skills, such as carpentry or metalwork. The latter helped to facilitate social interaction with others and the expansion of social networks through common interests. Moreover, skills and knowledge from previous employment could be continued in a meaningful and valued way.",
+    "scale": "partly",
+    "quote": "skills and knowledge from previous employment could be continued in a meaningful and valued way",
+    "page": 7,
+    "studies": [
+     "10.1016/j.jomh.2008.09.006",
+     "10.1111/hsc.12560",
+     "10.1093/heapro/daw091",
+     "10.1108/SEJ-11-2014-0041",
+     "10.1111/j.1365-2524.2010.00932.x",
+     "10.1111/hsc.12365"
+    ]
+   }
+  },
+  {
+   "id": "kc2",
+   "claim": "Practical activities increase movement and reduce sedentary behaviour, potentially improving fitness, mobility and physical health.",
+   "refs": [
+    "b5",
+    "b12",
+    "b27",
+    "l2",
+    "l9",
+    "l18"
+   ],
+   "where": "Section 3.3.2, Education and skills; Table 3; Section 3.3.3, Physical health; Figure 3",
+   "verdict": {
+    "raw": "There were five studies where shed members stated any physiological health outcomes, and all of the data was self-reported. Crabtree et al [4] found that shed members were walking and standing more while at sheds, which had led to increased mobility and decreased feelings of frailty; this was not mentioned in any other studies.",
+    "scale": "partly",
+    "quote": "all of the data was self-reported",
+    "page": 9,
+    "studies": [
+     "10.1111/ajr.12373",
+     "10.1108/WWOP-09-2017-0026",
+     "10.1108/JHOM-12-2016-0234",
+     "10.1007/s10943-013-9804-0",
+     "10.1108/SEJ-11-2014-0041"
+    ]
+   }
+  },
+  {
+   "id": "kc3",
+   "claim": "Space to socialise builds networks and meaningful relationships, which can reduce isolation and improve social well-being.",
+   "refs": [
+    "b2",
+    "b7",
+    "b14",
+    "b21",
+    "b29",
+    "l5",
+    "l11"
+   ],
+   "where": "Section 3.3.2, Socialisation and interaction; Table 3; Section 3.3.3, Social well-being; Figure 5",
+   "verdict": {
+    "raw": "A common social well-being outcome described in 14 of the studies was an increase in social networks and interactions as a result of attending a shed and taking part in activities. In five of the studies, increased social networks and social inclusion was reported as leading to a decreased sense of social isolation.",
+    "scale": "partly",
+    "quote": "was reported as leading to a decreased sense of social isolation",
+    "page": 10,
+    "studies": [
+     "10.1108/WWOP-09-2017-0026",
+     "10.1111/hsc.12560",
+     "10.1093/heapro/daw091",
+     "10.1093/pubmed/fdw116",
+     "10.1007/s10943-013-9804-0"
+    ]
+   }
+  },
+  {
+   "id": "kc4",
+   "claim": "An accepting and inclusive shed environment supports marginalised men and promotes belonging and inclusion.",
+   "refs": [
+    "b3",
+    "b10",
+    "b18",
+    "b25",
+    "l7",
+    "l15",
+    "l26"
+   ],
+   "where": "Section 3.3.2, Inclusivity; Table 3; Section 3.3.3, Social well-being",
+   "verdict": {
+    "raw": "Studies showed that sheds provided a supportive and inclusive environment for men of all backgrounds to attend, including those with physical or mental health issues. A greater sense of belonging from increased social networks was reported in seven of the studies. Social support and solidarity from other shed members, the engendering of a safe and accepting environment, and the ability to share experiences of vulnerability were reported to increase the feeling of being included in a community.",
+    "scale": "partly",
+    "quote": "were reported to increase the feeling of being included in a community",
+    "page": 10,
+    "studies": [
+     "10.1111/ajr.12373",
+     "10.1016/j.jomh.2008.09.006",
+     "10.1111/hsc.12560",
+     "10.1111/hsc.12140",
+     "10.1108/JHOM-12-2016-0234",
+     "10.1093/heapro/daw091",
+     "10.1093/pubmed/fdw116",
+     "10.1108/SEJ-11-2014-0041",
+     "10.1111/hsc.12365"
+    ]
+   }
+  },
+  {
+   "id": "kc5",
+   "claim": "Meaningful work-like activity and daily routine restore purpose, identity and self-worth and may improve mental well-being.",
+   "refs": [
+    "b6",
+    "b13",
+    "b20",
+    "b22",
+    "b23",
+    "b24",
+    "b28",
+    "l10",
+    "l19",
+    "l20",
+    "l21",
+    "l24"
+   ],
+   "where": "Table 3; Section 3.3.3, Mental health; Figure 4",
+   "verdict": {
+    "raw": "The most commonly reported mental health outcome, mentioned in all 16 of the studies, was an increased sense of purpose and meaning to individual participants lives. This outcome was mainly a result of having a reason to leave the house and the addition of structure and routine to their lives, which gave them a meaningful place in society. Having a sense of purpose and meaning was found to lead to increased feelings of self-worth and empowerment, increased sense of masculine identity, confidence and self-esteem and a sense of independence and control in life. Again, these areas were not investigated in detail.",
+    "scale": "partly",
+    "quote": "these areas were not investigated in detail",
+    "page": 9,
+    "studies": [
+     "10.1016/j.jomh.2008.09.006",
+     "10.1108/WWOP-09-2017-0026",
+     "10.1111/1440-1630.12190",
+     "10.1016/j.jomh.2010.08.008",
+     "10.1111/hsc.12560",
+     "10.1111/hsc.12140",
+     "10.1108/JHOM-12-2016-0234",
+     "10.1093/heapro/daw091",
+     "10.1007/s10943-013-9804-0",
+     "10.1108/SEJ-11-2014-0041",
+     "10.1111/j.1365-2524.2010.00932.x"
+    ]
+   }
+  },
+  {
+   "id": "kc6",
+   "claim": "Safe recovery space, purposeful engagement and social support may reduce depression, stress and suicidal thoughts.",
+   "refs": [
+    "b10",
+    "b17",
+    "b18",
+    "b26",
+    "b28",
+    "l27"
+   ],
+   "where": "Table 3; Section 3.3.3, Mental health",
+   "verdict": {
+    "raw": "Decreased depression and instances of suicidal thoughts was mentioned as an outcome of shed activities in 10 of the 16 studies, however, only by a small number of people within each sample.",
+    "scale": "partly",
+    "quote": "only by a small number of people within each sample",
+    "page": 9,
+    "studies": [
+     "10.1016/j.jomh.2008.09.006",
+     "10.1108/WWOP-09-2017-0026",
+     "10.1111/1440-1630.12190",
+     "10.1111/hsc.12560",
+     "10.1111/hsc.12140",
+     "10.1108/JHOM-12-2016-0234",
+     "10.1093/heapro/daw091",
+     "10.1108/SEJ-11-2014-0041",
+     "10.1111/j.1365-2524.2010.00932.x",
+     "10.1111/hsc.12365"
+    ]
+   }
+  },
+  {
+   "id": "kc7",
+   "claim": "A sober and supportive shed environment can replace alcohol and drug use, but resulting long-term health benefits remain untested.",
+   "refs": [
+    "b3",
+    "b9",
+    "b27",
+    "b28"
+   ],
+   "where": "Section 3.3.2, Inclusivity; Section 3.3.3, Physical health",
+   "verdict": {
+    "raw": "A small number of studies reported that shed members decreased their alcohol and drug consumption as a result of being in a sober shed environment; the long-term physical (or mental) health outcomes of this abstinence were not studied.",
+    "scale": "insufficient",
+    "quote": "the long-term physical (or mental) health outcomes of this abstinence were not studied",
+    "page": 9,
+    "studies": [
+     "10.1016/j.jomh.2008.09.006",
+     "10.1108/JHOM-12-2016-0234",
+     "10.1108/SEJ-11-2014-0041"
+    ]
+   }
+  },
+  {
+   "id": "kc8",
+   "claim": "Health information and professional visits improve health literacy, but whether this improves physical health is unclear.",
+   "refs": [
+    "b1",
+    "b8",
+    "b15",
+    "b27",
+    "l4",
+    "l12"
+   ],
+   "where": "Section 3.2; Section 3.3.2, Education and skills; Section 3.3.3, Physical health",
+   "verdict": {
+    "raw": "Cordier and Wilson [3] found that due to health professionals visiting sheds, there was an increase in health literacy among shed participants; nevertheless, it was unclear whether increased health-related knowledge led to improvements in physical health.",
+    "scale": "insufficient",
+    "quote": "it was unclear whether increased health-related knowledge led to improvements in physical health",
+    "page": 9,
+    "studies": [
+     "10.1093/heapro/dat033",
+     "10.1108/JHOM-12-2016-0234"
+    ]
+   }
+  },
+  {
+   "id": "kc9",
+   "claim": "Shed participation may improve family communication and home relationships through shared stories, useful contributions and an outlet for stress.",
+   "refs": [
+    "b11",
+    "b19",
+    "l16"
+   ],
+   "where": "Section 3.2; Section 3.3.2; Section 3.3.3, Social well-being",
+   "verdict": {
+    "raw": "Evidence from the articles tentatively suggests that attending a shed may positively impact upon family life and relationships at home. Only one of the studies [6] conducted interviews with family members, therefore, the findings were predominantly anecdotal. Waling and Fildes [16] found that as a result of attending a shed, men found an outlet for their stress and anger, leading to a decrease in arguments and aggression at home.",
+    "scale": "partly",
+    "quote": "the findings were predominantly anecdotal",
+    "page": 10,
+    "studies": [
+     "10.1016/j.jomh.2010.08.008",
+     "10.1093/heapro/daw091",
+     "10.1007/s10943-013-9804-0",
+     "10.1111/j.1365-2524.2010.00932.x",
+     "10.1111/hsc.12365"
+    ]
+   }
+  },
+  {
+   "id": "kc10",
+   "claim": "Replacing substance use with shed activity might reduce violence, antisocial behaviour and re-offending, but this causal step lacks direct shed evidence.",
+   "refs": [
+    "b9",
+    "b16",
+    "l13"
+   ],
+   "where": "Table 3; Section 3.3.3, opening discussion",
+   "verdict": {
+    "raw": "a study of a Men's Sheds implied that a decrease in alcohol use in shed members could potentially lead to a decrease in instances of violence, however there was no evidence to show this. Therefore, this study was included as links between alcohol use and violence have already been widely substantiated in public health literature",
+    "scale": "insufficient",
+    "quote": "there was no evidence to show this",
+    "page": 9,
+    "studies": [
+     "10.1108/JHOM-12-2016-0234",
+     "10.1111/j.1465-3362.2011.00290.x",
+     "10.1111/j.1465-3362.2011.00340.x"
+    ]
+   }
+  },
+  {
+   "id": "kc11",
+   "claim": "Benefits may differ by age and life circumstances, with older men particularly reporting physical capacity, companionship and restored purpose.",
+   "refs": [],
+   "where": "Section 3.2, Demographic findings; Section 4",
+   "verdict": {
+    "raw": "Men over the age of 60 years were more likely than younger men to report a sense of improved health and well-being through increased physical capacity and a development of new companionship that had been lost through widowhood or loss of friends. Similarly, factors correlated with older age and being retired, such as a loss of purpose, lack of opportunities to share knowledge and skills with others, were counteracted by shed activities.",
+    "scale": "partly",
+    "quote": "Men over the age of 60 years were more likely than younger men to report",
+    "page": 5,
+    "studies": [
+     "10.1108/WWOP-09-2017-0026",
+     "10.1111/1440-1630.12190",
+     "10.1111/hsc.12560",
+     "10.1111/j.1365-2524.2010.00932.x"
+    ]
+   }
+  },
+  {
+   "id": "kc12",
+   "claim": "Shed context and participant disadvantage may shape health benefits, but contextual and subgroup pathways are insufficiently understood.",
+   "refs": [],
+   "where": "Section 3.2, Demographic findings; Section 4",
+   "verdict": {
+    "raw": "Cordier and Wilson [3] found that sheds in remote areas tended to be smaller in size with less shed members; however, remote sheds received the most visits from health workers delivering information and advice to shed members. Yet, this study did not comment on the potential links to improved health and well-being as a result of such visits. Only one study directly discussed the health inequalities that shed members faced as a result of living in an area of deprivation stating that shed activities helped men to confront everyday issues related to unemployment, violence and substance use inherent to their community.",
+    "scale": "insufficient",
+    "quote": "did not comment on the potential links to improved health and well-being",
+    "page": 5,
+    "studies": [
+     "10.1093/heapro/dat033",
+     "10.1108/JHOM-12-2016-0234"
+    ]
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "The study shows that there is a lack of reliable and systematic evidence of the potential causal pathways between Men's Shed activities and health and well-being outcomes.",
+   "scale": "insufficient",
+   "quote": "a lack of reliable and systematic evidence of the potential causal pathways",
+   "page": 2,
+   "studies": []
+  },
+  "weakest_links": [
+   "l13"
+  ],
+  "strongest_links": [],
+  "summary": "The review offers a plausible causal theory and logic model, not a validated causal account. A body of largely qualitative evidence describes plausible mental health and social well-being impacts, while physical health is less documented. Evidence relies on self-report, small samples or low response rates, with little longitudinal measurement and limited generalisability. Context, participant differences and indirect effects on families remain under-explored. The figure's line weights indicate reporting frequency, not causal strength.",
+  "recommendations": [
+   "Undertake larger-scale quantitative and mixed-method studies.",
+   "Use longitudinal designs to measure changes over longer periods.",
+   "Use validated health and well-being measures to support validity, replication and comparison with other interventions.",
+   "Include comparator groups.",
+   "Investigate cultural and geographical context, deprivation, masculine identity and differences among participant subgroups.",
+   "Obtain physical health evidence beyond self-report, particularly concerning sedentary behaviour and alcohol and drug use.",
+   "Test and further develop the proposed theory and logic model."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/mens_sheds_2019_p5.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "The supplied image is Figure 2 on PDF page 5 (printed article page 4). Page references in this record use the supplied PDF-page numbering.",
+   "Arrow transcription is incomplete. Numerous crossing arrows, particularly between intermediate and long-term outcomes, cannot be followed reliably at the supplied resolution. Unresolved arrows have been omitted rather than inferred; the links array must not be treated as an exhaustive transcription.",
+   "Additional dashed arrows from the input boxes into lower mediating-variable boxes, and several long-term-outcome-to-result arrows, also require checking against a higher-resolution figure.",
+   "The source headings were mapped as follows: Inputs/Intervention to input; Mediating variables to output; Intermediate outcomes to outcome_short; Long term outcomes to outcome_long; Result to impact. Mediating variables are not described by the source as programme outputs.",
+   "The figure caption says thicker lines mean more than 10 papers reported an outcome and dotted lines mean fewer than 10. It does not define the treatment of exactly 10 papers. These styles are not causal-support verdicts.",
+   "Reporting counts differ between Table 3 and the narrative: purpose and meaning is 11 in the table but all 16 studies in the narrative; anxiety/stress/depression/suicidal thoughts is 3 in the table while depression/suicidal thoughts is reported in 10 studies in the narrative; belonging/inclusion is 4 in the table versus seven studies reporting belonging in the narrative. These differences have not been reconciled.",
+   "Table 3 reports intermediate-outcome frequencies of 11 for social bonds, 9 for routine, 5 for contentment/safety, 4 each for fitness and respite, and 3 each for health-seeking, antisocial behaviour and family relationships. Long-term frequencies are 11 for purpose, 10 for happiness, 9 each for confidence, reduced isolation and identity/self-worth, 4 for belonging and 3 for anxiety/stress/depression/suicidal thoughts. These are reporting frequencies, not effect estimates.",
+   "Figures 3 and 4 (PDF page 9) and Figure 5 (PDF page 10) show selected physical, mental and social pathways. The overview in Figure 2 is transcribed here; findings from those pathway figures are retained in the key claims.",
+   "No explicit assumptions or risks are separately stated in the figure. Evidence limitations are retained in context, key claims and conclusions rather than invented as assumptions.",
+   "The source does not rank individual strongest links. Its weakest-evidence discussion particularly identifies physical health, contextual variation, family effects and the untested substance-use-to-health and violence pathways; only an identifiable explicitly questioned link is listed under weakest_links."
+  ],
+  "source_sha256": "d019cca819de449034ac681d38fdc9c2b441a023a4ece207fe4f4829f0e74cbf",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

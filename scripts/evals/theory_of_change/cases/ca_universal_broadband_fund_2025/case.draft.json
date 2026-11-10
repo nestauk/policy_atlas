@@ -1,0 +1,471 @@
+{
+ "meta": {
+  "id": "ca_universal_broadband_fund_2025",
+  "title": "Evaluation of the Universal Broadband Fund",
+  "organisation": "Innovation, Science and Economic Development Canada, Audit and Evaluation Branch",
+  "year": 2025,
+  "country": "Canada",
+  "topic": "Rural, remote and Indigenous broadband connectivity",
+  "intervention_type": "fund",
+  "timing": "prospective",
+  "doc_url": "https://ised-isde.canada.ca/site/audits-evaluations/en/evaluation/evaluation-universal-broadband-fund",
+  "landing_url": "https://ised-isde.canada.ca/site/audits-evaluations/en/evaluation/evaluation-universal-broadband-fund",
+  "licence": "",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "ex_post_evaluation",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Ensure Canadian households can access affordable, reliable, high-speed Internet and participate in the digital world, while improving mobile coverage benefiting Indigenous peoples.",
+  "population": "Underserved households in rural and remote Canada, including Indigenous communities, and Indigenous peoples benefiting from mobile coverage in communities and along roads.",
+  "place": "Canada",
+  "time_horizon": "Launched November 9, 2020; funding available until March 31, 2027. The evaluation covers November 9, 2020 to March 31, 2024, with some subsequent progress updates.",
+  "intervention": "The $3.225 billion Universal Broadband Fund provides non-repayable contributions for broadband infrastructure where private investment alone is not commercially viable. Contributions generally cover up to 75% of eligible costs, or up to 90% for underserved Indigenous households and satellite-dependent or very remote communities. Rapid Response Stream projects could receive up to $5 million, and up to $50 million was set aside for mobile projects primarily benefiting Indigenous peoples.",
+  "context": "At launch, rural and remote communities had substantially worse connectivity than urban communities. Sparse populations, high deployment costs, difficult terrain and short construction seasons limited commercially viable investment. The fund operates alongside other federal and provincial/territorial broadband investments and was launched during the COVID-19 pandemic.",
+  "outcome_first": "Develop a theory of change for ensuring underserved rural and remote households across Canada, including Indigenous communities, can access affordable, reliable, high-speed Internet and participate in the digital world. Include improved mobile connectivity benefiting Indigenous peoples and a horizon through March 2027.",
+  "intervention_first": "Develop a theory of change for Canada's Universal Broadband Fund, a $3.225 billion infrastructure contribution programme running through March 2027. It aims to improve high-speed Internet access for underserved rural and remote households, including Indigenous communities, and mobile connectivity benefiting Indigenous peoples."
+ },
+ "containers": [],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "Potential applicants are aware of the UBF program requirements",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "Recipients and other stakeholders were satisfied with the tools and support provided by the UBF, although satisfaction was somewhat lower among smaller ISPs. Many of these applicants used the Pathfinder services, but awareness of these services was low among recipients surveyed.",
+    "scale": "partly",
+    "quote": "awareness of these services was low among recipients surveyed",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b2",
+   "label": "Eligible applicants submit quality applications",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "94.6% of applications were submitted by eligible applicants that met program requirements, surpassing the original target of 85%.",
+    "scale": "supports",
+    "quote": "surpassing the original target of 85%",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b3",
+   "label": "Scalable infrastructure is funded through broadband infrastructure projects (i.e., speeds beyond 50/10 Mbps)",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "91% of UBF funding was allocated to scalable infrastructure, which exceeded the initial target of 85%.",
+    "scale": "supports",
+    "quote": "exceeded the initial target of 85%",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b4",
+   "label": "Rapid response stream projects will offer improved Internet access (e.g., faster speeds, higher capacity, improved affordability)",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "The RRS experienced delays, and the completion target date was extended from March 31, 2022, to December 31, 2023. As of July 2024, 98% of the 75,045 targeted Canadian households were reached, including all 9,941 targeted Indigenous households.",
+    "scale": "partly",
+    "quote": "Rapid Response Stream largely implemented",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b5",
+   "label": "High impact projects that will bring 50/10 Mbps service to households in rural and remote areas are funded",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "The UBF exceeded its initial target of 10 high impact projects funded, with a total of 33 as of July 2024.",
+    "scale": "supports",
+    "quote": "exceeded its initial target of 10 high impact projects funded",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b6",
+   "label": "Households in rural and remote areas, including Nunavut, have access to high-speed Internet at 50/10 Mbps",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "There has been progress in reaching underserved households in Canada with 50/10 Mbps Internet services. There are two years left to reach the remaining 67% (533K) of households targeted by the UBF, as program funding is set to end by March 31, 2027.",
+    "scale": "partly",
+    "quote": "There has been progress in reaching underserved households",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b7",
+   "label": "Indigenous communities have a mobile Internet connection / enhanced mobile connectivity",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "Progress has been slow on the UBF's mobile connectivity objectives for Indigenous communities, with only one community reached.",
+    "scale": "partly",
+    "quote": "Progress has been slow",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b8",
+   "label": "Canadians have the opportunity to participate in the digital economy",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l2",
+   "source": "b2",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l3",
+   "source": "b4",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l4",
+   "source": "b5",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l5",
+   "source": "b6",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l6",
+   "source": "b7",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "risk",
+   "text": "Lengthy application assessment and agreement negotiations can increase costs, shorten construction timelines and undermine project feasibility.",
+   "links": [],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "The delays impacted the business case and feasibility of some projects due to cost increases and more condensed timelines.",
+    "scale": "supports",
+    "quote": "impacted the business case and feasibility of some projects",
+    "page": null,
+    "studies": [
+     "Office of the Auditor General 2023"
+    ]
+   }
+  },
+  {
+   "id": "a2",
+   "kind": "risk",
+   "text": "Inaccurate underserved-household data and overlapping project proposals can require validation and repeated re-scoping, causing delays and additional work.",
+   "links": [],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "The mapping process for underserved households was complex and contained inaccurate information.",
+    "scale": "supports",
+    "quote": "contained inaccurate information",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "a3",
+   "kind": "risk",
+   "text": "Permitting, extreme weather, financing, geographical constraints, shortages of materials and workers, access to other ISPs' infrastructure, and organizational or partner readiness can delay implementation.",
+   "links": [],
+   "from_layer": "outcome_short",
+   "to_layer": "outcome_long",
+   "verdict": {
+    "raw": "Due to the complex nature of their projects, recipients experienced a variety of implementation challenges which were largely outside of the UBF program's control.",
+    "scale": "supports",
+    "quote": "implementation challenges which were largely outside of the UBF program's control",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "a4",
+   "kind": "risk",
+   "text": "Mobile projects may lack incentives and a viable maintenance business case because coverage improvements along roads do not necessarily generate new subscribers.",
+   "links": [],
+   "from_layer": "outcome_short",
+   "to_layer": "outcome_long",
+   "verdict": {
+    "raw": "Some interviewees believed that there were insufficient incentives for ISPs to undertake the mobile projects, as they often do not lead to new subscribers since improvements in mobile coverage mostly target roads between communities.",
+    "scale": "partly",
+    "quote": "insufficient incentives for ISPs to undertake the mobile projects",
+    "page": null,
+    "studies": []
+   }
+  }
+ ],
+ "context": [
+  "At launch, rural, remote and Indigenous communities had inadequate broadband service, below the 50/10 Mbps standard, with slower speeds, lower availability and higher costs.",
+  "Sparse populations and high capital costs make private investment in many underserved communities commercially unattractive.",
+  "The UBF is one of several federal and provincial/territorial connectivity programmes; exact attribution of connectivity gains to UBF funding was challenging.",
+  "The COVID-19 pandemic, inflation, extreme weather and supply-chain and labour constraints affected programme delivery and project implementation.",
+  "Immediate, intermediate and ultimate outcomes are the figure's headings; they are not boxes."
+ ],
+ "key_claims": [
+  {
+   "id": "k1",
+   "claim": "Public funding and coordinated partnerships enable investment in otherwise commercially unviable connectivity projects, leverage other funding and reduce duplication.",
+   "refs": [],
+   "where": "Findings 1, 2 and 13; Summary conclusion",
+   "verdict": {
+    "raw": "A need for government intervention was confirmed because connecting these communities was not economically viable for ISPs. As a key program under the Connectivity Strategy, the UBF contributed to the facilitation of effective partnership activities and coordination with P/Ts and other government departments, thereby mitigating duplication and overlap. A significant amount of non-federal funding was leveraged for UBF funded projects. Recipients indicated that the UBF was a catalyst for the receipt of funding from other government programs and found the UBF to be effective in partnering to maximize broadband Internet access impacts.",
+    "scale": "supports",
+    "quote": "Ecosystem partnerships have enabled the UBF to efficiently reach a large volume of households across Canada.",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k2",
+   "claim": "Applicant information and support help applicants understand requirements and submit eligible, quality applications.",
+   "refs": [
+    "b1",
+    "b2"
+   ],
+   "where": "Finding 3; Figures 5–8",
+   "verdict": {
+    "raw": "94.6% of applications were submitted by eligible applicants that met program requirements, surpassing the original target of 85%. Of recipients surveyed, 78% were satisfied with support provided during application process. 67% of small ISPs were satisfied; 91% of medium and large ISPs were satisfied. Only a minority of funding recipients surveyed were aware of the Pathfinder services (42/124). Further, only a small portion (9/42) were aware that they had used the Pathfinder services, but those who were aware of using them found the services helpful (7/9). The UBF met its target to have at least 100 participants attending six technical webinars. The UBF met its initial target of at least 5 program updates sent to at a minimum 1,000 stakeholders by January 31, 2021.",
+    "scale": "partly",
+    "quote": "Most applications met program requirements",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k3",
+   "claim": "Engagement and tailored support must accommodate individual Indigenous communities' preferences to support project development and consultation.",
+   "refs": [],
+   "where": "Finding 4; Indigenous engagement case study",
+   "verdict": {
+    "raw": "The UBF utilized a two-phase approach to engage Indigenous stakeholders, first working with key representatives, then via Crown-Indigenous reconciliation processes such as the Duty to Consult. Since each Indigenous community has unique preferences, the engagement approach should be adaptive to each community. It was challenging for the ISP to have responsibility for engaging Indigenous stakeholders as they were not the spokespeople for the program. More time was needed to consult with Indigenous stakeholders. The requirement for ISPs to get a Band Council resolution demonstrating Indigenous communities' approval was often administratively burdensome for the First Nations bands and recipients.",
+    "scale": "partly",
+    "quote": "the engagement approach should be adaptive to each community",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k4",
+   "claim": "Timely assessment, approval and agreements are needed to preserve project feasibility and translate budgets into completed infrastructure.",
+   "refs": [
+    "a1",
+    "a3"
+   ],
+   "where": "Findings 5, 9 and 12; Figures 21–23",
+   "verdict": {
+    "raw": "The application and approval process was slow, especially in the early days of the program, due to a high volume of applications, insufficient program personnel, pandemic impacts, and program complexities. The delays impacted the business case and feasibility of some projects due to cost increases and more condensed timelines. Administrative costs were within expected levels, but the UBF's program expenditures were significantly less than planned, in part due to the length of time required to assess proposals and negotiate agreements as well as various external factors that delayed ISP implementation of their infrastructure. UBF expenditures for the first four years were significantly less than budgeted, with only 45% of the amount having been spent ($839M/$1.852B). The majority of recipients surveyed were satisfied or very satisfied with the project implementation process (75%).",
+    "scale": "partly",
+    "quote": "The delays impacted the business case and feasibility of some projects",
+    "page": null,
+    "studies": [
+     "Office of the Auditor General 2023"
+    ]
+   }
+  },
+  {
+   "id": "k5",
+   "claim": "Accurate mapping and validation of underserved households are needed to target funding and avoid overlapping proposals and repeated re-scoping.",
+   "refs": [
+    "a2"
+   ],
+   "where": "Finding 6; Recommendation 1",
+   "verdict": {
+    "raw": "The mapping process for underserved households was complex and contained inaccurate information. The evaluation found that some projects were re-scoped as applicants had overlapping areas of coverage, because they were solely responsible for proposing the geographical areas for their projects. It was also noted that ISED's data on underserved households was not accurate, and the application process did not include time to validate the data using ground truthing and field validation.",
+    "scale": "partly",
+    "quote": "there was a lot of time and resources required by some recipients to validate the location of underserved homes and adjust project parameters",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k6",
+   "claim": "Aligned, sufficiently flexible agreements and well-managed announcements support project delivery without unnecessary administrative delays.",
+   "refs": [],
+   "where": "Finding 7; Figures 11–12; Recommendation 2",
+   "verdict": {
+    "raw": "Many recipients were satisfied with the Contribution Agreement and public announcement processes. Some concerns were raised regarding the flexibility of the Terms and Conditions, use of parallel bilateral agreements, and how the public announcement process was managed. Satisfied or very satisfied: 60% of respondents for Contribution Agreement negotiations and 58% for the public announcement process. Small ISP satisfaction was 67% and 71%, respectively, compared with 54% and 48% for medium and large ISPs. Interviewees said that both levels of government had to agree on each step of the process and a lack of agreement resulted in delays.",
+    "scale": "partly",
+    "quote": "Some concerns were raised regarding the flexibility of the Terms and Conditions",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k7",
+   "claim": "Proportionate claims and reporting processes support implementation while avoiding excessive administrative burden.",
+   "refs": [],
+   "where": "Finding 8, as reproduced in Summary; Recommendation 2",
+   "verdict": {
+    "raw": "While most recipients were satisfied with the claims and reporting processes, some concerns were identified with the length/frequency of the claims process and level of requirements of the reporting process.",
+    "scale": "partly",
+    "quote": "most recipients were satisfied with the claims and reporting processes",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k8",
+   "claim": "UBF funding supports scalable broadband infrastructure and high-impact projects capable of bringing 50/10 Mbps or faster service to rural and remote households.",
+   "refs": [
+    "b3",
+    "b5"
+   ],
+   "where": "Finding 9; Figures 13–14; UBF project infrastructure scalable beyond 50-10 Mbps",
+   "verdict": {
+    "raw": "91% of UBF funding was allocated to scalable infrastructure, which exceeded the initial target of 85%. Seventy-nine percent of scalable infrastructure projects used Fibre technology, and as such, most of the UBF targeted households will be capable of accessing broadband speeds in the future at a level significantly higher than the current target of 50/10 Mbps. The UBF exceeded its initial target of 10 high impact projects funded, with a total of 33 as of July 2024. The UBF exceeded its initial target of connecting 30,000 households via high impact projects by March 31, 2022, with over 152,000 households connected. As of July 2024, the UBF high impact projects had reached 35% of the households targeted and there remained 286K households to be reached by March 31, 2027.",
+    "scale": "supports",
+    "quote": "High impact projects: Target for funding achieved",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k9",
+   "claim": "Rapid Response Stream funding brings improved Internet access to targeted households quickly.",
+   "refs": [
+    "b4"
+   ],
+   "where": "Finding 9; Rapid Response Stream largely implemented",
+   "verdict": {
+    "raw": "The UBF funded 34% of the Rapid Response Stream project applications received. Of these 203 funded projects, 49 were Indigenous. The RRS experienced delays, and the completion target date was extended from March 31, 2022, to December 31, 2023. As of July 2024, 98% of the 75,045 targeted Canadian households were reached, including all 9,941 targeted Indigenous households. There remained only around 1,000 targeted households (in Ontario) that had not yet been reached.",
+    "scale": "partly",
+    "quote": "98% of the 75,045 targeted Canadian households were reached",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k10",
+   "claim": "UBF projects, complemented by backbone investment and other connectivity programmes, expand household access and narrow the connectivity gap.",
+   "refs": [
+    "b6",
+    "a3"
+   ],
+   "where": "Findings 9 and 11; Figures 15–20",
+   "verdict": {
+    "raw": "As of July 2024, UBF projects had reached 33% of households targeted, including 15K Indigenous households (22% of Indigenous households targeted). A large share of the recipients surveyed (69%) reported that they had significant uptake of the Internet services for their completed UBF projects (at least 50% of their targeted subscribers were reached). As of March 31, 2024, for the original CTI program targets, the program had reached 110% of communities; 69% of Indigenous communities, 72% of households, and 75% of anchor institutions. Consequently, the CTI program, along with the UBF and other federal and P/T broadband programs, have contributed to reducing the connectivity gap, with underserved households reduced by 45% from 2020 to 2023. As of December 31, 2023, 60% of First Nations reserve areas had access to 50-10 Mbps service. Since the launch of the UBF, an additional 21% of households were reached in these areas.",
+    "scale": "partly",
+    "quote": "There has been progress in reaching underserved households in Canada with 50/10 Mbps Internet services.",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k11",
+   "claim": "Mobile project funding improves Indigenous communities' connectivity, provided projects have sufficient incentives and sustainable operating business cases.",
+   "refs": [
+    "b7",
+    "a4"
+   ],
+   "where": "Finding 10",
+   "verdict": {
+    "raw": "Progress has been slow on the UBF's mobile connectivity objectives for Indigenous communities, with only one community reached. The UBF's target is to reach 25 Indigenous communities with LTE network or better mobile wireless services by March 31, 2027. 60 communities were targeted by 10 mobile stream projects, as of July 2024. The funding for these projects comprised a total of $28.7M out of the $50M allocated. However, the program reported that only one community had been reached as of January 2024. Interviews revealed that one large ISP pulled out of most of their mobile projects (18 out of 20 projects). It was said that a large reason why those projects were withdrawn was because of a lengthy approval and negotiation process with ISED and a lack of a business case to support the maintenance costs of the infrastructure, given that many of the projects would not generate any new mobile customers, as well as other challenges (e.g., location of the cellular towers).",
+    "scale": "partly",
+    "quote": "there had not yet been significant progress on mobile connectivity projects",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k12",
+   "claim": "High-speed fixed and mobile connectivity give Canadians the opportunity to participate in the digital economy.",
+   "refs": [
+    "b6",
+    "b7",
+    "b8",
+    "l5",
+    "l6"
+   ],
+   "where": "Figure 28; Appendix E, Maturity of UBF; Finding 11",
+   "verdict": {
+    "raw": "The intermediate outcomes and ultimate outcome for the UBF have targeted completion dates of 2026 and later and were therefore beyond the scope of the evaluation. For these outcomes, the evaluation measured only interim progress in achieving these targets. As of December 31, 2023, the combined impact of UBF, CTI and other federal and P/T programs had reduced this gap to 847K households and 95.8% of Canadian households had access to 50-10 Mbps Internet speeds, although only 59.7% of Canadian households were subscribed to these services.",
+    "scale": "insufficient",
+    "quote": "were therefore beyond the scope of the evaluation",
+    "page": null,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "The UBF was effective in filling the need to connect rural and remote communities to broadband Internet services. Ecosystem partnerships have enabled the UBF to efficiently reach a large volume of households across Canada. While the UBF experienced initial challenges processing the large volume of applications and ISPs also experienced implementation challenges, there was significant progress in reaching underserved households. However, it will be critical for the UBF to remain vigilant and proactive in monitoring and mitigating program delivery and project implementation challenges to ensure that the projects are completed within the funding timeframe of March 31, 2027.",
+   "scale": "partly",
+   "quote": "there was significant progress in reaching underserved households",
+   "page": null,
+   "studies": []
+  },
+  "weakest_links": [],
+  "strongest_links": [],
+  "summary": "The UBF addressed a demonstrated need and effective partnerships supported coordination, reduced duplication and leveraged non-federal funding. There was significant progress on household connectivity, scalable infrastructure and high-impact project funding, and the Rapid Response Stream was largely implemented. Mobile connectivity progress for Indigenous communities was slow. Approval delays, inaccurate mapping, administrative complexity and external construction challenges remained important barriers. Ultimate outcomes were not yet assessable, and the exact contribution of UBF was difficult to separate from other connectivity investments. The source does not explicitly rank individual diagram links or assumptions as strongest or weakest.",
+  "recommendations": [
+   "ISED's Connected Canada Branch should explore, for both current and future broadband programming, approaches to reduce geographic overlap between project proposals and explore approaches to enhance validation processes to ensure underserved areas in the recipients' project proposals are accurate.",
+   "ISED's Connected Canada Branch should explore, for both current and future broadband programming, approaches to reduce the complexity of the reporting processes and further streamline bilateral contribution agreements to improve alignment."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/ca_universal_broadband_fund_2025_fig28.jpg']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "The supplied image and text identify Figure 28 in Appendix C but provide no page number. figure_pages is empty and verdict page fields are null.",
+   "Five upward arrows are drawn between the immediate and intermediate outcome rows. The central arrow above scalable infrastructure points into the gap between the two intermediate boxes; its target cannot be identified reliably, so it is not represented as a link.",
+   "The other four lower arrows are aligned beneath individual immediate boxes, but may express a collective transition between rows rather than intended box-specific causation. Links l1–l4 preserve their visible alignment with medium confidence. In particular, l3 and l4 visually lead to the Indigenous mobile outcome even though their labels concern household broadband. No semantically corrected arrows have been added.",
+   "The intermediate headings are mapped to outcome_long, immediate headings to outcome_short, and the ultimate heading to impact.",
+   "Awareness of programme requirements is not directly quantified in the supplied findings. The b1 verdict uses the related findings on support and Pathfinder awareness; awareness of Pathfinder is not equivalent to awareness of all UBF requirements.",
+   "Rapid Response Stream findings principally assess implementation and households reached, not separate effects on speed, capacity and affordability.",
+   "No separate finding establishes achievement of the ultimate digital-economy outcome. Appendix E states that only interim progress towards longer-term outcomes was assessed.",
+   "Parts of Findings 1, 2, 5, 7, 8 and 13 are truncated in the supplied text. Available summary findings are retained, but missing details and study citations have not been reconstructed.",
+   "The source gives no explicit strongest/weakest-link ranking; conclusions therefore leave those lists empty.",
+   "Document URLs, licence and numeric page references were not supplied. Evidence-level categories were not defined; B is a provisional classification for this mixed-method programme evaluation."
+  ],
+  "source_sha256": "880a470c328a058f4497a35a7cb4753622a8f2e39ee5d318c57ad09662140f4d",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

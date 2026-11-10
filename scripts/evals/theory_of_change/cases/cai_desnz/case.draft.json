@@ -1,0 +1,1055 @@
+{
+ "meta": {
+  "id": "cai_desnz",
+  "title": "Evaluation of DESNZ Consumer Advice and Information programme",
+  "organisation": "Department for Energy Security and Net Zero; Winning Moves; Energy Saving Trust; Brook Lyndhurst",
+  "year": 2025,
+  "country": "England",
+  "topic": "Home retrofit and energy efficiency advice",
+  "intervention_type": "programme",
+  "timing": "retrospective",
+  "doc_url": "https://assets.publishing.service.gov.uk/media/69aff07e6827004e30b8a5cc/evaluation-of-the-consumer-advice-and-information-programme-technical-annex.pdf",
+  "landing_url": "https://assets.publishing.service.gov.uk/media/69aee8c4671a8a924c83eedc/evaluation-of-the-consumer-advice-and-information-programme.pdf",
+  "licence": "",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "ex_post_evaluation",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Help households, particularly fuel-poor households, reduce energy bills and carbon emissions while improving comfort through home retrofit.",
+  "population": "Private housing sector households: owner-occupiers, private landlords and their tenants, particularly hard-to-reach households and people living in hard-to-decarbonise properties.",
+  "place": "England",
+  "time_horizon": "Programme delivery between 2023 and 2025; evaluation primary research between April 2024 and March 2025.",
+  "intervention": "The Consumer Advice and Information programme provided impartial home retrofit advice through online information tools, the Home Retrofit Advice and Information Line, and Local Energy Advice Demonstrator projects providing local, in-person support. Advice intensity varied between LEAD projects; there was no common prescribed number of contacts. The evaluation covered the phoneline and LEAD, not the online tools.",
+  "context": "Some households are digitally excluded, face fuel poverty, or live in properties that are difficult to decarbonise. Retrofit affordability and access to government funding affect their ability to act.",
+  "outcome_first": "Develop a theory of change for helping private-sector households in England reduce energy bills and carbon emissions while improving home comfort. Pay particular attention to fuel-poor and hard-to-reach households and people living in hard-to-decarbonise homes.",
+  "intervention_first": "Develop a theory of change for the Consumer Advice and Information programme in England, including its home retrofit phoneline and local in-person advice projects. The programme aims to help private-sector households, particularly fuel-poor and hard-to-reach households, reduce energy bills and carbon emissions while improving comfort."
+ },
+ "containers": [],
+ "boxes": [
+  {
+   "id": "b01",
+   "label": "Heat and buildings account for ~17% of all emissions in the UK, underlining need for retrofit measures",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b02",
+   "label": "Some consumers have no/limited internet access/capability, meaning they cannot access online support",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b03",
+   "label": "Availability of impartial, independent advice are limiting consumer action towards home decarbonisation",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b04",
+   "label": "DESNZ management resources and expertise",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b05",
+   "label": "Existing advice for households interested in installing energy efficiency measures",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b06",
+   "label": "Existing government grant funding schemes",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b07",
+   "label": "Net Zero Hub management resources and expertise",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b08",
+   "label": "£22.7 million in funding (2022/3 - 2024/5)",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b09",
+   "label": "Learning from other government programmes / evaluations",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b10",
+   "label": "Area-based consortium form to deliver in-person home energy advice at regional or local level",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b11",
+   "label": "Consumers made aware of the availability of energy efficiency advice",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b12",
+   "label": "Training for local residents to become retrofit champions or advisers",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b13",
+   "label": "Target consumers are identified and engaged using a range of methods",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b14",
+   "label": "Consumers receive in-person advice and/or home visits with tailored retrofit solutions",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b15",
+   "label": "Consumers receive ongoing tailored support with installation journey",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b16",
+   "label": "Consumers are signposted to funding (Government or otherwise)",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b17",
+   "label": "No. trained volunteers or community champions",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b18",
+   "label": "No. consumers in hard to reach groups or hard to treat properties provided with in person advice",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b19",
+   "label": "Networks formed for the provision of local energy advice",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b20",
+   "label": "No. home visits/retrofit assessments completed",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b21",
+   "label": "No. tailored retrofit plans developed",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b22",
+   "label": "No. consumers referred to or provided with info about local suppliers",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b23",
+   "label": "No. consumers referred to or provided with info about funding opportunities",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b24",
+   "label": "Increased local capacity and commitment to deliver local energy efficiency initiatives",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b25",
+   "label": "Improved understanding of cost and benefits of improvements",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b26",
+   "label": "Improved consumer understanding of most suitable installation choices for their property",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b27",
+   "label": "Improved understanding of the retrofit process, quality standards, logistical challenges and the steps needed to",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b28",
+   "label": "Increased consumer awareness of local supply chain",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b29",
+   "label": "Enhanced consumer understanding of gov schemes and their criteria",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b30",
+   "label": "Consortium members gain new knowledge, expertise and skills, increasing their capacity and knowledge of what works in promoting retrofit to hard-to-reach groups",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b31",
+   "label": "Volunteers continue to provide guidance and support on energy efficiency independent of LEAD project facilitators",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b32",
+   "label": "Consumer feels more incentivised to install scheme on and/or behavioural measures and / or barriers to action reduced",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b33",
+   "label": "Consumer feels more prepared for the retrofit process and more confident / empowered about consulting local contractors",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b34",
+   "label": "Consumer feel more confident and ready to apply for grants",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b35",
+   "label": "Establishment of sustainable community models for promoting energy efficiency and retrofit",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b36",
+   "label": "Increase in consumers intending to install retrofit measures",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b37",
+   "label": "Increase in consultations with local suppliers",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b38",
+   "label": "Increased participation in government schemes",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b39",
+   "label": "Increased uptake and implementation of retrofit projects",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b40",
+   "label": "Improved quality of installation",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b41",
+   "label": "Energy efficiency and low carbon heat measures installed",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b42",
+   "label": "Increased demand for local supply chain",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b43",
+   "label": "Reduced hassle and disruption during installation",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b44",
+   "label": "Reduced energy bills",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b45",
+   "label": "More homes in EPC C",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b46",
+   "label": "Increased thermal comfort of homes",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b47",
+   "label": "Reduced fuel poverty",
+   "layer": "vision",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b48",
+   "label": "Contribution to reaching Net Zero greenhouse gas emissions by 2050",
+   "layer": "vision",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b49",
+   "label": "Improved health outcomes",
+   "layer": "vision",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l01",
+   "source": "b17",
+   "target": "b24",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l02",
+   "source": "b17",
+   "target": "b18",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l03",
+   "source": "b19",
+   "target": "b30",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l04",
+   "source": "b24",
+   "target": "b31",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l05",
+   "source": "b30",
+   "target": "b35",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l06",
+   "source": "b31",
+   "target": "b35",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l07",
+   "source": "b18",
+   "target": "b20",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l08",
+   "source": "b18",
+   "target": "b21",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l09",
+   "source": "b18",
+   "target": "b22",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l10",
+   "source": "b18",
+   "target": "b23",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l11",
+   "source": "b18",
+   "target": "b25",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l12",
+   "source": "b20",
+   "target": "b26",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l13",
+   "source": "b21",
+   "target": "b27",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l14",
+   "source": "b22",
+   "target": "b28",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l15",
+   "source": "b23",
+   "target": "b29",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l16",
+   "source": "b25",
+   "target": "b32",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l17",
+   "source": "b26",
+   "target": "b32",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l18",
+   "source": "b27",
+   "target": "b32",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l19",
+   "source": "b27",
+   "target": "b33",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l20",
+   "source": "b28",
+   "target": "b33",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l21",
+   "source": "b29",
+   "target": "b34",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l22",
+   "source": "b32",
+   "target": "b36",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l23",
+   "source": "b33",
+   "target": "b36",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l24",
+   "source": "b33",
+   "target": "b37",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l25",
+   "source": "b34",
+   "target": "b38",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l26",
+   "source": "b36",
+   "target": "b39",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l27",
+   "source": "b38",
+   "target": "b39",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l28",
+   "source": "b37",
+   "target": "b42",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l29",
+   "source": "b39",
+   "target": "b42",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l30",
+   "source": "b39",
+   "target": "b41",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l31",
+   "source": "b33",
+   "target": "b40",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l32",
+   "source": "b33",
+   "target": "b43",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l33",
+   "source": "b41",
+   "target": "b40",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l34",
+   "source": "b41",
+   "target": "b44",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l35",
+   "source": "b41",
+   "target": "b45",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l36",
+   "source": "b41",
+   "target": "b46",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l37",
+   "source": "b44",
+   "target": "b47",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l38",
+   "source": "b46",
+   "target": "b49",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a01",
+   "kind": "assumption",
+   "text": "LEAD advisors have accurate and comprehensive information about funding opportunities to effectively guide consumers.",
+   "links": [
+    "l15",
+    "l21",
+    "l25"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a02",
+   "kind": "assumption",
+   "text": "There is sufficient interest and willingness among local residents to participate in training programs and take on roles as retrofit champions or advisers.",
+   "links": [
+    "l01",
+    "l02"
+   ],
+   "from_layer": "activity",
+   "to_layer": "output",
+   "verdict": null
+  },
+  {
+   "id": "a03",
+   "kind": "risk",
+   "text": "Many customers struggled with the onward customer journey, both due to a lack of follow-up support and challenges accessing funding, which remains a key barrier for many.",
+   "links": [
+    "l22",
+    "l23",
+    "l26",
+    "l27"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "There was a significant appetite from customers wanting follow-up support. None of the projects appear to have provided this consistently. One advice interaction is unlikely to be sufficient for many customers.",
+    "scale": "supports",
+    "quote": "None of the projects appear to have provided this consistently.",
+    "page": 124,
+    "studies": []
+   }
+  },
+  {
+   "id": "a04",
+   "kind": "risk",
+   "text": "Uptake of measures amongst this audience is unlikely to increase without further funding that supports a broader range of customers than current eligibility criteria allow.",
+   "links": [
+    "l26",
+    "l27",
+    "l30"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Uptake of measures amongst this audience is unlikely to increase without further funding that supports a broader range of customers than current eligibility criteria allow.",
+    "scale": "supports",
+    "quote": "unlikely to increase without further funding",
+    "page": 124,
+    "studies": []
+   }
+  }
+ ],
+ "context": [
+  "The online information tools were outside the evaluation's scope.",
+  "Distinct evaluations were undertaken for the phoneline and LEAD because of differences in their scope and nature.",
+  "LEAD projects differed in delivery model, local context, customer profile and housing stock.",
+  "LEAD monitoring data were analysed across projects; primary research focused on 13 of the 36 projects.",
+  "Survey samples may overrepresent customers receiving more intensive support; the phoneline survey covered 10% of callers in the relevant period and was subject to self-selection and non-response bias.",
+  "Inconsistent definitions of qualifying installations and differences in follow-up limit comparisons between LEAD projects.",
+  "Government funding eligibility, retrofit costs and the availability of suitable finance affect whether customers can act on advice."
+ ],
+ "key_claims": [
+  {
+   "id": "k01",
+   "claim": "Accessible telephone and local advice can reach hard-to-reach, digitally excluded and vulnerable households, but equitable reach and outcomes depend on targeting and local context.",
+   "refs": [
+    "b13",
+    "b18"
+   ],
+   "where": "Sections 2.5.1, 3.5.5; Table 3; report pp. 28–29, 47, 114–115",
+   "verdict": {
+    "raw": "Taken together, the evidence suggests that the phoneline was meeting its core objective of providing energy advice for hard-to-reach and digitally excluded consumers. The evidence suggests that the programme has successfully engaged hard-to-reach, digitally excluded, and vulnerable households. These findings suggest equity in reach was not consistent across the programme. Some projects reached more disadvantaged consumers, while others were less targeted or more likely to engage easier-to-reach and able to pay customers. Survey evidence suggests that a lower proportion of hard-to-reach consumers reported positive outcomes.",
+    "scale": "partly",
+    "quote": "equity in reach was not consistent across the programme",
+    "page": 115,
+    "studies": []
+   }
+  },
+  {
+   "id": "k02",
+   "claim": "Tailored advice, home visits and written reports improve the relevance, credibility and usefulness of advice, helping customers make informed decisions.",
+   "refs": [
+    "b14",
+    "b20",
+    "b21",
+    "b25",
+    "b26",
+    "b27",
+    "b33"
+   ],
+   "where": "Executive Summary, report p. 10; Section 3.5.5, p. 115",
+   "verdict": {
+    "raw": "Among the project case studies explored by this evaluation, those that: (i) tailored the advice to the needs of individual customers (ii) conducted home visits / surveys (iii) communicated findings, actions and next steps in a report often had higher proportions of customers with positive outcomes (e.g. increases in understanding, satisfaction with the service). Where advice was lighter touch, this resulted in lower proportions of customers reporting positive outcomes. The evidence suggests that the higher cost does increase customers’ confidence that the advice is accurate, enables it to be more tailored to the customer and their home, and increases trust in the advice and the likelihood of taking subsequent action. Reports help customers to make informed decisions.",
+    "scale": "supports",
+    "quote": "Reports help customers to make informed decisions.",
+    "page": 10,
+    "studies": []
+   }
+  },
+  {
+   "id": "k03",
+   "claim": "Advice improves understanding of suitable energy efficiency measures, but improvements are less common among lower-income and hard-to-reach customers and vary between projects.",
+   "refs": [
+    "b25",
+    "b26",
+    "l11",
+    "l12"
+   ],
+   "where": "Executive Summary, report p. 10; Section 3.4.1, Table 11, p. 67; Figure 15 discussion, p. 69",
+   "verdict": {
+    "raw": "Projects have been effective at moving some customers along the customer journey to retrofit. This includes increasing their understanding of energy efficiency measures, and to a lesser extent increasing customer confidence in measures and their intention to install. Customers with a household income over £30,000 were more likely to report an increase in understanding compared to lower income households. Fewer hard-to-reach customers reported an increase in understanding. Plymouth Energy Community Trust appears to have been effective in improving consumer understanding of the most relevant measures for their homes.",
+    "scale": "partly",
+    "quote": "Fewer hard-to-reach customers reported an increase in understanding.",
+    "page": 10,
+    "studies": []
+   }
+  },
+  {
+   "id": "k04",
+   "claim": "Improved understanding and personalised support can build confidence and readiness to navigate retrofit, but these softer outcomes vary substantially by project and customer group.",
+   "refs": [
+    "b27",
+    "b32",
+    "b33",
+    "b36",
+    "l16",
+    "l17",
+    "l18",
+    "l19",
+    "l20",
+    "l22",
+    "l23"
+   ],
+   "where": "Report pp. 10, 67, 69; Table 17 and discussion, pp. 112–113",
+   "verdict": {
+    "raw": "Surrey County Council’s project stands out across multiple indicators. Respondents who received support from this project were significantly more likely to report positive outcomes for all measures except applying for government funding. YES Energy Solutions, with 60% of respondents classed as hard-to-reach, achieved stronger outcomes than several other projects working with fewer hard-to-reach households. However YES also outperformed when focusing only on those who received a home visit, suggesting a particularly effective model for supporting more vulnerable households. East Lindsey also performed well given its respondent profile (63% of survey respondents were classified as hard-to-reach), particularly in encouraging households to apply for government funding schemes (40%, second only to SELCE) and driving installations (33%, the highest among projects where at least half of respondents were hard-to-reach). However, scores on softer outcomes, such as confidence in retrofit measures and navigating the process, were lower.",
+    "scale": "partly",
+    "quote": "suggesting a particularly effective model for supporting more vulnerable households",
+    "page": 69,
+    "studies": []
+   }
+  },
+  {
+   "id": "k05",
+   "claim": "Advice and increased readiness can lead to retrofit decisions and installations, but uptake was below forecasts and the evidence does not isolate the effects of particular delivery models.",
+   "refs": [
+    "b36",
+    "b39",
+    "b41",
+    "l26",
+    "l30"
+   ],
+   "where": "Sections 3.3.1 and 3.4.1; report pp. 58, 65, 67",
+   "verdict": {
+    "raw": "Collectively, projects report that 10,459 customers have installed measures to date. This represents 13% of customers advised. This number is lower than projects had forecast to achieve at the outset. Again, performance across the projects was mixed; only 7 projects met or exceeded their forecast, and the number of installations per project vary widely from 0 to 3,800. The customer survey evidence found that 19% (n=887) of respondents had installed a measure, and a further 10% (n=887) had decided to install a measure but had not yet done so. These findings are likely to be at the upper limit due to the likely bias in the sample. The data allows us to identify which projects performed well on different outcome measures, but it does not provide sufficient detail to determine why.",
+    "scale": "partly",
+    "quote": "This number is lower than projects had forecast to achieve at the outset.",
+    "page": 58,
+    "studies": []
+   }
+  },
+  {
+   "id": "k06",
+   "claim": "Advice about funding can help households apply for government schemes, although results depend on the project and access to funding remains a barrier.",
+   "refs": [
+    "b16",
+    "b23",
+    "b29",
+    "b34",
+    "b38",
+    "l15",
+    "l21",
+    "l25",
+    "l27",
+    "a01",
+    "a04"
+   ],
+   "where": "Report pp. 26, 47, 67, 69, 110, 112–113, 124",
+   "verdict": {
+    "raw": "SELCE’s project performed strongly in encouraging uptake of government funding schemes. 54% of respondents said they had applied or intended to apply, a significantly higher figure than the average across all projects, indicating strong support in helping households access financial assistance. BVSC appears to have delivered reasonable reach and support at low cost, and has been one of the most cost-effective in this group at supporting households to apply for government schemes, although further evidence on the representativeness of the survey would be needed to confirm this. ResQ call outcomes data and survey data both suggest that calls involving completion of scheme eligibility checks or the FWTSE tool (“digital assist”) were relatively rare. It’s not clear if this reflects a lack of awareness, customer preference for completing those tools in their own time, or a lack of interest in using these tools amongst the customers who called the phoneline.",
+    "scale": "partly",
+    "quote": "54% of respondents said they had applied or intended to apply",
+    "page": 67,
+    "studies": []
+   }
+  },
+  {
+   "id": "k07",
+   "claim": "Progress from advice to action requires continuing support rather than a single advice interaction.",
+   "refs": [
+    "b15",
+    "b33",
+    "l23",
+    "l24",
+    "l26",
+    "a03"
+   ],
+   "where": "Executive Summary, report p. 10; Section 3.6, p. 124",
+   "verdict": {
+    "raw": "There was a significant appetite from customers wanting follow-up support. None of the projects appear to have provided this consistently. One advice interaction is unlikely to be sufficient for many customers. Customers need the opportunity to consider advice, ask additional questions, discuss scenarios and / or changes to circumstances as well as encouragement and motivation to take the next steps. It is also likely that they will need support later in the customer journey than many of the projects had envisaged, for example finding, selecting and quality assuring installers.",
+    "scale": "supports",
+    "quote": "One advice interaction is unlikely to be sufficient for many customers.",
+    "page": 124,
+    "studies": []
+   }
+  },
+  {
+   "id": "k08",
+   "claim": "Advice is more likely to translate into installations when households can obtain affordable finance or accessible funding.",
+   "refs": [
+    "a04",
+    "b38",
+    "b39",
+    "b41",
+    "l27",
+    "l30"
+   ],
+   "where": "Section 3.6, report p. 124",
+   "verdict": {
+    "raw": "Uptake of measures amongst this audience is unlikely to increase without further funding that supports a broader range of customers than current eligibility criteria allow. Clearer and simpler eligibility criteria for funding schemes and /or a more joined up approach to advice provision and funding administration would help more customers to access funding and reduce the number of customers disengaging with the process due to frustration. Further work to help customers who are self-funding measures to understand the return on investment of measures, and the availability of suitable finance packages may help to overcome this barrier.",
+    "scale": "supports",
+    "quote": "unlikely to increase without further funding",
+    "page": 124,
+    "studies": []
+   }
+  },
+  {
+   "id": "k09",
+   "claim": "Training residents and building local networks can create continuing community capacity for energy advice and retrofit promotion.",
+   "refs": [
+    "b12",
+    "b17",
+    "b19",
+    "b24",
+    "b30",
+    "b31",
+    "b35",
+    "l01",
+    "l02",
+    "l03",
+    "l04",
+    "l05",
+    "l06",
+    "a02"
+   ],
+   "where": "Technical annex Figure 3, p. 9; assumptions table, p. 14",
+   "verdict": null
+  },
+  {
+   "id": "k10",
+   "claim": "Retrofit installations are expected to improve home efficiency and comfort, reduce energy bills and fuel poverty, and contribute to better health and net zero.",
+   "refs": [
+    "b40",
+    "b41",
+    "b42",
+    "b43",
+    "b44",
+    "b45",
+    "b46",
+    "b47",
+    "b48",
+    "b49",
+    "l28",
+    "l29",
+    "l31",
+    "l32",
+    "l33",
+    "l34",
+    "l35",
+    "l36",
+    "l37",
+    "l38"
+   ],
+   "where": "Technical annex Figure 3, p. 9",
+   "verdict": null
+  },
+  {
+   "id": "k11",
+   "claim": "Well-designed local advice can deliver worthwhile outcomes for its cost, but cost-effectiveness varies by project and no single delivery model is consistently best.",
+   "refs": [
+    "b08",
+    "b14",
+    "b18",
+    "b36",
+    "b38",
+    "b39"
+   ],
+   "where": "Sections 3.5.4 and 3.6.6; Tables 15 and 17; report pp. 13, 109–114, 124, 128",
+   "verdict": {
+    "raw": "Overall, no single delivery model or approach was consistently associated with strong cost-effectiveness. Projects with strong evidence of cost-effectiveness include Surrey County Council and YES Energy Solutions. Projects with limited evidence of cost-effectiveness include WYCA and SELCE. Projects with some evidence of cost-effectiveness but requiring further validation include East Lindsey, BVSC, Plymouth ECT, and North of Tyne. Basingstoke and Deane achieved lower outcome scores overall, particularly on softer outcomes such as confidence and understanding. However, the cost per transaction was extremely low (£30), suggesting it delivered impact at a very low unit cost. That said, the survey responses are clearly unrepresentative, with a disproportionately high number of respondents reporting a home visit compared to the overall household population. North of Tyne had the highest cost per transaction (£807) of any LEAD project, yet its outcome scores were moderate. While the high cost raises questions, the project may still represent a contextually justified investment given its focus on more vulnerable groups. Nonetheless, the value for money is difficult to determine with confidence.",
+    "scale": "partly",
+    "quote": "no single delivery model or approach was consistently associated with strong cost-effectiveness",
+    "page": 13,
+    "studies": []
+   }
+  },
+  {
+   "id": "k12",
+   "claim": "Programme resources can support economical advice delivery, but reaching forecast volumes and demonstrating longer-term value require realistic planning and consistent monitoring.",
+   "refs": [
+    "b04",
+    "b07",
+    "b08",
+    "b18",
+    "b39",
+    "b41"
+   ],
+   "where": "Sections 3.3.1, 3.5.3, 3.6.6 and 4.5; report pp. 58, 109, 124, 128",
+   "verdict": {
+    "raw": "Projects reported that in total 78,553 customers were provided with personalised energy efficiency advice, which represents 90% of the total number of customers forecast by projects at the start of the programme (87,316 customers). 13 of the 35 LEAD projects met or exceeded their forecast number of customers advised, however the remaining 22 did not. Most projects were delivered within budget, and the majority achieved a lower cost per transaction than originally forecast, indicating strong cost control and efficient use of resources. The phoneline service was also delivered within budget, though it achieved lower-than-expected call volumes and costs showed limited responsiveness to changes in demand. While it met some objectives, such as providing access to advice and achieving high immediate satisfaction, it was less efficient than originally expected, and evidence of longer-term outcomes was mixed. However, weaknesses in input cost data, outcome attribution, and monitoring consistency make it difficult to draw firm conclusions about value for money for these two services, or for the programme as a whole, particularly given that the online information tool was outside the scope of this evaluation.",
+    "scale": "partly",
+    "quote": "evidence of longer-term outcomes was mixed",
+    "page": 128,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "Projects have been effective at moving some customers along the customer journey to retrofit. This includes increasing their understanding of energy efficiency measures, and to a lesser extent increasing customer confidence in measures and their intention to install.",
+   "scale": "partly",
+   "quote": "effective at moving some customers along the customer journey to retrofit",
+   "page": 10,
+   "studies": []
+  },
+  "weakest_links": [],
+  "strongest_links": [],
+  "summary": "Advice reached significant numbers of target households and helped some customers progress towards retrofit. Tailored advice, home visits and reports were associated with better outcomes, but access to funding and a lack of consistent follow-up constrained onward progress. Hard-to-reach customers generally reported lower outcomes, although some projects demonstrated effective support for these groups. LEAD projects showed good economy and efficiency overall, but cost-effectiveness varied and monitoring and survey limitations restrict attribution and comparisons. The phoneline met its core access objective, but call volumes were below expectations and longer-term outcomes were mixed. The source does not provide an overall validation of every causal step or explicitly rank the diagram's links as strongest and weakest.",
+  "recommendations": [
+   "Provide further funding that supports a broader range of customers than current eligibility criteria allow.",
+   "Make funding eligibility criteria clearer and simpler, and join up advice provision with funding administration.",
+   "Help self-funding customers understand returns on investment and the availability of suitable finance packages.",
+   "Provide opportunities for follow-up questions, encouragement and support later in the retrofit journey, including finding, selecting and quality assuring installers.",
+   "Undertake further research to understand which specific elements make local advice projects cost-effective."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/cai_desnz_p6.png', 'downloads/pages/cai_desnz_p9.png', 'downloads/pages/cai_desnz_p14.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "Figure 1 on annex p. 6 is a separate Home Retrofit Advice and Information Line theory. Only Figure 3, LEAD, is transcribed because the supplied findings test LEAD most extensively. Findings about the phoneline are retained in key claims with no phoneline diagram references.",
+   "The supplied images are low-resolution page renderings. No higher-resolution rendering facility was available here. Tiny labels and crowded arrow endpoints require checking against the original PDF before this record is used as ground truth.",
+   "In particular, b32 is not securely legible: the phrase transcribed as 'scheme on and/or behavioural measures' needs verification. The b27 label appears to end at 'steps needed to' in the supplied image; no missing completion has been invented.",
+   "The exact wording of b18, b39 and the funding-period punctuation in b08 should be checked at higher resolution.",
+   "Several central arrows cross. Links l11–l14 and l17–l18 have uncertain endpoints. Additional arrows involving tailored plans and the consumer-understanding boxes may be present but could not be resolved confidently.",
+   "The top of Figure 3 contains crowded connections involving reduced energy bills, thermal comfort, fuel poverty and the net-zero policy goal. Only clearly readable connections have been recorded; the remaining endpoints require inspection.",
+   "No activity-to-output or input-to-activity arrows are clearly drawn in the supplied LEAD figure; none have been invented. The blue bracket above the activities does not visibly receive an arrow and has not been made a container.",
+   "The dotted frame and the label 'Indirect/secondary impacts of CAI programme' are treated as an annotation, not as an outcome box or arrow-linked container. 'Local Energy Advice Demonstration Projects' is treated as a heading.",
+   "Figure headings 'Policy goals', 'Impacts', 'Outcomes', 'Outputs', 'Activities', 'Workstream inputs', 'Programme wide inputs' and 'Contexts' determine layers. Policy goals map to vision, both input bands map to input, and the single Outcomes band maps to outcome_short. Consequently some results ordinarily called outcomes are mapped to impact because the source places them in its Impacts band.",
+   "Annex p. 14 contains only the continuation of the LEAD assumptions table. The earlier assumptions pages and Figures 2 and 4 were not supplied. Only the two visible assumptions and explicit risks from the report text are recorded.",
+   "The notes mention contribution-analysis verdicts 'Evidence test met? Yes / Partially / No', but those populated evidence tests are not present in the supplied material. No such verdicts have been reconstructed.",
+   "Most report findings judge service- or project-level contributions rather than a unique drawn arrow. They are retained on key claims rather than attributed to individual links without sufficient evidence.",
+   "The report names 36 projects in its methodology but assesses KPI achievement for 35 projects. This discrepancy is preserved rather than resolved.",
+   "The supplied material does not establish a publication year, document URL, landing URL or licence. Year 2025 is provisional, based on the final delivery and research period. Country is recorded as England from the evaluation's comparisons and programme context; explicit geographic coverage should be checked.",
+   "Evidence level B is provisional because no definitions for the A/B/C categories were supplied."
+  ],
+  "source_sha256": "d969dabd53a7baad6cc43f0d40b51911cf83df1d152b5722ae51b55c1cec971f",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

@@ -1,0 +1,467 @@
+{
+ "meta": {
+  "id": "agnutrition_masset_2012",
+  "title": "Effectiveness of agricultural interventions that aim to improve nutritional status of children: systematic review",
+  "organisation": "Institute of Development Studies, University of Sussex",
+  "year": 2012,
+  "country": "Multiple low and middle income countries",
+  "topic": "Agricultural interventions and child nutrition",
+  "intervention_type": "programme",
+  "timing": "synthesis",
+  "doc_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC3259800/fullTextXML",
+  "landing_url": "https://doi.org/10.1136/bmj.d8222",
+  "licence": "CC BY-NC 2.0",
+  "figure_pages": [],
+  "evidence_level": "A",
+  "verdict_source": "evidence_synthesis",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Improve children's nutritional status and reduce under-nutrition.",
+  "population": "Children in low and middle income countries, particularly children aged under 5 in households targeted by agricultural programmes.",
+  "place": "Developing countries; multiple study locations.",
+  "time_horizon": "Varies by programme; no common intervention duration or follow-up period is specified.",
+  "intervention": "Food-based agricultural programmes explicitly intended to improve child nutrition, including home gardens, bio-fortified crops, aquaculture and small scale fisheries, dairy development, animal husbandry, and poultry development. Dosage varies and is not specified consistently.",
+  "context": "The review covers 23 studies published after 1990, predominantly evaluations of home gardens. These are complex interventions implemented in settings where poverty and the health environment can affect nutritional outcomes.",
+  "outcome_first": "Develop a theory of change for improving children's nutritional status and reducing under-nutrition in low and middle income countries. Focus particularly on children under 5 in poor households.",
+  "intervention_first": "Develop a theory of change for food-based agricultural programmes explicitly intended to improve children's nutritional status in low and middle income countries. These programmes include home gardens, bio-fortified crops, fisheries, aquaculture, and livestock development."
+ },
+ "containers": [],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "Participation in programme",
+   "layer": "activity",
+   "container": null,
+   "verdict": {
+    "raw": "No study reported participation rates or the programme’s ability to reach the targeted population. No study described the socioeconomic characteristics of participants or the determinants of participation.",
+    "scale": "insufficient",
+    "quote": "No study reported participation rates",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b2",
+   "label": "Technology adoption",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b3",
+   "label": "Diet composition",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "The interventions were successful in promoting the consumption of food rich in protein and micronutrients, but the effect on the overall diet of poor people remains unclear.",
+    "scale": "partly",
+    "quote": "the effect on the overall diet of poor people remains unclear",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b4",
+   "label": "Household income",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "Five studies reported a large positive effect of the interventions on total household income. However, only in one case was the difference between project and control groups statistically tested.",
+    "scale": "insufficient",
+    "quote": "the overall effect on household income remains unclear",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b5",
+   "label": "Food expenditure",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b6",
+   "label": "Caloric, protein, and micronutrient intake",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "No evidence was found of an effect on the absorption of iron, but some evidence exists of a positive effect on absorption of vitamin A.",
+    "scale": "partly",
+    "quote": "some evidence exists of a positive effect on absorption of vitamin A",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b7",
+   "label": "Nutritional status",
+   "layer": "impact",
+   "container": null,
+   "verdict": {
+    "raw": "Overall, these results provide little support for the hypothesis that agricultural interventions help to reduce under-nutrition. However, they should not be interpreted as evidence of the absence of an effect.",
+    "scale": "insufficient",
+    "quote": "they should not be interpreted as evidence of the absence of an effect",
+    "page": null,
+    "studies": []
+   }
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b2",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l2",
+   "source": "b2",
+   "target": "b3",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l3",
+   "source": "b2",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l4",
+   "source": "b4",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l5",
+   "source": "b3",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l6",
+   "source": "b5",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l7",
+   "source": "b6",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "risk",
+   "text": "Not all targeted populations are able to join programmes, and the interventions can miss vulnerable groups.",
+   "links": [
+    "l1"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "we cannot tell how well targeted these programmes were, whether vulnerable groups were effectively reached, or what the effect was on specific subgroups.",
+    "scale": "insufficient",
+    "quote": "we cannot tell how well targeted these programmes were",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "a2",
+   "kind": "risk",
+   "text": "As income from one source increases, income from another source may decrease if households shift, for example, labour supply from farming to home gardens.",
+   "links": [
+    "l3"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a3",
+   "kind": "risk",
+   "text": "An increase in the consumption of the food item targeted by the intervention does not imply an improvement in the overall diet, because substitution effects in consumption occur.",
+   "links": [
+    "l2",
+    "l5"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Bushamuka et al found that although the consumption of vegetables, rice, and fish increased after the intervention, the consumption of pulses decreased.",
+    "scale": "supports",
+    "quote": "the consumption of pulses decreased",
+    "page": null,
+    "studies": [
+     "10.1177/156482650502600102"
+    ]
+   }
+  },
+  {
+   "id": "a4",
+   "kind": "risk",
+   "text": "Parents’ caring practices and health status can affect children’s nutritional status; the health environment and cultural practices can interfere with implementation at each stage.",
+   "links": [
+    "l5",
+    "l6",
+    "l7"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "an intervention successfully increased the consumption of food rich in vitamin A among children, but a parasitic infestation in the intervention areas reduced the observed values of serum retinol.",
+    "scale": "supports",
+    "quote": "a parasitic infestation in the intervention areas reduced the observed values of serum retinol",
+    "page": null,
+    "studies": [
+     "10.1017/s1368980000000495"
+    ]
+   }
+  }
+ ],
+ "context": [
+  "Under-nutrition is a complex phenomenon determined by multiple causes.",
+  "Most included studies evaluated home gardens; rigorous evaluations of dairy development, animal husbandry, and fisheries projects were extremely rare.",
+  "Few bio-fortification programmes had operated long enough to be rigorously evaluated.",
+  "Study designs, outcome metrics, and follow-up periods varied substantially."
+ ],
+ "key_claims": [
+  {
+   "id": "k1",
+   "claim": "Targeted households must be able to participate before they can adopt the promoted technologies.",
+   "refs": [
+    "b1",
+    "l1",
+    "a1"
+   ],
+   "where": "Figure 1; Results—Programme participation",
+   "verdict": {
+    "raw": "No study reported participation rates or the programme’s ability to reach the targeted population. No study described the socioeconomic characteristics of participants or the determinants of participation.",
+    "scale": "insufficient",
+    "quote": "No study reported participation rates",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k2",
+   "claim": "Agricultural programmes increase production of the foods they promote.",
+   "refs": [
+    "b2"
+   ],
+   "where": "Results; Discussion; What this study adds",
+   "verdict": {
+    "raw": "The interventions reviewed had a positive effect on the production of agricultural goods promoted",
+    "scale": "supports",
+    "quote": "a positive effect on the production of agricultural goods promoted",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k3",
+   "claim": "Adopting the promoted agricultural activities raises total household income, rather than merely replacing other income sources.",
+   "refs": [
+    "b4",
+    "l3",
+    "a2"
+   ],
+   "where": "Results—Income; Discussion",
+   "verdict": {
+    "raw": "Some studies reported a positive effect on incomes from a particular source, such as income from home gardens. This measure of effect is imprecise, because substitution effects in production are possible. As a result, the overall effect on household income remains unclear.",
+    "scale": "insufficient",
+    "quote": "the overall effect on household income remains unclear",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k4",
+   "claim": "Promoting agricultural foods increases their consumption, but improving the whole diet also requires avoiding adverse substitution.",
+   "refs": [
+    "b3",
+    "l2",
+    "a3"
+   ],
+   "where": "Results—Diet composition",
+   "verdict": {
+    "raw": "Of the 23 studies selected, 19 reported a positive effect on the composition of the diet. With very few exceptions, home garden programmes increased the consumption of fruit and vegetables, aquaculture and small fisheries interventions increased the consumption of fish, and dairy development projects increased the consumption of milk. An increase in the consumption of the food item targeted by the intervention does not imply an improvement in the overall diet, because substitution effects in consumption occur.",
+    "scale": "partly",
+    "quote": "does not imply an improvement in the overall diet",
+    "page": null,
+    "studies": [
+     "10.1177/156482650502600102"
+    ]
+   }
+  },
+  {
+   "id": "k5",
+   "claim": "Higher household income improves nutrient intake through food expenditure.",
+   "refs": [
+    "b4",
+    "b5",
+    "b6",
+    "l4",
+    "l6"
+   ],
+   "where": "Figure 1; Introduction",
+   "verdict": null
+  },
+  {
+   "id": "k6",
+   "claim": "Changes in food consumption improve children's iron intake and absorption.",
+   "refs": [
+    "b6",
+    "l5"
+   ],
+   "where": "Results—Micronutrient intake",
+   "verdict": {
+    "raw": "Two studies assessed the effect on iron intake of children and found no statistically significant differences in the average haemoglobin concentrations between children in the project and control groups. Another study assessed the effect of fish consumption on iron intake at the household level and found a modest effect by using food to micronutrients conversion tables. The observed effect would have been even smaller after consideration of the actual body absorption of the iron ingested.",
+    "scale": "insufficient",
+    "quote": "No evidence was found of an effect on the absorption of iron",
+    "page": null,
+    "studies": [
+     "10.1177/156482650903000407",
+     "10.1177/156482650202300206",
+     "10.1093/jn/133.11.4021S"
+    ]
+   }
+  },
+  {
+   "id": "k7",
+   "claim": "Agricultural food interventions can improve vitamin A intake and status in children under 5.",
+   "refs": [
+    "b6",
+    "l5"
+   ],
+   "where": "Results—Micronutrient intake; Figure 2",
+   "verdict": {
+    "raw": "Overall, the effect of the interventions is a difference of 2.4 µg/dL in serum retinol between project and control areas (z test of significance 6.35; P<0.001). This meta-analysis provides some support to the hypothesis that agricultural home gardens interventions improve vitamin A intake among children under the age of 5.",
+    "scale": "partly",
+    "quote": "provides some support to the hypothesis",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k8",
+   "claim": "Better food and nutrient intake reduces child under-nutrition.",
+   "refs": [
+    "b7",
+    "l7"
+   ],
+   "where": "Results—Children’s nutritional status; Table 1",
+   "verdict": {
+    "raw": "Only one study found a statistically significant effect on prevalence of stunting, whereas three studies found a positive effect on prevalence of underweight and two found a positive effect on wasting. The study by Gunaratna et al, which used rates of growth in height and weight, rather than prevalence, found a positive and statistically significant effect on nutrition. Overall, these results provide little support for the hypothesis that agricultural interventions help to reduce under-nutrition. However, they should not be interpreted as evidence of the absence of an effect.",
+    "scale": "insufficient",
+    "quote": "these results provide little support",
+    "page": null,
+    "studies": [
+     "Gunaratna et al 2010",
+     "10.1016/j.trstmh.2009.03.028",
+     "10.1093/ajcn/76.5.1048",
+     "Hoorweg et al 2000",
+     "Makhotla and Hendriks 2004",
+     "10.1177/15648265070282S205",
+     "10.1177/156482650903000407",
+     "10.1177/156482650202300206",
+     "Shmidt and Vorster 1995"
+    ]
+   }
+  },
+  {
+   "id": "k9",
+   "claim": "Health conditions and caring practices can interrupt the pathway from improved diets to improved nutritional status.",
+   "refs": [
+    "a4",
+    "l5",
+    "l6",
+    "l7"
+   ],
+   "where": "Introduction; Discussion—Comparison with earlier reviews and limitations",
+   "verdict": {
+    "raw": "an intervention successfully increased the consumption of food rich in vitamin A among children, but a parasitic infestation in the intervention areas reduced the observed values of serum retinol.",
+    "scale": "supports",
+    "quote": "a parasitic infestation in the intervention areas reduced the observed values of serum retinol",
+    "page": null,
+    "studies": [
+     "10.1017/s1368980000000495"
+    ]
+   }
+  },
+  {
+   "id": "k10",
+   "claim": "A lack of statistically significant nutritional effects does not establish that the agricultural pathway is ineffective.",
+   "refs": [
+    "b7",
+    "l7"
+   ],
+   "where": "Results—Children’s nutritional status; Discussion; Conclusions",
+   "verdict": {
+    "raw": "On average, the probability of detecting a small effect for these studies was less than 5%. Even a “large” effect (that is, a reduction in malnutrition by 30%) would be detected in only 50% of cases. A more realistic medium effect of 10% would be detected with a probability of only 15%. The lack of power of the studies reviewed could have prevented the identification of any effect.",
+    "scale": "supports",
+    "quote": "the lack of power of the studies reviewed could have prevented the identification of any effect",
+    "page": null,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "The question posed by the review cannot be answered with any level of confidence. The data available show a poor effect of these interventions on nutritional status, but methodological weaknesses of the studies cast serious doubts on the validity of these results.",
+   "scale": "insufficient",
+   "quote": "cannot be answered with any level of confidence",
+   "page": null,
+   "studies": []
+  },
+  "weakest_links": [],
+  "strongest_links": [],
+  "summary": "The interventions increased production and consumption of promoted foods, and some evidence supports improved vitamin A intake. Their effects on total household income and overall diet remain unclear, and no evidence of improved iron absorption was found. Very little evidence supports reductions in stunting, wasting, or underweight, but low statistical power and other methodological weaknesses prevent interpreting this as evidence of ineffectiveness. Participation, targeting, and subgroup effects were not adequately documented. The review cannot guide prioritisation among competing interventions without cost-effectiveness evidence.",
+  "recommendations": [
+   "Use credible counterfactual methods; use matched longitudinal or cross sectional project-control studies when randomisation is infeasible.",
+   "Avoid before/after comparisons and participant/non-participant comparisons that do not control for selection bias.",
+   "Investigate why poor people participate or do not participate, including whether vulnerable groups are reached.",
+   "Use total household income, consumption, and dietary diversity measures rather than only income or consumption of the promoted product.",
+   "Collect anthropometric measurements with sufficiently large samples and always conduct power calculations.",
+   "Consider rigorous evaluations of intermediate outcomes and efficacy within the complex causal chain.",
+   "Establish agreed standards and guidelines for rigorous evaluation.",
+   "Exercise caution about expected nutritional effects and develop cost-effectiveness evidence."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/agnutrition_masset_2012_fig1.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "Figure 1 is supplied as an unpaginated XML figure; page fields are null and figure_pages is empty.",
+   "The figure has no layer headings. Layer assignments are interpretive, based on the narrative description of the causal chain.",
+   "The two branches merge before the arrow into nutrient intake. They are represented as separate diet-composition-to-intake and food-expenditure-to-intake links, sharing the final arrow segment.",
+   "Production is judged positively in the text but is not a separate figure box. That finding is retained in key claim k2; it is not treated as direct evidence that technology adoption itself was measured.",
+   "Evidence chiefly judges intervention effects on outcomes, not the individual mediator-to-mediator causal arrows. Verdicts are therefore retained on boxes and key claims rather than transferred to links.",
+   "The supplied text does not identify the four studies in the vitamin A meta-analysis individually. No study list has been inferred for that finding.",
+   "Figure 2 is a serum-retinol forest plot, not another theory of change; its findings are retained in k7.",
+   "The source does not explicitly rank strongest and weakest causal links; those lists are left empty.",
+   "Evidence level A is used for a systematic review; no definition of the A/B/C classification was supplied."
+  ],
+  "source_sha256": "2f96993ad309dd7d38275fa8bd38a132060ef6eabbdd51fcc7a92d299312331a",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

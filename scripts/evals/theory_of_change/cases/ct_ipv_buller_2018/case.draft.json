@@ -1,0 +1,820 @@
+{
+ "meta": {
+  "id": "ct_ipv_buller_2018",
+  "title": "A mixed-method review of cash transfers and intimate partner violence in low- and middle-income countries",
+  "organisation": "",
+  "year": 2018,
+  "country": "Low- and middle-income countries",
+  "topic": "Cash transfers and intimate partner violence",
+  "intervention_type": "programme",
+  "timing": "synthesis",
+  "doc_url": "https://researchonline.lshtm.ac.uk/id/eprint/4647047/1/A%20mixed-method%20review%20of_Gold%20VoR.pdf",
+  "landing_url": "https://doi.org/10.1093/wbro/lky002",
+  "licence": "",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "evidence_synthesis",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Reduce intimate partner violence while avoiding unintended increases in violence associated with cash transfer programmes.",
+  "population": "Primarily women in poor and vulnerable households, including women in marital, cohabiting or dating relationships.",
+  "place": "Low- and middle-income countries; the reviewed evidence is concentrated in Latin America.",
+  "time_horizon": "Varies by programme and evaluation. The review includes data collected between 1998 and 2015; evidence on long-term effects and sustainability after transfers end is limited.",
+  "intervention": "Conditional and unconditional cash transfers, sometimes bundled with complementary services or in-kind transfers. Most reviewed programmes paid women monthly; reported transfer values ranged from approximately 6–50% of baseline household expenditure.",
+  "context": "Cash transfers are primarily poverty-alleviation and social protection programmes rather than violence-specific interventions. Their implications for violence may differ with programme design, household relationships and local gender norms.",
+  "outcome_first": "Develop a theory of change for reducing intimate partner violence among women in poor and vulnerable households in low- and middle-income countries. Account for differences between settings and the possibility of unintended harm.",
+  "intervention_first": "Develop a theory of change for conditional and unconditional cash transfer programmes serving poor and vulnerable households in low- and middle-income countries. Explain how these programmes could reduce intimate partner violence against women, and where unintended increases might occur."
+ },
+ "containers": [
+  {
+   "id": "c_proximate",
+   "label": "PROXIMATE OUTCOMES",
+   "layer": "output"
+  },
+  {
+   "id": "c_security",
+   "label": "PATHWAY 1: ECONOMIC SECURITY AND EMOTIONAL WELL-BEING",
+   "layer": "outcome_short"
+  },
+  {
+   "id": "c_conflict",
+   "label": "PATHWAY 2: INTRA-HOUSEHOLD CONFLICT",
+   "layer": "outcome_short"
+  },
+  {
+   "id": "c_empowerment",
+   "label": "PATHWAY 3: WOMEN’S EMPOWERMENT",
+   "layer": "outcome_short"
+  }
+ ],
+ "boxes": [
+  {
+   "id": "b_design",
+   "label": "• Size, frequency and duration of transfer\n• Targeting criteria\n• Recipient of transfer\n• Messaging objectives and framing of transfer\n• Conditionalities\n• System linkages and complementary programming",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_household_cash",
+   "label": "Household-level access to cash",
+   "layer": "output",
+   "container": "c_proximate",
+   "verdict": null
+  },
+  {
+   "id": "b_woman_cash",
+   "label": "Woman’s access to cash",
+   "layer": "output",
+   "container": "c_proximate",
+   "verdict": null
+  },
+  {
+   "id": "b_knowledge",
+   "label": "Knowledge, skills and access to services",
+   "layer": "output",
+   "container": "c_proximate",
+   "verdict": null
+  },
+  {
+   "id": "b_social",
+   "label": "Social capital and networks",
+   "layer": "output",
+   "container": "c_proximate",
+   "verdict": null
+  },
+  {
+   "id": "b_security",
+   "label": "Economic security\n• Increased financial and food security\n• Increased savings, assets and investments\n• Improved coping strategies (e.g. decreased hazardous labour, borrowing from money lenders)",
+   "layer": "outcome_short",
+   "container": "c_security",
+   "verdict": null
+  },
+  {
+   "id": "b_wellbeing",
+   "label": "Emotional well-being\n• Improved mental health\n• Decreased poverty-related stress",
+   "layer": "outcome_long",
+   "container": "c_security",
+   "verdict": null
+  },
+  {
+   "id": "b_alcohol",
+   "label": "Decreased use of alcohol",
+   "layer": "outcome_long",
+   "container": "c_security",
+   "verdict": null
+  },
+  {
+   "id": "b_daily_cash",
+   "label": "Increased availability of cash to meet daily needs",
+   "layer": "outcome_short",
+   "container": "c_conflict",
+   "verdict": null
+  },
+  {
+   "id": "b_temptation_cash",
+   "label": "Increased availability of cash for purchases of temptation goods",
+   "layer": "outcome_short",
+   "container": "c_conflict",
+   "verdict": null
+  },
+  {
+   "id": "b_less_conflict",
+   "label": "Decreased conflict in the relationship",
+   "layer": "outcome_long",
+   "container": "c_conflict",
+   "verdict": null
+  },
+  {
+   "id": "b_more_conflict",
+   "label": "Increased conflict in the relationship",
+   "layer": "outcome_long",
+   "container": "c_conflict",
+   "verdict": null
+  },
+  {
+   "id": "b_empowerment",
+   "label": "Women’s empowerment\n• Enhanced self confidence and self-efficacy\n• Increased financial autonomy\n• Increased productive investments and activities",
+   "layer": "outcome_short",
+   "container": "c_empowerment",
+   "verdict": null
+  },
+  {
+   "id": "b_power",
+   "label": "Shifts in relationship power\n• Woman’s increased ability to leave or to present a credible threat to exit the relationship\n• Woman’s increased ability to assert her preferences/realise her goals",
+   "layer": "outcome_long",
+   "container": "c_empowerment",
+   "verdict": null
+  },
+  {
+   "id": "b_accepting",
+   "label": "Partner’s reaction\nAccepting; wishes to keep woman in the relationship; increased appreciation of woman’s worth",
+   "layer": "outcome_long",
+   "container": "c_empowerment",
+   "verdict": null
+  },
+  {
+   "id": "b_threatened",
+   "label": "Partner’s reaction\nThreatened; concerned about woman usurping male authority and roles",
+   "layer": "outcome_long",
+   "container": "c_empowerment",
+   "verdict": null
+  },
+  {
+   "id": "b_decreased_ipv",
+   "label": "DECREASED IPV",
+   "layer": "impact",
+   "container": null,
+   "verdict": {
+    "raw": "Fourteen quantitative and nine qualitative studies met our inclusion criteria, of which eleven and six respectively demonstrated evidence that CTs decrease IPV.",
+    "scale": "supports",
+    "quote": "eleven and six respectively demonstrated evidence that CTs decrease IPV",
+    "page": 3,
+    "studies": []
+   }
+  },
+  {
+   "id": "b_increased_ipv",
+   "label": "INCREASED IPV",
+   "layer": "impact",
+   "container": null,
+   "verdict": {
+    "raw": "We found little support for increases in IPV, with only two studies showing overall mixed or adverse impacts.",
+    "scale": "against",
+    "quote": "little support for increases in IPV",
+    "page": 3,
+    "studies": []
+   }
+  }
+ ],
+ "links": [
+  {
+   "id": "l_prox_security",
+   "source": "c_proximate",
+   "target": "c_security",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "There is a large and robust literature across different geographical regions and program typologies showing that in general, CTs have significant positive impacts on a range of household-level economic security outcomes",
+    "scale": "supports",
+    "quote": "CTs have significant positive impacts",
+    "page": 23,
+    "studies": [
+     "Bastagli et al. 2016",
+     "Banerje et al. 2015",
+     "Handa et al. 2017",
+     "Handa et al. 2016",
+     "Hidrobo et al. 2014",
+     "Hidrobo et al. 2017",
+     "Natali et al. 2016",
+     "Taylor et al. 2016"
+    ]
+   }
+  },
+  {
+   "id": "l_prox_conflict",
+   "source": "c_proximate",
+   "target": "c_conflict",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "We found evidence to support all three hypothesized pathways: economic security and emotional wellbeing; intra-household conflict; and women’s empowerment.",
+    "scale": "supports",
+    "quote": "evidence to support all three hypothesized pathways",
+    "page": 31,
+    "studies": []
+   }
+  },
+  {
+   "id": "l_prox_empowerment",
+   "source": "c_proximate",
+   "target": "c_empowerment",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "Thus, although there are promising case studies, there are also mixed impacts, and a lack of consolidated evidence across program typologies and diverse contexts with differing gendered norms.",
+    "scale": "partly",
+    "quote": "there are also mixed impacts",
+    "page": 29,
+    "studies": [
+     "Perova et al. 2012",
+     "Natali et al. 2016",
+     "Green et al. 2015",
+     "van den Bold et al. 2013",
+     "Bonilla et al. 2017",
+     "Chant 2008",
+     "Molyneux 2006",
+     "Peterman et al. 2015",
+     "Seymour & Peterman 2017",
+     "Malhortra & Schuler 2005"
+    ]
+   }
+  },
+  {
+   "id": "l_security_wellbeing",
+   "source": "b_security",
+   "target": "b_wellbeing",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Overall, evidence confirms a strong relationship between poverty and mental health in developing settings.",
+    "scale": "supports",
+    "quote": "a strong relationship between poverty and mental health",
+    "page": 24,
+    "studies": [
+     "Lund et al. 2010",
+     "Lorant et al. 2003",
+     "Sacks et al. 2010",
+     "Buller et al. 2016",
+     "Nuwakora 2014",
+     "Haushofer and Fehr 2014"
+    ]
+   }
+  },
+  {
+   "id": "l_wellbeing_alcohol",
+   "source": "b_wellbeing",
+   "target": "b_alcohol",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l_wellbeing_ipv",
+   "source": "b_wellbeing",
+   "target": "b_decreased_ipv",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l_alcohol_ipv",
+   "source": "b_alcohol",
+   "target": "b_decreased_ipv",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l_daily_conflict",
+   "source": "b_daily_cash",
+   "target": "b_less_conflict",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Reduction in household tensions leading to fewer conflicts (mentioned by 4 studies; Slater & Mphale, 2008, Yildrim 2011, Angeles 2012, Buller et al. 2016)",
+    "scale": "supports",
+    "quote": "Reduction in household tensions leading to fewer conflicts",
+    "page": 20,
+    "studies": [
+     "Slater & Mphale 2008",
+     "Yildrim 2011",
+     "Angeles 2012",
+     "Buller et al. 2016"
+    ]
+   }
+  },
+  {
+   "id": "l_less_conflict_ipv",
+   "source": "b_less_conflict",
+   "target": "b_decreased_ipv",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l_temptation_conflict",
+   "source": "b_temptation_cash",
+   "target": "b_more_conflict",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "We also found substantial evidence from related literature to support each step in the proposed causal chains, with the exception of increasing violence by exacerbating conflict over the consumption of temptation goods.",
+    "scale": "insufficient",
+    "quote": "with the exception of increasing violence by exacerbating conflict over the consumption of temptation goods",
+    "page": 31,
+    "studies": []
+   }
+  },
+  {
+   "id": "l_more_conflict_ipv",
+   "source": "b_more_conflict",
+   "target": "b_increased_ipv",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l_empowerment_power",
+   "source": "b_empowerment",
+   "target": "b_power",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l_power_accepting",
+   "source": "b_power",
+   "target": "b_accepting",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l_power_threatened",
+   "source": "b_power",
+   "target": "b_threatened",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l_accepting_ipv",
+   "source": "b_accepting",
+   "target": "b_decreased_ipv",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l_threatened_ipv",
+   "source": "b_threatened",
+   "target": "b_increased_ipv",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a_design",
+   "kind": "assumption",
+   "text": "The pathways that become operative depend on programme design, including transfer size, frequency and duration, targeting, framing, conditionalities and complementary programming.",
+   "links": [
+    "l_prox_security",
+    "l_prox_conflict",
+    "l_prox_empowerment"
+   ],
+   "from_layer": "input",
+   "to_layer": "outcome_short",
+   "verdict": {
+    "raw": "Likewise, programs that generate smaller shifts in relationship power appear more easily accepted by men than those catalysing larger disruptions",
+    "scale": "partly",
+    "quote": "smaller shifts in relationship power appear more easily accepted by men",
+    "page": 32,
+    "studies": [
+     "Wasilkowska 2011",
+     "Slate and Mphale 2008",
+     "Maldonado 2005",
+     "Buller et al. 2016",
+     "Haushofer & Shapiro 2016"
+    ]
+   }
+  },
+  {
+   "id": "a_gender_context",
+   "kind": "assumption",
+   "text": "How the pathways play out depends on intra-household gender dynamics, local gender regimes and socio-economic inequalities, including how a woman’s partner reacts to the transfer.",
+   "links": [
+    "l_power_accepting",
+    "l_power_threatened",
+    "l_accepting_ipv",
+    "l_threatened_ipv"
+   ],
+   "from_layer": "outcome_long",
+   "to_layer": "impact",
+   "verdict": {
+    "raw": "The qualitative studies suggest that in highly patriarchal settings, shifts in household dynamics that are less challenging to traditional gender norms are less likely to prompt violence.",
+    "scale": "supports",
+    "quote": "less challenging to traditional gender norms are less likely to prompt violence",
+    "page": 32,
+    "studies": [
+     "Wasilkowska 2011",
+     "Slate and Mphale 2008",
+     "Maldonado 2005",
+     "Buller et al. 2016"
+    ]
+   }
+  },
+  {
+   "id": "a_recipient",
+   "kind": "assumption",
+   "text": "The recipient of the cash transfer is likely to be a key factor in understanding potential impacts on IPV.",
+   "links": [
+    "l_prox_security",
+    "l_prox_conflict",
+    "l_prox_empowerment"
+   ],
+   "from_layer": "input",
+   "to_layer": "impact",
+   "verdict": {
+    "raw": "While empirical evidence is scarce and mixed in terms of the impact of recipient sex on economic and human capital outcomes of transfers, there is even less evidence for how different targeting schemes affect IPV outcomes",
+    "scale": "insufficient",
+    "quote": "even less evidence for how different targeting schemes affect IPV outcomes",
+    "page": 32,
+    "studies": [
+     "Yoong et al. 2012",
+     "Haushofer & Shapiro 2016"
+    ]
+   }
+  }
+ ],
+ "context": [
+  "Gender regimes, social norms, laws and policy",
+  "Underlying household poverty and vulnerability",
+  "Socio-economic inequalities and intra-household gender dynamics",
+  "Evidence is concentrated in Latin America, with important regional and humanitarian-setting gaps."
+ ],
+ "key_claims": [
+  {
+   "id": "k_overall",
+   "claim": "Cash transfers can reduce intimate partner violence, although effects vary by violence measure, programme and population.",
+   "refs": [
+    "b_design",
+    "b_decreased_ipv",
+    "b_increased_ipv"
+   ],
+   "where": "Abstract; Table 2; Table 3; discussion, document pages 31–35",
+   "verdict": {
+    "raw": "Fourteen quantitative and nine qualitative studies met our inclusion criteria, of which eleven and six respectively demonstrated evidence that CTs decrease IPV. We found little support for increases in IPV, with only two studies showing overall mixed or adverse impacts. Transfers appear to reduce physical and/or sexual IPV more consistently than emotional abuse or controlling behaviours.",
+    "scale": "supports",
+    "quote": "eleven and six respectively demonstrated evidence that CTs decrease IPV",
+    "page": 3,
+    "studies": [
+     "Roy et al. 2017",
+     "Perova et al. 2012",
+     "Rodriguez 2015",
+     "Hidrobo & Fernald 2013",
+     "Hidrobo et al. 2016",
+     "Haushofer & Shapiro 2016",
+     "Ritter Burga 2014",
+     "Pettifor et al. 2016",
+     "Kilburn et al. 2017",
+     "Borraz & Munyo 2017",
+     "Angelucci 2008",
+     "Bobonis et al. 2013"
+    ]
+   }
+  },
+  {
+   "id": "k_security",
+   "claim": "Cash transfers improve household economic security and reduce poverty, with possible economic spillovers to non-beneficiaries.",
+   "refs": [
+    "b_household_cash",
+    "b_security",
+    "l_prox_security"
+   ],
+   "where": "Section 4.1, document page 23",
+   "verdict": {
+    "raw": "There is a large and robust literature across different geographical regions and program typologies showing that in general, CTs have significant positive impacts on a range of household-level economic security outcomes. Further, there is a growing literature documenting the positive local economy impacts of CTs, implying positive spill-overs on non-beneficiary households in terms of economic outcomes.",
+    "scale": "supports",
+    "quote": "a large and robust literature",
+    "page": 23,
+    "studies": [
+     "Bastagli et al. 2016",
+     "Banerje et al. 2015",
+     "Handa et al. 2017",
+     "Handa et al. 2016",
+     "Hidrobo et al. 2014",
+     "Hidrobo et al. 2017",
+     "Natali et al. 2016",
+     "Taylor et al. 2016"
+    ]
+   }
+  },
+  {
+   "id": "k_mental_health",
+   "claim": "Greater economic security can reduce poverty-related stress and improve emotional wellbeing.",
+   "refs": [
+    "b_security",
+    "b_wellbeing",
+    "l_security_wellbeing"
+   ],
+   "where": "Section 4.1, document pages 23–24; mechanisms summary, document page 15",
+   "verdict": {
+    "raw": "Overall, evidence confirms a strong relationship between poverty and mental health in developing settings. Although the relationship between poverty and poor mental health is well established, we know less about the typologies of interventions which are successful at breaking the two-way cycle. A recent review of programming concluded that although there is good evidence that a variety of mental health programs have positive impacts on economic outcomes, overall the mental health effects of poverty alleviation programs are inconclusive.",
+    "scale": "partly",
+    "quote": "the mental health effects of poverty alleviation programs are inconclusive",
+    "page": 24,
+    "studies": [
+     "Lund et al. 2010",
+     "Lund et al. 2011",
+     "Lorant et al. 2003",
+     "Sacks et al. 2010",
+     "Haushofer and Fehr 2014",
+     "Buller et al. 2016",
+     "Nuwakora 2014",
+     "Roy et al. 2017",
+     "Hidrobo et al. 2016",
+     "Haushofer & Shapiro 2016"
+    ]
+   }
+  },
+  {
+   "id": "k_wellbeing_ipv",
+   "claim": "Improved emotional wellbeing reduces IPV directly or through reduced alcohol use as a negative coping mechanism.",
+   "refs": [
+    "b_wellbeing",
+    "b_alcohol",
+    "l_wellbeing_alcohol",
+    "l_wellbeing_ipv",
+    "l_alcohol_ipv"
+   ],
+   "where": "Section 4.1; Figure 1; qualitative mechanisms summary, document page 20; discussion, document page 31",
+   "verdict": {
+    "raw": "We found evidence to support all three hypothesized pathways: economic security and emotional wellbeing; intra-household conflict; and women’s empowerment. We also found substantial evidence from related literature to support each step in the proposed causal chains, with the exception of increasing violence by exacerbating conflict over the consumption of temptation goods.",
+    "scale": "supports",
+    "quote": "evidence to support all three hypothesized pathways",
+    "page": 31,
+    "studies": [
+     "Adato & Roopnaraine 2004",
+     "Angeles 2012",
+     "Yildrim et al. 2014",
+     "Nuwakora 2014",
+     "Buller et al. 2016",
+     "Roy et al. 2017",
+     "Hidrobo et al. 2016",
+     "Haushofer & Shapiro 2016"
+    ]
+   }
+  },
+  {
+   "id": "k_daily_conflict",
+   "claim": "Cash available for daily household needs reduces tensions and relationship conflict, thereby reducing IPV.",
+   "refs": [
+    "b_daily_cash",
+    "b_less_conflict",
+    "l_daily_conflict",
+    "l_less_conflict_ipv"
+   ],
+   "where": "Table 3; qualitative mechanisms summary, document page 20; Figure 1; discussion, document page 31",
+   "verdict": {
+    "raw": "Reduction in household tensions leading to fewer conflicts (mentioned by 4 studies; Slater & Mphale, 2008, Yildrim 2011, Angeles 2012, Buller et al. 2016)",
+    "scale": "supports",
+    "quote": "Reduction in household tensions leading to fewer conflicts",
+    "page": 20,
+    "studies": [
+     "Slater & Mphale 2008",
+     "Yildrim 2011",
+     "Angeles 2012",
+     "Buller et al. 2016"
+    ]
+   }
+  },
+  {
+   "id": "k_temptation",
+   "claim": "Additional cash could increase purchases of temptation goods and provoke conflict and IPV, but this proposed adverse pathway lacks support.",
+   "refs": [
+    "b_temptation_cash",
+    "b_more_conflict",
+    "l_temptation_conflict",
+    "l_more_conflict_ipv"
+   ],
+   "where": "Figure 1; discussion, document page 31",
+   "verdict": {
+    "raw": "We also found substantial evidence from related literature to support each step in the proposed causal chains, with the exception of increasing violence by exacerbating conflict over the consumption of temptation goods.",
+    "scale": "insufficient",
+    "quote": "with the exception of increasing violence by exacerbating conflict over the consumption of temptation goods",
+    "page": 31,
+    "studies": []
+   }
+  },
+  {
+   "id": "k_empowerment",
+   "claim": "Transfers to women can increase their financial autonomy, confidence and bargaining power, but empowerment effects are mixed and context-specific.",
+   "refs": [
+    "b_woman_cash",
+    "b_empowerment",
+    "b_power",
+    "l_prox_empowerment",
+    "l_empowerment_power"
+   ],
+   "where": "Table 2; Table 3; mechanisms summaries, document pages 15 and 20; empowerment discussion, document page 29",
+   "verdict": {
+    "raw": "Numerous studies have also shown that CTs increase women’s savings and income earning opportunities, suggesting that CTs may affect women's bargaining power. However, the broader evidence is mixed. Although qualitative evidence on CCTs, largely from Latin America and the Caribbean, generally points to positive impacts on empowerment indicators, quantitative results are mixed.",
+    "scale": "partly",
+    "quote": "the broader evidence is mixed",
+    "page": 29,
+    "studies": [
+     "Perova et al. 2012",
+     "Natali et al. 2016",
+     "Green et al. 2015",
+     "van den Bold et al. 2013",
+     "Bonilla et al. 2017",
+     "Chant 2008",
+     "Molyneux 2006",
+     "Hidrobo & Fernald 2013",
+     "Maldonado 2006",
+     "Slater & Mphale 2008",
+     "Angeles 2012",
+     "Nuwakora 2014",
+     "Buller et al. 2016"
+    ]
+   }
+  },
+  {
+   "id": "k_partner_response",
+   "claim": "Stronger bargaining power may reduce IPV when partners accept it, but threatened authority or attempts to extract transfers can produce backlash.",
+   "refs": [
+    "b_power",
+    "b_accepting",
+    "b_threatened",
+    "l_power_accepting",
+    "l_power_threatened",
+    "l_accepting_ipv",
+    "l_threatened_ipv",
+    "a_gender_context"
+   ],
+   "where": "Mechanisms summaries, document pages 15 and 20; Table 2; Table 3; Figure 1; discussion, document pages 31–32",
+   "verdict": {
+    "raw": "The economic security and emotional wellbeing pathway is the only one that exclusively reduces IPV; the other two may increase or decrease IPV, depending on whether additional cash aggravates or soothes relationship conflict and/or how men respond to women’s increased empowerment. A partner seeking to extract resources/CT from his wife was mentioned by Bobonis et al. 2013, however not tested directly. Male backlash was mentioned by Angelucci 2008, with evidence suggesting the pathway could be valid.",
+    "scale": "partly",
+    "quote": "the other two may increase or decrease IPV",
+    "page": 31,
+    "studies": [
+     "Angelucci 2008",
+     "Bobonis et al. 2013",
+     "Hidrobo & Fernald 2013",
+     "Adato 2000a",
+     "Nuwakora 2014",
+     "Wasilkowska 2012",
+     "Pettifor et al. 2016",
+     "Kilburn et al. 2017"
+    ]
+   }
+  },
+  {
+   "id": "k_design_framing",
+   "claim": "Programme framing and the size and regularity of transfers can affect acceptance of changed household roles and the risk of IPV.",
+   "refs": [
+    "b_design",
+    "a_design",
+    "a_gender_context"
+   ],
+   "where": "Table 2; Table 3; discussion, document page 32",
+   "verdict": {
+    "raw": "Programs that generate smaller shifts in relationship power appear more easily accepted by men than those catalysing larger disruptions. More “acceptable” shifts might also be achieved by making smaller, more regular transfers. It should be noted, however, that the Kenya GiveDirectly study tested lump sum versus periodic transfers and found that the difference did not significantly affect the magnitude or impacts on IPV.",
+    "scale": "partly",
+    "quote": "the difference did not significantly affect the magnitude or impacts on IPV",
+    "page": 32,
+    "studies": [
+     "Wasilkowska 2011",
+     "Slate and Mphale 2008",
+     "Maldonado 2005",
+     "Buller et al. 2016",
+     "Haushofer & Shapiro 2016",
+     "Angelucci 2008"
+    ]
+   }
+  },
+  {
+   "id": "k_recipient",
+   "claim": "Whether women or men receive the transfer may affect IPV pathways, but evidence comparing recipient sex is insufficient.",
+   "refs": [
+    "b_design",
+    "a_recipient"
+   ],
+   "where": "Table 2, Kenya study; discussion, document page 32",
+   "verdict": {
+    "raw": "While empirical evidence is scarce and mixed in terms of the impact of recipient sex on economic and human capital outcomes of transfers, there is even less evidence for how different targeting schemes affect IPV outcomes. Across the studies reviewed here, the majority transferred cash to women; therefore, a large gap in knowledge remains with respect to impacts on IPV when men are the main recipient. Heterogeneous analysis by lump sum vs. monthly transfer, by large vs. small transfer & by male vs. female recipient in main sample show no differential impacts, however in the sample including within-cluster spillover HHs, impacts are driven by sample with large, monthly CTs given to females.",
+    "scale": "insufficient",
+    "quote": "a large gap in knowledge remains",
+    "page": 32,
+    "studies": [
+     "Yoong et al. 2012",
+     "Haushofer & Shapiro 2016"
+    ]
+   }
+  },
+  {
+   "id": "k_complements",
+   "claim": "Complementary services and programme participation may strengthen violence reductions through health, social ties and empowerment, but these mechanisms are not well isolated.",
+   "refs": [
+    "b_design",
+    "b_knowledge",
+    "b_social",
+    "l_prox_empowerment"
+   ],
+   "where": "Table 2, Bangladesh and Peru studies; Table 3, Ecuador study; mechanisms summary, document page 15; research gaps, document page 35",
+   "verdict": {
+    "raw": "Increasing interaction with the health sector, thereby improving women’s overall health and making her more resilient to abuse was mentioned by Ritter Burga 2014, including evidence suggesting the pathway could be valid. Encouraging greater interaction with other women and village leaders, which increases a woman’s social capital and social ties, and could increase the social cost of men perpetrating violence was mentioned by Roy et al. 2017, however not tested directly. Cross-sectional analysis on post-endline suggests transfers+BCC lead to sustainable reductions in IPV; transfers alone showed no significant post-endline impacts in the reported indicators. None were able to test potential synergistic effects between program components.",
+    "scale": "partly",
+    "quote": "none were able to test potential synergistic effects between program components",
+    "page": 35,
+    "studies": [
+     "Ritter Burga 2014",
+     "Roy et al. 2017",
+     "Buller et al. 2016",
+     "Green et al. 2015",
+     "Hidrobo et al. 2016",
+     "Haushofer & Shapiro 2016"
+    ]
+   }
+  },
+  {
+   "id": "k_sustainability",
+   "claim": "Violence reductions may change over time or after transfers stop, so short-term reductions do not establish sustained effects.",
+   "refs": [
+    "b_decreased_ipv"
+   ],
+   "where": "Programme review, document page 13; research gaps and conclusion, document page 35",
+   "verdict": {
+    "raw": "Finally, we know little about long-term impacts, including how impacts may vary over time horizons and if impacts are non-linear, as well as the sustainability of impacts after CTs end or households graduate (the latter studied only by Roy et al. 2017).",
+    "scale": "insufficient",
+    "quote": "we know little about long-term impacts",
+    "page": 35,
+    "studies": [
+     "Roy et al. 2017"
+    ]
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "We found evidence to support all three hypothesized pathways: economic security and emotional wellbeing; intra-household conflict; and women’s empowerment. We also found substantial evidence from related literature to support each step in the proposed causal chains, with the exception of increasing violence by exacerbating conflict over the consumption of temptation goods.",
+   "scale": "supports",
+   "quote": "We found evidence to support all three hypothesized pathways",
+   "page": 31,
+   "studies": []
+  },
+  "weakest_links": [
+   "l_temptation_conflict",
+   "a_recipient"
+  ],
+  "strongest_links": [
+   "l_prox_security",
+   "l_security_wellbeing"
+  ],
+  "summary": "Cash transfers are promising tools for reducing IPV, with little support for overall increases. The review supports three pathways, but only economic security and emotional wellbeing exclusively predicts reductions; conflict and empowerment may increase or decrease violence depending on relationship dynamics and context. The temptation-goods conflict pathway is the exception to the generally supportive related evidence. Physical and sexual violence show more consistent reductions than emotional abuse or controlling behaviours. Direct measurement of mechanisms, programme design comparisons, regional coverage and evidence on long-term sustainability remain limited.",
+  "recommendations": [
+   "Use internationally validated IPV measures sensitive to programme effects, including frequency and severity.",
+   "Go beyond impact estimation to measure causal pathways credibly, particularly relationship dynamics and intra-household behaviour.",
+   "Use more mixed-method evaluations.",
+   "Test targeting, complementary programming, programme linkages and conditionalities, including possible synergies between components.",
+   "Examine programme framing and design features that can maximize benefits and mitigate adverse impacts.",
+   "Fill regional and contextual gaps, including Asia, the Middle East, Western and Central Africa, and humanitarian settings.",
+   "Study long-term effects and sustainability after transfers end or households graduate."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/ct_ipv_buller_2018_p22.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "Page references use the supplied document-page numbering: Figure 1 is document page 22, printed page 21.",
+   "The broad coloured proximate-outcome and pathway panels are treated as containers because yellow arrows connect their boundaries as units. Those arrows meet the pathway-title bands rather than individual result boxes; the titles have not been made into boxes.",
+   "The four proximate-outcome circles are joined by thick yellow connectors without visible arrowheads. No causal links between those circles have been added.",
+   "No separate arrow from the programme-design polygon to the proximate-outcome panel is clearly visible. The polygon itself is arrow-shaped; no additional link has been inferred.",
+   "“INCREASED” is a shared modifier above the four proximate outcomes, accompanied by a triangular graphic; it has not been transcribed as a separate result box.",
+   "Intermediate pathways have no explicit short-term versus long-term headings. Early pathway results are mapped to outcome_short and subsequent relationship or wellbeing results to outcome_long; this is a layer interpretation, not a timing claim made by the figure.",
+   "The supplied excerpts omit portions of the pathway evidence sections. The broad discussion verdict is retained on the relevant key claims, but is not automatically assigned to every individual arrow.",
+   "The conclusion identifies the temptation-goods chain as lacking supporting evidence, but does not isolate whether the evidential failure is cash-to-consumption, consumption-to-conflict, or conflict-to-IPV. Its verdict is placed on l_temptation_conflict and the full chain is covered by k_temptation.",
+   "Strongest links are those explicitly described as having a large and robust literature or a strong relationship; the source does not provide a formal ranking.",
+   "Organisation, document URLs and licence were not supplied. The year is taken from the case notes.",
+   "Some study years and author spellings differ across the supplied source sections; citations retain the forms used in the relevant passages."
+  ],
+  "source_sha256": "d7c6dfc5e5315ae9c5bbe61858592b97913f99625ef1422a061d493605f12734",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

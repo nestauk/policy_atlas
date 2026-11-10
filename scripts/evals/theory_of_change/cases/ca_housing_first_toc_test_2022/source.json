@@ -1,0 +1,11 @@
+{
+ "file": "downloads/PMC9046122_fulltext.xml",
+ "doc_url": "https://www.thelancet.com/article/S2589537022001171/pdf",
+ "landing_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9046122",
+ "retrieved": "2026-11-09",
+ "figures": [
+  "downloads/pages/ca_housing_first_toc_2022_fig1.jpg",
+  "downloads/pages/ca_housing_first_toc_2022_fig2.jpg"
+ ],
+ "notes": "Figure(s): Figures 1-4. Verdict scale: unstandardised beta coefficients and odds ratios on each path; 'Parameter estimates are displayed only for statistically significant paths'. Timing: retrospective. Three separate path models (quality of life, recovery, crisis events); dashed vs solid lines mean binary vs continuous outcome, not evidence strength; PDF blocked, read via Europe PMC XML and PMC figures (Prepared from the longlist row; figures rendered by the checking agent.)"
+}

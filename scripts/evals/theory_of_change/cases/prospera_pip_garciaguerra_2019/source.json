@@ -1,0 +1,10 @@
+{
+ "file": "downloads/intl_PMC6887996.xml",
+ "doc_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC6887996/fullTextXML",
+ "landing_url": "https://doi.org/10.1093/jn/nxz169",
+ "retrieved": "2026-11-09",
+ "figures": [
+  "downloads/pages/prospera_pip_garciaguerra_2019_fig1.png"
+ ],
+ "notes": "Figure(s): Fig 1 (XML; no page numbers). Verdict scale: findings written in each box with reference numbers: \"Increase in antenatal care actions ... but quality of care an issue\", \"distributed irregularly\", \"Poor acceptance\", \"Low proportion of PLW consume Nutrivida\", \"use ineffective communications approaches\", \"[contribution of Nutrivida too small to be quantified]\", \"[not assessed]\". Timing: retrospective. Diagram is already populated with findings, so the 'original' ToC must be inferred by stripping the evidence text; small, low-resolution image (642x477). (Prepared from the longlist row; figures rendered by the checking agent.)"
+}

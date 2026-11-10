@@ -1,0 +1,986 @@
+{
+ "meta": {
+  "id": "lffn_wp1_synthesis",
+  "title": "Local Full Fibre Networks Evaluation: work package one report — Synthesis of evidence and conclusions",
+  "organisation": "Building Digital UK; Department for Digital, Culture, Media & Sport",
+  "year": 2026,
+  "country": "United Kingdom",
+  "topic": "Full-fibre broadband deployment, supplier entry and local broadband market competition",
+  "intervention_type": "programme",
+  "timing": "retrospective",
+  "doc_url": "https://www.gov.uk/government/publications/local-full-fibre-networks-evaluation-work-package-one-report/synthesis-of-evidence-and-conclusions",
+  "landing_url": "https://www.gov.uk/government/publications/local-full-fibre-networks-evaluation-work-package-one-report",
+  "licence": "Open Government Licence v3.0, except where otherwise stated",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "ex_post_evaluation",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Improve the availability, affordability and choice of gigabit-capable broadband, while supporting a more competitive and sustainable broadband market.",
+  "population": "Broadband users, public-sector organisations and broadband suppliers in participating local areas.",
+  "place": "United Kingdom; the supplied synthesis covers case studies including Blackpool, Mid Sussex, Highlands, Portsmouth, Suffolk, Wolverhampton, Northern Ireland and Tay Cities.",
+  "time_horizon": "Retrospective assessment of market changes following LFFN projects; the supplied text does not specify a common follow-up period.",
+  "intervention": "The Local Full Fibre Networks programme provided public funding for local full-fibre connectivity projects, including connections to public-sector sites and infrastructure used by broadband suppliers. Project funding amounts, duration and connection targets are not specified in the supplied synthesis.",
+  "context": "Suppliers were undertaking substantial commercially funded expansion alongside other public broadband programmes. Their existing geographical commitments, private capital and national rollout strategies differed substantially.",
+  "outcome_first": "Develop a theory of change for improving the availability, affordability and choice of gigabit-capable broadband in local areas across the United Kingdom. Include the intended contribution to a more competitive and sustainable broadband market.",
+  "intervention_first": "Develop a theory of change for the Local Full Fibre Networks programme in participating UK local areas. The programme funds local full-fibre connectivity projects and aims to improve broadband availability, affordability and choice while supporting a more competitive and sustainable market."
+ },
+ "containers": [
+  {
+   "id": "c1",
+   "label": "Facilitating competitive procurement",
+   "layer": "activity"
+  },
+  {
+   "id": "c2",
+   "label": "Market signalling",
+   "layer": "activity"
+  },
+  {
+   "id": "c3",
+   "label": "Infrastructure outputs",
+   "layer": "output"
+  },
+  {
+   "id": "c4",
+   "label": "Competition outputs",
+   "layer": "output"
+  },
+  {
+   "id": "c5",
+   "label": "Outcomes for consumers",
+   "layer": "outcome_short"
+  },
+  {
+   "id": "c6",
+   "label": "Outcomes for alt-nets",
+   "layer": "outcome_short"
+  },
+  {
+   "id": "c7",
+   "label": "Response to competition from traditional providers",
+   "layer": "outcome_short"
+  },
+  {
+   "id": "c8",
+   "label": "Consumer impacts",
+   "layer": "impact"
+  },
+  {
+   "id": "c9",
+   "label": "Market impacts",
+   "layer": "impact"
+  }
+ ],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "Private investment & resources",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b2",
+   "label": "BDUK funding and resources",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b3",
+   "label": "Policy/ regulatory frameworks",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b4",
+   "label": "Deployment of fibre",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b5",
+   "label": "Support/ advice to LAs",
+   "layer": "activity",
+   "container": "c1",
+   "verdict": null
+  },
+  {
+   "id": "b6",
+   "label": "Design of LFFN models",
+   "layer": "activity",
+   "container": "c1",
+   "verdict": null
+  },
+  {
+   "id": "b7",
+   "label": "Design & launch of programme",
+   "layer": "activity",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b8",
+   "label": "Engagement with market",
+   "layer": "activity",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b9",
+   "label": "Public sector site/ PoPs connected",
+   "layer": "output",
+   "container": "c3",
+   "verdict": null
+  },
+  {
+   "id": "b10",
+   "label": "Km of fibre installed",
+   "layer": "output",
+   "container": "c3",
+   "verdict": null
+  },
+  {
+   "id": "b11",
+   "label": "Premises passed",
+   "layer": "output",
+   "container": "c3",
+   "verdict": null
+  },
+  {
+   "id": "b12",
+   "label": "Competitive procurements",
+   "layer": "output",
+   "container": "c4",
+   "verdict": null
+  },
+  {
+   "id": "b13",
+   "label": "Supplier bids received",
+   "layer": "output",
+   "container": "c4",
+   "verdict": null
+  },
+  {
+   "id": "b14",
+   "label": "Contracts to mix of suppliers",
+   "layer": "output",
+   "container": "c4",
+   "verdict": null
+  },
+  {
+   "id": "b15",
+   "label": "Increased visibility of gov commitment to gigabit capable broadband",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b16",
+   "label": "Increased fibre deployment",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "LFFN enabled modest extensions or acceleration of network build for suppliers already active in the area",
+    "scale": "partly",
+    "quote": "modest extensions or acceleration of network build",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b17",
+   "label": "Multiple ISPs use infrastructure",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "in all five LFFN areas where it entered (Blackpool, Highlands, Portsmouth, Suffolk and Wolverhampton) its presence led to the availability of packages from Zen Fibre and Vodafone.",
+    "scale": "supports",
+    "quote": "its presence led to the availability of packages from Zen Fibre and Vodafone",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b18",
+   "label": "More reliable broadband",
+   "layer": "outcome_short",
+   "container": "c5",
+   "verdict": null
+  },
+  {
+   "id": "b19",
+   "label": "Faster broadband",
+   "layer": "outcome_short",
+   "container": "c5",
+   "verdict": null
+  },
+  {
+   "id": "b20",
+   "label": "Better value broadband",
+   "layer": "outcome_short",
+   "container": "c5",
+   "verdict": {
+    "raw": "There is strong evidence from the CNI and CityFibre case studies that LFFN has helped make broadband more affordable in the areas where it supported the early entry of gigabit-capable networks.",
+    "scale": "supports",
+    "quote": "strong evidence ... that LFFN has helped make broadband more affordable",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b21",
+   "label": "More consumer choice",
+   "layer": "outcome_short",
+   "container": "c5",
+   "verdict": {
+    "raw": "Overall, LFFN did increase consumer choice in areas where it enabled CityFibre to enter the market, but in most other locations its effect was small and geographically limited",
+    "scale": "partly",
+    "quote": "in most other locations its effect was small and geographically limited",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b22",
+   "label": "Alt-nets enter local markets",
+   "layer": "outcome_short",
+   "container": "c6",
+   "verdict": {
+    "raw": "LFFN did contribute to supplier entry in some locations, but this effect was highly variable across suppliers and areas",
+    "scale": "partly",
+    "quote": "did contribute to supplier entry in some locations",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b23",
+   "label": "Expand local networks",
+   "layer": "outcome_short",
+   "container": "c6",
+   "verdict": {
+    "raw": "LFFN did not change suppliers’ underlying strategies, but it helped bring forward some deployment activity and enabled modest extensions to existing plans.",
+    "scale": "partly",
+    "quote": "enabled modest extensions to existing plans",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b24",
+   "label": "Growth / financial stability",
+   "layer": "outcome_short",
+   "container": "c6",
+   "verdict": {
+    "raw": "Overall, LFFN’s contribution to alt-net financial growth is primarily indirect.",
+    "scale": "partly",
+    "quote": "primarily indirect",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b25",
+   "label": "Attract private investment",
+   "layer": "outcome_short",
+   "container": "c6",
+   "verdict": {
+    "raw": "Overall, the evidence for Claim 5 is mixed: LFFN played an important role for Fibrus, had limited or no effect for most CNI suppliers, and likely made only a minor contribution for CityFibre once its major private-sector backing was secured.",
+    "scale": "partly",
+    "quote": "the evidence for Claim 5 is mixed",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b26",
+   "label": "Increased investment in other markets",
+   "layer": "outcome_short",
+   "container": "c6",
+   "verdict": {
+    "raw": "The diagram below shows the theory of change, with outcomes where the evidence was limited, mixed or absent shown in grey.",
+    "scale": "partly",
+    "quote": "evidence was limited, mixed or absent",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b27",
+   "label": "Accelerate rollout/ make technical upgrades",
+   "layer": "outcome_short",
+   "container": "c7",
+   "verdict": {
+    "raw": "Evidence of accelerated rollout was found only in Wolverhampton; elsewhere, incumbent activity reflected broader national programmes rather than reactions to LFFN-funded suppliers.",
+    "scale": "partly",
+    "quote": "Evidence of accelerated rollout was found only in Wolverhampton",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b28",
+   "label": "Improved service offering",
+   "layer": "outcome_short",
+   "container": "c7",
+   "verdict": {
+    "raw": "The diagram below shows the theory of change, with outcomes where the evidence was limited, mixed or absent shown in grey.",
+    "scale": "partly",
+    "quote": "evidence was limited, mixed or absent",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b29",
+   "label": "Increased competition in local markets",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "In these locations, LFFN brought forward deployment and created conditions for new competition.",
+    "scale": "supports",
+    "quote": "created conditions for new competition",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b30",
+   "label": "Increased capacity/ capability of market to address underserved areas",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b31",
+   "label": "Operators adjust commercial rollout plans",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "There is no evidence that LFFN acted as a wider market signal that influenced operators’ strategic investment decisions.",
+    "scale": "against",
+    "quote": "no evidence that LFFN acted as a wider market signal",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b32",
+   "label": "Increased private investment in fibre networks",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "Where operators accelerated or expanded their networks, this reflected broader commercial drivers and private investment cycles rather than any signalling effect from LFFN.",
+    "scale": "against",
+    "quote": "rather than any signalling effect from LFFN",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b33",
+   "label": "Improved satisfaction with broadband",
+   "layer": "impact",
+   "container": "c8",
+   "verdict": null
+  },
+  {
+   "id": "b34",
+   "label": "Time and money savings",
+   "layer": "impact",
+   "container": "c8",
+   "verdict": null
+  },
+  {
+   "id": "b35",
+   "label": "Improved wellbeing / productivity",
+   "layer": "impact",
+   "container": "c8",
+   "verdict": null
+  },
+  {
+   "id": "b36",
+   "label": "99% coverage by 2032",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b37",
+   "label": "A more competitive / resilient broadband market",
+   "layer": "impact",
+   "container": "c9",
+   "verdict": null
+  },
+  {
+   "id": "b38",
+   "label": "Long term sustainability of alt-nets",
+   "layer": "impact",
+   "container": "c9",
+   "verdict": {
+    "raw": "The case studies indicate that most of the alt-nets supported through LFFN are in a relatively strong long-term position, with continued access to private investment, active growth strategies and ambitions to expand further.",
+    "scale": "partly",
+    "quote": "most of the alt-nets ... are in a relatively strong long-term position",
+    "page": null,
+    "studies": []
+   }
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l2",
+   "source": "b2",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l3",
+   "source": "b2",
+   "target": "c1",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l4",
+   "source": "b3",
+   "target": "c1",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l5",
+   "source": "b4",
+   "target": "c3",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l6",
+   "source": "c1",
+   "target": "c4",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l7",
+   "source": "c2",
+   "target": "b15",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l8",
+   "source": "c3",
+   "target": "b16",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l9",
+   "source": "b16",
+   "target": "c5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l10",
+   "source": "b16",
+   "target": "b17",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "As a wholesale operator, CityFibre enables multiple ISPs to deliver services over its network",
+    "scale": "supports",
+    "quote": "enables multiple ISPs to deliver services over its network",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "l11",
+   "source": "b17",
+   "target": "b29",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "This has expanded the range of gigabit-capable packages available to consumers in each location",
+    "scale": "supports",
+    "quote": "expanded the range of gigabit-capable packages",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "l12",
+   "source": "c4",
+   "target": "c6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l13",
+   "source": "c6",
+   "target": "b29",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "LFFN enabled supplier entry in specific areas, most clearly where it facilitated CityFibre’s or ITS’s entry through anchor tenancy and CNI models. In these locations, LFFN brought forward deployment and created conditions for new competition.",
+    "scale": "supports",
+    "quote": "created conditions for new competition",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "l14",
+   "source": "c6",
+   "target": "c7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "while LFFN may have prompted a competitive response in a small number of cases, particularly in Wolverhampton, there is no strong or consistent pattern across the case studies.",
+    "scale": "partly",
+    "quote": "there is no strong or consistent pattern across the case studies",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "l15",
+   "source": "c7",
+   "target": "b29",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l16",
+   "source": "c7",
+   "target": "b30",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l17",
+   "source": "b29",
+   "target": "c5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "LFFN contributed to improved affordability and consumer choice in areas where it enabled the entry of competitive wholesale networks.",
+    "scale": "supports",
+    "quote": "improved affordability and consumer choice",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "l18",
+   "source": "c5",
+   "target": "c8",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l19",
+   "source": "c6",
+   "target": "c9",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "many of the market changes facilitated by LFFN are likely to be sustained, particularly where the programme supported suppliers that already had strong backing and scalable business models.",
+    "scale": "partly",
+    "quote": "many of the market changes ... are likely to be sustained",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "l20",
+   "source": "b30",
+   "target": "b36",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l21",
+   "source": "b30",
+   "target": "c9",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l22",
+   "source": "b15",
+   "target": "b31",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "There is no evidence that LFFN acted as a wider market signal that influenced operators’ strategic investment decisions.",
+    "scale": "against",
+    "quote": "no evidence that LFFN acted as a wider market signal",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "l23",
+   "source": "b31",
+   "target": "b32",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Where operators accelerated or expanded their networks, this reflected broader commercial drivers and private investment cycles rather than any signalling effect from LFFN.",
+    "scale": "against",
+    "quote": "rather than any signalling effect from LFFN",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "l24",
+   "source": "b32",
+   "target": "b29",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l25",
+   "source": "b32",
+   "target": "b30",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "assumption",
+   "text": "Supplier entry effects are strongest where suppliers are not already committed to a particular geography and public funding reduces risks or accelerates deployment.",
+   "links": [
+    "l12"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "this effect was strongest where suppliers were not already committed to a particular geography and where public funding reduced risks or accelerated deployment.",
+    "scale": "supports",
+    "quote": "strongest where suppliers were not already committed to a particular geography",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "a2",
+   "kind": "assumption",
+   "text": "Multiple wholesale networks may create conditions for increased price competition over time, should market dynamics and demand support this.",
+   "links": [
+    "l17"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a3",
+   "kind": "assumption",
+   "text": "Market changes are more likely to be sustained where supported suppliers already have strong backing and scalable business models.",
+   "links": [
+    "l19"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "many of the market changes facilitated by LFFN are likely to be sustained, particularly where the programme supported suppliers that already had strong backing and scalable business models.",
+    "scale": "partly",
+    "quote": "particularly where ... strong backing and scalable business models",
+    "page": null,
+    "studies": []
+   }
+  }
+ ],
+ "context": [
+  "Private investment was the primary driver of supplier entry; all examined alt-nets had secured substantial private capital before LFFN.",
+  "F&W Networks and Fibrus had pre-existing geographical strategies focused on Sussex and Northern Ireland respectively; national operators CityFibre and ITS had more competing rollout options.",
+  "Private investment and larger public programmes, including Project Stratum, were principal drivers of network expansion outside LFFN.",
+  "VMO2's gigabit upgrades and migration to full fibre formed part of national programmes independent of LFFN.",
+  "Delivery model, supplier type and local market conditions substantially affected the strength of observed outcomes.",
+  "Limited visibility of CNI infrastructure and suppliers' preference for owning their networks restricted infrastructure sharing.",
+  "Consolidation pressures affected the alt-net sector, particularly the outlook for F&W Networks."
+ ],
+ "key_claims": [
+  {
+   "id": "k1",
+   "claim": "LFFN can bring forward supplier entry by removing local cost and risk barriers, particularly for suppliers not already committed to the area.",
+   "refs": [
+    "b22",
+    "l12",
+    "a1"
+   ],
+   "where": "Section 1.1, Claim 1; sections 3.1–3.2",
+   "verdict": {
+    "raw": "LFFN did contribute to supplier entry in some locations, but this effect was highly variable across suppliers and areas and was strongest where LFFN aligned with commercial interest but removed key barriers to entry. ... LFFN funding directly enabled the company to enter multiple local markets (Highlands, Portsmouth, Suffolk and Wolverhampton) ... ITS reported that its entry into Blackpool was a direct consequence of CNI infrastructure being available ... In Northern Ireland, LFFN did not influence entry: Fibrus was already active in the market",
+    "scale": "partly",
+    "quote": "strongest where LFFN aligned with commercial interest but removed key barriers to entry",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k2",
+   "claim": "Public-sector fibre connections and shared infrastructure can accelerate rollout and enable incremental network extensions, without necessarily changing suppliers' underlying investment plans.",
+   "refs": [
+    "b16",
+    "b23",
+    "c3",
+    "a1"
+   ],
+   "where": "Sections 1.1–1.2, Claims 1–2; section 3.1",
+   "verdict": {
+    "raw": "LFFN generally made an enabling contribution, helping to accelerate or slightly extend rollout, rather than fundamentally changing investment plans or delivering large-scale coverage uplift. ... there is no evidence that LFFN contributed to expanded coverage or accelerated deployment for VMO2. ... both Fibrus and Openreach NI indicated that FFNI allowed them to serve additional premises ... The scale of these additional connections is uncertain ... Openreach in Tay Cities reported that LFFN accelerated deployment in some locations, particularly in Perth ... In Mid Sussex, F&W Networks had already decided to enter the market for commercial reasons; CNI infrastructure simply made delivery faster and easier",
+    "scale": "partly",
+    "quote": "an enabling contribution, helping to accelerate or slightly extend rollout",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k3",
+   "claim": "Additional customers and public contracts can support alt-net growth, but LFFN's larger contribution may be delivery capability and credibility rather than direct short-term revenue.",
+   "refs": [
+    "b24",
+    "b26",
+    "c6"
+   ],
+   "where": "Section 1.3, Claim 3; section 3.2; revised diagram, section 3.3",
+   "verdict": {
+    "raw": "In most cases, the direct impact of LFFN on revenues is likely to have been modest ... ITS and CityFibre, reported that LFFN areas accounted for a noticeable share of their revenues at certain points in time ... This makes it difficult to establish a clear counterfactual or to isolate LFFN’s direct revenue effect. ... For other alt-nets, such as F&W Networks and Fibrus, the contribution of LFFN to revenue growth appears to be limited to those incremental premises ... participation in LFFN provided an early opportunity to deliver large-scale public-sector contracts, helping them to build a demonstrable track record ... This effect was cited by both CityFibre ... and Fibrus",
+    "scale": "partly",
+    "quote": "its more important effect appears to have been in building credibility and strengthening the foundations for future expansion",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k4",
+   "claim": "A visible government commitment to full fibre would change operators' strategic rollout plans and stimulate additional private network investment.",
+   "refs": [
+    "c2",
+    "b15",
+    "b31",
+    "b32",
+    "l22",
+    "l23",
+    "l24",
+    "l25"
+   ],
+   "where": "Section 1.4, Claim 4; section 3.2",
+   "verdict": {
+    "raw": "There is no evidence that LFFN acted as a wider market signal that influenced operators’ strategic investment decisions. Interviewees consistently reported that their organisations already had established strategies and long-term rollout plans for fibre deployment, and that these were not altered in response to the programme.",
+    "scale": "against",
+    "quote": "these were not altered in response to the programme",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k5",
+   "claim": "Successful public-sector contracts can strengthen an alt-net's credibility and help it attract private finance, depending on its development stage and existing backing.",
+   "refs": [
+    "b25",
+    "b24"
+   ],
+   "where": "Section 1.5, Claim 5; sections 3.1–3.2",
+   "verdict": {
+    "raw": "For the CNI alt-nets (F&W Networks and ITS) there is no evidence that access to LFFN-funded CNI infrastructure helped them attract private investment. ... investors may initially view the CNI model as less favourable, preferring operators that own their underlying infrastructure. ... Anchor-tenancy agreements, including those associated with early LFFN Wave 1 projects, helped provide lenders with confidence and unlock working capital. ... LFFN contracts in later years were unlikely to have played a material role in securing further investment ... LFFN made a substantial contribution to Fibrus’s ability to attract investment.",
+    "scale": "partly",
+    "quote": "LFFN played an important role for Fibrus, had limited or no effect for most CNI suppliers",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k6",
+   "claim": "LFFN-supported supplier entry can prompt incumbents to accelerate rollout or improve their networks, but this response is not general across local markets.",
+   "refs": [
+    "l14",
+    "c7",
+    "b27",
+    "b28",
+    "l15",
+    "l16"
+   ],
+   "where": "Section 1.6, Claim 6; section 3.2; revised diagram, section 3.3",
+   "verdict": {
+    "raw": "There is only limited evidence from case studies that LFFN provoked a competitive response from incumbents, with effects varying substantially by area. The clearest indication of a competitive response comes from Wolverhampton ... Point Topic data ... shows a marked increase in Openreach’s coverage coinciding with CityFibre’s deployment. ... the rollout data generally shows either very limited expansion by Openreach, or that Openreach’s footprint was already growing before CityFibre entered the market ... In most areas, the VMO2 footprint has remained largely unchanged ... national upgrade programmes, with no indication that they were triggered by LFFN-funded competition.",
+    "scale": "partly",
+    "quote": "only limited evidence ... with effects varying substantially by area",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k7",
+   "claim": "Entry and expansion of wholesale fibre networks allow more ISPs to offer gigabit packages, increasing consumer choice where LFFN adds coverage.",
+   "refs": [
+    "b17",
+    "b21",
+    "b29",
+    "l10",
+    "l11",
+    "l13"
+   ],
+   "where": "Section 1.7, Claim 7; section 3.1",
+   "verdict": {
+    "raw": "There is consistent evidence that LFFN increased ISP choice in areas where it facilitated CityFibre’s entry into the market. ... in all five LFFN areas where it entered (Blackpool, Highlands, Portsmouth, Suffolk and Wolverhampton) its presence led to the availability of packages from Zen Fibre and Vodafone. ... In Northern Ireland ... LFFN’s contribution to increasing ISP choice is limited to the incremental footprints created through FFNI ... A similar pattern is observed in Tay Cities",
+    "scale": "partly",
+    "quote": "consistent evidence ... in areas where it facilitated CityFibre’s entry",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k8",
+   "claim": "Alternative networks and lower delivery costs can increase price competition and access to cheaper gigabit broadband packages.",
+   "refs": [
+    "b20",
+    "b29",
+    "l17",
+    "a2"
+   ],
+   "where": "Section 1.8, Claim 8; section 1.7 on future competition; section 3.1",
+   "verdict": {
+    "raw": "There is strong evidence from the CNI and CityFibre case studies that LFFN has helped make broadband more affordable ... In Blackpool, ISPs using CityFibre consistently offered the lowest-cost packages at a range of speed thresholds ... In Mid Sussex, Hey Broadband ... offered the cheapest deals on the market for most speed ranges ... CNI enabled them to deliver higher-capacity services at lower cost ... Similar patterns were observed in the CityFibre case study areas ... In Northern Ireland, Fibrus also offers the cheapest deals ... for the subset of premises that gained access specifically through FFNI, LFFN has directly increased the availability of affordable full-fibre options.",
+    "scale": "supports",
+    "quote": "strong evidence ... that LFFN has helped make broadband more affordable",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k9",
+   "claim": "Demonstrating anchor-tenancy and shared-infrastructure delivery models can increase councils' confidence in using them and lower barriers to supplier entry.",
+   "refs": [
+    "b6",
+    "c1",
+    "l12",
+    "b22",
+    "b21",
+    "b20"
+   ],
+   "where": "Section 2.1, New commercial models",
+   "verdict": {
+    "raw": "LFFN supported the use and wider awareness of two delivery models ... both of which pre-dated the programme ... LFFN helped to formalise its use across multiple areas and provided other councils with greater confidence to adopt the model. ... the programme played an important role in raising its profile and encouraging uptake by local authorities in Blackpool and Mid Sussex. ... both the anchor tenancy and CNI approaches have demonstrated clear strengths in supporting supplier entry and improving consumer outcomes",
+    "scale": "supports",
+    "quote": "provided other councils with greater confidence to adopt the model",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k10",
+   "claim": "Shared passive infrastructure can produce a more coordinated and efficient market only if suppliers know about it and choose to share assets.",
+   "refs": [],
+   "where": "Section 2.1, New commercial models; section 3.2",
+   "verdict": {
+    "raw": "the broader market-shaping ambitions of CNI, such as enabling a more coordinated and efficient approach to network deployment, have been realised only to a limited degree. This reflects a combination of factors, including limited visibility of CNI infrastructure among some market participants and a continued preference among many alt-nets to deploy their own networks, rather than widespread take-up of shared assets.",
+    "scale": "partly",
+    "quote": "have been realised only to a limited degree",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k11",
+   "claim": "Supplier entry and wholesale access improvements can sustain greater choice and affordability when supported suppliers remain financially resilient.",
+   "refs": [
+    "b38",
+    "l19",
+    "a3",
+    "b21",
+    "b20"
+   ],
+   "where": "Section 2.2, Sustainability of alt-nets and market changes",
+   "verdict": {
+    "raw": "most of the alt-nets supported through LFFN are in a relatively strong long-term position ... ITS reported substantial recent growth supported by strategic acquisitions, substantial funding rounds ... CityFibre ... maintains its ambition to reach 8 million premises ... Fibrus has raised several rounds of investment ... The picture is more uncertain for F&W Networks ... a strategic partnership with Fusion Fibre Group ... may provide additional operational and financial resilience. ... In areas where LFFN stimulated supplier entry or expanded wholesale access ... the resulting increases in choice and affordability are also likely to persist",
+    "scale": "partly",
+    "quote": "the resulting increases in choice and affordability are also likely to persist",
+    "page": null,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "The evidence from the case studies provides a mixed picture of LFFN’s influence on broadband markets. Several elements of the theory of change are supported, while others show limited or no evidence.",
+   "scale": "partly",
+   "quote": "a mixed picture of LFFN’s influence on broadband markets",
+   "page": null,
+   "studies": []
+  },
+  "weakest_links": [
+   "l22",
+   "l23",
+   "l14"
+  ],
+  "strongest_links": [
+   "l10",
+   "l11",
+   "l13",
+   "l17"
+  ],
+  "summary": "LFFN enabled supplier entry in specific areas, modest extensions or acceleration of existing networks, and improved affordability and choice where competitive wholesale networks entered. It strengthened the credibility of some alt-nets, notably Fibrus, but direct revenue effects were generally modest. Wider market-signalling effects were not observed. Competitive responses from incumbents were limited, with the clearest evidence in Wolverhampton. CNI lowered some barriers to entry but did not produce widespread infrastructure sharing. Most supported alt-nets appeared relatively well positioned for continued operation, although F&W Networks' position was more uncertain. Grey outcomes represent partial or uneven evidence rather than necessarily no impact; only the wider market-signalling pathway was consistently ruled out across all case studies.",
+  "recommendations": [
+   "Read the diagram alongside the narrative findings, which explain how and where LFFN contributed to outcomes in practice.",
+   "Interpret the diagram with care: the strength of evidence depends on delivery model, supplier type and local market conditions, and grey shading does not generally mean no impact."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/lffn_wp1_synthesis_s3_3.png', 'downloads/pages/lffn_wp1_synthesis_initial_toc.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "The figures are HTML images without page numbers; figure_pages is empty and verdict pages are null.",
+   "The revised diagram in section 3.3 is transcribed once. The initial ToC is the earlier version of the same theory, not a separate diagram.",
+   "The single Outcomes heading does not distinguish short- from long-term outcomes. All boxes under it are mapped to outcome_short without imposing a new temporal subdivision.",
+   "Input wiring shares junctions: the BDUK line joins routes to deployment and facilitating competitive procurement. Links l2 and l3 record those branches with medium confidence; the shared routing does not provide separate arrowheads for every input-to-activity relationship.",
+   "Grey shading combines limited, mixed and absent evidence. For b26 and b28, the supplied narrative does not give a separate, precise node-level classification; partly records the combined grey category and should not be read as evidence of a measured partial effect.",
+   "Unshaded boxes are not automatically treated as achieved. The supplied synthesis does not separately assess broadband reliability, satisfaction, wellbeing, productivity, underserved-area capability or achievement of 99% coverage by 2032.",
+   "The synthesis names case studies and Point Topic data but supplies no author-year or DOI references; studies arrays are therefore empty.",
+   "No definitions of evidence_level A/B/C were supplied. B is used provisionally for this case-study-based ex-post synthesis.",
+   "The supplied synthesis does not specify programme funding amounts, dosage, project dates or a common evaluation follow-up period.",
+   "The figure contains no internal arrows connecting individual results inside its framed groups. Links to those groups remain at container level; narrative claims about individual results are retained in key_claims and box verdicts."
+  ],
+  "source_sha256": "8077a7826c750392f44d9d9048dc348426f6fc12ee6a28b308da7c586b631168",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

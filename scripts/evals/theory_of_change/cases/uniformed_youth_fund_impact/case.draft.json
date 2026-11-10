@@ -1,0 +1,749 @@
+{
+ "meta": {
+  "id": "uniformed_youth_fund_impact",
+  "title": "Uniformed Youth Fund impact evaluation",
+  "organisation": "",
+  "year": 2025,
+  "country": "United Kingdom",
+  "topic": "Impacts of uniformed youth group participation on young people",
+  "intervention_type": "programme",
+  "timing": "retrospective",
+  "doc_url": "https://www.gov.uk/government/publications/uniformed-youth-fund-evaluation-reports-2022-to-2025/uniformed-youth-fund-evaluation-reports-impact-evaluation",
+  "landing_url": "https://www.gov.uk/government/publications/uniformed-youth-fund-evaluation-reports-2022-to-2025",
+  "licence": "",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "ex_post_evaluation",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Improve young people's wellbeing, social and emotional skills, practical skills and educational attainment.",
+  "population": "Young people participating in uniformed youth organisations, primarily the eight organisations supported by the Uniformed Youth Fund; the survey includes ages 10–18.",
+  "place": "United Kingdom; the supplied case-study sample includes England and Wales.",
+  "time_horizon": "Ongoing membership; evaluation surveys were eight to 11 months apart, with longer-term benefits also anticipated.",
+  "intervention": "Membership and regular participation in uniformed youth groups. Eight organisations were supported by the Fund. A standard attendance frequency or dosage is not specified in the supplied text.",
+  "context": "The Fund sought to expand opportunities, especially where demand was unmet and in disadvantaged areas. This impact evaluation examined the benefits of membership rather than the impact of the Fund itself. Organisations differed in their aims and provision.",
+  "outcome_first": "Develop a theory of change for improving wellbeing, social and emotional skills, practical skills and educational attainment among young people in the United Kingdom. Account for differing ages and local circumstances, including disadvantaged areas.",
+  "intervention_first": "Develop a theory of change for regular participation in uniformed youth groups among young people in the United Kingdom. The intended changes are improved wellbeing, social and emotional skills, practical skills and educational attainment."
+ },
+ "containers": [
+  {
+   "id": "c_activities",
+   "label": "Activities",
+   "layer": "activity"
+  }
+ ],
+ "boxes": [
+  {
+   "id": "b_inputs",
+   "label": "Funding\nVolunteers\nFacilities/hubs located in the community\nUniforms\nExpertise of staff\nExisting partnerships and relationship",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_activities",
+   "label": "Structured leadership programmes and award structures\nTraining for volunteers and young people\nResidentials\nOrganisation specific activities focused on skill development\nMentoring\nVolunteering\nYouth social action",
+   "layer": "activity",
+   "container": "c_activities",
+   "verdict": null
+  },
+  {
+   "id": "b_mechanisms",
+   "label": "Mechanisms of change",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_access",
+   "label": "Wide variety of fun accessible opportunities",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_action",
+   "label": "Young people take self-directed action which empowers them in their communities. They feel trusted and encouraged to make informed choices.",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_safe_challenge",
+   "label": "Young people have a consistent emotionally and physically safe yet challenging space where they are able to fail.",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_identity",
+   "label": "Groups support sense of collective identity",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_nurturing",
+   "label": "Nurturing, affirming, & inclusive community where they can build trusted relationships",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_happiness",
+   "label": "Increased happiness",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_confidence",
+   "label": "Increased confidence and sense of empowerment (feeling of achievement)",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "There is strong evidence that UYO membership contributed to participants’ development of confidence and self-esteem.",
+    "scale": "supports",
+    "quote": "strong evidence",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b_trust",
+   "label": "Growing trust between peers and with the community",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_safety",
+   "label": "Increased feeling of safety and Sense of belonging to the group and collective identity",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "Among survey respondents, 97% agreed they felt safe at their group, and 89% agreed they felt supported.",
+    "scale": "supports",
+    "quote": "97% agreed they felt safe at their group",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b_networks",
+   "label": "Meeting new people and building up networks",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "Overall, these findings suggest strong evidence that UYO membership contributed to participants’ development of cooperation skills, more friendships, and deeper connections.",
+    "scale": "supports",
+    "quote": "more friendships, and deeper connections",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b_cooperation",
+   "label": "Cooperation skills\n- communication skills\n- interpersonal skills\n- teamwork",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "Overall, these findings suggest strong evidence that UYO membership contributed to participants’ development of cooperation skills, more friendships, and deeper connections.",
+    "scale": "supports",
+    "quote": "strong evidence",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b_satisfaction",
+   "label": "Improved life satisfaction",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_mental_health",
+   "label": "Improved mental health",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_autonomy",
+   "label": "Increased autonomy",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "The evidence linked to autonomy was less clear, particularly among younger participants who had fewer opportunities to lead at their UYO.",
+    "scale": "insufficient",
+    "quote": "The evidence linked to autonomy was less clear",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "b_belonging",
+   "label": "Feeling of belonging to movement, national and international community",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_skills",
+   "label": "Skills for Life and Work\n- leadership skills (for older members)\n- recognised qualifications and technical skills\n- Group specific awards\n- understanding of own faith, emotion management, empathy, responsibility, initiative and problem-solving",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_education",
+   "label": "Increased attitude to education, engagement and progress",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_resilience",
+   "label": "Increased long term resilience and self esteem",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "There is strong evidence that UYO membership contributed to participants’ development of confidence and self-esteem. This same trial found a positive impact on resilience, while this evaluation found weaker evidence to support the claim that improvements in confidence lead to greater resilience in young people.",
+    "scale": "partly",
+    "quote": "weaker evidence to support the claim that improvements in confidence lead to greater resilience",
+    "page": null,
+    "studies": [
+     "See et al. 2017"
+    ]
+   }
+  },
+  {
+   "id": "b_citizens",
+   "label": "Active citizens\n- prosocial behaviours\n- volunteering\n- community engagement\n- Increased Political engagement (for some)",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_employment",
+   "label": "Employment outcomes (skills development, networks, career choices, work readiness)",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_wellbeing",
+   "label": "Improved long term wellbeing",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_cohesion",
+   "label": "Community cohesion (community can be defined at different levels in different ways, according to activities)",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b_labour",
+   "label": "Increased participation in the labour market",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l01",
+   "source": "b_inputs",
+   "target": "c_activities",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l02",
+   "source": "b_mechanisms",
+   "target": "b_access",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l03",
+   "source": "b_mechanisms",
+   "target": "b_action",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l04",
+   "source": "b_mechanisms",
+   "target": "b_safe_challenge",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l05",
+   "source": "b_mechanisms",
+   "target": "b_identity",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l06",
+   "source": "b_mechanisms",
+   "target": "b_nurturing",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l07",
+   "source": "b_networks",
+   "target": "b_safety",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l08",
+   "source": "b_networks",
+   "target": "b_cooperation",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l09",
+   "source": "b_safety",
+   "target": "b_trust",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l10",
+   "source": "b_trust",
+   "target": "b_confidence",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l11",
+   "source": "b_confidence",
+   "target": "b_happiness",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l12",
+   "source": "b_happiness",
+   "target": "b_satisfaction",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l13",
+   "source": "b_satisfaction",
+   "target": "b_mental_health",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l14",
+   "source": "b_confidence",
+   "target": "b_autonomy",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l15",
+   "source": "b_trust",
+   "target": "b_belonging",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l16",
+   "source": "b_safety",
+   "target": "b_belonging",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l17",
+   "source": "b_mental_health",
+   "target": "b_resilience",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l18",
+   "source": "b_autonomy",
+   "target": "b_resilience",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l19",
+   "source": "b_autonomy",
+   "target": "b_citizens",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l20",
+   "source": "b_belonging",
+   "target": "b_citizens",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l21",
+   "source": "b_resilience",
+   "target": "b_wellbeing",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l22",
+   "source": "b_citizens",
+   "target": "b_cohesion",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l23",
+   "source": "b_cooperation",
+   "target": "b_skills",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l24",
+   "source": "b_cooperation",
+   "target": "b_education",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l25",
+   "source": "b_skills",
+   "target": "b_education",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l26",
+   "source": "b_education",
+   "target": "b_employment",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l27",
+   "source": "b_cooperation",
+   "target": "b_employment",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l28",
+   "source": "b_employment",
+   "target": "b_labour",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a_age",
+   "kind": "assumption",
+   "text": "for those old enough",
+   "links": [
+    "l27"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  }
+ ],
+ "context": [
+  "School, other groups and home life can contribute to the same outcomes.",
+  "For friendships and cooperation skills, evidence for alternative explanations was generally weaker than the contribution of UYO membership.",
+  "For confidence and self-esteem, evidence for alternative explanations was generally weaker; for resilience, it appeared equal to the contribution of membership.",
+  "Without pre-membership baseline data, the survey waves are not before-and-after measurements.",
+  "Weighting and regression adjustment cannot remove unobservable selection factors such as motivation and family attitudes.",
+  "Case-study selection and staff presence may produce positivity bias.",
+  "Former UYO members remained in the comparison group. Robustness checks found no statistically significant outcome differences between former members and never-members, although dilution cannot be entirely ruled out.",
+  "The YPS measure was truncated, and the Brief Resilience Scale was not developed specifically for pre-teens or teenagers."
+ ],
+ "key_claims": [
+  {
+   "id": "k01",
+   "claim": "A supportive, inclusive group environment builds safety and trusted relationships, contributing to happiness, life satisfaction and mental wellbeing.",
+   "refs": [
+    "b_nurturing",
+    "b_safety",
+    "b_trust",
+    "b_happiness",
+    "b_satisfaction",
+    "b_mental_health"
+   ],
+   "where": "Wellbeing findings; contribution claim 1; Table 5.5",
+   "verdict": {
+    "raw": "Contribution strength Strong; Evidence confidence Strong. Clear linkages between UYO environment and relationships and wellbeing. Evidence collected directly from young people. Validated ONS wellbeing scale. Consistent findings across interviews and surveys with young people.",
+    "scale": "supports",
+    "quote": "Clear linkages between UYO environment and relationships and wellbeing.",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k02",
+   "claim": "Enjoyable activities support wellbeing and healthy lifestyles and can reduce negative behaviours.",
+   "refs": [
+    "b_access",
+    "b_activities",
+    "b_happiness",
+    "b_mental_health"
+   ],
+   "where": "Wellbeing findings; contribution claim 2; Table 5.5",
+   "verdict": {
+    "raw": "Contribution strength Strong; Evidence confidence Strong. Clear linkages between UYO activities and wellbeing, often alongside other positive activities. Evidence collected directly from young people. Validated ONS wellbeing scale. Consistent findings across interviews and surveys with young people.",
+    "scale": "supports",
+    "quote": "Clear linkages between UYO activities and wellbeing, often alongside other positive activities.",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k03",
+   "claim": "Membership improves measured personal wellbeing, but the estimated benefits vary across groups.",
+   "refs": [
+    "b_happiness",
+    "b_satisfaction",
+    "b_mental_health"
+   ],
+   "where": "Tables 6.10–6.11",
+   "verdict": {
+    "raw": "ONS4 Score (W1): Treatment effect coefficient 0.25, P-value 0.03. ONS4 Score (W2): Treatment effect coefficient 0.36, P-value 0.00. Wave 2 subgroup P-values: White British 0.01; White Other 0.37; Asian 0.95; Black 0.01; Male 0.01; Female 0.22; Health: Very good 0.76; Health: Good 0.00; Health: Fair/Poor 0.01; Age 10-13 0.05; Age 14+ 0.00; IMD 1-5 (More Deprived) 0.68; IMD 6-10 (Less Deprived) 0.00; Career-oriented vs Comparison 0.12; Non-career-oriented vs Comparison 0.02; Shorter Duration vs Comparison 0.01; Longer Duration vs Comparison 0.03.",
+    "scale": "partly",
+    "quote": "ONS4 Score (W2) 7.05 6.69 0.36",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k04",
+   "claim": "Shared and structured activities build cooperation skills and valued friendships, although friendship benefits are not universal.",
+   "refs": [
+    "b_activities",
+    "b_networks",
+    "b_cooperation"
+   ],
+   "where": "Section 3.3.1; contribution claim 3; Table 5.5; Tables 6.14–6.15",
+   "verdict": {
+    "raw": "Contribution strength Strong; Evidence confidence Moderate. Overall, these findings suggest strong evidence that UYO membership contributed to participants’ development of cooperation skills, more friendships, and deeper connections. However, this was not universal for all young people. A minority of participants stated that their friendships at school were stronger than those at their group. A minority of participants explained that a disparity between ages could also be a barrier to building friendships at their group. YPS1 - Empathy: P-value 0.09 (W1), 0.02 (W2). YPS5 - Teamwork: P-value 0.00 (W1), 0.00 (W2). Wave 2 empathy subgroup P-values: IMD 1-5 (More Deprived) 0.05; IMD 6-10 (Less Deprived) 0.27.",
+    "scale": "supports",
+    "quote": "strong evidence that UYO membership contributed to participants’ development of cooperation skills, more friendships, and deeper connections",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k05",
+   "claim": "A safe but challenging environment enables young people to try activities, learn from mistakes and build confidence and self-esteem.",
+   "refs": [
+    "b_safe_challenge",
+    "b_confidence"
+   ],
+   "where": "Section 3.3.2; contribution claim 4; Table 5.5",
+   "verdict": {
+    "raw": "There is strong evidence that UYO membership contributed to participants’ development of confidence and self-esteem. Contribution strength Moderate; Evidence confidence Moderate. Clear linkages between UYO opportunities and development of confidence/self-esteem, but weak links to resilience.",
+    "scale": "supports",
+    "quote": "strong evidence that UYO membership contributed to participants’ development of confidence and self-esteem",
+    "page": null,
+    "studies": [
+     "See et al. 2017"
+    ]
+   }
+  },
+  {
+   "id": "k06",
+   "claim": "Confidence and learning from challenges lead to greater resilience.",
+   "refs": [
+    "b_safe_challenge",
+    "b_confidence",
+    "b_resilience"
+   ],
+   "where": "Section 3.3.2; contribution claim 4; Figure 3.5; Tables 6.12–6.13",
+   "verdict": {
+    "raw": "The quantitative and qualitative evidence are both fairly weak for supporting the claim that UYO membership leads to greater resilience. At Wave 2, UYO members on average scored 3.17 compared to 3.09 for the comparison group. This represents a 2.6% higher score that does not reach statistical significance (p=0.16). Total BRS Score (W1): P-value 0.11. Wave 2 subgroup P-values: IMD 1-5 (More Deprived) 0.38; IMD 6-10 (Less deprived) 0.25; Shorter-Duration vs Comparison 0.24; Longer-Duration vs Comparison 0.16. Stress Management [R]: P-value 0.05 (W1), 0.01 (W2). Recovery time [R]: P-value 0.05 (W1), 0.92 (W2). Other BRS item P-values exceed 0.05 in both waves.",
+    "scale": "insufficient",
+    "quote": "both fairly weak for supporting the claim",
+    "page": null,
+    "studies": [
+     "See et al. 2017"
+    ]
+   }
+  },
+  {
+   "id": "k07",
+   "claim": "Membership develops practical and transferable skills that can improve engagement and progress in education.",
+   "refs": [
+    "b_activities",
+    "b_cooperation",
+    "b_skills",
+    "b_education",
+    "l23",
+    "l24",
+    "l25"
+   ],
+   "where": "Section 3.4 introduction; Tables 6.14–6.15",
+   "verdict": {
+    "raw": "YPS2 - Problem solving: Treatment effect coefficient 0.11, P-value 0.00 (W1); Treatment effect coefficient 0.04, P-value 0.20 (W2). Wave 2 problem-solving subgroup P-values: IMD 1-5 (More Deprived) 0.67; IMD 6-10 (Less Deprived) 0.27.",
+    "scale": "partly",
+    "quote": "YPS2 - Problem solving (W2) 0.51 0.47 0.04",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k08",
+   "claim": "Responsibilities and leadership opportunities build leadership skills, confidence and empowerment; evidence for autonomy is less clear, especially for younger members.",
+   "refs": [
+    "b_activities",
+    "b_action",
+    "b_confidence",
+    "b_autonomy",
+    "b_skills",
+    "l14"
+   ],
+   "where": "Contribution claim 6; Figures 3.7–3.8; Table 6.14",
+   "verdict": {
+    "raw": "Contribution strength Strong; Evidence confidence Moderate. The evidence indicates that older UYO members gained significant opportunities to develop leadership skills. The evidence linked to autonomy was less clear, particularly among younger participants who had fewer opportunities to lead at their UYO. UYO members were 18-percentage points more likely to say they have the skills to make positive change in their community (p<0.01). Although the qualitative data indicated that older members were more likely to report changes regarding leadership opportunities and skills, there was no notable difference between younger (10 to 13-year-olds) and older (14 to 18-year-olds) members in these survey responses. YPS3 - Initiative: P-value 0.00 (W1), 0.06 (W2). YPS4 - Responsibility: P-value 0.00 (W1), 0.01 (W2).",
+    "scale": "supports",
+    "quote": "older UYO members gained significant opportunities to develop leadership skills",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k09",
+   "claim": "Shared identity and trusted relationships build belonging to a wider movement or community.",
+   "refs": [
+    "b_identity",
+    "b_safety",
+    "b_trust",
+    "b_belonging",
+    "l15",
+    "l16"
+   ],
+   "where": "Section 3.1.1; Youth Advisory Board workshop six",
+   "verdict": null
+  },
+  {
+   "id": "k10",
+   "claim": "Belonging and empowerment encourage active citizenship and community engagement, contributing to community cohesion.",
+   "refs": [
+    "b_autonomy",
+    "b_belonging",
+    "b_citizens",
+    "b_cohesion",
+    "l19",
+    "l20",
+    "l22"
+   ],
+   "where": "Figures 3.7–3.8; contribution claim 6; section 3.1.1",
+   "verdict": {
+    "raw": "UYO members were more likely to agree that young people can make a difference in the world (p=0.03). Youth empowerment belief: 81.1% UYO members’ mean outcome, 71.5% Weighted comparison group mean outcome. Community change skills: 74.6% UYO members’ mean outcome, 56.5% Weighted comparison group mean outcome.",
+    "scale": "partly",
+    "quote": "young people can make a difference in the world (p=0.03)",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k11",
+   "claim": "Skills, networks and educational engagement support employment outcomes and labour-market participation for those old enough.",
+   "refs": [
+    "b_skills",
+    "b_education",
+    "b_employment",
+    "b_labour",
+    "l26",
+    "l27",
+    "l28",
+    "a_age"
+   ],
+   "where": "Section 3.1.1; recommendation 6, Further research",
+   "verdict": {
+    "raw": "Additional research is needed to better understand the long-term impact of UYO participation, particularly on educational attainment and career pathways.",
+    "scale": "insufficient",
+    "quote": "Additional research is needed",
+    "page": null,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": null,
+  "weakest_links": [],
+  "strongest_links": [],
+  "summary": "The supplied findings support membership's contribution to wellbeing, cooperation skills, valued friendships, confidence, self-esteem and leadership opportunities. The confidence-to-resilience claim had weak evidence, and evidence concerning autonomy was less clear, particularly for younger participants. Contribution strength and evidence confidence were both Strong for claims 1 and 2, Strong and Moderate for claim 3, Moderate and Moderate for claim 4, and Strong and Moderate for claim 6. Findings suggest causal effects rather than conclusively establishing them. The supplied excerpts do not provide a complete overall verdict or all eight contribution-claim assessments.",
+  "recommendations": [
+   "Support those delivering activities to provide high-quality activities and create positive relationships with young people, with training focused on inclusive environments, social and emotional development, and community engagement.",
+   "Undertake longitudinal research to understand sustained benefits, particularly educational attainment and career pathways.",
+   "Address evaluation limitations, including the lack of baseline data."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/uniformed_youth_fund_impact_fig3_1.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "The figure is an HTML image, so no printed figure page number is available. Verdict pages are also unavailable in the supplied text.",
+   "The exact published title, organisation, publication year, URLs and licence are not supplied. The title is a descriptive case title; 2025 is provisional, based on fieldwork continuing to April 2025.",
+   "Evidence level B is provisional because the notes do not define the A/B/C rubric.",
+   "The figure's Medium term outcomes and Long term outcomes columns are both mapped to outcome_long because the fixed schema has no medium-term layer.",
+   "Mechanisms of change have no matching schema layer and are mapped to activity. The orange ellipse has its own outgoing arrows and is therefore retained as a box, not treated as a heading or container.",
+   "The input arrow ends at the Activities title; this is represented as a container holding the single drawn activities box.",
+   "No arrows are drawn from the activities box to the mechanisms, or from the mechanism boxes to the short-term outcomes. None have been added.",
+   "The arrows from mental health and autonomy into long-term resilience appear to merge; they are recorded as two arrows sharing an endpoint, with medium reading confidence.",
+   "Contribution claims cover pathways rather than individual arrows. Their ratings are retained on key claims, not assigned wholesale to individual figure arrows. Consequently strongest_links and weakest_links are empty despite the source identifying stronger and weaker claims.",
+   "The supplied document text is incomplete, including truncated Table 5.5 after claim 4 and missing full assessments of claims 5, 7 and 8. No missing ratings or educational-attainment findings have been inferred.",
+   "Key claim 7's verdict covers the supplied problem-solving estimates only, not evidence that skills improved educational attainment. Key claim 10's verdict covers empowerment beliefs and reported community-change skills, not demonstrated community cohesion.",
+   "Raw verdict fields preserve available rating labels, source wording and numerical table entries; table entries are compacted with punctuation for readability.",
+   "The remaining supplied fragment of Table 6.15 is truncated during the initiative subgroup results and cannot support a complete subgroup transcription."
+  ],
+  "source_sha256": "07a83d720333c8bf38700e2fa47d07dcf2709a5fcaa2a8aaf7ca5c9e7696c43c",
+  "prompt_sha256": "9aa8110282e9a21f8d902a759e0ac26e5ec06c0932bc91db9b24006db0899ef5"
+ }
+}

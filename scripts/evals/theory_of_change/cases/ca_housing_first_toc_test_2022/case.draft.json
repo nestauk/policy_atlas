@@ -1,0 +1,677 @@
+{
+ "meta": {
+  "id": "ca_housing_first_toc_test_2022",
+  "title": "Health and social outcomes in the Housing First model: Testing the theory of change",
+  "organisation": "MAP Centre for Urban Health Solutions, St. Michael's Hospital",
+  "year": 2022,
+  "country": "Canada",
+  "topic": "Housing First mechanisms for quality of life, recovery and crisis-related events",
+  "intervention_type": "programme",
+  "timing": "retrospective",
+  "doc_url": "https://www.thelancet.com/article/S2589537022001171/pdf",
+  "landing_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9046122",
+  "licence": "CC BY-NC-ND 4.0",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "ex_post_evaluation",
+  "split": "test"
+ },
+ "brief": {
+  "intended_change": "End homelessness and improve health, quality of life and recovery while reducing crisis-related events and costly service use.",
+  "population": "People experiencing homelessness and severe mental illness; the analysis included 1,103 participants in the Housing First treatment arms of At Home/Chez Soi.",
+  "place": "Five Canadian sites in the At Home/Chez Soi trial.",
+  "time_horizon": "24 months after enrolment, with early experiences and intermediate measures at 6 and 12 months.",
+  "intervention": "Housing First provides immediate access to permanent housing and mental health support without preconditions. Participants received Assertive Community Treatment for high and complex needs or Intensive Case Management for other needs, within a client-centred, trauma-informed, harm-reduction approach. A fixed contact frequency is not specified.",
+  "context": "The study used treatment-arm data from a pragmatic Canadian trial enrolling participants between October 2009 and June 2011. Programme fidelity was high. Four of the five sites were large cities, potentially limiting generalisability to smaller or remote communities.",
+  "outcome_first": "Develop a theory of change for ending homelessness and improving quality of life, recovery and health among people experiencing homelessness and severe mental illness in Canada. Include reductions in crisis-related events and consider a 24-month horizon.",
+  "intervention_first": "Develop a theory of change for Housing First for people experiencing homelessness and severe mental illness in five Canadian sites. The programme provides immediate permanent housing without preconditions alongside intensive, client-centred support, aiming to end homelessness and improve health, quality of life and recovery over 24 months."
+ },
+ "containers": [],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "Access to public benefits Income (per 1000)",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b2",
+   "label": "Working Alliance",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b3",
+   "label": "Hope for Change",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b4",
+   "label": "Health or social service consultation",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b5",
+   "label": "Subjective wellbeing",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b6",
+   "label": "Participation in meaningful activities",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b7",
+   "label": "Social connectedness",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b8",
+   "label": "Poor physical and mental health",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b9",
+   "label": "QUALITY OF LIFE",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b2",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Public Benefits 0.41 (−0.71,1.52)",
+    "scale": "against",
+    "quote": "0.41 (−0.71,1.52)",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "l2",
+   "source": "b1",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "access to public benefits at 0–6 months (b = 0.70, 95% CI 0.04,1.36) were also found to improve subjective well-being",
+    "scale": "supports",
+    "quote": "were also found to improve subjective well-being",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "l3",
+   "source": "b3",
+   "target": "b2",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Hope for Change 0.32 (0.08,0.57)",
+    "scale": "supports",
+    "quote": "0.32 (0.08,0.57)",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "l4",
+   "source": "b3",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Hope for change (b = 0.81, 95% CI 0.65, 0.98) and access to public benefits at 0–6 months (b = 0.70, 95% CI 0.04,1.36) were also found to improve subjective well-being",
+    "scale": "supports",
+    "quote": "Hope for change (b = 0.81, 95% CI 0.65, 0.98)",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "l5",
+   "source": "b3",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Hope for Change 1.00 (0.97,1.03)",
+    "scale": "against",
+    "quote": "1.00 (0.97,1.03)",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "l6",
+   "source": "b3",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "Hope for Change 1.01 (0.98,1.05)",
+    "scale": "against",
+    "quote": "1.01 (0.98,1.05)",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "l7",
+   "source": "b2",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "Working alliance at baseline was hypothesized to have a larger role but many of those associations were not confirmed, specifically those with health and social service consultation and poor physical or mental health at 12 months.",
+    "scale": "against",
+    "quote": "many of those associations were not confirmed",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "l8",
+   "source": "b2",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Working alliance was associated with improved participation in meaningful activities at 6 months (OR=1.01, 95% CI 1.00,1.02)",
+    "scale": "supports",
+    "quote": "Working alliance was associated with improved participation in meaningful activities",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "l9",
+   "source": "b2",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Working alliance at baseline was hypothesized to have a larger role but many of those associations were not confirmed, specifically those with health and social service consultation and poor physical or mental health at 12 months.",
+    "scale": "against",
+    "quote": "specifically those with health and social service consultation and poor physical or mental health at 12 months",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "l10",
+   "source": "b4",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Counterintuitively, health and social service consultation was inversely associated with subjective well-being.",
+    "scale": "against",
+    "quote": "inversely associated with subjective well-being",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "l11",
+   "source": "b4",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Health or Social Service Consultation 1.50 (1.04,2.16)",
+    "scale": "supports",
+    "quote": "1.50 (1.04,2.16)",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "l12",
+   "source": "b4",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Health or Social Service Consultation 1.78 (1.21,2.61)",
+    "scale": "supports",
+    "quote": "1.78 (1.21,2.61)",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "l13",
+   "source": "b5",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "subjective well-being at 6 months also improves poor physical and mental health at 12 months",
+    "scale": "supports",
+    "quote": "improves poor physical and mental health at 12 months",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "l14",
+   "source": "b5",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Subjective Well-Being 0.22 (0.07,0.38)",
+    "scale": "supports",
+    "quote": "0.22 (0.07,0.38)",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "l15",
+   "source": "b6",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Only one leg of the pathway from Working Alliance to QOL mediated by participation in meaningful activities was confirmed",
+    "scale": "against",
+    "quote": "Only one leg of the pathway",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "l16",
+   "source": "b7",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Socially Connected 8.73 (4.58,12.89)",
+    "scale": "supports",
+    "quote": "8.73 (4.58,12.89)",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "l17",
+   "source": "b8",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Poor physical or mental health −7.49 (−9.31,−5.66)",
+    "scale": "supports",
+    "quote": "−7.49 (−9.31,−5.66)",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "risk",
+   "text": "the recovery process is not linear and not all participants will progress equally toward improved outcomes",
+   "links": [],
+   "from_layer": "outcome_short",
+   "to_layer": "impact",
+   "verdict": null
+  }
+ ],
+ "context": [
+  "The analysis included only Housing First treatment participants, not the treatment-as-usual group.",
+  "All treatment participants secured housing, leaving little variation for testing immediate housing access in these models.",
+  "Programme fidelity was high across sites.",
+  "Actual programme-process and longitudinal engagement data were unavailable in sufficient detail.",
+  "The models did not include site, gender or age as explanatory variables; adding them could change estimates.",
+  "Working alliance was measured early and from clients' perspectives only.",
+  "Statistical significance, rather than a prespecified effect-size threshold, was used to confirm hypothesised relationships."
+ ],
+ "key_claims": [
+  {
+   "id": "kc1",
+   "claim": "Immediate housing and client-centred support can end homelessness and enable broader improvements, but housing stability does not guarantee uniform or linear recovery.",
+   "refs": [
+    "a1"
+   ],
+   "where": "Introduction; Discussion, limitations; Figure 1 overview",
+   "verdict": {
+    "raw": "Studies and systematic reviews of Housing First programs have consistently demonstrated high levels of housing stability and program retention across a variety of countries and populations with a mix of findings on non-housing outcomes",
+    "scale": "partly",
+    "quote": "high levels of housing stability and program retention ... with a mix of findings on non-housing outcomes",
+    "page": null,
+    "studies": [
+     "10.1097/PHH.0000000000001219",
+     "10.1186/1472-6963-14-167",
+     "10.1177/070674371506001102",
+     "10.1176/appi.ps.201400359"
+    ]
+   }
+  },
+  {
+   "id": "kc2",
+   "claim": "Access to public benefits improves early subjective well-being, but does not establish a stronger working alliance.",
+   "refs": [
+    "b1",
+    "l1",
+    "l2"
+   ],
+   "where": "Table 2; Table 3; Figure 2; Results, Quality of life",
+   "verdict": {
+    "raw": "access to public benefits at 0–6 months (b = 0.70, 95% CI 0.04,1.36) were also found to improve subjective well-being; Public Benefits 0.41 (−0.71,1.52)",
+    "scale": "partly",
+    "quote": "were also found to improve subjective well-being",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "kc3",
+   "claim": "Early hope for change strengthens working alliance and subjective well-being, but does not predict consultation or meaningful activity participation.",
+   "refs": [
+    "b3",
+    "l3",
+    "l4",
+    "l5",
+    "l6"
+   ],
+   "where": "Table 3; Figures 2 and 4; Discussion",
+   "verdict": {
+    "raw": "some but not all hope for change pathways were confirmed with our statistical models",
+    "scale": "partly",
+    "quote": "some but not all hope for change pathways were confirmed",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "kc4",
+   "claim": "Working alliance promotes participation in meaningful activities, but its proposed links to consultation and later health are not confirmed.",
+   "refs": [
+    "b2",
+    "l7",
+    "l8",
+    "l9"
+   ],
+   "where": "Table 3; Figures 2–4; Results; Discussion",
+   "verdict": {
+    "raw": "Working alliance was associated with improved participation in meaningful activities at 6 months (OR=1.01, 95% CI 1.00,1.02); many of those associations were not confirmed, specifically those with health and social service consultation and poor physical or mental health at 12 months.",
+    "scale": "partly",
+    "quote": "many of those associations were not confirmed",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "kc5",
+   "claim": "Consultation is an important early pathway variable, but is associated with worse rather than better subjective well-being.",
+   "refs": [
+    "b4",
+    "b5",
+    "l10"
+   ],
+   "where": "Table 3; Figures 2–4; Discussion",
+   "verdict": {
+    "raw": "Counterintuitively, health and social service consultation was inversely associated with subjective well-being. One partial explanation is that not all health and social service needs were resolved via service engagement and could lead to diminishing psychological well-being.",
+    "scale": "against",
+    "quote": "inversely associated with subjective well-being",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "kc6",
+   "claim": "Health and social service consultation promotes meaningful activities and later social connectedness.",
+   "refs": [
+    "b4",
+    "b6",
+    "b7",
+    "l11",
+    "l12"
+   ],
+   "where": "Tables 2 and 3; Figures 2–4; Results",
+   "verdict": {
+    "raw": "Health or Social Service Consultation 1.50 (1.04,2.16); Health or Social Service Consultation 1.78 (1.21,2.61)",
+    "scale": "supports",
+    "quote": "1.78 (1.21,2.61)",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "kc7",
+   "claim": "Better subjective well-being at six months predicts less poor physical and mental health at twelve months.",
+   "refs": [
+    "b5",
+    "b8",
+    "l13"
+   ],
+   "where": "Table 3; Figures 2–4; Results for all three outcomes",
+   "verdict": {
+    "raw": "Subjective well-being at 6 months, as for the previous two 24-month outcomes discussed, has a mediating role in the path to crisis related events in its association with poor physical and mental health (b =−0.04, 95% CI −0.04,−0.03)",
+    "scale": "supports",
+    "quote": "has a mediating role",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "kc8",
+   "claim": "Early subjective well-being directly improves later quality of life and recovery, although these direct contributions are relatively small.",
+   "refs": [
+    "b5",
+    "b9",
+    "l14"
+   ],
+   "where": "Table 3; Figures 2 and 3; Discussion",
+   "verdict": {
+    "raw": "Subjective well-being at six months was directly associated with both quality of life and recovery at 24 months although the magnitude of this direct contribution was relatively small.",
+    "scale": "supports",
+    "quote": "the magnitude of this direct contribution was relatively small",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "kc9",
+   "claim": "Social connectedness improves quality of life and recovery, but does not reduce crisis-related events or service use in these models.",
+   "refs": [
+    "b7",
+    "b9",
+    "l16"
+   ],
+   "where": "Table 3; Figures 2–4; Results; Discussion",
+   "verdict": {
+    "raw": "Being socially connected at 12 months was another important direct predictor of quality of life and recovery at 24 months confirmed by our path models. Social connectedness was not a confirmed pathway for this outcome as it was for the previous two.",
+    "scale": "partly",
+    "quote": "Social connectedness was not a confirmed pathway for this outcome",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "kc10",
+   "claim": "Better physical and mental health at twelve months improves quality of life and recovery and reduces later crisis-related events.",
+   "refs": [
+    "b8",
+    "b9",
+    "l17"
+   ],
+   "where": "Table 3; Figures 2–4; Results; Discussion",
+   "verdict": {
+    "raw": "Physical and mental health status at 12 months was directly associated with all three of our outcomes and the magnitude of its impact on the outcomes was sizable. A one unit improvement in physical and mental health at 12 months yielded a 7-point change in QOL.",
+    "scale": "supports",
+    "quote": "directly associated with all three of our outcomes",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387",
+     "Aubry 2014"
+    ]
+   }
+  },
+  {
+   "id": "kc11",
+   "claim": "Participation in meaningful activities does not complete the proposed pathway from working alliance to improved quality of life or recovery.",
+   "refs": [
+    "b6",
+    "l8",
+    "l15"
+   ],
+   "where": "Table 3; Figures 2 and 3; Results, Quality of life and Recovery",
+   "verdict": {
+    "raw": "Only one leg of the pathway from Working Alliance to QOL mediated by participation in meaningful activities was confirmed. Working alliance was associated with improved participation in meaningful activities at 6 months (OR=1.01, 95% CI 1.00,1.02) but the next leg of the path to recovery was not confirmed.",
+    "scale": "against",
+    "quote": "the next leg of the path to recovery was not confirmed",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387"
+    ]
+   }
+  },
+  {
+   "id": "kc12",
+   "claim": "A stronger working alliance does not directly buffer crisis events; health crises and criminal justice events may require different causal pathways.",
+   "refs": [],
+   "where": "Table 3; Figure 4; Results, Crisis-related events; Discussion",
+   "verdict": {
+    "raw": "The direct path from working alliance to crisis related events was also not confirmed in our analyses. The theoretical model for the third outcome – crisis-related events or service utilization–had the fewest hypothesized relationships confirmed. Housing First evaluations report improvements in emergency room visits and hospitalization at 24 months while this was not observed in a systematic review of criminal justice outcomes like arrests.",
+    "scale": "against",
+    "quote": "The direct path from working alliance to crisis related events was also not confirmed",
+    "page": null,
+    "studies": [
+     "10.1016/j.eclinm.2022.101387",
+     "10.1177/0706743718772539",
+     "10.1097/PHH.0000000000001219",
+     "10.1177/0706743718815902"
+    ]
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "Most hypothesized pathways were confirmed with path analysis. Confirmed pathways for two outcomes– Quality of Life (QOL) and Recovery – were similar.",
+   "scale": "partly",
+   "quote": "Most hypothesized pathways were confirmed",
+   "page": null,
+   "studies": [
+    "10.1016/j.eclinm.2022.101387"
+   ]
+  },
+  "weakest_links": [
+   "l7",
+   "l9",
+   "l15"
+  ],
+  "strongest_links": [
+   "l16",
+   "l17"
+  ],
+  "summary": "The path analyses confirmed many proposed direct and indirect relationships, particularly for quality of life and recovery. Early consultation, subjective well-being, twelve-month health and social connectedness were important pathway variables. Consultation was unexpectedly associated with lower subjective well-being. Several proposed working-alliance pathways and the final pathway from meaningful activities were not confirmed. Crisis-related events had the fewest confirmed relationships. These findings concern mechanisms within treatment participants, not an outcome evaluation or a new estimate of Housing First effectiveness.",
+  "recommendations": [
+   "Strengthen first-year engagement in initiatives improving mental and physical health, including substance use issues.",
+   "Enhance clients' connections to personal social support systems to improve longer-term quality of life and recovery.",
+   "Modify the theory of change for crisis-related events and consider separating criminal justice events from health-service crises.",
+   "Measure working alliance beyond the early programme stage and include workers' as well as clients' ratings.",
+   "Include and prioritise clients' perspectives in future theories of change.",
+   "Collect more detailed programme-process and longitudinal engagement data.",
+   "Examine pathways for other outcomes and consider site, gender, age and treatment-as-usual comparisons in future research."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/ca_housing_first_toc_2022_fig1.jpg', 'downloads/pages/ca_housing_first_toc_2022_fig2.jpg']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "Figure 2, the populated quality-of-life path model, is transcribed. Figure 1 is a broader process overview; Figures 3 and 4 are separate recovery and crisis-event models. Their findings are retained in key claims, but their boxes and arrows are not duplicated.",
+   "Only Figures 1 and 2 were supplied as images. Figures 3 and 4 are described in the document text and Table 3 but were not visually checked.",
+   "No figure-page numbers were supplied, and the source was read as XML rather than paginated PDF. figure_pages is empty and verdict pages are null.",
+   "The temporal headings are mapped as 0–6 months = outcome_short, 12 months = outcome_long, and 24 months = impact. These are temporal rather than explicit causal-layer headings; Hope for Change is measured at baseline despite appearing in the 0–6-month group.",
+   "The Hope for Change to Participation in meaningful activities arrow and the curved Working Alliance to consultation arrow are crowded; their endpoints have medium transcription confidence.",
+   "Dashed and solid arrows indicate binary versus continuous dependent variables, not evidence strength. Non-significant arrows remain in the transcription.",
+   "Non-significant tested paths are coded against because the authors use statistical significance to confirm hypotheses; this does not establish absence of an effect.",
+   "The consultation-to-subjective-well-being path is statistically significant but negative. Its verdict is against the proposed beneficial direction, although the authors count it among significant pathways.",
+   "There are numerical inconsistencies in the source. Figure 2 and Table 3 give a negative health-to-QOL coefficient, while one Results sentence omits the minus sign. Table 3 gives consultation-to-social-connectedness OR 1.78 with CI 1.21–2.61, whereas the QOL narrative prints a different interval. The crisis narrative also attributes a coefficient to consultation that Table 3 assigns to public benefits. Table 3 and the supplied populated figure were preferred.",
+   "The evidence-level coding rubric was not supplied; B is used for this longitudinal treatment-arm path analysis.",
+   "Descriptive results are not treated as evidence that an outcome improved: Table 2 reports mean three-month income of about CAD 2,300, consultation for 70.9%, meaningful activities for 79.7%, social connectedness for 84.9%, QOL 88.8, recovery 85.2, and no crisis events for 51.1%.",
+   "The source reports that high fidelity is associated with better outcomes in prior studies, but programme fidelity is not a box or tested arrow in the transcribed model.",
+   "The study acknowledges nonlinear and unequal recovery trajectories but does not directly test that risk."
+  ],
+  "source_sha256": "1895dceff74025915e1590af095d1b334c250d629fbcc7a4f354deb4206a8a84",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

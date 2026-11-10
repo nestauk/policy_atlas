@@ -1,0 +1,1107 @@
+{
+ "meta": {
+  "id": "agritech_catalyst_interim",
+  "title": "Interim Impact Evaluation of the Agri-Tech Catalyst: Phase 1 - Final Report",
+  "organisation": "SQW",
+  "year": 2018,
+  "country": "United Kingdom",
+  "topic": "Collaborative agricultural technology research, development and commercialisation",
+  "intervention_type": "programme",
+  "timing": "retrospective",
+  "doc_url": "https://assets.publishing.service.gov.uk/media/5f0851b4e90e0712c7aa02cc/agritech-catalyst-phase-1-report.pdf",
+  "landing_url": "https://www.gov.uk/government/publications/agri-tech-catalyst-atc-programme-interim-impact-evaluation",
+  "licence": "",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "ex_post_evaluation",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Accelerate translation of research into practical agricultural solutions and encourage greater R&D, ultimately supporting UK economic growth and agricultural productivity while improving animal welfare and reducing environmental impacts.",
+  "population": "UK agri-tech businesses, including SMEs, and research organisations participating in collaborative R&D; ultimately the wider agricultural sector.",
+  "place": "United Kingdom",
+  "time_horizon": "Programme delivery shown as 2014–2017, with anticipated outputs in 2015–2020 and outcomes and impacts in 2016–2025. Phase 1 evaluation research took place between February and June 2018.",
+  "intervention": "The Agri-Tech Catalyst provides competitive grants for collaborative industry–research projects at early, industrial research and late stages of development. The programme description identifies £60 million of non-DFID grant funding, alongside operational delivery and strategic oversight. This evaluation phase covers early and late stage awards only; project-specific grant amounts and durations are not supplied in the extracts.",
+  "context": "The programme forms part of the UK Agri-Tech Strategy. Its rationale includes risky R&D, uncertain and delayed returns, coordination problems, information failures and spillovers. Most surveyed applicants were already R&D-active. DFID-funded projects are outside this evaluation's scope.",
+  "outcome_first": "Develop a theory of change for accelerating the translation of research into practical agricultural solutions in the United Kingdom. It should address UK agri-tech businesses and research organisations, with longer-term ambitions for economic growth, agricultural productivity, animal welfare and environmental sustainability.",
+  "intervention_first": "Develop a theory of change for the UK Agri-Tech Catalyst's competitive grants for collaborative industry–research R&D projects. Explain how the programme could accelerate practical agricultural innovation and contribute to business growth, agricultural productivity, animal welfare and environmental sustainability."
+ },
+ "containers": [],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "Competitions launched and marketed",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b2",
+   "label": "Applications submitted and assessed – some are successful and funded",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b3",
+   "label": "Projects delivered in collaboration ...",
+   "layer": "activity",
+   "container": null,
+   "verdict": {
+    "raw": "✓✓✓ indicates strong progress",
+    "scale": "supports",
+    "quote": "All projects involve collaboration between industry and research base.",
+    "page": 102,
+    "studies": []
+   }
+  },
+  {
+   "id": "b4",
+   "label": "Delivery of project involves private sector investment in R&D (match funding) and new/more collaborations between industry and research",
+   "layer": "output",
+   "container": null,
+   "verdict": {
+    "raw": "✓✓✓ indicates strong progress",
+    "scale": "supports",
+    "quote": "Additional private sector investment in R&D",
+    "page": 102,
+    "studies": []
+   }
+  },
+  {
+   "id": "b5",
+   "label": "... early stage grants to test commercial potential of scientific ideas/feasibility",
+   "layer": "activity",
+   "container": null,
+   "verdict": {
+    "raw": "✓✓✓ indicates strong progress",
+    "scale": "supports",
+    "quote": "Early stage - test commercial potential of scientific ideas/feasibility of new technologies",
+    "page": 102,
+    "studies": []
+   }
+  },
+  {
+   "id": "b6",
+   "label": "... industrial grants to develop/test at pilot scale",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b7",
+   "label": "... late stage grants to test/trial in real-life context",
+   "layer": "activity",
+   "container": null,
+   "verdict": {
+    "raw": "✓✓✓ indicates strong progress",
+    "scale": "supports",
+    "quote": "Late stage awards, to test/trial innovations in real-life context",
+    "page": 102,
+    "studies": []
+   }
+  },
+  {
+   "id": "b8",
+   "label": "Activities delivered & technological progress made, demonstrating commercial applications, providing research outputs and new data/evidence to industry ... reducing risk of failure ... alongside skills acquisition, IP exploitation where appropriate",
+   "layer": "output",
+   "container": null,
+   "verdict": {
+    "raw": "Many projects successful in progressing through technology readiness; collaboration critical success factor",
+    "scale": "supports",
+    "quote": "Many projects successful in progressing through technology readiness",
+    "page": 106,
+    "studies": []
+   }
+  },
+  {
+   "id": "b9",
+   "label": "Sustained changes university and business attitudes/behaviour towards translational R&D, commercialisation, and R&D in agri-tech",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "ATC is leading to sustained changes in the attitudes and behaviours of those involved, which provides evidence to suggest that R&D activity in the sector is likely to continue.",
+    "scale": "supports",
+    "quote": "ATC is leading to sustained changes in the attitudes and behaviours of those involved",
+    "page": 56,
+    "studies": []
+   }
+  },
+  {
+   "id": "b10",
+   "label": "For firms directly involved, leverage of further R&D investment after ATC project For academics, improved ability to lever further R&D funding",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "✓✓ indicates some evidence of progress",
+    "scale": "partly",
+    "quote": "Leverage of further investment",
+    "page": 102,
+    "studies": []
+   }
+  },
+  {
+   "id": "b11",
+   "label": "New/strengthened and sustained relationships Improved skills, R&D/commercialisation capacity, profile/reputation, understanding of market position",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "There is strong evidence that the outputs and outcomes identified in the logic model associated with innovation behaviours, capacity and performance have been realised in practice at this interim evaluation stage.",
+    "scale": "supports",
+    "quote": "There is strong evidence",
+    "page": 57,
+    "studies": []
+   }
+  },
+  {
+   "id": "b12",
+   "label": "Increased investment in agri-tech R&D (in other projects) and spillover of technologies to other sectors (now and in future)",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "the majority are more likely to invest internal funds in other R&D and more likely to bid for Government funding to support other R&D activity in future",
+    "scale": "partly",
+    "quote": "more likely to invest internal funds in other R&D",
+    "page": 56,
+    "studies": []
+   }
+  },
+  {
+   "id": "b13",
+   "label": "Some firms directly involved take new products/services/processes to market (UK/exports), leading to business growth (sales/market share) and/or productivity",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "✓✓ indicates some evidence of progress",
+    "scale": "partly",
+    "quote": "New products/processes taken to market",
+    "page": 102,
+    "studies": []
+   }
+  },
+  {
+   "id": "b14",
+   "label": "Modest impacts on turnover, employment, GVA for firms engaged to date (some very successful outliers)",
+   "layer": "impact",
+   "container": null,
+   "verdict": {
+    "raw": "ATC has led to modest impacts on employment and/or turnover of those involved to date, but there are a small number of strongly performing projects (both early and late stage) who have generated substantial levels of revenue, including through exports.",
+    "scale": "partly",
+    "quote": "modest impacts on employment and/or turnover",
+    "page": 56,
+    "studies": []
+   }
+  },
+  {
+   "id": "b15",
+   "label": "Greater understanding and access to innovative practices/techs across agri-tech sector",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "✓✓✓ indicates strong progress",
+    "scale": "supports",
+    "quote": "Greater understanding of innovation processes",
+    "page": 102,
+    "studies": []
+   }
+  },
+  {
+   "id": "b16",
+   "label": "Improved productivity, quality, environmental sustainability (and animal welfare) for those involved – mostly in future",
+   "layer": "impact",
+   "container": null,
+   "verdict": {
+    "raw": "Wider impacts on organisations involved in projects have focused (and are likely to in future) on reducing environmental impacts or improving sustainability, improved yields/productivity (especially collaborators), and produce quality.",
+    "scale": "partly",
+    "quote": "have focused (and are likely to in future)",
+    "page": 57,
+    "studies": []
+   }
+  },
+  {
+   "id": "b17",
+   "label": "Impacts on wider UK agri-tech businesses (beyond those directly involved in projects): GVA, turnover, exports, no of firms, employment",
+   "layer": "impact",
+   "container": null,
+   "verdict": {
+    "raw": "✓ indicates limited progress to date",
+    "scale": "partly",
+    "quote": "Turnover (incl. exports) and employment in wider AT sector",
+    "page": 102,
+    "studies": []
+   }
+  },
+  {
+   "id": "b18",
+   "label": "Innovations/research rapidly adopted in supply chains, and application in other sectors (spillovers)",
+   "layer": "impact",
+   "container": null,
+   "verdict": {
+    "raw": "✓ indicates limited progress to date",
+    "scale": "partly",
+    "quote": "Take-up of new products/processes (UK/overseas)",
+    "page": 102,
+    "studies": []
+   }
+  },
+  {
+   "id": "b19",
+   "label": "Improved competitive position of UK agri-tech industry, leading to anchoring investment/additional inward investment to UK",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b20",
+   "label": "Improved attitudes / behaviours of banks / VCs towards investing in agri-tech R&D",
+   "layer": "impact",
+   "container": null,
+   "verdict": {
+    "raw": "Mixed views to date - ATC pipeline 'stoking' VC appetite (?), but still a challenge to secure interest/investment",
+    "scale": "partly",
+    "quote": "Mixed views to date",
+    "page": 106,
+    "studies": []
+   }
+  },
+  {
+   "id": "b21",
+   "label": "More productive and environmentally sustainable wider agricultural sector (and improved animal welfare)",
+   "layer": "impact",
+   "container": null,
+   "verdict": {
+    "raw": "There appears to have been limited impact on the wider agricultural sector to date",
+    "scale": "partly",
+    "quote": "limited impact on the wider agricultural sector to date",
+    "page": 102,
+    "studies": []
+   }
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b2",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l2",
+   "source": "b2",
+   "target": "b3",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l3",
+   "source": "b3",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l4",
+   "source": "b3",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l5",
+   "source": "b3",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l6",
+   "source": "b3",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l7",
+   "source": "b5",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l8",
+   "source": "b6",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l9",
+   "source": "b5",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l10",
+   "source": "b6",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l11",
+   "source": "b7",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l12",
+   "source": "b8",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l13",
+   "source": "b8",
+   "target": "b10",
+   "two_way": true,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l14",
+   "source": "b8",
+   "target": "b13",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l15",
+   "source": "b10",
+   "target": "b13",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l16",
+   "source": "b13",
+   "target": "b14",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l17",
+   "source": "b13",
+   "target": "b15",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l18",
+   "source": "b8",
+   "target": "b15",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l19",
+   "source": "b15",
+   "target": "b17",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l20",
+   "source": "b15",
+   "target": "b18",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l21",
+   "source": "b15",
+   "target": "b16",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l22",
+   "source": "b17",
+   "target": "b19",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l23",
+   "source": "b17",
+   "target": "b20",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l24",
+   "source": "b18",
+   "target": "b21",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l25",
+   "source": "b9",
+   "target": "b12",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l26",
+   "source": "b11",
+   "target": "b12",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l27",
+   "source": "b12",
+   "target": "b10",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "assumption",
+   "text": "Demand exists in line with competition scope, high quality applications, leading to high quality R&D funded. Feeder programmes informing applications to ATC.",
+   "links": [
+    "l1",
+    "l2"
+   ],
+   "from_layer": "activity",
+   "to_layer": "activity",
+   "verdict": null
+  },
+  {
+   "id": "a2",
+   "kind": "assumption",
+   "text": "Grant stimulated new collaboration and spill-in from non AT/agricultural sectors and new-to-R&D firms, although most participants are highly active in R&D (including collaborative R&D) pre-ATC. Cooperative approaches with the research base lead to greater benefits for business.",
+   "links": [
+    "l3"
+   ],
+   "from_layer": "activity",
+   "to_layer": "output",
+   "verdict": {
+    "raw": "The collaborative approach has added significant value to the scale, quality and speed of outcomes achieved through ATC.",
+    "scale": "supports",
+    "quote": "Collaboration was consistently identified as the critical factor in enabling pathways to impact",
+    "page": 103,
+    "studies": []
+   }
+  },
+  {
+   "id": "a3",
+   "kind": "assumption",
+   "text": "Activities delivered in line with scope of award; high activity additionality - activities/R&D investment would not have occurred without the intervention. ATC does not duplicate other support available in innovation landscape.",
+   "links": [
+    "l9",
+    "l10",
+    "l11"
+   ],
+   "from_layer": "activity",
+   "to_layer": "output",
+   "verdict": {
+    "raw": "ATC is catalysing new activity in the sector, and encouraging high levels of ‘activity additionality’ that might not otherwise have occurred in both early and late stage projects.",
+    "scale": "supports",
+    "quote": "encouraging high levels of ‘activity additionality’",
+    "page": 82,
+    "studies": []
+   }
+  },
+  {
+   "id": "a4",
+   "kind": "risk",
+   "text": "Some evidence of integration with wider support landscape, although scope for greater involvement, e.g. with DIT, local networks, Agri-tech Innovation centres, and high level of engagement with other sources of support outside ATC partnership which will influence outcomes.",
+   "links": [
+    "l9",
+    "l10",
+    "l11"
+   ],
+   "from_layer": "activity",
+   "to_layer": "output",
+   "verdict": {
+    "raw": "eight (40%) indicated that they had received other forms of support to develop the idea during delivery of the ATC project",
+    "scale": "partly",
+    "quote": "eight (40%)",
+    "page": 103,
+    "studies": []
+   }
+  },
+  {
+   "id": "a5",
+   "kind": "assumption",
+   "text": "Projects progress through the grant types",
+   "links": [
+    "l7",
+    "l8"
+   ],
+   "from_layer": "activity",
+   "to_layer": "activity",
+   "verdict": {
+    "raw": "Only 1 project progressed through the grant types",
+    "scale": "partly",
+    "quote": "Only 1 project",
+    "page": 106,
+    "studies": []
+   }
+  },
+  {
+   "id": "a6",
+   "kind": "risk",
+   "text": "Some projects fail to deliver due to technical failure, reflecting high risk associated with projects funded (supporting the original rationale) - still benefits realised e.g. skills/knowledge acquisition.",
+   "links": [
+    "l9",
+    "l10",
+    "l11"
+   ],
+   "from_layer": "activity",
+   "to_layer": "output",
+   "verdict": {
+    "raw": "The four projects that had not achieved objectives reported this was due to unexpected/unfavourable research results, technology failure or an inability to prove commercial viability – all reasonable outcomes of high-risk R&D.",
+    "scale": "partly",
+    "quote": "all reasonable outcomes of high-risk R&D",
+    "page": 76,
+    "studies": []
+   }
+  },
+  {
+   "id": "a7",
+   "kind": "assumption",
+   "text": "Industry involvement encourages commercial ‘pull’. Subsidies de-risk proposition – enables follow-on finance to be secured and stimulates further R&D in some cases.",
+   "links": [
+    "l12",
+    "l13"
+   ],
+   "from_layer": "output",
+   "to_layer": "outcome_short",
+   "verdict": {
+    "raw": "ATC has helped to de-risk projects sufficiently to secure some follow-on public sector investment and/or encourage greater investment in R&D by the participants themselves.",
+    "scale": "partly",
+    "quote": "secure some follow-on public sector investment",
+    "page": 56,
+    "studies": []
+   }
+  },
+  {
+   "id": "a8",
+   "kind": "risk",
+   "text": "Some projects technically successful but fail to secure follow-on investment, limited awareness of private sector investment opportunities.",
+   "links": [
+    "l13",
+    "l15"
+   ],
+   "from_layer": "output",
+   "to_layer": "outcome_short",
+   "verdict": {
+    "raw": "partners’ awareness of and ability to secure private sector finance (at an appropriate stage of the commercialisation process) remains a concern.",
+    "scale": "partly",
+    "quote": "remains a concern",
+    "page": 56,
+    "studies": []
+   }
+  },
+  {
+   "id": "a9",
+   "kind": "assumption",
+   "text": "Businesses receiving grant support more likely to make technological progression (and have done so more quickly) compared to non-beneficiaries/self-reported counterfactual – ATC instrumental in enabling this.",
+   "links": [
+    "l9",
+    "l10",
+    "l11",
+    "l14"
+   ],
+   "from_layer": "activity",
+   "to_layer": "outcome_short",
+   "verdict": {
+    "raw": "Businesses receiving grant support more likely to make technological progression (and have done so more quickly) compared to non-beneficiaries/self-reported counterfactual",
+    "scale": "supports",
+    "quote": "ATC instrumental in enabling this",
+    "page": 106,
+    "studies": []
+   }
+  },
+  {
+   "id": "a10",
+   "kind": "risk",
+   "text": "For projects that progress, non-beneficiaries as likely to take new products to market (in short term). Barriers remain unaddressed that inhibit commercialisation – including wider ecosystem of new products, feedback loops to earlier TRLs; IP disputes.",
+   "links": [
+    "l14",
+    "l15"
+   ],
+   "from_layer": "output",
+   "to_layer": "outcome_short",
+   "verdict": {
+    "raw": "For projects that progress, non-beneficiaries as likely to take new products to market (in short term)",
+    "scale": "partly",
+    "quote": "Barriers remain unaddressed that inhibit commercialisation",
+    "page": 106,
+    "studies": []
+   }
+  },
+  {
+   "id": "a11",
+   "kind": "assumption",
+   "text": "Early evidence suggests take-up of products taken to market so far, resulting in sales and exports (limited evidence of quantifiable impacts to date, as expected at interim evaluation stage); involvement of industry a key route to market. New jobs mostly due to R&D phase, some due to market phase (result of sales). High outcome additionality.",
+   "links": [
+    "l14",
+    "l16"
+   ],
+   "from_layer": "output",
+   "to_layer": "impact",
+   "verdict": {
+    "raw": "over half of the outcomes observed to date would not have been achieved without ATC, or would not have been brought about as quickly, to the same scale or quality",
+    "scale": "supports",
+    "quote": "over half of the outcomes observed to date",
+    "page": 102,
+    "studies": []
+   }
+  },
+  {
+   "id": "a12",
+   "kind": "assumption",
+   "text": "Other factors enabling progress to market, including changes to business plans, wider investment in R&D, new equipment purchased, new collaborations established (most stimulated by ATC but contributed towards outcomes).",
+   "links": [
+    "l14",
+    "l15",
+    "l16"
+   ],
+   "from_layer": "output",
+   "to_layer": "impact",
+   "verdict": {
+    "raw": "ATC is one of a number of interdependent and reinforcing factors that have been important in realising the project-based outcomes observed by businesses consulted, but that ATC was the decisive factor for many beneficiaries particularly in terms of intermediate outcomes.",
+    "scale": "supports",
+    "quote": "one of a number of interdependent and reinforcing factors",
+    "page": 103,
+    "studies": []
+   }
+  },
+  {
+   "id": "a13",
+   "kind": "assumption",
+   "text": "Displacement likely to be limited given highly innovative nature of activities.",
+   "links": [
+    "l16"
+   ],
+   "from_layer": "outcome_short",
+   "to_layer": "impact",
+   "verdict": null
+  },
+  {
+   "id": "a14",
+   "kind": "risk",
+   "text": "Some dissemination to date – mostly niche/narrowly targeted by projects; some (limited) programme-level dissemination but lack of awareness amongst key stakeholders. Limited dissemination between projects to enable synergies. IP concerns a barrier to wider dissemination; lack of KE strategy. Insufficient emphasis on how spillovers to wider agricultural sector will be achieved at scale. Limited involvement as yet with Centres for Agricultural Innovation to help business develop, adopt and exploit new agricultural technologies/processes.",
+   "links": [
+    "l19",
+    "l20",
+    "l21",
+    "l24"
+   ],
+   "from_layer": "outcome_short",
+   "to_layer": "impact",
+   "verdict": {
+    "raw": "Insufficient emphasis on how spillovers to wider agricultural sector will be achieved at scale.",
+    "scale": "partly",
+    "quote": "Limited dissemination between projects to enable synergies",
+    "page": 106,
+    "studies": []
+   }
+  },
+  {
+   "id": "a15",
+   "kind": "risk",
+   "text": "Agri-Tech Strategy helped to raise profile of ATC. Some promotion via UK/DIT, but concerns remain re: dissemination/promotion of portfolio, wider leadership/championing role. Risk: continued risk aversion/information failures.",
+   "links": [
+    "l22",
+    "l23"
+   ],
+   "from_layer": "impact",
+   "to_layer": "impact",
+   "verdict": {
+    "raw": "The Catalyst has demonstrated a clear UK commitment to Agri-Tech innovation and generated a “buzz and energy” across the sector – and both are powerful tools in attracting industry investment.",
+    "scale": "partly",
+    "quote": "generated a “buzz and energy” across the sector",
+    "page": 57,
+    "studies": []
+   }
+  },
+  {
+   "id": "a16",
+   "kind": "risk",
+   "text": "Future risks: Skills/know-how and attitudes of agricultural businesses, and their financial capacity to invest in new technology and supporting infrastructures needed. Results not taken-up by potential users in wider agricultural sector.",
+   "links": [
+    "l24"
+   ],
+   "from_layer": "impact",
+   "to_layer": "impact",
+   "verdict": null
+  },
+  {
+   "id": "a17",
+   "kind": "assumption",
+   "text": "Participants face financial barriers that justify ATC support.",
+   "links": [],
+   "from_layer": "activity",
+   "to_layer": "output",
+   "verdict": {
+    "raw": "the evidence on difficulties by participants in accessing finance (and therefore validating the need for ATC support) is mixed",
+    "scale": "partly",
+    "quote": "only half considered alternative sources of finance to ATC",
+    "page": 98,
+    "studies": []
+   }
+  }
+ ],
+ "context": [
+  "Institutional and cultural contexts.",
+  "Policy objectives in the UK and internationally.",
+  "Market declines/competition and changes to global commodity prices and exchange rates.",
+  "Climate change and other abiotic and biotic factors.",
+  "Wealth increases in developing countries, leading to changes in diet and more pressure for resource-intensive foods.",
+  "Technology reducing waste could reduce pressure on production growth.",
+  "Policy changes helping to drive commercialisation, for example Patent Box.",
+  "Increasing uncertainty around factors and assumptions the further forward one looks.",
+  "Most beneficiaries and unsuccessful applicants consulted were already active in collaborative R&D, often financed by other UK public funds or internal funds."
+ ],
+ "key_claims": [
+  {
+   "id": "k1",
+   "claim": "Competitive grants stimulate additional collaborative R&D and private investment, including some new collaborations and spill-ins.",
+   "refs": [
+    "b1",
+    "b2",
+    "b3",
+    "b4",
+    "l1",
+    "l2",
+    "l3",
+    "a1",
+    "a2",
+    "a3",
+    "a17"
+   ],
+   "where": "Sections 7 and 8; Figure 8-1, p102; Figure 8-2, p106",
+   "verdict": {
+    "raw": "ATC is catalysing new activity in the sector, and encouraging high levels of ‘activity additionality’ that might not otherwise have occurred in both early and late stage projects. The programme has also brought about a considerable level of additionality in terms of timing and quality of activities, even where the activity progressed without ATC.",
+    "scale": "supports",
+    "quote": "high levels of ‘activity additionality’",
+    "page": 82,
+    "studies": []
+   }
+  },
+  {
+   "id": "k2",
+   "claim": "Funded projects progress technologies, but progress is iterative and technical failure can coexist with useful learning; progression through successive Catalyst grant types is uncommon.",
+   "refs": [
+    "b5",
+    "b6",
+    "b7",
+    "b8",
+    "l7",
+    "l8",
+    "l9",
+    "l10",
+    "l11",
+    "a5",
+    "a6",
+    "a9"
+   ],
+   "where": "Section 6, pp75–76; Figure 8-1, p102; Figure 8-2, p106",
+   "verdict": {
+    "raw": "Many projects successful in progressing through technology readiness; collaboration critical success factor. Some projects fail to deliver due to technical failure, reflecting high risk associated with projects funded (supporting the original rationale) - still benefits realised e.g. skills/knowledge acquisition. Only 1 project progressed through the grant types.",
+    "scale": "partly",
+    "quote": "Many projects successful in progressing through technology readiness",
+    "page": 106,
+    "studies": []
+   }
+  },
+  {
+   "id": "k3",
+   "claim": "Collaborative R&D builds skills, commercialisation capacity, reputation and market understanding, with enduring changes in research relationships and innovation behaviour.",
+   "refs": [
+    "b9",
+    "b11",
+    "b12",
+    "l12",
+    "l25",
+    "l26",
+    "a2"
+   ],
+   "where": "Section 6, pp56–57; Figure 8-1, p102; Section 8, p103; Figure 8-2, p106",
+   "verdict": {
+    "raw": "The most common benefits of ATC include improved R&D and commercialisation capacity, profile, credibility and reputation, staff skills and knowledge, and understanding of market position and opportunities. The majority have also developed new and/or strengthened collaborations with industry and academia. There is little difference between the nature and extent of these outcomes between early and late stage projects, nor leads and collaborators.",
+    "scale": "supports",
+    "quote": "There is little difference ... between early and late stage projects, nor leads and collaborators",
+    "page": 56,
+    "studies": []
+   }
+  },
+  {
+   "id": "k4",
+   "claim": "Technology development produces usable research outputs and intellectual property, though new industry data and research outputs have progressed less strongly than skills and commercial applications.",
+   "refs": [
+    "b8"
+   ],
+   "where": "Figure 8-1, p102; Figure 8-2, p106",
+   "verdict": {
+    "raw": "✓✓✓ indicates strong progress; ✓✓ indicates some evidence of progress",
+    "scale": "partly",
+    "quote": "New patents filed; Skills acquisition; Commercial applications ... Research outputs; New data available to industry",
+    "page": 102,
+    "studies": []
+   }
+  },
+  {
+   "id": "k5",
+   "claim": "De-risking and industry involvement help secure follow-on R&D investment, but private finance remains a barrier even for technically successful projects.",
+   "refs": [
+    "b10",
+    "b12",
+    "l13",
+    "l15",
+    "l27",
+    "a7",
+    "a8"
+   ],
+   "where": "Section 6, p56; Figure 8-1, p102; Figure 8-2, p106",
+   "verdict": {
+    "raw": "ATC has helped to de-risk projects sufficiently to secure some follow-on public sector investment and/or encourage greater investment in R&D by the participants themselves. However, partners’ awareness of and ability to secure private sector finance (at an appropriate stage of the commercialisation process) remains a concern.",
+    "scale": "partly",
+    "quote": "awareness of and ability to secure private sector finance ... remains a concern",
+    "page": 56,
+    "studies": []
+   }
+  },
+  {
+   "id": "k6",
+   "claim": "Technological progress can lead to market entry, but commercialisation also requires further investment, complementary capabilities and resolution of remaining technical and IP barriers.",
+   "refs": [
+    "b8",
+    "b13",
+    "l14",
+    "l15",
+    "a4",
+    "a10",
+    "a12"
+   ],
+   "where": "Sections 6 and 7, pp56, 76, 94; Section 8, p103; Figure 8-2, p106",
+   "verdict": {
+    "raw": "There is evidence of new products or services reaching the market already – and to a lesser extent, new processes being introduced – following Catalyst activity.",
+    "scale": "partly",
+    "quote": "to a lesser extent, new processes",
+    "page": 56,
+    "studies": []
+   }
+  },
+  {
+   "id": "k7",
+   "claim": "ATC makes outcomes additional or earlier, although additionality differs by grant type and partner role and unsuccessful applicants reveal some deadweight.",
+   "refs": [
+    "a3",
+    "a9",
+    "a10",
+    "a11"
+   ],
+   "where": "Section 7, pp82, 85–86; Figure 7-1; Section 8, p102; Figure 8-2, p106",
+   "verdict": {
+    "raw": "reported “full” additionality was more common for participants in early stage projects (80%, 35), compared to participants in late stage projects (54%, 7) ... reported “full” additionality was more common for collaborators compared to leads (81%/30 and 60%/12 respectively)",
+    "scale": "supports",
+    "quote": "outcomes were brought forward by two-to-three years",
+    "page": 86,
+    "studies": []
+   }
+  },
+  {
+   "id": "k8",
+   "claim": "ATC contributes to outcomes alongside other reinforcing investments and organisational changes, often stimulating those other changes rather than acting alone.",
+   "refs": [
+    "a4",
+    "a12",
+    "b8",
+    "b10",
+    "b13"
+   ],
+   "where": "Section 7, p94; Section 8, p103; case study, p140; Figure 8-2, p106",
+   "verdict": {
+    "raw": "ATC is one of a number of interdependent and reinforcing factors that have been important in realising the project-based outcomes observed by businesses consulted, but that ATC was the decisive factor for many beneficiaries particularly in terms of intermediate outcomes.",
+    "scale": "supports",
+    "quote": "the decisive factor for many beneficiaries particularly in terms of intermediate outcomes",
+    "page": 103,
+    "studies": []
+   }
+  },
+  {
+   "id": "k9",
+   "claim": "Market entry generates participant sales, exports, employment and productivity gains, but most economic impacts remain prospective at this interim stage.",
+   "refs": [
+    "b13",
+    "b14",
+    "b16",
+    "l16",
+    "l21",
+    "a11",
+    "a13"
+   ],
+   "where": "Section 6, pp56–57, 76; Section 8, p102; Figures 8-1 and 8-2",
+   "verdict": {
+    "raw": "ATC has led to modest impacts on employment and/or turnover of those involved to date, but there are a small number of strongly performing projects (both early and late stage) who have generated substantial levels of revenue, including through exports. Most employment generated so far is associated with R&D activity",
+    "scale": "partly",
+    "quote": "a small number of strongly performing projects",
+    "page": 56,
+    "studies": []
+   }
+  },
+  {
+   "id": "k10",
+   "claim": "Dissemination and adoption spread innovations through supply chains and other sectors, but limited knowledge exchange and weak routes to sector-wide uptake constrain spillovers.",
+   "refs": [
+    "b15",
+    "b17",
+    "b18",
+    "l17",
+    "l18",
+    "l19",
+    "l20",
+    "a14"
+   ],
+   "where": "Section 6, p57; Section 8, p102; Figure 8-2, p106",
+   "verdict": {
+    "raw": "Some dissemination to date – mostly niche/narrowly targeted by projects; some (limited) programme-level dissemination but lack of awareness amongst key stakeholders. Limited dissemination between projects to enable synergies. IP concerns a barrier to wider dissemination; lack of KE strategy. Insufficient emphasis on how spillovers to wider agricultural sector will be achieved at scale.",
+    "scale": "partly",
+    "quote": "Insufficient emphasis on how spillovers ... will be achieved at scale",
+    "page": 106,
+    "studies": []
+   }
+  },
+  {
+   "id": "k11",
+   "claim": "A stronger innovation pipeline and sector profile can attract investment and improve the UK's competitive position, but investor engagement and wider promotion remain uncertain.",
+   "refs": [
+    "b19",
+    "b20",
+    "l22",
+    "l23",
+    "a15"
+   ],
+   "where": "Section 6, p57; Section 8, p103; Figure 8-2, p106",
+   "verdict": {
+    "raw": "Mixed views to date - ATC pipeline 'stoking' VC appetite (?), but still a challenge to secure interest/investment",
+    "scale": "partly",
+    "quote": "still a challenge to secure interest/investment",
+    "page": 106,
+    "studies": []
+   }
+  },
+  {
+   "id": "k12",
+   "claim": "Widespread adoption could improve agricultural productivity, produce quality, environmental sustainability and animal welfare, conditional on users' skills, attitudes and investment capacity.",
+   "refs": [
+    "b16",
+    "b18",
+    "b21",
+    "l24",
+    "a14",
+    "a16"
+   ],
+   "where": "Section 6, pp56–57; Section 8, pp102–103; Figure 8-2, p106",
+   "verdict": {
+    "raw": "There appears to have been limited impact on the wider agricultural sector to date ... There is greater confidence in future impacts on productivity, produce quality and environmental sustainability (and more modest impacts on animal health and welfare), but beneficiaries appear to be most focused on direct benefits for those involved with limited consideration of how their projects will have a wider, large scale impact on the sector.",
+    "scale": "partly",
+    "quote": "limited impact on the wider agricultural sector to date",
+    "page": 102,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "Early evidence gathered for this first phase of the evaluation suggests the programme is performing well against its aims to “accelerate translation of research into practical solutions, best practices …” and encourage greater R&D in the sector. It is probably too early to assess whether this is then translating into “… applications of new technologies in agriculture”, increased turnover and exports, improved agricultural productivity and reducing environmental impacts, and improved competitive position of the UK’s agri-tech sector internationally.",
+   "scale": "partly",
+   "quote": "performing well ... It is probably too early to assess",
+   "page": 103,
+   "studies": []
+  },
+  "weakest_links": [
+   "a5",
+   "a8",
+   "a10",
+   "a14",
+   "a16",
+   "a17"
+  ],
+  "strongest_links": [
+   "a2",
+   "a3",
+   "a9",
+   "a11",
+   "a12"
+  ],
+  "summary": "The intended pathway was judged plausible and the rationale strongly supported by risk, uncertain and delayed returns, and coordination failures, although evidence of finance constraints was mixed. Early and late stage projects show strong technological, skills, capacity and collaboration benefits, including sustained behavioural changes. Some products have reached market and some firms have substantial revenues, but aggregate commercial and wider agricultural impacts remain modest or prospective. ATC is an important and sometimes decisive contributor, especially to intermediate outcomes, while further investments and activity are generally needed to realise commercial and economic potential. The assessment covers only early and late stage awards, approximately half the portfolio, and relies substantially on triangulated self-reported evidence rather than a statistical counterfactual.",
+  "recommendations": [
+   "Probe how and why projects require external innovation support outside their consortia in the next evaluation phase.",
+   "Give greater attention to dissemination, knowledge exchange and the mechanisms by which project benefits will spread to the wider agricultural sector.",
+   "Address the identified gaps in awareness of and access to follow-on private finance.",
+   "The report states that a comprehensive programme assessment and recommendations for a final impact evaluation will follow in Phase 2."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/agritech_catalyst_interim_p32.png', 'downloads/pages/agritech_catalyst_interim_p33.png', 'downloads/pages/agritech_catalyst_interim_p102.png', 'downloads/pages/agritech_catalyst_interim_p106.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "Figure 8-2 on p106 is transcribed as the populated version of Figure 3-3 on p33. The programme logic model on p32 and progress summary on p102 are not transcribed as separate diagrams.",
+   "The small image makes several shared arrow junctions difficult to resolve. In particular, verify the grant-type-to-output junctions, the reciprocal technological-progress/follow-on-investment connection, the inputs to the new/strengthened relationships box, and the lower branches feeding future impacts against a higher-resolution original. No uncertain additional inputs to the relationships box have been invented.",
+   "Future expected impacts are indicated by dashed box outlines in Figure 8-2; the record has no separate field for that graphical distinction.",
+   "Figure 8-2's legend distinguishes intermediate outcomes from final outcomes/impacts. Intermediate outcomes are mapped to outcome_short and final outcomes/impacts to impact; the source does not separately divide short- and long-term outcomes.",
+   "The p102 tick scale measures progress, not evidence of causal effect. Strong progress is mapped to supports; some and limited progress are mapped to partly, preserving the original wording. These verdicts are attached to results, not to every connecting arrow.",
+   "The p102 progress items do not always exactly match the broader composite boxes in Figure 8-2. In particular, 'Greater understanding of innovation processes' is narrower than b15. Composite verdicts should not be read as evidence for every clause.",
+   "Figure 8-1 gives three ticks for additional private investment, patents, collaborations, skills and commercial applications; two for research outputs and new data. The differing output findings are retained in k4 rather than represented as invented individual boxes.",
+   "Figure 8-1 gives two ticks for university attitudes/behaviour, while the text also describes sustained changes in both university and business behaviour. These are different scopes, not necessarily contradictory verdicts.",
+   "The original p33 diagram includes a developing-country food-security/poverty impact. It is absent from the populated p106 diagram; DFID-funded projects are explicitly outside this evaluation's scope.",
+   "The provided text reports 74% fully additional outcomes on p85, while Figure 7-1's rounded categories on p86 sum to 76%. Both are source values; they have not been reconciled.",
+   "The p140 case study corroborates k3, k7 and k8: complementary partners enabled a larger, quicker and better-quality project; specific skills were directly attributable to ATC, while feeder projects, equipment and institutional changes also contributed.",
+   "Recommendations concerning finance and knowledge exchange reflect explicit gaps identified in the supplied findings and Figure 8-2, rather than a supplied formal recommendations section.",
+   "The supplied extracts do not establish publication metadata, URLs or licence. The year 2018 follows the evaluation timing; verify it against the report cover. Evidence level B is a provisional classification for the mixed-methods contribution analysis because no A/B/C rubric was supplied.",
+   "No separate causal studies are named for the programme steps. Methodological references and the Smart programme comparator are not treated as studies establishing individual ATC causal links.",
+   "Phase 2 was not supplied and its findings are not incorporated."
+  ],
+  "source_sha256": "6a079c2265435f1c41f87e08b83c9fb4ea1b78aa61c3f956539a02a705299807",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

@@ -1,0 +1,1193 @@
+{
+ "meta": {
+  "id": "housing_health_thomson_2014",
+  "title": "Developing empirically supported theories of change for housing investment and health",
+  "organisation": "MRC/CSO Social & Public Health Sciences Unit, University of Glasgow",
+  "year": 2015,
+  "country": "United Kingdom; New Zealand",
+  "topic": "Housing improvement, socio-economic determinants of health, and health",
+  "intervention_type": "programme",
+  "timing": "synthesis",
+  "doc_url": "http://eprints.gla.ac.uk/99992/1/99992.pdf",
+  "landing_url": "https://doi.org/10.1016/j.socscimed.2014.11.043",
+  "licence": "CC BY 3.0",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "evidence_synthesis",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Improve residents' health and wellbeing through investment in better housing.",
+  "population": "Residents receiving housing improvements, including low-income households and people with existing health problems.",
+  "place": "Predominantly the United Kingdom, with studies from New Zealand.",
+  "time_horizon": "Included evaluations followed residents for approximately three months to three years after intervention; longer-term health benefits are also considered.",
+  "intervention": "Structural housing improvements, including warmth and energy-efficiency retrofits, refurbishment, rehousing, and housing-led neighbourhood renewal. The measures and extent of investment varied across studies; there was no common dosage.",
+  "context": "Poor housing and poor health are associated, but poverty and other confounders complicate causal interpretation. Housing investment is generally undertaken to improve housing rather than primarily to improve health, and evaluations often have short follow-up periods.",
+  "outcome_first": "Develop a theory of change for improving health and wellbeing among residents of poor-quality housing in the United Kingdom and New Zealand. Identify the conditions under which benefits might occur and distinguish near-term from longer-term change.",
+  "intervention_first": "Develop a theory of change for structural housing improvements, including retrofits, refurbishment and rehousing, for residents in the United Kingdom and New Zealand. The intended change is improved health and wellbeing; account for variation in delivery and residents' needs."
+ },
+ "containers": [],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "Improved housing: best available evidence (Overall Grade A & B) from qualitative and quantitative studies of warmth improvements, refurbishment and rehousing in high income countries conducted since 1980.",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b2",
+   "label": "Rent",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b3",
+   "label": "Energy efficiency",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b4",
+   "label": "Thermal comfort",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b5",
+   "label": "House size & design",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b6",
+   "label": "Housing satisfaction & pride in house",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b7",
+   "label": "Relationship with housing provider",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b8",
+   "label": "Improved neighbourhood environment",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b9",
+   "label": "General health & “other” symptoms",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b10",
+   "label": "Respiratory health",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b11",
+   "label": "Unit cost of fuel",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b12",
+   "label": "Spending on fuel",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b13",
+   "label": "Disposable income",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b14",
+   "label": "Increased usable indoor space",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b15",
+   "label": "Increased emotional security & feeling of being at ease in home",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b16",
+   "label": "Increased use of kitchen",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b17",
+   "label": "Increased privacy, improved relationships within the household & family functioning",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b18",
+   "label": "Use of house for leisure & study",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b19",
+   "label": "Increased motivation to tidy & clean house",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b20",
+   "label": "Food choices & diet",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b21",
+   "label": "Reduced time off work/school",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b22",
+   "label": "Potential long term impact on determinant of health: Education & employment",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b23",
+   "label": "Mental health",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b24",
+   "label": "The existence, extent, and direction of the reported impacts will vary depending on the previous step on the pathway, also the extent of intervention, time since the intervention, baseline housing and health status of tenants, and other extenuating circumstances for individuals. It cannot be assumed that all housing improvements will automatically lead to improvements in thermal comfort and affordable warmth.",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l2",
+   "source": "b1",
+   "target": "b2",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l3",
+   "source": "b1",
+   "target": "b3",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l4",
+   "source": "b1",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l5",
+   "source": "b1",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l6",
+   "source": "b1",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l7",
+   "source": "b1",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l8",
+   "source": "b1",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l9",
+   "source": "b1",
+   "target": "b23",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l10",
+   "source": "b2",
+   "target": "b13",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links implied in data or hypothesised by review authors",
+    "scale": "insufficient",
+    "quote": "Links implied in data or hypothesised by review authors",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l11",
+   "source": "b3",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l12",
+   "source": "b3",
+   "target": "b12",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l13",
+   "source": "b3",
+   "target": "b14",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l14",
+   "source": "b5",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l15",
+   "source": "b5",
+   "target": "b14",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l16",
+   "source": "b4",
+   "target": "b14",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l17",
+   "source": "b4",
+   "target": "b15",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l18",
+   "source": "b4",
+   "target": "b10",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links implied in data or hypothesised by review authors",
+    "scale": "insufficient",
+    "quote": "Links implied in data or hypothesised by review authors",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l19",
+   "source": "b11",
+   "target": "b12",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l20",
+   "source": "b12",
+   "target": "b13",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l21",
+   "source": "b13",
+   "target": "b20",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l22",
+   "source": "b14",
+   "target": "b16",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l23",
+   "source": "b14",
+   "target": "b17",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l24",
+   "source": "b14",
+   "target": "b18",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l25",
+   "source": "b16",
+   "target": "b20",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l26",
+   "source": "b6",
+   "target": "b19",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l27",
+   "source": "b19",
+   "target": "b18",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l28",
+   "source": "b6",
+   "target": "b23",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links implied in data or hypothesised by review authors",
+    "scale": "insufficient",
+    "quote": "Links implied in data or hypothesised by review authors",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l29",
+   "source": "b15",
+   "target": "b23",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "Links implied in data or hypothesised by review authors",
+    "scale": "insufficient",
+    "quote": "Links implied in data or hypothesised by review authors",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l30",
+   "source": "b17",
+   "target": "b23",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links implied in data or hypothesised by review authors",
+    "scale": "insufficient",
+    "quote": "Links implied in data or hypothesised by review authors",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l31",
+   "source": "b9",
+   "target": "b21",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links implied in data or hypothesised by review authors",
+    "scale": "insufficient",
+    "quote": "Links implied in data or hypothesised by review authors",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l32",
+   "source": "b10",
+   "target": "b21",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links supported by data",
+    "scale": "supports",
+    "quote": "Links supported by data",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l33",
+   "source": "b21",
+   "target": "b22",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links implied in data or hypothesised by review authors",
+    "scale": "insufficient",
+    "quote": "Links implied in data or hypothesised by review authors",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "l34",
+   "source": "b18",
+   "target": "b22",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Links implied in data or hypothesised by review authors",
+    "scale": "insufficient",
+    "quote": "Links implied in data or hypothesised by review authors",
+    "page": 7,
+    "studies": []
+   }
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "assumption",
+   "text": "Housing improvements deliver meaningful changes in residents' exposure to poor housing conditions; interventions are properly delivered and used.",
+   "links": [
+    "l3",
+    "l4",
+    "l5",
+    "l11",
+    "l14"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Interventions may not have been delivered or used as hypothesised. ... These issues varied between and within studies, and were not clearly reported. This makes it difficult to make an accurate assessment of the influence of these factors.",
+    "scale": "insufficient",
+    "quote": "Interventions may not have been delivered or used as hypothesised.",
+    "page": 8,
+    "studies": []
+   }
+  },
+  {
+   "id": "a2",
+   "kind": "assumption",
+   "text": "Residents have potential to benefit; targeting people with inadequate warmth and existing chronic respiratory disease increases the likelihood of health improvement.",
+   "links": [
+    "l1",
+    "l4",
+    "l18"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Studies which targeted those with inadequate warmth and existing chronic respiratory disease were most likely to report health improvement",
+    "scale": "supports",
+    "quote": "most likely to report health improvement",
+    "page": 3,
+    "studies": [
+     "Howden-Chapman 2007",
+     "Howden-Chapman 2008"
+    ]
+   }
+  },
+  {
+   "id": "a3",
+   "kind": "risk",
+   "text": "Fuel prices, weather and increased energy consumption or 'take back' can prevent energy-efficiency improvements from reducing fuel bills.",
+   "links": [
+    "l12",
+    "l19",
+    "l20"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "energy efficiency measures cannot be assumed to lead to reductions in fuel bills.",
+    "scale": "partly",
+    "quote": "cannot be assumed to lead to reductions in fuel bills",
+    "page": 7,
+    "studies": [
+     "Alcott 2005"
+    ]
+   }
+  },
+  {
+   "id": "a4",
+   "kind": "risk",
+   "text": "Rent or other housing-cost increases may reduce disposable income; welfare provision does not necessarily protect all low-income households.",
+   "links": [
+    "l2",
+    "l10",
+    "l20",
+    "l21"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Rents often increased following housing improvement, for many low income tenants major increases were often covered by welfare provision, though this cannot be assumed. Those on low incomes who are not eligible for housing benefit may be adversely affected by increases in rent.",
+    "scale": "partly",
+    "quote": "may be adversely affected by increases in rent",
+    "page": 8,
+    "studies": []
+   }
+  },
+  {
+   "id": "a5",
+   "kind": "assumption",
+   "text": "Changes in domestic space and design are appropriate to household needs; an increase in space is not universally beneficial.",
+   "links": [
+    "l5",
+    "l15",
+    "l23",
+    "l24"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "This suggests that increased space is not a universal benefit, rather changes to household space should be tailored to meet household needs.",
+    "scale": "supports",
+    "quote": "increased space is not a universal benefit",
+    "page": 8,
+    "studies": [
+     "Bullen 2008",
+     "Gibson 2011"
+    ]
+   }
+  },
+  {
+   "id": "a6",
+   "kind": "assumption",
+   "text": "Short-term socio-economic improvements are steps towards health improvements that may emerge beyond the evaluation period.",
+   "links": [
+    "l28",
+    "l29",
+    "l30",
+    "l33",
+    "l34"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "The data from the review linking socio-economic impacts to health impacts is limited, and is largely based on a small number of participants within the qualitative studies. This may be insufficient to confirm that the socio-economic impacts act as a step on the pathway towards health impacts.",
+    "scale": "insufficient",
+    "quote": "may be insufficient to confirm",
+    "page": 8,
+    "studies": [
+     "Ellaway 2000",
+     "Bullen 2008"
+    ]
+   }
+  }
+ ],
+ "context": [
+  "Most included studies were conducted in the United Kingdom, where improved thermal comfort usually meant increased warmth; the overall model also recognises protection from excessive heat.",
+  "The extent, direction and timing of impacts depend on prior steps, intervention extent, baseline housing and health, and individual circumstances.",
+  "Area-level mean outcomes may conceal substantial benefits or harms for particular residents.",
+  "The review included structural housing changes, not housing tenure changes, education-only interventions, or stand-alone equipment to reduce domestic hazards.",
+  "The evidence was heterogeneous and not amenable to meta-analysis; the models indicate possible pathways and direction of effects rather than pooled effect sizes."
+ ],
+ "key_claims": [
+  {
+   "id": "k1",
+   "claim": "Housing investment must deliver tangible improvements in conditions, and its effects depend on implementation and residents' initial need.",
+   "refs": [
+    "b1",
+    "b3",
+    "b4",
+    "b5",
+    "b24",
+    "l3",
+    "l4",
+    "l5",
+    "a1",
+    "a2"
+   ],
+   "where": "Sections 3.2, 3.6 and 3.10; Figures 1–3",
+   "verdict": {
+    "raw": "There were reports of improved warmth in all but one of the studies. In one study, the occupants reported little change. ... Improvements in physical housing conditions were reported in three of the quantitative studies ... But another three quantitative studies reported little or no change in housing conditions. ... poor reporting of implementation and changes of exposure to poor housing conditions prevents accurate assessments of the key components or the extent of housing improvement needed to effect change.",
+    "scale": "partly",
+    "quote": "another three quantitative studies reported little or no change in housing conditions",
+    "page": 6,
+    "studies": [
+     "Critchley 2004",
+     "Thomson 2007",
+     "Kearns 2008",
+     "Evans and Layzell 2000",
+     "Barnes 2003",
+     "Thomas 2005"
+    ]
+   }
+  },
+  {
+   "id": "k2",
+   "claim": "Improving affordable thermal comfort can improve general and respiratory health, especially for residents with inadequate warmth and chronic respiratory disease.",
+   "refs": [
+    "b4",
+    "b9",
+    "b10",
+    "l1",
+    "l18",
+    "a2"
+   ],
+   "where": "Sections 1.1, 3.4, 3.8, 3.10 and 4.1; Figures 1–3",
+   "verdict": {
+    "raw": "The synthesis suggests that there were improvements in general health, respiratory health, and mental health. However, the health improvements were often small, and varied across the studies, with some studies reporting little evidence of any health impact. ... improvements are most likely where the warmth improvements are delivered to households with inadequate warmth and where household member(s) suffer from existing chronic respiratory disease ... Small improvements in measures of general health were reported in some quantitative studies ... however one study reported no change ... one study assessing changes in respiratory health reported a small deterioration.",
+    "scale": "partly",
+    "quote": "the health improvements were often small, and varied across the studies",
+    "page": 5,
+    "studies": [
+     "Howden-Chapman 2007",
+     "Howden-Chapman 2008",
+     "Rugkasa 2004",
+     "Evans and Layzell 2000",
+     "Barnes 2003",
+     "Critchley 2004",
+     "Kearns 2008",
+     "Thomson 2007"
+    ]
+   }
+  },
+  {
+   "id": "k3",
+   "claim": "Warmth improvements and appropriate house size and design make more of the home usable, but the appropriate amount of space differs between households.",
+   "refs": [
+    "b3",
+    "b4",
+    "b5",
+    "b14",
+    "l13",
+    "l15",
+    "l16",
+    "a5"
+   ],
+   "where": "Sections 3.2, 3.6, 3.7 and 3.9; Figures 1–3",
+   "verdict": {
+    "raw": "In three studies, greater warmth was linked to an increase in usable indoor space in the home ... a move to a smaller house was reported to be beneficial for elderly residents. While for those with families, an increase in space was reported to be beneficial. ... Housing design measures to improve access and utility for residents with disabilities were reported to improve levels of independence ... provision of appropriately designed housing for those with disabilities was linked directly to improved health and wellbeing.",
+    "scale": "supports",
+    "quote": "greater warmth was linked to an increase in usable indoor space",
+    "page": 5,
+    "studies": [
+     "Basham 2004",
+     "Harrington 2005",
+     "Gilbertson 2006",
+     "Bullen 2008",
+     "Gibson 2011"
+    ]
+   }
+  },
+  {
+   "id": "k4",
+   "claim": "More usable space can improve privacy, household relationships and family functioning, with possible benefits for stress and wellbeing.",
+   "refs": [
+    "b14",
+    "b17",
+    "b23",
+    "l23",
+    "l30",
+    "a6"
+   ],
+   "where": "Sections 3.3, 3.7, 3.8 and 4.1; Figures 1–3",
+   "verdict": {
+    "raw": "Qualitative reports of increased usable space were reported to lead to greater levels of privacy within the home ... as well as improved relationships and interaction between household members ... Increased space was reported to lead to reduced illness and stress ... and reduced use of tranquilisers ... In one study improved family functioning, and being able to invite people in to the house was linked to improvements in wellbeing.",
+    "scale": "partly",
+    "quote": "improved family functioning ... was linked to improvements in wellbeing",
+    "page": 7,
+    "studies": [
+     "Caldwell 2001",
+     "Basham 2004",
+     "Gilbertson 2006",
+     "Bullen 2008",
+     "Kearns 2008",
+     "Gibson 2011",
+     "Ellaway 2000"
+    ]
+   }
+  },
+  {
+   "id": "k5",
+   "claim": "Usable space and greater pride in the home support studying, leisure, hospitality and care of the house.",
+   "refs": [
+    "b6",
+    "b14",
+    "b18",
+    "b19",
+    "l24",
+    "l26",
+    "l27"
+   ],
+   "where": "Sections 3.3, 3.7, 3.9 and 4.1; Figures 1–3",
+   "verdict": {
+    "raw": "There were also reports of greater opportunities for studying at home, and socialising and offering hospitality in the home ... Increased housing satisfaction was reported to lead to increased care of the house as well as use of the house to offer hospitality.",
+    "scale": "supports",
+    "quote": "greater opportunities for studying at home, and socialising and offering hospitality",
+    "page": 5,
+    "studies": [
+     "Basham 2004",
+     "Platt 2007",
+     "Harrington 2005",
+     "Gilbertson 2006",
+     "Bullen 2008",
+     "Gibson 2011"
+    ]
+   }
+  },
+  {
+   "id": "k6",
+   "claim": "Lower housing and fuel costs can increase disposable income and improve food choices, but fuel prices, consumption and rent increases can offset these gains.",
+   "refs": [
+    "b2",
+    "b3",
+    "b11",
+    "b12",
+    "b13",
+    "b20",
+    "l10",
+    "l12",
+    "l19",
+    "l20",
+    "l21",
+    "a3",
+    "a4"
+   ],
+   "where": "Sections 3.3, 3.6–3.9 and 4.1; Figures 1–3",
+   "verdict": {
+    "raw": "In one study, increased disposable income, as a result of lower fuel bills, was reported to facilitate improvements in diet ... Another study reported that increased disposable income facilitated improvements in diet ... In one New Zealand study which addressed overcrowding by extending homes, increased space was reported to be linked to increased housing costs ... energy efficiency measures cannot be assumed to lead to reductions in fuel bills ... Those on low incomes who are not eligible for housing benefit may be adversely affected by increases in rent.",
+    "scale": "partly",
+    "quote": "energy efficiency measures cannot be assumed to lead to reductions in fuel bills",
+    "page": 7,
+    "studies": [
+     "Caldwell 2001",
+     "Harrington 2005",
+     "Ellaway 2000",
+     "Bullen 2008",
+     "Alcott 2005"
+    ]
+   }
+  },
+  {
+   "id": "k7",
+   "claim": "Making the kitchen more usable can improve diet and eating patterns.",
+   "refs": [
+    "b14",
+    "b16",
+    "b20",
+    "l22",
+    "l25"
+   ],
+   "where": "Sections 3.3 and 3.9; Figures 1 and 3",
+   "verdict": {
+    "raw": "greater use of the kitchen which was linked to improvements in diet in two studies",
+    "scale": "supports",
+    "quote": "linked to improvements in diet in two studies",
+    "page": 5,
+    "studies": [
+     "Caldwell 2001",
+     "Gilbertson 2006"
+    ]
+   }
+  },
+  {
+   "id": "k8",
+   "claim": "Improved warmth and housing satisfaction can increase comfort, control, security and pride, while relationships with housing providers may also change.",
+   "refs": [
+    "b4",
+    "b6",
+    "b7",
+    "b15",
+    "l6",
+    "l7",
+    "l17"
+   ],
+   "where": "Sections 3.2, 3.6 and 3.9; Figures 1 and 3",
+   "verdict": {
+    "raw": "The range of housing related impacts reported by residents to be linked to the housing improvement varied across the studies, they included: reduced fuel bills, increased pride in the house, greater control over domestic temperature, and an improved relationship with the landlord.",
+    "scale": "supports",
+    "quote": "increased pride in the house, greater control over domestic temperature",
+    "page": 5,
+    "studies": [
+     "Basham 2004",
+     "Gilbertson 2006",
+     "Bullen 2008",
+     "Gibson 2011"
+    ]
+   }
+  },
+  {
+   "id": "k9",
+   "claim": "Greater housing satisfaction, security and improved domestic relations may improve mental health, but this pathway is not confirmed by quantitative evidence.",
+   "refs": [
+    "b6",
+    "b15",
+    "b17",
+    "b23",
+    "l9",
+    "l28",
+    "l29",
+    "l30",
+    "a6"
+   ],
+   "where": "Sections 3.4, 3.8 and 3.9; Figures 1–3",
+   "verdict": {
+    "raw": "There was little evidence from the quantitative studies of improved mental health ... improvements in mental health and wellbeing would appear to be linked to other aspects of housing improvement, such as increased housing satisfaction, increased usable space, and improved domestic relations. However, these links are not confirmed by quantitative assessments of impacts on mental health; this is due to a lack of relevant data rather than an absence of a reported effect.",
+    "scale": "insufficient",
+    "quote": "these links are not confirmed by quantitative assessments",
+    "page": 8,
+    "studies": [
+     "Bullen 2008",
+     "Ellaway 2000",
+     "Gibson 2011"
+    ]
+   }
+  },
+  {
+   "id": "k10",
+   "claim": "Housing-led renewal and changes in housing design can improve the immediate environment and reduce exposure to antisocial behaviour, but neighbourhood and community effects are mixed.",
+   "refs": [
+    "b5",
+    "b8",
+    "l5",
+    "l8"
+   ],
+   "where": "Sections 3.6 and 3.7; Figure 2",
+   "verdict": {
+    "raw": "Residents reported improved transport, but also used the opportunity to comment on the limited changes effected by the investment ... Residents moving from a flat to a house with a front and back door, and a private garden reported reduced exposure to anti-social behaviour, but there were mixed reported of effects on neighbourliness and a sense of community.",
+    "scale": "partly",
+    "quote": "reduced exposure to anti-social behaviour",
+    "page": 6,
+    "studies": [
+     "Rogers 2008",
+     "Gibson 2011"
+    ]
+   }
+  },
+  {
+   "id": "k11",
+   "claim": "Health improvements following warmth improvements can reduce absences from school or work, especially absences related to asthma.",
+   "refs": [
+    "b9",
+    "b10",
+    "b21",
+    "l31",
+    "l32"
+   ],
+   "where": "Sections 3.3 and 4.1; Figures 1 and 3",
+   "verdict": {
+    "raw": "Three studies presented quantitative data reporting a reduction in time off work or school following the warmth improvements ... In one study the reduction in absences due to asthma was statistically significant, but reductions in absences due to other causes were not statistically significant.",
+    "scale": "partly",
+    "quote": "the reduction in absences due to asthma was statistically significant",
+    "page": 5,
+    "studies": [
+     "Somerville 2000",
+     "Howden-Chapman 2007",
+     "Howden-Chapman 2008",
+     "Free 2010"
+    ]
+   }
+  },
+  {
+   "id": "k12",
+   "claim": "Better opportunities to study and reduced absences may improve education and employment, creating longer-term health benefits not yet established by the evaluations.",
+   "refs": [
+    "b18",
+    "b21",
+    "b22",
+    "l33",
+    "l34",
+    "a6"
+   ],
+   "where": "Sections 4.1, 4.2 and 5; Figure 3",
+   "verdict": {
+    "raw": "This may lead to improved educational achievement and socio-economic status, and consequently to health benefits in the longer term. ... Despite the lack of clear health impacts within the timescale of existing evaluations, reported impacts on socio-economic determinants of health point to the potential for longer term impacts on health following housing improvement.",
+    "scale": "insufficient",
+    "quote": "point to the potential for longer term impacts on health",
+    "page": 10,
+    "studies": [
+     "Mueller and Tighe 2007",
+     "Lahelma 2004",
+     "Somerville 2000",
+     "Howden-Chapman 2007",
+     "Howden-Chapman 2008",
+     "Free 2010"
+    ]
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "The health impacts of housing improvement may not be assumed. However, best available evidence indicates that housing which is an appropriate size for the householders and is affordable to heat is linked to improved health, and may promote improved social relationships within and beyond the household.",
+   "scale": "partly",
+   "quote": "The health impacts of housing improvement may not be assumed.",
+   "page": 9,
+   "studies": []
+  },
+  "weakest_links": [
+   "a6",
+   "l28",
+   "l29",
+   "l30",
+   "l33",
+   "l34"
+  ],
+  "strongest_links": [
+   "a2"
+  ],
+  "summary": "The models are preliminary empirically based theories, not independent tests of a completed theory. Appropriate domestic space and affordable warmth are linked to health and social benefits, with health improvements most likely when meaningful warmth improvements reach people with inadequate warmth and existing respiratory disease. Short-term changes in income, use of the home and domestic relationships may mediate health effects. Evidence linking these socio-economic changes to subsequent health is limited, largely qualitative, and sometimes based on very few participants. Longer-term education, employment and health effects remain potential pathways. There is no pooled estimate of effect size, and implementation and exposure changes were poorly reported.",
+  "recommendations": [
+   "Further test and refine the preliminary theory to improve its specificity and reliability.",
+   "Use the theory to develop prespecified hypotheses and select primary, secondary and intermediate outcomes for future evaluations.",
+   "Assess implementation and actual changes in exposure to poor housing conditions rather than assuming that investment produces meaningful improvement.",
+   "Target residents with the greatest potential to benefit, deliver meaningful improvements in thermal comfort, tailor space and design to household needs, and avoid detrimental effects on disposable income.",
+   "Accumulate evidence from future evaluations and syntheses of other evidence sources, including longer-term effects.",
+   "Retain both quantitative and qualitative evidence, with qualitative evidence helping identify possible mechanisms."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/housing_health_toc_2014_p5.png', 'downloads/pages/housing_health_toc_2014_p7.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "Three distinct models are reported: Figure 1, warmth and energy efficiency (page 5); Figure 2, housing-led neighbourhood renewal (page 6); and Figure 3, the overall model (page 7). Figure 3 is transcribed because it is the synthesis-wide theory discussed in the conclusions. Findings from the specific models are retained in key claims.",
+   "The Figure 2 page image was not supplied. Its findings are available in the document text, but its boxes and arrows have not been transcribed.",
+   "The overall model has no explicit layer headings. Layers are mapped from temporal position and the accompanying description; health outcomes are short-term because the evaluations cover approximately three months to three years.",
+   "The broad left-hand branching line is treated as arrows from the improved-housing box, not as a container.",
+   "Solid arrows receive the figure's 'Links supported by data' verdict. This indicates reported evidence, not consistent effects across studies or strong causal identification. Dotted arrows receive 'insufficient' for explicit linkage because the source distinguishes them as implied or hypothesised; they are visibly drawn arrows, not transcription inferences.",
+   "The crowded routes from energy efficiency and house size/design to usable indoor space, disposable income to diet, and emotional security to mental health have medium transcription confidence.",
+   "The framed contextual note below Figure 3 is retained as a context box; it is not a container and has no arrows.",
+   "Figure 3 does not name studies on individual arrows. Link verdict study lists are therefore empty; studies explicitly discussed for the relevant findings are retained in key claims and assumptions.",
+   "The source does not formally rank strongest and weakest steps. The conclusion IDs identify its clearest explicit contrast: support for targeting those in greatest need versus limited confirmation of socio-economic-to-health and longer-term pathways.",
+   "The case identifier uses 2014, matching online availability and copyright; the bibliographic publication year is 2015.",
+   "The supplied material does not define the A/B/C case evidence-level coding; B is used for this empirical synthesis, not as a transcription of the article's study-quality grades."
+  ],
+  "source_sha256": "06ddd5403506637c1c6179a0cffbdabec72e46ca96c561c7171115411180c95e",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

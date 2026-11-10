@@ -1,0 +1,425 @@
+{
+ "meta": {
+  "id": "family_hubs_innovation_fund",
+  "title": "Family Hubs Innovation Fund Evaluation: Final report",
+  "organisation": "Ecorys UK, Clarissa White Research, and Starks Consulting; Department for Education",
+  "year": 2023,
+  "country": "England",
+  "topic": "Integrated family services",
+  "intervention_type": "service",
+  "timing": "retrospective",
+  "doc_url": "https://assets.publishing.service.gov.uk/media/6567764dcc1ec5000d8eef10/Family_Hubs_Innovation_Fund_Evaluation_Ecorys_Final_Report.pdf",
+  "landing_url": "https://assets.publishing.service.gov.uk/media/6567764dcc1ec5000d8eef10/Family_Hubs_Innovation_Fund_Evaluation_Ecorys_Final_Report.pdf",
+  "licence": "",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "ex_post_evaluation",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Improve the quality, accessibility and efficiency of family services and improve outcomes for children and families.",
+  "population": "Children and young people from pre-birth to age 19, extending to age 25 for families with SEND, and their families.",
+  "place": "Essex, England.",
+  "time_horizon": "Operational from 2017 under a seven-year contract with a possible three-year extension; evaluated using evidence gathered between April 2021 and March 2023.",
+  "intervention": "The Essex Child and Family Wellbeing Service, commissioned from HCRG Care Group in partnership with Barnardo’s, delivers integrated public health and early help services through 12 hubs and 26 delivery sites. In West Essex it also delivers children’s specialist health services. Support is universally available, with additional targeted support according to need; no fixed individual dosage is specified.",
+  "context": "A locally initiated transformation of existing family services, predating the more recent national family hubs transformation programmes. The service combines former Children’s Centres and health provision within a commissioned model.",
+  "outcome_first": "Develop a theory of change for improving the accessibility, quality and efficiency of services and outcomes for children and families in Essex, England. Cover children from pre-birth to age 19, extending to age 25 for families with SEND.",
+  "intervention_first": "Develop a theory of change for the Essex Child and Family Wellbeing Service in Essex, England. It provides integrated family services through local hubs and delivery sites for children from pre-birth to age 19, extending to age 25 for families with SEND, with the aim of improving service accessibility, quality, efficiency and family outcomes."
+ },
+ "containers": [],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "Need: Existing issues and rationale for the Integrated Family Hub model\n• Evidence of fragmented commissioning and underutilised services\n• Feedback from families included: not getting help at the right time, feeling isolated/struggling to make friends, not enough value from services already commissioned, conflicting advice from professionals, parents feel comfortable in a few places, professional advice can be hard to implement at home\n• Feedback from primary research highlighted a lack of support within the community and social isolation as particular issue for families in Essex.",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b2",
+   "label": "Vision: overall goal(s) or long-term impact\n• LA aspiration was to see: 1) long-term generational change within the families they have supported. 2) In the short-term improvements in school readiness reflected in feedback from head-teachers and in administrative data.\n• ECFWS Vision was “to provide first class universal public health and care and specialist community health services to the CYP and families of Essex”. The ECFWS Aims were needed to improve the lives of CYP, families and communities in\n○ Promote CYP and family's physical and mental health and wellbeing,\n○ Create home and community environments where CYP and families are safe and can learn, grow, and thrive,\n○ Be resourceful, self-supportive and supportive of others to build resilience and be future proof",
+   "layer": "vision",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b3",
+   "label": "Service design\n• Early Years Review (2015-16)\n• Collaborative dialogue with local providers\n• Evidence informed: including local data analysis and commissioned research\n• Commissioned service in July 2016 – competitive process. No service specification to allow for an emphasis on outcomes\nFunding\n• Fixed price 10-year contract\n• 3 main components:\n• Essex CC – 1) Public Health Grant, 2) Funding that was previously given to Children Centers and Sure Start\n• West Essex NHS CCG: 3) CCG Committee\n• Additional - Feel the Difference Fund (up to 10K grants) available from Virgin Care Corporate Body. FH staff can bid for specific health and social innovation projects to build community assets\nKey stakeholders\n• Lead Commissioner: Essex CC. Co-commissioner: West Essex NHS CCG\n• Provider: Virgin Care in partnership with Barnardos\n• Sub-contracted partners: Home Start Essex, Home-Start North Essex, Youth Enquiry Service, Community 360\n• Wider health partners: Acute trusts, maternity, immunisation services, children community health services and primary care (i.e., GPs, SALT, pediatrics, occupational therapists)\nFamily Hub structure\n• Essex Child and Family Wellbeing Service (ECFWS). 10-year contract: integrated pre-birth to 19, early help. Plus, children’s community health (in West Essex)\n• 12 Family Hubs (FH): across 4 Quadrants (Mid, North, South, West)\n• 26 Family Hub Delivery Sites (DS): flexible location typically based closer to families\nWorkforce\n• 29 Healthy Family Teams (HFTs) multi-disciplinary provides support up to 19. Based in FH/DS but also outreach in family homes, schools, and community spaces (GP practices, libraries, and village halls)\n• Community engagement workers: facilitate parent-led and community groups\n• Service champions (happening organically) parents promoting services and engaging other parents",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b4",
+   "label": "Service overview\n• Integrated services: Health visiting, School nursing, Family Support, Safeguarding Children Team, Looked After Children Team. In West Essex: Children’s Community Health provision (community pediatrics, SALT, allergy, incontinence, physiotherapy, occupational therapy, and specialist community nursing.)\n• Three tiers of support: Universal, Universal plus (UP) (outcome measure work) (e.g., family support interventions) without needing a separate referral. Universal partnership plus (UPP) (outcome measure work) families needing additional support and where other partners (e.g., social care) are involved.\n• Healthy Schools Programme (Essex CC)\n• National Child Measuring Programme (NHS West Essex CCG).\n• Community asset building – communities and schools\nTarget groups\n• All CYP eligible. Aged 0 to 19 (SEND families aged 0 - 25). Includes CYP with early signs of neurodevelopmental conditions, < 5s not school ready.\n• Systematic approach for identifying 17 priority groups (individual or family vulnerabilities).\nPractice model\n• Work in partnership with CYP/families to set goals and create an outcome care plan.\n• Promote behavior change in families using a coaching model of personalised care\n• Build relationships with families in community to proactively engage families with additional needs/vulnerabilities.\n• Outcome activity discussed with practitioners at 1-1s and is part of appraisal process\nMonitoring\n• Outcome Measures Framework (23 measures for the County, +5 specific in West Essex)\n• 40 locally agreed KPIs. 45 public health (national) KPIs (several metrics linked to national targets, e.g., mandated assessments)\n• Monthly outcome report produced by Business Informatics Team\n• Single monitoring system (SystmOne)\nGovernance\n• Independent Advisory Board (AB) meets 3-4 times a year to agree FH/DS objectives and development plans. Mix of KPI and family feedback inform AB reviews. Monitored against outcomes framework.\n• Regular service design meetings as opportunity to make small adjustments to achieve better",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b5",
+   "label": "• Parents receive universal support e.g., transition to parenthood, maternal and family mental health, breastfeeding, health weight and nutrition, health literacy, managing minor illnesses, reducing accidents, hep with CYP being school ready.\n• Parents offered evidence-based parent support\n• Priority group dashboard illustrating number of families with 3/4/5 priorities and informs services offer\n• One care plan (UP/UPP families) - reviewed and updated to track progress towards goals (includes social care reviews if relevant)\n• Practitioners co-creating and co-delivering approaches with parents\n• Parents appropriately accessing community-led and peer support.\n• ECFWS well connected and integrated with community organisations, schools, wider partner services",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b6",
+   "label": "Outcome Measures Framework: 28 CYP outcome areas, including: loneliness, child safety, school readiness, emotional wellbeing, confidence in managing health related conditions",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b7",
+   "label": "Children and families\n• Motivated and confident to manage own health and care (parent and child)\n• Well informed, able to make good choices (parent)\n• Know where to get help (parent)\n• Supporting one another (parent)\n• Increase in positive choices after support (child - amongst those identified as at risk)\n• Feel less lonely after support (child and parent)\n• Improved experience of services for sick children, disabled children, and those with complex needs (West Essex)\n• Experience safe and high-quality transition to adult services for sic and disabled children, and those with complex needs (West Essex)",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b8",
+   "label": "Workforce\n• Increased focus on families and their strengths\n• Increased trusting relationships with families\n• Increased shared vision of outcomes and success\n• Improved skill set (competences) and knowledge\n• Integrated team working around one care plan (just say story once)",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "The evaluation also found signs of higher awareness and confidence in family hubs and in levels of service integration among the workforce within the mature hub models.",
+    "scale": "partly",
+    "quote": "signs of higher awareness and confidence in family hubs",
+    "page": 130,
+    "studies": []
+   }
+  },
+  {
+   "id": "b9",
+   "label": "System (financial, capacity/demand)\n• Coherent commissioning focused on families’ needs and outcomes\n• Increased workforce flexibility\n• Multi-disciplinary assessment and planning – reduce duplication, improve communication and family experience (West Essex)",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "Qualitative evidence of more joined-up strategy, governance and partnership working arrangements was supported by quantifiable savings. This was especially so in the case of Essex",
+    "scale": "supports",
+    "quote": "more joined-up strategy, governance and partnership working arrangements",
+    "page": 130,
+    "studies": []
+   }
+  },
+  {
+   "id": "b10",
+   "label": "Children\n• Feel safe (not specified)\n• Reduction/mitigation of risks (identified by practitioner)\n• Increased school readiness (amongst those at risk)\n• Healthy weight by year 6 (amongst those overweight at reception)\n• Ready for next stage of life by 19 (amongst those identified as at risk, SEND and in care/care leavers)\n• Improved emotional wellbeing (amongst those at-risk, with parents with poor mental health)\n• Strong attachment to at least one adult/other person (amongst those at-risk - by 6-8 weeks post-natal, 2 years, and statutory school age)\n• Avoid hospital for health care (child – West Essex)\n• Confident and competent to manage their health condition at home (West Essex)\nParents\n• Feel their CYP are safe (not specified)\n• Improved peri-natal emotional wellbeing (at risk groups, plus parents with CIN or CPP)\n• Increased positive lifestyle choices (amongst those identified as at risk e.g., teenage parents)\n• Feel confident and competent to manage child’s conditions at home (West Essex)\nFamilies\n• Increased resilience",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b11",
+   "label": "System (financial, capacity/demand)\n• Increased capacity in the wider system due to better integrated and joined up working\n• Reduced need for professional support/powerful peer support",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "assumption",
+   "text": "Early and ongoing collaboration between commissioner and provider(s) in the service design.",
+   "links": [],
+   "from_layer": "input",
+   "to_layer": "activity",
+   "verdict": null
+  },
+  {
+   "id": "a2",
+   "kind": "assumption",
+   "text": "Flexibility in the contract to update and refine the service and outcomes framework as needed (awareness that contextual factors may change over the 10-year duration of the contract)",
+   "links": [],
+   "from_layer": "input",
+   "to_layer": "activity",
+   "verdict": null
+  },
+  {
+   "id": "a3",
+   "kind": "assumption",
+   "text": "Strong working relationships between the provider (Virgin Care and Barnardos) and LA commissioner. Regular meetings to discuss success and challenging factors and ways to improve delivery.",
+   "links": [],
+   "from_layer": "input",
+   "to_layer": "activity",
+   "verdict": null
+  },
+  {
+   "id": "a4",
+   "kind": "assumption",
+   "text": "Strategic support within the LA on investing in early intervention with families to support better outcomes longer term",
+   "links": [],
+   "from_layer": "activity",
+   "to_layer": "outcome_long",
+   "verdict": null
+  },
+  {
+   "id": "a5",
+   "kind": "risk",
+   "text": "Impact of C-19 pandemic on workforce. E.g., high volume of staff leaving roles or the profession due to changing priorities",
+   "links": [],
+   "from_layer": "input",
+   "to_layer": "activity",
+   "verdict": null
+  },
+  {
+   "id": "a6",
+   "kind": "risk",
+   "text": "Proximity to London can affect staff retention, particularly in West Essex",
+   "links": [],
+   "from_layer": "input",
+   "to_layer": "activity",
+   "verdict": null
+  },
+  {
+   "id": "a7",
+   "kind": "risk",
+   "text": "Some uncertainty around NHS structures and funding, which may affect sustainability of CCG commitment (but a low risk).",
+   "links": [],
+   "from_layer": "input",
+   "to_layer": "activity",
+   "verdict": null
+  }
+ ],
+ "context": [
+  "The five LA models differed in target populations, service infrastructure, historical partnerships and maturity.",
+  "The pandemic and other programmes complicate attribution of population-level changes to family hubs.",
+  "In most models developed from Children’s Centres, provision for ages 0–5 dominated and the 5–19 offer was less developed.",
+  "The evaluation preceded the more recent national family hubs transformation programmes."
+ ],
+ "key_claims": [
+  {
+   "id": "kc1",
+   "claim": "Integrated whole-family support helps families receive effective help, but timely access depends on clear routes into services and specialist capacity.",
+   "refs": [
+    "b4",
+    "b5",
+    "b7"
+   ],
+   "where": "Contribution analysis, p110; Table 11 referenced but not supplied",
+   "verdict": {
+    "raw": "The evidence across LAs suggests that whole families received effective support from family hubs services. However, there was still some way to go in helping families to receive help quickly. Families reported not knowing where and how to get the help they needed prior to being referred into family hubs, particularly those with complex needs and children with SEND. Families reported long waitlists for specialist partner services.",
+    "scale": "partly",
+    "quote": "whole families received effective support",
+    "page": 110,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc2",
+   "claim": "Training, shared planning and integrated working build workforce capability and coordination, although adapting roles can be difficult.",
+   "refs": [
+    "b4",
+    "b8"
+   ],
+   "where": "Contribution analysis, p110; conclusions, p130",
+   "verdict": {
+    "raw": "Workforces reported being better integrated with other professionals and partner services, compared with prior service arrangements. Workforces had received training in relationship-oriented practices, common care planning and shared case management discussions. In some (but not all) LAs workforces also benefited from shared case management systems, which provided efficient data and information sharing across professionals. However, multi-disciplinary working and changes to job roles and responsibilities as a result of family hub transformation was challenging for workforces to initially adapt to.",
+    "scale": "partly",
+    "quote": "better integrated with other professionals and partner services",
+    "page": 110,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc3",
+   "claim": "Mature hub arrangements support clearer referral pathways, appropriate training and supervision, and a learning culture.",
+   "refs": [
+    "b4",
+    "b8"
+   ],
+   "where": "Conclusions: Evidencing and valuing change, p130",
+   "verdict": {
+    "raw": "Based on the survey data, practitioners from mature hubs had a greater propensity to report that referral pathways are clearly understood by different professionals and agencies across the LA, and that family services have been integrated across the 0-19 range (up to 25 years for SEND). They were also more likely to report positively on survey items relating to the appropriateness of training and supervision, and on the presence of a culture of learning and reflective practice. These findings must be caveated appropriately, given that they relate to a comparison of 5 specific local family hub models.",
+    "scale": "partly",
+    "quote": "practitioners from mature hubs had a greater propensity to report that referral pathways are clearly understood",
+    "page": 130,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc4",
+   "claim": "Integrated commissioning and partnership working improve system coordination, capacity and efficiency.",
+   "refs": [
+    "b3",
+    "b4",
+    "b9",
+    "b11"
+   ],
+   "where": "Contribution analysis, p110; conclusions, p130",
+   "verdict": {
+    "raw": "There was evidence of positive system changes and efficiencies in commissioning and capacity across LAs as a result of family hubs service arrangements.",
+    "scale": "supports",
+    "quote": "positive system changes and efficiencies in commissioning and capacity",
+    "page": 110,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc5",
+   "claim": "Family hub integration generates savings that can be redeployed, but estimated savings from family benefits depend on uncertain impacts.",
+   "refs": [
+    "b9",
+    "b11"
+   ],
+   "where": "Executive summary: Value for money achieved to date, p16",
+   "verdict": {
+    "raw": "Value for money analysis estimated savings of between approximately £37 million and £68 million across the family hubs in this study. Most of these savings related to estimated benefits from 1 family hub model (a commissioned service). However, efficiency savings were identified across most models. These savings are in effect cashable and can, and in many cases have, been redeployed to deliver additional services. The estimated savings resulting from benefits (as opposed to economies or efficiencies) were based on findings from the impact evaluation. As the impact evaluation described these benefits as potential benefits or positive signs, these benefits may or may not be realised in practice.",
+    "scale": "partly",
+    "quote": "these benefits may or may not be realised in practice",
+    "page": 16,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc6",
+   "claim": "Whole-system early help and signposting increase take-up of funded early years education.",
+   "refs": [
+    "b4",
+    "b5",
+    "b10"
+   ],
+   "where": "QED findings summarised on p16; conclusions, pp130–131",
+   "verdict": {
+    "raw": "Both Leeds and Essex saw positive trends in the percentage of 2-year-old children benefiting from funded early years education over the period corresponding with family hubs transformation, supported by qualitative evidence of family hub whole system approaches to strengthen Early Help infrastructure and to signpost and support awareness and take-up of early years education. While statistically significant results were found on 2 of the indicators for Essex: the percentage of 3-4-years-old children benefiting from funded early year education, and the percentage of Key Stage 4 children going to or remaining in education or employment, similar results were found in comparable (statistical neighbour) LAs",
+    "scale": "partly",
+    "quote": "Both Leeds and Essex saw positive trends",
+    "page": 130,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc7",
+   "claim": "Family hub support improves young people’s progression into education or employment.",
+   "refs": [
+    "b10"
+   ],
+   "where": "QED findings summarised on p16; conclusions, pp130–131",
+   "verdict": {
+    "raw": "Statistically significant (positive) differences were found on the percentage of 3-4-years-old children benefiting from funded early year education, and on the percentage of Key Stage 4 children going to or remaining in education or employment. As statistical neighbour LAs showed similar trends, however, it is not possible to attribute these effects causally to family hubs.",
+    "scale": "insufficient",
+    "quote": "it is not possible to attribute these effects causally to family hubs",
+    "page": 16,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc8",
+   "claim": "Whole-family partnership working across education and prevention services reduces youth offending.",
+   "refs": [],
+   "where": "Leeds findings discussed in conclusions, pp130–131",
+   "verdict": {
+    "raw": "Staff identified a strong contribution of this whole family approach towards falling rates of first-time entrants to the youth justice system over this period. In Leeds, no statistically significant impacts were detected across the measures selected for the impact evaluation despite the positive trends in the data described above.",
+    "scale": "partly",
+    "quote": "Staff identified a strong contribution",
+    "page": 130,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc9",
+   "claim": "Integrated family services improve wider child and family health, safety and wellbeing outcomes.",
+   "refs": [
+    "b7",
+    "b10"
+   ],
+   "where": "QED summary, p16; impact evaluation scope, p101; conclusions, pp130–131",
+   "verdict": {
+    "raw": "Although there was no impact on any of the other indicators, there were positive signs where some indicators were moving in the right direction or maintaining good levels.",
+    "scale": "insufficient",
+    "quote": "there was no impact on any of the other indicators",
+    "page": 16,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc10",
+   "claim": "Earlier family hub support reduces progression to statutory child protection and care services.",
+   "refs": [],
+   "where": "QED impact for Sefton family hubs, p110; future evaluation plan, p142",
+   "verdict": {
+    "raw": "The analysis suggested that there was no impact in any of the 3 indicators. However, it is likely that impact cannot be detected yet for Sefton, as its family hub development has been slower.",
+    "scale": "insufficient",
+    "quote": "it is likely that impact cannot be detected yet for Sefton",
+    "page": 110,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc11",
+   "claim": "Shared information infrastructure, analytical capacity and staff buy-in enable outcome-led service improvement.",
+   "refs": [
+    "b4",
+    "b6"
+   ],
+   "where": "Measurement and service development discussion, p58; conclusions, p125",
+   "verdict": {
+    "raw": "They stressed how an investment in the right infrastructure (e.g., shared information management system, dedicated data team) coupled with initiatives to support commissioner and staff buy-in (e.g., training, ongoing support) to agree, understand and use the outcomes framework, had been critical to embedding an outcome and data driven approach. However, there remained a gap in clear evidence about whether targeted interventions translated into meaningful changes for families.",
+    "scale": "partly",
+    "quote": "critical to embedding an outcome and data driven approach",
+    "page": 58,
+    "studies": []
+   }
+  },
+  {
+   "id": "kc12",
+   "claim": "Sustained implementation and sufficient follow-up are necessary for service transformation to produce detectable population-level outcomes.",
+   "refs": [
+    "a2",
+    "a4",
+    "b2"
+   ],
+   "where": "Executive summary, p16; conclusions, pp125 and 131; Sefton future evaluation plan, p142",
+   "verdict": {
+    "raw": "The evaluation established that there are limitations to the use of quasi-experimental designs for family hubs during the formative stages in their development. This is due to the time required for implementing change programmes, and the lag in these changes registering detectable effects within the administrative data at a population level (a factor which is likely to have affected the results for Leeds in particular, given the more recent roll-out of the local family hubs model compared with Essex).",
+    "scale": "insufficient",
+    "quote": "the lag in these changes registering detectable effects",
+    "page": 131,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "The evaluation paints a generally positive overall picture regarding outcomes. The triangulated evaluation data gives promising signs of improvements at system and workforce levels among the mature hubs. Despite these positive signs, however, the use of quasi-experimental methods produced limited evidence of impact when compared with other LAs.",
+   "scale": "partly",
+   "quote": "limited evidence of impact when compared with other LAs",
+   "page": 130,
+   "studies": []
+  },
+  "weakest_links": [],
+  "strongest_links": [],
+  "summary": "Evidence was most promising for system and workforce improvements in mature hubs, supported by qualitative findings and quantifiable savings. Families received effective support, but routes into help and waits for specialist services remained problems. Administrative indicators showed encouraging trends, particularly for engagement and service uptake, but comparative impact analysis provided limited evidence that family hubs caused these changes. The evaluation was an early and limited snapshot, with substantial challenges concerning model comparability, outcome measurement, maturity and attribution.",
+  "recommendations": [
+   "Allow sufficient time for complex systems change, with ongoing monitoring, evaluation and adjustment.",
+   "Use local theories of change and data that reflect specific local needs and service configurations.",
+   "Improve reliable measures of family functioning, wellbeing and resilience, and standardised quality and service improvement measures for Early Help.",
+   "Support outcome-led commissioning with analytical capacity, information systems, tools and staff training.",
+   "For Sefton, conduct a more comprehensive future impact analysis using more indicators and years of data, accounting for gradual development and cumulative effects."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/family_hubs_innovation_fund_p136.png', 'downloads/pages/family_hubs_innovation_fund_p23.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "Figure 33 (Essex, p136) is transcribed because Essex has the most mature model and the fullest outcome and economic evidence in the supplied findings. Other distinct LA diagrams are Figure 34 Leeds (p137), Figure 35 Sefton (p138), Figure 36 Suffolk (p139), and Figure 37 Bristol (p140). Only the Essex figure image was supplied.",
+   "Figure 33 is a column-based diagram with no drawn causal arrows. Links and containers are therefore empty; causal findings are retained as key claims rather than invented links.",
+   "The supplied p23 image is a method overview (Figure 2), not a family hub theory of change, and is not transcribed.",
+   "The moderators are presented together across the lower part of the figure, not attached to specific causal steps. Their layer placements here indicate their apparent scope, rather than drawn connections. They are recorded as assumptions and risks, not duplicated as a box.",
+   "The Outcome Measures Framework is drawn as a separate narrow box spanning the two result columns. It is assigned outcome_short, but it applies to both immediate and medium-term changes.",
+   "The final governance bullet in the activities box ends at 'achieve better' in the supplied figure and text; it has not been completed.",
+   "Table 11 and its criterion-level High/Medium/Low scores and totals were not supplied. The thresholds in the notes cannot establish any LA-specific verdict, and no such scores have been inferred.",
+   "No source ranking of individual causal links or assumptions as strongest or weakest was supplied; those lists are empty.",
+   "Detailed QED results in Table 10 and the full outcome indicator list in Table 9 were not supplied. Key claims preserve the aggregate findings available in the excerpts without inventing indicator-specific results.",
+   "The figure uses Virgin Care and describes a 10-year contract, while the service description uses HCRG Care Group and specifies seven years with a possible three-year extension. Source wording is retained in the boxes.",
+   "The full title page, final report URL, licence and evidence-level rubric were not supplied. Bibliographic details are drawn from contextual references; evidence_level B is provisional.",
+   "Figure pages records all five ToC pages identified in the notes; the transcribed diagram itself is on p136."
+  ],
+  "source_sha256": "280fb90587e17c52595b8b46a0b36b16027cbee95c8357cec2ecdc8f18a8a644",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

@@ -1,0 +1,8 @@
+{
+ "intervention_first": "A minimum price per unit of alcohol, set by law, for all alcohol sold in Scotland.",
+ "outcome_first": "Reduce alcohol-related deaths, hospital admissions and wider harms across the population of Scotland.",
+ "based_on": "The policy as described in the synthesis report (via the rich brief in case.draft.json); Figure 1 is the prospective theory. Source PDF not re-read.",
+ "notes": "Scotland kept: a national policy, which a user would name. The price level (50p) and start date left out as day-one detail; they belong to the rich brief. Leakage: the evaluations of this policy are themselves the evidence, so the year cut-off (before May 2018) is what guards this case.",
+ "written_by": "Claude (lead session); not yet checked by the owner",
+ "date": "2026-11-09"
+}

@@ -1,0 +1,688 @@
+{
+ "meta": {
+  "id": "dcms_opportunity_mission_toc",
+  "title": "DCMS Sector Theory of Change for the Opportunity Mission",
+  "organisation": "Department for Culture, Media and Sport; Ipsos",
+  "year": 2025,
+  "country": "United Kingdom",
+  "topic": "Children and young people's opportunity and social mobility through participation in DCMS sectors",
+  "intervention_type": "policy",
+  "timing": "prospective",
+  "doc_url": "https://www.gov.uk/government/publications/research-report-theory-of-change-dcms-contribution-to-the-opportunity-mission/theory-of-change-dcms-contribution-to-the-opportunity-mission",
+  "landing_url": "https://www.gov.uk/government/publications/research-report-theory-of-change-dcms-contribution-to-the-opportunity-mission",
+  "licence": "",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "evidence_synthesis",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Break the link between a child's background and their future success, particularly by helping children achieve and thrive at school and supporting progression to good employment, education and training.",
+  "population": "Children and young people, with particular interest in those with special educational needs and disabilities, women and girls, ethnic minorities, lower socioeconomic groups and disadvantaged regions.",
+  "place": "DCMS policy context in the United Kingdom; the supplied extract does not specify the precise territorial coverage of the programmes.",
+  "time_horizon": "School years through adulthood; no single programme duration or impact deadline is specified.",
+  "intervention": "A portfolio of culture and creative industries programmes, sport and physical activity programmes, and other youth programmes. Provision can be voluntary or compulsory and inside or outside educational settings; there is no common dosage.",
+  "context": "The Opportunity Mission recognises multiple influences on children's development and progression. Wider socioeconomic conditions and the availability and quality of public services affect social mobility but are not directly addressed by these programmes. Participation and provision vary across groups and places.",
+  "outcome_first": "Develop a theory of change for breaking the link between children's backgrounds and their future success in the UK. Focus on children and young people during their school years and their progression into adulthood, including underserved groups and disadvantaged places.",
+  "intervention_first": "Develop a theory of change for DCMS's portfolio of cultural, sport and physical activity, and other youth programmes for children and young people in the UK. Explain how this portfolio could support the Opportunity Mission's aim of breaking the link between background and future success."
+ },
+ "containers": [
+  {
+   "id": "c_outputs",
+   "label": "",
+   "layer": "output"
+  },
+  {
+   "id": "c_mediators",
+   "label": "",
+   "layer": "outcome_short"
+  },
+  {
+   "id": "c_results",
+   "label": "",
+   "layer": "outcome_short"
+  },
+  {
+   "id": "c_nonhealth_outcomes",
+   "label": "",
+   "layer": "outcome_short"
+  }
+ ],
+ "boxes": [
+  {
+   "id": "b01",
+   "label": "Regulation",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b02",
+   "label": "Funding",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b03",
+   "label": "Facilities and spaces",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b04",
+   "label": "Information",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b05",
+   "label": "Trusted adults",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b06",
+   "label": "Workforce",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b07",
+   "label": "Subsidising facilities or equipment",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b08",
+   "label": "Recruiting, training and encouraging volunteers and workforce",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b09",
+   "label": "Reduce cost of participation",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b10",
+   "label": "Increase awareness and targeting delivery to underserved groups",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b11",
+   "label": "Making the case for participation (including via role models)",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b12",
+   "label": "Empowering adults to guide children and young people",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b13",
+   "label": "Empower educational settings to offer extracurricular activity",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b14",
+   "label": "Amending curriculum and/ or local authority requirements",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b15",
+   "label": "Convening partners",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b16",
+   "label": "Adapting programmes to meet local needs and interests",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b17",
+   "label": "Greater quantity of high quality facilities, resources and activities (in underserved areas)",
+   "layer": "output",
+   "container": "c_outputs",
+   "verdict": null
+  },
+  {
+   "id": "b18",
+   "label": "Increased volunteering capacity and capability",
+   "layer": "output",
+   "container": "c_outputs",
+   "verdict": null
+  },
+  {
+   "id": "b19",
+   "label": "More children and young people able to afford participation",
+   "layer": "output",
+   "container": "c_outputs",
+   "verdict": null
+  },
+  {
+   "id": "b20",
+   "label": "More children and young people from interest group are aware of participation opportunities",
+   "layer": "output",
+   "container": "c_outputs",
+   "verdict": null
+  },
+  {
+   "id": "b21",
+   "label": "More children and young people from interest groups participating (compulsory)",
+   "layer": "output",
+   "container": "c_outputs",
+   "verdict": null
+  },
+  {
+   "id": "b22",
+   "label": "More children and young people from interest groups participating (voluntary)",
+   "layer": "output",
+   "container": "c_outputs",
+   "verdict": null
+  },
+  {
+   "id": "b23",
+   "label": "More adult participation and engagement",
+   "layer": "output",
+   "container": "c_outputs",
+   "verdict": null
+  },
+  {
+   "id": "b24",
+   "label": "Improved use of existing government, local authority and civil society resources",
+   "layer": "output",
+   "container": "c_outputs",
+   "verdict": null
+  },
+  {
+   "id": "b25",
+   "label": "Improved use of private sector resources",
+   "layer": "output",
+   "container": "c_outputs",
+   "verdict": null
+  },
+  {
+   "id": "b26",
+   "label": "Cohesive local plans",
+   "layer": "output",
+   "container": "c_outputs",
+   "verdict": null
+  },
+  {
+   "id": "b27",
+   "label": "Skills, Cognition, Creativity, Social Capital",
+   "layer": "outcome_short",
+   "container": "c_mediators",
+   "verdict": null
+  },
+  {
+   "id": "b28",
+   "label": "Belonging, Flourishing, Self esteem, Motivation, Self efficacy",
+   "layer": "outcome_short",
+   "container": "c_mediators",
+   "verdict": null
+  },
+  {
+   "id": "b29",
+   "label": "Attainment, Attendance, Higher Education Progression",
+   "layer": "outcome_short",
+   "container": "c_results",
+   "verdict": null
+  },
+  {
+   "id": "b30",
+   "label": "Income, Employment",
+   "layer": "outcome_short",
+   "container": "c_results",
+   "verdict": null
+  },
+  {
+   "id": "b31",
+   "label": "Volunteering, Community, Civic participation, Civic identity, Antisocial behaviour, Violence",
+   "layer": "outcome_short",
+   "container": "c_results",
+   "verdict": null
+  },
+  {
+   "id": "b32",
+   "label": "Wellbeing, Mental Health, Health, Loneliness",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b33",
+   "label": "Enhanced individual thriving and improved educational and employment outcomes for individuals",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b34",
+   "label": "Stronger, more cohesive communities",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b35",
+   "label": "Thriving cultural, sports and youth sectors",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b36",
+   "label": "Reduced generational income persistence",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b37",
+   "label": "Upward income mobility for disadvantaged communities",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b38",
+   "label": "Upward social mobility for disadvantaged communities",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l01",
+   "source": "c_outputs",
+   "target": "c_mediators",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l02",
+   "source": "c_outputs",
+   "target": "b32",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "This review found a strong link between participation in DCMS sectors and health and wellbeing, with the most robust evidence found in relation to youth activities.",
+    "scale": "supports",
+    "quote": "a strong link between participation in DCMS sectors and health and wellbeing",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "l03",
+   "source": "c_mediators",
+   "target": "c_results",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l04",
+   "source": "b32",
+   "target": "c_nonhealth_outcomes",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a01",
+   "kind": "assumption",
+   "text": "The model assumes that the necessary resources are available to deliver the activities and achieve the desired outcomes.",
+   "links": [],
+   "from_layer": "input",
+   "to_layer": "activity",
+   "verdict": null
+  },
+  {
+   "id": "a02",
+   "kind": "assumption",
+   "text": "The Theory of Change assumes that if barriers to participation are addressed, individuals will engage in DCMS sector activities",
+   "links": [],
+   "from_layer": "activity",
+   "to_layer": "output",
+   "verdict": null
+  },
+  {
+   "id": "a03",
+   "kind": "risk",
+   "text": "a lack of sports facilities or youth programmes will create structural barriers to participation within a local area which block the outcomes of the Theory of Change",
+   "links": [],
+   "from_layer": "input",
+   "to_layer": "output",
+   "verdict": null
+  }
+ ],
+ "context": [
+  "Broader socioeconomic conditions and the availability and quality of public services are key determinants of social mobility outside the model's direct scope.",
+  "Costs and other barriers to participation can limit programmes' contribution to opportunity.",
+  "Differences in regional provision can create structural barriers to participation.",
+  "Outcomes are interconnected and may reinforce each other rather than follow a single linear sequence.",
+  "Employment outcomes arise in adulthood, substantially later than many educational outcomes.",
+  "The review uses studies rated Maryland SMS Level 2 or above, but Level 2 does not necessarily prove causation."
+ ],
+ "key_claims": [
+  {
+   "id": "k01",
+   "claim": "Adequate resources and local infrastructure are necessary for programmes to provide opportunities for participation.",
+   "refs": [
+    "b02",
+    "b03",
+    "b07",
+    "b08",
+    "b17",
+    "b18",
+    "a01",
+    "a03"
+   ],
+   "where": "Scope and assumptions; DCMS sector infrastructure",
+   "verdict": {
+    "raw": "a healthy supply of culture, sport and other youth infrastructure is a necessary precondition for the target outcomes and impacts",
+    "scale": "supports",
+    "quote": "a necessary precondition for the target outcomes and impacts",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k02",
+   "claim": "Addressing cost, awareness and other participation barriers is expected to increase engagement, particularly among underserved groups.",
+   "refs": [
+    "b09",
+    "b10",
+    "b11",
+    "b12",
+    "b19",
+    "b20",
+    "b21",
+    "b22",
+    "a02"
+   ],
+   "where": "Scope and assumptions; concluding discussion of underserved groups and areas",
+   "verdict": {
+    "raw": "the findings of this review suggest that the focusing on engagement and participation may have greatest impact where focused on underserved groups who are least likely to be capturing these benefits at present - and underserved areas",
+    "scale": "partly",
+    "quote": "may have greatest impact where focused on underserved groups",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k03",
+   "claim": "Participation improves wellbeing across sectors; evidence for physical health, mental health and reduced loneliness varies by sector and measure.",
+   "refs": [
+    "l02",
+    "b32"
+   ],
+   "where": "Health and wellbeing outcomes; health and wellbeing synthesis; Tables 4.1 and 4.2",
+   "verdict": {
+    "raw": "There is strong evidence of improvements in wellbeing as an outcome of participation across all three sectors. Despite variations in the precise definition used by researchers, in all cases we find evidence of participation in DCMS sector programmes supporting greater happiness and life satisfaction. We find the greatest quantity of research demonstrating this link in relation to sport (4 studies rated SMS 2 or higher), closely followed by culture (3 studies), though the most robust evidence of a link to wellbeing can be found in other youth activities (specifically, mentoring), despite the quantity of research being limited. While there is some evidence of health benefits flowing from cultural participation (1 study) this is significantly less prevalent and less robust than the evidence related to engagement with sport. As with wellbeing, we do find limited but very strong evidence linking other youth activities – namely play groups and cooking classes – and health. We have not identified a robust link between cultural programmes and mental health, though this does not disprove an association, particularly given the likely overlap with wellbeing outcomes for which there is strong evidence. There is limited evidence of the extent to which DCMS activities can tackle loneliness among children and young people, though one very strong study (SMS Level 5) indicates such a link with youth self-care programmes",
+    "scale": "supports",
+    "quote": "There is strong evidence of improvements in wellbeing as an outcome of participation across all three sectors.",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k04",
+   "claim": "Participation supports educational attainment, attendance and higher education progression, but not every sector has evidence for each outcome.",
+   "refs": [
+    "b21",
+    "b22",
+    "b29"
+   ],
+   "where": "Education outcomes; Sections 6.2–6.4; education breakdown-of-evidence table",
+   "verdict": {
+    "raw": "The evidence linking DCMS sector participation with educational outcomes is robust and wide ranging. Cultural activities are strongly associated with improvements in literacy and numeracy, particularly in school-aged children. Sports have a solid evidence base for improving school attendance and engagement, which in turn boosts academic performance. Youth programs show significant evidence in fostering educational aspirations and career readiness. While the outcomes associated with sport and physical activity are the most heavily researched in relation to attainment, there is evidence that programmes across all sectors can meet this key outcome, and the strongest evidence exists in relation to culture programmes. The literature review did not identify any studies with an SMS-level of 2 or higher which demonstrate a link between culture and the creative industries and Attendance. This does not disprove an association with this outcome.",
+    "scale": "supports",
+    "quote": "robust and wide ranging",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k05",
+   "claim": "Participation develops practical, cognitive and socioemotional skills, while evidence for creativity and social capital is more limited.",
+   "refs": [
+    "l01",
+    "b27"
+   ],
+   "where": "Individual skills and knowledge outcomes; Sections 7.2–7.4; Table 7.1; Annex C table 12.4",
+   "verdict": {
+    "raw": "There is compelling evidence for the role of DCMS initiatives in developing essential skills and knowledge. Cultural activities enhance cognitive abilities, literacy, emotional regulation, and creativity. Sports participation develops valuable life skills such as teamwork, communication, and self-discipline. Youth programs contribute to social-emotional learning, communication skills, and critical thinking. The evidence was particularly strong for sports and physical activity, with a wealth of studies demonstrating cognitive and skill development benefits. While the evidence in some areas (namely creativity and social capital) was limited, this is likely to be more reflective of the difficulty of measuring and capturing such outcomes robustly. The literature review, based on a minimum of SMS-level 2, did not identify a robust causal link between youth initiatives (outside of culture and sport) and creativity. This does not disprove an association with this outcome.",
+    "scale": "supports",
+    "quote": "compelling evidence for the role of DCMS initiatives in developing essential skills and knowledge",
+    "page": null,
+    "studies": [
+     "Metelski 2018",
+     "Zhou et al. 2021",
+     "Mecocci et al. 2022",
+     "Fluharty et al. 2023",
+     "Kim et al. 2016",
+     "Carneiro et al. 2024"
+    ]
+   }
+  },
+  {
+   "id": "k06",
+   "claim": "Participation can improve self-esteem, flourishing, belonging, motivation and self-efficacy, with uneven evidence across outcomes and sectors.",
+   "refs": [
+    "l01",
+    "b28"
+   ],
+   "where": "Attitudes, beliefs and values outcomes; Sections 8.2–8.4; Table 8.1",
+   "verdict": {
+    "raw": "There is strong evidence of links between participation in DCMS sector programmes and attitudes, beliefs and values outcomes, with variation in relation to the specific attitudes, beliefs and values within this grouping. There is limited evidence of the links between DCMS sector participation and developing a sense of belonging. There is a wide range of evidence demonstrating the potential for participation in DCMS sector programmes to have a positive effect on individual flourishing and self-esteem. There is a relative lack of evidence in relation to the potential for other youth programmes to contribute to this outcome. There is also strong evidence linking participation in sport and other (non-culture) youth programmes to motivation and self-efficacy. This review did not identify evidence that culture programmes contribute to these outcomes, though as with others, this does not disprove an association.",
+    "scale": "supports",
+    "quote": "strong evidence of links ... with variation",
+    "page": null,
+    "studies": [
+     "Denovan and Dagnall 2023",
+     "Bone et al. 2023",
+     "Owen et al. 2024",
+     "Olivares and Piatak 2021",
+     "See et al. 2017",
+     "Fujiwara et al. 2015"
+    ]
+   }
+  },
+  {
+   "id": "k07",
+   "claim": "Participation can strengthen volunteering, community engagement and civic identity and reduce harmful behaviour, but sector-specific evidence is uneven.",
+   "refs": [
+    "b21",
+    "b22",
+    "b31",
+    "b34"
+   ],
+   "where": "Civic impact outcomes; Sections 9.2–9.4; Table 9.1",
+   "verdict": {
+    "raw": "This review found a moderate link between participation in DCMS sectors and civic impact outcomes, but a lower quantity of evidence to demonstrate those links relative to other outcomes. Across the literature reviewed, there is strong evidence of civic impact outcomes flowing from participation in DCMS sector activities, with 15 studies rated SMS Level 2 or above demonstrating a link. There is strong (SMS Level 3) evidence that participation in culture and sport programmes support increased volunteering among children and young people. The studies reviewed indicated that engaging in any sport increased the likelihood of frequent volunteering by 3%, while involvement in the arts had an even stronger effect. This review did not, however, identify any evidence linking other youth programmes and increased volunteering. There is significant and strong evidence that participation in all three DCMS sectors supports increased community engagement and civic identity. The strongest (SMS Level 5) evidence in this area related to other (non-culture, non-sport) youth initiatives. we did not identify evidenced links to reduced anti-social behaviour and violence through culture and sport programmes",
+    "scale": "partly",
+    "quote": "a moderate link between participation in DCMS sectors and civic impact outcomes",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k08",
+   "claim": "Participation may improve adult employment and income, but direct causal evidence is sparse and absent for cultural programmes.",
+   "refs": [
+    "b21",
+    "b22",
+    "b30"
+   ],
+   "where": "Employment outcomes; Sections 10.2–10.4; Table 10.1; employment evidence-strength breakdown",
+   "verdict": {
+    "raw": "This review found a limited and weak directly causal link between participation in DCMS sectors and employment outcomes, with the most robust evidence found in relation to other (non-culture and non-sport) youth initiatives. Across the literature identified, this review found very limited robust evidence linking participation in any DCMS sector to employment outcomes, with only 6 studies rated SMS Level 2 or above demonstrating a link. Within this relatively sparse evidence however, this review did identify 2 studies rated SMS Level 5. while this review has identified evidence linking sport and other youth initiatives with employment outcomes over the long term, it has found no evidence linking culture programmes with those outcomes. The absence of evidence does not, therefore, necessarily disprove such a link",
+    "scale": "partly",
+    "quote": "a limited and weak directly causal link",
+    "page": null,
+    "studies": [
+     "Robinson 2024"
+    ]
+   }
+  },
+  {
+   "id": "k09",
+   "claim": "Skills and positive attitudes act as building blocks for education and civic outcomes rather than functioning only as final results.",
+   "refs": [
+    "b27",
+    "b28",
+    "b29",
+    "b31",
+    "l03"
+   ],
+   "where": "Pathways; education mechanisms; skills and knowledge conclusions; attitudes, beliefs and values mechanisms",
+   "verdict": {
+    "raw": "Individual skills and knowledge, along with attitudes, beliefs, and values, often serve as interim steps or building blocks towards longer-term outcomes. These outcomes don’t always follow a linear path; instead, they interact and build upon each other over time. this literature also suggests a positive impact on social and emotional competencies like self-regulation, emotional management, and interpersonal abilities, which have been shown to support both wellbeing and educational success in youth programs (Bavarian et al., 2013). Skills like teamwork and communication, while linked to educational success, also enhance civic engagement and social cohesion",
+    "scale": "supports",
+    "quote": "often serve as interim steps or building blocks towards longer-term outcomes",
+    "page": null,
+    "studies": [
+     "Bavarian et al. 2013",
+     "Fujiwara et al. 2015"
+    ]
+   }
+  },
+  {
+   "id": "k10",
+   "claim": "Improved health and wellbeing can enable educational, employment and other developmental outcomes.",
+   "refs": [
+    "b32",
+    "l04",
+    "c_nonhealth_outcomes"
+   ],
+   "where": "Health and wellbeing outcomes; health and wellbeing mechanisms; employment pathways",
+   "verdict": {
+    "raw": "The literature highlights several key mechanisms by which DCMS sector participation leads to improved health and wellbeing outcomes, which in turn underpin and enable intermediate and longer-term outcomes",
+    "scale": "supports",
+    "quote": "underpin and enable intermediate and longer-term outcomes",
+    "page": null,
+    "studies": []
+   }
+  },
+  {
+   "id": "k11",
+   "claim": "Education, skills and other intermediate benefits may improve employment over time, but these indirect employment pathways need longitudinal validation.",
+   "refs": [
+    "b27",
+    "b28",
+    "b29",
+    "b30",
+    "b32",
+    "l03"
+   ],
+   "where": "Employment overview and pathways",
+   "verdict": {
+    "raw": "It is therefore possible that participation has a positive effect on these other outcomes which can in turn impact these employment outcomes however over the longer term, this connection is not clear in the literature. Many of the employment benefits may be realized through the intermediate outcomes of improved education, skills development, and social capital formation, as suggested in the Theory of Change. However, more longitudinal research would be needed to fully validate these pathways.",
+    "scale": "insufficient",
+    "quote": "more longitudinal research would be needed to fully validate these pathways",
+    "page": null,
+    "studies": [
+     "Robinson 2024"
+    ]
+   }
+  },
+  {
+   "id": "k12",
+   "claim": "Educational success, skills, wellbeing, employment and cohesive communities provide routes towards the Opportunity Mission's longer-term social mobility goals.",
+   "refs": [
+    "b27",
+    "b28",
+    "b29",
+    "b30",
+    "b31",
+    "b32",
+    "b33",
+    "b34",
+    "b36",
+    "b37",
+    "b38"
+   ],
+   "where": "DCMS sector participation outcomes; Opportunity Mission overview; pathways and policy implications",
+   "verdict": {
+    "raw": "This directly supports the Opportunity Mission given the prominence of attendance and attainment in driving social mobility and supporting improved labour market outcomes. These directly contribute to the target impacts of the Opportunity Mission by giving children and young people the tools for growth and the ability to capitalise on opportunities in education and the labour market. This supports the Opportunity Mission by underpinning the positive environments required for social mobility and reduces the likelihood of negative life outcomes associated with a lack of community cohesion such as crime and anti-social behaviour which might otherwise perpetuate income persistence.",
+    "scale": "supports",
+    "quote": "underpinning the positive environments required for social mobility",
+    "page": null,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": null,
+  "weakest_links": [],
+  "strongest_links": [
+   "l02"
+  ],
+  "summary": "The review finds substantial commonality in inputs, activities and outputs across the three sectors, with greater variation in outcomes. Evidence is strongest and most plentiful for health and wellbeing, education, skills and knowledge, and positive attitudes, beliefs and values. Civic impacts have a smaller evidence base and are described as a moderate link in the summary, although the detailed chapter also describes strong evidence. Direct employment evidence is sparse, particularly for culture; indirect employment pathways require further longitudinal research. Outcomes interact and reinforce one another. Absence of evidence is not evidence that a relationship does not exist, especially for intangible or long-term outcomes. The supplied material does not give a single overall grade for the complete theory.",
+  "recommendations": [
+   "Focus engagement and participation efforts on underserved groups and underserved areas.",
+   "Invest in underlying DCMS sector infrastructure and collaborate across government, civil society and local stakeholders.",
+   "Use the theory to trace intended programme impacts back to activities and measurable outputs, correcting programme logic where necessary.",
+   "Use the theory at portfolio level to identify strengths, weaknesses, gaps and synergies.",
+   "Use the evidence framework to guide future research and evaluation.",
+   "Conduct more longitudinal research to validate pathways to adult employment outcomes.",
+   "Consider replicating research on youth programmes and GCSE outcomes for cultural and physical exercise programmes."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/dcms_opportunity_mission_toc_overarching.png', 'downloads/pages/dcms_opportunity_mission_toc_sport.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "The source is supplied as HTML-derived images and text without numbered pages. figure_pages is empty and verdict pages are null.",
+   "Publication year 2025 is inferred from the March 2025 workshop described in the extract; publication metadata, URLs and licence were not supplied.",
+   "The precise territorial coverage is not stated in the supplied extract; United Kingdom records the DCMS policy context rather than verified programme coverage.",
+   "The overarching theory is transcribed because the findings predominantly assess cross-sector outcome areas. Annex A also contains sport, culture and youth theories. The supplied sport image was inspected; culture and youth figures were not supplied as visible images.",
+   "The figure has no arrows from individual inputs to activities or from activities to outputs. No such links have been added. Activity-panel frames are not represented as containers because no arrows attach to them.",
+   "c_outputs represents the bracket spanning all ten output boxes. The smaller output-panel frames have no arrows attached and are not separately encoded.",
+   "The outputs-to-mediator arrow ends in the gap to the left of the skills and attitudes boxes rather than touching either box. l01 reads it as addressing their combined group, with medium confidence.",
+   "c_mediators represents the joining bracket for b27 and b28; c_results represents the bracket around b29, b30 and b31.",
+   "c_nonhealth_outcomes represents the lower bracket spanning b27–b31, to which the health arrow points. This overlaps the two smaller outcome groupings. The schema has no nested or multiple container membership, so b27–b31 retain their smaller-container assignments; the broader membership is documented here.",
+   "A fifth arrow runs from the education/employment/civic group towards the impact column, but its head stops in blank space without selecting an impact box or a drawn impact container. It is not encoded as a link because doing so would invent an endpoint or container.",
+   "All six outcome boxes share the source heading Outcomes. They are mapped to outcome_short as a schema convention, not as a claim that employment or every other result occurs in the short term.",
+   "Outcome-area evidence grades are retained on key claims rather than attached to result boxes: this is an ex-ante literature review, not a judgment that the depicted results have already occurred. Except for health, the drawn group arrows do not isolate the individual graded causal steps.",
+   "The summary and detailed sections give different study totals: health 24 versus 32; education 23 versus 24; skills 22 versus 29; attitudes 25 versus 26. These have not been reconciled.",
+   "The summary calls civic evidence moderate, whereas the detailed civic chapter calls it strong. k07 preserves both and uses partly for the overall claim.",
+   "The employment step is the clearest evidence weakness, but there is no drawn standalone participation-to-employment arrow. weakest_links is therefore empty rather than assigning that weakness to a broader arrow.",
+   "Evidence_level B is a provisional classification for a literature-backed theory; definitions of the A/B/C categories were not supplied.",
+   "The supplied document text is truncated in several places. No missing study names, subgroup results, assumption endings or recommendations have been reconstructed."
+  ],
+  "source_sha256": "7ee76c890d76e0b94ee3ff0d42eff9eeafc87a2c180b40931c9df04ee5afb2c5",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

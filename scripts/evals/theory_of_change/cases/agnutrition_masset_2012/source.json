@@ -1,0 +1,10 @@
+{
+ "file": "downloads/intl_PMC3259800.xml",
+ "doc_url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC3259800/fullTextXML",
+ "landing_url": "https://doi.org/10.1136/bmj.d8222",
+ "retrieved": "2026-11-09",
+ "figures": [
+  "downloads/pages/agnutrition_masset_2012_fig1.png"
+ ],
+ "notes": "Figure(s): Fig 1 (XML; no page numbers). Verdict scale: \"No study reported participation rates\"; \"positive effect on the production\" but \"not on households' total income\"; diet effect \"remains unclear\"; \"No evidence was found\" (iron); \"some evidence exists of a positive effect\" (vitamin A); overall \"cannot be answered with any level of confidence\". Timing: synthesis. Small clean linear chain with one fork (diet vs income -> food expenditure); verdict per box rather than per arrow, but each box is one step so link mapping is easy. (Prepared from the longlist row; figures rendered by the checking agent.)"
+}

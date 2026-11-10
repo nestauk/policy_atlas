@@ -1,0 +1,1311 @@
+{
+ "meta": {
+  "id": "building_choices_hmpps",
+  "title": "The Next Generation of Accredited Offending Behaviour Programmes: Building Choices",
+  "organisation": "Ministry of Justice / HM Prison and Probation Service",
+  "year": 0,
+  "country": "England",
+  "topic": "Offending behaviour programmes and rehabilitation",
+  "intervention_type": "programme",
+  "timing": "prospective",
+  "doc_url": "https://assets.publishing.service.gov.uk/media/68763e2f88da2e5804bb6a51/next-generation-behaviour-report.pdf",
+  "landing_url": "https://www.gov.uk/government/publications/building-choices-process-evaluation-of-the-design-test-of-a-new-accredited-offending-behaviour-programme",
+  "licence": "",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "ex_post_evaluation",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Help participants lead constructive, crime-free lives and reduce reoffending.",
+  "population": "People assessed as suitable for an accredited offending behaviour programme, including adults and young adults, different offence cohorts, and people with learning disabilities and challenges. The Design Test participants were predominantly men.",
+  "place": "Prison and community settings in England; the Design Test involved three prisons and two probation regions.",
+  "time_horizon": "During programme participation for initial changes, with longer-term rehabilitation aims. A fixed follow-up horizon is not specified in the supplied text.",
+  "intervention": "Building Choices, an accredited offending behaviour programme providing structured group and individual support. In the Design Test, the Moderate Intensity pathway comprised 21 group sessions and 5 one-to-one sessions, approximately 58 hours. The High Intensity pathway comprised 46 group sessions and 6 one-to-one sessions, approximately 121 hours.",
+  "context": "A small-scale Design Test preceded staggered national implementation. Delivery covered different offence cohorts, ages, learning abilities and settings. Community participation faced greater barriers and attrition than prison participation.",
+  "outcome_first": "Develop a theory of change for helping people eligible for offending behaviour programmes in England lead constructive, crime-free lives and reduce reoffending. Include prison and community settings and people with differing levels of risk, need and learning ability.",
+  "intervention_first": "Develop a theory of change for Building Choices, an accredited offending behaviour programme delivered in prison and community settings in England. It serves people assessed as suitable across different offence cohorts and learning abilities, with the aim of supporting constructive, crime-free lives and reducing reoffending."
+ },
+ "containers": [
+  {
+   "id": "c1",
+   "label": "bracket: Risk-Dose Proportionality, Responsivity Processes, Strength Based Approaches",
+   "layer": "activity"
+  },
+  {
+   "id": "c2",
+   "label": "Changes we expect to see in the programme participant",
+   "layer": "output"
+  },
+  {
+   "id": "c3",
+   "label": "Cognitive behavioural approaches",
+   "layer": "activity"
+  },
+  {
+   "id": "c4",
+   "label": "shared connector: complete materials, motivation, programme support",
+   "layer": "outcome_short"
+  },
+  {
+   "id": "c5",
+   "label": "Success Wheel Outcomes",
+   "layer": "outcome_short"
+  },
+  {
+   "id": "c6",
+   "label": "Primary outcomes",
+   "layer": "outcome_long"
+  },
+  {
+   "id": "c7",
+   "label": "Potential indirect benefit/outcomes",
+   "layer": "outcome_long"
+  }
+ ],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "Programme Assessment",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b2",
+   "label": "Moderate intensity pathway Medium/high/very high risk & medium need",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b3",
+   "label": "High intensity pathway Medium/high/very high risk & high need",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b4",
+   "label": "Pre-programme (P): Getting Ready",
+   "layer": "activity",
+   "container": "c3",
+   "verdict": null
+  },
+  {
+   "id": "b5",
+   "label": "Module 1: Getting Started",
+   "layer": "activity",
+   "container": "c3",
+   "verdict": null
+  },
+  {
+   "id": "b6",
+   "label": "Module 2: Managing Myself",
+   "layer": "activity",
+   "container": "c3",
+   "verdict": null
+  },
+  {
+   "id": "b7",
+   "label": "Module 3: Managing Life’s Problems",
+   "layer": "activity",
+   "container": "c3",
+   "verdict": null
+  },
+  {
+   "id": "b8",
+   "label": "Module 4: People Around Me",
+   "layer": "activity",
+   "container": "c3",
+   "verdict": null
+  },
+  {
+   "id": "b9",
+   "label": "Module 5: Bringing It All Together",
+   "layer": "activity",
+   "container": "c3",
+   "verdict": null
+  },
+  {
+   "id": "b10",
+   "label": "Post Programme Review",
+   "layer": "activity",
+   "container": "c3",
+   "verdict": null
+  },
+  {
+   "id": "b11",
+   "label": "Moving Forward",
+   "layer": "activity",
+   "container": "c3",
+   "verdict": null
+  },
+  {
+   "id": "b12",
+   "label": "Risk-Dose Proportionality",
+   "layer": "activity",
+   "container": "c1",
+   "verdict": null
+  },
+  {
+   "id": "b13",
+   "label": "Responsivity Processes",
+   "layer": "activity",
+   "container": "c1",
+   "verdict": null
+  },
+  {
+   "id": "b14",
+   "label": "Strength Based Approaches",
+   "layer": "activity",
+   "container": "c1",
+   "verdict": null
+  },
+  {
+   "id": "b15",
+   "label": "Better able to manage thinking using self-talk",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b16",
+   "label": "Better able to use skills to manage impulsivity & urges",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b17",
+   "label": "Better understanding of arousal & emotions",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b18",
+   "label": "Better able to soothe & regulate arousal",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b19",
+   "label": "Better able to tolerate distressing emotional states",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b20",
+   "label": "Recognises situations that lead to unhelpful behaviour",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b21",
+   "label": "Better able to use problem solving skills",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b22",
+   "label": "Insight into own thinking & emotions",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b23",
+   "label": "Understands how thinking impacts behaviour",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b24",
+   "label": "Can better think in ways that are flexible and accepting",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b25",
+   "label": "Better understanding of relationships",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b26",
+   "label": "Awareness of own social support network",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b27",
+   "label": "Better equipped to start and maintain healthy intimate relationships",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b28",
+   "label": "Better able to use effective interpersonal skills",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b29",
+   "label": "Better able to manage unhelpful peer influences",
+   "layer": "output",
+   "container": "c2",
+   "verdict": {
+    "raw": "‘better able to manage unhelpful peer influences’ had mixed feedback because the confines of the justice setting meant that people could not fully disassociate from negative peers or, alternatively, had been forced to separate from peers by their orders or sentences.",
+    "scale": "partly",
+    "quote": "had mixed feedback",
+    "page": 65,
+    "studies": []
+   }
+  },
+  {
+   "id": "b30",
+   "label": "Improved perspective taking",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b31",
+   "label": "Better understanding of social and cultural influences and how they shaped self-development",
+   "layer": "output",
+   "container": "c2",
+   "verdict": {
+    "raw": "There was insufficient evidence from qualitative interviews to support the outcome ‘better understanding of social and cultural influences and how they shaped self-development’.",
+    "scale": "insufficient",
+    "quote": "There was insufficient evidence from qualitative interviews",
+    "page": 65,
+    "studies": []
+   }
+  },
+  {
+   "id": "b32",
+   "label": "Feels psychologically safe enough to form alliance",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b33",
+   "label": "Curious about change & open to learning skills",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b34",
+   "label": "Recognises what matters in life & makes life purposeful",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b35",
+   "label": "Increased understanding of strengths",
+   "layer": "output",
+   "container": "c2",
+   "verdict": {
+    "raw": "Outcomes such as ‘increased understanding of strengths’ were evidenced throughout participant and staff interviews and were facilitated by skills practice where there was praise for people’s strengths and progress.",
+    "scale": "supports",
+    "quote": "were evidenced throughout participant and staff interviews",
+    "page": 65,
+    "studies": []
+   }
+  },
+  {
+   "id": "b36",
+   "label": "Understands goals & links them to values",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b37",
+   "label": "Can review progress towards goals and has a plan",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b38",
+   "label": "Sees programme activities as supporting their ability to achieve their goals",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b39",
+   "label": "Feels hopeful and has intent to desist from crime",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b40",
+   "label": "Motivated to enlist support for future",
+   "layer": "output",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b41",
+   "label": "Complete all sessions/programme materials",
+   "layer": "outcome_short",
+   "container": "c4",
+   "verdict": {
+    "raw": "Green/Amber; Moderate. Qualitative data is based on a small sample. Management Information data covers all participants and describes a high rate of attrition in community (a finding not unusual for community-based programmes). The Quality Assurance data included those who completed all sessions and not any non-completers.",
+    "scale": "partly",
+    "quote": "Green/Amber",
+    "page": 111,
+    "studies": []
+   }
+  },
+  {
+   "id": "b42",
+   "label": "Motivation to engage in and complete the programme (Motivation scale)",
+   "layer": "outcome_short",
+   "container": "c4",
+   "verdict": {
+    "raw": "Green/Amber; Moderate. Evidence is from a small sample of Design Test participants and does not include a women’s cohort. Descriptive statistics from the Horizon Motivation Scale lend support to sustained participant motivation.",
+    "scale": "partly",
+    "quote": "lend support to sustained participant motivation",
+    "page": 111,
+    "studies": []
+   }
+  },
+  {
+   "id": "b43",
+   "label": "Programme participants are supported to get the most out of the programme",
+   "layer": "outcome_short",
+   "container": "c4",
+   "verdict": {
+    "raw": "Amber; Moderate. Evidence suggests there are some challenges when delivering to young adult prison-based participants and those with LDC. This evidence does not include data on the women’s cohort.",
+    "scale": "partly",
+    "quote": "some challenges when delivering to young adult prison-based participants and those with LDC",
+    "page": 111,
+    "studies": []
+   }
+  },
+  {
+   "id": "b44",
+   "label": "Managing Myself",
+   "layer": "outcome_short",
+   "container": "c5",
+   "verdict": {
+    "raw": "Green/Amber (Moderate)",
+    "scale": "partly",
+    "quote": "Green/Amber (Moderate)",
+    "page": 24,
+    "studies": []
+   }
+  },
+  {
+   "id": "b45",
+   "label": "Healthy Thinking",
+   "layer": "outcome_short",
+   "container": "c5",
+   "verdict": {
+    "raw": "Green/Amber (Moderate)",
+    "scale": "partly",
+    "quote": "Green/Amber (Moderate)",
+    "page": 24,
+    "studies": []
+   }
+  },
+  {
+   "id": "b46",
+   "label": "Positive Relationships",
+   "layer": "outcome_short",
+   "container": "c5",
+   "verdict": {
+    "raw": "Amber (Moderate)",
+    "scale": "partly",
+    "quote": "Amber (Moderate)",
+    "page": 24,
+    "studies": []
+   }
+  },
+  {
+   "id": "b47",
+   "label": "Purpose",
+   "layer": "outcome_short",
+   "container": "c5",
+   "verdict": {
+    "raw": "Sense of Purpose: Green/Amber (Moderate)",
+    "scale": "partly",
+    "quote": "Green/Amber (Moderate)",
+    "page": 24,
+    "studies": []
+   }
+  },
+  {
+   "id": "b48",
+   "label": "Healthy Sex (if applicable)",
+   "layer": "outcome_short",
+   "container": "c5",
+   "verdict": {
+    "raw": "Green (Low)",
+    "scale": "supports",
+    "quote": "Green (Low)",
+    "page": 24,
+    "studies": []
+   }
+  },
+  {
+   "id": "b49",
+   "label": "Prison Misconduct",
+   "layer": "outcome_long",
+   "container": "c6",
+   "verdict": null
+  },
+  {
+   "id": "b50",
+   "label": "Reoffending",
+   "layer": "outcome_long",
+   "container": "c6",
+   "verdict": null
+  },
+  {
+   "id": "b51",
+   "label": "Prison Misconduct",
+   "layer": "outcome_long",
+   "container": "c7",
+   "verdict": null
+  },
+  {
+   "id": "b52",
+   "label": "Accommodation status",
+   "layer": "outcome_long",
+   "container": "c7",
+   "verdict": null
+  },
+  {
+   "id": "b53",
+   "label": "Self-harm",
+   "layer": "outcome_long",
+   "container": "c7",
+   "verdict": null
+  },
+  {
+   "id": "b54",
+   "label": "Recall & breach/compliance",
+   "layer": "outcome_long",
+   "container": "c7",
+   "verdict": null
+  },
+  {
+   "id": "b55",
+   "label": "Substance misuse",
+   "layer": "outcome_long",
+   "container": "c7",
+   "verdict": null
+  },
+  {
+   "id": "b56",
+   "label": "Participants develop a pro-social identity",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b57",
+   "label": "Reducing Reoffending",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b58",
+   "label": "Economic Benefits",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b59",
+   "label": "Improved wider outcomes (e.g. health, employment, housing)",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b60",
+   "label": "Improved public protection",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b2",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l2",
+   "source": "b1",
+   "target": "b3",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l3",
+   "source": "b1",
+   "target": "c1",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l4",
+   "source": "b2",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l5",
+   "source": "b3",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l6",
+   "source": "b4",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l7",
+   "source": "b5",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l8",
+   "source": "b6",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l9",
+   "source": "b7",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l10",
+   "source": "b8",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l11",
+   "source": "b9",
+   "target": "b10",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l12",
+   "source": "b10",
+   "target": "b11",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l13",
+   "source": "c3",
+   "target": "c2",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l14",
+   "source": "b12",
+   "target": "b41",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l15",
+   "source": "b13",
+   "target": "b42",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l16",
+   "source": "b14",
+   "target": "b43",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l17",
+   "source": "c4",
+   "target": "c6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l18",
+   "source": "c5",
+   "target": "c7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l19",
+   "source": "c6",
+   "target": "b56",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l20",
+   "source": "c7",
+   "target": "b59",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "assumption",
+   "text": "Building Choices is designed to be inclusive of all protected characteristics of programme participants (intersectionality).",
+   "links": [],
+   "from_layer": "activity",
+   "to_layer": "outcome_short",
+   "verdict": {
+    "raw": "Green/Amber; Moderate. Qualitative findings suggest some challenges with meeting responsivity needs of the LDC cohort. There is no data available for the women’s cohort.",
+    "scale": "partly",
+    "quote": "some challenges with meeting responsivity needs of the LDC cohort",
+    "page": 116,
+    "studies": []
+   }
+  },
+  {
+   "id": "a2",
+   "kind": "assumption",
+   "text": "Building Choices will be appropriate for all offence types (criminogenic needs associated with the offence types and tailored conversations).",
+   "links": [],
+   "from_layer": "activity",
+   "to_layer": "outcome_short",
+   "verdict": {
+    "raw": "Amber; Moderate. Data sources raise the question: Is content about relationships specific for PCOSO, IPV/DA offences missing and therefore required or is it missed by staff, who were expecting to see this type of content which is in other programmes? (There is no data available for the women’s cohort)",
+    "scale": "partly",
+    "quote": "Is content about relationships specific for PCOSO, IPV/DA offences missing",
+    "page": 116,
+    "studies": []
+   }
+  },
+  {
+   "id": "a3",
+   "kind": "assumption",
+   "text": "Building Choices will be appropriate for programme participants in custody or community settings.",
+   "links": [],
+   "from_layer": "activity",
+   "to_layer": "outcome_short",
+   "verdict": {
+    "raw": "Green/Amber; Moderate. Evidence suggests the programme content was suitable for those in community and prison settings. Higher attrition in community was found, a finding not unusual with programmes in community settings. There is no data available for the women’s cohort.",
+    "scale": "partly",
+    "quote": "the programme content was suitable for those in community and prison settings",
+    "page": 116,
+    "studies": []
+   }
+  },
+  {
+   "id": "a4",
+   "kind": "assumption",
+   "text": "Building Choices programme design is underpinned by well evidenced theories and principles of effective rehabilitation (e.g. risk need responsivity, biopsychosocial model, desistance theory) which assume programme participants can change and desistance from crime is possible.",
+   "links": [],
+   "from_layer": "activity",
+   "to_layer": "outcome_long",
+   "verdict": {
+    "raw": "N/A; Insufficient Evidence. The methodology was not specifically designed to test the theories.",
+    "scale": "not_assessed",
+    "quote": "The methodology was not specifically designed to test the theories.",
+    "page": 117,
+    "studies": []
+   }
+  },
+  {
+   "id": "a5",
+   "kind": "assumption",
+   "text": "Facilitators will be appropriately trained in how to deliver Building Choices as intended.",
+   "links": [],
+   "from_layer": "activity",
+   "to_layer": "output",
+   "verdict": {
+    "raw": "Green/Amber; High. All those who delivered the programme had completed and passed training. Some evidence suggested some improvements could be made to training.",
+    "scale": "partly",
+    "quote": "All those who delivered the programme had completed and passed training.",
+    "page": 117,
+    "studies": []
+   }
+  },
+  {
+   "id": "a6",
+   "kind": "assumption",
+   "text": "All programme participants will be appropriately selected in line with the eligibility criteria for their pathway.",
+   "links": [
+    "l1",
+    "l2"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Amber; Moderate. Three participants had low need (DA), however had the Medium SARA score needed to be eligible for the programme. A further person in community had medium risk at the time of sentence but then had a low-risk score at the start of the programme. It was not clear if this was a clerical data inputting error or if the person had a low-risk score.",
+    "scale": "partly",
+    "quote": "It was not clear if this was a clerical data inputting error or if the person had a low-risk score.",
+    "page": 117,
+    "studies": []
+   }
+  },
+  {
+   "id": "a7",
+   "kind": "assumption",
+   "text": "Staff in custody and community understand the assessment criteria and use the actuarial risk tools appropriately.",
+   "links": [
+    "l1",
+    "l2"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Green; Moderate. Evidence supports that the assessment criteria, tools and process were understood across both settings and all sites.",
+    "scale": "supports",
+    "quote": "the assessment criteria, tools and process were understood across both settings and all sites",
+    "page": 118,
+    "studies": []
+   }
+  },
+  {
+   "id": "a8",
+   "kind": "assumption",
+   "text": "Programme participants receive the correct number of sessions in the correct sequence for their pathway.",
+   "links": [
+    "l4",
+    "l5",
+    "l6",
+    "l7",
+    "l8",
+    "l9",
+    "l10",
+    "l11",
+    "l12"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Green/Amber; Moderate. Sessions were mostly delivered in the right order and catch ups were provided as specified. There were some instances of a catch up and 1:1 session being combined where they should not have been. Some catch up sessions were not completed, and some staff in prisons also reported that delivering catch up sessions was challenging to manage within the weekly delivery rate.",
+    "scale": "partly",
+    "quote": "Sessions were mostly delivered in the right order",
+    "page": 118,
+    "studies": []
+   }
+  },
+  {
+   "id": "a9",
+   "kind": "assumption",
+   "text": "Staff will understand individual’s identified strengths, needs and areas for support to effectively deliver Building Choices in a tailored/individualised manner for programme participants.",
+   "links": [
+    "l15",
+    "l16"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Green/Amber; Moderate. WWFM supported the identification of responsivity needs. Some evidence suggests staff struggled across cohorts (especially the young adult LDC prison cohort) to make adaptations due to the need to maintain programme integrity. However, QA data suggests this was because attempts to address responsivity did not link to the programme content or aims. Responsivity overall was strong in the community setting.",
+    "scale": "partly",
+    "quote": "Responsivity overall was strong in the community setting.",
+    "page": 118,
+    "studies": []
+   }
+  },
+  {
+   "id": "a10",
+   "kind": "assumption",
+   "text": "Facilitators will deliver the programme as intended, after they have been trained to do so.",
+   "links": [
+    "l13"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Amber; Moderate. Programme integrity was mixed. There were examples of good practice where session content was delivered responsively in line with the delivery guide. On some occasions however, programme content changed or missing. For example, Check-in exercises and skills practices were sometimes missed, and other material was occasionally altered which was not in line with the guidelines or programme aims. This was across sites and both settings. This finding might be reflective of Building Choices being a new programme",
+    "scale": "partly",
+    "quote": "Programme integrity was mixed.",
+    "page": 119,
+    "studies": []
+   }
+  },
+  {
+   "id": "a11",
+   "kind": "assumption",
+   "text": "Facilitators will develop good working alliance with programme participants.",
+   "links": [
+    "l13"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Green/Amber; Moderate. Evidence from the WAI-SR & WAI-SRT showed scores started high and remained high, indicating good working alliance across sites, settings and cohorts. This was corroborated with findings from the interviews and QA data. However, the Category C young adult male prison saw a decrease in working alliance for facilitator scores, for the LDC cohort, which aligns with QA findings. Overall programme participants considered there was good working alliance with facilitators.",
+    "scale": "partly",
+    "quote": "scores started high and remained high",
+    "page": 119,
+    "studies": []
+   }
+  },
+  {
+   "id": "a12",
+   "kind": "assumption",
+   "text": "Supervision will be of a high standard, in line with training and guidance in the management manuals.",
+   "links": [],
+   "from_layer": "activity",
+   "to_layer": "output",
+   "verdict": {
+    "raw": "Amber; Moderate. There was of a good balance of programme planning and supervision across most sites. In some instances, there was more focus on staff well-being than on staff professional development, though this may have reflected the unique characteristics or needs of certain staff or those of the individuals they worked with during the Design Test.",
+    "scale": "partly",
+    "quote": "more focus on staff well-being than on staff professional development",
+    "page": 119,
+    "studies": []
+   }
+  },
+  {
+   "id": "a13",
+   "kind": "assumption",
+   "text": "Session monitoring will be of a high standard, in line with training and guidance in the management manuals.",
+   "links": [],
+   "from_layer": "activity",
+   "to_layer": "output",
+   "verdict": {
+    "raw": "Amber; Moderate. Evidence suggested that more session monitoring was required in the community sites, and to a lesser extent in the prison sites.",
+    "scale": "partly",
+    "quote": "more session monitoring was required",
+    "page": 120,
+    "studies": []
+   }
+  },
+  {
+   "id": "a14",
+   "kind": "assumption",
+   "text": "All programme participants sign the conditions of success (see Appendix B). Continuing commitment to and achievement of these is monitored throughout the programme, with use of Supportive Authority to explore any specific breaches.",
+   "links": [
+    "l13"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Green/Amber; Moderate. There was evidence that participants had signed up to the conditions of success, although this was inferred from the findings as there was no MI data available at the time which specifically captured this. There were some inconsistencies with the conditions of success and the use of the principles of supportive authority to manage this.",
+    "scale": "partly",
+    "quote": "There were some inconsistencies with the conditions of success",
+    "page": 120,
+    "studies": []
+   }
+  },
+  {
+   "id": "a15",
+   "kind": "assumption",
+   "text": "Facilitators will have enough time to plan and prep for delivery of each session and module and debrief each session.",
+   "links": [],
+   "from_layer": "context",
+   "to_layer": "activity",
+   "verdict": {
+    "raw": "Amber; Moderate. Evidence suggests that overall, there was time set aside for planning but that it took longer than anticipated, especially in applying adaptations for those with LDC on Building Choices plus. This observation might have been reflective of staff being new to the programme.",
+    "scale": "partly",
+    "quote": "it took longer than anticipated",
+    "page": 120,
+    "studies": []
+   }
+  },
+  {
+   "id": "a16",
+   "kind": "assumption",
+   "text": "Facilitators are offered appropriate support and development, comprising of the recommended rates of group and individual supervision, session monitoring feedback and personal support where appropriate.",
+   "links": [],
+   "from_layer": "context",
+   "to_layer": "activity",
+   "verdict": {
+    "raw": "Amber; Moderate. Most facilitators felt supported. Some sites completed the required amount of session monitoring and feedback, but some needed to do more. This was the case across both prison and community settings, for both individual and group supervision. Professional reflective support provision for staff was not monitored as part of the Design Test as this would not necessarily be accessed within the timescales of the test itself.",
+    "scale": "partly",
+    "quote": "Most facilitators felt supported.",
+    "page": 120,
+    "studies": []
+   }
+  }
+ ],
+ "context": [
+  "The Design Test was a small-scale proof of concept in three prison sites and two probation regions.",
+  "The evaluation used self-selecting qualitative samples and uncontrolled before-after analysis; it does not establish cause and effect.",
+  "Women were only 4% of programme starters; only two qualitative interviews were conducted with women, and several triangulation assessments had no women’s cohort data.",
+  "Community participants faced additional challenges, barriers and responsibilities, with higher attrition than prison participants.",
+  "Justice settings and orders could constrain participants’ ability to disengage from unhelpful peers.",
+  "Some implementation difficulties may reflect a new programme and the unique Design Test environment rather than routine delivery.",
+  "Probation Practitioners’ understanding of, and capacity to deliver, Moving Forward varied, potentially reflecting caseload and capacity."
+ ],
+ "key_claims": [
+  {
+   "id": "k1",
+   "claim": "Assessment identifies suitable participants and allocates them to an appropriate intensity pathway.",
+   "refs": [
+    "b1",
+    "b2",
+    "b3",
+    "l1",
+    "l2",
+    "a6",
+    "a7"
+   ],
+   "where": "Sections 4.2, 5.1(ii), 5.2(i); Table I3, printed pp.117–118",
+   "verdict": {
+    "raw": "Overall, the programme was reaching the intended target groups. The PNI was viewed positively and the WWFM meeting was useful for exploring readiness to engage and specific responsivity considerations. Across prison sites, feedback suggested a small number of participants might have been better placed on Building Choices Plus (for those with LDC). The PNI was reported by practitioners to be quicker than the PNA and correctly screened who was eligible for the programme in line with RNR principles. Assessment criteria and tools: Green (Moderate); eligibility selection: Amber (Moderate).",
+    "scale": "partly",
+    "quote": "Overall, the programme was reaching the intended target groups.",
+    "page": 68,
+    "studies": []
+   }
+  },
+  {
+   "id": "k2",
+   "claim": "Facilitator training prepares staff to deliver Building Choices as intended.",
+   "refs": [
+    "a5",
+    "a10",
+    "l13"
+   ],
+   "where": "Section 5.1(i); Table I3, printed p.117",
+   "verdict": {
+    "raw": "Green/Amber; High. All those who delivered the programme had completed and passed training. Some evidence suggested some improvements could be made to training. Treatment managers and facilitators reported thorough training in preparation for implementation and delivery.",
+    "scale": "partly",
+    "quote": "All those who delivered the programme had completed and passed training.",
+    "page": 117,
+    "studies": []
+   }
+  },
+  {
+   "id": "k3",
+   "claim": "Receiving the intended sequence, dose and content enables participants to benefit from the programme.",
+   "refs": [
+    "c3",
+    "l4",
+    "l5",
+    "l6",
+    "l7",
+    "l8",
+    "l9",
+    "l10",
+    "l11",
+    "l12",
+    "l13",
+    "a8",
+    "a10"
+   ],
+   "where": "Sections 5.1(i), 5.2(i); Table I3, printed pp.118–119; executive summary, printed p.7",
+   "verdict": {
+    "raw": "Generally, the programme was implemented and delivered as intended, adhering to the Delivery Guide. Sessions were mostly delivered in the right order and catch ups were provided as specified. Programme integrity was mixed. Check-in exercises and skills practices were sometimes missed, and other material was occasionally altered. Key elements of the programme such as the Success Wheel, the Great Eight and the focus on skills logs and practices were seen to support the achievement of these outcomes. Probation Practitioners’ understanding of, and capacity to deliver ‘Moving Forward’ to people attending Building Choices was varied.",
+    "scale": "partly",
+    "quote": "Programme integrity was mixed.",
+    "page": 119,
+    "studies": []
+   }
+  },
+  {
+   "id": "k4",
+   "claim": "Inclusive, individually tailored delivery makes the programme suitable across settings, offence types and learning needs and helps participants get the most from it.",
+   "refs": [
+    "b13",
+    "b14",
+    "b43",
+    "a1",
+    "a2",
+    "a3",
+    "a9",
+    "l15",
+    "l16"
+   ],
+   "where": "Tables I1 and I3, printed pp.111, 116, 118; Sections 5.1(i)–(ii)",
+   "verdict": {
+    "raw": "Programme support: Amber (Moderate). Inclusivity, setting suitability and individualised delivery: Green/Amber (Moderate). Offence-type suitability: Amber (Moderate). WWFM supported the identification of responsivity needs. Responsivity overall was strong in the community setting. There were challenges for young adult prison-based participants and those with LDC, and no women’s cohort data in these triangulation assessments. Staff questioned whether offence-specific relationship content was missing or whether they were expecting content familiar from other programmes. Some prison participants might have been better placed on Building Choices Plus.",
+    "scale": "partly",
+    "quote": "Evidence suggests there are some challenges when delivering to young adult prison-based participants and those with LDC.",
+    "page": 111,
+    "studies": []
+   }
+  },
+  {
+   "id": "k5",
+   "claim": "A safe group environment, working alliance and agreed conditions support engagement and change.",
+   "refs": [
+    "b32",
+    "a11",
+    "a14",
+    "l13"
+   ],
+   "where": "Section 5.2(i); Table I3, printed pp.119–120",
+   "verdict": {
+    "raw": "Working alliance: Green/Amber (Moderate). Evidence from the WAI-SR & WAI-SRT showed scores started high and remained high, indicating good working alliance across sites, settings and cohorts. However, the Category C young adult male prison saw a decrease in working alliance for facilitator scores, for the LDC cohort. Conditions of success: Green/Amber (Moderate), with some inconsistencies in their application and supportive authority. The size and frequency of the group was said to be appropriate in both community and prison settings. Participants described they felt safe and supported by facilitators. The focus on participants as individuals and their future was said to support engagement and working alliance.",
+    "scale": "partly",
+    "quote": "scores started high and remained high",
+    "page": 119,
+    "studies": []
+   }
+  },
+  {
+   "id": "k6",
+   "claim": "Adequate preparation time, supervision, monitoring and staff support enable good-quality delivery.",
+   "refs": [
+    "a12",
+    "a13",
+    "a15",
+    "a16"
+   ],
+   "where": "Table I3, printed pp.119–120",
+   "verdict": {
+    "raw": "Supervision, session monitoring, preparation time, and facilitator support and development: Amber (Moderate). Planning took longer than anticipated, especially for LDC adaptations. More session monitoring was required in community sites and, to a lesser extent, prisons. Most facilitators felt supported, but some sites needed more monitoring, feedback and supervision. Some supervision focused more on staff well-being than professional development. Professional reflective support provision was not monitored during the Design Test.",
+    "scale": "partly",
+    "quote": "more session monitoring was required",
+    "page": 120,
+    "studies": []
+   }
+  },
+  {
+   "id": "k7",
+   "claim": "Programme delivery sustains motivation and supports completion, although external barriers can prevent attendance.",
+   "refs": [
+    "b12",
+    "b41",
+    "b42",
+    "l14",
+    "l15",
+    "a3",
+    "a8"
+   ],
+   "where": "Table I1; Sections 4.6, 5.1(ii)–(iv), 5.2(i); printed pp.4, 56, 68–69, 111",
+   "verdict": {
+    "raw": "Completion and motivation: Green/Amber (Moderate). Of the 78 people who started Building Choices across both prison and probation, 53 participants (68%) completed the programme. Levels of non-completion were higher in the community than in prison, broadly in line with existing programmes. Of the 25 non-completers, 18 (72%) had reasons in the ‘Other’ sub-category, including health or bereavement; lack of engagement was not a significant factor for dropping out. Eight assessed individuals did not start, seven in community sites; WWFM was the most common point for identifying that people were not ready. Motivation varied between cohorts, but was reasonably high overall and improved from pre to post programme for all cohorts, sites and settings. Community cohorts started with much lower reported motivation than prison cohorts.",
+    "scale": "partly",
+    "quote": "Descriptive statistics from the Horizon Motivation Scale lend support to sustained participant motivation.",
+    "page": 111,
+    "studies": []
+   }
+  },
+  {
+   "id": "k8",
+   "claim": "Programme activities build emotional self-management, healthier thinking and problem-solving skills.",
+   "refs": [
+    "b15",
+    "b16",
+    "b17",
+    "b18",
+    "b19",
+    "b20",
+    "b21",
+    "b22",
+    "b23",
+    "b24",
+    "b44",
+    "b45",
+    "l13"
+   ],
+   "where": "Table 3; Section 5.1(iii)–(iv), printed pp.24, 68",
+   "verdict": {
+    "raw": "Managing Myself: Green/Amber (Moderate). Healthy Thinking: Green/Amber (Moderate). Quantitative analysis of SWM domains also suggest improvements for programme participants in managing emotions, problem solving, communication skills and healthy relationships with others (including professionals). Without a comparison group however, it is not possible to attribute these changes to the programme.",
+    "scale": "partly",
+    "quote": "suggest improvements for programme participants in managing emotions, problem solving",
+    "page": 68,
+    "studies": []
+   }
+  },
+  {
+   "id": "k9",
+   "claim": "Programme activities improve relationships and support networks, including the ability to manage unhelpful social influences.",
+   "refs": [
+    "b25",
+    "b26",
+    "b27",
+    "b28",
+    "b29",
+    "b30",
+    "b31",
+    "b46"
+   ],
+   "where": "Table 3; Section 4.7, printed p.65; Section 5.1(iii)",
+   "verdict": {
+    "raw": "Positive Relationships: Amber (Moderate). Programme participants in community reflected there had been improvements in their existing relationships. There was insufficient evidence from qualitative interviews to support the outcome ‘better understanding of social and cultural influences and how they shaped self-development’. ‘Better able to manage unhelpful peer influences’ had mixed feedback because justice settings constrained separation from negative peers or orders and sentences had already forced separation. The support spider and other exercises supported understanding of relationships and support networks; participants often added professionals to their support network.",
+    "scale": "partly",
+    "quote": "There was insufficient evidence from qualitative interviews to support the outcome",
+    "page": 65,
+    "studies": []
+   }
+  },
+  {
+   "id": "k10",
+   "claim": "Programme activities strengthen purpose, recognition of strengths and goals, and healthy sexuality where applicable.",
+   "refs": [
+    "b33",
+    "b34",
+    "b35",
+    "b36",
+    "b37",
+    "b38",
+    "b39",
+    "b40",
+    "b47",
+    "b48"
+   ],
+   "where": "Table 3; Section 4.7, printed p.65",
+   "verdict": {
+    "raw": "Sense of Purpose: Green/Amber (Moderate). Healthy Sex: Green (Low). There was also evidence to support changes in accordance with the final segment on the Success Wheel, ‘Purpose’. Outcomes such as ‘increased understanding of strengths’ were evidenced throughout participant and staff interviews and were facilitated by skills practice where there was praise for people’s strengths and progress.",
+    "scale": "partly",
+    "quote": "There was also evidence to support changes",
+    "page": 65,
+    "studies": []
+   }
+  },
+  {
+   "id": "k11",
+   "claim": "The programme produces overall progress across its immediate treatment targets, with progress potentially differing by module and cohort.",
+   "refs": [
+    "c2",
+    "c3",
+    "c5",
+    "b4",
+    "l13"
+   ],
+   "where": "Section 4.6(ii), printed p.56; Table I2, printed p.116; Section 5.1(iv)",
+   "verdict": {
+    "raw": "Overall Success Wheel: Green/Amber; Moderate. Good progress on Success Wheel overall, however very small increases in scores before/after the Getting Ready element of the programme. Facilitator score change was minimal in the high secure prison and large in the Category C young adult male prison for Getting Ready. There was no data available for the women’s cohort. The overall change in total SWM score from pre-to-post programme was found to be statistically significant, providing indicative evidence of participant progress against the ToC. The analysis used complete cases (n = 48), without a comparison group, so causal inference cannot be drawn. Increases were observed in individual domains for both prison and community.",
+    "scale": "partly",
+    "quote": "Good progress on Success Wheel overall, however very small increases in scores before/after the Getting Ready element",
+    "page": 116,
+    "studies": []
+   }
+  },
+  {
+   "id": "k12",
+   "claim": "Immediate participant changes are expected to contribute to a pro-social identity, reduced reoffending and wider benefits, assuming rehabilitation and desistance are possible.",
+   "refs": [
+    "c6",
+    "c7",
+    "b56",
+    "b57",
+    "b58",
+    "b59",
+    "b60",
+    "l17",
+    "l18",
+    "l19",
+    "l20",
+    "a4"
+   ],
+   "where": "Appendix B, printed pp.93–94; Table I3, printed p.117; evaluation aims and limitations",
+   "verdict": {
+    "raw": "The methodology was not specifically designed to test the theories. The measures under ‘potential indirect benefits/outcomes’ represent outcomes which are more likely to sit outside of the scope of the evaluation. Process evaluations do not try to establish cause and effect.",
+    "scale": "not_assessed",
+    "quote": "The methodology was not specifically designed to test the theories.",
+    "page": 117,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "Within these methodological constraints, the findings indicate that Building Choices shows promise and was mostly implemented and delivered as intended. Out of 27 sub-categories, 16 were rated Green or Green/Amber and 10 rated Amber. There were no Red ratings. One was not possible to score.",
+   "scale": "partly",
+   "quote": "Building Choices shows promise and was mostly implemented and delivered as intended.",
+   "page": 67,
+   "studies": []
+  },
+  "weakest_links": [
+   "a2",
+   "a6",
+   "a10",
+   "a12",
+   "a13",
+   "a15",
+   "a16"
+  ],
+  "strongest_links": [
+   "a7",
+   "a5",
+   "a11"
+  ],
+  "summary": "Building Choices was broadly suitable for people in prison and community settings, generally reached the intended target groups, and showed promising indicative evidence of desired changes. Participants were generally motivated and engaged and working alliance was good. The evaluation does not establish causal effects: it involved a small, self-selecting Design Test sample and uncontrolled before-after measures. Important limitations concern women’s evidence, learning-needs adaptations, offence-specific content concerns, programme integrity, monitoring and staff preparation time. Relationships evidence was mixed, and qualitative evidence for understanding social and cultural influences was insufficient. The source does not formally rank strongest and weakest elements; the listed assumption ids identify comparatively positive and mixed assessments.",
+  "recommendations": [
+   "Use the Design Test findings to refine the programme and its next phase of implementation.",
+   "Consider improvements to the length and usability of the Delivery Guide and to training.",
+   "Address adaptations and guidance for participants with learning disabilities and challenges; facilitators reported that a standalone LDC Delivery Guide would be useful.",
+   "Provide more structure and direction for tailored conversations and clarify concerns about perceived missing offence-specific content.",
+   "Review programme selection and placement, including suitability for Building Choices Plus.",
+   "Address implementation issues involving catch-up sessions, content fidelity, session monitoring, supervision and preparation time.",
+   "Continue evaluating the programme as it progresses through national implementation; iterate the theory of change using process, impact and economic evaluations."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/building_choices_hmpps_p24.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "The publication year, document URLs and licence are absent from the supplied material. Year 0 is an unknown-value placeholder, not a publication date.",
+   "Figure 1, Pathways for Building Choices, is named in the notes but its image was not supplied. Figure 2 is the theory assessed here.",
+   "The nested mechanisms table has 26 participant-change text cells. Its Related Module cells are treated as row annotations rather than separate causal boxes. In row order their values are: 2; 2; 2; P/2; P/1/2; 3; 3; 2/3; 2; 2; 4; 4; 4; 3/4; 4; 4; P/4; P/1; P; P/1/2; P; P/1; 5; 1; 5; 5.",
+   "Mechanisms of Change has no exact schema layer. The three delivery principles are mapped to activity; the expected participant changes are mapped to output, preserving their position before Short Term Outcomes without asserting that the source calls them outputs.",
+   "The rightmost pink column is explicitly headed Medium to Long Term Outcomes, so its boxes are mapped to outcome_long, although Appendix B describes these as impacts.",
+   "The dense connectors between individual participant-change rows and the five Success Wheel outcomes cannot be assigned reliably from this rendering. Those arrows are not transcribed rather than inventing row groupings or endpoints. Several additional blue arrowheads entering Healthy Sex are visible, but their sources are unclear.",
+   "The three principle-to-short-term-outcome connectors are crowded; l14–l16 are medium-confidence readings.",
+   "The rightmost connectors are crowded. l19 reads the primary-outcomes connector as ending at pro-social identity; l20 reads the potential-indirect-outcomes connector as ending at improved wider outcomes. The relationship of the pink dashed boxes and their adjacent vertical bracket to pro-social identity needs checking at higher resolution; no extra arrows or container were inferred.",
+   "The supplied text omits the intervening pages of Tables I2 and I3. Ratings for the five individual Success Wheel domains are available in Table 3, but their detailed triangulation rationales are not. The source reports 27 assessed sub-categories; the supplied excerpts do not expose every assumption row.",
+   "Green/Amber is mapped to partly because the source defines it as more supportive than adverse evidence, not wholly supportive evidence. The separate evidence-strength axis is retained in raw verdict text.",
+   "Strongest and weakest assumption lists are descriptive selections from ratings and narrative, not a ranking explicitly made by the source.",
+   "Assumptions without a specific arrow location are placed between layers as an explicit transcription convention; the source presents them as programme-wide design and delivery assumptions."
+  ],
+  "source_sha256": "0a32bbdfd9d90192f54b9bd38195158fce8ab712a3b1489bc77022fd1e344491",
+  "prompt_sha256": "5d1cb40eee82156ea7f23694cb51862a2897d4e42dda82082bf094028453e696"
+ }
+}

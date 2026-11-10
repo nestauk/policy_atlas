@@ -92,3 +92,8 @@ scripts/feasibility_checks/
 docs/tasks/*/research/
 docs/tasks/*/spec-changes-proposed.md
 docs/tasks/*/intent.md
+
+# ToC eval: downloaded source PDFs and rendered pages stay local (task 060)
+scripts/evals/theory_of_change/downloads/
+# The ToC candidate longlist and fact tables are provenance records: keep them (task 060)
+!scripts/evals/theory_of_change/candidates/*.csv

@@ -1,0 +1,1127 @@
+{
+ "meta": {
+  "id": "beas_pilot_process",
+  "title": "Evaluation of the Business Energy Advice Service (BEAS) pilot: Process evaluation report",
+  "organisation": "Department for Energy Security and Net Zero",
+  "year": 2026,
+  "country": "United Kingdom",
+  "topic": "SME energy efficiency and decarbonisation",
+  "intervention_type": "programme",
+  "timing": "prospective",
+  "doc_url": "https://assets.publishing.service.gov.uk/media/6a3bb8e1eaee00074150f34d/beas-process-evaluation-report.pdf",
+  "landing_url": "https://www.gov.uk/government/publications/business-energy-advice-service-beas-pilot-process-evaluation",
+  "licence": "",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "ex_post_evaluation",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Support SMEs in reducing energy consumption and progressing towards decarbonisation, while generating evidence to inform future SME decarbonisation policies.",
+  "population": "Small and medium-sized enterprises, including energy-intensive SMEs, eligible for BEAS support.",
+  "place": "West Midlands, England.",
+  "time_horizon": "Phase 1 ran from October 2023 to March 2025. The scheme was extended to March 2026; the wider strategic horizon includes net zero by 2050.",
+  "intervention": "The Business Energy Advice Service pilot offered free standard and energy-intensive energy audits, alongside match-funded grants for eligible energy-saving measures. Phase 1 delivered 2,178 audits, including 100 energy-intensive audits, and £2.7 million in grants to 107 businesses.",
+  "context": "A regional pilot funded by DESNZ and coordinated by WMCA with delivery partners. It had a dual purpose of business support and evidence generation. Its initial delivery window was shortened by contracting delays, and participating businesses differed substantially in resources and capacity.",
+  "outcome_first": "Develop a theory of change for helping SMEs across the West Midlands reduce energy consumption and progress towards decarbonisation. Include how a regional pilot could also generate useful evidence for future SME decarbonisation policy.",
+  "intervention_first": "Develop a theory of change for the Business Energy Advice Service pilot in the West Midlands. It offers SMEs free energy audits and match-funded grants, aiming to reduce energy consumption, support decarbonisation and inform future policy."
+ },
+ "containers": [],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "1. DESNZ Funding and Staff Resources.",
+   "layer": "input",
+   "container": null,
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "b2",
+   "label": "2. DLUHC Capital Funding.",
+   "layer": "input",
+   "container": null,
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "b3",
+   "label": "3. WMCA Capital Funding and Staff Resources.",
+   "layer": "input",
+   "container": null,
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "b4",
+   "label": "4. WMCA mobilise sufficient suitable resources to deliver the Business Energy Advice Service (BEAS).",
+   "layer": "input",
+   "container": null,
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "b5",
+   "label": "5. WMCA Networks (Growth Hubs, Chambers of Commerce etc) and Delivery Partners publicise the audit and grant schemes to eligible applicants.",
+   "layer": "activity",
+   "container": null,
+   "verdict": {
+    "raw": "appear to hold true or have been achieved only to some extent, and for which evidence is mixed",
+    "scale": "partly",
+    "quote": "evidence is mixed",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "b6",
+   "label": "6. WMCA make available capital subsidies for free energy assessments to eligible SMEs.",
+   "layer": "activity",
+   "container": null,
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "b7",
+   "label": "7. WMCA make available capital subsidies (grants) for eligible energy efficiency intervention projects which were recommended by an energy assessment.",
+   "layer": "activity",
+   "container": null,
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "b8",
+   "label": "8. SMEs apply for a subsidised energy assessment (financial barrier is overcome).",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "appear to hold true or have been achieved only to some extent, and for which evidence is mixed",
+    "scale": "partly",
+    "quote": "evidence is mixed",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "b9",
+   "label": "9. SMEs become aware of the potential benefits of energy assessments (Information barrier is overcome).",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "b10",
+   "label": "10. SMEs undergo energy assessments and receive quality reports and recommendations.",
+   "layer": "output",
+   "container": null,
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "b11",
+   "label": "11. SMEs become aware of specific energy efficiency opportunities in their business and understand their potential paybacks (Information barrier is overcome).",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "b12",
+   "label": "12. SMEs gain knowledge of how best to implement energy efficiency measures of which they were already aware (Information barrier is overcome).",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "b13",
+   "label": "13. SMEs review recommendations, and make plans to implement (at least some) of the recommendations.",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b14",
+   "label": "14. SMEs implement some energy efficiency improvements from their own funds. (Key Assumption: payback period is short and sufficient capital reserves).",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b15",
+   "label": "15. SMEs become aware that they can, and therefore do, apply for grants to implement energy efficiency improvements which were recommended from audits, but which were not economically viable to implement from their own funds. (information barrier is overcome).",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "appear to hold true or have been achieved only to some extent, and for which evidence is mixed",
+    "scale": "partly",
+    "quote": "evidence is mixed",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "b16",
+   "label": "16. Quality energy efficiency interventions, which would not otherwise have occurred, are awarded subsidies via the grant process. (financial barrier is overcome).",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": {
+    "raw": "appear to hold true or have been achieved only to some extent, and for which evidence is mixed",
+    "scale": "partly",
+    "quote": "evidence is mixed",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "b17",
+   "label": "17. SMEs plan to implement some improvements that were previously non-viable.",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b18",
+   "label": "18. SMEs implement some energy efficiency improvements from using BEAS grant subsidy. (Key Assumption: payback period without subsidy was long).",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b19",
+   "label": "19. SMEs achieve reduced energy consumption.",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b20",
+   "label": "20. SMEs reduce their energy costs.",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b21",
+   "label": "21. DESNZ receives a sufficiently large volume of rich, consistently formatted data on energy efficiency potential – and propensity to act on it – among SMEs for the first time.",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b22",
+   "label": "22. SMEs reduce their carbon emissions.",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b23",
+   "label": "23. DESNZ utilises this data to “learn lessons” – specifically with the aim of developing future policy interventions suitable for SMEs, in the pursuit of Net Zero.",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b24",
+   "label": "24. SMEs increase their productivity.",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b25",
+   "label": "25. Protect energy security through increasing our energy independence.",
+   "layer": "vision",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b26",
+   "label": "26. Bring down bills and have among the cheapest electricity wholesale prices in Europe by 2035.",
+   "layer": "vision",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b27",
+   "label": "27. Transform our economy to ensure net zero emissions by 2050.",
+   "layer": "vision",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b28",
+   "label": "28. Seize the opportunities of our green energy future to create new energy industries and new jobs.",
+   "layer": "vision",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "l2",
+   "source": "b2",
+   "target": "b3",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "l3",
+   "source": "b3",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "l4",
+   "source": "b4",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "l5",
+   "source": "b4",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "l6",
+   "source": "b4",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "l7",
+   "source": "b6",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "l8",
+   "source": "b5",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "appear to hold true or have been achieved only to some extent, and for which evidence is mixed",
+    "scale": "partly",
+    "quote": "evidence is mixed",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "l9",
+   "source": "b5",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "l10",
+   "source": "b9",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "l11",
+   "source": "b5",
+   "target": "b15",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": {
+    "raw": "appear to hold true or have been achieved only to some extent, and for which evidence is mixed",
+    "scale": "partly",
+    "quote": "evidence is mixed",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "l12",
+   "source": "b8",
+   "target": "b10",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "l13",
+   "source": "b10",
+   "target": "b11",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "l14",
+   "source": "b10",
+   "target": "b12",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "l15",
+   "source": "b11",
+   "target": "b13",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l16",
+   "source": "b12",
+   "target": "b13",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l17",
+   "source": "b13",
+   "target": "b15",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l18",
+   "source": "b15",
+   "target": "b16",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "appear to hold true or have been achieved only to some extent, and for which evidence is mixed",
+    "scale": "partly",
+    "quote": "evidence is mixed",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "l19",
+   "source": "b7",
+   "target": "b16",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "hold true and have been achieved",
+    "scale": "supports",
+    "quote": "supported by consistent and credible evidence",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "l20",
+   "source": "b16",
+   "target": "b17",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l21",
+   "source": "b17",
+   "target": "b18",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l22",
+   "source": "b13",
+   "target": "b14",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l23",
+   "source": "b14",
+   "target": "b19",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l24",
+   "source": "b18",
+   "target": "b19",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l25",
+   "source": "b10",
+   "target": "b21",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l26",
+   "source": "b21",
+   "target": "b23",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l27",
+   "source": "b23",
+   "target": "b27",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l28",
+   "source": "b19",
+   "target": "b22",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l29",
+   "source": "b19",
+   "target": "b20",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l30",
+   "source": "b20",
+   "target": "b24",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l31",
+   "source": "b22",
+   "target": "b27",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l32",
+   "source": "b19",
+   "target": "b25",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l33",
+   "source": "b20",
+   "target": "b26",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l34",
+   "source": "b24",
+   "target": "b28",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "assumption",
+   "text": "the financial and human resources enable the scheme to proceed",
+   "links": [
+    "l1",
+    "l2",
+    "l3"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a2",
+   "kind": "assumption",
+   "text": "the resources available enable WMCA and DPs to use their local relationships, which reach across the entire BEAS target area",
+   "links": [
+    "l5"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a3",
+   "kind": "assumption",
+   "text": "there are sufficient capital funding and enough resources for DPs to identify and engage a suitable number of technically capable suppliers",
+   "links": [
+    "l4"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a4",
+   "kind": "assumption",
+   "text": "the subsidy level is sufficient and the application process straightforward enough to induce application",
+   "links": [
+    "l7"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a5",
+   "kind": "assumption",
+   "text": "pilot BEAS communications are effective and targeted at eligible SMEs",
+   "links": [
+    "l8",
+    "l9"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "There was strong evidence that BEAS communications activities were effective at targeting some eligible businesses.",
+    "scale": "supports",
+    "quote": "effective at targeting some eligible businesses",
+    "page": 52,
+    "studies": []
+   }
+  },
+  {
+   "id": "a6",
+   "kind": "assumption",
+   "text": "audit reports are accessible to SMEs, with tailored recommendations that include reasonably accurate cost-benefit estimates and support is provided to SMEs to develop action plans aligned with their energy efficiency profile and business needs",
+   "links": [
+    "l13",
+    "l14"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a7",
+   "kind": "assumption",
+   "text": "payback period is short and sufficient capital reserves",
+   "links": [
+    "l22"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a8",
+   "kind": "assumption",
+   "text": "payback period without subsidy was long",
+   "links": [
+    "l21"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a9",
+   "kind": "risk",
+   "text": "upfront costs, cash-flow pressures and concerns about the financial return of measures",
+   "links": [
+    "l18",
+    "l21",
+    "l22"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "some financial barriers still persisted, constraining implementation of energy efficiency measures by some SMEs",
+    "scale": "supports",
+    "quote": "some financial barriers still persisted",
+    "page": 9,
+    "studies": []
+   }
+  },
+  {
+   "id": "a10",
+   "kind": "risk",
+   "text": "planning and regulatory requirements, landlord approval processes for tenant-occupied premises, limited internal time and capacity within SMEs, and the suitability of recommended measures for specific buildings or operational contexts",
+   "links": [
+    "l21",
+    "l22"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "several barriers remained outside the scheme’s direct control",
+    "scale": "supports",
+    "quote": "several barriers remained",
+    "page": 9,
+    "studies": []
+   }
+  }
+ ],
+ "context": [
+  "The pilot had a dual purpose: supporting regional SMEs and gathering evidence to inform future policy; delivery stakeholders did not consistently understand this balance.",
+  "Contracting delays caused the scheme to start around six months later than originally planned.",
+  "The original Phase 1 target of 4,000 audits was regarded as highly ambitious for the available delivery period.",
+  "Other information sources had already made some SMEs aware of energy assessments and energy efficiency opportunities.",
+  "Regulatory compliance, high energy consumption and rising energy costs also motivated SME participation.",
+  "Smaller SMEs had less capacity to provide documentation and navigate audit and grant processes.",
+  "Local supplier availability was more limited for specialist technologies than for common measures.",
+  "Findings rely substantially on self-reported evidence; some survey subgroups were small, and SMEs who expressed interest but did not receive an audit could not be studied."
+ ],
+ "key_claims": [
+  {
+   "id": "k1",
+   "claim": "Public funding and staff resources allow WMCA to mobilise BEAS and make audit and grant support available.",
+   "refs": [
+    "b1",
+    "b2",
+    "b3",
+    "b4",
+    "b6",
+    "b7",
+    "l1",
+    "l2",
+    "l3",
+    "l4",
+    "l6",
+    "a1",
+    "a3"
+   ],
+   "where": "Figure 5; Inputs, pp.49–50; executive summary, p.5",
+   "verdict": {
+    "raw": "The funding allocated to BEAS broadly aligned with the business case and was adequate to deliver Phase 1, including both audits and grants. Resource mobilisation was initially affected by delays in finalising contracts for the Primary and Secondary Auditors. Once these issues were resolved, Scheme Delivery Representatives stated that the resources in place were sufficient to deliver the scheme.",
+    "scale": "supports",
+    "quote": "the resources in place were sufficient to deliver the scheme",
+    "page": 49,
+    "studies": []
+   }
+  },
+  {
+   "id": "k2",
+   "claim": "Locally delivered promotion builds awareness of audit benefits and encourages eligible SMEs to apply, although some already know the benefits from other sources.",
+   "refs": [
+    "b5",
+    "b9",
+    "l5",
+    "l8",
+    "l9",
+    "l10",
+    "a2",
+    "a5"
+   ],
+   "where": "Figure 5; BEAS promotion, p.50; Contribution Claim 1 and Alternative Explanation 1, pp.52–53",
+   "verdict": {
+    "raw": "Marketing activities were mostly effective in engaging SMEs, but initial marketing challenges - such as inconsistent messaging and branding, which led to confusion over SMEs’ eligibility for BEAS - along with delays in establishing the scheme resulted in fewer registrations than anticipated. There was strong evidence that BEAS communications activities were effective at targeting some eligible businesses. There was also strong evidence that some SMEs were already aware of the potential benefits of energy assessments because other information sources have communicated this to them.",
+    "scale": "partly",
+    "quote": "BEAS marketing helped some SMEs understand the benefits of energy assessments and encouraged them to apply",
+    "page": 52,
+    "studies": []
+   }
+  },
+  {
+   "id": "k3",
+   "claim": "Free audits and an accessible application process encourage SME participation, but delays and administrative burdens limit uptake.",
+   "refs": [
+    "b6",
+    "b8",
+    "l7",
+    "a4"
+   ],
+   "where": "Figure 5; Engagement with BEAS audits, p.52; SME motivations, p.53; executive summary, pp.4–5",
+   "verdict": {
+    "raw": "the total number of audits delivered in Phase 1 was significantly lower than the 4,000 target set in the business case. This shortfall was largely attributed to the late launch of the scheme, and the target being overly ambitious. However, additional factors - such as some SMEs, particularly smaller organisations, perceiving the application process as burdensome - also contributed to this gap. Most standard and EI SMEs interviewed reported that the audit registration process was straightforward and comparable to other scheme applications.",
+    "scale": "partly",
+    "quote": "adequate to support a reasonable number of applications",
+    "page": 52,
+    "studies": []
+   }
+  },
+  {
+   "id": "k4",
+   "claim": "SMEs participating in BEAS receive useful energy assessments and reports, although inconsistent quality assurance can undermine report quality.",
+   "refs": [
+    "b10",
+    "l12",
+    "a6"
+   ],
+   "where": "Figure 5; Delivery of Energy Efficiency Audits, p.26; executive summary, p.7; Lessons 7–8, p.62",
+   "verdict": {
+    "raw": "The delivery of energy efficiency audits under BEAS was generally described as smooth and well managed. Auditors were reported to have appropriate knowledge and experience to deliver BEAS audits. A large majority of SMEs found their audit report easy to understand (82%) and relevant to their business (80%), providing clear and actionable steps to improve energy efficiency (78%). SMEs that received EI audits reported particularly high levels of satisfaction. However, quality assurance arrangements were applied differently across Delivery Partners. In some cases, audit reports drafted by auditors contained errors or generic content.",
+    "scale": "supports",
+    "quote": "SMEs’ overall perceptions of audit reports were positive",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "k5",
+   "claim": "Audit reports help SMEs identify energy efficiency opportunities and understand potential paybacks, beyond information available elsewhere.",
+   "refs": [
+    "b11",
+    "l13",
+    "a6"
+   ],
+   "where": "Figure 5; Contribution Claim 2 and Alternative Explanation 2, p.53",
+   "verdict": {
+    "raw": "There was strong evidence that most SMEs were satisfied with the quality of the audit reports and reported that BEAS improved their awareness of energy efficiency opportunities, associated payback periods, and practical suggestions for implementation. There was also moderate evidence that SMEs drew on other information sources to overcome informational barriers. However, some SMEs perceived these sources as providing information that was similar to, or of lower quality than, that offered through BEAS.",
+    "scale": "supports",
+    "quote": "BEAS improved their awareness of energy efficiency opportunities, associated payback periods",
+    "page": 53,
+    "studies": []
+   }
+  },
+  {
+   "id": "k6",
+   "claim": "Practical audit advice helps SMEs understand implementation and prepare to act, but knowledge alone does not remove structural and operational constraints.",
+   "refs": [
+    "b12",
+    "b13",
+    "l14",
+    "l15",
+    "l16",
+    "a6",
+    "a10"
+   ],
+   "where": "Figure 5; Information barriers overcome, p.53; executive summary, p.9",
+   "verdict": {
+    "raw": "Most surveyed SMEs (85%) reported engaging with their energy audit report and actively considering the recommendations provided through the BEAS audit (84%). BEAS played an important role in improving SME awareness of energy efficiency opportunities, their potential payback and how measures could be delivered. BEAS also helped SMEs by increasing the priority given to energy demand and carbon reduction. However, several barriers remained outside the scheme’s direct control.",
+    "scale": "supports",
+    "quote": "improved understanding and more informed decision-making",
+    "page": 9,
+    "studies": []
+   }
+  },
+  {
+   "id": "k7",
+   "claim": "Publicity and post-audit assistance help SMEs apply for grants, but demanding processes and unfunded support needs constrain progression.",
+   "refs": [
+    "b15",
+    "l11",
+    "l17"
+   ],
+   "where": "Figure 5; executive summary, p.7; Lesson 8, p.62",
+   "verdict": {
+    "raw": "Delivery Partners and auditors provided substantial pre-grant application support to SMEs. This support was particularly important for smaller SMEs. However, stakeholders noted that this level of support fell outside the funded scope of DPs contracts, creating additional resource pressures during delivery. Just over half (55%) of surveyed SMEs who had applied for a BEAS grant, agreed that the grant application process was clear. The majority of SMEs (61%) felt that the effort required to apply was proportionate to the value of the grant.",
+    "scale": "partly",
+    "quote": "SMEs reported mixed experiences of the grant application process",
+    "page": 7,
+    "studies": []
+   }
+  },
+  {
+   "id": "k8",
+   "claim": "Grant subsidies make some otherwise unaffordable energy efficiency investments possible, but cash flow and match funding remain barriers.",
+   "refs": [
+    "b7",
+    "b16",
+    "l18",
+    "l19",
+    "a9"
+   ],
+   "where": "Figure 5; executive summary, pp.4, 9",
+   "verdict": {
+    "raw": "Among SMEs that reported financial barriers, nearly half stated that BEAS helped them to overcome these challenges. However, some financial barriers still persisted, constraining implementation of energy efficiency measures by some SMEs. Match-funding requirements were a particular constraint, with a significant proportion of SMEs reporting that they were unable to afford the non-grant-funded share of costs, especially among micro businesses.",
+    "scale": "partly",
+    "quote": "nearly half stated that BEAS helped them to overcome these challenges",
+    "page": 9,
+    "studies": []
+   }
+  },
+  {
+   "id": "k9",
+   "claim": "Available suppliers and workable quotation requirements are needed to turn recommendations and grant applications into installations.",
+   "refs": [],
+   "where": "Supply chain findings, p.8; Lesson 2, p.60",
+   "verdict": {
+    "raw": "For more common or routine measures, such as lighting upgrades or standard electrical works, many SMEs reported that identifying suitable suppliers was relatively straightforward. However, SMEs reported greater difficulty when sourcing suppliers for more specialised or niche technologies, particularly where local supply was limited. The requirement to obtain three quotes for grant applications was widely cited as challenging. These challenges were more pronounced for smaller projects or for SMEs operating in more demanding environments.",
+    "scale": "partly",
+    "quote": "greater difficulty when sourcing suppliers for more specialised or niche technologies",
+    "page": 8,
+    "studies": []
+   }
+  },
+  {
+   "id": "k10",
+   "claim": "Programme data and structured feedback support learning, delivery improvements and future policy, but fragmented systems and unclear data requirements weaken this pathway.",
+   "refs": [
+    "b21",
+    "b23",
+    "l25",
+    "l26"
+   ],
+   "where": "Governance structure and monitoring, pp.42, 44; executive summary, pp.8–9; Lessons 6–7, p.62",
+   "verdict": {
+    "raw": "Stakeholders consistently reported that these forums were valuable in enabling the exchange of experience, identifying emerging delivery issues, and informing iterative changes to processes during Phase 1. However, delivery processes, mainly data management and information flows, needed significant improvement. The absence of a shared Customer Relationship Management (CRM) or central data portal meant that monitoring information had to be captured and managed across multiple spreadsheets and formats. A central data portal was introduced in Phase 2, which stakeholders reported had improved the efficiency, consistency, and accessibility of data, although some challenges with validation rules and administrative burden remained.",
+    "scale": "partly",
+    "quote": "delivery processes, mainly data management and information flows, needed significant improvement",
+    "page": 8,
+    "studies": []
+   }
+  },
+  {
+   "id": "k11",
+   "claim": "SMEs implement recommended measures using their own funds when paybacks and reserves permit, or grants when subsidy makes previously non-viable measures feasible; these measures reduce energy consumption.",
+   "refs": [
+    "b13",
+    "b14",
+    "b17",
+    "b18",
+    "b19",
+    "l20",
+    "l21",
+    "l22",
+    "l23",
+    "l24",
+    "a7",
+    "a8"
+   ],
+   "where": "Figure 5; evaluation scope, p.46",
+   "verdict": {
+    "raw": "The elements shown in grey in Figure 5 are outside of the scope of this evaluation and have been assessed as part of the impact evaluation.",
+    "scale": "not_assessed",
+    "quote": "outside of the scope of this evaluation",
+    "page": 46,
+    "studies": []
+   }
+  },
+  {
+   "id": "k12",
+   "claim": "Lower energy consumption reduces emissions and costs, supporting productivity and government objectives for net zero, energy security, bills and green jobs.",
+   "refs": [
+    "b19",
+    "b20",
+    "b22",
+    "b24",
+    "b25",
+    "b26",
+    "b27",
+    "b28",
+    "l28",
+    "l29",
+    "l30",
+    "l31",
+    "l32",
+    "l33",
+    "l34"
+   ],
+   "where": "Figure 5; evaluation scope, p.46",
+   "verdict": {
+    "raw": "The elements shown in grey in Figure 5 are outside of the scope of this evaluation and have been assessed as part of the impact evaluation.",
+    "scale": "not_assessed",
+    "quote": "outside of the scope of this evaluation",
+    "page": 46,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "The BEAS Theory of Change broadly holds for the elements within scope of this study, with consistent and credible evidence supporting the early causal pathways showing how programme inputs and activities overcome the key barriers faced by SMEs.",
+   "scale": "supports",
+   "quote": "The BEAS Theory of Change broadly holds for the elements within scope of this study",
+   "page": 9,
+   "studies": []
+  },
+  "weakest_links": [
+   "l8",
+   "l11",
+   "l18"
+  ],
+  "strongest_links": [
+   "l9",
+   "l10",
+   "l13",
+   "l14"
+  ],
+  "summary": "Core activities, including scheme promotion, audit delivery and access to capital grants, were implemented largely as intended and contributed to the expected intermediate outcomes. Partial achievement generally reflected compressed timescales and operational challenges associated with the pilot rather than weaknesses in the underlying causal logic. Audits improved awareness and understanding, while grants reduced financial barriers for some businesses. Administrative demands, inconsistent report quality, match-funding requirements, specialist supplier availability and structural constraints limited progression. Governance forums supported learning and in-flight adaptation, but data management and communication of the pilot's evidence-generation purpose needed improvement. No assessed element or pathway was rated red. Later implementation and impact pathways were outside this process evaluation's formal scope.",
+  "recommendations": [
+   "Consider tiered support thresholds, potentially linked to annual energy use, to reduce burden and target support appropriately.",
+   "Allow justified exceptions to the three-quote requirement and/or offer scheme-approved supplier lists.",
+   "Embed structured learning and feedback mechanisms from the outset, while limiting the frequency of process changes.",
+   "Finalise contracting, governance and delivery arrangements well before launch, with contingency planning for delays.",
+   "Establish clear mandatory guidance on audit methodologies, on-site expectations, report templates and quality assurance, supported by ongoing oversight.",
+   "Have a fully tested centralised data system in place that collects information once for use across delivery stages.",
+   "Agree and justify essential data requirements before launch and communicate the scheme's policy-learning purpose clearly to delivery partners.",
+   "Explicitly fund post-audit and pre-grant assistance, including help with applications and clarification of audit findings.",
+   "Explore more flexible finance, including zero- or low-interest loans and means-tested grants with lower match-funding requirements."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/beas_pilot_process_p48.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "The supplied document text omits pp.51, 54–59 and 63 and Annex F. Detailed pathway tests and the concluding ToC assessment on those pages could not be checked.",
+   "The figure places box 4 within the Inputs band, whereas p.46 describes boxes 4–7 as Activities. The layer here follows the figure's spatial headings.",
+   "Page 46 lists assessed barriers as boxes 8, 9, 11, 12, 15 and 16, but Figure 5 also gives box 10 a green outline. Its verdict follows the painted figure rather than treating all boxes numbered 1–16 as assessed.",
+   "Barriers Overcome, Capabilities Achieved is mapped to outcome_short; Intermediate Benefits or Outcomes is mapped to outcome_long. These are schema mappings, not source terminology.",
+   "Several arrows between publicity, audit subsidies and barrier boxes share a crowded routing area. Links l7–l9 and l11 are read with medium confidence.",
+   "The grey arrow from box 13 towards box 15 is small; it is transcribed as one-way with medium confidence.",
+   "Figure verdict wording comes from the colour key on pp.46–47, applied to the outlines on p.48. Box fill colours are not verdicts.",
+   "Grey elements and their arrows have no individual verdicts. Process findings relevant to the grey data-and-learning pathway are retained in key claim k10 without assigning a formal RAG rating to those elements.",
+   "The source does not explicitly rank strongest and weakest links. The listed strongest links are those highlighted by the strong contribution evidence on pp.52–53; the weakest are the amber pathways in Figure 5.",
+   "Figure 1 is a governance structure, not a second theory of change, and was not transcribed.",
+   "No exact document URL, landing URL or licence was supplied. Evidence level B is a provisional classification of the mixed-methods process evaluation; no evidence-level rubric was supplied."
+  ],
+  "source_sha256": "1acb5d13cdca40f785cd7e4b433be0524304207ea4857034e667f2b6f604043d",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

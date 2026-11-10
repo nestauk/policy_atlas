@@ -1,0 +1,12 @@
+{
+ "file": "downloads/cai_desnz.pdf",
+ "doc_url": "https://assets.publishing.service.gov.uk/media/69aff07e6827004e30b8a5cc/evaluation-of-the-consumer-advice-and-information-programme-technical-annex.pdf",
+ "landing_url": "https://assets.publishing.service.gov.uk/media/69aee8c4671a8a924c83eedc/evaluation-of-the-consumer-advice-and-information-programme.pdf",
+ "retrieved": "2026-11-09",
+ "figures": [
+  "downloads/pages/cai_desnz_p6.png",
+  "downloads/pages/cai_desnz_p9.png",
+  "downloads/pages/cai_desnz_p14.png"
+ ],
+ "notes": "Figure(s): annex p6 Figure 1 phoneline ToC; annex p9 Figure 3 LEAD ToC (Figs 2 and 4 = assumptions). Verdict scale: \"Evidence test met?\" \"Yes / Partially / No\"; report-level \"Evidence is strong\", \"Strength of evidence is moderate\". Timing: retrospective. Tiny text at 110 dpi, render at 200+ dpi to transcribe; two ToCs; p14 PNG not inspected (Prepared from the longlist row; figures rendered by the checking agent.)"
+}

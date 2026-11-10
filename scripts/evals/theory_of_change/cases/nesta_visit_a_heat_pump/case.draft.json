@@ -1,0 +1,777 @@
+{
+ "meta": {
+  "id": "nesta_visit_a_heat_pump",
+  "title": "Four essential insights on using theory-based evaluation to track innovation progress",
+  "organisation": "Nesta",
+  "year": 2026,
+  "country": "United Kingdom",
+  "topic": "Heat pump perceptions and home decarbonisation",
+  "intervention_type": "programme",
+  "timing": "prospective",
+  "doc_url": "https://www.nesta.org.uk/blog/4-insights-theory-based-evaluation/",
+  "landing_url": "https://www.nesta.org.uk/project/visit-a-heat-pump/",
+  "licence": "Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International",
+  "figure_pages": [],
+  "evidence_level": "C",
+  "verdict_source": "ex_ante_design",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Increase heat pump uptake and contribute to Nesta's mission to reduce UK home carbon emissions by 30% by 2030.",
+  "population": "UK households considering home heating choices, and households hosting heat pump visits.",
+  "place": "United Kingdom",
+  "time_horizon": "Mission horizon of 2030; the supplied diagram specifies interim goals for 2027.",
+  "intervention": "Visit a Heat Pump enables households to take part in visits involving heat pump hosts. The team also seeks press coverage and works to grow the number of hosts and visits. Visit duration, frequency and participant dosage are not specified.",
+  "context": "Nesta uses a mission-led portfolio approach to home decarbonisation rather than treating each project as an isolated intervention. Its theory-based evaluation is intended to support ongoing learning and changes in strategy.",
+  "outcome_first": "Develop a theory of change for increasing heat pump uptake among UK households and contributing to lower home carbon emissions. Situate it within the UK's home decarbonisation challenge and Nesta's 2030 mission horizon.",
+  "intervention_first": "Develop a theory of change for Nesta's Visit a Heat Pump initiative in the United Kingdom. It involves households taking part in heat pump visits, supported by host recruitment and publicity, and aims to increase uptake and contribute to lower home carbon emissions."
+ },
+ "containers": [],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "Heat Pump User Survey",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b2",
+   "label": "Consumer segmentation",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b3",
+   "label": "Media and partner work",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b4",
+   "label": "Get a Heat Pump",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b5",
+   "label": "Greener Homes Content Catalyst",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b6",
+   "label": "Visit a Heat Pump",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b7",
+   "label": "Heat Pump Visuals",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b8",
+   "label": "People know more about heat pumps and their costs, benefits and practicalities",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b9",
+   "label": "People feel confident they know what getting a heat pump will cost and involve",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b10",
+   "label": "People see heat pumps in situ and hear from those with direct experience",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b11",
+   "label": "Heat pumps feel more common and familiar",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b12",
+   "label": "Decision makers and opinion formers have more accurate, informed views on heat pumps",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b13",
+   "label": "Messages are repeated and amplified",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b14",
+   "label": "Low carbon heating is better understood",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b15",
+   "label": "Consumers are confident they are making the right choice",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b16",
+   "label": "Low carbon heating is more trusted",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b17",
+   "label": "Low carbon heating is more normal and desirable",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b18",
+   "label": "66% of people say they will get a heat pump at their next heating system change",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b19",
+   "label": "Policymakers are more confident to introduce pro-heat pump policies",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b20",
+   "label": "~425,000 low carbon heating installs in existing homes during 2027",
+   "layer": "vision",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b3",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l2",
+   "source": "b1",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l3",
+   "source": "b1",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l4",
+   "source": "b1",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l5",
+   "source": "b1",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l6",
+   "source": "b2",
+   "target": "b3",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l7",
+   "source": "b2",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l8",
+   "source": "b2",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l9",
+   "source": "b2",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l10",
+   "source": "b2",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l11",
+   "source": "b3",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l12",
+   "source": "b3",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l13",
+   "source": "b3",
+   "target": "b10",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l14",
+   "source": "b3",
+   "target": "b11",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l15",
+   "source": "b3",
+   "target": "b12",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l16",
+   "source": "b5",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l17",
+   "source": "b5",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l18",
+   "source": "b5",
+   "target": "b10",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l19",
+   "source": "b5",
+   "target": "b11",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l20",
+   "source": "b5",
+   "target": "b12",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l21",
+   "source": "b6",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l22",
+   "source": "b6",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l23",
+   "source": "b6",
+   "target": "b10",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l24",
+   "source": "b6",
+   "target": "b11",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l25",
+   "source": "b6",
+   "target": "b12",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l26",
+   "source": "b7",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l27",
+   "source": "b7",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l28",
+   "source": "b7",
+   "target": "b10",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l29",
+   "source": "b7",
+   "target": "b11",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l30",
+   "source": "b7",
+   "target": "b12",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l31",
+   "source": "b8",
+   "target": "b14",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l32",
+   "source": "b8",
+   "target": "b15",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l33",
+   "source": "b9",
+   "target": "b14",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l34",
+   "source": "b9",
+   "target": "b15",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l35",
+   "source": "b10",
+   "target": "b14",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l36",
+   "source": "b10",
+   "target": "b15",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l37",
+   "source": "b10",
+   "target": "b16",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l38",
+   "source": "b10",
+   "target": "b17",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l39",
+   "source": "b11",
+   "target": "b16",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l40",
+   "source": "b11",
+   "target": "b17",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l41",
+   "source": "b12",
+   "target": "b13",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l42",
+   "source": "b13",
+   "target": "b16",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l43",
+   "source": "b13",
+   "target": "b17",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l44",
+   "source": "b14",
+   "target": "b18",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l45",
+   "source": "b15",
+   "target": "b18",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l46",
+   "source": "b16",
+   "target": "b18",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l47",
+   "source": "b17",
+   "target": "b18",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l48",
+   "source": "b18",
+   "target": "b20",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l49",
+   "source": "b18",
+   "target": "b19",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l50",
+   "source": "b19",
+   "target": "b20",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "assumption",
+   "text": "The most likely pathway to scaled impact for Visit a Heat Pump is through communications and media coverage, rather than the direct effect of individual households taking part.",
+   "links": [],
+   "from_layer": "activity",
+   "to_layer": "impact",
+   "verdict": {
+    "raw": "it emerged that the most likely pathway to scaled impact for the project was through communications and media coverage, rather than the direct effect of individual households taking part in Visit a Heat Pump.",
+    "scale": "supports",
+    "quote": "the most likely pathway to scaled impact for the project was through communications and media coverage",
+    "page": null,
+    "studies": []
+   }
+  }
+ ],
+ "context": [
+  "Nesta's home decarbonisation work comprises four areas of focus: heat pump perceptions, installer capacity, financial incentives and consumer journeys.",
+  "The document describes systemic change in which multiple organisations contribute to final results; it does not claim sole attribution to Nesta.",
+  "The impact framework uses light-touch theory-based evaluation with lower standards of evidence, whereas the Greener Homes Content Catalyst is being evaluated using a more robust approach."
+ ],
+ "key_claims": [
+  {
+   "id": "k1",
+   "claim": "User research and consumer segmentation inform initiatives intended to improve heat pump perceptions.",
+   "refs": [
+    "b1",
+    "b2",
+    "b3",
+    "b4",
+    "b5",
+    "b6",
+    "b7",
+    "l1",
+    "l2",
+    "l3",
+    "l4",
+    "l5",
+    "l6",
+    "l7",
+    "l8",
+    "l9",
+    "l10"
+   ],
+   "where": "Supplied Figure 2, core underpinning research and key initiatives",
+   "verdict": null
+  },
+  {
+   "id": "k2",
+   "claim": "The initiatives increase knowledge of heat pumps and confidence about what getting one costs and involves.",
+   "refs": [
+    "b8",
+    "b9",
+    "l11",
+    "l12",
+    "l16",
+    "l17",
+    "l21",
+    "l22",
+    "l26",
+    "l27"
+   ],
+   "where": "Supplied Figure 2, intended outcomes",
+   "verdict": null
+  },
+  {
+   "id": "k3",
+   "claim": "Heat pump visits and the wider initiatives expose people to installed heat pumps and users' experience, making heat pumps more familiar.",
+   "refs": [
+    "b6",
+    "b10",
+    "b11",
+    "l13",
+    "l14",
+    "l18",
+    "l19",
+    "l23",
+    "l24",
+    "l28",
+    "l29"
+   ],
+   "where": "Supplied Figure 2, key initiatives and intended outcomes",
+   "verdict": null
+  },
+  {
+   "id": "k4",
+   "claim": "Better-informed decision makers and opinion formers repeat and amplify messages about heat pumps.",
+   "refs": [
+    "b12",
+    "b13",
+    "l15",
+    "l20",
+    "l25",
+    "l30",
+    "l41"
+   ],
+   "where": "Supplied Figure 2, intended outcomes",
+   "verdict": null
+  },
+  {
+   "id": "k5",
+   "claim": "Knowledge, confidence about installation and direct experience improve understanding of low carbon heating and confidence in choosing it.",
+   "refs": [
+    "b14",
+    "b15",
+    "l31",
+    "l32",
+    "l33",
+    "l34",
+    "l35",
+    "l36"
+   ],
+   "where": "Supplied Figure 2, intended outcomes to perceptions objectives",
+   "verdict": null
+  },
+  {
+   "id": "k6",
+   "claim": "Direct experience, familiarity and amplified messages make low carbon heating more trusted, normal and desirable.",
+   "refs": [
+    "b16",
+    "b17",
+    "l37",
+    "l38",
+    "l39",
+    "l40",
+    "l42",
+    "l43"
+   ],
+   "where": "Supplied Figure 2, intended outcomes to perceptions objectives",
+   "verdict": null
+  },
+  {
+   "id": "k7",
+   "claim": "Improved understanding, choice confidence, trust and desirability increase intentions to get a heat pump at the next heating system change.",
+   "refs": [
+    "b18",
+    "l44",
+    "l45",
+    "l46",
+    "l47"
+   ],
+   "where": "Supplied Figure 2, perceptions objectives to 2027 progress indicator",
+   "verdict": null
+  },
+  {
+   "id": "k8",
+   "claim": "Greater public intention to adopt heat pumps increases installations directly and by giving policymakers confidence to introduce supportive policies.",
+   "refs": [
+    "b18",
+    "b19",
+    "b20",
+    "l48",
+    "l49",
+    "l50"
+   ],
+   "where": "Supplied Figure 2, 2027 progress indicator and mission goal",
+   "verdict": null
+  },
+  {
+   "id": "k9",
+   "claim": "Visit a Heat Pump is more likely to achieve scaled impact through communications and media coverage than through the direct effect on participating households.",
+   "refs": [
+    "a1"
+   ],
+   "where": "Section 4, Tracking logic in real-time enables strategic pivots",
+   "verdict": {
+    "raw": "it emerged that the most likely pathway to scaled impact for the project was through communications and media coverage, rather than the direct effect of individual households taking part in Visit a Heat Pump.",
+    "scale": "supports",
+    "quote": "through communications and media coverage, rather than the direct effect of individual households",
+    "page": null,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": null,
+  "weakest_links": [],
+  "strongest_links": [],
+  "summary": "Reviewing Visit a Heat Pump's assumptions identified communications and media coverage as its most likely route to scaled impact, rather than the direct effect on individual participating households. The team consequently increased efforts to gain press coverage while also focusing on growing hosts and visits. The article presents this as an example of theory-based evaluation enabling timely strategic pivots, not as a measured demonstration that the diagram's outcomes or targets have been achieved.",
+  "recommendations": [
+   "Increase efforts to gain press coverage for Visit a Heat Pump while continuing to grow the number of hosts and visits.",
+   "Monitor causal links and revisit assumptions while work is ongoing so teams can reallocate resources and refine strategy.",
+   "Match the intensity of theory-based evaluation to programme maturity, stakes and available capacity."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/nesta_visit_a_heat_pump_fig2.jpg']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "The notes and article identify the supplied image as Figure 2, but its visible title is 'Summary Theory of Change for Heat Pumps Perceptions Area of Focus'. It contains five initiatives, including Visit a Heat Pump, rather than a standalone Visit a Heat Pump diagram.",
+   "No page numbers were supplied for this web article or its figure. figure_pages is therefore empty; verdict page fields are null.",
+   "The article also describes Figure 1 as the heat pump perceptions area-of-focus diagram. No separate Figure 1 image was supplied, so its relationship to the supplied Figure 2 cannot be verified.",
+   "Several arrows use shared branching connector lines without junction dots. Links through these shared lines have been expanded into source-target pairs and marked medium confidence; the figure does not distinguish each initiative's individual contribution to each connected outcome.",
+   "No outgoing connector from Get a Heat Pump to the intended-outcomes spine is clearly visible in the supplied image. None has been added.",
+   "Layer mapping follows the headings: core underpinning research=input; key initiatives=activity; intended outcomes=outcome_short; perceptions objectives=outcome_long; 2027 progress indicator=impact; 2027 mission goal=vision. The policymaker box is an indirect outcome placed below the final columns and is mapped to outcome_long.",
+   "The only causal judgement in the accompanying narrative is a comparative judgement about the most likely route to scale. Its supports coding applies to that likelihood judgement, not to demonstrated impact. No empirical effect estimates, named studies, achieved outcomes or formal overall verdict are reported.",
+   "The communications-versus-direct-participation judgement spans the pathway and cannot be assigned to a single drawn arrow; it is recorded as assumption a1 and key claim k9."
+  ],
+  "source_sha256": "2d70465a5260081d38a832c19bd87331884b029348c68199b76e3168dc6616af",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

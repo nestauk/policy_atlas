@@ -1,0 +1,825 @@
+{
+ "meta": {
+  "id": "agep_zambia_2017",
+  "title": "Evaluation of the Girls Empowerment Programme in Zambia: End Term Evaluation Report",
+  "organisation": "Mott MacDonald",
+  "year": 2017,
+  "country": "Zambia",
+  "topic": "Adolescent girls' empowerment",
+  "intervention_type": "programme",
+  "timing": "prospective",
+  "doc_url": "https://www.gov.uk/government/publications/evaluation-of-adolescent-girls-empowerment-programme",
+  "landing_url": "https://www.gov.uk/government/publications/evaluation-of-adolescent-girls-empowerment-programme",
+  "licence": "",
+  "figure_pages": [],
+  "evidence_level": "A",
+  "verdict_source": "ex_post_evaluation",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Enable vulnerable adolescent girls to make a healthy transition to adulthood, improving education and sexual and reproductive health and reducing early marriage and gender-based violence.",
+  "population": "Vulnerable adolescent girls aged 10–19, with younger and older cohorts in urban and rural settings.",
+  "place": "Zambia; ten programme sites across four provinces.",
+  "time_horizon": "A two-year intervention phase, implemented through a phased roll-out between August 2013 and March 2016, with longer-term follow-up through the 2017 Round 5 survey.",
+  "intervention": "The Adolescent Girls Empowerment Programme (AGEP): weekly group meetings with a young female community mentor over two years, providing educational and pastoral support. Additional programme components included age-appropriate health vouchers and access to Girls' Dream bank savings accounts.",
+  "context": "Social isolation, economic vulnerability and lack of appropriate health information and services hinder girls' transition to adulthood. Urban and rural girls face different constraints, and parents, relatives, husbands and other community gatekeepers can affect participation.",
+  "outcome_first": "Develop a theory of change for helping vulnerable adolescent girls aged 10–19 in urban and rural Zambia make a healthy transition to adulthood. The intended changes include better education and sexual and reproductive health, less early marriage and less gender-based violence. Consider a two-year intervention period and longer-term follow-up.",
+  "intervention_first": "Develop a theory of change for Zambia's Adolescent Girls Empowerment Programme for vulnerable girls aged 10–19. It provides weekly mentor-led group meetings over two years, with additional health-voucher and bank-account components, aiming to improve girls' transition to adulthood, education and sexual and reproductive health and reduce early marriage and gender-based violence."
+ },
+ "containers": [
+  {
+   "id": "c1",
+   "label": "brace: Savings accounts opened; Financial education",
+   "layer": "activity"
+  },
+  {
+   "id": "c2",
+   "label": "brace: Sexual and reproductive health education; Health vouchers",
+   "layer": "activity"
+  },
+  {
+   "id": "c3",
+   "label": "shared bracket: Economic assets; Social assets; Health assets",
+   "layer": "outcome_short"
+  }
+ ],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "‘Safe Spaces’ Mentoring sessions",
+   "layer": "activity",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b2",
+   "label": "Savings accounts opened",
+   "layer": "activity",
+   "container": "c1",
+   "verdict": null
+  },
+  {
+   "id": "b3",
+   "label": "Financial education",
+   "layer": "activity",
+   "container": "c1",
+   "verdict": null
+  },
+  {
+   "id": "b4",
+   "label": "Sexual and reproductive health education",
+   "layer": "activity",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b5",
+   "label": "Health vouchers",
+   "layer": "activity",
+   "container": "c2",
+   "verdict": null
+  },
+  {
+   "id": "b6",
+   "label": "Economic assets",
+   "layer": "outcome_short",
+   "container": "c3",
+   "verdict": null
+  },
+  {
+   "id": "b7",
+   "label": "Social assets",
+   "layer": "outcome_short",
+   "container": "c3",
+   "verdict": null
+  },
+  {
+   "id": "b8",
+   "label": "Health assets",
+   "layer": "outcome_short",
+   "container": "c3",
+   "verdict": null
+  },
+  {
+   "id": "b9",
+   "label": "Increased school completion",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b10",
+   "label": "Delayed sexual debut",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b11",
+   "label": "Reduced early marriage",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b12",
+   "label": "Reduced gender-based violence",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b13",
+   "label": "Fewer early/unintended pregnancies",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b14",
+   "label": "Reduced STI transmission",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b15",
+   "label": "Reduced HIV transmission",
+   "layer": "impact",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b2",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l2",
+   "source": "b1",
+   "target": "b3",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l3",
+   "source": "b1",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "Since, at this stage, the evidence for building social assets remains inconclusive at the outcome level, it remains difficult to trace a credible pathway to impact level results, and thus confirm Hypothesis 1 in the AGEP theory of change.",
+    "scale": "insufficient",
+    "quote": "the evidence for building social assets remains inconclusive at the outcome level",
+    "page": 33,
+    "studies": [
+     "Population Council 2016"
+    ]
+   }
+  },
+  {
+   "id": "l4",
+   "source": "b1",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l5",
+   "source": "b1",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l6",
+   "source": "c1",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "So, at this stage, the evidence for building economic assets is somewhat mixed at the outcome level. There are also no obvious links to the inconclusive impact level results. It, therefore, remains difficult to confirm Hypothesis 3 in the AGEP theory of change at this stage.",
+    "scale": "partly",
+    "quote": "the evidence for building economic assets is somewhat mixed at the outcome level",
+    "page": 48,
+    "studies": [
+     "Population Council 2016"
+    ]
+   }
+  },
+  {
+   "id": "l7",
+   "source": "c2",
+   "target": "b8",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "So, at this stage, the evidence for building health assets remains inconclusive at the empowerment outcome level. It, therefore, remains difficult to trace a credible pathway to impact level results, and thus confirm Hypothesis 2 in the AGEP theory of change.",
+    "scale": "insufficient",
+    "quote": "the evidence for building health assets remains inconclusive",
+    "page": 41,
+    "studies": [
+     "Population Council 2016"
+    ]
+   }
+  },
+  {
+   "id": "l8",
+   "source": "c3",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l9",
+   "source": "c3",
+   "target": "b10",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l10",
+   "source": "c3",
+   "target": "b11",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l11",
+   "source": "c3",
+   "target": "b12",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l12",
+   "source": "c3",
+   "target": "b13",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l13",
+   "source": "c3",
+   "target": "b14",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l14",
+   "source": "c3",
+   "target": "b15",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "assumption",
+   "text": "Suitable female mentors can be identified in the community",
+   "links": [
+    "l3"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Although suitable mentors were successfully recruited in each CSA, our interviews/observations pointed to some variability in mentor knowledge, experience and skills.",
+    "scale": "supports",
+    "quote": "suitable mentors were successfully recruited in each CSA",
+    "page": 31,
+    "studies": []
+   }
+  },
+  {
+   "id": "a2",
+   "kind": "assumption",
+   "text": "The most poor and vulnerable girls can be identified and will have sufficient autonomy to be able to attend weekly meetings",
+   "links": [
+    "l3"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Although girls were systematically selected against using vulnerability index, the need to meet recruitment targets meant there was greater variance in levels of vulnerability among rural girls (with possible effects on group dynamics). We noted that parents, relatives, husbands and other ‘community gatekeepers’ can affect the autonomy of the girls to participate in programme activities.",
+    "scale": "partly",
+    "quote": "parents, relatives, husbands and other ‘community gatekeepers’ can affect the autonomy of the girls",
+    "page": 31,
+    "studies": []
+   }
+  },
+  {
+   "id": "a3",
+   "kind": "assumption",
+   "text": "Mentors will be able to successfully deliver the curriculum in such a way that it influences SRH knowledge and decision making",
+   "links": [
+    "l3",
+    "l7"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Although mentors received good training and support, we found some variability in mentor skills. Results on SRH knowledge and decision-making were not conclusive at the end of the intervention.",
+    "scale": "insufficient",
+    "quote": "Results on SRH knowledge and decision-making were not conclusive",
+    "page": 31,
+    "studies": []
+   }
+  },
+  {
+   "id": "a4",
+   "kind": "assumption",
+   "text": "Programme will be able to have an effect on self-esteem",
+   "links": [
+    "l3"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Results on self-esteem were not conclusive at the end of the intervention (Round 3) for any sample segment.",
+    "scale": "insufficient",
+    "quote": "Results on self-esteem were not conclusive",
+    "page": 31,
+    "studies": [
+     "Population Council 2016"
+    ]
+   }
+  },
+  {
+   "id": "a5",
+   "kind": "assumption",
+   "text": "Girls willing to report unwanted sex during programme surveys; there is a link between assets and unwanted and/or transactional sex",
+   "links": [],
+   "from_layer": "outcome_short",
+   "to_layer": "impact",
+   "verdict": null
+  },
+  {
+   "id": "a6",
+   "kind": "assumption",
+   "text": "Health workers in post, especially at peripheral rural health facilities",
+   "links": [
+    "l7"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a7",
+   "kind": "assumption",
+   "text": "Support from MOH/MCDMCH and DMOs for voucher scheme",
+   "links": [
+    "l7"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a8",
+   "kind": "assumption",
+   "text": "A range of providers exists and has the potential to provide a package of quality services to adolescent girls",
+   "links": [
+    "l7"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a9",
+   "kind": "assumption",
+   "text": "Vouchers will encourage uptake of services among adolescent girls",
+   "links": [
+    "l7"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "We have observed that several of the assumptions underpinning this component of the theory of change need qualification (e.g. the assumption that health vouchers alone are sufficient to leverage uptake of services).",
+    "scale": "partly",
+    "quote": "the assumption that health vouchers alone are sufficient to leverage uptake of services",
+    "page": 41,
+    "studies": []
+   }
+  },
+  {
+   "id": "a10",
+   "kind": "assumption",
+   "text": "Vouchers will encourage providers to offer quality and adolescent-friendly services",
+   "links": [
+    "l7"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a11",
+   "kind": "assumption",
+   "text": "Financial institutions will extend services to rural areas and small savers in Zambia",
+   "links": [
+    "l6"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "In particular, the assumption relating to the viability and accessibility of Girls Dream savings accounts needs to be revisited.",
+    "scale": "partly",
+    "quote": "the viability and accessibility of Girls Dream savings accounts needs to be revisited",
+    "page": 48,
+    "studies": []
+   }
+  },
+  {
+   "id": "a12",
+   "kind": "assumption",
+   "text": "Financial goals translate into desire for savings accounts",
+   "links": [
+    "l6"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a13",
+   "kind": "assumption",
+   "text": "Poor adolescent girls will be able to save",
+   "links": [
+    "l6"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a14",
+   "kind": "assumption",
+   "text": "Girls are able to save money, especially in rural areas",
+   "links": [
+    "l6"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a15",
+   "kind": "assumption",
+   "text": "The presence of other complementary initiatives working on structural and normative issues, and male involvement",
+   "links": [
+    "l3"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "We note that several of the design assumptions could not be validated (e.g. the presence of other complementary initiatives working on structural and normative issues, and male involvement).",
+    "scale": "insufficient",
+    "quote": "several of the design assumptions could not be validated",
+    "page": 2,
+    "studies": []
+   }
+  },
+  {
+   "id": "a16",
+   "kind": "assumption",
+   "text": "Assets built during the two-year intervention phase will be protective for girls undergoing the transition to adulthood, leading to longer-term impacts.",
+   "links": [
+    "l8",
+    "l9",
+    "l10",
+    "l11",
+    "l12",
+    "l13",
+    "l14"
+   ],
+   "from_layer": "outcome_short",
+   "to_layer": "impact",
+   "verdict": {
+    "raw": "So, an emerging question is, how strong (and complete) do the effects on empowerment outcomes need to be at this point to produce intended impacts in the longer term? Additional questions for consideration are: a) how long the effects of assets built over the two-year intervention phase likely to endure? and b) how strong are the longer-term impacts likely to be for older girls who have already made sexual transitions? We can only speculate at this stage",
+    "scale": "insufficient",
+    "quote": "We can only speculate at this stage",
+    "page": 49,
+    "studies": []
+   }
+  }
+ ],
+ "context": [
+  "Social isolation, economic vulnerability and lack of appropriate health information and services are critical problems for Zambian girls' transition to adulthood.",
+  "Urban and rural settings, and younger and older age cohorts, have different constraints, risks and opportunities.",
+  "Parents, relatives, husbands and other community gatekeepers can affect girls' autonomy to participate.",
+  "Distance to banks is a key barrier, especially for rural girls.",
+  "Delayed roll-out of the health-voucher component and limited or concentrated voucher use may have limited observed health effects.",
+  "The evaluation used Round 1–3 intent-to-treat difference-in-difference estimates against internal controls. External-control analysis was not yet available to fully assess spillover.",
+  "Longer-term impact findings were not yet available; Round 5 follow-up was expected in 2017."
+ ],
+ "key_claims": [
+  {
+   "id": "k1",
+   "claim": "Safe Spaces mentoring builds social assets, but effects vary by age and setting.",
+   "refs": [
+    "b1",
+    "b7",
+    "l3"
+   ],
+   "where": "Table 1; Sections 5.1.2 and 5.1.6; Figures 5–6",
+   "verdict": {
+    "raw": "there is evidence that Safe Spaces produced a significant positive (p <0.05) effect for younger rural girls in having a safe space to meet friends, and for older rural girls on condom use at first sex. However, for the majority of indicators on social assets, after two years of programme implementation, there was no evidence of effects.",
+    "scale": "insufficient",
+    "quote": "for the majority of indicators on social assets ... there was no evidence of effects",
+    "page": 33,
+    "studies": [
+     "Population Council 2016"
+    ]
+   }
+  },
+  {
+   "id": "k2",
+   "claim": "Mentoring can improve urban girls' autonomy and social participation, but the urban pathway review shows mixed or adverse effects rather than consistent gains.",
+   "refs": [],
+   "where": "Figure 5, older urban girls aged 15–19 and younger urban girls aged 10–14, Rounds 1–3",
+   "verdict": {
+    "raw": "OLDER GIRLS (15-19): Autonomy in decisions on money earned — Marginally significant positive effect relative to controls; Social club attendance – past month — Significant negative effect relative to controls; All other social assets indicators — No effect found. YOUNGER GIRLS (10-14): Autonomy in decisions on money earned — Marginally significant negative effect relative to controls; All other social assets indicators — No effect found.",
+    "scale": "partly",
+    "quote": "All other social assets indicators",
+    "page": 25,
+    "studies": [
+     "Population Council 2016"
+    ]
+   }
+  },
+  {
+   "id": "k3",
+   "claim": "The programme's asset-building approach should improve education, sexual transitions and protection from sexual risk, but early impact results are mixed across groups.",
+   "refs": [
+    "a5",
+    "b9",
+    "b10",
+    "b12",
+    "l8",
+    "l9",
+    "l11"
+   ],
+   "where": "Figure 5; Table 1; Sections 5.1.6 and Findings Part 3: Comparative evaluation",
+   "verdict": {
+    "raw": "Of some concern were the significant negative effects on impact level indicators relating to sexual debut and school attendance for older urban girls. Figure 5: Transactional sex — Marginally significant positive effect relative to controls; All other impact indicators — No effect found. Younger girls: Avg. years of schooling; Completed primary school; Physical/intimate partner violence past 12 months — No effect found; No other impact indicators measured R3 for this age group. The comparative analysis shows that, after 24 months of interventions, AGEP compares reasonably well with the other programmes, since it has had significant positive effects on transactional sex and condom use at first sex.",
+    "scale": "partly",
+    "quote": "significant negative effects on impact level indicators relating to sexual debut and school attendance for older urban girls",
+    "page": 2,
+    "studies": [
+     "Population Council 2016"
+    ]
+   }
+  },
+  {
+   "id": "k4",
+   "claim": "Safe Spaces reproductive-health education and health vouchers build health assets, with observed knowledge gains concentrated among younger rural girls.",
+   "refs": [
+    "b4",
+    "b5",
+    "c2",
+    "b8",
+    "l7"
+   ],
+   "where": "Table 1; Sections 5.2.2 and 5.2.6; Figures 7–8",
+   "verdict": {
+    "raw": "there is evidence of a significant positive effects (p<0.05) on the contraceptive knowledge of younger, rural girls. However, for the majority of indicators on health assets, there remains no strong evidence of effects over Rounds 1-3 for either urban or rural girls across the two age sets. Given the limited use of vouchers, it is most likely that the positive gains in contraceptive knowledge for rural girls are linked to the SRH education component delivered through Safe Spaces.",
+    "scale": "insufficient",
+    "quote": "the evidence for building health assets remains inconclusive",
+    "page": 41,
+    "studies": [
+     "Population Council 2016"
+    ]
+   }
+  },
+  {
+   "id": "k5",
+   "claim": "Health vouchers need to generate service uptake and suitable service delivery to improve health; providing vouchers alone may not be sufficient.",
+   "refs": [
+    "a6",
+    "a7",
+    "a8",
+    "a9",
+    "a10",
+    "l7"
+   ],
+   "where": "Sections 5.2.6 and 8.4; Table 1",
+   "verdict": {
+    "raw": "Evidence from our evaluation review of process confirms that there has been limited use of health vouchers –or just repeated use by a minority of girls. This, combined with the delayed roll-out of this component, could explain why the health voucher scheme has not yet translated into significant gains in perceived health status by Round 3. We have observed that several of the assumptions underpinning this component of the theory of change need qualification",
+    "scale": "partly",
+    "quote": "there has been limited use of health vouchers –or just repeated use by a minority of girls",
+    "page": 41,
+    "studies": [
+     "Population Council 2016"
+    ]
+   }
+  },
+  {
+   "id": "k6",
+   "claim": "Financial education and savings provision build economic assets, but the effects differ across age groups, settings and measures.",
+   "refs": [
+    "b2",
+    "b3",
+    "c1",
+    "b6",
+    "l6",
+    "a12",
+    "a13",
+    "a14"
+   ],
+   "where": "Table 1; Sections 5.3.2 and 5.3.6; Figures 9–10",
+   "verdict": {
+    "raw": "there is strong evidence that the intervention led to significant positive effects (p<0.05) on the saving activity of older and younger urban girls, and on the percentage of older urban girls working for cash or in-kind payments. There is also strong evidence of significant positive effects on the income earnt by older rural girls working for cash, and on the financial literacy scores of younger rural girls. For most other indicators on economic assets, the evidence remains inconclusive; however, the significant negative effect on the percentage of older rural girls working for cash or in-kind payments remains difficult to explain.",
+    "scale": "partly",
+    "quote": "the evidence for building economic assets is somewhat mixed at the outcome level",
+    "page": 48,
+    "studies": [
+     "Population Council 2016"
+    ]
+   }
+  },
+  {
+   "id": "k7",
+   "claim": "Economic gains depend on usable and sustainable savings arrangements; the observed gains cannot readily be attributed to bank-account use rather than financial education and mentoring.",
+   "refs": [
+    "b2",
+    "b3",
+    "l6",
+    "a11"
+   ],
+   "where": "Sections 5.3.6, Findings Part 2: Economics evaluation, and 8.4",
+   "verdict": {
+    "raw": "it is difficult to link positive gains in economic assets to use of the Girls Dream savings accounts –other than through reinforcement of learning. This suggests that the positive gains in economic assets are largely due to an effective financial education curriculum and guidance from mentors on income generating activities. This tentative conclusion would benefit from further investigation to strengthen the evidence base. The Girls’ Dream savings account may not be sustainable in the longer-term without further collaborative working with the NatSave Bank and further investment from partners. The cost-effectiveness of this component thus remains uncertain.",
+    "scale": "insufficient",
+    "quote": "it is difficult to link positive gains in economic assets to use of the Girls Dream savings accounts",
+    "page": 48,
+    "studies": [
+     "Population Council 2016"
+    ]
+   }
+  },
+  {
+   "id": "k8",
+   "claim": "Adding the health-voucher and savings-account components should generate benefits beyond Safe Spaces alone sufficient to justify their additional costs.",
+   "refs": [
+    "b2",
+    "b5",
+    "l6",
+    "l7"
+   ],
+   "where": "Findings Part 2: Economics evaluation; Section 8.4",
+   "verdict": {
+    "raw": "The existing analysis already tells us that there were no significant additional benefits for the additional costs of Arms 2 and 3 of AGEP. However, the best time to look at an economic evaluation of AGEP is when the information on longer-term impacts is available.",
+    "scale": "against",
+    "quote": "no significant additional benefits for the additional costs of Arms 2 and 3",
+    "page": 4,
+    "studies": [
+     "Population Council 2016"
+    ]
+   }
+  },
+  {
+   "id": "k9",
+   "claim": "Assets built during two years of participation persist and protect girls during the transition to adulthood, producing longer-term impacts.",
+   "refs": [
+    "c3",
+    "a16",
+    "l8",
+    "l9",
+    "l10",
+    "l11",
+    "l12",
+    "l13",
+    "l14"
+   ],
+   "where": "Sections 5.1.6, 5.2.6, 5.3.6 and 5.4",
+   "verdict": {
+    "raw": "how strong (and complete) do the effects on empowerment outcomes need to be at this point to produce intended impacts in the longer term? Additional questions for consideration are: a) how long the effects of assets built over the two-year intervention phase likely to endure? and b) how strong are the longer-term impacts likely to be for older girls who have already made sexual transitions? We can only speculate at this stage",
+    "scale": "insufficient",
+    "quote": "We can only speculate at this stage",
+    "page": 49,
+    "studies": []
+   }
+  },
+  {
+   "id": "k10",
+   "claim": "Suitable local mentors and the recruitment and attendance of vulnerable girls make the Safe Spaces mechanism possible.",
+   "refs": [
+    "b1",
+    "a1",
+    "a2",
+    "l3"
+   ],
+   "where": "Table 6; Sections 5.1.5 and 5.1.6",
+   "verdict": {
+    "raw": "Although suitable mentors were successfully recruited in each CSA, our interviews/observations pointed to some variability in mentor knowledge, experience and skills. Although girls were systematically selected against using vulnerability index, the need to meet recruitment targets meant there was greater variance in levels of vulnerability among rural girls (with possible effects on group dynamics). We noted that parents, relatives, husbands and other ‘community gatekeepers’ can affect the autonomy of the girls to participate in programme activities.",
+    "scale": "partly",
+    "quote": "suitable mentors were successfully recruited in each CSA",
+    "page": 31,
+    "studies": []
+   }
+  },
+  {
+   "id": "k11",
+   "claim": "Mentors' curriculum delivery improves girls' self-esteem, reproductive-health knowledge and decision-making.",
+   "refs": [
+    "a3",
+    "a4",
+    "l3",
+    "l7"
+   ],
+   "where": "Table 6; Section 5.1.5",
+   "verdict": {
+    "raw": "Although mentors received good training and support, we found some variability in mentor skills. Results on SRH knowledge and decision-making were not conclusive at the end of the intervention. Results on self-esteem were not conclusive at the end of the intervention (Round 3) for any sample segment.",
+    "scale": "insufficient",
+    "quote": "Results on self-esteem were not conclusive",
+    "page": 31,
+    "studies": [
+     "Population Council 2016"
+    ]
+   }
+  },
+  {
+   "id": "k12",
+   "claim": "Complementary action on structural and normative barriers, including male involvement, supports the social-assets pathway.",
+   "refs": [
+    "a15",
+    "l3"
+   ],
+   "where": "Table 1; Section 5.1.6",
+   "verdict": {
+    "raw": "We note that several of the design assumptions could not be validated (e.g. the presence of other complementary initiatives working on structural and normative issues, and male involvement).",
+    "scale": "insufficient",
+    "quote": "several of the design assumptions could not be validated",
+    "page": 2,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "Since, at this stage, the evidence for building social assets remains inconclusive at the outcome level, it remains difficult to trace a credible pathway to impact level results, and thus confirm Hypothesis 1 in the AGEP theory of change. So, at this stage, the evidence for building health assets remains inconclusive at the empowerment outcome level. So, at this stage, the evidence for building economic assets is somewhat mixed at the outcome level.",
+   "scale": "insufficient",
+   "quote": "it remains difficult to trace a credible pathway to impact level results",
+   "page": null,
+   "studies": [
+    "Population Council 2016"
+   ]
+  },
+  "weakest_links": [
+   "a9",
+   "a11",
+   "a15",
+   "a16"
+  ],
+  "strongest_links": [],
+  "summary": "At Round 3, evidence for building social and health assets remained inconclusive, while economic-asset findings were mixed, with strong positive effects on selected measures and subgroups. It remained difficult to confirm the three hypotheses or trace credible pathways to longer-term impacts. Safe Spaces was implemented commendably as designed, but several assumptions remained questionable or required qualification. Limited voucher use and delayed roll-out may explain weak health results. Economic gains were difficult to attribute to bank-account use and may instead reflect financial education and mentor guidance. The analysis found no significant additional benefits from the additional costs of Arms 2 and 3, although final economic judgements should await longer-term impacts. Average total cost per participant was $771, or $394 for Safe Spaces alone; illustrative scale-up estimates assumed a 20% reduction in unit costs. Durability of assets, their required strength and their protective effect for girls who have already made sexual transitions remained open questions.",
+  "recommendations": [
+   "Modify the theory of change to reflect assumptions that do not hold and consider more disaggregated theories for younger and older girls in urban and rural settings.",
+   "Customise the curriculum to different contexts and age cohorts, improve attendance and inclusivity, strengthen support to mentors and improve community engagement.",
+   "Establish a scalable Safe Spaces model and demonstrate durable social-asset results in different settings within acceptable timeframes.",
+   "Document health-voucher lessons and engage more fully with national and district Ministry of Health strategies on adolescent health.",
+   "Calibrate voucher reimbursements to facilities in different sectors, support leadership by Heads of Facilities, strengthen parental and community sensitisation, and repeat training where staff turnover is high.",
+   "Revisit the viability and accessibility of Girls' Dream accounts, especially bank-distance barriers for rural girls, and consider traditional savings arrangements such as Chilimba schemes.",
+   "Investigate whether financial education and mentor guidance, rather than account use, explain economic gains.",
+   "Assess sustained effects and longer-term impacts using Round 5 findings before firm sustainability, scale-up and economic conclusions.",
+   "Align economic reporting with the Mid-Term Technical Report, clarify significance levels and consider costs per negative effect.",
+   "Agree a joint DFID–Population Council communication strategy for final survey findings."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/agep_zambia_2017_p16.png', 'downloads/pages/agep_zambia_2017_p33.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "Figure 1 is transcribed because it is the common theory tested by all three hypotheses. Figure 5 is a disaggregated social-assets pathway review; its findings are retained in key claims without duplicating its boxes. Figures 6–10 are described in the supplied text but their images were not supplied.",
+   "figure_pages uses supplied PDF page numbers 16 and 33. Verdict page references use printed report pagination: these figure pages are printed pages 8 and 25.",
+   "The two intervention braces are represented as containers feeding economic and health assets. The shared bracket beside all three mediating assets is represented as one container with seven outgoing arrows; no individual asset-to-impact arrows have been invented.",
+   "Mediating is mapped to outcome_short. Longer-Term is mapped to impact because the accompanying evaluation explicitly calls these impact-level results.",
+   "Figure 5 findings transcribed in verdict.raw combine the figure's box labels with its colour-key wording. The older urban autonomy and transactional-sex boxes are read as marginally significant positive effects; older urban social-club attendance is significant negative; younger urban autonomy is marginally significant negative.",
+   "The overall verdict combines the source's separate hypothesis conclusions; the excerpts do not supply a single formal overall rating. No source-ranked strongest link is identified. The weakest-link list records assumptions specifically questioned, rather than a numerical ranking.",
+   "The assumptions in Table 2 are retained even where the relevant review tables were not supplied. No individual verdict is inferred from the general statement that some economic assumptions were broadly upheld.",
+   "The supplied notes identify 2017 as the case year, but the excerpts do not include the report's title-page publication date. Document URL, landing URL and licence were not supplied.",
+   "Evidence level A is used for the experimental impact-evaluation evidence underlying the ITT difference-in-difference findings; the independent process evaluation itself used mixed methods and non-probability interviews."
+  ],
+  "source_sha256": "d5cb65b74f1cfb3c9a300d92cc0d966302e5f8b3965df3b0ea7322f2c2c1b90a",
+  "prompt_sha256": "5d1cb40eee82156ea7f23694cb51862a2897d4e42dda82082bf094028453e696"
+ }
+}

@@ -1,0 +1,11 @@
+{
+ "file": "downloads/intl_pita_sr43.pdf",
+ "doc_url": "https://3ieimpact.org/sites/default/files/2019-06/SR43-PITA-report.pdf",
+ "landing_url": "https://doi.org/10.1002/cl2.1025",
+ "retrieved": "2026-11-09",
+ "figures": [
+  "downloads/pages/pita_waddington_2019_p21.png",
+  "downloads/pages/pita_waddington_2019_p100.png"
+ ],
+ "notes": "Figure(s): 21 (Fig 2 indicative ToC); 100 (Fig 28 refined ToC, rights information); Figs 29-32 refined ToCs follow. Verdict scale: \"usually effective\" (user engagement, +0.23 SD), \"limited effects\" (provider action), \"not likely to improve key well-being outcomes\"; refined ToCs mark a failure pathway in red (\"not strong enough to trigger service provider behaviour changes\"). Timing: synthesis. Five refined ToCs, one per intervention group; verdicts come from meta-analysis by chain stage plus realist moderators; dashed arrows and red box encode weak/failed links without a legend. (Prepared from the longlist row; figures rendered by the checking agent.)"
+}

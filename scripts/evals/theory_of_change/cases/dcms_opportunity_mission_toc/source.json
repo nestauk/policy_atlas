@@ -1,0 +1,11 @@
+{
+ "file": "downloads/dcms_opportunity_mission_toc.html",
+ "doc_url": "https://www.gov.uk/government/publications/research-report-theory-of-change-dcms-contribution-to-the-opportunity-mission/theory-of-change-dcms-contribution-to-the-opportunity-mission",
+ "landing_url": "https://www.gov.uk/government/publications/research-report-theory-of-change-dcms-contribution-to-the-opportunity-mission",
+ "retrieved": "2026-11-09",
+ "figures": [
+  "downloads/pages/dcms_opportunity_mission_toc_overarching.png",
+  "downloads/pages/dcms_opportunity_mission_toc_sport.png"
+ ],
+ "notes": "Figure(s): overarching ToC (HTML image); Annex A sport, culture, youth ToCs. Verdict scale: \"strong link\", \"moderate link\", \"limited and weak directly causal link\" (from research note; per outcome area). Timing: prospective (ex-ante evidence review). Shape matches our tool task (draft ToC, grade links with literature) but grades are per outcome area; sport PNG rendered not inspected; culture/youth SVGs not rendered (Prepared from the longlist row; figures rendered by the checking agent.)"
+}

@@ -1,0 +1,11 @@
+{
+ "file": "downloads/intl_mapsan_bick_2021.pdf",
+ "doc_url": "https://researchonline.lshtm.ac.uk/id/eprint/4661693/8/Bick_etal_2021_Using-path-analysis-to-test.pdf",
+ "landing_url": "https://doi.org/10.1186/s12889-021-11364-w",
+ "retrieved": "2026-11-09",
+ "figures": [
+  "downloads/pages/mapsan_bick_2021_p4.png",
+  "downloads/pages/mapsan_bick_2021_p6.png"
+ ],
+ "notes": "Figure(s): 4 (Fig 1 ToC); 6 (Fig 2 structural model). Verdict scale: path coefficients with model trimming (paths kept or removed); text: \"implemented with high fidelity\", improvements \"but not to handwashing\", \"little contribution from hygiene promotion activities nor core elements expected to mediate change\". Timing: reconstructed. ToC formalised after the intervention; health outcomes sit beyond a 'ceiling of accountability' and are not tested here; 8 alternative path hypotheses tested. Overton/OpenAlex row 42 (figshare file) parent paper. (Prepared from the longlist row; figures rendered by the checking agent.)"
+}

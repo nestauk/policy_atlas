@@ -1,0 +1,664 @@
+{
+ "meta": {
+  "id": "mesas_mup_scotland",
+  "title": "MESAS final synthesis (2023)",
+  "organisation": "Public Health Scotland",
+  "year": 2023,
+  "country": "Scotland",
+  "topic": "Minimum unit pricing for alcohol",
+  "intervention_type": "policy",
+  "timing": "prospective",
+  "doc_url": "https://publichealthscotland.scot/publications/evaluating-the-impact-of-minimum-unit-pricing-for-alcohol-in-scotland-a-synthesis-of-the-evidence/",
+  "landing_url": "https://publichealthscotland.scot/publications/evaluating-the-impact-of-minimum-unit-pricing-for-alcohol-in-scotland-a-synthesis-of-the-evidence/",
+  "licence": "",
+  "figure_pages": [
+   21,
+   86
+  ],
+  "evidence_level": "A",
+  "verdict_source": "evidence_synthesis",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Reduce alcohol-related health and social harms, while understanding differential effects on people and businesses.",
+  "population": "The population of Scotland, with attention to differences by drinking level, age, gender and socioeconomic circumstances, and to alcoholic drinks businesses.",
+  "place": "Scotland",
+  "time_horizon": "Implemented on 1 May 2018; evaluated to inform the statutory five-year review and the decision on continuation beyond 30 April 2024. The main deaths and hospitalisations findings cover two and a half years after implementation.",
+  "intervention": "A statutory minimum retail price of £0.50 per unit of alcohol in licensed premises throughout Scotland, implemented on 1 May 2018.",
+  "context": "MUP formed part of Scotland's wider alcohol strategy. Before implementation, just under half of off-trade alcohol was estimated to sell below the proposed floor. On-trade prices were generally already substantially higher. The legislation included review and sunset clauses; the evaluation period also encountered the COVID-19 pandemic.",
+  "outcome_first": "Develop a theory of change for reducing alcohol-related health and social harms in Scotland. Consider differential effects across population groups and possible effects on businesses.",
+  "intervention_first": "Develop a theory of change for Scotland's minimum unit pricing policy, introduced at £0.50 per unit of alcohol on 1 May 2018. Explain how this population-wide policy is intended to reduce alcohol-related health and social harms, including differential and unintended effects."
+ },
+ "containers": [
+  {
+   "id": "c1",
+   "label": "",
+   "layer": "outcome_short"
+  }
+ ],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "MUP implemented",
+   "layer": "activity",
+   "container": "c1",
+   "verdict": {
+    "raw": "MUP implemented: Achieved",
+    "scale": "supports",
+    "quote": "MUP implemented: Achieved",
+    "page": 86,
+    "studies": []
+   }
+  },
+  {
+   "id": "b2",
+   "label": "Compliance",
+   "layer": "output",
+   "container": "c1",
+   "verdict": {
+    "raw": "Compliance: Achieved",
+    "scale": "supports",
+    "quote": "Alcohol was generally not available for sale <50ppu through licensed premises in Scotland.",
+    "page": 86,
+    "studies": [
+     "Dickie et al 2019"
+    ]
+   }
+  },
+  {
+   "id": "b3",
+   "label": "Price change No alcohol <50ppu",
+   "layer": "outcome_short",
+   "container": "c1",
+   "verdict": {
+    "raw": "Price change: Achieved",
+    "scale": "supports",
+    "quote": "Substantial drop in availability of alcohol below 50ppu. Increase in average price-per-unit of off-trade alcohol.",
+    "page": 86,
+    "studies": []
+   }
+  },
+  {
+   "id": "b4",
+   "label": "Reduced purchasing",
+   "layer": "outcome_short",
+   "container": "c1",
+   "verdict": {
+    "raw": "Reduced purchasing and consumption: Achieved",
+    "scale": "supports",
+    "quote": "Reductions generally greatest in those who purchase the most alcohol.",
+    "page": 86,
+    "studies": [
+     "Griffith et al 2022"
+    ]
+   }
+  },
+  {
+   "id": "b5",
+   "label": "Reduced population consumption. Safer patterns of drinking",
+   "layer": "outcome_long",
+   "container": "c1",
+   "verdict": {
+    "raw": "Reduced purchasing and consumption: Achieved",
+    "scale": "supports",
+    "quote": "MUP reduced population consumption of alcohol.",
+    "page": 86,
+    "studies": []
+   }
+  },
+  {
+   "id": "b6",
+   "label": "Reduced health and social harms",
+   "layer": "impact",
+   "container": "c1",
+   "verdict": {
+    "raw": "Alcohol-related mortality: Achieved; Alcohol-related morbidity: Achieved at population level, with some potential harms for individuals; Social harms: Minimal evidence of negative effects at population level. Some evidence of negative effects for some individuals in vulnerable groups.",
+    "scale": "partly",
+    "quote": "No strong evidence of MUP causing any other alcohol-related health harms or benefits.",
+    "page": 86,
+    "studies": [
+     "Wyper et al 2023"
+    ]
+   }
+  },
+  {
+   "id": "b7",
+   "label": "Product and marketing changes",
+   "layer": "outcome_short",
+   "container": "c1",
+   "verdict": {
+    "raw": "Move to smaller pack sizes.",
+    "scale": "partly",
+    "quote": "Move to smaller pack sizes.",
+    "page": 86,
+    "studies": []
+   }
+  },
+  {
+   "id": "b8",
+   "label": "Change in social norms and attitudes to MUP and alcohol",
+   "layer": "outcome_short",
+   "container": "c1",
+   "verdict": {
+    "raw": "Attitudes to MUP: Mixed",
+    "scale": "partly",
+    "quote": "Generally positive at population level. Doubt of effectiveness for those with alcohol dependence. Concern for financially vulnerable. Some public misconceptions about what MUP means.",
+    "page": 86,
+    "studies": []
+   }
+  },
+  {
+   "id": "b9",
+   "label": "Economic impact on alcohol industry",
+   "layer": "impact",
+   "container": null,
+   "verdict": {
+    "raw": "Alcoholic drinks industry: Minimal evidence of impacts",
+    "scale": "partly",
+    "quote": "No evidence of impact on the 5 performance metrics measured. Increase in sales value. Impact on profits not clear.",
+    "page": 86,
+    "studies": [
+     "Frontier Economics 2019",
+     "Frontier Economics 2023"
+    ]
+   }
+  },
+  {
+   "id": "b10",
+   "label": "Displacement of spending",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "Increased financial strain among some economically vulnerable individuals with alcohol dependence who maintain consumption, and some evidence of reduced spend on food.",
+    "scale": "partly",
+    "quote": "some evidence of reduced spend on food",
+    "page": 82,
+    "studies": [
+     "Holmes et al 2022"
+    ]
+   }
+  },
+  {
+   "id": "b11",
+   "label": "Substitution: non-beverage alcohol or illicit drugs",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": {
+    "raw": "There were qualitative reports of people who use drugs switching some of their alcohol consumption to greater illicit drug use, but it was generally unclear if these were linked to MUP, and quantitative analyses from four studies found no effect.",
+    "scale": "partly",
+    "quote": "There was no reported illicit drug use in those who did not use drugs prior to MUP.",
+    "page": 80,
+    "studies": [
+     "So et al 2021",
+     "Holmes et al 2022",
+     "Dimova et al 2022",
+     "Emslie et al 2023"
+    ]
+   }
+  },
+  {
+   "id": "b12",
+   "label": "Impact on demand for services",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b13",
+   "label": "Influence of factors external to the strategy e.g: other influences on alcohol price and/or disposable income that affect affordability. Alcohol policy and other factors that affect availability, access to treatment etc.",
+   "layer": "context",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b2",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l2",
+   "source": "b2",
+   "target": "b3",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l3",
+   "source": "b3",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "The products that experienced the largest price increase, namely cider, perry and own-brand spirits, had the largest fall in sales.",
+    "scale": "supports",
+    "quote": "had the largest fall in sales",
+    "page": 98,
+    "studies": []
+   }
+  },
+  {
+   "id": "l4",
+   "source": "b4",
+   "target": "b5",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l5",
+   "source": "b5",
+   "target": "b6",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "We have demonstrated that the expected chain of outcomes followed the implementation of MUP thereby increasing our confidence that MUP has contributed to the relative reductions in alcohol-related deaths and hospitalisations.",
+    "scale": "supports",
+    "quote": "MUP has contributed to the relative reductions in alcohol-related deaths and hospitalisations.",
+    "page": 89,
+    "studies": [
+     "Wyper et al 2023"
+    ]
+   }
+  },
+  {
+   "id": "l6",
+   "source": "b2",
+   "target": "b7",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l7",
+   "source": "b7",
+   "target": "b8",
+   "two_way": true,
+   "confidence": "high",
+   "verdict": null
+  },
+  {
+   "id": "l8",
+   "source": "c1",
+   "target": "b9",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l9",
+   "source": "c1",
+   "target": "b10",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l10",
+   "source": "c1",
+   "target": "b11",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  },
+  {
+   "id": "l11",
+   "source": "c1",
+   "target": "b12",
+   "two_way": false,
+   "confidence": "medium",
+   "verdict": null
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "assumption",
+   "text": "External factors also influencing these outcomes have been assessed and, where possible, accounted for.",
+   "links": [
+    "l5"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "We have considered a range of alternative explanations and consider most of these unlikely. For the remaining explanations, data limitations and the lack of robust evidence mean that we cannot say definitively whether or not these have contributed to the outcomes observed.",
+    "scale": "partly",
+    "quote": "consider most of these unlikely",
+    "page": 89,
+    "studies": []
+   }
+  },
+  {
+   "id": "a2",
+   "kind": "risk",
+   "text": "Some people with established alcohol dependence with limited financial or social support may experience withdrawal, reduced expenditure on food or increased intoxication possibly from switching to spirits as a consequence of MUP.",
+   "links": [
+    "l5",
+    "l9"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "However, there is evidence that some people with established alcohol dependence with limited financial or social support, may have experienced harm, such as withdrawal, reduced expenditure on food or increased intoxication possibly from switching to spirits as a consequence of MUP.",
+    "scale": "supports",
+    "quote": "may have experienced harm",
+    "page": 84,
+    "studies": [
+     "Holmes et al 2022",
+     "Dimova et al 2022",
+     "Emslie et al 2023"
+    ]
+   }
+  },
+  {
+   "id": "a3",
+   "kind": "assumption",
+   "text": "Any beneficial impacts of MUP realised to date will only continue if the value of MUP compared to other prices and incomes is maintained.",
+   "links": [
+    "l3",
+    "l5"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  }
+ ],
+ "context": [
+  "Alcohol duty and inflation in raw material or distribution costs can affect alcohol prices independently of MUP.",
+  "Wages, welfare reform and inflation in other goods and services affect disposable income.",
+  "Alcohol availability, marketing, treatment and care, attitudes to drinking, and broader social and economic determinants can influence drinking and harms.",
+  "COVID-19 and lockdown measures affected alcohol availability, drinking behaviour and access to treatment.",
+  "Cross-border purchasing is more feasible for people living close to England and with access to transport."
+ ],
+ "key_claims": [
+  {
+   "id": "k1",
+   "claim": "Implementing MUP secures retailer compliance with the minimum price.",
+   "refs": [
+    "b1",
+    "b2",
+    "l1"
+   ],
+   "where": "Figure 8, PDF p.86",
+   "verdict": {
+    "raw": "Compliance: Achieved. Alcohol was generally not available for sale <50ppu through licensed premises in Scotland.",
+    "scale": "supports",
+    "quote": "Compliance: Achieved",
+    "page": 86,
+    "studies": [
+     "Dickie et al 2019"
+    ]
+   }
+  },
+  {
+   "id": "k2",
+   "claim": "Compliance removes most alcohol priced below 50p per unit and raises average off-trade prices.",
+   "refs": [
+    "b2",
+    "b3",
+    "l2"
+   ],
+   "where": "Figure 8, PDF p.86",
+   "verdict": {
+    "raw": "Price change: Achieved. Substantial drop in availability of alcohol below 50ppu. Increase in average price-per-unit of off-trade alcohol. Little evidence of MUP driven change at 65ppu and above.",
+    "scale": "supports",
+    "quote": "Little evidence of MUP driven change at 65ppu and above.",
+    "page": 86,
+    "studies": []
+   }
+  },
+  {
+   "id": "k3",
+   "claim": "Higher prices reduce alcohol purchasing, especially for products and households most exposed to MUP, with little population-level offset from cross-border shopping.",
+   "refs": [
+    "b3",
+    "b4",
+    "l3"
+   ],
+   "where": "Figure 8; Table 3, PDF pp.83–84; sections 5.4 and 7",
+   "verdict": {
+    "raw": "The products that experienced the largest price increase, namely cider, perry and own-brand spirits, had the largest fall in sales. The 5% highest purchasing households reduced purchasing by nearly 15%, whereas households in the bottom 70% did not show a significant change. Some evidence of cross-border trade, but only on a small scale, with cross-border purchase most likely by the small proportion of the population living near the border.",
+    "scale": "supports",
+    "quote": "the effect of cross-border purchasing at population level is likely to be negligible.",
+    "page": 86,
+    "studies": [
+     "Griffith et al 2022",
+     "Frontier Economics 2019",
+     "Frontier Economics 2023",
+     "Patterson et al 2022",
+     "Patterson et al 2023",
+     "Holmes et al 2022"
+    ]
+   }
+  },
+  {
+   "id": "k4",
+   "claim": "Reduced purchasing lowers population consumption, but responses differ and reductions are not clearly demonstrated among people with alcohol dependence or underage drinkers.",
+   "refs": [
+    "b4",
+    "b5",
+    "l4"
+   ],
+   "where": "Figure 8; Table 3, PDF p.82; chapters 6–7",
+   "verdict": {
+    "raw": "MUP reduced population consumption of alcohol. Drinkers reported varied responses to MUP. No clear evidence of reduction in consumption in those with probable alcohol dependence. Those under 18 years of age generally reported that MUP had not affected their alcohol consumption, largely because price was a relatively minor factor in their decision to drink alcohol.",
+    "scale": "partly",
+    "quote": "No clear evidence of reduction in consumption in those with probable alcohol dependence.",
+    "page": 86,
+    "studies": [
+     "Holmes et al 2022",
+     "Iconic Consulting 2020"
+    ]
+   }
+  },
+  {
+   "id": "k5",
+   "claim": "Lower consumption reduces alcohol-attributable deaths and hospital admissions, generating substantial social value, although other health-service indicators show no detected effect.",
+   "refs": [
+    "b5",
+    "b6",
+    "b12",
+    "l5",
+    "l11",
+    "a2"
+   ],
+   "where": "Figure 8; Table 3; sections 5.1 and 5.4; Tables 5–6; chapter 7",
+   "verdict": {
+    "raw": "13.4% significant reduction in wholly attributable deaths. 4.1% reduction in wholly attributable hospital admissions. Significant reductions for chronic causes, slightly offset with potential increases from acute causes. Largest reductions for men, and in those in the 4 most deprived deciles. No evidence of impact on ambulance callouts, emergency department attendance or prescribing for alcohol dependence. Some qualitative evidence that MUP may have had some negative health consequences for some individuals with alcohol dependence. There are large benefits to society arising from the deaths prevented by MUP.",
+    "scale": "supports",
+    "quote": "the greater uncertainty around the magnitude and direction of the estimates of costs averted by avoiding hospital admissions does not undermine the core conclusion around the substantial value in monetary terms of the deaths prevented.",
+    "page": 94,
+    "studies": [
+     "Wyper et al 2023",
+     "Manca et al 2022a",
+     "Manca et al 2023",
+     "So et al 2021"
+    ]
+   }
+  },
+  {
+   "id": "k6",
+   "claim": "Reduced drinking may reduce wider social harms, but population-level benefits were not demonstrated for crime or harms to children, and road-traffic findings were inconsistent.",
+   "refs": [
+    "b6",
+    "l5"
+   ],
+   "where": "Table 3, PDF pp.81–83; Figure 8; chapters 5 and 7",
+   "verdict": {
+    "raw": "There is lack of robust evidence that MUP had a detectable impact on a range of social outcomes. No increase or decrease in alcohol-related crime was detected. No specific examples were provided by those working with families affected by alcohol use of positive or negative impacts from MUP. Limited impact of MUP on children and young people's own drinking and related behaviour. Road traffic accidents: Evidence inconsistent. One paper found no evidence of impact, another paper reported evidence of an increase and a third paper reported evidence of a decrease.",
+    "scale": "insufficient",
+    "quote": "There is lack of robust evidence that MUP had a detectable impact on a range of social outcomes",
+    "page": 80,
+    "studies": [
+     "Krzemieniewska-Nandwani et al 2021",
+     "Ford et al 2020",
+     "Iconic Consulting 2020",
+     "Francesconi and James 2022",
+     "Manca et al 2022b",
+     "Vandoros and Kawachi 2022"
+    ]
+   }
+  },
+  {
+   "id": "k7",
+   "claim": "Higher alcohol costs can displace essential spending among financially vulnerable dependent drinkers, without a detected population-wide deterioration in diet.",
+   "refs": [
+    "b10",
+    "l9",
+    "a2"
+   ],
+   "where": "Table 3, PDF pp.82–83; Figure 8; chapters 5–7",
+   "verdict": {
+    "raw": "Increased financial strain among some economically vulnerable individuals with alcohol dependence who maintain consumption, and some evidence of reduced spend on food. No evidence of effects on the quantity of food purchased, energy density or diet quality. Only category of nutrients that exhibited a statistically significant change due to MUP was a reduction in sugar from alcohol consumption, particularly in deprived areas and higher-alcohol-purchasing households. Minimal changes were perceived in terms of theft or begging among homeless and street drinkers, but some reported needing to use pre-existing harmful strategies more often.",
+    "scale": "partly",
+    "quote": "some evidence that MUP exacerbated existing financial vulnerabilities",
+    "page": 86,
+    "studies": [
+     "Holmes et al 2022",
+     "Kopasker et al 2022",
+     "Leckcivilize et al 2022",
+     "Dimova et al 2022",
+     "Emslie et al 2023"
+    ]
+   }
+  },
+  {
+   "id": "k8",
+   "claim": "MUP may prompt substitution to non-beverage alcohol or illicit drugs, principally among existing users rather than the wider population.",
+   "refs": [
+    "b11",
+    "l10"
+   ],
+   "where": "Table 3; Figure 8; sections 5.1 and 7",
+   "verdict": {
+    "raw": "Evidence of substitution using non-beverage or illicitly distilled alcohol was scarce. There were qualitative reports of people who use drugs switching some of their alcohol consumption to greater illicit drug use, but it was generally unclear if these were linked to MUP, and quantitative analyses from four studies found no effect. There was no reported illicit drug use in those who did not use drugs prior to MUP. No clear evidence that it caused other wider negative consequences, such as increased crime, use of illicit substances or acute withdrawal.",
+    "scale": "partly",
+    "quote": "Substituting illicit drugs appeared to be uncommon and confined to those who already used such substances.",
+    "page": 99,
+    "studies": [
+     "So et al 2021",
+     "Holmes et al 2022",
+     "Dimova et al 2022",
+     "Emslie et al 2023"
+    ]
+   }
+  },
+  {
+   "id": "k9",
+   "claim": "MUP changes industry revenues and demand, but higher prices and margins largely offset reduced volumes without substantial detected damage to industry performance.",
+   "refs": [
+    "b9",
+    "l8"
+   ],
+   "where": "Table 3; Figure 8; sections 5.1, 5.4 and 7",
+   "verdict": {
+    "raw": "No evidence that MUP had significantly impacted the performance of the alcoholic drinks industry in Scotland in terms of the key metrics (turnover, output, GVA, number of firms, employment). Effects of MUP played out quickly and over the industry as a whole the impacts of falls in sales volumes were largely offset by increased prices and margins. The extent to which businesses were affected depending on the mix of products made/sold. Increase in sales value. Impact on profits not clear. No evidence of a substantial impact on profitability, turnover or employment of retailers in Scotland close to the border. Although we did not carry out a full economic evaluation, evidence from this evaluation as well as previous theory and evidence suggest that the balance of costs and benefits are favourable.",
+    "scale": "supports",
+    "quote": "negative impacts on performance were limited",
+    "page": 95,
+    "studies": [
+     "Frontier Economics 2019",
+     "Frontier Economics 2023"
+    ]
+   }
+  },
+  {
+   "id": "k10",
+   "claim": "Industry can adapt to MUP through changes to products, pack sizes, pricing and marketing.",
+   "refs": [
+    "b7",
+    "l6"
+   ],
+   "where": "Figure 8; sections 5.1 and 5.4",
+   "verdict": {
+    "raw": "Move to smaller pack sizes. In general firms had adapted to the cost of complying with and implementing the required changes in pricing and marketing at a £0.50 per unit MUP.",
+    "scale": "supports",
+    "quote": "Move to smaller pack sizes.",
+    "page": 86,
+    "studies": [
+     "Frontier Economics 2019",
+     "Frontier Economics 2023"
+    ]
+   }
+  },
+  {
+   "id": "k11",
+   "claim": "Product changes, drinking behaviour and attitudes to MUP can influence one another, but evidence on attitudes is mixed rather than a test of the full feedback pathway.",
+   "refs": [
+    "b7",
+    "b8",
+    "l7"
+   ],
+   "where": "Figure 8, PDF p.86",
+   "verdict": {
+    "raw": "Attitudes to MUP: Mixed. Generally positive at population level. Doubt of effectiveness for those with alcohol dependence. Concern for financially vulnerable. Some public misconceptions about what MUP means.",
+    "scale": "partly",
+    "quote": "Attitudes to MUP: Mixed",
+    "page": 86,
+    "studies": []
+   }
+  },
+  {
+   "id": "k12",
+   "claim": "Attributing the observed improvements to MUP requires alternative explanations to be unlikely; sustained benefits also depend on maintaining the real value of the price floor.",
+   "refs": [
+    "b13",
+    "a1",
+    "a3"
+   ],
+   "where": "Chapter 4; section 5.4, Table 4; chapter 6",
+   "verdict": {
+    "raw": "Differences in comparator group, impact of COVID-19 on studies, alcohol affordability – price, alcohol availability, licensing and public health objective, multi-buy discount ban and alcohol framework: Unlikely to otherwise explain observed effects. Impact of COVID-19 on outcomes, alcohol treatment and alcohol affordability – disposable income: Unlikely to be an important explanation but some contribution cannot be ruled out. It is likely that any beneficial impacts of MUP realised to date will only continue if the value of MUP compared to other prices and incomes is maintained.",
+    "scale": "partly",
+    "quote": "For the remaining explanations, data limitations and the lack of robust evidence mean that we cannot say definitively whether or not these have contributed to the outcomes observed.",
+    "page": 90,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "Overall, the evidence supports that MUP has had a positive impact on health outcomes, namely a reduction in alcohol-attributable deaths and hospital admissions, particularly in men and those living in the most deprived areas, and therefore contributes to addressing alcohol-related health inequalities. There was no clear evidence of substantial negative impacts on the alcoholic drinks industry, or of social harms at the population level.",
+   "scale": "supports",
+   "quote": "the weight of evidence broadly supports the initial theory of change",
+   "page": 85,
+   "studies": []
+  },
+  "weakest_links": [],
+  "strongest_links": [],
+  "summary": "The expected chain of outcomes followed MUP implementation, increasing confidence that MUP contributed to relative reductions in alcohol-attributable deaths and hospitalisations. Wholly attributable deaths fell by 13.4% and admissions by 4.1%, with greater uncertainty for admissions. Reductions were largest among men and people in the most deprived areas. Other health and social outcomes generally showed no detectable population-level effect. Industry performance showed no substantial detrimental impact. Some financially vulnerable people with alcohol dependence experienced increased pressure and possible harms. Most alternative explanations were considered unlikely, although some contributions could not be ruled out.",
+  "recommendations": [
+   "If MUP continues, maintain its value relative to other prices and incomes; consider both potential benefits and harms of increases.",
+   "Provide timely evidence-based treatment and wider support for people with alcohol dependence.",
+   "Monitor and address the needs of financially vulnerable people with alcohol dependence, particularly if the minimum price increases.",
+   "Use alternative evidence-based approaches to reach drinkers below the legal purchasing age.",
+   "Consider interactions between MUP and new policies such as the proposed Deposit Return Scheme.",
+   "Continue evaluation over time and consider the delayed Scottish Health Survey consumption study when complete."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from [21, 86]; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "The landing-page URL mentioned in the notes was not supplied. Both URL fields are therefore empty; no direct PDF URL is known.",
+   "The exact report title and licence were not supplied. The title field uses the description in the notes.",
+   "Figure 1 has no explicit layer headings. Layers are mapped by causal position; the lower row contains heterogeneous additional consequences rather than one explicitly named layer.",
+   "The purple bracket under the Figure 1 pathway is represented as container c1 because four arrows originate from it. It is an open bracket rather than a closed frame. Its scope is interpreted as the main policy pathway and the product/attitude branch, excluding the external-factors box; its single layer is only a schema accommodation for a cross-layer group.",
+   "Figure 1 also draws a vertical two-headed arrow between the purchasing–consumption connector and the product-changes–attitudes connector. Neither end terminates at a box or framed container. It is not encoded as a box-to-box link because doing so would invent endpoints; the reciprocal relationship is retained in key claim k11.",
+   "Figure 8 combines purchasing and consumption, separates health and social harms, and reorganises the additional outcomes. Figure 1 alone supplies the transcribed boxes and arrows; Figure 8 supplies verdicts on corresponding results.",
+   "Figure 8 does not separately judge safer drinking patterns, changes in social norms, the product–attitude feedback link, or overall demand for services. No separate verdicts on those causal steps were invented.",
+   "The populated diagram reports smaller pack sizes but does not establish every type of product or marketing change envisaged in Figure 1.",
+   "The source does not explicitly rank individual link or assumption IDs as strongest or weakest, so those lists are empty.",
+   "Evidence-level categories A, B and C were not defined in the supplied instructions. A is used for this multi-study synthesis, which includes controlled natural-experiment evidence.",
+   "Timing is recorded as prospective because the requested theory was drawn before the evaluation; its attached evidence verdicts are retrospective."
+  ],
+  "source_sha256": "bb6aa68e7d086586a2ce34abf8f24ab0094354a8d07e31f5e01d49241dbc0440",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}

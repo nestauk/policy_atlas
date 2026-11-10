@@ -1,0 +1,11 @@
+{
+ "file": "downloads/ietf_final_process.pdf",
+ "doc_url": "https://assets.publishing.service.gov.uk/media/6972cbf6d8adeaf266040583/ietf-final-process-evaluation.pdf",
+ "landing_url": "https://www.gov.uk/government/publications/evaluation-of-the-industrial-energy-transformation-fund-ietf",
+ "retrieved": "2026-11-09",
+ "figures": [
+  "downloads/pages/ietf_final_process_p16.png",
+  "downloads/pages/ietf_final_process_p49.png"
+ ],
+ "notes": "Figure(s): p16 Figure 1 IETF ToC; p49 Figure 10 in-scope extract; Figs 14, 18, 19 causal pathways. Verdict scale: arrow colour = prior confidence \"high confidence / moderate uncertainty / high risk or no/weak evidence\"; findings \"Theory of Change broadly holds true\", \"Strong evidence for overcoming financial barriers\", \"Mixed evidence for overcoming capability barriers\". Timing: prospective (DESNZ ToC tested by evaluation). Strong: per-pathway verdicts plus prior-confidence colouring on every arrow; small text, render at higher dpi; p49 PNG not inspected (Prepared from the longlist row; figures rendered by the checking agent.)"
+}

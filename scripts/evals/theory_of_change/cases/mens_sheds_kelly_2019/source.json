@@ -1,0 +1,10 @@
+{
+ "file": "downloads/gb_mens_sheds_2019.pdf",
+ "doc_url": "https://researchonline.gcu.ac.uk/ws/files/27420893/hsc.12765.pdf",
+ "landing_url": "https://doi.org/10.1111/hsc.12765",
+ "retrieved": "2026-11-09",
+ "figures": [
+  "downloads/pages/mens_sheds_2019_p5.png"
+ ],
+ "notes": "Figure(s): 5. Verdict scale: two-level line weight per link: \"Thicker lines = more than 10 papers reported this outcome; dotted lines = less than 10 papers reported this outcome\". Timing: synthesis. Overton/OpenAlex row 38. Line weight measures how many papers report a link, not whether it is causally supported; many crossing arrows make transcription slow. (Prepared from the longlist row; figures rendered by the checking agent.)"
+}

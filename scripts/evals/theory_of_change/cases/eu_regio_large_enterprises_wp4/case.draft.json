@@ -1,0 +1,414 @@
+{
+ "meta": {
+  "id": "eu_regio_large_enterprises_wp4",
+  "title": "Ex post evaluation of support to large enterprises",
+  "organisation": "European Commission, DG REGIO; KPMG/Prognos",
+  "year": 2016,
+  "country": "Austria; Czech Republic; Germany; Hungary; Italy; Poland; Portugal; Spain",
+  "topic": "ERDF support to large enterprises under Cohesion Policy 2007–2013",
+  "intervention_type": "programme",
+  "timing": "reconstructed",
+  "doc_url": "https://ec.europa.eu/regional_policy/sources/evaluation/expost2013/wp4_final_en.pdf",
+  "landing_url": "https://ec.europa.eu/regional_policy/sources/evaluation/expost2013/wp4_case_study.pdf",
+  "licence": "",
+  "figure_pages": [],
+  "evidence_level": "B",
+  "verdict_source": "ex_post_evaluation",
+  "split": ""
+ },
+ "brief": {
+  "intended_change": "Contribute to regional economic growth, strengthen the development of SMEs and drive cohesion, including longer-term employment growth.",
+  "population": "Large enterprises eligible for Cohesion Policy support, including subsidiaries with fewer than 250 employees at the supported site, and the economies of their programme areas.",
+  "place": "Selected programme areas in Austria, the Czech Republic, Germany, Hungary, Italy, Poland, Portugal and Spain.",
+  "time_horizon": "The 2007–2013 programming period, with consideration of the mandatory five-year post-support period and longer-term sustainability.",
+  "intervention": "ERDF financial support to large-enterprise investment projects, including non-refundable grants and refundable support. The eight selected Operational Programmes accounted for EUR 3.8 billion in support; amounts and aid intensity varied by project, with no uniform dosage.",
+  "context": "The evaluation covered eight programme case studies and 45 company case studies. Programme rationales were often not explicit and had to be reconstructed. The financial crisis affected investment decisions and outcomes, and large firms often had access to other finance and operated within multinational corporate strategies.",
+  "outcome_first": "Develop a theory of change for improving regional economic growth, employment and SME development in selected programme areas in eight EU Member States. Consider the role of large enterprises in these economies and the conditions under which benefits would remain locally.",
+  "intervention_first": "Develop a theory of change for ERDF financial support to large-enterprise investment projects under Cohesion Policy 2007–2013 in Austria, the Czech Republic, Germany, Hungary, Italy, Poland, Portugal and Spain. The intended change is regional economic growth, stronger SME development and longer-term employment growth."
+ },
+ "containers": [],
+ "boxes": [
+  {
+   "id": "b1",
+   "label": "ERDF AND NATIONAL SUPPORT",
+   "layer": "input",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b2",
+   "label": "PROJECT",
+   "layer": "output",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b3",
+   "label": "DIRECT EFFECTS",
+   "layer": "outcome_short",
+   "container": null,
+   "verdict": null
+  },
+  {
+   "id": "b4",
+   "label": "INDIRECT AND WIDER BENEFITS",
+   "layer": "outcome_long",
+   "container": null,
+   "verdict": null
+  }
+ ],
+ "links": [
+  {
+   "id": "l1",
+   "source": "b1",
+   "target": "b2",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "~ 30 % of FIRMS: LITTLE INFLUENCE OF SUPPORT",
+    "scale": "against",
+    "quote": "LITTLE INFLUENCE OF SUPPORT",
+    "page": 15,
+    "studies": []
+   }
+  },
+  {
+   "id": "l2",
+   "source": "b1",
+   "target": "b2",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "~ 50 % of FIRMS: SOME DEGREE OF BEHAVIOURAL ADDITIONALITY",
+    "scale": "partly",
+    "quote": "SOME DEGREE OF BEHAVIOURAL ADDITIONALITY",
+    "page": 15,
+    "studies": []
+   }
+  },
+  {
+   "id": "l3",
+   "source": "b1",
+   "target": "b2",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "~ 20 % of FIRMS: STRONG BEHAVIOURAL ADDITIONALITY",
+    "scale": "supports",
+    "quote": "STRONG BEHAVIOURAL ADDITIONALITY",
+    "page": 15,
+    "studies": []
+   }
+  },
+  {
+   "id": "l4",
+   "source": "b2",
+   "target": "b3",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "90% OF PROJECTS ACHIEVED PROJECT TARGETS",
+    "scale": "supports",
+    "quote": "90% OF PROJECTS ACHIEVED PROJECT TARGETS",
+    "page": 15,
+    "studies": []
+   }
+  },
+  {
+   "id": "l5",
+   "source": "b3",
+   "target": "b4",
+   "two_way": false,
+   "confidence": "high",
+   "verdict": {
+    "raw": "75% of PLANNED WIDER BENEFITS EMERGED",
+    "scale": "partly",
+    "quote": "75% of PLANNED WIDER BENEFITS EMERGED",
+    "page": 15,
+    "studies": []
+   }
+  }
+ ],
+ "assumptions": [
+  {
+   "id": "a1",
+   "kind": "assumption",
+   "text": "For these wider benefits to emerge, additional conditions, such as sufficient absorption capacity for new knowledge among the benefiting organisations (e.g. SMEs) and pre-existing collaborative ties, had to be in place.",
+   "links": [
+    "l5"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": null
+  },
+  {
+   "id": "a2",
+   "kind": "risk",
+   "text": "The lack of planning for indirect and wider benefits and a focus on inputs and direct results prevented the occurrence of such impacts.",
+   "links": [
+    "l5"
+   ],
+   "from_layer": null,
+   "to_layer": null,
+   "verdict": {
+    "raw": "Where planned, indirect and wider benefits have emerged in 75% of cases; however, in many cases, the lack of planning for indirect and wider benefits and a focus on inputs and direct results prevented the occurrence of such impacts.",
+    "scale": "supports",
+    "quote": "the lack of planning for indirect and wider benefits and a focus on inputs and direct results prevented the occurrence of such impacts",
+    "page": 14,
+    "studies": []
+   }
+  }
+ ],
+ "context": [
+  "ERDF support typically acted as a necessary but not sufficient condition for investment; long-term corporate strategy, transport infrastructure and local industry structure also influenced decisions.",
+  "Other development funds, state subsidies, company investments and parent-company capital injections could contribute to the observed outcomes.",
+  "Sector-specific market trends and the financial crisis affected production, productivity, location decisions and employment.",
+  "Existing global contracts and parent-company business relationships sometimes decisively influenced subsidiary investments and their outcomes.",
+  "Investment lifecycles, operating history in the region and fit with the existing industrial structure affected longer-term sustainability."
+ ],
+ "key_claims": [
+  {
+   "id": "k1",
+   "claim": "Financial support changes whether, when or at what scale large enterprises implement investment projects, but behavioural additionality varies substantially.",
+   "refs": [
+    "b1",
+    "b2",
+    "l1",
+    "l2",
+    "l3"
+   ],
+   "where": "Figures 3–4, pp.14–15; section 4.1",
+   "verdict": {
+    "raw": "~20% of cases were significantly influenced by the support. In ~50% of cases ERDF support led to some behavioural additionality by …acting as a catalyst to the projects …amplifying the investment scope …granting access to finance for „mid-caps” with growth potentials. In ~30% of cases ERDF support had only little influence",
+    "scale": "partly",
+    "quote": "In ~50% of cases ERDF support led to some behavioural additionality",
+    "page": 14,
+    "studies": []
+   }
+  },
+  {
+   "id": "k2",
+   "claim": "Implemented investment projects improve firms' production capacity, productivity and technology and achieve their direct targets.",
+   "refs": [
+    "b2",
+    "b3",
+    "l4"
+   ],
+   "where": "Executive summary, pp.14–15; section 4.2",
+   "verdict": {
+    "raw": "Ninety per cent of supported projects had positive direct effects, but – as described above – not all observed outcomes were fully explained by EU support. For the majority of projects, both the production capacity and the productivity of the large enterprises have risen, often due to the utilisation of cutting-edge technologies that went beyond simple replacement investments.",
+    "scale": "supports",
+    "quote": "For most firms, there were strong causal linkages between the project and the observed outcomes.",
+    "page": 14,
+    "studies": []
+   }
+  },
+  {
+   "id": "k3",
+   "claim": "Investment projects create or safeguard jobs, although gross employment gains cannot all be attributed to ERDF support.",
+   "refs": [
+    "b2",
+    "b3",
+    "l4"
+   ],
+   "where": "Section 4.2.3, p.61; section 4.7, pp.85–86",
+   "verdict": {
+    "raw": "At least 60,000 new jobs (in gross figures) were created or safeguarded at the supported large enterprises, but given the limited influence of ERDF support on large firms’ behaviour, a significant share of them would have been created anyway. Evidence gathered from the company case studies corroborated the above findings that the majority of large firms (40 out of 45) created demand for new jobs as a direct result of their investment projects",
+    "scale": "partly",
+    "quote": "this positive outcome can only be partially attributed to the programmes",
+    "page": 61,
+    "studies": []
+   }
+  },
+  {
+   "id": "k4",
+   "claim": "Direct project effects generate benefits for SMEs and the wider regional economy when these benefits are planned and local organisations can absorb them.",
+   "refs": [
+    "b3",
+    "b4",
+    "l5",
+    "a1",
+    "a2"
+   ],
+   "where": "Executive summary, pp.14–15; section 4.3",
+   "verdict": {
+    "raw": "Wherever such effects were foreseen, 75% of desired indirect and wider benefits were at least partly induced. Where spillovers to SMEs were expected to take place, the majority of the projects managed to achieve positive effects. There were similar results for improvements in workforce mobility, working culture, business and social infrastructure and attraction of other firms to the region.",
+    "scale": "partly",
+    "quote": "75% of desired indirect and wider benefits were at least partly induced",
+    "page": 14,
+    "studies": []
+   }
+  },
+  {
+   "id": "k5",
+   "claim": "Large-enterprise projects can increase long-term regional employment, with stronger evidence for large-scale business investments than for technological upgrading.",
+   "refs": [],
+   "where": "Section 4.7 and Table 23, p.86",
+   "verdict": {
+    "raw": "in the case of large-scale business investments (Theory of Change LE1), in particular, a long-term increase in employment levels due to the project was common; in 13 out of 16 company cases, this long-term job increase was reported and the investment was seen as large enough to influence the labour market. For other interventions, such as for the LE2 theory (technology upgrading) and the LE4 theory (investment in R&D capacity), the positive examples equal the negative ones.",
+    "scale": "partly",
+    "quote": "a long-term increase in employment levels due to the project was common",
+    "page": 86,
+    "studies": []
+   }
+  },
+  {
+   "id": "k6",
+   "claim": "Technological upgrading and innovation projects increase firms' export capacity and can contribute to regional exports.",
+   "refs": [],
+   "where": "Table 23, p.86; Table 24 and accompanying discussion, p.90",
+   "verdict": {
+    "raw": "Table 24: LE2 (technological upgrading): Yes 11, No 2; Cause 8, Pre-condition 3, Supporting factor 0. LE3 (innovation support): Yes 6, No 0; Cause 3, Pre-condition 2, Supporting factor 1. As was found for Portugal, export volumes of supported large enterprises under the innovation incentive systems rose by 15% in 2007–2011, compared to a decrease of 1.6% in the control group.",
+    "scale": "supports",
+    "quote": "technological advantages achieved through support led to a notably better market position and export performance",
+    "page": 90,
+    "studies": [
+     "Instituto de Estudos Sociais e Económicos e Quaternaire Portugal 2013"
+    ]
+   }
+  },
+  {
+   "id": "k7",
+   "claim": "R&D-capacity projects increase innovation capacity, stimulate new products and collaborations, and generate knowledge spillovers to SMEs.",
+   "refs": [],
+   "where": "Table 26 and section 4.7, p.92",
+   "verdict": {
+    "raw": "Table 26: Firm increases capacity to innovate: Yes 10, No 0; Further R&D collaborations are induced: Yes 8, No 2; Development of additional new products and processes is stimulated by increased capacities to innovate: Yes 10, No 0; Knowledge spillover to SMEs induced by collaborations: Yes 8, No 1. Corporate partners interviewed stated that in eight out of the ten cases their projects contributed to the innovation capacity in the programme area (in two cases decisively, in another four cases with important contributions). While knowledge spillovers to SMEs have occurred frequently, evidence from the company case studies on other longer-term structural effects were only recorded in a few cases.",
+    "scale": "partly",
+    "quote": "in eight out of the ten cases their projects contributed to the innovation capacity in the programme area",
+    "page": 92,
+    "studies": [
+     "Warwick and Nolan 2014",
+     "PAG Consult 2014",
+     "Czarnitzki et al. 2011"
+    ]
+   }
+  },
+  {
+   "id": "k8",
+   "claim": "Public R&D support reduces risk and expands private R&D activity rather than necessarily causing projects to begin or replacing private expenditure.",
+   "refs": [],
+   "where": "Section 4.7, p.92",
+   "verdict": {
+    "raw": "As the causality assessment showed, there appears to be no causal relationship between EU funds and project implementation. Rather, EU funds reduced potential risks and extended the scope of R&D activities. At the same time, the assessment did not detect that public support supplanted private R&D at the large enterprises. In fact, there are rather complementarities than substitution effects between public support and private R&D.",
+    "scale": "partly",
+    "quote": "EU funds reduced potential risks and extended the scope of R&D activities",
+    "page": 92,
+    "studies": [
+     "Guellec and Van Pottelsberghe De La Potterie 2003",
+     "Garcia-Quevado 2004",
+     "Cunningham et al. 2013"
+    ]
+   }
+  },
+  {
+   "id": "k9",
+   "claim": "Other investments, finance and corporate relationships jointly influence project outcomes, limiting attribution to the supported project alone.",
+   "refs": [
+    "b2",
+    "b3",
+    "l4"
+   ],
+   "where": "Table 21 and section 4.4, pp.74–75",
+   "verdict": {
+    "raw": "The largest, multinational firms often implemented other investments, financed from other EU funds or state subsidies or their own funds, which emerged as important alternative explanations of the outcomes. The large firms mostly used other development funds and state subsidies (28 cases out of 43) or financed these projects from their own funds (23 cases out of 45). Capital injections from parent firms were less frequent (10 cases out of 41). In the few cases where they were relevant, global contracts made at the headquarters of the large firms had a decisive influence on both the parameters of the large firms’ investments (location, scope, timing etc.), and their outcomes (production level, employment).",
+    "scale": "supports",
+    "quote": "other investment projects were often important alternative, or rather co-existing, causes of the observed outcomes",
+    "page": 74,
+    "studies": []
+   }
+  },
+  {
+   "id": "k10",
+   "claim": "Market conditions and firms' capacity to respond to them influence whether investment projects deliver their intended results.",
+   "refs": [
+    "b2",
+    "b3",
+    "l4"
+   ],
+   "where": "Table 21, p.74; section 4.4, p.75",
+   "verdict": {
+    "raw": "The level of achieved outcomes was also influenced by sector-specific market trends and large firms’ capacity to react to those trends. Around half of the analysed company case studies concluded that market trends had directly influenced the outcomes of the support to a material extent (in 19 out of 44 cases the role of this factor was rated ‘decisive’ or ‘important’).",
+    "scale": "supports",
+    "quote": "market trends had directly influenced the outcomes of the support to a material extent",
+    "page": 75,
+    "studies": []
+   }
+  },
+  {
+   "id": "k11",
+   "claim": "Project benefits persist after assistance ends, but longer-term sustainability depends on regional fit, corporate strategy and investment lifecycles.",
+   "refs": [
+    "b3",
+    "b4"
+   ],
+   "where": "Executive summary, p.15; section 4.5",
+   "verdict": {
+    "raw": "Long-term sustainability of the large enterprise projects is uncertain, but a good match with local industry structure and longer investment lifecycles can help. In this sense, the analysed projects were largely sustainable within the mandatory five-year grace period. Longer-term sustainability is less clear, due to manifold external factors.",
+    "scale": "partly",
+    "quote": "largely sustainable within the mandatory five-year grace period",
+    "page": 15,
+    "studies": []
+   }
+  },
+  {
+   "id": "k12",
+   "claim": "Stable structures, management capacity, strategic planning and private co-financing help large enterprises complete projects and use public funds efficiently.",
+   "refs": [
+    "b1",
+    "b2",
+    "b3"
+   ],
+   "where": "Section 4.6, p.85",
+   "verdict": {
+    "raw": "The higher efficiency of public support was coupled with a more reliable achievement of targets and efficient utilisation of public funds by large enterprises. According to public officials (e.g. in Styria and Thuringia), the interruption rate of large enterprise projects was much lower than that of SMEs. Typical reasons include more stable enterprise structures, higher management capacity and more strategic planning. Furthermore, large enterprises usually receive lower aid intensity; i.e. for the same project size, large enterprises receive less public support, resulting in higher efficiency.",
+    "scale": "supports",
+    "quote": "the interruption rate of large enterprise projects was much lower than that of SMEs",
+    "page": 85,
+    "studies": []
+   }
+  }
+ ],
+ "conclusions": {
+  "overall": {
+   "raw": "Labour markets were positively affected in the programme areas; however, the weak causal connection between the ERDF support and the projects led to limited contribution of the support to the observed outcomes.",
+   "scale": "partly",
+   "quote": "limited contribution of the support to the observed outcomes",
+   "page": 85,
+   "studies": []
+  },
+  "weakest_links": [
+   "l1",
+   "l2"
+  ],
+  "strongest_links": [
+   "l4"
+  ],
+  "summary": "Most supported projects achieved direct results, but these outcomes were not fully explained by ERDF support. Support significantly influenced roughly 20% of cases, produced some behavioural additionality in roughly 50%, and had little influence in roughly 30%. Planned indirect and wider benefits emerged at least partly in 75% of cases, conditional on planning, absorption capacity and collaborative ties. Large-scale investments commonly affected regional employment; technological upgrading and innovation strengthened export capacity; R&D projects often improved innovation capacity and SME spillovers. Other investments, market trends and corporate relationships were important co-existing causes. Projects were largely sustainable over the mandatory five-year period, but longer-term sustainability remained uncertain.",
+  "recommendations": [
+   "Make Cohesion Policy support to large enterprises more selective.",
+   "Focus on attracting investment from third countries, inducing benefits for SMEs and local economies, and helping mid-caps obtain financing and growth.",
+   "Seek financial and non-financial benefits for SMEs and the regional innovation system beyond direct project results."
+  ]
+ },
+ "transcription": {
+  "method": "gpt-6.1-sol draft from ['downloads/pages/eu_regio_wp4_p15.png', 'downloads/pages/eu_regio_wp4_p24.png', 'downloads/pages/eu_regio_wp4_p118.png', 'downloads/pages/eu_regio_wp4_p119.png']; not yet checked by hand",
+  "checked_by": "",
+  "date": "2026-11-09",
+  "open_questions": [
+   "Transcribed Figure 4 on p.15, the populated aggregate chain most directly tied to the findings. Its three separate support-to-project arrows represent different firm groups, not three sequential steps.",
+   "Figure 6 on p.24 is a more detailed generic overview. Annex diagrams LE1–LE4 concern distinct intervention types and are not transcribed as additional diagrams. LE1 and LE2 images are supplied on pp.118–119; LE3 and LE4 on pp.120–121 are named in the notes but their images are not supplied.",
+   "Numbered assumptions and lettered wider-effect markers belong to Figure 6 and the annex diagrams, not Figure 4. They have not been imported into the selected diagram. The assumptions retained here come from the findings text.",
+   "Layer mapping uses the document's p.24 definition of projects as outputs, direct effects as short-term outcomes, and indirect/wider benefits as longer-term outcomes; Figure 4 itself does not provide formal layer headings.",
+   "Table 23 on p.86 is internally inconsistent: the LE1 prose reports five important contributions, while the displayed table reports six; its magnitude counts do not reconcile with the Yes count. LE2 rows also have counts that do not reconcile. No reconciliation has been invented.",
+   "Only part of Table 23 and selected findings pages are supplied. Findings from omitted rows and annex evidence-strength assessments cannot be recovered.",
+   "The 60,000 employment estimate excludes Italy and the Czech Republic; about 10% may be safeguarded rather than newly created jobs. It is a gross figure, not an estimate of net additional employment.",
+   "The source cautions that the R&D-capacity case sample was small and non-random; longer-term structural effects were documented only in a few cases.",
+   "Document and landing URLs, licence and full publication metadata were not supplied. Organisation and year follow the report context and figure source attribution.",
+   "No definition of evidence-level categories A/B/C was supplied; B is a provisional classification for the comparative, theory-based case-study evaluation.",
+   "The overall verdict quoted concerns labour-market contribution; the supplied text does not provide a single formally scored verdict for the entire theory."
+  ],
+  "source_sha256": "f1735727762f88f589298c432294ee98d207eb888c41aa9c9e8aa8d8d310349d",
+  "prompt_sha256": "242575cf923d095d669b10a2f5536b6336230d831bf488d426d1db6f13f03c4f"
+ }
+}
