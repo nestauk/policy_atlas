@@ -69,6 +69,8 @@ export const publicRouter = createBrowserRouter([
       { index: true, element: <RedirectToPath suffix="/result" /> },
       { path: "result", element: <ArtefactView /> },
       { path: "sources", element: <SourcesLayout />, children: sourcesChildren },
+      // A longlist option's card, read-only on the public link (round 12).
+      { path: "options/:optionId", element: <OptionCard /> },
       // `preserveOriginal` (task 037 review fix): this can fire on a
       // read that was public when it resolved but is unshared before a
       // stashed refetch settles — carry the original deep link so

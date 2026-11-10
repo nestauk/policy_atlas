@@ -20,6 +20,7 @@ import {
   leverLabel,
   longlistTitle,
   maturityPhrase,
+  ownerWord,
 } from "./longlistPresentation";
 import { Select } from "../../ui/brand/Select";
 import { ShortlistToggle, useOptionActions } from "./optionActions";
@@ -98,7 +99,10 @@ function numberOf(value: unknown): number | null {
  */
 export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: LonglistOut }) {
   const task = useTask(taskId);
-  const plan = usePlan(taskId);
+  // The public link reads the shortlist; it changes nothing (round 12). The
+  // plan and the runs are owner-only reads, so the public link never asks.
+  const publicView = usePublicView();
+  const plan = usePlan(publicView ? "" : taskId);
   const patchPlan = usePatchPlan(taskId);
   const suggest = useSuggestMore(taskId);
   const walkActive = isRunActive(task.data);
@@ -106,8 +110,6 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
   // A Result-tab switch opens the page at its top, focus on the title (round 13, owner).
   const titleRef = useRef<HTMLHeadingElement>(null);
   useOpenAtTop(titleRef, "shortlist");
-  // The public link reads the shortlist; it changes nothing (round 12).
-  const publicView = usePublicView();
 
   const options = longlist.options ?? [];
   const placed = options.filter(holdsPlace);
@@ -115,15 +117,16 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
   const picks = placed.filter((option) => option.shortlist?.state === "proposed").sort(byName);
   const hasOpenOption = options.some((option) => option.state === "included" && option.shortlist == null);
   const shortlist = longlist.shortlist;
-  const appetite: RiskAppetite = plan.data?.scoping?.risk_appetite ?? "mostly_tried";
+  // The public link has no plan; the longlist read carries the same fields.
+  const appetite: RiskAppetite = plan.data?.scoping?.risk_appetite ?? longlist.risk_appetite ?? "mostly_tried";
   // The longlist's setting words were judged against the plan it was built
   // from; after a plan change, name no place until the Rebuild.
-  const where = longlist.plan_inputs_changed ? null : (plan.data?.scoping?.where?.text ?? null);
+  const where = longlist.plan_inputs_changed ? null : (plan.data?.scoping?.where?.text ?? longlist.where ?? null);
 
   // A shortlist walk that could not propose (P17): the task's newest
   // parentless walk has the purpose "shortlist" and ended degraded or
   // failed. Any other walk ending that way shows nothing here.
-  const runs = useRuns(taskId, { page_size: SCOPING_RUNS_PAGE_SIZE, parentless: true });
+  const runs = useRuns(publicView ? "" : taskId, { page_size: SCOPING_RUNS_PAGE_SIZE, parentless: true });
   const newest = runs.data?.data?.[0] ?? null;
   const proposalFailed =
     newest !== null && newest.purpose === "shortlist" && (newest.status === "degraded" || newest.status === "failed");
@@ -221,7 +224,7 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
   };
 
   const noPlaces = placed.length === 0;
-  const question = scrub(longlistTitle(plan.data?.scoping, task.data?.name));
+  const question = scrub(longlistTitle(plan.data?.scoping ?? longlist, task.data?.name));
 
   return (
     <ReportPage>
@@ -249,7 +252,7 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
 
       {addedByYou.length > 0 && (
         <section className="mt-8">
-          <h2 className={REPORT_SECTION_HEADING_CLASS}>Added by you</h2>
+          <h2 className={REPORT_SECTION_HEADING_CLASS}>Added by {ownerWord(task.data, publicView)}</h2>
           <ul role="list" className="mt-3 divide-y divide-line border-y border-line">
             {addedByYou.map(renderPlaceRow)}
           </ul>

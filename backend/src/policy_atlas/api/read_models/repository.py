@@ -4621,6 +4621,9 @@ def longlist_out(conn: Connection, task_id: uuid.UUID) -> LonglistOut | None:
         plan_inputs_changed=_plan_inputs_changed(
             current_plan, built_from[1] if built_from else None
         ),
+        question=current_plan.question if current_plan else None,
+        where=current_plan.where.text if current_plan else None,
+        risk_appetite=current_plan.risk_appetite if current_plan else None,
     )
 
 

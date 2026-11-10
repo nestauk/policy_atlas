@@ -5,6 +5,9 @@ import { mockLonglist } from "../../mock/fixtures";
 import {
   ORIGIN_WORDS,
   buildingLayout,
+  exclusionPhrase,
+  originWords,
+  ownerWord,
   isLonglistBuilding,
   layoutSignature,
   searchStatusLine,
@@ -49,6 +52,25 @@ describe("origin words (task 058, scene 15; round 10, C1)", () => {
       added_by_you: "added by you",
       clustered: "found in the evidence",
     });
+  });
+});
+
+describe("who 'you' is (owner, 2026-11-10)", () => {
+  it("is 'you' for the owner, the owner's short name for a colleague, 'the owner' on a public link", () => {
+    expect(ownerWord({ is_owner: true, owner_display: "Firstname Surname" }, false)).toBe("you");
+    expect(ownerWord(undefined, false)).toBe("you");
+    expect(ownerWord({ is_owner: false, owner_display: "Firstname  Middle Surname" }, false)).toBe("Firstname S.");
+    expect(ownerWord({ is_owner: false, owner_display: "Firstname" }, false)).toBe("Firstname");
+    expect(ownerWord({ is_owner: false, owner_display: "Firstname (Org)" }, false)).toBe("Firstname (Org)");
+    expect(ownerWord({ is_owner: false, owner_display: null }, false)).toBe("the owner");
+    expect(ownerWord({ is_owner: false, owner_display: "Firstname Surname" }, true)).toBe("the owner");
+  });
+
+  it("says the origin and the exclusion to that reader", () => {
+    expect(originWords("added_by_you", "Firstname S.")).toBe("added by Firstname S.");
+    expect(originWords("from_evidence_search", "the owner")).toBe("from the owner's report");
+    expect(originWords("from_evidence_search")).toBe("from your report");
+    expect(exclusionPhrase({ by: "user", constraint: "", reason: "" }, "the owner")).toBe("Excluded by the owner");
   });
 });
 

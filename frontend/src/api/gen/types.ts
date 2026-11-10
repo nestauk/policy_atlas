@@ -3983,6 +3983,12 @@ export interface components {
          *             the longlist was built from in a field the longlist reads, so a
          *             rebuild would give a different longlist. A change to the risk
          *             appetite alone leaves it false (task 055, A6).
+         *         question: The current approved plan's question (the page heading).
+         *         where: The current approved plan's setting, e.g. "England".
+         *         risk_appetite: The current approved plan's risk appetite.
+         *
+         *     The last three repeat plan fields so a public link, which cannot read
+         *     the owner-only plan, shows the same heading and words as the owner.
          */
         LonglistOut: {
             /** Capability Run Id */
@@ -4011,6 +4017,10 @@ export interface components {
             plan_inputs_changed: boolean;
             /** Plan Version */
             plan_version: number;
+            /** Question */
+            question?: string | null;
+            /** Risk Appetite */
+            risk_appetite?: ("tried_only" | "mostly_tried" | "open_to_untested") | null;
             /**
              * Run Id
              * Format: uuid
@@ -4023,6 +4033,8 @@ export interface components {
             themes?: components["schemas"]["LonglistThemeOut"][];
             /** Unthemed Option Ids */
             unthemed_option_ids?: string[];
+            /** Where */
+            where?: string | null;
         };
         /**
          * LonglistThemeOut

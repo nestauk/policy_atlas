@@ -63,10 +63,15 @@ function renderShortlist(
       typeof queries.useTask
     >,
   );
-  vi.mocked(queries.usePlan).mockReturnValue(
-    {
-      data: { scoping: { question: "How can we cut the NEET rate?", where: where === null ? null : { text: where } } },
-    } as unknown as ReturnType<typeof queries.usePlan>,
+  // An empty task id is the public link's "never ask" (the plan is owner-only).
+  vi.mocked(queries.usePlan).mockImplementation(
+    (taskId) =>
+      ({
+        data:
+          taskId === ""
+            ? undefined
+            : { scoping: { question: "How can we cut the NEET rate?", where: where === null ? null : { text: where } } },
+      }) as unknown as ReturnType<typeof queries.usePlan>,
   );
   vi.mocked(mutations.useOptionVerb).mockImplementation(
     (_taskId, verb) =>
@@ -253,6 +258,20 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     expect(button).not.toHaveAttribute("aria-describedby");
     await user.click(button);
     expect(suggestMutate).toHaveBeenCalledTimes(1);
+  });
+
+  it("on the public link, reads the question, Where and appetite from the longlist, never the plan", async () => {
+    publicLink = true;
+    renderShortlist({}, (longlist) => {
+      open(longlist, MOCK_OPTION_ID_NO_IN_SCOPE, "added_by_you");
+      Object.assign(longlist, { question: "Public question", where: "Wales", risk_appetite: "tried_only" });
+    });
+    expect(queries.usePlan).toHaveBeenCalledWith("");
+    expect(screen.getByText("Public question")).toBeInTheDocument();
+    expect(screen.getByText(/Evaluated, not in Wales, last before/)).toBeInTheDocument();
+    expect(screen.getByText(RISK_APPETITE_LABELS.tried_only)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Added by the owner" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Added by you" })).not.toBeInTheDocument();
   });
 
   it("names the plan's Where in the setting words while the longlist matches the plan", async () => {
