@@ -33,12 +33,52 @@ export const ORIGIN_WORDS: Record<OptionSummaryOut["origin"], string> = {
   clustered: "found in the evidence",
 };
 
+/**
+ * Who "you" is in the longlist's words (owner, 2026-11-10): the owner reads
+ * "you"; a colleague in the organisation, the owner's first name and surname
+ * initial; a public link, "the owner".
+ *
+ * Args:
+ *   task: The task read, or undefined while it loads (read as the owner's).
+ *   publicView: Whether the page is the public link's.
+ *
+ * Returns:
+ *   "you", the owner's short name, or "the owner".
+ */
+export function ownerWord(
+  task: { is_owner?: boolean; owner_display?: string | null } | undefined,
+  publicView: boolean,
+): string {
+  if (publicView) return "the owner";
+  if (task === undefined || task.is_owner !== false) return "you";
+  const [first = "", ...rest] = (task.owner_display ?? "").trim().split(/\s+/);
+  if (first === "") return "the owner";
+  const last = rest.at(-1);
+  // Only a word that starts with a letter gives an initial; a generated or
+  // decorated name ("(Org)", an id) is shown as it is.
+  if (last === undefined) return first;
+  return /^\p{L}/u.test(last) ? `${first} ${last[0].toUpperCase()}.` : `${first} ${rest.join(" ")}`;
+}
+
+/** "your" for the owner, else "<who>'s". */
+function possessive(who: string): string {
+  return who === "you" ? "your" : `${who}'s`;
+}
+
+/** An option's origin words, said to this reader (`ownerWord`). */
+export function originWords(origin: OptionSummaryOut["origin"], who = "you"): string {
+  if (origin === "added_by_you") return `added by ${who}`;
+  if (origin === "from_evidence_search") return `from ${possessive(who)} report`;
+  return ORIGIN_WORDS[origin];
+}
+
 /** The option card's origin: the row's words, and for an option drawn from
  *  the linked report the section it came from (task 045, F3; round 10, C1:
  *  "from your report · <section>"). */
-export function originLabel(origin: OptionSummaryOut["origin"], fromSection?: string | null): string {
+export function originLabel(origin: OptionSummaryOut["origin"], fromSection?: string | null, who = "you"): string {
   const section = fromSection?.trim() ?? "";
-  return origin === "from_evidence_search" && section !== "" ? `${ORIGIN_WORDS[origin]} · ${section}` : ORIGIN_WORDS[origin];
+  const words = originWords(origin, who);
+  return origin === "from_evidence_search" && section !== "" ? `${words} · ${section}` : words;
 }
 
 /** One relation, rendered from this option's side (contract § Terms
@@ -100,7 +140,7 @@ type OptionDocumentOut = components["schemas"]["OptionDocumentOut"];
  * Returns:
  *   The heading, the constraint's words (or null) and the reason ("" when none).
  */
-export function exclusionFacts(exclusion: Pick<ExclusionOut, "by" | "constraint" | "reason">): {
+export function exclusionFacts(exclusion: Pick<ExclusionOut, "by" | "constraint" | "reason">, who = "you"): {
   heading: string;
   constraint: string | null;
   why: string;
@@ -111,8 +151,8 @@ export function exclusionFacts(exclusion: Pick<ExclusionOut, "by" | "constraint"
   if (!byYou) return { heading: "Does not meet a constraint", constraint: constraint === "" ? null : constraint, why: reason };
   const group = /^(with the (?:theme|lever) [^:]+):?\s*(.*)$/.exec(reason);
   return group === null
-    ? { heading: "Excluded by you", constraint: null, why: reason }
-    : { heading: `Excluded by you · ${group[1].trim()}`, constraint: null, why: group[2].trim() };
+    ? { heading: `Excluded by ${who}`, constraint: null, why: reason }
+    : { heading: `Excluded by ${who} · ${group[1].trim()}`, constraint: null, why: group[2].trim() };
 }
 
 /**
@@ -128,11 +168,11 @@ export function exclusionFacts(exclusion: Pick<ExclusionOut, "by" | "constraint"
  *   a group's exclusion, "Excluded by you", or "Excluded by a constraint"
  *   (`by` "constrain").
  */
-export function exclusionPhrase(exclusion: Pick<ExclusionOut, "by" | "constraint" | "reason">): string {
+export function exclusionPhrase(exclusion: Pick<ExclusionOut, "by" | "constraint" | "reason">, who = "you"): string {
   const byYou = exclusion.by === "user" || fold(constraintLabel(exclusion.constraint ?? "")) === "your decision";
   if (!byYou) return "Excluded by a constraint";
   const group = /^with the (theme|lever) ([^:]+)/.exec((exclusion.reason ?? "").trim());
-  return group === null ? "Excluded by you" : `Excluded with the ${group[1]} ${group[2].trim()}`;
+  return group === null ? `Excluded by ${who}` : `Excluded with the ${group[1]} ${group[2].trim()}`;
 }
 
 /** "a, b and c" */
@@ -1167,6 +1207,7 @@ export function buildingLayout(
   rows: readonly OptionProgressOut[],
   longlist: LonglistOut | null | undefined,
   live: LiveNames = NO_LIVE_NAMES,
+  who = "you",
 ): BuildingLayout {
   const summaries = new Map((longlist?.options ?? []).map((option) => [option.option_id, option]));
   const ids = new Set(rows.map((row) => row.option_id));
@@ -1191,7 +1232,7 @@ export function buildingLayout(
       key: shownOrigin === "clustered" && liveName !== undefined ? nameKey("named", shownName) : id,
       name: shownName,
       description: (summary?.description ?? description).trim(),
-      origin: ORIGIN_WORDS[shownOrigin],
+      origin: originWords(shownOrigin, who),
       status: summary !== undefined ? null : assigning ? ASSIGNING_LINE : search,
       lever: summary !== undefined && profiled(summary) ? leverLabel(summary) : null,
       summary: summary ?? null,

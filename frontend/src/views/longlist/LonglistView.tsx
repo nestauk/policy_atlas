@@ -53,7 +53,9 @@ import {
   rowMetaFields,
   type BuildingLayout,
   type BuildingRow,
+  ownerWord,
 } from "./longlistPresentation";
+import { useOwnerWord } from "./ownerWord";
 import {
   REASON_INPUT_CLASS,
   ShortlistToggle,
@@ -88,7 +90,6 @@ const MODES: { key: Mode; label: string }[] = [
 
 const ADD_OPTION_ANCHOR = "add-option";
 const EXCLUDED_ANCHOR = "excluded-options";
-const EXCLUDED_SUMMARY = "Excluded from shortlisting by a constraint or by you.";
 
 /** Theme sections rise one after another, 60 ms apart; under reduced
  *  motion every wave appears at once. Literal classes so the build keeps them. */
@@ -294,6 +295,7 @@ function OptionRow({
   const exclusion = excluded ? (summary?.exclusion ?? null) : null;
   const notice = controls?.notice ?? null;
   const publicView = usePublicView();
+  const who = useOwnerWord(taskId);
   // The row's name in the regrouping transition (`longlist.css`).
   const style = { "--longlist-row": `opt-${row.key}` } as CSSProperties;
   return (
@@ -328,7 +330,7 @@ function OptionRow({
               colour; the constraint and any reason are the card's (round 15,
               owner). */}
           {exclusion !== null && phrase && (
-            <p className="mt-0.5 max-w-[44em] text-meta text-grey">{exclusionPhrase(exclusion)}</p>
+            <p className="mt-0.5 max-w-[44em] text-meta text-grey">{exclusionPhrase(exclusion, who)}</p>
           )}
         </div>
         <div className="flex flex-none items-center gap-x-4 text-meta text-grey sm:-mt-1">
@@ -434,7 +436,12 @@ type GroupAction = { label: string; include: boolean; tooltip?: string; disabled
 export function Longlist({ taskId, longlist: finished }: { taskId: string; longlist?: LonglistOut }) {
   const building = finished === undefined;
   const task = useTask(taskId);
-  const plan = usePlan(taskId);
+  // The public link reads the list; it adds nothing (round 12). The plan is
+  // an owner-only read: asking for it without a sign-in sends the reader to
+  // sign in, so the public link never asks.
+  const publicView = usePublicView();
+  const plan = usePlan(publicView ? "" : taskId);
+  const who = ownerWord(task.data, publicView);
   const options = useOptions(taskId);
   const longlistRead = useLonglist(taskId);
   const stream = useRunStream(taskId);
@@ -443,8 +450,6 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
   // A Result-tab switch opens the page at its top, focus on the title (round 13, owner).
   const titleRef = useRef<HTMLHeadingElement>(null);
   useOpenAtTop(titleRef, "longlist");
-  // The public link reads the list; it adds nothing (round 12).
-  const publicView = usePublicView();
 
   const [chosenMode, setMode] = useState<Mode>("list");
   const [gridLine, setGridLine] = useState<GridLine>("ambition");
@@ -481,14 +486,14 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
   // options read has but the longlist does not (and that was not folded
   // into another) is not on the list.
   const computed = useMemo(() => {
-    const layout = buildingLayout(optionRows ?? [], longlist, live);
+    const layout = buildingLayout(optionRows ?? [], longlist, live, who);
     if (building) return layout;
     const listed = (rows: BuildingRow[]) => rows.filter((row) => row.summary !== null);
     return {
       groups: layout.groups.map((group) => ({ ...group, rows: listed(group.rows) })).filter((group) => group.rows.length > 0),
       excluded: listed(layout.excluded),
     };
-  }, [optionRows, longlist, building, live]);
+  }, [optionRows, longlist, building, live, who]);
   // Only a regroup moves the rows (round 13, owner): the build's theme wave,
   // a new grouping, a whole theme or lever excluded or included again. A
   // shortlist toggle or one option excluded or included again updates in
@@ -633,7 +638,8 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
     />
   );
 
-  const question = scrub(longlistTitle(plan.data?.scoping, task.data?.name));
+  // The public link has no plan; the longlist read carries its question.
+  const question = scrub(longlistTitle(plan.data?.scoping ?? longlist, task.data?.name));
   const counts = longlist === null ? null : countsParts(longlist.counts, leverCount(longlist.options));
   // The shortlist the reader is assembling, said in the count line (round
   // 11, review finding 2).
@@ -820,7 +826,10 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
           <h2 id={`${EXCLUDED_ANCHOR}-heading`} className={REPORT_SECTION_HEADING_CLASS}>
             Excluded
           </h2>
-          <p className="mt-1 max-w-prose-measure text-body text-grey">{EXCLUDED_SUMMARY}</p>
+          {/* A short name ("Firstname S.") already ends in a full stop. */}
+          <p className="mt-1 max-w-prose-measure text-body text-grey">
+            Excluded from shortlisting by a constraint or by {who.endsWith(".") ? who : `${who}.`}
+          </p>
           {excludedGroups.groups.map((group) => (
             <GroupSection
               key={`${groupBy}-${group.key}`}

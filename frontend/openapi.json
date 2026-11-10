@@ -3902,7 +3902,7 @@
         "type": "object"
       },
       "LonglistOut": {
-        "description": "The `longlist` read model: the options grouped by theme, with their states.\n\nArgs:\n    run_id: The longlist component run the longlist came from.\n    capability_run_id: The longlist walk that run belonged to.\n    plan_version: The plan version the longlist was built from.\n    counts: The header counts.\n    themes: The themes, in display order.\n    unthemed_option_ids: Options in no theme (including options added\n        since the build).\n    options: Every option of the task, themed ones first in theme order.\n    lever_types: The lever-type list the options were typed against, in\n        order (the grid's rows).\n    lever_type_definitions: The same list with each type's one-line\n        definition (the list view's group headings).\n    lever_type_definitions_by_version: Every lever-type taxonomy version's\n        definitions, keyed by version, so an option typed under an\n        earlier version can show that version's wording (task 046).\n    taxonomy_version: The lever-type list version.\n    depth_label: The depth label every longlist surface carries.\n    shortlist: The latest shortlist proposal (task 055).\n    plan_inputs_changed: The current approved plan differs from the plan\n        the longlist was built from in a field the longlist reads, so a\n        rebuild would give a different longlist. A change to the risk\n        appetite alone leaves it false (task 055, A6).",
+        "description": "The `longlist` read model: the options grouped by theme, with their states.\n\nArgs:\n    run_id: The longlist component run the longlist came from.\n    capability_run_id: The longlist walk that run belonged to.\n    plan_version: The plan version the longlist was built from.\n    counts: The header counts.\n    themes: The themes, in display order.\n    unthemed_option_ids: Options in no theme (including options added\n        since the build).\n    options: Every option of the task, themed ones first in theme order.\n    lever_types: The lever-type list the options were typed against, in\n        order (the grid's rows).\n    lever_type_definitions: The same list with each type's one-line\n        definition (the list view's group headings).\n    lever_type_definitions_by_version: Every lever-type taxonomy version's\n        definitions, keyed by version, so an option typed under an\n        earlier version can show that version's wording (task 046).\n    taxonomy_version: The lever-type list version.\n    depth_label: The depth label every longlist surface carries.\n    shortlist: The latest shortlist proposal (task 055).\n    plan_inputs_changed: The current approved plan differs from the plan\n        the longlist was built from in a field the longlist reads, so a\n        rebuild would give a different longlist. A change to the risk\n        appetite alone leaves it false (task 055, A6).\n    question: The current approved plan's question (the page heading).\n    where: The current approved plan's setting, e.g. \"England\".\n    risk_appetite: The current approved plan's risk appetite.\n\nThe last three repeat plan fields so a public link, which cannot read\nthe owner-only plan, shows the same heading and words as the owner.",
         "properties": {
           "capability_run_id": {
             "anyOf": [
@@ -3965,6 +3965,33 @@
             "title": "Plan Version",
             "type": "integer"
           },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "risk_appetite": {
+            "anyOf": [
+              {
+                "enum": [
+                  "tried_only",
+                  "mostly_tried",
+                  "open_to_untested"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Appetite"
+          },
           "run_id": {
             "format": "uuid",
             "title": "Run Id",
@@ -3998,6 +4025,17 @@
             },
             "title": "Unthemed Option Ids",
             "type": "array"
+          },
+          "where": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Where"
           }
         },
         "required": [

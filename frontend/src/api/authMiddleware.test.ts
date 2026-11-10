@@ -70,6 +70,25 @@ describe("createAuthMiddleware", () => {
   it("surfaces the original 401 when the refresh yields no token", async () => {
     const getAccessToken = vi.fn(async (force?: boolean) => (force ? null : "token-a"));
     const middleware = createAuthMiddleware(makeAuth({ getAccessToken }));
+    const request = new Request("https://api.example/x", {
+      headers: { Authorization: "Bearer token-a" },
+    });
+    const originalResponse = new Response(null, { status: 401 });
+
+    const result = await middleware.onResponse?.({
+      ...callbackParams(request),
+      response: originalResponse,
+    });
+
+    expect(getAccessToken).toHaveBeenCalledWith(true);
+    expect(result).toBe(originalResponse);
+  });
+
+  // A public link read signed out: its 401 must not start a silent sign-in,
+  // which would swap the page for "Taking you to sign in…".
+  it("never refreshes after a 401 on a request sent without a token", async () => {
+    const getAccessToken = vi.fn(async () => null);
+    const middleware = createAuthMiddleware(makeAuth({ getAccessToken }));
     const request = new Request("https://api.example/x");
     const originalResponse = new Response(null, { status: 401 });
 
@@ -78,6 +97,7 @@ describe("createAuthMiddleware", () => {
       response: originalResponse,
     });
 
+    expect(getAccessToken).not.toHaveBeenCalled();
     expect(result).toBe(originalResponse);
   });
 
