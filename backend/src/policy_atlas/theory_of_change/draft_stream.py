@@ -22,6 +22,7 @@ sketch so far and forgets it when the draft's stage ends.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 
 import structlog
@@ -30,13 +31,14 @@ from pydantic import ValidationError
 from policy_atlas.core import liveness
 from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import JsonArrayObjectDecoder
-from policy_atlas.core.usage import UsageResult
+from policy_atlas.core.usage import TokenUsage, UsageResult, add_token_usage
 from policy_atlas.theory_of_change.backend import DRAFT_STEP, TocBackend
 from policy_atlas.theory_of_change.draft_prompt import (
     DraftBoxWire,
     DraftLinkWire,
     DraftResponse,
 )
+from policy_atlas.theory_of_change.report_stream import stream_failure
 
 log = structlog.get_logger()
 
@@ -136,12 +138,15 @@ def draft_streamed(
         frames: The live sketch.
 
     Returns:
-        The draft and its usage, as :meth:`TocBackend.draft` returns them.
+        The draft and its usage, as :meth:`TocBackend.draft` returns them. After
+        a fallback the usage also counts the failed stream's tokens.
 
     Raises:
         Exception: Whatever the ordinary call raises after the stream failed.
     """
     liveness.model_call_opened()
+    started = time.monotonic()
+    stream_usage: TokenUsage | None = None
     try:
         return backend.draft_stream(
             plan=plan,
@@ -151,8 +156,15 @@ def draft_streamed(
             first_content_s=first_content_limit(),
         )
     except Exception as exc:
-        log.warning("toc_draft.stream_fallback", error=type(exc).__name__)
+        error, stream_usage = stream_failure(exc)
+        log.warning(
+            "toc_draft.stream_fallback",
+            error=error,
+            elapsed_s=round(time.monotonic() - started, 1),
+        )
     finally:
         liveness.model_call_closed()
     frames.reset()
-    return backend.draft(plan=plan, existing_theory=existing_theory, problems=problems)
+    draft, used = backend.draft(plan=plan, existing_theory=existing_theory, problems=problems)
+    # The failed stream's tokens were paid for: they count with the ordinary call's.
+    return draft, add_token_usage(stream_usage, used)

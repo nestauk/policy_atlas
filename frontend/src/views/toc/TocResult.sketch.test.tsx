@@ -176,16 +176,36 @@ describe("the live draft on the canvas (S12)", () => {
     expect(document.querySelector(".react-flow__edge")).not.toHaveAttribute("tabindex");
   });
 
-  it("empties the canvas when the draft is written again, then draws the retry", () => {
+  it("shows the empty state again when the draft is written again, then draws the retry", () => {
     live(stream({ sketch: { boxes: BOXES, links: [] } }));
     render(page(drafting()));
-    // An empty frame removes the stream's sketch while the draft still runs.
+    // An empty frame removes the stream's sketch while the draft still runs:
+    // the waiting message, not an empty canvas (owner, 2026-11-10).
     update(stream({}), drafting());
     expect(boxNodes()).toHaveLength(0);
-    expect(screen.getByRole("group", { name: "Theory of change canvas" })).toBeInTheDocument();
-    expect(screen.queryByText(EMPTY_STATE)).toBeNull();
+    expect(screen.getByText(EMPTY_STATE)).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Theory of change canvas" })).toBeNull();
+    // The retry's first box brings the canvas back.
     update(stream({ sketch: { boxes: BOXES.slice(0, 1), links: [] } }), drafting());
+    expect(screen.queryByText(EMPTY_STATE)).toBeNull();
     expect(boxNodes()).toHaveLength(1);
+  });
+
+  it("after a fallback with no further sketch, the stored graph replaces the empty state", () => {
+    live(stream({ sketch: { boxes: BOXES, links: [] } }));
+    render(page(drafting()));
+    // The stream failed: the reset, then the ordinary call runs with nothing drawn.
+    update(stream({}), drafting());
+    expect(screen.getByText(EMPTY_STATE)).toBeInTheDocument();
+    // The stage ends before `GET /toc` returns the graph: still the waiting message.
+    update(stream({ stage: "completed", status: "succeeded" }), drafting());
+    expect(screen.getByText(EMPTY_STATE)).toBeInTheDocument();
+    expect(boxNodes()).toHaveLength(0);
+    // The stored graph lands in place of the empty state.
+    update(stream({ stage: null, runId: "check" }), tocGraphFixture({ check_status: "checking" }));
+    expect(screen.queryByText(EMPTY_STATE)).toBeNull();
+    expect(boxNodes().length).toBeGreaterThan(3);
+    expect(screen.getByText("A1")).toBeInTheDocument();
   });
 
   it("holds the sketch after the draft's stage ends, until the stored graph replaces it with no empty frame", () => {

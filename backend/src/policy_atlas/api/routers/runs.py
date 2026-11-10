@@ -410,6 +410,15 @@ def create_run(
             backends=backends,
             user_id=user.user_id,
         )
+    try:
+        created = _await_new_run(engine, task_id=task_id, existing_ids=existing_ids)
+    finally:
+        # Once the runtime row exists, the database's ``running`` count owns
+        # capacity accounting; keeping the launch reservation would double-count.
+        # A Start whose row never came gives it back too, so the task is not
+        # fenced until the server restarts.
+        with _dispatch_lock:
+            _dispatching_tasks.discard(task_id)
     if toc_question is not None:
         question = toc_question
 
@@ -420,12 +429,8 @@ def create_run(
             with tracing.trace_scope(user_id=user.user_id):
                 name_task_from_question(engine, titles, task_id=task_id, question=question)
 
+        # Only once the walk's row exists: a Start that fails names nothing.
         in_background(_name_task, name=f"policy-atlas-task-title-{task_id}")
-    created = _await_new_run(engine, task_id=task_id, existing_ids=existing_ids)
-    # Once the runtime row exists, the database's ``running`` count owns
-    # capacity accounting; keeping the launch reservation would double-count.
-    with _dispatch_lock:
-        _dispatching_tasks.discard(task_id)
     return created
 
 

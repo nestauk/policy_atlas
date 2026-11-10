@@ -53,7 +53,7 @@ from policy_atlas.core.openai_client import (
     JsonArrayStringDecoder,
     JsonStringFieldDecoder,
 )
-from policy_atlas.core.usage import UsageAccumulator, UsageResult
+from policy_atlas.core.usage import TokenUsage, UsageAccumulator, UsageResult
 from policy_atlas.runtime.progress import ProgressEmitter
 from policy_atlas.theory_of_change.report_prompt import (
     ConnectionReasonWire,
@@ -128,6 +128,39 @@ _OPEN_MARKER = re.compile(r"(?:\[\d*|#\d*)$")
 
 class FirstContentTimeout(TimeoutError):
     """The streamed call sent no words within the step's ``first_content_s``."""
+
+
+class StreamFailed(RuntimeError):
+    """A streamed call that failed after it was sent, with the tokens it had used.
+
+    In plain terms: a stream can fail late (its whole answer came but did not
+    parse) after the model has already been paid for. The tokens it reported
+    ride on this error so the caller adds them to the step's cost before the
+    ordinary call runs. The original failure is the error's ``__cause__``.
+
+    Args:
+        usage: The tokens the stream reported, or ``None`` when it reported none
+            (a stream that dropped or sent nothing in time reports none).
+    """
+
+    def __init__(self, usage: TokenUsage | None) -> None:
+        super().__init__("the streamed call failed")
+        self.usage = usage
+
+
+def stream_failure(exc: BaseException) -> tuple[str, TokenUsage | None]:
+    """A failed stream's error name for the log, and the tokens it used.
+
+    Args:
+        exc: What the streamed call raised.
+
+    Returns:
+        The original failure's class name and the stream's usage (``None``
+        unless ``exc`` is a :class:`StreamFailed` that carries some).
+    """
+    if isinstance(exc, StreamFailed):
+        return type(exc.__cause__ or exc).__name__, exc.usage
+    return type(exc).__name__, None
 
 
 @dataclass(frozen=True)
@@ -559,7 +592,7 @@ def write_streamed(
 
     The streamed call runs once, outside every retry loop: a retry would
     repeat words the reader has already seen. Its usage is added to ``usage``
-    as the ordinary call's is.
+    as the ordinary call's is, also when it failed late and the fallback ran.
 
     Args:
         backend: The ToC backend (``report_stream`` and ``report``).
@@ -573,12 +606,20 @@ def write_streamed(
     """
     frames.start()
     liveness.model_call_opened()
+    started = time.monotonic()
     try:
         wire, used = backend.report_stream(
             **inputs, on_text=frames.feed, first_content_s=first_content_limit()
         )
     except Exception as exc:
-        log.warning("toc_report.stream_fallback", error=type(exc).__name__)
+        error, stream_usage = stream_failure(exc)
+        log.warning(
+            "toc_report.stream_fallback",
+            error=error,
+            elapsed_s=round(time.monotonic() - started, 1),
+        )
+        # The failed stream's tokens were paid for: they count in the step's cost.
+        usage.add(stream_usage)
         result: UsageResult[ReportResponse] | None = None
     else:
         result = (wire, used)

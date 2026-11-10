@@ -223,3 +223,30 @@ def test_start_names_the_task_from_the_plan_question_unless_the_user_named_it(
     # The user's own name stands, and no title call was made for it.
     assert _name_and_renames(engine, kept)[0] == "Mine"
     assert len(titles.title_calls) == 1
+
+
+def test_a_start_whose_walk_never_opens_names_nothing_and_frees_the_task(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The name waits for the walk's row: a Start that fails with 500 names nothing."""
+    monkeypatch.setattr(runs_router, "in_background", lambda work, *, name: work())
+
+    def never_opens(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError("executor did not create a capability run")
+
+    monkeypatch.setattr(runs_router, "_await_new_run", never_opens)
+    titles = StubAgentBackend(title_responses="Childhood obesity in Leeds")
+    overrides = {
+        **_overrides(),
+        get_title_backend: lambda: titles,
+        get_executor: lambda: RecordingExecutor(status="succeeded"),
+    }
+    with api_client(tmp_path, overrides) as (client, owner, _other):
+        task_id = _toc_task(client, owner)
+        task_agent_turn_ok(client, owner, task_id, QUESTION)
+        started = client.post(f"/api/v1/tasks/{task_id}/runs", headers=owner, json={})
+        assert started.status_code == 500
+    assert titles.title_calls == []
+    assert _name_and_renames(engine, task_id) == ("Theory", [])
+    # The launch reservation is given back, so the task is not fenced until a restart.
+    assert uuid.UUID(task_id) not in runs_router._dispatching_tasks

@@ -469,3 +469,15 @@ def test_only_a_first_report_streams(engine: Engine, cleanup: list[uuid.UUID]) -
         # No report yet: a check's report streams; "Update the report" never does.
         assert streams_to_page(conn, task_id=task_id, context=check)
         assert not streams_to_page(conn, task_id=task_id, context=update)
+
+
+def test_a_stream_that_fails_at_the_parse_still_counts_its_tokens(hub: TickHub) -> None:
+    backend = OpenAITocBackend(api_key="test-key")
+    # Every piece arrives, then the text is not a whole ReportResponse.
+    completions = _FakeCompletions(RESPONSE.model_dump_json()[:-20])
+    backend._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))  # type: ignore[assignment]
+    usage = UsageAccumulator()
+    result = write_streamed(backend, INPUTS, _frames(), usage, lambda: RESPONSE)
+    assert result == RESPONSE
+    # The fallback here adds nothing, so these are the failed stream's (paid-for) tokens.
+    assert usage.payload()["completion"] == 40 and usage.payload()["prompt"] == 100

@@ -126,7 +126,7 @@ from policy_atlas.theory_of_change.report_prompt import (
     WhatToTestWire,
     build_report_messages,
 )
-from policy_atlas.theory_of_change.report_stream import REPORT_STEP, consume
+from policy_atlas.theory_of_change.report_stream import REPORT_STEP, StreamFailed, consume
 from policy_atlas.theory_of_change.review_prompt import (
     TOC_REVIEW_MAX_OUTPUT_TOKENS,
     TOC_REVIEW_PROMPT_VERSION,
@@ -178,7 +178,9 @@ class TocBackend(Protocol):
 
         Raises:
             FirstContentTimeout: If no words came within ``first_content_s``.
-            Exception: On any stream or parse failure; the caller falls back.
+            Exception: On any stream or parse failure; the caller falls back. The
+                live backend raises :class:`StreamFailed` (the original error as
+                its cause), carrying the tokens the stream used.
         """
         ...
 
@@ -283,7 +285,9 @@ class TocBackend(Protocol):
 
         Raises:
             FirstContentTimeout: If no words came within ``first_content_s``.
-            Exception: On any stream or parse failure; the caller falls back.
+            Exception: On any stream or parse failure; the caller falls back. The
+                live backend raises :class:`StreamFailed` (the original error as
+                its cause), carrying the tokens the stream used.
         """
         ...
 
@@ -696,7 +700,12 @@ class OpenAITocBackend:
         """Make one streamed call and parse its whole text as the ordinary call does.
 
         Each text piece goes to ``on_text`` on this thread (:func:`consume`);
-        the call is traced as one Langfuse generation, attempt 1.
+        the call is traced as one Langfuse generation, attempt 1, under the
+        task's session.
+
+        Raises:
+            StreamFailed: On any stream or parse failure (the original error is
+                its ``__cause__``), carrying the tokens the stream reported.
         """
         request = self._stream_request(
             messages,
@@ -737,11 +746,15 @@ class OpenAITocBackend:
         def run(span: Any | None) -> UsageResult[T]:
             if span is not None:
                 span.update(input={"messages": messages}, model=model, metadata=metadata)
-            text = consume(
-                pieces(), first_content_s=first_content_s, on_fragment=on_text, cancel=cancel
-            )
-            log_usage(f"{step}.usage", held.get("usage"))
-            wire = response_format.model_validate_json(text)
+            try:
+                text = consume(
+                    pieces(), first_content_s=first_content_s, on_fragment=on_text, cancel=cancel
+                )
+                log_usage(f"{step}.usage", held.get("usage"))
+                wire = response_format.model_validate_json(text)
+            except Exception as exc:
+                # The tokens used so far go with the failure, so the step's cost counts them.
+                raise StreamFailed(token_usage_from_provider(held.get("usage"))) from exc
             usage = token_usage_from_provider(held.get("usage"))
             if span is not None:
                 span.update(
@@ -753,9 +766,15 @@ class OpenAITocBackend:
 
         if self._langfuse_client is None:
             return run(None)
-        with tracing._observation(
-            self._langfuse_client, name=f"toc:{step.removeprefix('toc_')}", as_type="generation"
-        ) as span:
+        # Under the task's Langfuse session, as :func:`traced_parse` opens the ordinary call.
+        with (
+            tracing.trace_scope(session_id=self._session_id),
+            tracing._observation(
+                self._langfuse_client,
+                name=f"toc:{step.removeprefix('toc_')}",
+                as_type="generation",
+            ) as span,
+        ):
             return run(span)
 
 

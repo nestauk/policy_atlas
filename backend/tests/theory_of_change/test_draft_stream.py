@@ -306,3 +306,61 @@ def test_the_streamed_draft_request_is_todays_request_streamed() -> None:
     today = dict(completions.parse_kwargs)
     today["response_format"] = type_to_response_format_param(today["response_format"])
     assert sent == today
+
+
+# --- a failed stream's tokens count in the step's cost ---------------------------------
+
+
+class _BrokenStreamCompletions(_FakeCompletions):
+    """The whole answer streams but does not parse; the ordinary call answers."""
+
+    def parse(self, **kwargs: Any) -> Any:
+        message = SimpleNamespace(parsed=DRAFT)
+        usage = SimpleNamespace(prompt_tokens=100, completion_tokens=5, total_tokens=105)
+        return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=usage)
+
+
+def test_a_stream_that_fails_at_the_parse_still_counts_its_tokens(hub: TickHub) -> None:
+    backend = OpenAITocBackend(api_key="test-key")
+    # Cut short: every piece arrives, then the text is not a whole DraftResponse.
+    completions = _BrokenStreamCompletions(DRAFT.model_dump_json()[:-20])
+    backend._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))  # type: ignore[assignment]
+    result, usage = draft_streamed(backend, **INPUTS, frames=SketchFrames())
+    assert result == DRAFT
+    # The stream's 40 completion tokens (paid for) plus the ordinary call's 5.
+    assert usage is not None and usage.completion == 45 and usage.prompt == 200
+
+
+def test_the_streamed_draft_is_traced_under_the_tasks_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from contextlib import contextmanager
+
+    from policy_atlas.core import tracing
+
+    session_id = uuid.uuid4()
+    events: list[str] = []
+
+    @contextmanager
+    def fake_propagate_attributes(**attributes: Any) -> Iterator[None]:
+        events.append(f"session:{attributes.get('session_id')}")
+        yield
+
+    @contextmanager
+    def fake_observation(_client: Any, *, name: str, as_type: str) -> Iterator[Any]:
+        events.append(f"open:{name}")
+        yield SimpleNamespace(update=lambda **_kwargs: None)
+
+    monkeypatch.setattr(tracing, "propagate_attributes", fake_propagate_attributes)
+    monkeypatch.setattr(tracing, "_observation", fake_observation)
+    backend = OpenAITocBackend(
+        api_key="test-key",
+        langfuse_client=object(),  # type: ignore[arg-type]
+        session_id=session_id,
+    )
+    completions = _FakeCompletions(DRAFT.model_dump_json())
+    backend._client = SimpleNamespace(chat=SimpleNamespace(completions=completions))  # type: ignore[assignment]
+    streamed, _ = backend.draft_stream(**INPUTS, on_text=lambda _piece: None, first_content_s=None)
+    assert streamed == DRAFT
+    # The session is set before the generation opens, so the generation carries it.
+    assert events == [f"session:{session_id}", "open:toc:draft"]

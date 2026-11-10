@@ -256,7 +256,10 @@ function TocPage({ taskId }: { taskId: string }) {
   // canvas: the stage's end comes before `GET /toc` returns the graph, and
   // a new walk (the check that follows) clears the stream's sketch. An
   // empty sketch while the draft runs means it is written again, so the
-  // held one goes; a failed draft drops it.
+  // held one goes and the page shows its waiting message until the next
+  // box or the stored graph (owner, 2026-11-10: a fallback's ordinary call
+  // can take minutes, and an empty canvas reads as broken); a failed draft
+  // drops it.
   const streamSketch = stream?.liveSketch ?? null;
   const draftStage = stages.findLast((entry) => entry.stage === "toc_draft");
   const draftFailed = draftStage?.status === "failed" || runStatus === "failed" || runStatus === "aborted" || runStatus === "interrupted";
@@ -269,10 +272,10 @@ function TocPage({ taskId }: { taskId: string }) {
     // Retired: the stream may keep the replaced sketch until its walk ends.
     setHeld({ sketch: null, retired: held.sketch === EMPTY_SKETCH ? held.retired : held.sketch });
   } else if (held.sketch !== null && held.sketch !== EMPTY_SKETCH && reset) {
-    // Written again: the canvas empties and the retry is drawn from its first box.
+    // Written again: the waiting message, then the retry drawn from its first box.
     setHeld({ sketch: EMPTY_SKETCH, retired: held.sketch });
   }
-  const drawing = held.sketch !== null && graph != null && !stored && !draftFailed ? held.sketch : null;
+  const drawing = held.sketch !== null && held.sketch !== EMPTY_SKETCH && graph != null && !stored && !draftFailed ? held.sketch : null;
   // The page showed its empty state before the first box: the canvas then
   // arrives, and the first box rises in with it.
   const [sawEmpty, setSawEmpty] = useState(false);
