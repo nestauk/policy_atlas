@@ -3,30 +3,46 @@ import { askForFinishAlerts } from "../../lib/askForAlerts";
 import { prefersReducedMotion } from "../../lib/motion";
 import { useSearchParams } from "react-router";
 
-import { useTask, useToc, useTocEvidence, useTocProposals } from "../../api/queries";
+import { useFunnel, useTask, useToc, useTocEvidence, useTocProposals } from "../../api/queries";
+import { formatDate } from "../../lib/dates";
+import { formatCount } from "../../lib/format";
 import { scrub } from "../../lib/scrub";
+import type { LiveSection } from "../../store";
 import { Button } from "../../ui/brand/Button";
+import { cn } from "../../ui/brand/cn";
+import { ToneSquare } from "../../ui/brand/EvidenceMarks";
+import type { ToneColour } from "../../ui/brand/evidence";
+import { QUIET_CONTROL_CLASS } from "../../ui/brand/inlineActions";
 import { REPORT_BODY_CLASS } from "../artefactPresentation";
-import { codeTargets, DetailedInformation } from "./DetailedInformation";
+import { ReportExpandScope, seedReportExpanded } from "../ArtefactOutline";
+import { LiveDraft, SourceDossier, usePrefersReducedMotion } from "../ArtefactView";
+import { DownloadMenu } from "../DownloadMenu";
+import { usePublicView } from "../publicView";
+import { REPORT_DATELINE_CLASS, REPORT_TITLE_CLASS, ReportFacts, ReportKindRow, ReportPage, type ReportFact } from "../reportPage";
+import { useTaskLive } from "../taskLive";
+import { ActionLine } from "../workspace/ActionLine";
+import { codeTargets, liveSections, LiveReportBody, ReportBody, reportSections, type SourceRows } from "./DetailedInformation";
 import { DetailPanel, SidePanel, type Selection } from "./DetailPanel";
-import { AddBoxForm, CanvasBar, UndoToast, useTocEditor } from "./Editing";
+import { AddBoxForm, CanvasBar, tocDownloads, UndoToast, useTocEditor } from "./Editing";
+import { pendingCitations, RevealedWords, tocParts, useActivePart, useLiveSourceNames, type TocPartKey } from "./liveReport";
 import { pendingCount, type Preview, Suggestions } from "./Suggestions";
 import { ReadingGuide, VerdictLegend } from "./ReadingGuide";
 import { TocCanvas } from "./TocCanvas";
 import { usePanelWidth } from "../workspace/usePanelWidth";
 import { tocTitle } from "./tocModel";
+import type { TocGraph } from "./types";
 
-/** The overall verdict's text colour: the canvas's verdict colours, darkened for text. */
-const EVIDENCE_TEXT: Record<"supports" | "mixed" | "too_little" | "against", string> = {
-  supports: "var(--color-verdict-confident-text)",
-  mixed: "var(--color-verdict-mixed-text)",
-  too_little: "var(--color-verdict-little-text)",
-  against: "var(--color-verdict-against-text)",
-};
+type Report = NonNullable<TocGraph["report"]>;
 
-/** An implausible mechanism reads as against; otherwise the evidence's colour. */
-function verdictColour(verdict: { mechanism: string; evidence: keyof typeof EVIDENCE_TEXT }): string {
-  return verdict.mechanism === "implausible" ? EVIDENCE_TEXT.against : EVIDENCE_TEXT[verdict.evidence];
+/** The overall verdict's tone square, from what the verdict says (never
+ *  from its words): an implausible mechanism or evidence against is Red,
+ *  mixed evidence Yellow, supporting evidence Green. Too little evidence has
+ *  no square in today's palette. */
+function verdictTone(verdict: { mechanism: string; evidence: string }): ToneColour | null {
+  if (verdict.mechanism === "implausible" || verdict.evidence === "against") return "red";
+  if (verdict.evidence === "mixed") return "yellow";
+  if (verdict.evidence === "supports") return "green";
+  return null;
 }
 
 /** The headline without a leading "Implausible:" that repeats the label, capitalised. */
@@ -35,11 +51,102 @@ function headlineAfter(label: string, headline: string): string {
   return rest.charAt(0).toUpperCase() + rest.slice(1);
 }
 
-/** The theory-of-change Result tab: header, canvas with its bar and detail panel, the report. */
+/** What a report says, without whether it is stale (worked out on each
+ *  read): a new report is one whose words differ, not a new read of the same
+ *  one. */
+function reportKey(report: Report | null): string | null {
+  return report === null ? null : JSON.stringify({ ...report, stale: false });
+}
+
+/** The header's prose: the report's own measure and size. */
+const HEADER_P = `mt-3 max-w-[56em] ${REPORT_BODY_CLASS}`;
+
+/** The steps an "Update the report" walk runs (`toc_plan`, C45): a walk
+ *  whose steps are only these rewrites the report and searches nothing. */
+const UPDATE_STAGES = new Set(["toc_summarise", "toc_report"]);
+
+/**
+ * The verdict line, the question and "what would settle it" above the
+ * canvas (decision 4: the header keeps its four parts), live while the
+ * report is written and committed after. The verdict's tone square arrives
+ * with the committed report.
+ */
+function HeaderParts({
+  report,
+  parts,
+  sources,
+  arriving,
+}: {
+  report: Report | null | undefined;
+  parts: ReadonlyMap<TocPartKey, LiveSection>;
+  sources: ReadonlyMap<string, string>;
+  arriving: string;
+}) {
+  if (report != null) {
+    const verdict = report.verdict;
+    const tone = verdict != null ? verdictTone(verdict) : null;
+    const question = report.summary.question ?? report.summary.goal;
+    return (
+      <>
+        {verdict != null && (
+          <p className={HEADER_P}>
+            {tone !== null && <ToneSquare colour={tone} className={cn("mr-2 mb-[0.2em]", arriving)} />}
+            <b className="uppercase tracking-[0.04em] text-navy">{scrub(verdict.label)}.</b> <b>{scrub(headlineAfter(verdict.label, verdict.headline))}</b>
+          </p>
+        )}
+        {question !== "" && <p className={HEADER_P}>{scrub(question.replace(/\.?$/, "."))}</p>}
+        {report.summary_text != null && <p className={HEADER_P}>{scrub(report.summary_text)}</p>}
+      </>
+    );
+  }
+  const verdict = parts.get("verdict");
+  const live = (key: TocPartKey) => {
+    const section = parts.get(key);
+    const text = section === undefined ? "" : section.state === "filled" ? (section.prose ?? "") : (section.draft ?? "");
+    if (text.trim() === "") return null;
+    const marked = pendingCitations(text, sources);
+    return (
+      <div className="mt-3 [&>div]:max-w-[56em]">
+        <LiveDraft draft={marked.text} claims={marked.claims} complete={false} />
+      </div>
+    );
+  };
+  return (
+    <>
+      {verdict !== undefined && verdict.title !== "" && (
+        <p className={HEADER_P}>
+          <b className="uppercase tracking-[0.04em] text-navy">{scrub(verdict.title)}.</b>{" "}
+          <b>
+            <RevealedWords text={scrub(headlineAfter(verdict.title, verdict.prose ?? ""))} />
+          </b>
+        </p>
+      )}
+      {live("question")}
+      {live("in_brief")}
+    </>
+  );
+}
+
+/** The theory-of-change Result tab: the report page (task 054, A14), with the
+ *  header, the canvas with its bar and detail panel, and the report under it.
+ *  The report's expand state is the task's, as the Evidence search's is. */
 export function TocResult({ taskId }: { taskId: string }) {
+  return (
+    <ReportExpandScope taskId={taskId}>
+      <TocPage taskId={taskId} />
+    </ReportExpandScope>
+  );
+}
+
+function TocPage({ taskId }: { taskId: string }) {
   const toc = useToc(taskId);
   const task = useTask(taskId);
   const evidence = useTocEvidence(taskId);
+  const funnel = useFunnel(taskId);
+  const isPublicView = usePublicView();
+  // The run stream, while the reader is signed in (the public link has none).
+  const stream = useTaskLive()?.stream ?? null;
+  const reduceMotion = usePrefersReducedMotion();
   const [pathway, setPathway] = useState("all");
   const [guideOpen, setGuideOpen] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -47,6 +154,8 @@ export function TocResult({ taskId }: { taskId: string }) {
   const [focus, setFocus] = useState<{ target: Selection; count: number } | null>(null);
   const [mode, setMode] = useState<"view" | "connect">("view");
   const [adding, setAdding] = useState(false);
+  // A reference's dossier, by its document row (or its title, for a report written before ids).
+  const [reference, setReference] = useState<string | null>(null);
   const canEdit = toc.data?.can_edit === true;
   const panel = usePanelWidth({ label: "Resize the details panel", initial: 380, edge: "left" });
   const { editor, toast, dismissToast, undoLast, error } = useTocEditor(taskId, canEdit);
@@ -66,6 +175,51 @@ export function TocResult({ taskId }: { taskId: string }) {
   const askReview = () => editor.run({ kind: "review" });
 
   const graph = toc.data;
+  const report = graph?.report ?? null;
+
+  // The report while it is written (A13): only a first report streams
+  // (S7b, A22), so the live parts show only while there is no report.
+  const parts = tocParts(stream?.liveSections ?? {});
+  const runStatus = stream?.run?.status;
+  const showLive =
+    graph != null &&
+    report === null &&
+    parts.size > 0 &&
+    (runStatus === "running" || runStatus === "paused" || runStatus === "succeeded" || runStatus === "degraded");
+  const active = useActivePart(parts);
+  const sources = useLiveSourceNames(stream?.run?.id ?? null, [...parts.values()]);
+
+  // "Update the report" (A17): the old report stays, with the working line,
+  // until the new one swaps in. The update's walk rewrites the report and
+  // searches nothing; the reader's press says so before its first step.
+  const [requested, setRequested] = useState<{ from: string | null } | null>(null);
+  const key = reportKey(report);
+  const stages = stream?.stages ?? [];
+  const updateRunning =
+    (runStatus === "running" || runStatus === "paused") && stages.length > 0 && stages.every((entry) => UPDATE_STAGES.has(entry.stage));
+  if (requested !== null && graph != null && (key !== requested.from || graph.check_status === "failed" || graph.check_status === "stopped")) {
+    setRequested(null);
+  }
+  const updating = report !== null && (updateRunning || requested !== null);
+
+  // The swap (S7): the committed report replaces the live one, or the old
+  // one, in place; what it brings fades in once (058's swap). A cut under
+  // reduced motion. A reader who watched it written finds its sections open.
+  const [swap, setSwap] = useState<{ from: string | null; waiting: boolean; arriving: boolean }>({ from: null, waiting: false, arriving: false });
+  if ((showLive || updating) && !swap.waiting) {
+    if (showLive) seedReportExpanded(taskId);
+    setSwap({ from: key, waiting: true, arriving: false });
+  } else if (swap.waiting && !showLive && !updating) {
+    if (report !== null && key !== swap.from) setSwap({ from: null, waiting: false, arriving: !reduceMotion });
+    else if (runStatus === "failed" || runStatus === "aborted" || runStatus === "interrupted") setSwap({ from: null, waiting: false, arriving: false });
+  }
+  const arriving = swap.arriving ? "anim-swap-in" : "";
+
+  // Each judged document's row, so a citation or a reference opens its dossier.
+  const rows: SourceRows = new Map(
+    (evidence.data?.links ?? []).flatMap((link) => link.documents.map((doc) => [doc.evidence_id, doc.task_source_snapshot_id] as const)),
+  );
+
   // Select a box or link and centre the canvas on it.
   const focusOn = (target: Selection) => {
     setSelection(target);
@@ -94,15 +248,14 @@ export function TocResult({ taskId }: { taskId: string }) {
   const sketching = graph != null && graph.check_status === "none" && canEdit;
   if (graph == null || (graph.boxes.length === 0 && !sketching)) {
     return (
-      <main aria-busy={toc.isPending} className="mx-auto my-8 w-full max-w-[1280px] bg-paper px-10 py-9 shadow-sm ring-1 ring-line">
-        <p className="text-body text-grey">
+      <ReportPage className="md:max-w-[1180px]">
+        <p aria-busy={toc.isPending} className="text-body text-grey">
           {toc.isPending ? "Loading the theory of change…" : graph?.check_status === "none" ? "There is no theory of change yet." : "The theory of change is being drafted."}
         </p>
-      </main>
+      </ReportPage>
     );
   }
 
-  const running = graph.check_status === "drafting" || graph.check_status === "checking";
   // A code in the report selects its box or link, brings the canvas into view and centres it there.
   const showCanvas = () => {
     const canvas = document.querySelector('[aria-label="Theory of change canvas"]');
@@ -117,6 +270,16 @@ export function TocResult({ taskId }: { taskId: string }) {
     setPathway(pathwayId);
     showCanvas();
   };
+  // A reference's title or number opens its dossier: by its document row when the report names it.
+  const openReference = (title: string) => {
+    const source = report?.sources.find((item) => (item.title ?? item.citation) === title);
+    const evidenceId = source?.evidence_id ?? null;
+    setReference((evidenceId !== null ? rows.get(evidenceId) : undefined) ?? title);
+  };
+  const updateReport = () => {
+    setRequested({ from: key });
+    editor.run({ kind: "updateReport" });
+  };
   // The drafted and failed banners' retry: the evidence check of the whole theory.
   const checkEvidence = canEdit && (
     <Button
@@ -129,54 +292,100 @@ export function TocResult({ taskId }: { taskId: string }) {
       Check the evidence
     </Button>
   );
+
+  // The facts line (A14): the sources the report cites out of those found,
+  // and the years they were published.
+  const facts: ReportFact[] = [];
+  if (report !== null && report.sources.length > 0) {
+    const found = funnel.data?.found;
+    facts.push([
+      "Sources",
+      `${formatCount(report.sources.length)} cited${typeof found === "number" ? ` out of ${formatCount(found)} found` : ""}`,
+      "#references",
+    ]);
+    const years = report.sources.map((source) => source.year).filter((year): year is number => typeof year === "number");
+    if (years.length > 0) {
+      const from = Math.min(...years);
+      const to = Math.max(...years);
+      facts.push(["Published", from === to ? String(from) : `${from}–${to}`, null]);
+    }
+  }
+  const lastRun = task.data?.latest_run;
+  const lastUpdated = report !== null && lastRun?.status !== "running" && lastRun?.status !== "paused" ? (lastRun?.ended_at ?? null) : null;
+  const titlePart = parts.get("title");
+  const liveTitle = showLive && titlePart !== undefined ? (titlePart.state === "filled" ? (titlePart.prose ?? "") : (titlePart.draft ?? "")) : "";
+  const entries = report !== null ? reportSections(report) : showLive ? liveSections(parts) : undefined;
+
   return (
-    <main className="mx-auto my-8 w-full max-w-[1280px] bg-paper px-10 py-9 shadow-sm ring-1 ring-line max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0">
-      {/* The report's short title and summary; the task's name until a report is written. */}
-      <h1 className="text-title font-extrabold leading-tight tracking-[-0.2px] text-navy">{scrub(graph.report?.title ?? task.data?.name ?? tocTitle(graph))}</h1>
-      {/* Can the theory work? The overall verdict leads, in its colour, then the plain headline. */}
-      {graph.report?.verdict != null && (
-        <p className={`mt-3 max-w-[56em] ${REPORT_BODY_CLASS}`}>
-          <b className="uppercase tracking-[0.04em]" style={{ color: verdictColour(graph.report.verdict) }}>
-            {scrub(graph.report.verdict.label)}.
-          </b>{" "}
-          <b>{scrub(headlineAfter(graph.report.verdict.label, graph.report.verdict.headline))}</b>
-        </p>
-      )}
-      {/* The goal, as the report's question (its plan goal on reports before toc_report_v7), then the evidence in brief. */}
-      {graph.report != null && (graph.report.summary.question ?? graph.report.summary.goal) !== "" && (
-        <p className={`mt-3 max-w-[56em] ${REPORT_BODY_CLASS}`}>{scrub((graph.report.summary.question ?? graph.report.summary.goal).replace(/\.?$/, "."))}</p>
-      )}
-      {graph.report?.summary_text != null && <p className={`mt-3 max-w-[56em] ${REPORT_BODY_CLASS}`}>{scrub(graph.report.summary_text)}</p>}
-      {sketching && (
-        <p className={`mt-3 max-w-[56em] ${REPORT_BODY_CLASS}`}>
-          Draw your own theory here if you like: add boxes with <b>Add box</b> and join them with <b>Connect</b>. When the Task Agent drafts the theory, it keeps what
-          you drew and suggests the rest.
-        </p>
-      )}
-      {running && (
-        <p className={`mt-4 max-w-[1100px] ${REPORT_BODY_CLASS}`}>
-          Policy Atlas is checking each step against the evidence. Steps take their colour as they are checked.
-        </p>
-      )}
-      {graph.check_status === "drafted" && (
-        // An uploaded theory (increment 5): the user checks the reading before the evidence check.
-        <div role="status" className="mt-4 flex max-w-[1100px] flex-wrap items-center gap-4 border-l-4 border-blue bg-blue-tint-2 px-4 py-3">
-          <p className={`min-w-0 flex-1 ${REPORT_BODY_CLASS}`}>
-            This is how Policy Atlas read your diagram. Solid dark connections are drawn in your diagram. Dashed blue ones are connections Policy Atlas suggested where your diagram grouped boxes or left them unconnected. What Policy Atlas would add to complete the theory waits under Suggestions, beside the canvas. Compare it with your original in the plan, fix anything that is wrong, then check the evidence.
+    <ReportPage entries={entries} className="md:max-w-[1180px]">
+      <header>
+        <ReportKindRow kind="Report">
+          {/* Download arrives with the committed report (058). */}
+          {report !== null && !isPublicView && (
+            <span className={arriving}>
+              <DownloadMenu items={tocDownloads(graph)} />
+            </span>
+          )}
+        </ReportKindRow>
+        {/* The report's own short title (decision 4: it stays the h1); the
+            task's name until it is written. */}
+        <h1 className={REPORT_TITLE_CLASS}>
+          {liveTitle.trim() !== "" ? <RevealedWords text={scrub(liveTitle)} /> : scrub(report?.title ?? task.data?.name ?? tocTitle(graph))}
+        </h1>
+        {lastUpdated !== null && (
+          <p className={cn(REPORT_DATELINE_CLASS, arriving)}>
+            Last updated <time dateTime={lastUpdated}>{formatDate(lastUpdated, "long")}</time>
           </p>
-          {checkEvidence}
+        )}
+        <div className={arriving}>
+          <ReportFacts facts={facts} />
         </div>
-      )}
-      {graph.check_status === "stopped" && (
-        <p className={`mt-4 max-w-[1100px] ${REPORT_BODY_CLASS}`}>The check was stopped. What it finished stays; connections it did not reach show Needs evidence.</p>
-      )}
-      {graph.check_status === "failed" && (
-        // A check that ended with an error: say so and offer the retry the chat names (owner, 2026-11-04).
-        <div role="alert" className="mt-4 flex max-w-[1100px] flex-wrap items-center gap-4 border-l-4 border-red bg-paper-2 px-4 py-3">
-          <p className={`min-w-0 flex-1 ${REPORT_BODY_CLASS}`}>The evidence check stopped with an error. What it finished stays on the canvas.</p>
-          {checkEvidence}
-        </div>
-      )}
+        {/* A report written before the reader's latest changes says so; the
+            update is the reader's (decision 10, S9). While it runs, the
+            working line stands in its place and the old report stays. */}
+        {updating ? (
+          <div className="mt-3">
+            <ActionLine label="Updating the report" live arrivalId={`toc-update:${taskId}`} />
+          </div>
+        ) : (
+          report?.stale === true && (
+            <p className="mt-3 text-meta text-grey">
+              Written before your latest changes.
+              {canEdit && (
+                <button type="button" disabled={editor.busy} onClick={updateReport} className={cn(QUIET_CONTROL_CLASS, "ml-2")}>
+                  Update the report
+                </button>
+              )}
+            </p>
+          )
+        )}
+        <HeaderParts report={report} parts={showLive ? parts : new Map()} sources={sources} arriving={arriving} />
+        {sketching && (
+          <p className={`mt-3 max-w-[56em] ${REPORT_BODY_CLASS}`}>
+            Draw your own theory here if you like: add boxes with <b>Add box</b> and join them with <b>Connect</b>. When the Task Agent drafts the theory, it keeps what
+            you drew and suggests the rest.
+          </p>
+        )}
+        {graph.check_status === "drafted" && (
+          // An uploaded theory (increment 5): the user checks the reading before the evidence check.
+          <div role="status" className="mt-4 flex max-w-[1100px] flex-wrap items-center gap-4 border-l-4 border-blue bg-blue-tint-2 px-4 py-3">
+            <p className={`min-w-0 flex-1 ${REPORT_BODY_CLASS}`}>
+              This is how Policy Atlas read your diagram. Solid dark connections are drawn in your diagram. Dashed blue ones are connections Policy Atlas suggested where your diagram grouped boxes or left them unconnected. What Policy Atlas would add to complete the theory waits under Suggestions, beside the canvas. Compare it with your original in the plan, fix anything that is wrong, then check the evidence.
+            </p>
+            {checkEvidence}
+          </div>
+        )}
+        {graph.check_status === "stopped" && (
+          <p className={`mt-4 max-w-[1100px] ${REPORT_BODY_CLASS}`}>The check was stopped. What it finished stays; connections it did not reach show Needs evidence.</p>
+        )}
+        {graph.check_status === "failed" && (
+          // A check that ended with an error: say so and offer the retry the chat names (owner, 2026-11-04).
+          <div role="alert" className="mt-4 flex max-w-[1100px] flex-wrap items-center gap-4 border-l-4 border-red bg-paper-2 px-4 py-3">
+            <p className={`min-w-0 flex-1 ${REPORT_BODY_CLASS}`}>The evidence check stopped with an error. What it finished stays on the canvas.</p>
+            {checkEvidence}
+          </div>
+        )}
+      </header>
       {/* The full-screen area: the bar, what it opens, and the canvas with its detail panel. */}
       <div id="toc-canvas" className="mt-6 flex scroll-mt-4 flex-col border border-line bg-paper [&:fullscreen]:overflow-y-auto">
         <CanvasBar
@@ -263,8 +472,19 @@ export function TocResult({ taskId }: { taskId: string }) {
         </div>
       </div>
       <VerdictLegend />
-      <DetailedInformation taskId={taskId} graph={graph} onSelect={select} onPathway={showPathway} />
+      {/* The report under the canvas: live while it is written, then the
+          committed report in its place. Before writing starts, nothing. */}
+      {(showLive || report !== null) && (
+        <section aria-label="Detailed information" className="mt-10 border-t border-line pt-6">
+          {report !== null ? (
+            <ReportBody taskId={taskId} graph={graph} rows={rows} arriving={arriving} onSelect={select} onPathway={showPathway} onOpenReference={openReference} />
+          ) : (
+            <LiveReportBody parts={parts} active={active} sources={sources} still={reduceMotion || stream?.connectionStatus !== "connected"} />
+          )}
+        </section>
+      )}
+      {reference !== null && <SourceDossier taskId={taskId} sourceRef={reference} onClose={() => setReference(null)} />}
       {toast !== null && <UndoToast text={toast} onUndo={undoLast} onClose={dismissToast} />}
-    </main>
+    </ReportPage>
   );
 }

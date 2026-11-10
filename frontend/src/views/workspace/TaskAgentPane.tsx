@@ -49,8 +49,10 @@ import { GrowBox } from "./GrowBox";
 import { PlanCard } from "./PlanCard";
 import type { PlanOverlay } from "./planOverlay";
 import { PastRunLine, RunTrace } from "./RunTrace";
+import { isFinished, threadRunStages } from "./runProgress";
 import { usePacedText, PacedReply } from "./PacedReply";
-import { TocTrace } from "./TocTrace";
+import { joinTocWalks, pendingLead, waitsForCheck } from "./tocWalks";
+import { useNow } from "../../lib/freshness";
 import { TocCodeText } from "../toc/codeLinks";
 import { CitationMarker } from "../toc/Documents";
 import { AttachFileButton, UploadPreview } from "../toc/uploads";
@@ -873,8 +875,6 @@ export function TaskAgentPane({
   const uploads = useTocUploads(taskId, isToc);
   const uploadFiles = useMemo(() => ({ taskId, picked, uploads: uploads.data ?? [] }), [taskId, picked, uploads.data]);
   const tocLive = isToc && (tocGraph.data?.check_status === "drafting" || tocGraph.data?.check_status === "checking");
-  // The live walk's kind, from the theory's own status: never guessed from steps not yet loaded.
-  const tocLiveKind = tocGraph.data?.check_status === "drafting" ? "draft" : "check";
   const tocReviewing = isToc && tocGraph.data?.reviewing === true;
   const tocCodes = useMemo(
     () =>
@@ -1001,19 +1001,6 @@ export function TaskAgentPane({
       ? thread.some((item) => item.type === "run_block")
       : (tocGraph.data?.check_status ?? "none") !== "none"
     : thread.slice(planCardAt).some((item) => item.type === "run_block");
-  // The first walk drafts the theory; every later one checks it.
-  const firstTocRunId = isToc ? (thread.find((item) => item.type === "run_block")?.run.capability_run_id ?? null) : null;
-  // The walk running now: the newest one still open.
-  // While the list still shows the finished draft as running, its check has not appeared yet.
-  const tocLiveRunId = tocLive
-    ? (thread
-        .filter((item) => item.type === "run_block")
-        .findLast(
-          (item) =>
-            (item.run.status === "running" || item.run.status === "paused") &&
-            !(tocLiveKind === "check" && item.decisions.some((decision) => (decision.detail as { component?: unknown } | null)?.component === "toc_draft")),
-        )?.run.capability_run_id ?? null)
-    : null;
   const liveRunId = stream.run?.id;
   // Task 045 (A7): the live walk's own purpose, once the walk list has it —
   // an added option's search is not the baseline.
@@ -1024,21 +1011,39 @@ export function TaskAgentPane({
   );
   const hasFindings = typeof funnel.data?.findings === "number" && funnel.data.findings > 0;
 
+  // A theory of change's automatic chain is one card (task 054, decision 5,
+  // S10): a check the server started after a draft draws the draft's rows
+  // first and runs one timer from the draft's start; the draft gets no card
+  // of its own. Between the two walks the card stays "Running".
+  const threadRuns = runsQuery.data?.data ?? [];
+  const tocChain = joinTocWalks(isToc ? threadRuns : []);
+  const liveRead = threadRuns.find((run) => run.capability_run_id === liveRunId);
+  const liveLead = isToc
+    ? liveRunId !== undefined
+      ? (tocChain.leadOf.get(liveRunId) ?? pendingLead(threadRuns, stream.run, tocChain))
+      : null
+    : null;
+  const nowMs = useNow(isToc && stream.run !== null && isFinished(stream.run.status));
+  const holding =
+    isToc &&
+    waitsForCheck(stream.run, stream.stages, liveRead?.toc_walk, liveRunId !== undefined && tocChain.joined.has(liveRunId), nowMs);
+
   // The run trace (task 058, owner 2026-11-05): the one place the live run
   // shows, in the Agent tab and the sidebar alike.
   const liveTrace =
     stream.run === null ? null : (
       <RunTrace
         taskId={taskId}
-        status={stream.run.status}
-        stages={stream.stages}
+        status={holding ? "running" : stream.run.status}
+        stages={liveLead !== null ? [...threadRunStages(liveLead), ...stream.stages] : stream.stages}
         liveness={stream.liveness}
         plan={stream.plan?.plan}
-        startedAt={stream.run.startedAt}
-        endedAt={stream.run.endedAt}
+        startedAt={liveLead?.started_at ?? stream.run.startedAt}
+        endedAt={holding ? undefined : stream.run.endedAt}
         hasFindings={hasFindings}
         capability={planQuery.data?.capability}
         purpose={liveRunPurpose}
+        tocWalk={liveRead?.toc_walk ?? (liveLead !== null ? "check" : null)}
         isOwner={isOwner}
         ownerName={taskQuery.data?.owner_display ?? null}
         checkInWaiting={stream.pendingCheckIn !== null}
@@ -1046,6 +1051,9 @@ export function TaskAgentPane({
         streamOpen={stream.connectionStatus === "connected"}
       />
     );
+  // The thread's block the live card stands in: its own walk's, or, for a
+  // check the runs read has not caught up with, the draft's it follows.
+  const liveBlockId = liveLead !== null && !threadHasLiveRun ? liveLead.capability_run_id : liveRunId;
 
   const send = (input: { message: string; clientTurnId: string }) => {
     const trimmed = input.message.trim();
@@ -1200,24 +1208,28 @@ export function TaskAgentPane({
                 tocCodes={tocCodes}
               />
               </GrowBox>
+            ) : isToc && tocChain.joined.has(item.run.capability_run_id) ? null : isToc &&
+              item.run.capability_run_id === liveBlockId &&
+              liveTrace !== null ? (
+              // One key for the chain (the draft's id), so the draft's card
+              // carries on as the check's when the check arrives (S10).
+              <GrowBox key={`run-${liveLead?.capability_run_id ?? liveRunId}`} arrivalId={`run:${liveLead?.capability_run_id ?? liveRunId}`}>
+                <Arrival arrivalId={`run:${liveLead?.capability_run_id ?? liveRunId}`}>{liveTrace}</Arrival>
+              </GrowBox>
             ) : isToc ? (
-              <TocTrace
-                key={`run-${item.run.capability_run_id}`}
-                walkId={item.run.capability_run_id}
-                decisions={item.decisions}
-                live={tocLive && item.run.capability_run_id === tocLiveRunId}
-                // Live: the theory's status says; ended: its own steps, or its order before they load.
-                kind={
-                  tocLive && item.run.capability_run_id === tocLiveRunId
-                    ? tocLiveKind
-                    : item.decisions.length > 0
-                      ? undefined
-                      : item.run.capability_run_id === firstTocRunId
-                        ? "draft"
-                        : "check"
-                }
-                status={item.run.status}
-              />
+              <GrowBox
+                key={`run-${tocChain.leadOf.get(item.run.capability_run_id)?.capability_run_id ?? item.run.capability_run_id}`}
+                arrivalId={`run:${tocChain.leadOf.get(item.run.capability_run_id)?.capability_run_id ?? item.run.capability_run_id}`}
+              >
+                <Arrival arrivalId={`run:${tocChain.leadOf.get(item.run.capability_run_id)?.capability_run_id ?? item.run.capability_run_id}`}>
+                  <PastRunLine
+                    run={item.run}
+                    leadRun={tocChain.leadOf.get(item.run.capability_run_id) ?? null}
+                    taskId={taskId}
+                    capability={planQuery.data?.capability}
+                  />
+                </Arrival>
+              </GrowBox>
             ) : item.run.capability_run_id === liveRunId && liveTrace !== null ? (
               <GrowBox key="live-run-block" arrivalId={`run:${liveRunId}`}>
               <div className="space-y-6">
@@ -1239,7 +1251,7 @@ export function TaskAgentPane({
                 checkIns={checkInsQuery.data}
               />
             );
-          return [{ rendered, index }];
+          return rendered === null ? [] : [{ rendered, index }];
           });
           const planCard = (
             <PlanCard key="plan-card" taskId={taskId} runActive={runActive} streaming={streaming} started={planStarted} isOwner={isOwner} onReviewPlan={onReviewPlan} overlay={planOverlay} onOverlayApplied={onOverlayApplied} onDiscardOverlay={onDiscardOverlay} />
@@ -1305,7 +1317,7 @@ export function TaskAgentPane({
           </Arrival>
         )}
 
-        {!isToc && liveTrace !== null && !threadHasLiveRun && (
+        {liveTrace !== null && !threadHasLiveRun && !(isToc && liveLead !== null) && (
           <GrowBox key="live-run-fallback" arrivalId={`run:${liveRunId}`}>
           <div className="space-y-6">
             <Arrival arrivalId={`run:${liveRunId}`}>{liveTrace}</Arrival>
@@ -1324,14 +1336,9 @@ export function TaskAgentPane({
             compact={compact}
           />
         )}
-        {/* The walk started but the run list has not caught up yet. */}
-        {tocLive && tocLiveRunId === null && <TocTrace walkId="" decisions={[]} live kind={tocLiveKind} />}
-        {tocReviewing && (
-          <p role="status" className="mr-8 flex items-center gap-2 text-body font-semibold text-grey">
-            <span aria-hidden="true" className="anim-breathe h-1.5 w-1.5 shrink-0 bg-blue" />
-            Reviewing the theory…
-          </p>
-        )}
+        {/* A review of the theory runs in the background (C45): the shared
+            working line, its mark turning, until its message lands. */}
+        {tocReviewing && <ActionLine label="Reviewing the theory" live arrivalId={`toc-review:${taskId}`} />}
         </div>
         </div>
         </ArrivalProvider>

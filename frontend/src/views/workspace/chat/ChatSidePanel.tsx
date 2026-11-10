@@ -1,12 +1,11 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router";
 
-import { useArtefact, useConversations, useTask } from "../../../api/queries";
+import { useArtefact, useConversations } from "../../../api/queries";
 import { COPY } from "../../../lib/vocabulary";
 import { useRunStream } from "../../../store";
 import { cn } from "../../../ui/brand/cn";
 import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
-import { isToc } from "../../scopingActivity";
 import { usePlanPanel } from "../../planPanel";
 import { useChatsEnabled } from "../../taskResult";
 import { TaskAgentPane } from "../TaskAgentPane";
@@ -16,7 +15,6 @@ import { ChangingText } from "../ChangingText";
 import { Tooltip, TooltipProvider } from "../../../ui/radix/Tooltip";
 import { ConversationList, type ConversationRow } from "./ConversationList";
 import { ConversationRail, RAIL_TOOLTIP_CLASS, RAIL_TOOLTIP_DELAY_MS } from "./ConversationRail";
-import { readStored, writeStored } from "./ConversationSidebar";
 import {
   DRAFT_CHAT_ID,
   isTaskAgentConversation,
@@ -26,9 +24,6 @@ import {
 } from "./conversationState";
 import { DraftChatPane } from "./DraftChatPane";
 import { ChatsIcon, ExpandIcon, PanelCloseIcon, PlusIcon, iconButtonClass } from "../../../ui/brand/icons";
-
-/** Whether the user closed the sidebar: a theory of change opens it on the Task Agent until they do. */
-const CLOSED_KEY = "pa.chatSidebarClosed";
 
 const HEADER_BUTTON = iconButtonClass("chrome");
 
@@ -87,21 +82,9 @@ export function ChatSidePanel({
   const draftOpen = activeConversationId === DRAFT_CHAT_ID;
   const artefact = useArtefact(taskId);
   const chatsEnabled = useChatsEnabled(taskId);
-  const task = useTask(taskId);
-  const tocTask = isToc(task.data);
-  // On a theory of change, the sidebar stays as the user left it across tabs
-  // (round 7): open on the Task Agent unless they closed it, and closed until
-  // they open it again. The other kinds keep it closed until opened, as before.
-  // ponytail: one flag for every task in this browser; per task if users ask.
-  useEffect(() => {
-    if (activeConversationId !== null) {
-      writeStored(CLOSED_KEY, "0");
-      return;
-    }
-    if (tocTask && conversations.isSuccess && readStored(CLOSED_KEY) !== "1") {
-      setActiveConversation(taskAgentId, { replace: true });
-    }
-  }, [activeConversationId, conversations.isSuccess, taskAgentId, setActiveConversation, tocTask]);
+  // The sidebar does not open by itself on any kind of task (task 054,
+  // decision 11, reversing round 7's theory-of-change rule): the run status
+  // bar shows the run, and the reader opens the Task Agent from it.
   const stream = useRunStream(taskId);
   const checkInWaiting = stream.pendingCheckIn != null;
   const openLatestOrTaskAgent = () => {
@@ -219,10 +202,7 @@ export function ChatSidePanel({
           <button
             type="button"
             aria-label="Close sidebar"
-            onClick={() => {
-              writeStored(CLOSED_KEY, "1");
-              setActiveConversation(null);
-            }}
+            onClick={() => setActiveConversation(null)}
             className={HEADER_BUTTON}
           >
             <PanelCloseIcon />

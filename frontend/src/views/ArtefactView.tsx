@@ -1608,7 +1608,7 @@ const PLACEHOLDER_WIDTHS: readonly (readonly number[])[] = [
   [91, 64],
 ];
 
-function PlaceholderLines({
+export function PlaceholderLines({
   index,
   still,
   className = "",
@@ -2045,7 +2045,7 @@ function DraftProse({
 
 /** The draft as it streams: paced in the browser (`useRevealedText`), its
  *  height held while a revision shortens it. */
-function LiveDraft({
+export function LiveDraft({
   draft,
   revising,
   claims,
@@ -2316,7 +2316,7 @@ export function liveReferences(sections: readonly LiveSection[]): { n: number; t
 
 /** The lines under a live section's heading: the key findings' note, the
  *  sources the writer is drawing on, and the action line with the live mark. */
-function LiveSubhead({
+export function LiveSubhead({
   section,
   active,
   activity,

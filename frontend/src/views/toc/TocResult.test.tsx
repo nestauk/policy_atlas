@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as queries from "../../api/queries";
 import { TooltipProvider } from "../../ui/radix/Tooltip";
 import { REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_PART_HEADING_CLASS, REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
+import { forgetReportExpand } from "../ArtefactOutline";
 import { FigureList } from "./Documents";
 import { boxId, link, linkId, pathwayId, SHARED_DOC_TITLE, TASK_ID, tocEvidenceFixture, tocGraphFixture } from "./fixture";
 import { TocResult } from "./TocResult";
@@ -18,6 +19,13 @@ vi.mock("../../api/queries", () => ({
   useTocDocumentContext: vi.fn(),
   useTocHistory: vi.fn(() => ({ data: [{ event_id: "e1", at: "2026-10-30T11:20:00Z", who: "Ada", what: "Edited S1: text", undoable: true }] })),
   useTocProposals: vi.fn(() => ({ data: [], refetch: vi.fn() })),
+  // Task 054's 058 alignment: the facts line counts what was found; a
+  // citation's marks and a source's dossier read the shared dossier.
+  useFunnel: vi.fn(() => ({ data: { found: 412 } })),
+  useSourceDossier: vi.fn(() => ({ data: undefined, isPending: false, isLoading: false, isError: false })),
+  useEvidence: vi.fn(() => ({ data: undefined, isPending: false })),
+  useFindings: vi.fn(() => ({ data: undefined, isPending: false })),
+  useSourceRecords: vi.fn(() => ({ data: undefined, isPending: false })),
 }));
 const mutate = vi.fn();
 vi.mock("../../api/mutations", () => ({ useTocEdit: vi.fn(() => ({ mutate, isPending: false })) }));
@@ -43,7 +51,11 @@ function renderResult(graph: TocGraph = tocGraphFixture(), evidence = tocEvidenc
 const node = (n: number) => document.querySelector(`[data-id="${boxId(n)}"]`) as HTMLElement;
 const edge = (n: number) => document.querySelector(`[data-testid="rf__edge-${linkId(n)}"]`);
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  // The report's expand state is remembered per task: each test opens it fresh.
+  forgetReportExpand(TASK_ID);
+});
 
 describe("canvas", () => {
   it("renders neutral boxes with no grade colour", () => {
@@ -252,21 +264,27 @@ describe("detail panel", () => {
 
 describe("detailed information", () => {
   const SECTIONS = ["Summary", "Pathways", "How it could fail", "What to test first", "How it could be expanded", "Supporting activities", "Assumptions", "References"];
+  /** A reader opening a finished report finds its sections shut (058's expand state). */
+  const openAll = async (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole("button", { name: "Show all" }));
 
-  it("is the report (Summary, routes, failure, tests, appendix, References), in the report's four text styles only", () => {
+  it("is the report in the shared page: h2 sections in today's order, the contents, the report's text styles (A14)", async () => {
+    const user = userEvent.setup();
     renderResult();
     const info = screen.getByLabelText("Detailed information");
-    // No heading of its own, and no contents sidebar for now (round 5).
-    expect(within(info).queryByRole("heading", { level: 2 })).toBeNull();
-    expect(screen.queryByRole("navigation", { name: "Contents" })).toBeNull();
-    const sections = within(info).getAllByRole("heading", { level: 3 });
-    expect(sections.map((h) => h.textContent)).toEqual(SECTIONS);
+    // The sections are the page's h2s, each a disclosure, shut for a fresh reader.
+    const sections = within(info).getAllByRole("heading", { level: 2 });
+    expect(sections.map((h) => h.textContent?.replace(/(Show|Hide)$/, ""))).toEqual(SECTIONS);
     for (const heading of sections) expect(heading.className).toContain(REPORT_SECTION_HEADING_CLASS);
-    // Every text element uses one of the four styles (body, label, part or section heading);
-    // metadata lines (the scope) are the body style in grey.
+    expect(within(info).queryByText(/This report asks whether the ban/)).toBeNull();
+    // The contents list the same sections (left from md up, a disclosure on a phone).
+    const contents = screen.getAllByRole("navigation", { name: "Contents" });
+    expect(contents.length).toBeGreaterThan(0);
+    expect(within(contents[0] as HTMLElement).getByText("Assumptions")).toBeInTheDocument();
+    await openAll(user);
+    // Every text element uses the report's styles; metadata lines are the body style in grey.
     const greyBody = REPORT_BODY_CLASS.replace("text-ink", "text-grey");
     const styles = [REPORT_BODY_CLASS, greyBody, REPORT_LABEL_CLASS, REPORT_PART_HEADING_CLASS, REPORT_SECTION_HEADING_CLASS];
-    for (const el of info.querySelectorAll("p, ul, table, th, h2, h3")) {
+    for (const el of info.querySelectorAll("p, ul, table, th, h2")) {
       const own = el.className;
       const inherited = (el.closest("table") as HTMLElement | null)?.className ?? "";
       expect(styles.some((style) => own.includes(style) || inherited.includes(style))).toBe(true);
@@ -281,13 +299,36 @@ describe("detailed information", () => {
     expect(within(info).getByText(/Find out whether children see fewer/)).toBeInTheDocument();
     // The table scrolls sideways on a narrow screen; What to test is a list, not a table.
     expect(info.querySelectorAll(".overflow-x-auto table")).toHaveLength(1);
-    // No method paragraph under the sources.
+    // The table keeps all its columns, Sources included (§ 8).
+    expect(within(info).getAllByRole("columnheader").map((th) => th.textContent?.replace(/[↕▲▼]/g, "").trim())).toEqual([
+      "Code",
+      "Assumption (connection)",
+      "Conditions",
+      "Importance",
+      "Evidence",
+      "Why",
+      "Sources",
+    ]);
+    // No method paragraph under the sources; the References footer stays (§ 8).
     expect(within(info).queryByText(/'Too little evidence' means none was found/)).toBeNull();
+    expect(within(info).getByText(/These are the documents the report cites/)).toBeInTheDocument();
+  });
+
+  it("heads the page with the kind row, the title, the date and the facts line (A14)", () => {
+    renderResult();
+    expect(screen.getByText("Report")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Food advert limits and childhood obesity");
+    // Sources cited out of those found, and the years they were published.
+    const facts = screen.getAllByText("Sources").map((el) => el.closest("dl")).find((dl) => dl !== null) as HTMLElement;
+    expect(facts).toHaveTextContent("Sources3 cited out of 412 found");
+    expect(facts).toHaveTextContent("Published2020");
+    expect(within(facts).getByRole("link", { name: "3 cited out of 412 found" })).toHaveAttribute("href", "#references");
   });
 
   it("selects a link or box on the canvas from a code in the text", async () => {
     const user = userEvent.setup();
     renderResult();
+    await openAll(user);
     const info = screen.getByLabelText("Detailed information");
     await user.click(within(info).getAllByRole("button", { name: "Show #3 on the canvas" })[0] as HTMLElement);
     const panel = screen.getByRole("complementary", { name: "Details" });
@@ -296,21 +337,45 @@ describe("detailed information", () => {
     expect(within(screen.getByRole("complementary", { name: "Details" })).getByText("Children see fewer ads for less healthy food")).toBeInTheDocument();
   });
 
-  it("opens each [n] in the citation sidebar, as the Evidence search does", async () => {
+  it("opens each [n] in the shared citation sheet, and lists the shared References (A15)", async () => {
     const user = userEvent.setup();
     renderResult();
+    await openAll(user);
     const info = screen.getByLabelText("Detailed information");
     const [marker] = within(info).getAllByRole("button", { name: "Citations 3" });
     expect(marker?.className).toContain("citation-marker");
     await user.click(marker as HTMLElement);
-    expect(within(screen.getByRole("dialog")).getByText("Evidence for this claim")).toBeInTheDocument();
+    const sheet = screen.getByRole("dialog");
+    expect(within(sheet).getByText("Evidence for this claim")).toBeInTheDocument();
+    expect(within(sheet).queryByRole("link", { name: "Open the source" })).toBeNull();
     expect(queries.useTocDocumentContext).toHaveBeenCalledWith(TASK_ID, "00000000-0000-4000-8000-0000000e0003", null);
-    // The source list reads as the Evidence search's references: number, title, then authors, year and venue.
-    expect(info.querySelector("#toc-source-3")?.textContent).toBe("[3]Source 3 — Smith A, Lee B (2020) · Obesity Reviews");
+    // The source's marks come from its dossier, by its document row.
+    expect(queries.useSourceDossier).toHaveBeenCalledWith(TASK_ID, expect.stringMatching(/^[0-9a-f-]{36}$/));
+    await user.keyboard("{Escape}");
+    // The References read as the Evidence search's: number, then the citation form.
+    const references = screen.getByRole("region", { name: "References" });
+    expect(within(references).getByRole("button", { name: "Source 3: Source 3" })).toBeInTheDocument();
+    expect(references).toHaveTextContent("Smith A, Lee B (2020).");
   });
 
-  it("lists the set-aside pathways in one line, after the pathways", () => {
+  it("opens a source's dossier from the sheet, with Back to the claim (A15)", async () => {
+    const user = userEvent.setup();
     renderResult();
+    fireEvent.click((edge(3) as Element).querySelector("path") as Element);
+    const panel = screen.getByRole("complementary", { name: "Details" });
+    await user.click(within(panel).getByRole("button", { name: "Children's exposure after Chile's Law 20.606" }));
+    const sheet = screen.getByRole("dialog");
+    expect(within(sheet).getByText("Evidence for this claim")).toBeInTheDocument();
+    expect(within(sheet).queryByRole("link", { name: "Open the source" })).toBeNull();
+    await user.click(within(sheet).getByRole("button", { name: "Children's exposure after Chile's Law 20.606" }));
+    await user.click(screen.getByRole("button", { name: "Back to the claim" }));
+    expect(screen.getByText("Evidence for this claim")).toBeInTheDocument();
+  });
+
+  it("lists the set-aside pathways in one line, after the pathways", async () => {
+    const user = userEvent.setup();
+    renderResult();
+    await openAll(user);
     const info = screen.getByLabelText("Detailed information");
     expect(within(info).getByText("Considered and set aside:")).toBeInTheDocument();
     expect(within(info).getByText(/Merged into pathway 1/)).toBeInTheDocument();
@@ -319,8 +384,9 @@ describe("detailed information", () => {
   it("selects a pathway on the canvas from its name, with its strength", async () => {
     const user = userEvent.setup();
     renderResult();
+    await openAll(user);
     const info = screen.getByLabelText("Detailed information");
-    const item = within(info).getByRole("button", { name: "Show the pathway Fewer adverts, less snacking on the canvas" }).closest("h4") as HTMLElement;
+    const item = within(info).getByRole("button", { name: "Show the pathway Fewer adverts, less snacking on the canvas" }).closest("h3") as HTMLElement;
     expect(item).toHaveTextContent("Mixed");
     await user.click(within(item).getByRole("button", { name: /Show the pathway/ }));
     expect(screen.getByRole("combobox", { name: /pathway/i })).toHaveValue(pathwayId(1));
@@ -333,6 +399,7 @@ describe("detailed information", () => {
     const base = report.assumptions[0] as (typeof report.assumptions)[number];
     const more = [4, 6, 7, 8].map((n) => ({ ...base, code: `#${n}`, flag: false }));
     renderResult({ ...fixture, report: { ...report, assumptions: [...report.assumptions, ...more] } });
+    await openAll(user);
     const row = screen.getAllByRole("row", { hidden: true }).find((item) => item.textContent?.startsWith("#8")) as HTMLElement;
     expect(row).toHaveClass("hidden");
     await user.click(screen.getByRole("button", { name: "Show all 6 connections" }));
@@ -344,6 +411,7 @@ describe("detailed information", () => {
   it("sorts the assumptions table and flags central, weak rows", async () => {
     const user = userEvent.setup();
     renderResult();
+    await openAll(user);
     const table = screen.getByRole("table");
     const codes = () => [...table.querySelectorAll("tbody tr td:first-child")].map((cell) => cell.textContent?.replace("⚠", ""));
     expect(codes()).toEqual(["#3", "#5"]);
@@ -354,25 +422,33 @@ describe("detailed information", () => {
     expect(codes()).toEqual(["#5", "#3"]);
   });
 
-  it("prints whole: nothing is collapsed, and the canvas's Download menu prints", async () => {
+  it("opens whole with Show all, and Download sits in the kind row and prints (A14)", async () => {
     const user = userEvent.setup();
     const print = vi.spyOn(window, "print").mockImplementation(() => undefined);
     renderResult();
+    await openAll(user);
     const info = screen.getByLabelText("Detailed information");
     expect(info.querySelectorAll('details, [aria-expanded="false"]')).toHaveLength(0);
+    // Not in the canvas bar any more.
+    expect(within(document.getElementById("toc-canvas") as HTMLElement).queryByRole("button", { name: "Download" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Download" }));
     expect(within(screen.getAllByRole("menu").at(-1) as HTMLElement).getAllByRole("menuitem").map((item) => item.firstChild?.textContent)).toEqual(["Report (PDF)", "Image (PNG)", "Image (SVG)", "Diagram file (draw.io)", "References (CSV)", "Theory (JSON)"]);
     await user.click(screen.getByRole("menuitem", { name: /Report \(PDF\)/ }));
     await waitFor(() => expect(print).toHaveBeenCalled());
   });
 
-  it("leads with the overall verdict and its headline, without repeating the label", () => {
+  it("offers no Download before the report is committed", () => {
+    renderResult(tocGraphFixture({ report: null }));
+    expect(screen.queryByRole("button", { name: "Download" })).toBeNull();
+  });
+
+  it("leads with the overall verdict and its headline, its tone square beside the word", () => {
     const fixture = tocGraphFixture();
     const report = fixture.report as NonNullable<TocGraph["report"]>;
     renderResult({ ...fixture, report: { ...report, verdict: { ...(report.verdict as NonNullable<typeof report.verdict>), mechanism: "implausible", label: "Implausible", headline: "Implausible: blue doors would not credibly reduce diabetes." } } });
     const line = screen.getByText("Implausible.").closest("p") as HTMLElement;
     expect(line).toHaveTextContent("Implausible. Blue doors would not credibly reduce diabetes.");
-    expect(screen.getByText("Implausible.")).toHaveStyle({ color: "var(--color-verdict-against-text)" });
+    expect(line.querySelector('[data-tone="red"]')).not.toBeNull();
   });
 
   it("asks the user to review an uploaded theory, with its suggested connections dashed", async () => {
@@ -386,9 +462,11 @@ describe("detailed information", () => {
     expect(mutate.mock.calls.at(-1)?.[0]).toEqual({ kind: "checkFull" });
   });
 
-  it("says when the report is not written yet", () => {
-    renderResult(tocGraphFixture({ report: null }));
-    expect(screen.getByText("The report is written when the evidence check finishes.")).toBeInTheDocument();
+  it("shows nothing under the canvas before writing starts (§ 8)", () => {
+    renderResult(tocGraphFixture({ report: null, check_status: "checking" }));
+    expect(screen.queryByLabelText("Detailed information")).toBeNull();
+    expect(screen.queryByText(/The report is written when/)).toBeNull();
+    expect(screen.queryByText(/The report's sections are set out/)).toBeNull();
   });
 });
 
@@ -402,14 +480,13 @@ describe("detail panel documents", () => {
     await user.click(within(panel).getByRole("button", { name: "Children's exposure after Chile's Law 20.606" }));
     expect(queries.useTocDocumentContext).toHaveBeenCalledWith(TASK_ID, expect.stringContaining("0000e"), null);
     expect(screen.getByText("Evidence for this claim")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open the source" })).toHaveAttribute("href", expect.stringContaining("example.org"));
   });
 });
 
 describe("header", () => {
-  it("says the check is running while it runs", () => {
+  it("says nothing of its own while the check runs: the run status bar says it (§ 8)", () => {
     renderResult(tocGraphFixture({ check_status: "checking" }));
-    expect(screen.getByText(/checking each step against the evidence/)).toBeInTheDocument();
+    expect(screen.queryByText(/checking each step against the evidence/)).toBeNull();
   });
 
   it("shows the report's title and summary, or the task's name before a report", () => {

@@ -35,14 +35,39 @@ const LONGLIST_STAGES = new Set([
   "theme",
 ]);
 
+/** A theory of change's walk kinds as the run read names them
+ *  (`RunOut.toc_walk`, task 054, S3). */
+const TOC_WALK_KINDS: Record<string, WalkKind> = {
+  draft: "toc_draft",
+  read: "toc_read",
+  check: "toc_check",
+  report_update: "toc_report_update",
+};
+
+/** Whether a walk kind is one of a theory of change's. */
+export function isTocWalk(kind: WalkKind): boolean {
+  return kind.startsWith("toc_");
+}
+
 /** Decide the walk kind from the task's capability and the run's own
  *  purpose (task 045, A7/A8); the stages decide only when the purpose is not
- *  known yet. */
+ *  known yet. A theory of change's walk follows the run read's `toc_walk`
+ *  (task 054, S3); before the read has it, its first step says: an upload's
+ *  read reports `toc_read`, a draft `toc_draft`, and anything else is a
+ *  check. */
 export function walkKind(
   capability: string | null | undefined,
   stages: StageEntry[],
   purpose?: string | null,
+  tocWalk?: string | null,
 ): WalkKind {
+  if (capability === "theory_of_change") {
+    const named = tocWalk != null ? TOC_WALK_KINDS[tocWalk] : undefined;
+    if (named !== undefined) return named;
+    if (stages.some((entry) => entry.stage === "toc_read")) return "toc_read";
+    if (stages.some((entry) => entry.stage === "toc_draft")) return "toc_draft";
+    return "toc_check";
+  }
   if (!isScoping({ capability })) return "evidence_search";
   if (purpose === "targeted") return "option_search";
   if (purpose === "longlist" || purpose === "baseline" || purpose === "shortlist") return purpose;
@@ -325,6 +350,7 @@ export function rowLink(
     }
     return row.stages.every((stage) => stage === "inherit") ? null : longlist;
   }
+  if (isTocWalk(kind)) return tocRowLink(row, taskId);
   if (kind !== "evidence_search" && kind !== "baseline") return null;
   const written =
     kind === "baseline"
@@ -344,6 +370,24 @@ export function rowLink(
   if (classified) return { href: `/tasks/${taskId}/sources/landscape`, label: "Landscape" };
   if (has("extract") && hasFindings) return { href: `/tasks/${taskId}/sources/findings`, label: "Findings" };
   if (has("synthesise")) return written;
+  return null;
+}
+
+/** A theory of change's steps whose rows point at the theory on the Result
+ *  tab, and those that point at the Sources table (task 054, § 8: the
+ *  links of the mock brief's table). Merging, the figures and the titles
+ *  point nowhere. */
+const TOC_THEORY_STAGES = new Set(["toc_draft", "toc_read", "toc_discover", "toc_judge", "toc_search_again", "toc_retry_searches", "toc_choose"]);
+const TOC_SOURCES_STAGES = new Set(["toc_item_searches", "toc_select", "toc_search_new", "toc_new_link_searches", "classify", "appraise"]);
+
+/** Where a theory of change's row points, running and done: "Theory →",
+ *  "Sources →" or "Report →". */
+function tocRowLink(row: CardRow, taskId: string): { href: string; label: string } | null {
+  if (row.state !== "progress" && row.state !== "done") return null;
+  const has = (stages: ReadonlySet<string>) => row.stages.some((stage) => stages.has(stage));
+  if (has(TOC_SOURCES_STAGES)) return { href: `/tasks/${taskId}/sources/all`, label: "Sources" };
+  if (has(TOC_THEORY_STAGES)) return { href: `/tasks/${taskId}/result`, label: "Theory" };
+  if (row.stages.includes("toc_report")) return { href: `/tasks/${taskId}/result`, label: "Report" };
   return null;
 }
 

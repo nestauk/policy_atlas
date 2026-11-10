@@ -1,9 +1,9 @@
 import { type ReactNode, useState } from "react";
 
-import { useTocDocumentContext } from "../../api/queries";
+import { useSourceDossier, useTocDocumentContext } from "../../api/queries";
 import { scrub } from "../../lib/scrub";
 import { Tooltip } from "../../ui/radix/Tooltip";
-import { CITATION_MARKER_CLASS, CitationProvenanceBlock, ProvenanceSheet } from "../ArtefactView";
+import { CITATION_MARKER_CLASS, CitationProvenanceBlock, ProvenanceSheet, SourceDossier } from "../ArtefactView";
 import { evidenceBalance, figureGroups, figureHeadline, SUPPORT_LABEL, VERDICT_LABEL, VERDICT_VAR } from "./tocModel";
 import type { SourceType, Support, TocDocument, TocFigure, Verdict } from "./types";
 
@@ -97,7 +97,7 @@ export function sourceLine(sourceType: SourceType, authors: readonly string[] | 
 }
 
 /** One cited document: its number in the panel, the judgement behind it and the passage to show. */
-interface TocCitation {
+export interface TocCitation {
   n: number;
   /** The judgement row; null on rows written before evidence ids. */
   evidenceId: string | null;
@@ -107,38 +107,80 @@ interface TocCitation {
   quote: string | null;
   /** The judgement's quote, shown alone when the passage cannot be found. */
   fallbackQuote: string;
+  /** The task's document row (`task_source_snapshot_id`): its title opens
+   *  the source's dossier, and its marks come from it. Null when unknown. */
+  sourceId?: string | null;
 }
 
-/** One citation's block in the sidebar: the source, then its quote inside the passage it came from. */
-function CitationBlock({ taskId, citation, numbered }: { taskId: string; citation: TocCitation; numbered: boolean }) {
+/** One citation's block in the sheet, as the Evidence search's: the source
+ *  (its title the way into its dossier), its evidence type and strength from
+ *  the dossier, then its quote inside the passage it came from (task 054,
+ *  A15). */
+function CitationBlock({
+  taskId,
+  citation,
+  numbered,
+  onOpenDossier,
+}: {
+  taskId: string;
+  citation: TocCitation;
+  numbered: boolean;
+  onOpenDossier: (sourceId: string) => void;
+}) {
   const fetched = useTocDocumentContext(taskId, citation.evidenceId, citation.quote);
   const context = citation.evidenceId !== null ? fetched : { isPending: false, isError: true, data: undefined };
-  return (
-    <>
-      <CitationProvenanceBlock
-        n={citation.n}
-        hideNumber={!numbered}
-        sourceTitle={citation.title}
-        sourceRef={null}
-        onOpenDossier={() => undefined}
-        context={context}
-        quote={citation.quote ?? citation.fallbackQuote}
-      />
-      {citation.url !== null && (
-        <a href={citation.url} target="_blank" rel="noreferrer" className="block text-body font-bold text-blue hover:underline">
-          Open the source
-        </a>
-      )}
-    </>
+  const sourceId = citation.sourceId ?? null;
+  const block = (marks: { evidenceType: string | null; strength: string | null }) => (
+    <CitationProvenanceBlock
+      n={citation.n}
+      hideNumber={!numbered}
+      sourceTitle={citation.title}
+      sourceRef={sourceId}
+      onOpenDossier={onOpenDossier}
+      context={context}
+      quote={citation.quote ?? citation.fallbackQuote}
+      evidenceType={marks.evidenceType}
+      strength={marks.strength}
+      taskId={taskId}
+      sourceId={sourceId}
+    />
   );
+  // Only a citation with a document row reads its dossier for its marks.
+  return sourceId === null ? block({ evidenceType: null, strength: null }) : <WithMarks taskId={taskId} sourceId={sourceId} render={block} />;
 }
 
-/** The Evidence search's citation sidebar, for ToC citations. */
+/** A source's evidence type and strength, read from its dossier. */
+function WithMarks({
+  taskId,
+  sourceId,
+  render,
+}: {
+  taskId: string;
+  sourceId: string;
+  render: (marks: { evidenceType: string | null; strength: string | null }) => ReactNode;
+}) {
+  const dossier = useSourceDossier(taskId, sourceId);
+  return <>{render({ evidenceType: dossier.data?.evidence_type ?? null, strength: dossier.data?.appraisal_tier ?? null })}</>;
+}
+
+/** The Evidence search's citation sheet, for ToC citations: "Evidence for
+ *  this claim", the claim, then one box per source. A source's title opens
+ *  its dossier over the sheet, with "Back to the claim" (task 054, A15). */
 export function CitationSheet({ taskId, claim, citations, numbered = true, onClose }: { taskId: string; claim: string | null; citations: TocCitation[]; numbered?: boolean; onClose: () => void }) {
+  const [source, setSource] = useState<string | null>(null);
+  if (source !== null) {
+    return <SourceDossier taskId={taskId} sourceRef={source} onClose={onClose} onBack={() => setSource(null)} />;
+  }
   return (
-    <ProvenanceSheet description="Source passage" claimTexts={claim !== null ? [claim] : []} onClose={onClose}>
+    <ProvenanceSheet claimTexts={claim !== null ? [claim] : []} onClose={onClose}>
       {citations.map((citation) => (
-        <CitationBlock key={`${citation.n}-${citation.evidenceId ?? citation.title}`} taskId={taskId} citation={citation} numbered={numbered} />
+        <CitationBlock
+          key={`${citation.n}-${citation.evidenceId ?? citation.title}`}
+          taskId={taskId}
+          citation={citation}
+          numbered={numbered}
+          onOpenDossier={setSource}
+        />
       ))}
     </ProvenanceSheet>
   );
@@ -265,7 +307,15 @@ export function citedDocuments(documents: TocDocument[]): TocDocument[] {
 
 /** A cited document as a citation, with its number. */
 export function documentCitation(doc: TocDocument, n: number, quote: string | null = null): TocCitation {
-  return { n, evidenceId: doc.evidence_id || null, title: doc.title, url: doc.url, quote, fallbackQuote: doc.quote ?? "" };
+  return {
+    n,
+    evidenceId: doc.evidence_id || null,
+    title: doc.title,
+    url: doc.url,
+    quote,
+    fallbackQuote: doc.quote ?? "",
+    sourceId: doc.task_source_snapshot_id || null,
+  };
 }
 
 /** The citation list: a link's cited documents, numbered as the markers number them, each with its support, quality and relevance. */

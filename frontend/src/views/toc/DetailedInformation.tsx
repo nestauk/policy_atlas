@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
-import { prefersReducedMotion } from "../../lib/motion";
 import { scrub } from "../../lib/scrub";
-import { REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
-import { referenceAuthorsShort } from "../../ui/brand/reference";
+import type { LiveSection } from "../../store";
+import { REPORT_BODY_CLASS, REPORT_LABEL_CLASS } from "../artefactPresentation";
+import { LiveDraft, LiveSubhead, PlaceholderLines, ReferencesSection } from "../ArtefactView";
+import { FullReportExpandAllButton, FullReportExpandProvider, SectionDisclosure, type OutlineSection } from "../ArtefactOutline";
+import type { SidebarEntry } from "../ArtefactOutline";
 import type { Selection } from "./DetailPanel";
-import { CitationMarker, CitationSheet } from "./Documents";
+import { CitationMarker, type TocCitation } from "./Documents";
+import { isListPart, partText, pendingCitations, type TocPartKey } from "./liveReport";
 import { VERDICT_LABEL } from "./tocModel";
 import type { TocGraph, Verdict } from "./types";
 
@@ -15,14 +18,26 @@ type Report = NonNullable<TocGraph["report"]>;
 const P = `mt-2 max-w-[44em] ${REPORT_BODY_CLASS}`;
 /** Metadata lines (the scope): body size, grey. */
 const GREY = P.replace("text-ink", "text-grey");
-const H3 = `mt-8 ${REPORT_SECTION_HEADING_CLASS}`;
 const TOKEN = /(#\d+|\b[APSLIF]\d+\b|\[\d+\])/;
 
 const CITES = /\s*(?:\[\d+\])+/g;
 
+/** Each judged document's row in the task (`task_source_snapshot_id`), by
+ *  its judgement (`evidence_id`): a numbered source's way into its dossier. */
+export type SourceRows = ReadonlyMap<string, string>;
+
 /** A numbered source as a citation: its quote, shown in its passage when the judgement is stored. */
-function sourceCitation(source: Report["sources"][number]) {
-  return { n: source.n, evidenceId: source.evidence_id ?? null, title: source.title ?? source.citation, url: source.url, quote: null, fallbackQuote: source.quote ?? "" };
+function sourceCitation(source: Report["sources"][number], rows: SourceRows): TocCitation {
+  const evidenceId = source.evidence_id ?? null;
+  return {
+    n: source.n,
+    evidenceId,
+    title: source.title ?? source.citation,
+    url: source.url,
+    quote: null,
+    fallbackQuote: source.quote ?? "",
+    sourceId: evidenceId !== null ? (rows.get(evidenceId) ?? null) : null,
+  };
 }
 
 /**
@@ -31,21 +46,21 @@ function sourceCitation(source: Report["sources"][number]) {
  * "[n]" opens the source's quote in context beside the sentence it grounds,
  * as the Evidence search does: the sentence may summarise, the quote is exact.
  */
-function Rich({ taskId, text, codes, sources, onSelect }: { taskId: string; text: string; codes: Map<string, Selection>; sources: Report["sources"]; onSelect: (selection: Selection) => void }) {
+function Rich({ taskId, text, codes, sources, rows, onSelect }: { taskId: string; text: string; codes: Map<string, Selection>; sources: Report["sources"]; rows: SourceRows; onSelect: (selection: Selection) => void }) {
   const sentences = scrub(text).split(/(?<=[.!?](?:\[\d+\])*)\s+/);
   return (
     <>
       {sentences.map((sentence, at) => (
         <span key={at}>
           {at > 0 && " "}
-          <RichSentence taskId={taskId} sentence={sentence} codes={codes} sources={sources} onSelect={onSelect} />
+          <RichSentence taskId={taskId} sentence={sentence} codes={codes} sources={sources} rows={rows} onSelect={onSelect} />
         </span>
       ))}
     </>
   );
 }
 
-function RichSentence({ taskId, sentence, codes, sources, onSelect }: { taskId: string; sentence: string; codes: Map<string, Selection>; sources: Report["sources"]; onSelect: (selection: Selection) => void }) {
+function RichSentence({ taskId, sentence, codes, sources, rows, onSelect }: { taskId: string; sentence: string; codes: Map<string, Selection>; sources: Report["sources"]; rows: SourceRows; onSelect: (selection: Selection) => void }) {
   const claim = sentence.replace(CITES, "").trim();
   return (
     <>
@@ -56,17 +71,11 @@ function RichSentence({ taskId, sentence, codes, sources, onSelect }: { taskId: 
           // The Evidence search's marker: opens the source and its quote beside this sentence
           // (in its passage when the judgement is stored; the whole programme's, the quote alone).
           return (
-            <CitationMarker key={index} taskId={taskId} claim={claim} citations={[sourceCitation(source)]} />
+            <CitationMarker key={index} taskId={taskId} claim={claim} citations={[sourceCitation(source, rows)]} />
           );
         }
-        if (cite !== null) {
-          // A report written before sources carried their judgement: jump to the list.
-          return (
-            <a key={index} href={`#toc-source-${cite[1]}`} className="hover:underline">
-              {part}
-            </a>
-          );
-        }
+        // A report written before sources carried their judgement: the number alone.
+        if (cite !== null) return part;
         const target = codes.get(part);
         if (target === undefined) return part;
         return (
@@ -203,60 +212,83 @@ function AssumptionsTable({ rows, rich }: { rows: Row[]; rich: (text: string) =>
   );
 }
 
-/**
- * The numbered sources, as the Evidence search lists its references: the
- * number, the title (opens the source's quote in the citation sidebar), then
- * authors, year and venue in grey. Reports written before those fields show
- * their one-line citation.
- */
-function SourceList({ taskId, sources }: { taskId: string; sources: Report["sources"] }) {
-  const [opened, setOpened] = useState<Report["sources"][number] | null>(null);
-  if (sources.length === 0) return null;
-  return (
-    <>
-      <ol className={`mt-3 max-w-[44em] space-y-1.5 ${REPORT_BODY_CLASS}`}>
-        {sources.map((source) => {
-          const authors = referenceAuthorsShort((source.authors ?? []).map((name) => ({ name })));
-          const title = source.title ?? source.citation;
-          return (
-            <li key={source.n} id={`toc-source-${source.n}`} className="flex gap-2">
-              <span className="font-bold text-blue">[{source.n}]</span>
-              <span>
-                {source.evidence_id != null ? (
-                  <button type="button" className="cursor-pointer text-left hover:underline" onClick={() => setOpened(source)}>
-                    {scrub(title)}
-                  </button>
-                ) : source.url !== null ? (
-                  <a href={source.url} target="_blank" rel="noreferrer" className="hover:underline">
-                    {scrub(title)}
-                  </a>
-                ) : (
-                  scrub(title)
-                )}
-                {authors !== null && <span className="text-grey"> — {scrub(authors)}</span>}
-                {source.year != null && <span className="text-grey"> ({source.year})</span>}
-                {source.venue != null && <span className="text-grey"> · {scrub(source.venue)}</span>}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-      {opened !== null && (
-        <CitationSheet
-          taskId={taskId}
-          claim={null}
-          numbered={false}
-          citations={[sourceCitation(opened)]}
-          onClose={() => setOpened(null)}
-        />
-      )}
-    </>
-  );
+/** The page's anchor for each report section (the contents point here). */
+export const SECTION_ID: Readonly<Record<Exclude<TocPartKey, "title" | "verdict" | "question" | "in_brief">, string>> = {
+  summary: "toc-summary",
+  pathways: "toc-routes",
+  how_it_could_fail: "toc-fail",
+  tests: "toc-tests",
+  found_routes: "toc-expand",
+  supporting_activities: "toc-supporting",
+  assumptions: "toc-assumptions",
+  references: "references",
+};
+
+/** A section of the report as the shared disclosure reads it. */
+function outline(title: string): OutlineSection {
+  return { title, role: "standard" };
 }
 
-function ReportBody({ taskId, report, graph, onSelect, onPathway }: { taskId: string; report: Report; graph: TocGraph; onSelect: (selection: Selection) => void; onPathway: (pathwayId: string) => void }) {
+/** The committed report's sections in today's order (§ 8), each with its
+ *  page anchor: the contents list and the page read the same list. */
+export function reportSections(report: Report): { id: string; title: string }[] {
+  const fail = report.how_it_could_fail ?? report.summary.weakest_links;
+  return [
+    { id: SECTION_ID.summary, title: "Summary" },
+    { id: SECTION_ID.pathways, title: "Pathways" },
+    ...(fail !== "" ? [{ id: SECTION_ID.how_it_could_fail, title: "How it could fail" }] : []),
+    ...(report.tests.length > 0 ? [{ id: SECTION_ID.tests, title: "What to test first" }] : []),
+    ...((report.expansions ?? []).length > 0 ? [{ id: SECTION_ID.found_routes, title: "How it could be expanded" }] : []),
+    ...((report.supporting_activities ?? []).length > 0 ? [{ id: SECTION_ID.supporting_activities, title: "Supporting activities" }] : []),
+    { id: SECTION_ID.assumptions, title: "Assumptions" },
+    ...(report.sources.length > 0 ? [{ id: SECTION_ID.references, title: "References" }] : []),
+  ];
+}
+
+/** The live report's contents: its sections as the skeleton set them out. */
+export function liveSections(parts: ReadonlyMap<TocPartKey, LiveSection>): SidebarEntry[] {
+  return [...parts.entries()]
+    .filter(([key]) => key in SECTION_ID)
+    .sort(([, left], [, right]) => left.index - right.index)
+    .map(([key, section]) => ({ id: SECTION_ID[key as keyof typeof SECTION_ID], title: section.title }));
+}
+
+/**
+ * The committed report under the canvas (C38), in the shared report page's
+ * sections (task 054, A14): each section a disclosure with its `h2`, folding
+ * with the page's expand state; the content and its order as they were
+ * (decision 4). The references are the shared References.
+ *
+ * Args:
+ *   taskId: The task.
+ *   graph: The theory, with its report.
+ *   rows: Each judgement's document row, for the dossiers.
+ *   arriving: The swap's fade class for what the committed report brings.
+ *   onSelect: Selects a box or connection on the canvas.
+ *   onPathway: Shows a pathway on the canvas.
+ *   onOpenReference: Opens a reference's dossier, by its title.
+ */
+export function ReportBody({
+  taskId,
+  graph,
+  rows,
+  arriving,
+  onSelect,
+  onPathway,
+  onOpenReference,
+}: {
+  taskId: string;
+  graph: TocGraph;
+  rows: SourceRows;
+  arriving: string;
+  onSelect: (selection: Selection) => void;
+  onPathway: (pathwayId: string) => void;
+  onOpenReference: (title: string) => void;
+}) {
+  const report = graph.report;
+  if (report == null) return null;
   const codes = codeTargets(graph);
-  const rich = (text: string) => <Rich taskId={taskId} text={text} codes={codes} sources={report.sources} onSelect={onSelect} />;
+  const rich = (text: string) => <Rich taskId={taskId} text={text} codes={codes} sources={report.sources} rows={rows} onSelect={onSelect} />;
   const { summary } = report;
   const fail = report.how_it_could_fail ?? summary.weakest_links;
   const setAside = graph.pathways.filter((pathway) => pathway.status === "set_aside");
@@ -265,94 +297,92 @@ function ReportBody({ taskId, report, graph, onSelect, onPathway }: { taskId: st
   const older = report.verdict_reason == null;
   const supporting = report.supporting_activities ?? [];
   const expansions = report.expansions ?? [];
-  const sections = [
-    ["toc-summary", "Summary"],
-    ["toc-routes", "Pathways"],
-    ...(fail !== "" ? [["toc-fail", "How it could fail"]] : []),
-    ...(report.tests.length > 0 ? [["toc-tests", "What to test first"]] : []),
-    ...(expansions.length > 0 ? [["toc-expand", "How it could be expanded"]] : []),
-    ...(supporting.length > 0 ? [["toc-supporting", "Supporting activities"]] : []),
-    ["toc-assumptions", "Assumptions"],
-    ["toc-references", "References"],
-  ];
+  const section = (id: string, title: string, children: ReactNode) => (
+    <SectionDisclosure key={id} id={id} section={outline(title)} collapsible defaultOpen={false} arrivingClass={arriving}>
+      <div className={arriving}>{children}</div>
+    </SectionDisclosure>
+  );
   return (
-    <>
-      {/* The narrative beside a short contents list; the table below takes the full width. */}
-      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_13rem] lg:gap-10">
-      <div className="min-w-0">
-      <h3 id="toc-summary" className={H3}>Summary</h3>
-      {/* The setting and the question, as one paragraph (owner, 2026-11-04). */}
-      {summary.question != null && summary.question !== "" ? (
-        <p className={P}>
-          {summary.context !== "" && <>{rich(summary.context)} </>}
-          {rich(summary.question)}
-        </p>
-      ) : (
+    <FullReportExpandProvider>
+      <div className={`mb-4 flex justify-end ${arriving}`}>
+        <FullReportExpandAllButton />
+      </div>
+      {section(
+        SECTION_ID.summary,
+        "Summary",
         <>
-          {summary.context !== "" && <p className={P}>{rich(summary.context)}</p>}
+          {/* The setting and the question, as one paragraph (owner, 2026-11-04). */}
+          {summary.question != null && summary.question !== "" ? (
+            <p className={P}>
+              {summary.context !== "" && <>{rich(summary.context)} </>}
+              {rich(summary.question)}
+            </p>
+          ) : (
+            <>
+              {summary.context !== "" && <p className={P}>{rich(summary.context)}</p>}
+              <p className={P}>
+                <b>Goal:</b> {scrub(summary.goal.replace(/\.?$/, "."))}
+              </p>
+            </>
+          )}
           <p className={P}>
-            <b>Goal:</b> {scrub(summary.goal.replace(/\.?$/, "."))}
+            {summary.if_then_because.split(/\b(if|If|then|because)\b/).map((part, index) =>
+              index % 2 === 1 ? <b key={index}>{part}</b> : <span key={index}>{rich(part)}</span>,
+            )}
           </p>
-        </>
+          {report.verdict_reason != null && report.verdict_reason !== "" && (
+            <p className={P}>
+              <b>Verdict: {report.verdict != null ? scrub(report.verdict.label.replace(/\.?$/, ".")) : ""}</b> {rich(report.verdict_reason)}
+            </p>
+          )}
+          {older && report.whole_programme != null && report.whole_programme !== "" && (
+            <p className={P}>
+              <b>Evaluations of the whole programme.</b> {rich(report.whole_programme)}
+            </p>
+          )}
+        </>,
       )}
-      <p className={P}>
-        {summary.if_then_because.split(/\b(if|If|then|because)\b/).map((part, index) =>
-          index % 2 === 1 ? <b key={index}>{part}</b> : <span key={index}>{rich(part)}</span>,
-        )}
-      </p>
-      {report.verdict_reason != null && report.verdict_reason !== "" && (
-        <p className={P}>
-          <b>Verdict: {report.verdict != null ? scrub(report.verdict.label.replace(/\.?$/, ".")) : ""}</b> {rich(report.verdict_reason)}
-        </p>
-      )}
-      {older && report.whole_programme != null && report.whole_programme !== "" && (
-        <p className={P}>
-          <b>Evaluations of the whole programme.</b> {rich(report.whole_programme)}
-        </p>
-      )}
-
-      <h3 id="toc-routes" className={H3}>Pathways</h3>
-      {report.pathways.map((pathway, index) => {
-        const title = scrub(pathway.title.replace(/[.:]?$/, ""));
-        return (
-          <div key={index} className="mt-4 max-w-[44em]">
-            <h4 className="text-lead font-bold text-navy">
-              {pathway.pathway_id != null ? (
-                <button type="button" className="cursor-pointer text-left hover:underline" onClick={() => onPathway(pathway.pathway_id as string)} aria-label={`Show the pathway ${title} on the canvas`}>
-                  {title}
-                </button>
-              ) : (
-                title
-              )}
-              {pathway.strength != null && <span className="font-normal"> ({pathway.strength})</span>}
-            </h4>
-            <p className={`mt-1 ${REPORT_BODY_CLASS}`}>{rich(pathway.paragraph)}</p>
-          </div>
-        );
-      })}
-      {setAside.length > 0 && (
-        <p className={`${GREY} mt-4`}>
-          <b>Considered and set aside:</b>{" "}
-          {setAside.map((pathway, index) => (
-            <span key={pathway.pathway_id}>
-              {index > 0 && " "}
-              {scrub(pathway.label.replace(/\.?$/, "."))}
-              {pathway.reason !== null && <> {scrub(pathway.reason)}</>}
-            </span>
-          ))}
-        </p>
-      )}
-
-      {fail !== "" && (
+      {section(
+        SECTION_ID.pathways,
+        "Pathways",
         <>
-          <h3 id="toc-fail" className={H3}>How it could fail</h3>
-          <p className={P}>{rich(fail)}</p>
-        </>
+          {report.pathways.map((pathway, index) => {
+            const title = scrub(pathway.title.replace(/[.:]?$/, ""));
+            return (
+              <div key={index} className="mt-4 max-w-[44em]">
+                <h3 className="text-lead font-bold text-navy">
+                  {pathway.pathway_id != null ? (
+                    <button type="button" className="cursor-pointer text-left hover:underline" onClick={() => onPathway(pathway.pathway_id as string)} aria-label={`Show the pathway ${title} on the canvas`}>
+                      {title}
+                    </button>
+                  ) : (
+                    title
+                  )}
+                  {pathway.strength != null && <span className="font-normal"> ({pathway.strength})</span>}
+                </h3>
+                <p className={`mt-1 ${REPORT_BODY_CLASS}`}>{rich(pathway.paragraph)}</p>
+              </div>
+            );
+          })}
+          {setAside.length > 0 && (
+            <p className={`${GREY} mt-4`}>
+              <b>Considered and set aside:</b>{" "}
+              {setAside.map((pathway, index) => (
+                <span key={pathway.pathway_id}>
+                  {index > 0 && " "}
+                  {scrub(pathway.label.replace(/\.?$/, "."))}
+                  {pathway.reason !== null && <> {scrub(pathway.reason)}</>}
+                </span>
+              ))}
+            </p>
+          )}
+        </>,
       )}
-
-      {report.tests.length > 0 && (
-        <>
-          <h3 id="toc-tests" className={H3}>What to test first</h3>
+      {fail !== "" && section(SECTION_ID.how_it_could_fail, "How it could fail", <p className={P}>{rich(fail)}</p>)}
+      {report.tests.length > 0 &&
+        section(
+          SECTION_ID.tests,
+          "What to test first",
           <ol className={LIST}>
             {report.tests.map((test, index) => (
               <li key={index}>
@@ -366,65 +396,65 @@ function ReportBody({ taskId, report, graph, onSelect, onPathway }: { taskId: st
                 )}
               </li>
             ))}
-          </ol>
-        </>
-      )}
-
-      {expansions.length > 0 && (
-        <>
-          <h3 id="toc-expand" className={H3}>How it could be expanded</h3>
-          <p className={P}>
-            The evidence describes {expansions.length === 1 ? "a route" : `${expansions.length} routes`} your diagram does not show. You can add{" "}
-            {expansions.length === 1 ? "it" : "any of them"} from Suggestions, beside the canvas.
-          </p>
-          <ul className={`mt-2 max-w-[44em] list-disc space-y-1.5 pl-5 ${REPORT_BODY_CLASS}`}>
-            {expansions.map((route, index) => {
-              // Live: a route the user accepted is on the canvas now, as a pathway of that name.
-              const added = graph.pathways.some((pathway) => pathway.label === route.label && pathway.status === "kept");
-              return (
-                <li key={index}>
-                  <b>{scrub(route.label.replace(/\.?$/, "."))}</b>
-                  {route.kind === "failure" && <i> (a way it could go wrong)</i>} {rich(route.sentence)}
-                  {added && <span className="ml-2 text-meta font-semibold text-[var(--color-verdict-confident-text)]">Added to your theory</span>}
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
-      {supporting.length > 0 && (
-        <>
-          <h3 id="toc-supporting" className={H3}>Supporting activities</h3>
+          </ol>,
+        )}
+      {expansions.length > 0 &&
+        section(
+          SECTION_ID.found_routes,
+          "How it could be expanded",
+          <>
+            <p className={P}>
+              The evidence describes {expansions.length === 1 ? "a route" : `${expansions.length} routes`} your diagram does not show. You can add{" "}
+              {expansions.length === 1 ? "it" : "any of them"} from Suggestions, beside the canvas.
+            </p>
+            <ul className={`mt-2 max-w-[44em] list-disc space-y-1.5 pl-5 ${REPORT_BODY_CLASS}`}>
+              {expansions.map((route, index) => {
+                // Live: a route the user accepted is on the canvas now, as a pathway of that name.
+                const added = graph.pathways.some((pathway) => pathway.label === route.label && pathway.status === "kept");
+                return (
+                  <li key={index}>
+                    <b>{scrub(route.label.replace(/\.?$/, "."))}</b>
+                    {route.kind === "failure" && <i> (a way it could go wrong)</i>} {rich(route.sentence)}
+                    {added && <span className="ml-2 text-meta font-semibold text-[var(--color-verdict-confident-text)]">Added to your theory</span>}
+                  </li>
+                );
+              })}
+            </ul>
+          </>,
+        )}
+      {supporting.length > 0 &&
+        section(
+          SECTION_ID.supporting_activities,
+          "Supporting activities",
           <ul className={`mt-2 max-w-[44em] list-disc space-y-1.5 pl-5 ${REPORT_BODY_CLASS}`}>
             {supporting.map((text, index) => (
               <li key={index}>{rich(text)}</li>
             ))}
-          </ul>
-        </>
+          </ul>,
+        )}
+      {section(
+        SECTION_ID.assumptions,
+        "Assumptions",
+        <>
+          <p className={P}>
+            Each connection in the theory corresponds to a causal assumption. The Importance measure indicates either the share of success pathways that go through the connection, or that it is a risk connection leading to a failure.
+          </p>
+          <AssumptionsTable rows={report.assumptions} rich={rich} />
+        </>,
       )}
-      </div>
-      <nav aria-label="Report contents" className="print-hide mt-8 max-lg:hidden">
-        <p className={REPORT_LABEL_CLASS}>Contents</p>
-        <ul className={`mt-2 space-y-1.5 border-l border-line pl-3 ${REPORT_BODY_CLASS}`}>
-          {sections.map(([id, label]) => (
-            <li key={id}>
-              <button type="button" className="cursor-pointer text-left text-navy hover:text-blue hover:underline" onClick={() => document.getElementById(id as string)?.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" })}>
-                {label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </nav>
-      </div>
-
-      <h3 id="toc-assumptions" className={H3}>Assumptions</h3>
-      <p className={P}>
-        Each connection in the theory corresponds to a causal assumption. The Importance measure indicates either the share of success pathways that go through the connection, or that it is a risk connection leading to a failure.
-      </p>
-      <AssumptionsTable rows={report.assumptions} rich={rich} />
-
-      <h3 id="toc-references" className={H3}>References</h3>
-      <SourceList taskId={taskId} sources={report.sources} />
+      {report.sources.length > 0 && (
+        <ReferencesSection
+          references={report.sources.map((source) => ({
+            n: source.n,
+            title: source.title ?? source.citation,
+            year: source.year ?? null,
+            venue: source.venue ?? null,
+            url: source.url,
+            authorships: (source.authors ?? []).map((name) => ({ name })),
+          }))}
+          onOpenReference={onOpenReference}
+        />
+      )}
       <p className={GREY}>
         These are the documents the report cites.{" "}
         <Link to={`/tasks/${taskId}/sources/all`} className="font-bold text-blue hover:underline">
@@ -432,24 +462,71 @@ function ReportBody({ taskId, report, graph, onSelect, onPathway }: { taskId: st
         </Link>
         .
       </p>
-    </>
+    </FullReportExpandProvider>
   );
 }
 
 /**
- * The report under the canvas (C38), and the PDF: an Overview (goal, logic,
- * scope, context, pathways strongest first, how it could fail, what to test),
- * the Assumptions and evidence table and the References. Nothing collapses,
- * so the print view shows it whole.
+ * The report's sections while it is written (task 054, A13): each in its
+ * page place, its placeholder lines until its words arrive, then the
+ * model's words paced in, its "[n]" markers as the muted "[·]" chips with
+ * their sources' names on hover. The part being written reads "◆ Writing".
+ * Through the shared live pieces, so the page reads as the Evidence search's
+ * live report does.
+ *
+ * Args:
+ *   parts: The live parts.
+ *   active: The part being written now.
+ *   sources: Each numbered source's short name, by its number.
+ *   still: The marks and lines hold still (reduced motion, a lapsed stream).
  */
-export function DetailedInformation({ taskId, graph, onSelect, onPathway }: { taskId: string; graph: TocGraph; onSelect: (selection: Selection) => void; onPathway: (pathwayId: string) => void }) {
+export function LiveReportBody({
+  parts,
+  active,
+  sources,
+  still,
+}: {
+  parts: ReadonlyMap<TocPartKey, LiveSection>;
+  active: TocPartKey | null;
+  sources: ReadonlyMap<string, string>;
+  still: boolean;
+}) {
+  const sections = [...parts.entries()]
+    .filter(([key]) => key in SECTION_ID)
+    .sort(([, left], [, right]) => left.index - right.index);
   return (
-    <section aria-label="Detailed information" className="mt-10 border-t border-line pt-6">
-      {graph.report === null || graph.report === undefined ? (
-        <p className={P}>The report is written when the evidence check finishes.</p>
-      ) : (
-        <ReportBody taskId={taskId} report={graph.report} graph={graph} onSelect={onSelect} onPathway={onPathway} />
-      )}
-    </section>
+    <>
+      {sections.map(([key, section]) => {
+        const id = SECTION_ID[key as keyof typeof SECTION_ID];
+        const writing = key === active;
+        const text = key === "references" ? "" : partText(key, section);
+        const marked = pendingCitations(text, sources);
+        return (
+          <SectionDisclosure
+            key={id}
+            id={id}
+            section={outline(section.title)}
+            collapsible={false}
+            defaultOpen
+            busy={writing}
+            subhead={
+              <LiveSubhead
+                section={{ ...section, role: "standard", sources: undefined }}
+                active={writing}
+                activity="Writing"
+                terminal={false}
+                still={still}
+              />
+            }
+          >
+            {marked.text.trim() === "" ? (
+              <PlaceholderLines index={section.index} still={still} />
+            ) : (
+              <LiveDraft draft={marked.text} claims={marked.claims} complete={false} layout={isListPart(key) ? "list" : "prose"} />
+            )}
+          </SectionDisclosure>
+        );
+      })}
+    </>
   );
 }

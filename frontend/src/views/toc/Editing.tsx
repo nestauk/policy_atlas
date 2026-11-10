@@ -7,8 +7,7 @@ import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/radix/Popover";
 import { TOAST_CLASS } from "../../ui/radix/Toast";
-import { DownloadMenu, MENU_ITEM_CLASS } from "../DownloadMenu";
-import { usePublicView } from "../publicView";
+import { MENU_ITEM_CLASS } from "../DownloadMenu";
 import { canvasImage, downloadDrawio, downloadJson, downloadReferences, printReport } from "./exports";
 import { keptPathways, LAYER_LABEL, pathwayTitles } from "./tocModel";
 import type { BoxLayer, TocGraph } from "./types";
@@ -194,8 +193,6 @@ export function CanvasBar({
   onSuggestions: () => void;
 }) {
   const titles = pathwayTitles(graph);
-  // Downloads are for signed-in readers only, never the public link (C17).
-  const isPublicView = usePublicView();
   const reviewLabel = `Review the theory${graph.edits_since_review >= 5 ? ` (${graph.edits_since_review} changes)` : ""}`;
   const running = graph.check_status === "drafting" || graph.check_status === "checking";
   // Before the draft there is no plan to check or review against.
@@ -262,13 +259,13 @@ export function CanvasBar({
         </button>
       )}
       <MoreMenu items={menu} />
-      {!isPublicView && <DownloadMenu small items={downloads(graph)} />}
     </div>
   );
 }
 
-/** The Download menu (contract item 6), grouped by what people do next. */
-function downloads(graph: TocGraph) {
+/** The Download menu (contract item 6), grouped by what people do next. It
+ *  sits in the report's kind row (task 054, A14). */
+export function tocDownloads(graph: TocGraph) {
   const failed = () => window.alert("The download could not be made. Try again.");
   const image = (kind: "png" | "svg") => () => void canvasImage(graph, kind).catch(failed);
   return [

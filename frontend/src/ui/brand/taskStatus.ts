@@ -135,16 +135,33 @@ export function isStale(latestRun: LatestRun, now: Date = new Date()): boolean {
 
 /** What kind of walk a run is (task 045): an Evidence search, a scoping
  *  task's baseline walk, its longlist walk, an added option's own search, or
- *  the shortlist walk. A finished run's words follow it ("the evidence base
- *  is ready" is wrong for a longlist). */
-export type WalkKind = "evidence_search" | "baseline" | "longlist" | "option_search" | "shortlist";
+ *  the shortlist walk; and a theory of change's walks (task 054): the draft,
+ *  an uploaded theory's read, the evidence check and "Update the report".
+ *  A finished run's words follow it ("the evidence base is ready" is wrong
+ *  for a longlist). */
+export type WalkKind =
+  | "evidence_search"
+  | "baseline"
+  | "longlist"
+  | "option_search"
+  | "shortlist"
+  | "toc_draft"
+  | "toc_read"
+  | "toc_check"
+  | "toc_report_update";
 
 /** The words a run that finished well ends with, per walk: the trace's top
- *  line and the browser title's unseen finish ("● Report ready"). */
+ *  line and the browser title's unseen finish ("● Report ready"). A theory
+ *  of change's draft and an uploaded theory's read both end "Theory
+ *  drafted"; its check ends "Evidence checked" (owner decision 6, task 054). */
 export const READY_WORDS: Record<WalkKind, string> = {
   evidence_search: "Report ready",
   baseline: "The baseline is ready",
   longlist: "The longlist is ready",
   option_search: "The option's search is done",
   shortlist: "The shortlist is proposed",
+  toc_draft: "Theory drafted",
+  toc_read: "Theory drafted",
+  toc_check: "Evidence checked",
+  toc_report_update: "Report ready",
 };

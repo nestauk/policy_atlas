@@ -376,6 +376,9 @@ type TraceProps = {
   /** The run's own purpose (`RunOut.purpose`): an added option's search
    *  reads as its own kind, not the baseline (task 045, A7). */
   purpose?: string | null;
+  /** A theory of change's walk kind (`RunOut.toc_walk`, task 054): its
+   *  finish words and its rows' links follow it. */
+  tocWalk?: string | null;
   /** The owner is told a paused run waits on them. */
   isOwner: boolean;
   /** The task's owner (`TaskOut.owner_display`), whom a colleague is told a
@@ -408,6 +411,7 @@ function TraceCard({
   hasFindings,
   capability,
   purpose,
+  tocWalk,
   isOwner,
   ownerName = null,
   checkInWaiting = false,
@@ -417,7 +421,7 @@ function TraceCard({
 }: TraceProps & { past?: boolean }) {
   const [open, setOpen] = useState(false);
   const listId = useId();
-  const kind = walkKind(capability, stages, purpose);
+  const kind = walkKind(capability, stages, purpose, tocWalk);
   const ended = endedLine(status, kind);
   const ticking = ended === null && (status === "running" || status === "paused");
   const paused = ended === null && (status === "paused" || checkInWaiting);
@@ -579,19 +583,24 @@ function useLandedRows(rows: CardRow[]): ReadonlySet<string> {
  */
 export function PastRunLine({
   run,
+  leadRun = null,
   taskId,
   capability,
   hasFindings = false,
 }: {
   run: TaskAgentThreadRun;
+  /** A theory of change's draft that this check followed by itself (task
+   *  054, S10): one card for the two, its rows first and its start the
+   *  card's start. */
+  leadRun?: TaskAgentThreadRun | null;
   taskId: string;
   capability?: string | null;
   /** Whether the task has findings, for a done Extracting row's link. */
   hasFindings?: boolean;
 }) {
   const status = run.status as RunStatus;
-  const stages = threadRunStages(run);
-  if (endedLine(status, walkKind(capability, stages, run.purpose)) !== null) {
+  const stages = [...(leadRun !== null ? threadRunStages(leadRun) : []), ...threadRunStages(run)];
+  if (endedLine(status, walkKind(capability, stages, run.purpose, run.toc_walk)) !== null) {
     return (
       <TraceCard
         past
@@ -599,11 +608,12 @@ export function PastRunLine({
         status={status}
         stages={stages}
         plan={null}
-        startedAt={run.started_at}
+        startedAt={leadRun?.started_at ?? run.started_at}
         endedAt={run.ended_at ?? undefined}
         hasFindings={hasFindings}
         capability={capability}
         purpose={run.purpose}
+        tocWalk={run.toc_walk}
         isOwner={false}
       />
     );
