@@ -36,24 +36,52 @@ function withMobileContents(children: ReactNode, entries: SidebarEntry[]): React
   return at === -1 ? [contents, ...nodes] : [...nodes.slice(0, at + 1), contents, ...nodes.slice(at + 1)];
 }
 
-/** Sidebar + paper, side by side from md up; below md the contents fold
- *  into a closed disclosure under the title block. */
+/**
+ * Sidebar + paper, side by side from md up; below md the contents fold
+ * into a closed disclosure under the title block.
+ *
+ * `contents="within"` keeps the sidebar off the paper's side: the page sets
+ * it inside the paper with `ContentsBeside`, next to the part it reads
+ * beside, so a wide page's canvas and tables keep the paper's whole width
+ * (the theory of change; owner, 2026-11-10). The phone's disclosure is the
+ * same either way.
+ */
 export function ReportPage({
   entries,
+  contents = "beside",
   className,
   children,
 }: {
   entries?: SidebarEntry[];
+  contents?: "beside" | "within";
   className?: string;
   children: ReactNode;
 }) {
   const hasContents = entries !== undefined && entries.length > 0;
   return (
     <div className="mx-auto flex w-full flex-col justify-center gap-6 px-6 max-md:gap-0 max-md:px-0 md:flex-row">
-      {hasContents && <ContentsSidebar entries={entries} />}
+      {hasContents && contents === "beside" && <ContentsSidebar entries={entries} />}
       <main className={className === undefined ? REPORT_PAGE_CLASS : `${REPORT_PAGE_CLASS} ${className}`}>
         {hasContents ? withMobileContents(children, entries) : children}
       </main>
+    </div>
+  );
+}
+
+/**
+ * The contents inside the paper, at the right of the part they sit beside
+ * (a `ReportPage` with `contents="within"`): the part keeps the paper's left
+ * edge, the sidebar sticks beside it while it is read, and what follows the
+ * part takes the full width again. From md up; below it the page carries the
+ * contents disclosure under its title. First in the reading order, as the
+ * sidebar beside the paper is.
+ */
+export function ContentsBeside({ entries, children }: { entries: SidebarEntry[]; children: ReactNode }) {
+  if (entries.length === 0) return <>{children}</>;
+  return (
+    <div className="md:grid md:grid-cols-[minmax(0,1fr)_14rem] md:gap-x-10">
+      <ContentsSidebar entries={entries} className="md:col-start-2 md:row-start-1 md:top-6 md:pt-1 md:pr-0" />
+      <div className="min-w-0 md:col-start-1 md:row-start-1">{children}</div>
     </div>
   );
 }

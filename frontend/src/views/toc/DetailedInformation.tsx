@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { formatCount } from "../../lib/format";
 import { scrub } from "../../lib/scrub";
 import type { LiveSection } from "../../store";
+import { BulletList } from "../../ui/brand/BulletList";
 import { cn } from "../../ui/brand/cn";
 import { DisclosureToggle } from "../../ui/brand/DisclosureToggle";
 import { LINK_CLASS } from "../../ui/brand/inlineActions";
@@ -14,6 +15,7 @@ import { REPORT_BODY_CLASS } from "../artefactPresentation";
 import { CITATION_MARKER_CLASS, LiveDraft, LiveSubhead, PlaceholderLines, ReferencesSection } from "../ArtefactView";
 import { FullReportExpandAllButton, FullReportExpandProvider, SectionDisclosure, type OutlineSection } from "../ArtefactOutline";
 import type { SidebarEntry } from "../ArtefactOutline";
+import { ContentsBeside } from "../reportPage";
 import type { Selection } from "./DetailPanel";
 import { CitationMarker, type TocCitation } from "./Documents";
 import { isListPart, partText, pendingCitations, type TocPartKey } from "./liveReport";
@@ -222,13 +224,8 @@ function AssumptionsTable({ rows, rich }: { rows: Row[]; rich: (text: string) =>
               </td>
               <td className="border-b border-line py-2 pr-2 align-top">{scrub(row.statement)}</td>
               <td className="border-b border-line py-2 pr-2 align-top">
-                {(row.conditions ?? []).length > 0 && (
-                  <ul className="list-disc pl-4">
-                    {(row.conditions ?? []).map((condition) => (
-                      <li key={condition}>{scrub(condition)}</li>
-                    ))}
-                  </ul>
-                )}
+                {/* The report's square bullet, as the other capabilities' (owner, 2026-11-10). */}
+                {(row.conditions ?? []).length > 0 && <BulletList items={(row.conditions ?? []).map((condition) => scrub(condition))} className="space-y-1" />}
               </td>
               <td className="whitespace-nowrap border-b border-line py-2 pr-2 align-top">{row.importance ?? (row.kind === "risk" ? "Risk" : "")}</td>
               <td className="border-b border-line py-2 pr-2 align-top">
@@ -286,6 +283,10 @@ export const SECTION_ID: Readonly<Record<Exclude<TocPartKey, "title" | "verdict"
   assumptions: "toc-assumptions",
   references: "references",
 };
+
+/** The parts that take the paper's full width under the narrative and its
+ *  contents: the Assumptions table and the References (owner, 2026-11-10). */
+const WIDE_PARTS: ReadonlySet<TocPartKey> = new Set(["assumptions", "references"]);
 
 /** A section of the report as the shared disclosure reads it. */
 function outline(title: string): OutlineSection {
@@ -370,6 +371,9 @@ export function ReportBody({
       <div className={`mb-4 flex justify-end ${arriving}`}>
         <FullReportExpandAllButton />
       </div>
+      {/* The narrative beside the contents; the Assumptions table and the
+          References under it take the paper's full width (owner, 2026-11-10). */}
+      <ContentsBeside entries={reportSections(report)}>
       {section(
         SECTION_ID.summary,
         "Summary",
@@ -466,31 +470,29 @@ export function ReportBody({
               The evidence describes {expansions.length === 1 ? "a route" : `${expansions.length} routes`} your diagram does not show. You can add{" "}
               {expansions.length === 1 ? "it" : "any of them"} from Suggestions, beside the canvas.
             </p>
-            <ul className={`mt-2 max-w-[44em] list-disc space-y-1.5 pl-5 ${REPORT_BODY_CLASS}`}>
-              {expansions.map((route, index) => {
+            <BulletList
+              className={`mt-2 max-w-[44em] ${REPORT_BODY_CLASS}`}
+              items={expansions.map((route) => {
                 // Live: a route the user accepted is on the canvas now, as a pathway of that name.
                 const added = graph.pathways.some((pathway) => pathway.label === route.label && pathway.status === "kept");
                 return (
-                  <li key={index}>
+                  <>
                     <b>{scrub(route.label.replace(/\.?$/, "."))}</b>
                     {route.kind === "failure" && <i> (a way it could go wrong)</i>} {rich(route.sentence)}
                     {added && <span className="ml-2 text-meta font-semibold text-green-deep">Added to your theory</span>}
-                  </li>
+                  </>
                 );
               })}
-            </ul>
+            />
           </>,
         )}
       {supporting.length > 0 &&
         section(
           SECTION_ID.supporting_activities,
           "Supporting activities",
-          <ul className={`mt-2 max-w-[44em] list-disc space-y-1.5 pl-5 ${REPORT_BODY_CLASS}`}>
-            {supporting.map((text, index) => (
-              <li key={index}>{rich(text)}</li>
-            ))}
-          </ul>,
+          <BulletList className={`mt-2 max-w-[44em] ${REPORT_BODY_CLASS}`} items={supporting.map((text) => rich(text))} />,
         )}
+      </ContentsBeside>
       {section(
         SECTION_ID.assumptions,
         "Assumptions",
@@ -553,39 +555,44 @@ export function LiveReportBody({
   const sections = [...parts.entries()]
     .filter(([key]) => key in SECTION_ID)
     .sort(([, left], [, right]) => left.index - right.index);
+  // As the committed report: the narrative beside the contents, the wide parts under it.
+  const narrative = sections.filter(([key]) => !WIDE_PARTS.has(key));
+  const wide = sections.filter(([key]) => WIDE_PARTS.has(key));
+  const render = ([key, section]: (typeof sections)[number]) => {
+    const id = SECTION_ID[key as keyof typeof SECTION_ID];
+    const writing = key === active;
+    const text = key === "references" ? "" : partText(key, section);
+    const marked = pendingCitations(text, sources);
+    return (
+      <SectionDisclosure
+        key={id}
+        id={id}
+        section={outline(section.title)}
+        collapsible={false}
+        defaultOpen
+        busy={writing}
+        subhead={
+          <LiveSubhead
+            section={{ ...section, role: "standard", sources: undefined }}
+            active={writing}
+            activity="Writing"
+            terminal={false}
+            still={still}
+          />
+        }
+      >
+        {marked.text.trim() === "" ? (
+          <PlaceholderLines index={section.index} still={still} />
+        ) : (
+          <LiveDraft draft={marked.text} claims={marked.claims} complete={false} layout={isListPart(key) ? "list" : "prose"} />
+        )}
+      </SectionDisclosure>
+    );
+  };
   return (
     <>
-      {sections.map(([key, section]) => {
-        const id = SECTION_ID[key as keyof typeof SECTION_ID];
-        const writing = key === active;
-        const text = key === "references" ? "" : partText(key, section);
-        const marked = pendingCitations(text, sources);
-        return (
-          <SectionDisclosure
-            key={id}
-            id={id}
-            section={outline(section.title)}
-            collapsible={false}
-            defaultOpen
-            busy={writing}
-            subhead={
-              <LiveSubhead
-                section={{ ...section, role: "standard", sources: undefined }}
-                active={writing}
-                activity="Writing"
-                terminal={false}
-                still={still}
-              />
-            }
-          >
-            {marked.text.trim() === "" ? (
-              <PlaceholderLines index={section.index} still={still} />
-            ) : (
-              <LiveDraft draft={marked.text} claims={marked.claims} complete={false} layout={isListPart(key) ? "list" : "prose"} />
-            )}
-          </SectionDisclosure>
-        );
-      })}
+      <ContentsBeside entries={liveSections(parts)}>{narrative.map(render)}</ContentsBeside>
+      {wide.map(render)}
     </>
   );
 }

@@ -519,7 +519,8 @@ export function TocCanvas({
           type: MarkerType.ArrowClosed,
           width: 14,
           height: 14,
-          color: pending || (unchecked && !reviewing) ? "var(--color-line-2)" : reviewing ? (link.origin === "imported" ? "var(--color-navy)" : "var(--color-blue)") : VERDICT_VAR[link.verdict],
+          // A connection being checked: the live blue, its arrowhead breathing with its line.
+          color: pending ? "var(--color-blue)" : unchecked && !reviewing ? "var(--color-line-2)" : reviewing ? (link.origin === "imported" ? "var(--color-navy)" : "var(--color-blue)") : VERDICT_VAR[link.verdict],
         },
         data: {
           span: sameColumn ? 0 : (columnOf.get(link.target_box_id) ?? 0) - (columnOf.get(link.source_box_id) ?? 0),

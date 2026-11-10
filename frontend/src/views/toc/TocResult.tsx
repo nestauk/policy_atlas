@@ -12,7 +12,7 @@ import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { QUIET_CONTROL_CLASS } from "../../ui/brand/inlineActions";
 import { useToast } from "../../ui/radix/Toast";
-import { theoryVerdictColour, VerdictSquare } from "../../ui/brand/verdictTones";
+import { theoryVerdictColour, VERDICT_RULE_BLOCK_CLASS, VerdictRule } from "../../ui/brand/verdictTones";
 import { REPORT_BODY_CLASS } from "../artefactPresentation";
 import { ReportExpandScope, seedReportExpanded } from "../ArtefactOutline";
 import { LiveDraft, SeePlanLink, SourceDossier, usePrefersReducedMotion } from "../ArtefactView";
@@ -58,8 +58,9 @@ const UPDATE_STAGES = new Set(["toc_summarise", "toc_report"]);
 /**
  * The verdict line, the question and "what would settle it" above the
  * canvas (decision 4: the header keeps its four parts), live while the
- * report is written and committed after. The verdict's tone square arrives
- * with the committed report.
+ * report is written and committed after. The verdict line runs beside a rule
+ * in its tone (owner, 2026-11-10); the rule arrives with the committed
+ * report, its indent held while the line is written so the words never move.
  */
 function HeaderParts({
   report,
@@ -74,15 +75,15 @@ function HeaderParts({
 }) {
   if (report != null) {
     const verdict = report.verdict;
-    // The shared tone square from what the verdict says (never its words);
-    // too little evidence takes the Line 2 grey (§ 8).
+    // The shared tone from what the verdict says (never its words); too
+    // little evidence takes the Line 2 grey (§ 8).
     const tone = verdict != null ? theoryVerdictColour(verdict) : null;
     const question = report.summary.question ?? report.summary.goal;
     return (
       <>
         {verdict != null && (
-          <p className={HEADER_P}>
-            {tone !== null && <VerdictSquare colour={tone} className={cn("mr-2 mb-[0.2em]", arriving)} />}
+          <p className={cn(HEADER_P, VERDICT_RULE_BLOCK_CLASS)}>
+            {tone !== null && <VerdictRule colour={tone} className={arriving} />}
             <b>{scrub(verdict.label)}.</b> <b>{scrub(headlineAfter(verdict.label, verdict.headline))}</b>
           </p>
         )}
@@ -106,7 +107,7 @@ function HeaderParts({
   return (
     <>
       {verdict !== undefined && verdict.title !== "" && (
-        <p className={HEADER_P}>
+        <p className={cn(HEADER_P, VERDICT_RULE_BLOCK_CLASS)}>
           <b>{scrub(verdict.title)}.</b>{" "}
           <b>
             <RevealedWords text={scrub(headlineAfter(verdict.title, verdict.prose ?? ""))} />
@@ -318,7 +319,9 @@ function TocPage({ taskId }: { taskId: string }) {
   const entries = report !== null ? reportSections(report) : showLive ? liveSections(parts) : undefined;
 
   return (
-    <ReportPage entries={entries} className="md:max-w-[1180px]">
+    // The contents sit inside the paper beside the report's narrative, so the
+    // canvas and the Assumptions table keep the paper's width (owner, 2026-11-10).
+    <ReportPage entries={entries} contents="within" className="md:max-w-[1180px]">
       <header>
         <ReportKindRow kind="Report">
           {/* Download arrives with the committed report (058). */}

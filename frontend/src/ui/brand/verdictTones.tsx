@@ -1,4 +1,5 @@
 import type { components } from "../../api/gen/types";
+import { cn } from "./cn";
 import { TONE_HEX, TONE_VAR, type ToneColour } from "./evidence";
 import { ToneSquare } from "./EvidenceMarks";
 
@@ -8,7 +9,8 @@ import { ToneSquare } from "./EvidenceMarks";
  * verdict, a document's support and the theory's overall verdict take the
  * palette's green, yellow and red tone squares, as an evidence strength does;
  * "Not enough evidence" takes a Line 2 grey square (§ 8), the canvas line's
- * faint grey. The square always sits before the word, in ink.
+ * faint grey. The square always sits before the word, in ink; the report's
+ * verdict line takes a rule in its tone down its left instead (`VerdictRule`).
  */
 
 type Schemas = components["schemas"];
@@ -75,6 +77,29 @@ export function theoryVerdictColour(verdict: TocTheoryVerdict): ToneColour {
  *  names its colour. The surface sets the spacing through `className`. */
 export function VerdictSquare({ colour, className }: { colour: ToneColour; className?: string }) {
   return <ToneSquare colour={colour} className={className} testId="verdict-mark" />;
+}
+
+/** The block a `VerdictRule` runs down: the rule's 2 px and a 12 px indent,
+ *  the citation sheet's claim rule (`border-l-2 pl-3`). */
+export const VERDICT_RULE_BLOCK_CLASS = "relative pl-3.5";
+
+/**
+ * A verdict's rule (owner, 2026-11-10): a 2 px line in the verdict's tone
+ * down the left of the block that states it, where the verdict leads a block
+ * of its own (the report's verdict line) in place of the square. The word
+ * stays beside it. Decorative; `data-tone` names its colour. The block takes
+ * `VERDICT_RULE_BLOCK_CLASS`; `className` carries an arrival.
+ */
+export function VerdictRule({ colour, className }: { colour: ToneColour; className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      data-testid="verdict-rule"
+      data-tone={colour}
+      className={cn("absolute inset-y-0 left-0 w-0.5", className)}
+      style={{ backgroundColor: TONE_VAR[colour] }}
+    />
+  );
 }
 
 /**

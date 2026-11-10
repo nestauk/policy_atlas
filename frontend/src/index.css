@@ -516,8 +516,12 @@
    dashes; Mixed solid amber (owner, 2026-11-04); Not enough
    evidence grey dashed; Leaning against long red dashes; Not
    confident dotted red. The critical link carries a warning triangle
-   (CriticalMark), not a thicker line. A checking edge is grey and
-   pulses; an unchecked one is a still grey line. Scoped under .react-flow so the library's own edge
+   (CriticalMark), not a thicker line. A connection being searched or
+   checked is the live blue (DESIGN.md: work in progress is blue and
+   breathing), its line and arrowhead breathing on the one 1.6 s rhythm to
+   the 0.25 trough (owner, 2026-11-10: the grey pulse was too subtle); still
+   and solid blue under reduced motion. An unchecked one is a still grey
+   line. Scoped under .react-flow so the library's own edge
    styles, loaded later, do not win. */
 .react-flow .toc-edge {
   fill: none;
@@ -530,7 +534,7 @@
 .react-flow .toc-edge--against { stroke-dasharray: 2 5; }
 .react-flow .toc-edge--leaning_supports { stroke-dasharray: 12 5; }
 .react-flow .toc-edge--leaning_against { stroke-dasharray: 12 5; }
-.react-flow .toc-edge--pending { stroke: var(--color-line-2); animation: toc-pulse 1.6s ease-in-out infinite; }
+.react-flow .toc-edge--pending { stroke: var(--color-blue); animation: breathe 1.6s ease-in-out infinite; }
 .react-flow .toc-edge--unchecked { stroke: var(--color-line-2); }
 /* Keyboard focus on a box or a connection: DESIGN's 2px blue outline, offset 2px. */
 .react-flow .react-flow__node-box:focus-visible,
@@ -544,12 +548,8 @@
 .toc-export-only { display: none; }
 .toc-exporting .toc-export-only { display: block; }
 .react-flow .toc-edge-halo { fill: none; stroke: var(--color-blue); stroke-opacity: 0.18; stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
-@keyframes toc-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
 @media (prefers-reduced-motion: reduce) {
-  .toc-edge--pending { animation: none; }
+  .react-flow .toc-edge--pending { animation: none; }
 }
 /* PDF: the panel is hidden (aside), the canvas and toolbar stay. */
 .toc-print-image { display: none; }

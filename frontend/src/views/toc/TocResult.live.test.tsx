@@ -189,6 +189,13 @@ describe("the live report (A13)", () => {
     // No Download until the report is committed; the contents list the sections.
     expect(screen.queryByRole("button", { name: "Download" })).toBeNull();
     expect(within(screen.getAllByRole("navigation", { name: "Contents" })[0] as HTMLElement).getByText("Assumptions")).toBeInTheDocument();
+    // As the committed report: the contents beside the narrative, the Assumptions under them at full width.
+    const beside = screen
+      .getAllByRole("navigation", { name: "Contents" })
+      .map((nav) => nav.parentElement as HTMLElement)
+      .find((el) => el.querySelector("#toc-summary") !== null) as HTMLElement;
+    expect(beside.querySelector("#toc-assumptions")).toBeNull();
+    expect(within(info).getByRole("heading", { level: 2, name: "Assumptions" })).toBeInTheDocument();
   });
 
   it("fills in the order written: a list part's items arrive before a section above it", () => {

@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import type { components } from "../../api/gen/types";
 import { scrub } from "../../lib/scrub";
+import { BulletList } from "../../ui/brand/BulletList";
 import { Button } from "../../ui/brand/Button";
 import type { Editor } from "./Editing";
 
@@ -183,13 +184,14 @@ export function Suggestions({
             {proposal.report_findings.length > 0 && (
               <div className="mt-2 border-t border-line pt-2">
                 <p className="text-body font-bold text-ink">The report no longer matches the theory in:</p>
-                <ul className="mt-1 list-disc pl-5 text-body marker:text-grey">
-                  {proposal.report_findings.map((finding) => (
-                    <li key={finding.section}>
+                <BulletList
+                  className="mt-1 space-y-1 text-body"
+                  items={proposal.report_findings.map((finding) => (
+                    <>
                       <span className="font-semibold">{SECTION_LABEL[finding.section] ?? finding.section}</span>: {scrub(finding.why)}
-                    </li>
+                    </>
                   ))}
-                </ul>
+                />
               </div>
             )}
             <div className="mt-3 flex flex-wrap gap-2">

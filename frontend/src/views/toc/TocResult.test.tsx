@@ -89,6 +89,13 @@ describe("canvas", () => {
     expect(edge(9)?.querySelector(".toc-edge--pending")).not.toBeNull(); // still checking
   });
 
+  it("draws a connection being checked in the live blue, its arrowhead too (owner, 2026-11-10)", () => {
+    renderResult();
+    const pending = edge(9)?.querySelector(".toc-edge--pending");
+    expect(pending?.getAttribute("marker-end")).toContain("color-blue");
+    expect(edge(1)?.querySelector(".toc-edge--supported")?.getAttribute("marker-end")).not.toContain("color-blue");
+  });
+
   it("marks the critical connection with a warning triangle, not a thicker line", () => {
     renderResult();
     // The mark is the edge's only <g transform>: one on the critical edge, none elsewhere.
@@ -279,6 +286,35 @@ describe("detailed information", () => {
   /** A reader opening a finished report finds its sections shut (058's expand state). */
   const openAll = async (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole("button", { name: "Show all" }));
 
+  it("bullets its lists with the report's square, as the other capabilities do (owner, 2026-11-10)", async () => {
+    const user = userEvent.setup();
+    renderResult();
+    await user.click(screen.getByRole("button", { name: "Show all" }));
+    const info = screen.getByLabelText("Detailed information");
+    expect(info.querySelector(".list-disc")).toBeNull();
+    const supporting = within(info).getByText(/Ofcom monitors compliance/).closest("li") as HTMLElement;
+    expect(supporting.querySelector("[data-bullet]")).not.toBeNull();
+    const expansion = within(info).getByText("Brands move spend to influencers.").closest("li") as HTMLElement;
+    expect(expansion.querySelector("[data-bullet]")).not.toBeNull();
+    const condition = within(info).getByText("Brands do not move their spend to brand-only ads").closest("li") as HTMLElement;
+    expect(condition.querySelector("[data-bullet]")).not.toBeNull();
+  });
+
+  it("sets the contents inside the paper beside the narrative; the canvas and the Assumptions table keep the full width (owner, 2026-11-10)", () => {
+    renderResult();
+    const paper = screen.getByRole("main");
+    // Not beside the paper, as the Evidence search's are: inside it.
+    for (const nav of screen.getAllByRole("navigation", { name: "Contents" })) expect(paper).toContainElement(nav);
+    const beside = screen
+      .getAllByRole("navigation", { name: "Contents" })
+      .map((nav) => nav.parentElement as HTMLElement)
+      .find((el) => el.querySelector("#toc-summary") !== null) as HTMLElement;
+    expect(beside.querySelector("#toc-routes")).not.toBeNull();
+    expect(beside.querySelector("#toc-assumptions")).toBeNull();
+    expect(beside.querySelector("#references")).toBeNull();
+    expect(beside).not.toContainElement(document.getElementById("toc-canvas"));
+  });
+
   it("is the report in the shared page: h2 sections in today's order, the contents, the report's text styles (A14)", async () => {
     const user = userEvent.setup();
     renderResult();
@@ -288,7 +324,7 @@ describe("detailed information", () => {
     expect(sections.map((h) => h.textContent?.replace(/(Show|Hide)$/, ""))).toEqual(SECTIONS);
     for (const heading of sections) expect(heading.className).toContain(REPORT_SECTION_HEADING_CLASS);
     expect(within(info).queryByText(/This report asks whether the ban/)).toBeNull();
-    // The contents list the same sections (left from md up, a disclosure on a phone).
+    // The contents list the same sections (inside the paper from md up, a disclosure on a phone).
     const contents = screen.getAllByRole("navigation", { name: "Contents" });
     expect(contents.length).toBeGreaterThan(0);
     expect(within(contents[0] as HTMLElement).getByText("Assumptions")).toBeInTheDocument();
@@ -297,6 +333,8 @@ describe("detailed information", () => {
     const greyBody = REPORT_BODY_CLASS.replace("text-ink", "text-grey");
     const styles = [REPORT_BODY_CLASS, greyBody, REPORT_LABEL_CLASS, REPORT_PART_HEADING_CLASS, REPORT_SECTION_HEADING_CLASS];
     for (const el of info.querySelectorAll("p, ul, table, th, h2")) {
+      // The contents beside the narrative are the page's chrome, not its text.
+      if (el.closest("nav") !== null) continue;
       const own = el.className;
       const inherited = (el.closest("table") as HTMLElement | null)?.className ?? "";
       expect(styles.some((style) => own.includes(style) || inherited.includes(style))).toBe(true);
@@ -495,13 +533,15 @@ describe("detailed information", () => {
     expect(screen.queryByRole("button", { name: "Download" })).toBeNull();
   });
 
-  it("leads with the overall verdict and its headline, its tone square beside the word", () => {
+  it("leads with the overall verdict and its headline, beside a rule in its tone", () => {
     const fixture = tocGraphFixture();
     const report = fixture.report as NonNullable<TocGraph["report"]>;
     renderResult({ ...fixture, report: { ...report, verdict: { ...(report.verdict as NonNullable<typeof report.verdict>), mechanism: "implausible", label: "Implausible", headline: "Implausible: blue doors would not credibly reduce diabetes." } } });
     const line = screen.getByText("Implausible.").closest("p") as HTMLElement;
     expect(line).toHaveTextContent("Implausible. Blue doors would not credibly reduce diabetes.");
-    expect(line.querySelector('[data-tone="red"]')).not.toBeNull();
+    expect(within(line).getByTestId("verdict-rule")).toHaveAttribute("data-tone", "red");
+    // The rule replaces the square (owner, 2026-11-10).
+    expect(within(line).queryByTestId("verdict-mark")).toBeNull();
   });
 
   it("asks the user to review an uploaded theory, with its suggested connections dashed", async () => {
@@ -913,12 +953,12 @@ describe("the shared tones, links and disclosures (phase 7, § 4 E)", () => {
     expect(origin).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("leads the header with the verdict's tone square and its word in ink, not uppercase", () => {
+  it("leads the header with the verdict's tone rule and its word in ink, not uppercase", () => {
     renderResult();
     const label = screen.getAllByText("Too little evidence.").find((el) => el.closest("header") !== null) as HTMLElement;
     expect(label.className).not.toMatch(/uppercase|tracking/);
     const line = label.closest("p") as HTMLElement;
-    expect(within(line).getByTestId("verdict-mark")).toHaveAttribute("data-tone", "grey");
+    expect(within(line).getByTestId("verdict-rule")).toHaveAttribute("data-tone", "grey");
   });
 
   it("links a report's codes in the Link style and keeps an old report's numbers as markers", async () => {

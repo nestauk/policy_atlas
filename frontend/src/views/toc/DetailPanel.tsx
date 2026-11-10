@@ -2,6 +2,7 @@ import { type ReactNode, useState } from "react";
 
 import { formatCount } from "../../lib/format";
 import { scrub } from "../../lib/scrub";
+import { BulletList } from "../../ui/brand/BulletList";
 import { CloseButton } from "../../ui/brand/CloseButton";
 import { cn } from "../../ui/brand/cn";
 import { useExpandForPrint } from "../../ui/brand/Disclosure";
@@ -304,11 +305,7 @@ function LinkDetail({
       {link.conditions.length > 0 && (
         <>
           <p className={SUB}>Conditions</p>
-          <ul className="mt-1 list-disc pl-5 text-body">
-            {link.conditions.map((condition) => (
-              <li key={condition}>{scrub(condition)}</li>
-            ))}
-          </ul>
+          <BulletList items={link.conditions.map((condition) => scrub(condition))} className="mt-1 space-y-1 text-body" />
         </>
       )}
 
