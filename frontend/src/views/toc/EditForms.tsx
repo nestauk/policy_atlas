@@ -1,10 +1,12 @@
 import { type FormEvent, useState } from "react";
 
 import { Button } from "../../ui/brand/Button";
-import { CheckButton, type Editor, LayerSelect } from "./Editing";
+import { cn } from "../../ui/brand/cn";
+import { QUIET_CONTROL_CLASS } from "../../ui/brand/inlineActions";
+import { CheckButton, type Editor, FIELD_CLASS, FIELD_LABEL_CLASS, LayerSelect } from "./Editing";
 import type { BoxLayer, TocBox, TocGraph, TocLink } from "./types";
 
-const INPUT = "border border-line-2 bg-paper px-2 py-1.5 text-body font-normal text-ink";
+const INPUT = cn(FIELD_CLASS, "resize-y");
 
 /** A submitted form's field, trimmed (a textarea submits CRLF line breaks; back to "\n"). */
 function fieldOf(event: FormEvent<HTMLFormElement>): (name: string) => string {
@@ -14,28 +16,30 @@ function fieldOf(event: FormEvent<HTMLFormElement>): (name: string) => string {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="mt-3 grid gap-1 text-meta font-semibold text-ink">
-      {label}
+    <label className="mt-3 grid gap-1">
+      <span className={FIELD_LABEL_CLASS}>{label}</span>
       {children}
     </label>
   );
 }
 
-/** Delete with a second click to confirm, naming what goes with it. */
+/** Delete with a second press to confirm, naming what goes with it: the
+ *  quiet control, then the archive confirm's form (the sentence, an outline
+ *  "Delete" and a ghost "Keep"). Never red words: Undo brings it back. */
 function DeleteButton({ label, confirm, onDelete, busy }: { label: string; confirm: string; onDelete: () => void; busy: boolean }) {
   const [asked, setAsked] = useState(false);
   return asked ? (
-    <span className="flex items-center gap-2 text-meta">
-      <span className="text-ink">{confirm}</span>
-      <button type="button" disabled={busy} onClick={onDelete} className="cursor-pointer font-bold text-red hover:underline">
+    <span role="group" aria-label={label} className="flex basis-full flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-line pt-3">
+      <span className="mr-auto text-body text-ink">{confirm}</span>
+      <Button variant="outline" size="sm" disabled={busy} onClick={onDelete}>
         Delete
-      </button>
-      <button type="button" onClick={() => setAsked(false)} className="cursor-pointer text-grey hover:underline">
+      </Button>
+      <Button variant="ghost" size="sm" onClick={() => setAsked(false)}>
         Keep
-      </button>
+      </Button>
     </span>
   ) : (
-    <button type="button" onClick={() => setAsked(true)} className="cursor-pointer text-meta font-bold text-red hover:underline">
+    <button type="button" onClick={() => setAsked(true)} className={cn(QUIET_CONTROL_CLASS, "text-meta")}>
       {label}
     </button>
   );
@@ -45,6 +49,7 @@ function DeleteButton({ label, confirm, onDelete, busy }: { label: string; confi
 export function BoxEditForm({ box, graph, editor, onDone }: { box: TocBox; graph: TocGraph; editor: Editor; onDone: () => void }) {
   // The text stays controlled: the warning about its connections follows it as it is typed.
   const [text, setText] = useState(box.text);
+  const [layer, setLayer] = useState<BoxLayer>(box.layer);
   const links = graph.links.filter((link) => link.source_box_id === box.box_id || link.target_box_id === box.box_id).length;
   return (
     <form
@@ -59,7 +64,7 @@ export function BoxEditForm({ box, graph, editor, onDone }: { box: TocBox; graph
             body: {
               expected_revision: box.revision,
               text: text.trim(),
-              layer: field("layer") as BoxLayer,
+              layer,
               description: field("description") || null,
               criteria: { definition: field("definition") || null, indicator: field("indicator") || null, timing: field("timing") || null },
             },
@@ -73,29 +78,32 @@ export function BoxEditForm({ box, graph, editor, onDone }: { box: TocBox; graph
       <Field label="Text">
         <textarea required value={text} onChange={(event) => setText(event.target.value)} rows={3} maxLength={500} className={INPUT} />
       </Field>
-      <Field label="Layer">
-        <LayerSelect name="layer" defaultValue={box.layer} className={INPUT} />
-      </Field>
+      <div className="mt-3 grid gap-1">
+        <span aria-hidden="true" className={FIELD_LABEL_CLASS}>
+          Layer
+        </span>
+        <LayerSelect value={layer} onChange={setLayer} className="w-full" />
+      </div>
       <Field label="Description">
         <textarea name="description" defaultValue={box.description ?? ""} rows={3} maxLength={2000} className={INPUT} />
       </Field>
       <Field label="Definition">
-        <input name="definition" defaultValue={box.result_criteria.definition ?? ""} className={INPUT} />
+        <input name="definition" defaultValue={box.result_criteria.definition ?? ""} className={FIELD_CLASS} />
       </Field>
       <Field label="Indicator">
-        <input name="indicator" defaultValue={box.result_criteria.indicator ?? ""} className={INPUT} />
+        <input name="indicator" defaultValue={box.result_criteria.indicator ?? ""} className={FIELD_CLASS} />
       </Field>
       <Field label="Timing">
-        <input name="timing" defaultValue={box.result_criteria.timing ?? ""} className={INPUT} />
+        <input name="timing" defaultValue={box.result_criteria.timing ?? ""} className={FIELD_CLASS} />
       </Field>
       {text.trim() !== box.text && links > 0 && (
         <p className="mt-2 text-body text-grey">Changing the text marks its {links === 1 ? "connection" : `${links} connections`} "evidence from the earlier wording".</p>
       )}
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Button type="submit" size="sm" disabled={editor.busy || text.trim() === ""}>
+      <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-3">
+        <Button type="submit" variant="outline" size="sm" disabled={editor.busy || text.trim() === ""}>
           Save
         </Button>
-        <Button type="button" variant="secondary" size="sm" onClick={onDone}>
+        <Button type="button" variant="ghost" size="sm" onClick={onDone}>
           Cancel
         </Button>
         <span className="flex-1" />
@@ -142,13 +150,13 @@ export function LinkEditForm({ link, editor, onDone }: { link: TocLink; editor: 
     >
       <p className="text-meta text-grey">Editing connection {link.code}</p>
       <Field label="Title">
-        <input name="title" defaultValue={link.title ?? ""} maxLength={200} className={INPUT} />
+        <input name="title" defaultValue={link.title ?? ""} maxLength={200} className={FIELD_CLASS} />
       </Field>
       <Field label="If">
         <textarea name="if_text" defaultValue={link.if_text} rows={2} className={INPUT} />
       </Field>
       <Field label="For">
-        <input name="for_text" defaultValue={link.for_text} className={INPUT} />
+        <input name="for_text" defaultValue={link.for_text} className={FIELD_CLASS} />
       </Field>
       <Field label="Then">
         <textarea name="then_text" defaultValue={link.then_text} rows={2} className={INPUT} />
@@ -159,11 +167,11 @@ export function LinkEditForm({ link, editor, onDone }: { link: TocLink; editor: 
       <Field label="Conditions (one per line)">
         <textarea name="conditions" defaultValue={link.conditions.join("\n")} rows={3} className={INPUT} />
       </Field>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <Button type="submit" size="sm" disabled={editor.busy}>
+      <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-3">
+        <Button type="submit" variant="outline" size="sm" disabled={editor.busy}>
           Save
         </Button>
-        <Button type="button" variant="secondary" size="sm" onClick={onDone}>
+        <Button type="button" variant="ghost" size="sm" onClick={onDone}>
           Cancel
         </Button>
         <span className="flex-1" />
@@ -185,7 +193,7 @@ export function NeedsEvidence({ links, graph, editor }: { links: TocLink[]; grap
   // Before the first check there is nothing to find evidence against (same gate as the canvas bar).
   if (unchecked.length === 0 || graph.check_status === "none") return null;
   return (
-    <div className="mt-3 border-l-[3px] border-blue bg-blue-tint-2 px-3 py-2.5">
+    <div className="mt-3 border-l-2 border-blue bg-blue-tint-2 px-3 py-2.5">
       <p className="text-body font-bold text-ink">Needs evidence</p>
       <p className="text-body">No check has looked for evidence on {unchecked.length === 1 ? "this connection" : `${unchecked.length} of its connections`} yet.</p>
       {editor !== null && (

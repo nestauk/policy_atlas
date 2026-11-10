@@ -1,16 +1,27 @@
-import { type ComponentProps, type ReactNode, useState } from "react";
+import { type ComponentProps, useState } from "react";
 
 import { type TocEdit, useTocEdit } from "../../api/mutations";
 import { useTocHistory } from "../../api/queries";
+import { formatDate } from "../../lib/dates";
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
+import { CloseButton } from "../../ui/brand/CloseButton";
 import { cn } from "../../ui/brand/cn";
+import { iconButtonClass, MoreIcon } from "../../ui/brand/icons";
+import { LINK_CLASS } from "../../ui/brand/inlineActions";
+import { Select } from "../../ui/brand/Select";
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/radix/Popover";
 import { TOAST_CLASS } from "../../ui/radix/Toast";
 import { MENU_ITEM_CLASS } from "../DownloadMenu";
 import { canvasImage, downloadDrawio, downloadJson, downloadReferences, printReport } from "./exports";
 import { keptPathways, LAYER_LABEL, pathwayTitles } from "./tocModel";
 import type { BoxLayer, TocGraph } from "./types";
+
+/** A form field (DESIGN.md § Inputs): Paper, a Line 2 hairline, 12 by 10 px, Lead words, square. */
+export const FIELD_CLASS = "w-full min-w-0 border border-line-2 bg-paper px-3 py-2.5 text-lead text-ink placeholder:text-grey";
+
+/** A field's label over it: Meta Semibold Navy. */
+export const FIELD_LABEL_CLASS = "text-meta font-semibold text-navy";
 
 /** What an edit control needs: run an edit, with the line the Undo toast shows after it. */
 export interface Editor {
@@ -74,7 +85,7 @@ function isChecking(graph: TocGraph, linkIds: string[]): boolean {
 
 type CheckMode = Extract<TocEdit, { kind: "check" }>["body"]["mode"];
 
-/** A button that checks these links: its own words; "Finding evidence…" and inactive while the check runs on them; "Added to the queue" once it waits for the running check. */
+/** A button that checks these links: its own words; "Finding evidence…" and inactive while the check runs on them; "Added to the queue" once it waits for the running check. The outline button: the view's one fill is "Check the evidence". */
 export function CheckButton({
   graph,
   editor,
@@ -87,53 +98,47 @@ export function CheckButton({
   const queued = isQueued(graph, ids);
   const checking = isChecking(graph, ids);
   return (
-    <Button size="sm" {...props} disabled={editor.busy || disabled || queued || checking} onClick={() => editor.run({ kind: "check", body: { link_ids: ids, mode } })}>
+    <Button variant="outline" size="sm" {...props} disabled={editor.busy || disabled || queued || checking} onClick={() => editor.run({ kind: "check", body: { link_ids: ids, mode } })}>
       {queued ? "Added to the queue" : checking ? "Finding evidence…" : label}
     </Button>
   );
 }
 
-/** The layer choice, in the canvas's column order. */
-export function LayerSelect(props: ComponentProps<"select">) {
-  return (
-    <select {...props}>
-      {Object.entries(LAYER_LABEL).map(([layer, label]) => (
-        <option key={layer} value={layer}>
-          {label}
-        </option>
-      ))}
-    </select>
-  );
+const LAYER_OPTIONS = (Object.entries(LAYER_LABEL) as [BoxLayer, string][]).map(([value, label]) => ({ value, label }));
+
+/** The layer choice, in the canvas's column order: the app's one dropdown. */
+export function LayerSelect({ value, onChange, id, className }: { value: BoxLayer; onChange: (layer: BoxLayer) => void; id?: string; className?: string }) {
+  return <Select label="Layer" id={id} value={value} options={LAYER_OPTIONS} onChange={onChange} className={className} />;
 }
 
-/** A bordered tool button with its icon: the canvas bar's edit actions. */
-function ToolButton({ icon, label, pressed, disabled, onClick }: { icon: ReactNode; label: string; pressed?: boolean; disabled?: boolean; onClick: () => void }) {
+/**
+ * The canvas bar's edit actions: the outline button at the bar's 32 px, the
+ * Sources filter bar's control height. A toggle (Connect, Suggestions) shows
+ * its pressed state as the outline switch does: a Navy border, never a fill.
+ */
+function ToolButton({ label, pressed, disabled, onClick }: { label: string; pressed?: boolean; disabled?: boolean; onClick: () => void }) {
   return (
-    <button
-      type="button"
+    <Button
+      variant="outline"
+      size="sm"
       aria-pressed={pressed}
       disabled={disabled}
       onClick={onClick}
-      className={`inline-flex cursor-pointer items-center gap-1.5 border px-2.5 py-1.5 text-meta font-semibold focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-default disabled:text-line-2 ${
-        pressed ? "border-blue bg-blue-tint text-blue" : "border-line-2 bg-paper text-navy hover:border-navy disabled:hover:border-line-2"
-      }`}
+      className="h-8 py-0 transition-colors duration-150 aria-pressed:border-navy aria-pressed:bg-hover-fill max-sm:order-3"
     >
-      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-        {icon}
-      </svg>
       {label}
-    </button>
+    </Button>
   );
 }
 
-/** The "…" menu: the actions used less often. Closes on a choice, a click elsewhere or Esc. */
+/** The more menu: the actions used less often. Closes on a choice, a click elsewhere or Esc. */
 function MoreMenu({ items }: { items: { label: string; disabled?: boolean; onClick: () => void }[] }) {
   const [open, setOpen] = useState(false);
   if (items.length === 0) return null;
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger aria-label="More actions" className="flex cursor-pointer items-center border border-line-2 bg-paper px-2.5 py-1.5 text-meta font-bold leading-none text-navy hover:border-navy">
-        …
+      <PopoverTrigger aria-label="More actions" className={cn(iconButtonClass("chrome"), "max-sm:order-1")}>
+        <MoreIcon />
       </PopoverTrigger>
       <PopoverContent role="menu" align="end" sideOffset={4} className="grid w-auto min-w-[16rem] border-line p-0 py-1">
         {items.map((item) => (
@@ -158,7 +163,7 @@ function MoreMenu({ items }: { items: { label: string; disabled?: boolean; onCli
 
 /**
  * The bar across the top of the canvas (round 5): the pathway choice, the edit
- * buttons and the "…" menu. It sits inside the full-screen area, so all of it
+ * buttons and the more menu. It sits inside the full-screen area, so all of it
  * works in full screen too.
  */
 export function CanvasBar({
@@ -214,59 +219,37 @@ export function CanvasBar({
   ];
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-paper px-3 py-2">
-      <select
-        aria-label="Pathway"
+      <Select
+        label="Pathway"
+        size={32}
         value={pathway}
-        onChange={(event) => onPathway(event.target.value)}
-        className="w-[16rem] min-w-0 border border-line-2 bg-paper px-2.5 py-[5px] text-meta font-semibold text-navy"
-      >
-        <option value="all">All pathways</option>
-        {keptPathways(graph).map((item) => (
-          <option key={item.pathway_id} value={item.pathway_id}>
-            {titles.get(item.pathway_id) ?? ""}
-          </option>
-        ))}
-      </select>
-      <span className="flex-1" />
-      {editor !== null && running && (
-        <ToolButton icon={<rect x="4" y="4" width="8" height="8" fill="currentColor" stroke="none" />} label="Stop the check" disabled={editor.busy} onClick={() => editor.run({ kind: "stop" })} />
-      )}
+        onChange={onPathway}
+        options={[{ value: "all", label: "All pathways" }, ...keptPathways(graph).map((item) => ({ value: item.pathway_id, label: titles.get(item.pathway_id) ?? "" }))]}
+        className="w-64 max-sm:w-auto max-sm:min-w-0 max-sm:flex-1"
+        contentClassName="w-80"
+      />
+      {/* On a phone the more menu sits beside the pathway choice and the edit actions take the next row. */}
+      <span aria-hidden="true" className={cn("flex-1 max-sm:order-2", (editor !== null || suggestions > 0) && "max-sm:basis-full")} />
+      {editor !== null && running && <ToolButton label="Stop the check" disabled={editor.busy} onClick={() => editor.run({ kind: "stop" })} />}
       {editor !== null && (
         <>
-          <ToolButton icon={<path d="M2.5 4.5h11v7h-11zM8 6v4M6 8h4" />} label="Add box" onClick={onAddBox} />
-          <ToolButton
-            icon={<path d="M1.5 5.5h4v5h-4zM10.5 5.5h4v5h-4zM5.5 8h4.5M8.5 6.5 10 8l-1.5 1.5" />}
-            label="Connect"
-            pressed={mode === "connect"}
-            onClick={() => onMode(mode === "connect" ? "view" : "connect")}
-          />
-          <ToolButton
-            icon={<path d="M3 8a5 5 0 1 0 1.5-3.5M3 2.5V5h2.5" />}
-            label="Reset layout"
-            disabled={editor.busy || !moved}
-            onClick={() => editor.run({ kind: "resetLayout" }, "Reset the layout")}
-          />
+          <ToolButton label="Add box" onClick={onAddBox} />
+          <ToolButton label="Connect" pressed={mode === "connect"} onClick={() => onMode(mode === "connect" ? "view" : "connect")} />
+          <ToolButton label="Reset layout" disabled={editor.busy || !moved} onClick={() => editor.run({ kind: "resetLayout" }, "Reset the layout")} />
         </>
       )}
-      {suggestions > 0 && (
-        <button
-          type="button"
-          aria-pressed={suggestionsOpen}
-          onClick={onSuggestions}
-          className="inline-flex cursor-pointer items-center gap-1.5 border border-blue bg-paper px-2.5 py-[5px] text-meta font-semibold text-blue hover:bg-blue-tint-2 aria-pressed:bg-blue-tint-2"
-        >
-          Suggestions ({suggestions})
-        </button>
-      )}
+      {suggestions > 0 && <ToolButton label={`Suggestions (${suggestions})`} pressed={suggestionsOpen} onClick={onSuggestions} />}
       <MoreMenu items={menu} />
     </div>
   );
 }
 
 /** The Download menu (contract item 6), grouped by what people do next. It
- *  sits in the report's kind row (task 054, A14). */
-export function tocDownloads(graph: TocGraph) {
-  const failed = () => window.alert("The download could not be made. Try again.");
+ *  sits in the report's kind row (task 054, A14). An image that cannot be
+ *  made reports through `onFailed` (the page's error toast), never a browser
+ *  dialog. */
+export function tocDownloads(graph: TocGraph, onFailed?: (message: string) => void) {
+  const failed = () => onFailed?.("The download could not be made. Try again.");
   const image = (kind: "png" | "svg") => () => void canvasImage(graph, kind).catch(failed);
   return [
     { group: "Read and share", label: "Report (PDF)", hint: "The whole canvas, then the report", onSelect: () => void printReport(graph) },
@@ -285,27 +268,31 @@ export function AddBoxForm({ editor, onDone }: { editor: Editor; onDone: (boxId:
   return (
     <form
       aria-label="Add a box"
-      className="mb-3 flex flex-wrap items-end gap-2 border border-line bg-paper-2 px-3 py-2.5"
+      className="mb-3 flex flex-wrap items-end gap-x-3 gap-y-2 border border-line bg-paper px-4 py-3"
       onSubmit={(event) => {
         event.preventDefault();
         if (text.trim() === "") return;
         editor.run({ kind: "createBox", body: { layer, text: text.trim() } }, "Added a box", (data) => onDone((data as { id?: string } | undefined)?.id ?? null));
       }}
     >
-      <label className="grid gap-1 text-meta font-semibold text-ink">
-        Layer
-        <LayerSelect value={layer} onChange={(event) => setLayer(event.target.value as BoxLayer)} className="border border-line-2 bg-paper px-2 py-1.5 text-body font-normal" />
+      <div className="grid gap-1">
+        <span aria-hidden="true" className={FIELD_LABEL_CLASS}>
+          Layer
+        </span>
+        <LayerSelect value={layer} onChange={setLayer} className="w-56" />
+      </div>
+      <label className="grid min-w-[16rem] flex-1 gap-1">
+        <span className={FIELD_LABEL_CLASS}>What changes</span>
+        <input autoFocus value={text} onChange={(event) => setText(event.target.value)} maxLength={500} className={cn(FIELD_CLASS, "h-10 py-0 text-body")} />
       </label>
-      <label className="grid min-w-[16rem] flex-1 gap-1 text-meta font-semibold text-ink">
-        What changes
-        <input autoFocus value={text} onChange={(event) => setText(event.target.value)} maxLength={500} className="border border-line-2 bg-paper px-2 py-1.5 text-body font-normal" />
-      </label>
-      <Button type="submit" size="sm" disabled={editor.busy || text.trim() === ""}>
-        Add
-      </Button>
-      <Button type="button" variant="secondary" size="sm" onClick={() => onDone(null)}>
-        Cancel
-      </Button>
+      <span className="flex gap-1">
+        <Button type="submit" variant="outline" className="h-10 py-0" disabled={editor.busy || text.trim() === ""}>
+          Add
+        </Button>
+        <Button type="button" variant="ghost" className="h-10 py-0" onClick={() => onDone(null)}>
+          Cancel
+        </Button>
+      </span>
     </form>
   );
 }
@@ -315,17 +302,13 @@ export function UndoToast({ text, onUndo, onClose }: { text: string; onUndo: () 
   return (
     <div role="status" className={cn(TOAST_CLASS, "fixed bottom-4 right-4 z-50 w-96 max-w-[92vw] items-center border-line-2 text-body")}>
       <span className="flex-1 text-navy">{text}</span>
-      <button type="button" onClick={onUndo} className="cursor-pointer font-bold text-blue hover:underline">
+      <button type="button" onClick={onUndo} className={LINK_CLASS}>
         Undo
       </button>
-      <button type="button" aria-label="Dismiss" onClick={onClose} className="cursor-pointer text-grey hover:text-navy">
-        ✕
-      </button>
+      <CloseButton aria-label="Dismiss" onClick={onClose} className="-my-1.5 -mr-2" />
     </div>
   );
 }
-
-const WHEN = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
 /** "Edited by Ada · 30 Oct, 11:20" under a title (C41); nothing when nobody has edited it. */
 export function EditedLine({ by, at }: { by?: string | null; at?: string | null }) {
@@ -333,7 +316,7 @@ export function EditedLine({ by, at }: { by?: string | null; at?: string | null 
   return (
     <p className="mt-0.5 text-meta text-grey">
       Edited by {scrub(by)}
-      {at != null && ` · ${WHEN.format(new Date(at))}`}
+      {at != null && ` · ${formatDate(at, "short")}, ${formatDate(at, "time")}`}
     </p>
   );
 }

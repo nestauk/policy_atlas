@@ -1,7 +1,12 @@
 import { type ReactNode, useState } from "react";
 
 import { useSourceDossier, useTocDocumentContext } from "../../api/queries";
+import { formatCount } from "../../lib/format";
 import { scrub } from "../../lib/scrub";
+import { DisclosureToggle } from "../../ui/brand/DisclosureToggle";
+import { evidenceTypeLabel } from "../../ui/brand/evidence";
+import { referenceAuthorsShort, SOURCE_TITLE_LINK_CLASS } from "../../ui/brand/reference";
+import { SUPPORT_COLOUR, VERDICT_COLOUR, VerdictMark, VerdictSquare } from "../../ui/brand/verdictTones";
 import { Tooltip } from "../../ui/radix/Tooltip";
 import { CITATION_MARKER_CLASS, CitationProvenanceBlock, ProvenanceSheet, SourceDossier } from "../ArtefactView";
 import { evidenceBalance, figureGroups, figureHeadline, SUPPORT_LABEL, VERDICT_LABEL, VERDICT_VAR } from "./tocModel";
@@ -17,14 +22,11 @@ export const ITEM_QUOTE = "mt-1 block italic text-ink";
 
 const SOURCE_LABEL: Record<SourceType, string> = { academic: "Academic", policy: "Policy document", web: "Web page" };
 
-/** A coloured dot for a verdict. */
-export function VerdictDot({ verdict }: { verdict: Verdict }) {
-  return <span aria-hidden="true" className="mr-2 inline-block h-[10px] w-[10px] shrink-0 rounded-full" style={{ background: VERDICT_VAR[verdict] }} />;
-}
-
-/** "Leaning supports" in the verdict's own colour, bold. */
-export function VerdictWords({ verdict }: { verdict: Verdict }) {
-  return <span className={`toc-verdict-${verdict} font-bold`}>{VERDICT_LABEL[verdict]}</span>;
+/** A verdict as every ToC surface writes it (decision 7): the shared tone
+ *  square, then "Leaning supports" in ink; "Not enough evidence" takes the
+ *  Line 2 grey square (§ 8). The surface sets the word's weight. */
+export function VerdictWords({ verdict, className }: { verdict: Verdict; className?: string }) {
+  return <VerdictMark colour={VERDICT_COLOUR[verdict]} word={VERDICT_LABEL[verdict]} className={className} />;
 }
 
 /** Block colours: the verdict colours, weak support a lighter green. */
@@ -74,26 +76,46 @@ export function EvidenceBalance({ documents, detail, onOpen }: { documents: TocD
   );
 }
 
-/** "Strongly supports · quality 3 · relevance 2 · UK children aged 9 to 11". */
-export function documentChips(doc: Pick<TocDocument, "support" | "quality" | "relevance" | "relevance_reason"> & Partial<Pick<TocDocument, "scored_by" | "judge_support" | "judge_relevance" | "added_by">>): string {
+type ScoredDocument = Pick<TocDocument, "support" | "quality" | "relevance" | "relevance_reason"> &
+  Partial<Pick<TocDocument, "scored_by" | "judge_support" | "judge_relevance" | "added_by">>;
+
+/** A document's facts after its support: "quality 3", "relevance 2", the judge's
+ *  scores beside the user's, who added it, and why it is relevant. */
+function documentFactsAfterSupport(doc: ScoredDocument): string[] {
   // The user's scores count (C42); the judge's stay visible beside them.
   const judge =
     doc.scored_by != null && doc.judge_support != null ? `your scores (judge: ${SUPPORT_LABEL[doc.judge_support].toLowerCase()} · relevance ${doc.judge_relevance})` : null;
   const added = doc.added_by != null ? `added by ${doc.added_by}` : null;
-  return [SUPPORT_LABEL[doc.support], `quality ${doc.quality}`, `relevance ${doc.relevance}`, judge, added, doc.relevance_reason].filter(Boolean).join(" · ");
+  return [`quality ${doc.quality}`, `relevance ${doc.relevance}`, judge, added, doc.relevance_reason].filter((part): part is string => Boolean(part));
 }
 
-/** "Smith et al.", one author's name, or the publishing organisation (Overton's single author); null when unknown. */
-function shortAuthors(authors: readonly string[] | undefined): string | null {
-  const names = (authors ?? []).filter((name) => name !== "");
-  if (names.length === 0) return null;
-  return names.length === 1 ? (names[0] ?? null) : `${names[0]} et al.`;
+/** "Strongly supports · quality 3 · relevance 2 · UK children aged 9 to 11". */
+export function documentChips(doc: ScoredDocument): string {
+  return [SUPPORT_LABEL[doc.support], ...documentFactsAfterSupport(doc)].join(" · ");
 }
 
-/** A source line: short authors (or the source type when there are none), then the rest. */
+/** A document's facts as a marks line (decision 7): the support's tone square
+ *  and its word in ink, then the scores, joined by the middot. */
+function DocumentFacts({ doc }: { doc: ScoredDocument }) {
+  const colour = SUPPORT_COLOUR[doc.support];
+  return (
+    <p className="mt-0.5">
+      {colour !== null && <VerdictSquare colour={colour} className="mr-1.5 mb-[0.15em]" />}
+      {scrub([SUPPORT_LABEL[doc.support], ...documentFactsAfterSupport(doc)].join(" · "))}
+    </p>
+  );
+}
+
+/** A source line: the authors in the References' short form (or the source
+ *  type when there are none), then the rest. */
 export function sourceLine(sourceType: SourceType, authors: readonly string[] | undefined, ...rest: (string | number | null | undefined)[]): string {
-  const who = sourceType === "web" ? null : shortAuthors(authors);
+  const who = sourceType === "web" ? null : referenceAuthorsShort((authors ?? []).map((name) => ({ name })));
   return [who ?? SOURCE_LABEL[sourceType], ...rest].filter((part) => part != null && part !== "").join(" · ");
+}
+
+/** An evidence type in the shared sentence case, or nothing. */
+function typeLabel(type: string | null | undefined): string | null {
+  return typeof type === "string" && type.trim() !== "" ? evidenceTypeLabel(type) : null;
 }
 
 /** One cited document: its number in the panel, the judgement behind it and the passage to show. */
@@ -211,7 +233,7 @@ export function DocumentItem({
   n,
   url = doc.url,
   quote = doc.quote,
-  chips = documentChips(doc),
+  chips,
   onOpen,
   actions,
   muted = false,
@@ -220,6 +242,7 @@ export function DocumentItem({
   n?: number;
   url?: string | null;
   quote?: string | null;
+  /** In place of the document's own facts line ("Removed by …"). */
   chips?: string;
   onOpen?: () => void;
   /** Editing controls under the document (C42). */
@@ -230,21 +253,21 @@ export function DocumentItem({
   return (
     <li className={`border-t border-line py-2.5 text-body${muted ? " opacity-60" : ""}`}>
       <p className={ITEM_TITLE}>
-        {n !== undefined && <span className="mr-1 text-grey">[{n}]</span>}
+        {n !== undefined && <span className="mr-1 font-normal tabular-nums text-grey">[{n}]</span>}
         {onOpen !== undefined ? (
-          <button type="button" onClick={onOpen} className="cursor-pointer text-left text-blue hover:underline">
+          <button type="button" onClick={onOpen} className={`cursor-pointer text-left ${SOURCE_TITLE_LINK_CLASS}`}>
             {scrub(doc.title)}
           </button>
         ) : url !== null ? (
-          <a href={url} target="_blank" rel="noreferrer" className="text-blue hover:underline">
+          <a href={url} target="_blank" rel="noreferrer" className={SOURCE_TITLE_LINK_CLASS}>
             {scrub(doc.title)}
           </a>
         ) : (
           scrub(doc.title)
         )}
       </p>
-      <p className="mt-0.5">{sourceLine(doc.source_type, doc.authors, doc.year, doc.evidence_type)}</p>
-      <p className="mt-0.5">{scrub(chips)}</p>
+      <p className="mt-0.5">{scrub(sourceLine(doc.source_type, doc.authors, doc.year, typeLabel(doc.evidence_type)))}</p>
+      {chips !== undefined ? <p className="mt-0.5">{scrub(chips)}</p> : <DocumentFacts doc={doc} />}
       {quote !== null && quote !== "" && <q className={ITEM_QUOTE}>{scrub(quote)}</q>}
       {actions}
     </li>
@@ -256,7 +279,7 @@ const FIGURE_GROUPS_SHOWN = 3;
 
 /** "Smith et al. · Obesity Reviews · 2019 · systematic review". */
 function figureSource(figure: TocFigure): string {
-  return sourceLine(figure.source_type, figure.source_authors, figure.source_venue, figure.source_year, figure.evidence_type);
+  return sourceLine(figure.source_type, figure.source_authors, figure.source_venue, figure.source_year, typeLabel(figure.evidence_type));
 }
 
 /**
@@ -289,10 +312,10 @@ export function FigureList({ taskId, figures, citationOf }: { taskId: string; fi
           })}
         </div>
       ))}
-      {!all && groups.length > FIGURE_GROUPS_SHOWN && (
-        <button type="button" onClick={() => setAll(true)} className="cursor-pointer text-body font-bold text-blue hover:underline">
-          Show all {figures.length} figures
-        </button>
+      {groups.length > FIGURE_GROUPS_SHOWN && (
+        <DisclosureToggle open={all} onToggle={() => setAll((open) => !open)} className="mt-1 text-body">
+          {all ? "Hide" : `Show all ${formatCount(figures.length)} figures`}
+        </DisclosureToggle>
       )}
     </div>
   );

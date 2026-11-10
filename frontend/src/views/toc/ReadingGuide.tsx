@@ -44,7 +44,7 @@ function LineSample({ verdict }: { verdict: Verdict }) {
 /** The key under the canvas: one line style per verdict, and the critical connection's mark. */
 export function VerdictLegend() {
   return (
-    <ul aria-label="Line key" className="mt-2 flex flex-wrap gap-x-[18px] gap-y-1 text-meta text-grey">
+    <ul aria-label="Line key" className="mt-2 flex flex-wrap gap-x-4.5 gap-y-1 text-meta text-grey">
       {VERDICTS.map((verdict) => (
         <li key={verdict} className="inline-flex items-center gap-1.5">
           <LineSample verdict={verdict} />
@@ -68,19 +68,19 @@ export function VerdictLegend() {
 /** "How to read this": opens above the canvas. */
 export function ReadingGuide({ graph }: { graph: Pick<TocGraph, "grade_rules"> }) {
   return (
-    <section aria-label="How to read this" className="mb-3 border border-line bg-paper-2 px-5 py-4 text-body">
+    <section aria-label="How to read this" className="mb-3 border border-line bg-paper px-5 py-4 text-body">
       <h3 className="text-body font-bold text-navy">How to read this</h3>
-      <p className="mt-2 max-w-[64em]">
+      <p className="mt-2 max-w-[44em]">
         Read from left to right: Inputs and activities (what the programme does), Outputs (what it delivers), Short-term outcomes (the first changes it
         should cause), Long-term outcomes (the lasting changes) and Impact (the long-term aim). The dashed line separates what the programme directly
         influences from what it contributes to. Steps that could go wrong sit below the line.
       </p>
-      <p className="mt-2 max-w-[64em]">
+      <p className="mt-2 max-w-[44em]">
         Boxes are the steps. Each connection between them has one evidence verdict, and its line style shows it (see the key under the canvas). The
         verdict weighs every document that supports or refutes the step by its quality and by how well it applies to this population and place. The
         connection marked with a warning triangle is the critical connection: test it first.
       </p>
-      <ul className="mt-2 max-w-[64em] space-y-1">
+      <ul className="mt-2 max-w-[44em] space-y-1">
         {graph.grade_rules.map((row) => (
           <li key={row.label}>
             <span className="font-semibold">{scrub(row.label)}: </span>

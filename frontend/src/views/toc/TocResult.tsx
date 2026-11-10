@@ -10,9 +10,8 @@ import { scrub } from "../../lib/scrub";
 import type { LiveSection } from "../../store";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
-import { ToneSquare } from "../../ui/brand/EvidenceMarks";
-import type { ToneColour } from "../../ui/brand/evidence";
 import { QUIET_CONTROL_CLASS } from "../../ui/brand/inlineActions";
+import { theoryVerdictColour, VerdictSquare } from "../../ui/brand/verdictTones";
 import { REPORT_BODY_CLASS } from "../artefactPresentation";
 import { ReportExpandScope, seedReportExpanded } from "../ArtefactOutline";
 import { LiveDraft, SourceDossier, usePrefersReducedMotion } from "../ArtefactView";
@@ -33,17 +32,6 @@ import { tocTitle } from "./tocModel";
 import type { TocGraph } from "./types";
 
 type Report = NonNullable<TocGraph["report"]>;
-
-/** The overall verdict's tone square, from what the verdict says (never
- *  from its words): an implausible mechanism or evidence against is Red,
- *  mixed evidence Yellow, supporting evidence Green. Too little evidence has
- *  no square in today's palette. */
-function verdictTone(verdict: { mechanism: string; evidence: string }): ToneColour | null {
-  if (verdict.mechanism === "implausible" || verdict.evidence === "against") return "red";
-  if (verdict.evidence === "mixed") return "yellow";
-  if (verdict.evidence === "supports") return "green";
-  return null;
-}
 
 /** The headline without a leading "Implausible:" that repeats the label, capitalised. */
 function headlineAfter(label: string, headline: string): string {
@@ -84,14 +72,16 @@ function HeaderParts({
 }) {
   if (report != null) {
     const verdict = report.verdict;
-    const tone = verdict != null ? verdictTone(verdict) : null;
+    // The shared tone square from what the verdict says (never its words);
+    // too little evidence takes the Line 2 grey (§ 8).
+    const tone = verdict != null ? theoryVerdictColour(verdict) : null;
     const question = report.summary.question ?? report.summary.goal;
     return (
       <>
         {verdict != null && (
           <p className={HEADER_P}>
-            {tone !== null && <ToneSquare colour={tone} className={cn("mr-2 mb-[0.2em]", arriving)} />}
-            <b className="uppercase tracking-[0.04em] text-navy">{scrub(verdict.label)}.</b> <b>{scrub(headlineAfter(verdict.label, verdict.headline))}</b>
+            {tone !== null && <VerdictSquare colour={tone} className={cn("mr-2 mb-[0.2em]", arriving)} />}
+            <b>{scrub(verdict.label)}.</b> <b>{scrub(headlineAfter(verdict.label, verdict.headline))}</b>
           </p>
         )}
         {question !== "" && <p className={HEADER_P}>{scrub(question.replace(/\.?$/, "."))}</p>}
@@ -115,7 +105,7 @@ function HeaderParts({
     <>
       {verdict !== undefined && verdict.title !== "" && (
         <p className={HEADER_P}>
-          <b className="uppercase tracking-[0.04em] text-navy">{scrub(verdict.title)}.</b>{" "}
+          <b>{scrub(verdict.title)}.</b>{" "}
           <b>
             <RevealedWords text={scrub(headlineAfter(verdict.title, verdict.prose ?? ""))} />
           </b>
@@ -283,6 +273,7 @@ function TocPage({ taskId }: { taskId: string }) {
   // The drafted and failed banners' retry: the evidence check of the whole theory.
   const checkEvidence = canEdit && (
     <Button
+      variant="start"
       disabled={editor.busy}
       onClick={() => {
         askForFinishAlerts();
@@ -368,7 +359,7 @@ function TocPage({ taskId }: { taskId: string }) {
         )}
         {graph.check_status === "drafted" && (
           // An uploaded theory (increment 5): the user checks the reading before the evidence check.
-          <div role="status" className="mt-4 flex max-w-[1100px] flex-wrap items-center gap-4 border-l-4 border-blue bg-blue-tint-2 px-4 py-3">
+          <div role="status" className="mt-4 flex max-w-[1100px] flex-wrap items-center gap-4 border-l-2 border-blue bg-blue-tint-2 px-4 py-3">
             <p className={`min-w-0 flex-1 ${REPORT_BODY_CLASS}`}>
               This is how Policy Atlas read your diagram. Solid dark connections are drawn in your diagram. Dashed blue ones are connections Policy Atlas suggested where your diagram grouped boxes or left them unconnected. What Policy Atlas would add to complete the theory waits under Suggestions, beside the canvas. Compare it with your original in the plan, fix anything that is wrong, then check the evidence.
             </p>
@@ -380,7 +371,8 @@ function TocPage({ taskId }: { taskId: string }) {
         )}
         {graph.check_status === "failed" && (
           // A check that ended with an error: say so and offer the retry the chat names (owner, 2026-11-04).
-          <div role="alert" className="mt-4 flex max-w-[1100px] flex-wrap items-center gap-4 border-l-4 border-red bg-paper-2 px-4 py-3">
+          // A failure is a Red Tint surface (DESIGN.md § Callout), as a failed turn is.
+          <div role="alert" className="mt-4 flex max-w-[1100px] flex-wrap items-center gap-4 border border-red-tint bg-red-tint/40 px-4 py-3">
             <p className={`min-w-0 flex-1 ${REPORT_BODY_CLASS}`}>The evidence check stopped with an error. What it finished stays on the canvas.</p>
             {checkEvidence}
           </div>

@@ -11,14 +11,16 @@ import {
 } from "../lib/capabilities";
 import { useDocumentTitle } from "../lib/title";
 import { COPY, PROJECT, TASK } from "../lib/vocabulary";
-import { Button } from "../ui/brand/Button";
+import { Button, buttonVariants } from "../ui/brand/Button";
 import { Card } from "../ui/brand/Card";
+import { CloseButton } from "../ui/brand/CloseButton";
 import { MultiSelect } from "../ui/brand/MultiSelect";
 import { cn } from "../ui/brand/cn";
+import { LINK_CLASS } from "../ui/brand/inlineActions";
 import { CAPTION_LABEL_CLASS } from "../ui/brand/label";
 import { useMakeProject } from "./projectActions";
 import { ProjectPicker } from "./ProjectPicker";
-import { AttachFileButton } from "./toc/uploads";
+import { AttachFileButton, PaperclipGlyph } from "./toc/uploads";
 import type { TocUploadHandOff } from "./workspace/TaskAgentPane";
 
 /** Step one: pick a kind of work. Two of the four can run. */
@@ -132,20 +134,18 @@ function AttachTheory({ file, onFile }: { file: File | null; onFile: (file: File
   const url = file !== null && file.type !== "application/pdf" ? blobUrl(file) : null;
   if (file !== null) {
     return (
-      <div className="flex shrink-0 items-center gap-2 border border-line bg-paper-2 px-2 py-1.5">
-        {url !== null ? <img src={url} alt="" className="h-10 w-14 object-contain" /> : <span aria-hidden="true">📄</span>}
-        <span className="max-w-[10rem] truncate text-meta font-semibold text-navy">{file.name}</span>
-        <button type="button" aria-label={`Remove ${file.name}`} onClick={() => onFile(null)} className="cursor-pointer px-1 text-lead leading-none text-grey hover:text-navy">
-          ×
-        </button>
+      <div className="flex min-w-0 shrink-0 items-center gap-2 border border-line bg-paper py-1 pr-1 pl-3">
+        {url !== null ? <img src={url} alt="" className="h-10 w-14 object-contain" /> : <PaperclipGlyph className="shrink-0 text-grey" />}
+        <span className="max-w-[14rem] truncate text-meta font-semibold text-navy">{file.name}</span>
+        <CloseButton aria-label={`Remove ${file.name}`} onClick={() => onFile(null)} />
       </div>
     );
   }
   return (
     <AttachFileButton
       onFile={onFile}
-      className="flex shrink-0 cursor-pointer items-center gap-2 border border-navy bg-paper px-3 py-3 text-body font-semibold text-navy hover:bg-blue-tint-2 focus-within:outline-2 focus-within:outline-blue"
-      iconClassName="h-4 w-4"
+      className={cn(buttonVariants({ variant: "outline" }), "shrink-0 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-blue")}
+      iconClassName="shrink-0"
     >
       Upload your theory
     </AttachFileButton>
@@ -304,7 +304,7 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
                 type="button"
                 onClick={() => submit(true)}
                 disabled={pending}
-                className="shrink-0 cursor-pointer text-meta font-semibold leading-5 text-blue underline-offset-2 hover:underline disabled:cursor-default disabled:text-grey"
+                className={cn(LINK_CLASS, "shrink-0 text-meta leading-5")}
               >
                 Start drafting yourself →
               </button>

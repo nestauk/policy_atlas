@@ -2,6 +2,7 @@ import { Fragment, type ReactNode } from "react";
 import { Link } from "react-router";
 
 import { scrub } from "../../lib/scrub";
+import { LINK_CLASS } from "../../ui/brand/inlineActions";
 
 /**
  * Chat text with each box and connection code (S3, #5) as a link that opens
@@ -21,7 +22,7 @@ export function TocCodeText({ text, taskId, codes }: { text: string; taskId: str
       <Link
         key={index}
         to={part === "Result tab" ? `/tasks/${taskId}/result` : `/tasks/${taskId}/result?focus=${encodeURIComponent(part)}`}
-        className="font-semibold text-blue hover:underline"
+        className={LINK_CLASS}
       >
         {part}
       </Link>

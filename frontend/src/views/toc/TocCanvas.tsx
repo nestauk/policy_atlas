@@ -1,6 +1,6 @@
 import "@xyflow/react/dist/style.css";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
   BaseEdge,
   ControlButton,
@@ -145,6 +145,8 @@ const MIN_START_ZOOM = 1;
 /** The furthest the view zooms out: far enough for the fit button to show a large theory whole. */
 const MIN_ZOOM = 0.1;
 const VIEW_PADDING = 0.08;
+/** The gap left of (and above) a theory too big to fit at the start zoom. */
+const START_INSET = 24;
 const HANDLE_CLASS = "!h-1 !w-1 !border-0 !bg-transparent";
 
 /**
@@ -176,9 +178,11 @@ function BoxView({ data }: NodeProps<BoxNode>) {
     <div
       title={tip === "" ? undefined : scrub(tip)}
       className={[
-        "relative flex cursor-pointer items-center rounded-lg border-[1.5px] bg-paper px-3.5 text-meta font-semibold leading-snug text-navy shadow-sm",
+        // Rounded corners stay (owner, contract W2); the paper weight and the
+        // Line 2 hairline are the cards' (DESIGN.md § Elevation).
+        "relative flex cursor-pointer items-center rounded-lg border bg-paper px-3.5 text-meta font-semibold leading-snug text-navy shadow-paper",
         box.code !== null ? "pt-3.5" : "",
-        data.selected || data.connecting ? "border-blue ring-4 ring-blue-tint" : "border-grey/40",
+        data.selected || data.connecting ? "border-blue ring-4 ring-blue-tint" : "border-line-2",
         data.dim ? "opacity-20" : "",
         data.ghost ? "border-dashed !border-blue opacity-60" : "",
       ].join(" ")}
@@ -252,6 +256,20 @@ function TocEdgeView({ id, sourceX, sourceY, targetX, targetY, sourcePosition, t
   );
 }
 
+/**
+ * A glyph in the canvas's zoom controls, drawn as `ui/brand/icons.tsx` draws
+ * (a 16-unit grid, the 1.5 stroke, round joins) for the two controls the
+ * canvas adds to React Flow's. Its own fill stays off: React Flow fills its
+ * control glyphs with the text colour.
+ */
+function ControlGlyph({ children }: { children: ReactNode }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ fill: "none" }}>
+      {children}
+    </svg>
+  );
+}
+
 const nodeTypes = { box: BoxView, label: LabelView };
 const edgeTypes = { toc: TocEdgeView };
 
@@ -302,7 +320,10 @@ function ViewFitter({ boxes, bounds, refit }: { boxes: number; bounds: Bounds; r
       void setViewport(fitted);
       return;
     }
-    void setViewport({ x: 24 - x * MIN_START_ZOOM, y: (viewH - height * MIN_START_ZOOM) / 2 - y * MIN_START_ZOOM, zoom: MIN_START_ZOOM });
+    // Centred when it fits the view's height; otherwise from its top row, so a
+    // tall theory on a phone starts at its first boxes, not cut through them.
+    const top = Math.max((viewH - height * MIN_START_ZOOM) / 2, START_INSET);
+    void setViewport({ x: START_INSET - x * MIN_START_ZOOM, y: top - y * MIN_START_ZOOM, zoom: MIN_START_ZOOM });
   }, [ready, boxes, x, y, width, height, refit, setViewport, store]);
   return null;
 }
@@ -595,15 +616,15 @@ export function TocCanvas({
         <Controls showInteractive={false} showFitView={false}>
           {/* Our own fit button: the whole diagram, below the start zoom when it must be. */}
           <ControlButton onClick={() => setFitWhole((count) => count + 1)} title="Fit the whole diagram" aria-label="Fit the whole diagram">
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-              <rect x="5" y="5" width="14" height="14" />
-            </svg>
+            <ControlGlyph>
+              <rect x="3.5" y="3.5" width="9" height="9" />
+            </ControlGlyph>
           </ControlButton>
           {canFullscreen && (
             <ControlButton onClick={toggleFullscreen} title={fullscreen ? "Exit full screen" : "Full screen"} aria-label={fullscreen ? "Exit full screen" : "Full screen"}>
-              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-                {fullscreen ? <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /> : <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />}
-              </svg>
+              <ControlGlyph>
+                {fullscreen ? <path d="M6 2.5V6H2.5M10 2.5V6h3.5M6 13.5V10H2.5M10 13.5V10h3.5" /> : <path d="M2.5 6V2.5H6M13.5 6V2.5H10M2.5 10v3.5H6M13.5 10v3.5H10" />}
+              </ControlGlyph>
             </ControlButton>
           )}
         </Controls>

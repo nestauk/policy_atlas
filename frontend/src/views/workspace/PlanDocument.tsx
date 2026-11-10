@@ -8,6 +8,7 @@ import { scrub } from "../../lib/scrub";
 import { COPY } from "../../lib/vocabulary";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
+import { DisclosureChevron } from "../../ui/brand/Disclosure";
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/radix/Popover";
 import { Tooltip } from "../../ui/radix/Tooltip";
 import { READING_COLUMN_MAX_W } from "../listPageChrome";
@@ -986,12 +987,13 @@ function TocEditSection({
   );
 }
 
-/** "2000 onwards", "2000–2010", "Until 2010" or "Any year", from the plan's ISO dates. */
+/** "From 2000", "2000–2010", "Until 2010" or "No preference", from the plan's
+ *  ISO dates: Evidence search's words for its publication years (task 054, § 8). */
 function tocYearsLabel(after: string, before: string): string {
   if (after !== "" && before !== "") return `${after}–${before}`;
-  if (after !== "") return `${after} onwards`;
+  if (after !== "") return `From ${after}`;
   if (before !== "") return `Until ${before}`;
-  return "Any year";
+  return "No preference";
 }
 
 /** The year of a plan date ("2000" from "2000-01-01"), or "" when none is set. */
@@ -1008,14 +1010,14 @@ function TocYearsSection({ taskId, toc, readOnly }: { taskId: string; toc: TocPl
       taskId={taskId}
       toc={toc}
       readOnly={readOnly}
-      label="Evidence"
+      label="Search filters"
       fields={[
         { key: "published_after", label: "Published from (year)" },
         { key: "published_before", label: "Published until (year)" },
       ]}
       view={
         <dl className="space-y-3">
-          <PlainField label="Evidence published" value={tocYearsLabel(yearOf(toc.published_after), yearOf(toc.published_before))} />
+          <PlainField label="Publication years" value={tocYearsLabel(yearOf(toc.published_after), yearOf(toc.published_before))} />
         </dl>
       }
       initial={(key) => yearOf(toc[key])}
@@ -1043,7 +1045,7 @@ function YourOriginal({ taskId, uploadId }: { taskId: string; uploadId: string }
             blob={file.data}
             imageClassName="max-h-80 w-full border border-line object-contain"
             pdf={(url) => (
-              <a href={url} target="_blank" rel="noreferrer" className="text-body font-bold text-aqua hover:underline">
+              <a href={url} target="_blank" rel="noreferrer" className={cn(panelValueClass, "font-semibold underline decoration-on-navy-muted underline-offset-[3px] transition-colors duration-150 hover:decoration-white")}>
                 Open your original (PDF)
               </a>
             )}
@@ -1085,9 +1087,12 @@ function TocPlanSections({
               {toc.existing_theory_text != null &&
                 (toc.upload_id != null ? (
                   // The transcription is long: the picture is the user's view of it.
-                  <details>
-                    <summary className="cursor-pointer text-meta font-bold text-white hover:underline">How Policy Atlas read it</summary>
-                    <p className="mt-2 whitespace-pre-wrap text-body">{scrub(toc.existing_theory_text)}</p>
+                  <details className="group">
+                    <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 text-body font-semibold text-white [&::-webkit-details-marker]:hidden">
+                      <DisclosureChevron className="text-on-navy-muted group-open:rotate-90 group-hover:text-white" />
+                      How Policy Atlas read it
+                    </summary>
+                    <p className="mt-2 whitespace-pre-wrap text-body text-on-navy">{scrub(toc.existing_theory_text)}</p>
                   </details>
                 ) : (
                   <PlainField label="Your theory of change" value={toc.existing_theory_text} />

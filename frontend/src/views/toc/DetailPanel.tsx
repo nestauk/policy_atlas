@@ -1,29 +1,58 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 
+import { formatCount } from "../../lib/format";
 import { scrub } from "../../lib/scrub";
+import { CloseButton } from "../../ui/brand/CloseButton";
+import { cn } from "../../ui/brand/cn";
+import { useExpandForPrint } from "../../ui/brand/Disclosure";
+import { DisclosureToggle } from "../../ui/brand/DisclosureToggle";
+import { QUIET_CONTROL_CLASS } from "../../ui/brand/inlineActions";
+import { SOURCE_TITLE_LINK_CLASS } from "../../ui/brand/reference";
+import { Collapse } from "../../ui/motion/Collapse";
 import { Tooltip } from "../../ui/radix/Tooltip";
-import { CitationMarker, CitationSheet, citedDocuments, documentCitation, DocumentItem, EvidenceBalance, FigureList, ITEM_QUOTE, ITEM_TITLE, LinkDocuments, sourceLine, VerdictDot, VerdictWords } from "./Documents";
+import { CitationMarker, CitationSheet, citedDocuments, documentCitation, DocumentItem, EvidenceBalance, FigureList, ITEM_QUOTE, ITEM_TITLE, LinkDocuments, sourceLine, VerdictWords } from "./Documents";
 import { type Editor, EditedLine } from "./Editing";
 import { BoxEditForm, LinkEditForm, NeedsEvidence } from "./EditForms";
 import { AddStudy, DocumentActions, EditedEvidenceBlock, FindMore, NewEvidenceBlock, RemovedDocuments } from "./EvidenceEdits";
 import { CriticalIcon } from "./ReadingGuide";
 import { CRITICAL_DEFINITION, LAYER_LABEL, ORIGIN_LABEL } from "./tocModel";
-import { REPORT_LABEL_CLASS } from "../artefactPresentation";
 import type { PanelWidth } from "../workspace/usePanelWidth";
 import type { TocBox, TocDocument, TocEvidence, TocGraph, TocLink } from "./types";
 
 export type Selection = { kind: "box" | "link"; id: string };
 
-const HEAD = `mt-5 ${REPORT_LABEL_CLASS}`;
+/** A section of the panel ("How this works", "Evidence"): a plain head, Body
+ *  Bold Navy, with room above it (no uppercase label, phase 7). */
+const HEAD = "mt-6 text-body font-bold text-navy";
 /** A part inside a section ("Conditions", "Size of change"): body size, bold, body ink. */
 const SUB = "mt-3 text-body font-bold text-ink";
+/** The panel's title: the box's or connection's words, Lead Bold Navy. */
+const TITLE = "mt-0.5 text-lead font-bold leading-snug text-navy max-md:text-body";
+/** The panel's small actions on what it shows ("Edit", "Mark as critical"). */
+const ACTION = cn(QUIET_CONTROL_CLASS, "text-meta");
+
+/** One of the panel's closed notes: the shared chevron and quiet words,
+ *  folding open below; open in print. */
+function PanelDisclosure({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  useExpandForPrint(setOpen);
+  return (
+    <div className="mt-3 text-body">
+      <DisclosureToggle open={open} onToggle={() => setOpen((value) => !value)} className="print-hide">
+        {label}
+      </DisclosureToggle>
+      <Collapse show={open} durationMs={200}>
+        {children}
+      </Collapse>
+    </div>
+  );
+}
 
 function Origin({ origin, rules }: { origin: TocBox["origin"]; rules?: TocGraph["grade_rules"] }) {
   return (
     <>
       {rules !== undefined && (
-        <details className="mt-3 text-body">
-          <summary className="cursor-pointer font-bold text-navy">How the verdict is given</summary>
+        <PanelDisclosure label="How the verdict is given">
           <dl className="mt-1 space-y-1 text-grey">
             {rules.map((row) => (
               <div key={row.label}>
@@ -32,12 +61,11 @@ function Origin({ origin, rules }: { origin: TocBox["origin"]; rules?: TocGraph[
               </div>
             ))}
           </dl>
-        </details>
+        </PanelDisclosure>
       )}
-      <details className="mt-3 text-body">
-        <summary className="cursor-pointer font-bold text-navy">Where this came from</summary>
+      <PanelDisclosure label="Where this came from">
         <p className="mt-1 text-grey">{ORIGIN_LABEL[origin]}</p>
-      </details>
+      </PanelDisclosure>
     </>
   );
 }
@@ -57,7 +85,7 @@ function Criteria({ criteria }: { criteria: TocBox["result_criteria"] }) {
   if (rows.length === 0) return null;
   return (
     <>
-      <p className={HEAD}>How we'd know it happened</p>
+      <h4 className={HEAD}>How we'd know it happened</h4>
       <dl className="mt-1 grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-1 text-body">
         {rows.map(([label, value]) => (
           <div key={label} className="contents">
@@ -104,21 +132,21 @@ function BoxDetail({
         {editor !== null && (
           <>
             {" · "}
-            <button type="button" onClick={() => setEditing(true)} className="cursor-pointer font-semibold text-blue hover:underline">
+            <button type="button" onClick={() => setEditing(true)} className={ACTION}>
               Edit
             </button>
           </>
         )}
       </p>
-      <h3 className="mt-0.5 text-body font-bold leading-snug text-navy">{scrub(box.text)}</h3>
+      <h3 className={TITLE}>{scrub(box.text)}</h3>
       <EditedLine by={box.edited_by} at={box.edited_at} />
       {box.description !== null && <p className="mt-2 text-body">{scrub(box.description)}</p>}
       {box.origin === "user" && ownLinks.length === 0 && graph.check_status !== "none" && (
-        <p className="mt-3 border-l-[3px] border-blue bg-blue-tint-2 px-3 py-2.5 text-body">Connect it to another box (Connect, in the toolbar) to find evidence for it.</p>
+        <p className="mt-3 border-l-2 border-blue bg-blue-tint-2 px-3 py-2.5 text-body">Connect it to another box (Connect, in the toolbar) to find evidence for it.</p>
       )}
       {box.origin === "user" && <NeedsEvidence links={ownLinks} graph={graph} editor={editor} />}
       <Criteria criteria={box.result_criteria} />
-      {(figures.length > 0 || studies.length > 0) && <p className={HEAD}>Evidence</p>}
+      {(figures.length > 0 || studies.length > 0) && <h4 className={HEAD}>Evidence</h4>}
       {box.seen_in !== null && (
         <p className="mt-1 text-body">
           {scrub(box.seen_in)}
@@ -137,12 +165,12 @@ function BoxDetail({
       )}
       {studies.length > 0 && (
         <>
-          <p className={SUB}>Case studies ({studies.length})</p>
+          <p className={SUB}>Case studies ({formatCount(studies.length)})</p>
           <ul className="mt-1">
             {studies.map((study) => (
               <li key={`${study.task_source_snapshot_id}-${study.programme}`} className="border-t border-line py-2.5 text-body">
                 <p className={ITEM_TITLE}>
-                  <span className="mr-1 text-grey">[{numberOf(study.task_source_snapshot_id)}]</span>
+                  <span className="mr-1 font-normal tabular-nums text-grey">[{numberOf(study.task_source_snapshot_id)}]</span>
                   {scrub(study.programme)}
                   {study.place !== null ? `, ${scrub(study.place)}` : ""}
                 </p>
@@ -151,7 +179,7 @@ function BoxDetail({
                   {scrub(sourceLine(study.source_type, study.authors, study.year))}
                   {" · "}
                   {study.url !== null ? (
-                    <a href={study.url} target="_blank" rel="noreferrer" className="text-blue hover:underline">
+                    <a href={study.url} target="_blank" rel="noreferrer" className={SOURCE_TITLE_LINK_CLASS}>
                       {scrub(study.title)}
                     </a>
                   ) : (
@@ -223,7 +251,7 @@ function LinkDetail({
         {editor !== null && (
           <>
             {" · "}
-            <button type="button" onClick={() => setEditing(true)} className="cursor-pointer font-semibold text-blue hover:underline">
+            <button type="button" onClick={() => setEditing(true)} className={ACTION}>
               Edit
             </button>
           </>
@@ -235,14 +263,14 @@ function LinkDetail({
               type="button"
               disabled={editor.busy}
               onClick={() => editor.run({ kind: "patchLink", linkId: link.link_id, body: { expected_revision: link.revision, critical: true } }, `Marked ${link.code ?? "it"} as critical`)}
-              className="cursor-pointer font-semibold text-blue hover:underline"
+              className={ACTION}
             >
               Mark as critical
             </button>
           </>
         )}
       </p>
-      <h3 className="mt-0.5 text-body font-bold leading-snug text-navy">{scrub(link.title ?? link.sentence)}</h3>
+      <h3 className={TITLE}>{scrub(link.title ?? link.sentence)}</h3>
       <EditedLine by={link.edited_by} at={link.edited_at} />
       <EditedEvidenceBlock link={link} graph={graph} editor={editor} />
       <NewEvidenceBlock link={link} documents={documents} editor={editor} />
@@ -251,13 +279,12 @@ function LinkDetail({
       ) : pending ? (
         <p className="mt-1 text-body text-grey">Checking the evidence…</p>
       ) : (
-        <p data-testid="link-verdict" className="mt-1 flex items-center text-body">
-          <VerdictDot verdict={link.verdict} />
+        <p data-testid="link-verdict" className="mt-1.5 text-body">
           <VerdictWords verdict={link.verdict} />
         </p>
       )}
 
-      <p className={HEAD}>How this works</p>
+      <h4 className={HEAD}>How this works</h4>
       <p className="mt-1 text-body">
         {(
           [
@@ -285,7 +312,7 @@ function LinkDetail({
         </>
       )}
 
-      <p className={HEAD}>Evidence</p>
+      <h4 className={HEAD}>Evidence</h4>
       {!pending && (
         <>
           <p className={SUB}>
@@ -330,7 +357,7 @@ function LinkDetail({
           onClose={() => setOpened(null)}
         />
       )}
-      <p className={SUB}>Documents ({cited.length})</p>
+      <p className={SUB}>Documents ({formatCount(cited.length)})</p>
       <LinkDocuments cited={cited} onOpen={setOpened} actions={editor !== null ? (doc) => <DocumentActions doc={doc} editor={editor} /> : undefined} />
       <RemovedDocuments documents={documents} editor={editor} />
       {editor !== null && <AddStudy link={link} editor={editor} />}
@@ -377,9 +404,7 @@ export function SidePanel({ label, panel, onClose, children }: { label: string; 
     <div style={{ "--panel-w": panel.width } as React.CSSProperties} className="relative w-[var(--panel-w)] shrink-0 lg:h-full max-lg:w-full">
       <div {...panel.separatorProps} className="absolute inset-y-0 -left-1 z-10 hidden w-2 cursor-col-resize hover:bg-blue-tint focus-visible:bg-blue-tint focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue lg:block" />
       <aside aria-label={label} className="h-full overflow-y-auto border-l border-line bg-paper px-5 py-4 max-lg:border-l-0 max-lg:border-t">
-        <button type="button" onClick={onClose} aria-label="Close" className="float-right cursor-pointer text-lead leading-none text-grey hover:text-navy">
-          ×
-        </button>
+        <CloseButton onClick={onClose} aria-label="Close" className="float-right -mt-1.5 -mr-2 ml-2" />
         {children}
       </aside>
     </div>

@@ -236,3 +236,33 @@ describe("PlanCard — options scoping (task 044)", () => {
     expect(container).toBeEmptyDOMElement();
   });
 });
+
+describe("PlanCard — theory of change (task 054)", () => {
+  function tocPlanOut(): PlanOut {
+    return {
+      capability: "theory_of_change",
+      plan: null,
+      toc: { ready: true, title: "Youth wage subsidies and fewer NEETs", question: "Will wage subsidies reduce NEETs?" },
+      status: "approved",
+      version: 1,
+    } as unknown as PlanOut;
+  }
+
+  it("reads Theory of change plan over the plan's title, with Draft the theory and Review the plan", async () => {
+    mockPlanQuery(tocPlanOut());
+    const onReviewPlan = vi.fn();
+    const user = userEvent.setup();
+    renderCard({ onReviewPlan });
+    expect(screen.getByText("Theory of change plan")).toBeInTheDocument();
+    expect(screen.getByText("Youth wage subsidies and fewer NEETs")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Draft the theory" }).className).toContain("bg-green");
+    await user.click(screen.getByRole("button", { name: "Review the plan" }));
+    expect(onReviewPlan).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves once the draft has started, as Evidence search's card does", () => {
+    mockPlanQuery(tocPlanOut());
+    const { container } = renderCard({ started: true });
+    expect(container).toBeEmptyDOMElement();
+  });
+});

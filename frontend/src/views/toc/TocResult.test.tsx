@@ -7,8 +7,9 @@ import * as queries from "../../api/queries";
 import { TooltipProvider } from "../../ui/radix/Tooltip";
 import { REPORT_BODY_CLASS, REPORT_LABEL_CLASS, REPORT_PART_HEADING_CLASS, REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
 import { forgetReportExpand } from "../ArtefactOutline";
+import { setAsideLine } from "./DetailedInformation";
 import { FigureList } from "./Documents";
-import { boxId, link, linkId, pathwayId, SHARED_DOC_TITLE, TASK_ID, tocEvidenceFixture, tocGraphFixture } from "./fixture";
+import { boxId, link, linkId, SHARED_DOC_TITLE, TASK_ID, tocEvidenceFixture, tocGraphFixture } from "./fixture";
 import { TocResult } from "./TocResult";
 import type { TocGraph } from "./types";
 
@@ -62,7 +63,10 @@ describe("canvas", () => {
     renderResult();
     expect(screen.getAllByText(/Ban on less healthy food ads/).length).toBeGreaterThan(0);
     const box = node(1).firstElementChild as HTMLElement;
-    expect(box.className).toContain("border-grey/40");
+    // The cards' hairline and paper weight; the rounded corners stay (owner).
+    expect(box.className).toContain("border-line-2");
+    expect(box.className).toContain("shadow-paper");
+    expect(box.className).toContain("rounded-lg");
     expect(box.className).not.toMatch(/grade/);
   });
 
@@ -203,7 +207,7 @@ describe("detail panel", () => {
     expect(within(panel).getByText("Evidence suggests 44 to 58% fewer adverts for less healthy food seen by children (2 studies)")).toBeInTheDocument();
     expect(within(panel).getByText("Children saw 44% fewer adverts for less healthy food after the rules.").className).toContain("font-semibold");
     expect(within(panel).getByText("odds ratio 1·05 (0·99 to 1·12)")).toBeInTheDocument();
-    expect(within(panel).getAllByText(/^Smith et al\. · Obesity Reviews · 2020 · quasi-experiment/).length).toBe(3);
+    expect(within(panel).getAllByText(/^Smith, Jones · Obesity Reviews · 2020 · Quasi-experiment/).length).toBe(3);
     expect(within(panel).queryByText("Figures come from the documents' abstracts.")).toBeNull();
   });
 
@@ -372,13 +376,33 @@ describe("detailed information", () => {
     expect(screen.getByText("Evidence for this claim")).toBeInTheDocument();
   });
 
-  it("lists the set-aside pathways in one line, after the pathways", async () => {
+  it("names each set-aside pathway, then who set it aside and why (§ 8), with no control", async () => {
     const user = userEvent.setup();
     renderResult();
     await openAll(user);
     const info = screen.getByLabelText("Detailed information");
-    expect(within(info).getByText("Considered and set aside:")).toBeInTheDocument();
-    expect(within(info).getByText(/Merged into pathway 1/)).toBeInTheDocument();
+    const [item] = within(info).getAllByTestId("set-aside-pathway");
+    expect(within(item as HTMLElement).getByRole("heading", { level: 3 }).textContent).toBe("Children ask parents less");
+    expect(within(item as HTMLElement).getByText("Set aside by Policy Atlas · Merged into pathway 1, because it is the same step as healthier choices.")).toBeInTheDocument();
+    expect(within(item as HTMLElement).queryByRole("button")).toBeNull();
+    expect(within(info).queryByText("Considered and set aside:")).toBeNull();
+  });
+
+  it("counts a set-aside pathway's thin connections in its line (§ 8)", () => {
+    const links = [
+      { link_id: "a", verdict: "not_sure_insufficient", state: "checked" },
+      { link_id: "b", verdict: "supported", state: "checked" },
+      { link_id: "c", verdict: "not_sure_insufficient", state: "checked" },
+      { link_id: "d", verdict: "not_sure_mixed", state: "checked" },
+    ] as const;
+    expect(setAsideLine({ link_ids: ["a", "b", "c", "d"], reason: "Over the limit." }, links)).toBe(
+      "Set aside by Policy Atlas · Too little evidence for 2 of its 4 connections.",
+    );
+    expect(setAsideLine({ link_ids: ["b", "d"], reason: "Over the limit of 4 success pathways." }, links)).toBe(
+      "Set aside by Policy Atlas · Over the limit of 4 success pathways.",
+    );
+    expect(setAsideLine({ link_ids: ["a"], reason: null }, links)).toBe("Set aside by Policy Atlas · Too little evidence for 1 of its 1 connection.");
+    expect(setAsideLine({ link_ids: [], reason: null }, links)).toBe("Set aside by Policy Atlas.");
   });
 
   it("selects a pathway on the canvas from its name, with its strength", async () => {
@@ -389,7 +413,7 @@ describe("detailed information", () => {
     const item = within(info).getByRole("button", { name: "Show the pathway Fewer adverts, less snacking on the canvas" }).closest("h3") as HTMLElement;
     expect(item).toHaveTextContent("Mixed");
     await user.click(within(item).getByRole("button", { name: /Show the pathway/ }));
-    expect(screen.getByRole("combobox", { name: /pathway/i })).toHaveValue(pathwayId(1));
+    expect(screen.getByRole("combobox", { name: /pathway/i })).toHaveTextContent(/^Pathway 1 ·/);
   });
 
   it("shows the first five rows, the rest on a click, and collapses again", async () => {
@@ -404,7 +428,8 @@ describe("detailed information", () => {
     expect(row).toHaveClass("hidden");
     await user.click(screen.getByRole("button", { name: "Show all 6 connections" }));
     expect(row).not.toHaveClass("hidden");
-    await user.click(screen.getByRole("button", { name: "Collapse table" }));
+    // "Show all 6 connections" / "Hide": the one disclosure vocabulary.
+    await user.click(within(screen.getByRole("table").parentElement as HTMLElement).getByRole("button", { name: "Hide" }));
     expect(row).toHaveClass("hidden");
   });
 
@@ -416,9 +441,12 @@ describe("detailed information", () => {
     const codes = () => [...table.querySelectorAll("tbody tr td:first-child")].map((cell) => cell.textContent?.replace("⚠", ""));
     expect(codes()).toEqual(["#3", "#5"]);
     expect(within(table).getByRole("img", { name: "Central and weakly evidenced" })).toBeInTheDocument();
-    await user.click(within(table).getByRole("button", { name: /Evidence/ }));
+    // The shared sortable header (moved from the Sources view): its arrow, no ▲▼↕ glyphs.
+    expect(table.textContent).not.toMatch(/[▲▼↕⚠]/);
+    expect(within(table).getAllByTestId("sort-arrow")).toHaveLength(3);
+    await user.click(within(table).getByRole("button", { name: "Sort by evidence" }));
     expect(codes()).toEqual(["#3", "#5"]);
-    await user.click(within(table).getByRole("button", { name: /Evidence/ }));
+    await user.click(within(table).getByRole("button", { name: "Sort by evidence" }));
     expect(codes()).toEqual(["#5", "#3"]);
   });
 
@@ -476,7 +504,7 @@ describe("detail panel documents", () => {
     renderResult();
     fireEvent.click((edge(3) as Element).querySelector("path") as Element);
     const panel = screen.getByRole("complementary", { name: "Details" });
-    expect(within(panel).getAllByText(/^Smith et al\. · 20\d\d · quasi-experiment/).length).toBeGreaterThan(0);
+    expect(within(panel).getAllByText(/^Smith, Jones · 20\d\d · Quasi-experiment/).length).toBeGreaterThan(0);
     await user.click(within(panel).getByRole("button", { name: "Children's exposure after Chile's Law 20.606" }));
     expect(queries.useTocDocumentContext).toHaveBeenCalledWith(TASK_ID, expect.stringContaining("0000e"), null);
     expect(screen.getByText("Evidence for this claim")).toBeInTheDocument();
@@ -507,9 +535,14 @@ describe("figures", () => {
     const figures = ["a", "b", "c", "d"].map((measure, i) => ({ ...base!, figure_id: `f${i}`, measure }));
     render(<FigureList taskId={TASK_ID} figures={figures} citationOf={() => null} />);
     expect(screen.getAllByTestId("figure-group")).toHaveLength(3);
-    await user.click(screen.getByRole("button", { name: "Show all 4 figures" }));
+    const toggle = screen.getByRole("button", { name: "Show all 4 figures" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
     expect(screen.getAllByTestId("figure-group")).toHaveLength(4);
     expect(screen.queryByRole("button", { name: /Show all/ })).toBeNull();
+    // The one disclosure vocabulary: "Show all N figures" / "Hide".
+    await user.click(screen.getByRole("button", { name: "Hide" }));
+    expect(screen.getAllByTestId("figure-group")).toHaveLength(3);
   });
 });
 
@@ -608,8 +641,9 @@ describe("editing the evidence (C42, C43)", () => {
     await user.click(within(panel()).getAllByRole("button", { name: "Change" })[0] as HTMLElement);
     const menu = within(panel()).getByRole("group", { name: "Change this document" });
     expect(within(menu).getByText(/^Judge said:/)).toBeInTheDocument();
-    await user.click(within(menu).getByRole("button", { name: "Refutes" }));
-    await user.click(within(menu).getByRole("button", { name: "Relevance 3" }));
+    await user.click(within(menu).getByRole("combobox", { name: "Support" }));
+    await user.click(screen.getByRole("option", { name: "Refutes" }));
+    await user.click(within(within(menu).getByRole("group", { name: "Relevance" })).getByRole("button", { name: "3" }));
     await user.click(within(menu).getByRole("button", { name: "Save" }));
     expect(lastEdit()).toMatchObject({ kind: "evidence", body: { action: "score", support: "refutes", relevance: 3, expected_revision: 1 } });
   });
@@ -625,7 +659,8 @@ describe("editing the evidence (C42, C43)", () => {
     await user.click(within(panel()).getByRole("button", { name: "Restore" }));
     expect(lastEdit()).toMatchObject({ kind: "evidence", body: { action: "restore" } });
     await user.click(within(panel()).getAllByRole("button", { name: "Change" })[0] as HTMLElement);
-    await user.click(within(panel()).getByRole("button", { name: "Remove from this connection" }));
+    // The colleague's words, in the quiet control (owner, 2026-11-09).
+    await user.click(within(panel()).getByRole("button", { name: "Remove" }));
     expect(lastEdit()).toMatchObject({ kind: "evidence", body: { action: "remove" } });
   });
 
@@ -806,5 +841,74 @@ describe("before any draft", () => {
   it("tells a reader there is no theory yet", () => {
     renderResult(tocGraphFixture({ boxes: [], links: [], pathways: [], report: null, check_status: "none", can_edit: false }));
     expect(screen.getByText("There is no theory of change yet.")).toBeInTheDocument();
+  });
+});
+
+describe("the shared tones, links and disclosures (phase 7, § 4 E)", () => {
+  const openLink = (n: number) => {
+    fireEvent.click((edge(n) as Element).querySelector("path") as Element);
+    return screen.getByRole("complementary", { name: "Details" });
+  };
+
+  it("writes a connection's verdict as the shared tone square and the word in ink; not enough evidence is grey", () => {
+    renderResult();
+    const mixed = within(openLink(3)).getByTestId("link-verdict");
+    expect(within(mixed).getByTestId("verdict-mark")).toHaveAttribute("data-tone", "yellow");
+    expect(mixed.innerHTML).not.toMatch(/toc-verdict-|rounded-full/);
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    const thin = within(openLink(2)).getByTestId("link-verdict");
+    expect(thin.textContent).toBe("Not enough evidence");
+    expect(within(thin).getByTestId("verdict-mark")).toHaveAttribute("data-tone", "grey");
+    expect(within(thin).getByTestId("verdict-mark").className).toContain("bg-line-2");
+  });
+
+  it("gives each document's support its tone square, and its title the shared source link", () => {
+    renderResult();
+    const panel = openLink(3);
+    const title = within(panel).getByRole("button", { name: "Children's exposure after Chile's Law 20.606" });
+    expect(title.className).toContain("decoration-line-2");
+    expect(title.className).not.toContain("text-blue");
+    const item = title.closest("li") as HTMLElement;
+    expect(within(item).getByTestId("verdict-mark")).toBeInTheDocument();
+  });
+
+  it("heads the panel's sections plainly, closes with the shared button, and opens its notes with the shared disclosure", async () => {
+    const user = userEvent.setup();
+    renderResult();
+    const panel = openLink(3);
+    const head = within(panel).getByRole("heading", { level: 4, name: "How this works" });
+    expect(head.className).not.toMatch(/uppercase|tracking/);
+    const close = within(panel).getByRole("button", { name: "Close" });
+    expect(close.textContent).toBe("");
+    expect(close.querySelector("svg")).not.toBeNull();
+    expect(panel.querySelector("details")).toBeNull();
+    const origin = within(panel).getByRole("button", { name: "Where this came from" });
+    expect(origin).toHaveAttribute("aria-expanded", "false");
+    await user.click(origin);
+    expect(origin).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("leads the header with the verdict's tone square and its word in ink, not uppercase", () => {
+    renderResult();
+    const label = screen.getAllByText("Too little evidence.").find((el) => el.closest("header") !== null) as HTMLElement;
+    expect(label.className).not.toMatch(/uppercase|tracking/);
+    const line = label.closest("p") as HTMLElement;
+    expect(within(line).getByTestId("verdict-mark")).toHaveAttribute("data-tone", "grey");
+  });
+
+  it("links a report's codes in the Link style and keeps an old report's numbers as markers", async () => {
+    const user = userEvent.setup();
+    const fixture = tocGraphFixture();
+    const report = fixture.report as NonNullable<TocGraph["report"]>;
+    // A report written before sources carried their judgement.
+    const old = { ...report, sources: report.sources.map((source) => ({ ...source, evidence_id: null, quote: null })) };
+    renderResult({ ...fixture, report: old });
+    await user.click(screen.getByRole("button", { name: "Show all" }));
+    const info = screen.getByLabelText("Detailed information");
+    const code = within(info).getAllByRole("button", { name: "Show #3 on the canvas" })[0] as HTMLElement;
+    expect(code.className).toContain("font-semibold");
+    expect(code.className).not.toContain("font-bold");
+    const marker = within(info).getAllByRole("button", { name: /^Source 1: / })[0] as HTMLElement;
+    expect(marker.className).toContain("citation-marker");
   });
 });

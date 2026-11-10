@@ -3,6 +3,7 @@ import { usePlan } from "../../api/queries";
 import type { components } from "../../api/gen/types";
 import type { ReactNode } from "react";
 
+import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { useArrives } from "../../ui/motion/arrivals";
@@ -85,36 +86,43 @@ export function PlanCard({
   const toc = planOut?.toc ?? null;
   const approved = planOut?.status === "approved";
   const scopingReady = scoping && planOut?.scoping?.ready === true;
-  // A theory of change keeps its plan one click away after the draft starts (round 7).
+  // A theory of change reads "Theory of change plan" over the plan's title,
+  // and leaves as the draft starts, as Evidence search's card does (task 054,
+  // § 8); the report page keeps the plan one click away.
   if (toc !== null && approved && toc.ready) {
+    const title = toc.title ?? toc.question ?? "";
     return (
-      <PlanReadyBox arrivalId={`plan-card:${planOut?.version ?? ""}`} leaving={false}>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-          {isOwner && !started && (
-            <Button
-              variant="start"
-              size="entry"
-              disabled={streaming || runActive || startToc.isPending}
-              onClick={() => startToc.mutate(undefined)}
+      <Collapse show={!started}>
+        <PlanReadyBox arrivalId={`plan-card:${planOut?.version ?? ""}`} leaving={started}>
+          <p className="text-body font-semibold text-navy">Theory of change plan</p>
+          {title !== "" && <p className="mt-0.5 text-meta text-grey">{scrub(title)}</p>}
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-3">
+            {isOwner && (
+              <Button
+                variant="start"
+                size="entry"
+                disabled={streaming || runActive || startToc.isPending}
+                onClick={() => startToc.mutate(undefined)}
+              >
+                Draft the theory
+              </Button>
+            )}
+            <button
+              type="button"
+              data-plan-opener=""
+              onClick={() => onReviewPlan?.()}
+              className={cn(LINK_CLASS, "text-body")}
             >
-              Draft the theory
-            </Button>
+              Review the plan
+            </button>
+          </div>
+          {startToc.isError && (
+            <p role="alert" className="mt-3 text-body text-red">
+              The draft couldn't start. Try again.
+            </p>
           )}
-          <button
-            type="button"
-            data-plan-opener=""
-            onClick={() => onReviewPlan?.()}
-            className={cn(LINK_CLASS, "text-body")}
-          >
-            {started ? "See the plan" : "Review the plan"}
-          </button>
-        </div>
-        {startToc.isError && (
-          <p role="alert" className="mt-3 text-body text-red">
-            The draft couldn't start. Try again.
-          </p>
-        )}
-      </PlanReadyBox>
+        </PlanReadyBox>
+      </Collapse>
     );
   }
   if (!approved || toc !== null) return null;

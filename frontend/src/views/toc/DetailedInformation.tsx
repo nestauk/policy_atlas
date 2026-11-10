@@ -1,17 +1,25 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
+import { formatCount } from "../../lib/format";
 import { scrub } from "../../lib/scrub";
 import type { LiveSection } from "../../store";
-import { REPORT_BODY_CLASS, REPORT_LABEL_CLASS } from "../artefactPresentation";
-import { LiveDraft, LiveSubhead, PlaceholderLines, ReferencesSection } from "../ArtefactView";
+import { cn } from "../../ui/brand/cn";
+import { DisclosureToggle } from "../../ui/brand/DisclosureToggle";
+import { LINK_CLASS } from "../../ui/brand/inlineActions";
+import { COLUMN_HEADER_TEXT_CLASS, SortableColumnHeader } from "../../ui/brand/SortableColumnHeader";
+import { VERDICT_COLOUR, VerdictMark } from "../../ui/brand/verdictTones";
+import { Tooltip } from "../../ui/radix/Tooltip";
+import { REPORT_BODY_CLASS } from "../artefactPresentation";
+import { CITATION_MARKER_CLASS, LiveDraft, LiveSubhead, PlaceholderLines, ReferencesSection } from "../ArtefactView";
 import { FullReportExpandAllButton, FullReportExpandProvider, SectionDisclosure, type OutlineSection } from "../ArtefactOutline";
 import type { SidebarEntry } from "../ArtefactOutline";
 import type { Selection } from "./DetailPanel";
 import { CitationMarker, type TocCitation } from "./Documents";
 import { isListPart, partText, pendingCitations, type TocPartKey } from "./liveReport";
+import { CriticalIcon } from "./ReadingGuide";
 import { VERDICT_LABEL } from "./tocModel";
-import type { TocGraph, Verdict } from "./types";
+import type { TocGraph, TocLink, TocPathway, Verdict } from "./types";
 
 type Report = NonNullable<TocGraph["report"]>;
 
@@ -46,21 +54,32 @@ function sourceCitation(source: Report["sources"][number], rows: SourceRows): To
  * "[n]" opens the source's quote in context beside the sentence it grounds,
  * as the Evidence search does: the sentence may summarise, the quote is exact.
  */
-function Rich({ taskId, text, codes, sources, rows, onSelect }: { taskId: string; text: string; codes: Map<string, Selection>; sources: Report["sources"]; rows: SourceRows; onSelect: (selection: Selection) => void }) {
+type RichProps = {
+  taskId: string;
+  codes: Map<string, Selection>;
+  sources: Report["sources"];
+  rows: SourceRows;
+  onSelect: (selection: Selection) => void;
+  /** Opens a numbered source's dossier, by its title: the way in for a
+   *  report written before sources carried their judgement. */
+  onOpenReference: (title: string) => void;
+};
+
+function Rich({ text, ...props }: RichProps & { text: string }) {
   const sentences = scrub(text).split(/(?<=[.!?](?:\[\d+\])*)\s+/);
   return (
     <>
       {sentences.map((sentence, at) => (
         <span key={at}>
           {at > 0 && " "}
-          <RichSentence taskId={taskId} sentence={sentence} codes={codes} sources={sources} rows={rows} onSelect={onSelect} />
+          <RichSentence sentence={sentence} {...props} />
         </span>
       ))}
     </>
   );
 }
 
-function RichSentence({ taskId, sentence, codes, sources, rows, onSelect }: { taskId: string; sentence: string; codes: Map<string, Selection>; sources: Report["sources"]; rows: SourceRows; onSelect: (selection: Selection) => void }) {
+function RichSentence({ taskId, sentence, codes, sources, rows, onSelect, onOpenReference }: RichProps & { sentence: string }) {
   const claim = sentence.replace(CITES, "").trim();
   return (
     <>
@@ -74,12 +93,22 @@ function RichSentence({ taskId, sentence, codes, sources, rows, onSelect }: { ta
             <CitationMarker key={index} taskId={taskId} claim={claim} citations={[sourceCitation(source, rows)]} />
           );
         }
-        // A report written before sources carried their judgement: the number alone.
+        // A report written before sources carried their judgement: the same
+        // marker, opening the source's dossier as its number in the References does.
+        if (source !== undefined) {
+          const title = source.title ?? source.citation;
+          return (
+            <button key={index} type="button" aria-label={`Source ${source.n}: ${scrub(title)}`} onClick={() => onOpenReference(title)} className={CITATION_MARKER_CLASS}>
+              [{source.n}]
+            </button>
+          );
+        }
         if (cite !== null) return part;
         const target = codes.get(part);
         if (target === undefined) return part;
+        // A box or connection code: the link to it on the canvas.
         return (
-          <button key={index} type="button" onClick={() => onSelect(target)} className="cursor-pointer font-semibold text-blue hover:underline" aria-label={`Show ${part} on the canvas`}>
+          <button key={index} type="button" onClick={() => onSelect(target)} className={LINK_CLASS} aria-label={`Show ${part} on the canvas`}>
             {part}
           </button>
         );
@@ -103,10 +132,11 @@ const VERDICT_OF = new Map<string, Verdict>([
   ["Not confident: evidence against", "against"],
 ]);
 
-/** A verdict as text, in its colour (the canvas's verdict colours, as text). */
+/** A verdict as text: its tone square, then the word in ink (decision 7); a
+ *  word outside the vocabulary keeps its word and has no square. */
 function VerdictText({ label }: { label: string }) {
   const verdict = VERDICT_OF.get(label);
-  return <span className={verdict !== undefined ? `toc-verdict-${verdict}` : undefined}>{label}</span>;
+  return <VerdictMark colour={verdict !== undefined ? VERDICT_COLOUR[verdict] : null} word={label} />;
 }
 
 type Row = Report["assumptions"][number];
@@ -139,25 +169,29 @@ function AssumptionsTable({ rows, rich }: { rows: Row[]; rich: (text: string) =>
     sort === null
       ? rows
       : [...rows].sort((left, right) => (SORT[sort.key](left) - SORT[sort.key](right)) * (sort.descending ? -1 : 1));
-  const head = (label: string, key?: SortKey) => {
-    const active = key !== undefined && sort?.key === key;
-    return (
-      <th key={label} scope="col" aria-sort={active ? (sort.descending ? "descending" : "ascending") : undefined} className={`whitespace-nowrap border-b border-line-2 py-1.5 pr-2 text-left ${REPORT_LABEL_CLASS}`}>
-        {key === undefined ? (
-          label
-        ) : (
-          <button
-            type="button"
-            className="cursor-pointer uppercase tracking-[0.06em] hover:text-navy"
-            // Importance opens most central first; the others lowest first.
-            onClick={() => setSort({ key, descending: active ? !sort.descending : key === "importance" })}
-          >
-            {label} {active ? (sort.descending ? "▼" : "▲") : "↕"}
-          </button>
-        )}
+  // The table's head (DESIGN.md § Tables): the Label style at Caption size,
+  // one line, bottom-aligned, over a Line hairline; the sortable columns take
+  // the shared header and its arrow.
+  const TH = "border-b border-line py-1.5 pr-2 text-left align-bottom";
+  const onSort = (key: SortKey) =>
+    // Importance opens most central first; the others lowest first; again to reverse.
+    setSort((current) => ({ key, descending: current?.key === key ? !current.descending : key === "importance" }));
+  const head = (label: string, key?: SortKey) =>
+    key === undefined ? (
+      <th key={label} scope="col" className={cn(TH, COLUMN_HEADER_TEXT_CLASS)}>
+        {/* The sortable header's box, so every label shares one baseline. */}
+        <span className="inline-flex min-h-6 items-center py-1">{label}</span>
       </th>
+    ) : (
+      <SortableColumnHeader
+        key={label}
+        column={{ key, label }}
+        activeSort={sort?.key ?? null}
+        activeOrder={sort === null ? null : sort.descending ? "desc" : "asc"}
+        onSort={onSort}
+        className={TH}
+      />
     );
-  };
   return (
     <div className="mt-2 overflow-x-auto">
       <table className={`w-full border-collapse ${REPORT_BODY_CLASS}`}>
@@ -177,9 +211,12 @@ function AssumptionsTable({ rows, rich }: { rows: Row[]; rich: (text: string) =>
             <tr key={`${row.code}-${index}`} className={hidden > 0 && !key(row) ? "hidden print:table-row" : undefined}>
               <td className="whitespace-nowrap border-b border-line py-2 pr-2 align-top">
                 {row.flag && (
-                  <span role="img" aria-label="Central and weakly evidenced" title="Central and weakly evidenced" className="mr-1 text-[var(--color-verdict-against-text)]">
-                    ⚠
-                  </span>
+                  // The critical connection's mark, as the canvas and the panel draw it.
+                  <Tooltip content="Central and weakly evidenced" className="text-meta">
+                    <span role="img" aria-label="Central and weakly evidenced" className="mr-1 cursor-help">
+                      <CriticalIcon />
+                    </span>
+                  </Tooltip>
                 )}
                 {rich(row.code)}
               </td>
@@ -204,12 +241,38 @@ function AssumptionsTable({ rows, rich }: { rows: Row[]; rich: (text: string) =>
         </tbody>
       </table>
       {extra > 0 && (
-        <button type="button" onClick={() => setAll((open) => !open)} className="print-hide mt-2 cursor-pointer border border-navy bg-paper px-3 py-1.5 text-meta font-semibold text-navy hover:bg-blue-tint-2">
-          {all ? "Collapse table" : `Show all ${rows.length} connections`}
-        </button>
+        <DisclosureToggle open={all} onToggle={() => setAll((open) => !open)} className="print-hide mt-2 text-meta">
+          {all ? "Hide" : `Show all ${formatCount(rows.length)} connections`}
+        </DisclosureToggle>
       )}
     </div>
   );
+}
+
+/**
+ * A set-aside pathway's line (§ 8): "Set aside by Policy Atlas · Too little
+ * evidence for 2 of its 4 connections.", counting its connections judged not
+ * enough evidence. A pathway set aside for another reason (merged, over the
+ * limit) keeps the reason it was given.
+ *
+ * Args:
+ *   pathway: The set-aside pathway.
+ *   links: The theory's connections.
+ *
+ * Returns:
+ *   The line.
+ */
+export function setAsideLine(pathway: Pick<TocPathway, "link_ids" | "reason">, links: readonly Pick<TocLink, "link_id" | "verdict" | "state">[]): string {
+  const own = links.filter((link) => pathway.link_ids.includes(link.link_id));
+  const thin = own.filter((link) => link.state !== "checking" && link.state !== "unchecked" && link.verdict === "not_sure_insufficient").length;
+  const total = pathway.link_ids.length;
+  const why =
+    thin > 0
+      ? `Too little evidence for ${formatCount(thin)} of its ${formatCount(total)} ${total === 1 ? "connection" : "connections"}.`
+      : pathway.reason !== null && pathway.reason.trim() !== ""
+        ? pathway.reason.trim()
+        : null;
+  return why === null ? "Set aside by Policy Atlas." : `Set aside by Policy Atlas · ${why}`;
 }
 
 /** The page's anchor for each report section (the contents point here). */
@@ -288,7 +351,7 @@ export function ReportBody({
   const report = graph.report;
   if (report == null) return null;
   const codes = codeTargets(graph);
-  const rich = (text: string) => <Rich taskId={taskId} text={text} codes={codes} sources={report.sources} rows={rows} onSelect={onSelect} />;
+  const rich = (text: string) => <Rich taskId={taskId} text={text} codes={codes} sources={report.sources} rows={rows} onSelect={onSelect} onOpenReference={onOpenReference} />;
   const { summary } = report;
   const fail = report.how_it_could_fail ?? summary.weakest_links;
   const setAside = graph.pathways.filter((pathway) => pathway.status === "set_aside");
@@ -364,18 +427,14 @@ export function ReportBody({
               </div>
             );
           })}
-          {setAside.length > 0 && (
-            <p className={`${GREY} mt-4`}>
-              <b>Considered and set aside:</b>{" "}
-              {setAside.map((pathway, index) => (
-                <span key={pathway.pathway_id}>
-                  {index > 0 && " "}
-                  {scrub(pathway.label.replace(/\.?$/, "."))}
-                  {pathway.reason !== null && <> {scrub(pathway.reason)}</>}
-                </span>
-              ))}
-            </p>
-          )}
+          {/* A pathway Policy Atlas set aside: its name in Grey, then who set
+              it aside and why (§ 8). No control: Include again waits (S11). */}
+          {setAside.map((pathway) => (
+            <div key={pathway.pathway_id} data-testid="set-aside-pathway" className="mt-4 max-w-[44em]">
+              <h3 className="text-lead font-bold text-grey">{scrub(pathway.label.replace(/[.:]?$/, ""))}</h3>
+              <p className={cn(GREY, "mt-1")}>{setAsideLine(pathway, graph.links)}</p>
+            </div>
+          ))}
         </>,
       )}
       {fail !== "" && section(SECTION_ID.how_it_could_fail, "How it could fail", <p className={P}>{rich(fail)}</p>)}
@@ -415,7 +474,7 @@ export function ReportBody({
                   <li key={index}>
                     <b>{scrub(route.label.replace(/\.?$/, "."))}</b>
                     {route.kind === "failure" && <i> (a way it could go wrong)</i>} {rich(route.sentence)}
-                    {added && <span className="ml-2 text-meta font-semibold text-[var(--color-verdict-confident-text)]">Added to your theory</span>}
+                    {added && <span className="ml-2 text-meta font-semibold text-green-deep">Added to your theory</span>}
                   </li>
                 );
               })}
@@ -457,7 +516,7 @@ export function ReportBody({
       )}
       <p className={GREY}>
         These are the documents the report cites.{" "}
-        <Link to={`/tasks/${taskId}/sources/all`} className="font-bold text-blue hover:underline">
+        <Link to={`/tasks/${taskId}/sources/all`} className={LINK_CLASS}>
           See every document found in the Sources tab
         </Link>
         .

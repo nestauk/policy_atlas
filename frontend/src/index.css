@@ -142,11 +142,15 @@
   --color-aqua-tint: #e6f5f7; /* the lower level word on a profile line (046) */
 
   /* Evidence verdicts (task 054 theory of change, C36): colour means the
-     verdict and nothing else. The line/dot colour, and a darker twin for words. */
-  --color-verdict-confident: #18a48c;
-  --color-verdict-mixed: #f0a823;
-  --color-verdict-little: #b4b4bb;
-  --color-verdict-against: #d93a12;
+     verdict and nothing else. The canvas lines take the shared tones (owner,
+     2026-11-09, decision 7: the palette's green, yellow and red, and Line 2
+     for not enough evidence); the dash patterns tell the verdicts apart.
+     Words take the tone square in ink (`ui/brand/verdictTones.tsx`); the
+     "-text" twins below have no reader left in the views. */
+  --color-verdict-confident: var(--color-green);
+  --color-verdict-mixed: var(--color-yellow);
+  --color-verdict-little: var(--color-line-2);
+  --color-verdict-against: var(--color-red);
   --color-verdict-confident-text: #0d7a67;
   --color-verdict-mixed-text: #8f6100;
   --color-verdict-little-text: #646363;

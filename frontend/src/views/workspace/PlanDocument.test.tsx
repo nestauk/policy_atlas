@@ -1186,9 +1186,11 @@ describe("PlanDocument — theory of change (task 054)", () => {
   it("shows the evidence years and saves a changed range through the plan edit", () => {
     mockUsePlan({ data: tocPlanOut() });
     renderPlan();
-    expect(screen.getByText("Evidence published")).toBeInTheDocument();
-    expect(screen.getByText("2000 onwards")).toBeInTheDocument();
-    const section = screen.getByText("Evidence published").closest("section") as HTMLElement;
+    // Evidence search's words for the same filter (task 054, § 8).
+    expect(screen.getByRole("heading", { name: "Search filters" })).toBeInTheDocument();
+    expect(screen.getByText("Publication years")).toBeInTheDocument();
+    expect(screen.getByText("From 2000")).toBeInTheDocument();
+    const section = screen.getByText("Publication years").closest("section") as HTMLElement;
     fireEvent.click(within(section).getByRole("button", { name: "Edit" }));
     fireEvent.change(screen.getByLabelText("Published from (year)"), { target: { value: "1995" } });
     fireEvent.change(screen.getByLabelText("Published until (year)"), { target: { value: "2010" } });

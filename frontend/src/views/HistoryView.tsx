@@ -220,7 +220,7 @@ function EntryRow({ entry, step = false, editor }: { entry: HistoryEntry; step?:
             type="button"
             disabled={editor.busy}
             onClick={() => editor.run({ kind: "undo", eventId: entry.undoEventId as string }, "Undid a change")}
-            className="cursor-pointer text-body font-bold text-blue [grid-area:mark] hover:underline disabled:cursor-default disabled:text-grey"
+            className={cn(QUIET_CONTROL_CLASS, "self-start text-meta [grid-area:mark]")}
           >
             Undo
           </button>

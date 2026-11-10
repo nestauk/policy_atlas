@@ -4,6 +4,19 @@ import { blobUrl } from "../../lib/blobUrl";
 
 // The user's own theory-of-change diagram (task 054, increment 5): the paperclip that picks it, and its preview.
 
+/**
+ * The paperclip: an attached diagram. Drawn as `ui/brand/icons.tsx` draws (a
+ * 16-unit grid, the 1.5 stroke, round joins, `currentColor`); it belongs in
+ * that module once it serves a second view.
+ */
+export function PaperclipGlyph({ size = 16, className }: { size?: number; className?: string }) {
+  return (
+    <svg aria-hidden="true" focusable="false" width={size} height={size} viewBox="0 0 16 16" className={className} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m14 7.33-5.67 5.67a3.33 3.33 0 0 1-4.67-4.67L9.33 2.67a2.33 2.33 0 0 1 3.33 3.33l-5.67 5.67a1.33 1.33 0 0 1-2-2L10 4.67" />
+    </svg>
+  );
+}
+
 /** A paperclip label that opens the file picker for a PNG, JPEG or PDF diagram. */
 export function AttachFileButton({
   onFile,
@@ -22,9 +35,7 @@ export function AttachFileButton({
 }) {
   return (
     <label title={title} className={className}>
-      <svg aria-hidden="true" viewBox="0 0 24 24" className={iconClassName} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-        <path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7" />
-      </svg>
+      <PaperclipGlyph className={iconClassName} />
       {children}
       <input
         type="file"

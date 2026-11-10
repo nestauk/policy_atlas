@@ -8,14 +8,6 @@ import type { Editor } from "./Editing";
 type Proposal = components["schemas"]["TocProposalOut"];
 type Edit = Proposal["edits"][number];
 
-/** Where a suggestion came from, as its card's heading. */
-const SOURCE_LABEL: Record<string, string> = {
-  review: "Review of your changes",
-  chat: "Suggested in the chat",
-  discover: "Found in the evidence",
-  draft: "To complete your theory",
-};
-
 const SECTION_LABEL: Record<string, string> = {
   summary: "Summary",
   how_change_happens: "How change happens",
@@ -73,11 +65,11 @@ function previewOf(proposal: Proposal, route: Route): Preview {
   };
 }
 
-/** A suggestion's Accept and Reject. */
-function AcceptReject({ busy, onDecide, acceptClassName }: { busy: boolean; onDecide: (accept: boolean) => void; acceptClassName?: string }) {
+/** A suggestion's Accept and Reject: the outline button for the choice, the secondary beside it. */
+function AcceptReject({ busy, onDecide }: { busy: boolean; onDecide: (accept: boolean) => void }) {
   return (
-    <span className="mt-1.5 flex gap-2">
-      <Button size="sm" variant="secondary" className={acceptClassName} disabled={busy} onClick={() => onDecide(true)}>
+    <span className="mt-2 flex gap-2">
+      <Button size="sm" variant="outline" disabled={busy} onClick={() => onDecide(true)}>
         Accept
       </Button>
       <Button size="sm" variant="secondary" disabled={busy} onClick={() => onDecide(false)}>
@@ -148,9 +140,8 @@ export function Suggestions({
         const single = proposal.edits.filter((edit) => edit.group == null);
         const pendingSingle = single.filter((edit) => edit.status === "pending");
         return (
-          <div key={proposal.proposal_id} className="border border-line-2 bg-paper px-3 py-3">
-            <p className="text-meta font-bold uppercase tracking-[0.06em] text-blue">{SOURCE_LABEL[proposal.source] ?? "Suggested"}</p>
-            <p className="mt-1 text-body text-ink">{scrub(proposal.summary)}</p>
+          <div key={proposal.proposal_id} className="border border-line-2 bg-paper px-4 py-3">
+            <p className="text-body text-ink">{scrub(proposal.summary)}</p>
             {routes.length > 0 && (
               <ul className="mt-2">
                 {routes.map((route) => {
@@ -168,7 +159,7 @@ export function Suggestions({
                         {route.kind === "failure" ? "A way it could go wrong" : "A route to the goal"}
                         {added.length > 0 && <> · adds {added.map((text) => `“${scrub(text)}”`).join(", ")}</>}
                       </p>
-                      <AcceptReject busy={editor.busy} acceptClassName="border border-navy" onDecide={(accept) => decide(proposal.proposal_id, { index: null, accept, group: route.group })} />
+                      <AcceptReject busy={editor.busy} onDecide={(accept) => decide(proposal.proposal_id, { index: null, accept, group: route.group })} />
                     </li>
                   );
                 })}
@@ -192,10 +183,10 @@ export function Suggestions({
             {proposal.report_findings.length > 0 && (
               <div className="mt-2 border-t border-line pt-2">
                 <p className="text-body font-bold text-ink">The report no longer matches the theory in:</p>
-                <ul className="mt-1 list-disc pl-5 text-body">
+                <ul className="mt-1 list-disc pl-5 text-body marker:text-grey">
                   {proposal.report_findings.map((finding) => (
                     <li key={finding.section}>
-                      <b>{SECTION_LABEL[finding.section] ?? finding.section}</b>: {scrub(finding.why)}
+                      <span className="font-semibold">{SECTION_LABEL[finding.section] ?? finding.section}</span>: {scrub(finding.why)}
                     </li>
                   ))}
                 </ul>
@@ -203,7 +194,7 @@ export function Suggestions({
             )}
             <div className="mt-3 flex flex-wrap gap-2">
               {routes.length + pendingSingle.length > 1 && (
-                <Button size="sm" disabled={editor.busy} onClick={() => decide(proposal.proposal_id, { index: null, accept: true })}>
+                <Button size="sm" variant="outline" disabled={editor.busy} onClick={() => decide(proposal.proposal_id, { index: null, accept: true })}>
                   Accept all
                 </Button>
               )}
@@ -212,7 +203,7 @@ export function Suggestions({
                   Update the report
                 </Button>
               )}
-              <Button size="sm" variant="secondary" disabled={editor.busy} onClick={() => editor.run({ kind: "dismiss", proposalId: proposal.proposal_id })}>
+              <Button size="sm" variant="ghost" disabled={editor.busy} onClick={() => editor.run({ kind: "dismiss", proposalId: proposal.proposal_id })}>
                 Dismiss
               </Button>
             </div>

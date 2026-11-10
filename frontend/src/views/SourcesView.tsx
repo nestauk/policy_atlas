@@ -39,7 +39,6 @@ import {
   STATUS_COLUMN_HEADER,
   PHONE_SORT_OPTIONS,
   SOURCE_SORT_COLUMNS,
-  TABLE_HEADER_TEXT_CLASS,
   switchChoiceClass,
   type CellPulses,
   type EvidenceSortField,
@@ -58,6 +57,7 @@ import {
   type ReadDepth,
 } from "../ui/brand/evidence";
 import { DepthMark, StrengthMark, ToneSquare } from "../ui/brand/EvidenceMarks";
+import { SortableColumnHeader } from "../ui/brand/SortableColumnHeader";
 import { csvCell, numberedAuthorships, triggerUrlDownload } from "./artefactPresentation";
 import { referenceParts } from "../ui/brand/reference";
 import { ReferenceUrl } from "../ui/brand/ReferenceUrl";
@@ -594,12 +594,12 @@ function SourcesHeaderRow({
   return (
     <thead role="rowgroup" className="sources-head">
       <tr role="row">
-        <SortableColumnHeader column={column("title")} className="pl-4" {...props} />
-        <SortableColumnHeader column={column("year")} {...props} />
-        <SortableColumnHeader column={column("type")} {...props} />
-        <SortableColumnHeader column={column("strength")} hint={<StrengthLegend />} {...props} />
-        <SortableColumnHeader column={column("relevance")} align="end" {...props} />
-        <SortableColumnHeader column={column("status")} {...props} />
+        <SortableColumnHeader column={column("title")} className="sources-th pl-4" {...props} />
+        <SortableColumnHeader column={column("year")} className="sources-th" {...props} />
+        <SortableColumnHeader column={column("type")} className="sources-th" {...props} />
+        <SortableColumnHeader column={column("strength")} className="sources-th" hint={<StrengthLegend />} {...props} />
+        <SortableColumnHeader column={column("relevance")} className="sources-th" align="end" {...props} />
+        <SortableColumnHeader column={column("status")} className="sources-th" {...props} />
       </tr>
     </thead>
   );
@@ -972,82 +972,6 @@ function StrengthLegend() {
         </li>
       ))}
     </ul>
-  );
-}
-
-/** The sort mark: a 12 px arrow at the funnel's 2 px stroke. Its slot is
- *  always reserved, so a label never shifts as sorting changes. */
-function SortArrow({ order }: { order: SortOrder | null }) {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      data-testid="sort-arrow"
-      className={cn(
-        "h-3 w-3 shrink-0",
-        order === null
-          ? "text-line-2 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
-          : "text-navy",
-        order === "asc" && "rotate-180",
-      )}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M12 4v16M6 14l6 6 6-6" />
-    </svg>
-  );
-}
-
-/** One sortable `<th>` in the sources table: a real button (accessible name
- *  "Sort by <label>"), `aria-sort` on the header itself, and the arrow once
- *  this column is the active sort (Line 2 on hover and focus otherwise).
- *  Clicking cycles none → the column's default direction → the opposite →
- *  none, and the caller re-derives `sort`/`order` URL params from that (no
- *  client-side sort of the page — the 025 filters pattern). Every header is
- *  one line and bottom-aligned, so the labels and arrows share a baseline. */
-function SortableColumnHeader({
-  column,
-  activeSort,
-  activeOrder,
-  onSort,
-  align = "start",
-  className,
-  hint,
-}: {
-  column: (typeof SOURCE_SORT_COLUMNS)[number];
-  /** A legend shown on hover and focus (the strength's tones, round 12). */
-  hint?: ReactNode;
-  activeSort: EvidenceSortField | null;
-  activeOrder: SortOrder | null;
-  onSort: (field: EvidenceSortField) => void;
-  align?: "start" | "end";
-  className?: string;
-}) {
-  const order = activeSort === column.key ? activeOrder : null;
-  const ariaSort = order === "asc" ? "ascending" : order === "desc" ? "descending" : "none";
-  const button = (
-    <button
-      type="button"
-      aria-label={`Sort by ${column.label.toLowerCase()}`}
-      onClick={() => onSort(column.key)}
-      className={cn(
-        "group inline-flex min-h-6 cursor-pointer items-center gap-1 py-1 transition-colors duration-150 hover:text-navy",
-        TABLE_HEADER_TEXT_CLASS,
-        order !== null && "text-navy",
-        align === "end" && "flex-row-reverse",
-      )}
-    >
-      {column.label}
-      <SortArrow order={order} />
-    </button>
-  );
-  return (
-    <th role="columnheader" scope="col" className={cn("sources-th", align === "end" && "text-right", className)} aria-sort={ariaSort}>
-      {hint === undefined ? button : <Tooltip content={hint}>{button}</Tooltip>}
-    </th>
   );
 }
 
