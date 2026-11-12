@@ -3875,11 +3875,8 @@ export interface components {
             capability_run_id: string;
             /** Ended At */
             ended_at?: string | null;
-            /**
-             * Paused Seconds
-             * @default 0
-             */
-            paused_seconds: number;
+            /** Paused Seconds */
+            paused_seconds?: number;
             /** Stage */
             stage?: ("acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist" | "toc_draft" | "toc_read" | "toc_item_searches" | "toc_select" | "toc_discover" | "toc_merge" | "toc_search_new" | "toc_new_link_searches" | "toc_judge" | "toc_search_again" | "toc_retry_searches" | "toc_figures" | "toc_choose" | "toc_summarise" | "toc_report") | null;
             /** Stage Label */
@@ -5533,11 +5530,8 @@ export interface components {
             follows_capability_run_id?: string | null;
             /** Parent Capability Run Id */
             parent_capability_run_id?: string | null;
-            /**
-             * Paused Seconds
-             * @default 0
-             */
-            paused_seconds: number;
+            /** Paused Seconds */
+            paused_seconds?: number;
             /**
              * Plan Id
              * Format: uuid

@@ -121,7 +121,9 @@ class RunOut(BaseModel):
     status: RunStatus
     started_at: datetime
     ended_at: datetime | None = None
-    paused_seconds: float = 0
+    # A factory, as for a list field: the generated front-end type then has
+    # the field as optional, so a client object without it is still valid.
+    paused_seconds: float = Field(default_factory=float)
     artefact_id: uuid.UUID | None = None
     parent_capability_run_id: uuid.UUID | None = None
     purpose: str | None = None

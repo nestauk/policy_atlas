@@ -3755,7 +3755,6 @@
             "title": "Ended At"
           },
           "paused_seconds": {
-            "default": 0,
             "title": "Paused Seconds",
             "type": "number"
           },
@@ -6928,7 +6927,6 @@
             "title": "Parent Capability Run Id"
           },
           "paused_seconds": {
-            "default": 0,
             "title": "Paused Seconds",
             "type": "number"
           },
