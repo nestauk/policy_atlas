@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { SseFrame } from "../api/sseFrame";
 import { hasTerminalPartialLiveArtefact, reduceRunStreamFrame } from "./reducer";
+import { elapsedSeconds } from "../views/workspace/runProgress";
 import { createInitialRunStreamState } from "./types";
 import type { CheckInOut, PlanDraft, RunStreamState, StageEntry } from "./types";
 
@@ -1511,5 +1512,32 @@ describe("a tick with no run (round 15)", () => {
     const fresh = reduceRunStreamFrame(createInitialRunStreamState(), tick);
     expect(fresh.run).toBeNull();
     expect(Object.keys(fresh.runs ?? {})).toEqual([]);
+  });
+});
+
+describe("reduceRunStreamFrame — the timer leaves out time paused at a check-in", () => {
+  const status = (value: "running" | "paused" | "succeeded", occurred_at: string, sequence: number): SseFrame => ({
+    type: "run.status",
+    capability_run_id: TASK_RUN_ID,
+    status: value,
+    occurred_at,
+    sequence,
+  });
+
+  it("stops at the pause, then carries on without the wait", () => {
+    let state = [
+      status("running", "2026-07-21T10:00:00Z", 1),
+      status("paused", "2026-07-21T10:04:00Z", 2),
+    ].reduce(reduceRunStreamFrame, createInitialRunStreamState());
+    expect(state.run?.pausedAt).toBe("2026-07-21T10:04:00Z");
+    // Hours later the paused run still reads four minutes.
+    const hoursLater = Date.parse("2026-07-21T13:04:00Z");
+    expect(elapsedSeconds(state.run?.startedAt, state.run?.pausedAt, hoursLater, state.run?.pausedMs)).toBe(240);
+
+    state = reduceRunStreamFrame(state, status("running", "2026-07-21T13:04:00Z", 3));
+    expect(state.run?.pausedAt).toBeUndefined();
+    expect(state.run?.pausedMs).toBe(3 * 60 * 60 * 1000);
+    const oneMinuteOn = Date.parse("2026-07-21T13:05:00Z");
+    expect(elapsedSeconds(state.run?.startedAt, state.run?.pausedAt, oneMinuteOn, state.run?.pausedMs)).toBe(300);
   });
 });

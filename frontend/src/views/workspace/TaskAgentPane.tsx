@@ -1041,6 +1041,8 @@ export function TaskAgentPane({
         plan={stream.plan?.plan}
         startedAt={liveLead?.started_at ?? stream.run.startedAt}
         endedAt={holding ? undefined : stream.run.endedAt}
+        pausedAt={stream.run.pausedAt}
+        pausedMs={stream.run.pausedMs}
         hasFindings={hasFindings}
         capability={planQuery.data?.capability}
         purpose={liveRunPurpose}

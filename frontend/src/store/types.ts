@@ -32,6 +32,12 @@ interface RunRef {
   startedAt: string;
   /** Terminal `run.status` / `occurred_at` — omitted while the run is live. */
   endedAt?: string;
+  /** When the run paused for a check-in — set only while it is paused, so
+   *  the run's timer stops there. */
+  pausedAt?: string;
+  /** Milliseconds this run has spent paused in earlier check-ins. The timer
+   *  leaves them out: it counts the time the run worked. */
+  pausedMs?: number;
 }
 
 /** One entry in the resolved-decisions log (a `checkin.resolved` frame,

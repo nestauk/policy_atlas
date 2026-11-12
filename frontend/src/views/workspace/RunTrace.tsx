@@ -370,6 +370,10 @@ type TraceProps = {
   plan: PlanDraft | null | undefined;
   startedAt?: string;
   endedAt?: string;
+  /** When the run paused for a check-in: the timer stops there. */
+  pausedAt?: string;
+  /** Milliseconds spent paused in earlier check-ins, left out of the timer. */
+  pausedMs?: number;
   hasFindings: boolean;
   /** The task's capability: the finished words follow the walk kind (task 045). */
   capability?: string | null;
@@ -408,6 +412,8 @@ function TraceCard({
   plan,
   startedAt,
   endedAt,
+  pausedAt,
+  pausedMs,
   hasFindings,
   capability,
   purpose,
@@ -435,7 +441,7 @@ function TraceCard({
   const stamp = tick?.occurredAt ?? progress?.entries[0]?.startedAt;
   const quiet = !useFreshness(stamp, STALL_AFTER_MS);
   const stalled = progress !== null && stamp !== undefined && quiet && !paused;
-  const seconds = elapsedSeconds(startedAt, ticking ? undefined : endedAt, nowMs);
+  const seconds = elapsedSeconds(startedAt, ticking ? pausedAt : endedAt, nowMs, pausedMs);
   const context: RowContext = { rows, taskId, kind, hasFindings, nowMs };
   const landed = useLandedRows(rows);
   // A step that gains or loses its section and activity lines eases the

@@ -245,6 +245,15 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
         frame.status === "aborted" ||
         frame.status === "interrupted" ||
         frame.status === "degraded";
+      // The timer counts working time: it stops at a pause, and the wait is
+      // left out when the run carries on (or ends) after it.
+      const pauseStart = sameRun ? current.pausedAt : undefined;
+      const pausedAt = frame.status === "paused" ? (pauseStart ?? frame.occurred_at) : undefined;
+      const waited =
+        pauseStart !== undefined && pausedAt === undefined
+          ? Math.max(0, Date.parse(frame.occurred_at) - Date.parse(pauseStart)) || 0
+          : 0;
+      const pausedMs = (sameRun ? (current.pausedMs ?? 0) : 0) + waited;
       const next: RunStreamState = {
         ...base,
         run: {
@@ -256,6 +265,8 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
             : sameRun && current.endedAt !== undefined
               ? { endedAt: current.endedAt }
               : {}),
+          ...(pausedAt !== undefined ? { pausedAt } : {}),
+          ...(pausedMs > 0 ? { pausedMs } : {}),
         },
         runs: { ...base.runs, [frame.capability_run_id]: frame.status },
         stages: isNewRun ? [] : base.stages,

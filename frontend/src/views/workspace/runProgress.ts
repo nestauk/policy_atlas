@@ -118,12 +118,14 @@ export function formatElapsed(seconds: number, { withSeconds = true }: { withSec
 /**
  * Seconds between start and end. When `endedAt` is missing, `nowMs` is the
  * live clock — callers must freeze `nowMs` (or pass `endedAt`) once the run
- * is no longer ticking.
+ * is no longer ticking. `pausedMs` is time spent waiting at check-ins, which
+ * is left out; for a run paused now, pass the pause time as `endedAt`.
  */
 export function elapsedSeconds(
   startedAt: string | undefined,
   endedAt: string | undefined,
   nowMs: number,
+  pausedMs = 0,
 ): number {
   if (startedAt === undefined || startedAt === "") return 0;
   const started = Date.parse(startedAt);
@@ -131,7 +133,7 @@ export function elapsedSeconds(
   const ended =
     endedAt !== undefined && endedAt !== "" ? Date.parse(endedAt) : Number.NaN;
   const endMs = Number.isNaN(ended) ? nowMs : ended;
-  return Math.max(0, (endMs - started) / 1000);
+  return Math.max(0, (endMs - started - pausedMs) / 1000);
 }
 
 /**
