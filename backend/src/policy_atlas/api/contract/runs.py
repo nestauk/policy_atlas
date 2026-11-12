@@ -94,6 +94,9 @@ class RunOut(BaseModel):
         started_at: When the run started executing.
         ended_at: When the run reached a terminal status, or `None` while
             still running or paused.
+        paused_seconds: Seconds the run spent in finished pauses at
+            check-ins, on the list and the one-run reads. The run's working
+            time is its span from start to end less this.
         artefact_id: The artefact this walk wrote, or `None` when it wrote
             none (it has not reached synthesise, or ended before it). A
             scoping walk that carries one produced a baseline, whatever its
@@ -118,6 +121,7 @@ class RunOut(BaseModel):
     status: RunStatus
     started_at: datetime
     ended_at: datetime | None = None
+    paused_seconds: float = 0
     artefact_id: uuid.UUID | None = None
     parent_capability_run_id: uuid.UUID | None = None
     purpose: str | None = None

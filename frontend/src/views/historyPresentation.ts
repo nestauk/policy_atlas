@@ -186,13 +186,15 @@ function searchTerms(decision: DecisionLike): HistoryDetail[] {
 /**
  * A run's one line: its outcome and its time (lead ruling H7, wording P10).
  * The outcome is read from the run's own events: finished, stopped, a step
- * that failed, waiting at a check-in, or still running.
+ * that failed, waiting at a check-in, or still running. The time is the time
+ * the run worked: `pausedMs`, its waits at check-ins, is left out.
  */
 function runLine(
   steps: readonly HistoryEntry[],
   kinds: readonly string[],
   endStatus: string | null,
   capability: string | undefined,
+  pausedMs: number,
 ): {
   sentence: string;
   failed: boolean;
@@ -201,7 +203,7 @@ function runLine(
   const Noun = noun[0].toUpperCase() + noun.slice(1);
   const start = Date.parse(steps[0].at);
   const end = Date.parse(steps[steps.length - 1].at);
-  const time = formatElapsed((end - start) / 1000, { withSeconds: false });
+  const time = formatElapsed(Math.max(0, end - start - pausedMs) / 1000, { withSeconds: false });
   if (kinds.includes("run.interrupted") || endStatus === "aborted" || endStatus === "interrupted") {
     return { sentence: `${Noun} stopped · ${time}`, failed: true };
   }
@@ -277,6 +279,9 @@ export function mergeHistory(
     string,
     Array<{ entry: HistoryEntry; kind: string; sequence: number; status: string | null }>
   >();
+  // Everything recorded against each run, its check-in answers included: a
+  // wait at a check-in ends at the next of them.
+  const acts = new Map<string, DecisionLike[]>();
   for (const decision of decisions ?? []) {
     const details = [
       ...friendlyDecisionDetails(decision.detail as never).map((detail) => ({
@@ -294,6 +299,7 @@ export function mergeHistory(
       details: details.length > 0 ? details : undefined,
     };
     const runId = decision.capability_run_id;
+    if (runId != null) acts.set(runId, (acts.get(runId) ?? []).concat(decision));
     if (runId != null && STEP_KINDS.has(decision.kind)) {
       const steps = runs.get(runId) ?? [];
       steps.push({
@@ -311,11 +317,25 @@ export function mergeHistory(
   for (const [runId, recorded] of runs) {
     recorded.sort((left, right) => left.entry.at.localeCompare(right.entry.at) || left.sequence - right.sequence);
     const steps = recorded.map((step) => step.entry);
+    // A wait runs from a pause to the next record against the run (the
+    // answer). It counts only once a later step shows the run carried on.
+    const end = Date.parse(steps[steps.length - 1].at);
+    let pausedAt: number | null = null;
+    let pausedMs = 0;
+    for (const act of (acts.get(runId) ?? []).sort((left, right) => left.sequence - right.sequence)) {
+      const at = Date.parse(act.occurred_at);
+      if (act.kind === "run.parked") pausedAt ??= at;
+      else if (pausedAt !== null) {
+        if (at <= end) pausedMs += Math.max(0, at - pausedAt);
+        pausedAt = null;
+      }
+    }
     const { sentence, failed } = runLine(
       steps,
       recorded.map((step) => step.kind),
       recorded.find((step) => step.status !== null)?.status ?? null,
       viewer.capability,
+      pausedMs,
     );
     rows.push({
       tiebreak: recorded[0].sequence,

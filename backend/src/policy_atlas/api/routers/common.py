@@ -9,6 +9,8 @@ helpers in ``access`` (task 033). What is left is projection and display.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Collection
+from datetime import datetime
 from typing import Any, Literal, cast
 
 from sqlalchemy import ColumnElement, Text, case, exists, func, select
@@ -146,12 +148,62 @@ def _latest_run_row(conn: Connection, row: RowMapping | dict[str, Any]) -> RowMa
     )
 
 
-def _latest_run_out(walk: RowMapping, stage: StageKey | None = None) -> LatestRun:
+#: The events that start or end a pause. They are the ones the live stream
+#: turns into a run status, so a read and the stream give the same times.
+_PAUSE_EVENT_TYPES = ("run.parked", "continuation.claimed", "run.interrupted", "run.finished")
+
+
+def walk_pauses(
+    conn: Connection, *, task_id: uuid.UUID, walk_ids: Collection[uuid.UUID]
+) -> dict[uuid.UUID, float]:
+    """Each walk's seconds paused at check-ins, read from the event log.
+
+    A run that waits hours for an answer did not work for hours, so its timer
+    leaves the wait out. The event log is the one record of when a walk
+    paused and when it carried on; nothing extra is stored. A pause the walk
+    is still in is not counted: it has no end yet.
+
+    Args:
+        conn: Open database connection.
+        task_id: The task.
+        walk_ids: The walks to read.
+
+    Returns:
+        Walk id → the total seconds of its finished pauses (absent when none).
+    """
+    wanted = {str(walk_id) for walk_id in walk_ids}
+    if not wanted:
+        return {}
+    walk = event_log.c.payload["capability_run_id"].astext
+    rows = conn.execute(
+        select(event_log.c.event_type, event_log.c.occurred_at, walk)
+        .where(event_log.c.task_id == task_id)
+        .where(event_log.c.event_type.in_(_PAUSE_EVENT_TYPES))
+        .where(walk.in_(wanted))
+        .order_by(event_log.c.sequence)
+    )
+    paused_at: dict[str, datetime] = {}
+    seconds: dict[uuid.UUID, float] = {}
+    for event_type, occurred_at, walk_id in rows:
+        if event_type == "run.parked":
+            paused_at.setdefault(walk_id, occurred_at)
+        elif walk_id in paused_at:
+            waited = (occurred_at - paused_at.pop(walk_id)).total_seconds()
+            seconds[uuid.UUID(walk_id)] = seconds.get(uuid.UUID(walk_id), 0.0) + max(0.0, waited)
+    return seconds
+
+
+def _latest_run_out(
+    walk: RowMapping,
+    stage: StageKey | None = None,
+    paused_seconds: float = 0,
+) -> LatestRun:
     return LatestRun(
         capability_run_id=walk["capability_run_id"],
         status=walk["status"],
         started_at=walk["started_at"],
         ended_at=walk["ended_at"],
+        paused_seconds=paused_seconds,
         stage=stage,
         stage_label=presentation(stage)[0] if stage is not None else None,
     )
@@ -502,7 +554,8 @@ def task_out(
     # see what exists and what is active"): one ``SELECT … LIMIT 1`` for any
     # running or paused walk, children included, and one ``EXISTS`` for the
     # longlist — a fixed two statements per task, whatever it has run. An
-    # active walk adds one more for its stage (task 058, N15).
+    # active walk adds one more for its stage (task 058, N15) and one for the
+    # time it has paused, which its timer leaves out.
     active = conn.execute(
         select(capability_run)
         .where(capability_run.c.task_id == row["task_id"])
@@ -556,7 +609,13 @@ def task_out(
         archived_at=row["archived_at"],
         latest_run=latest_out,
         active_run=(
-            _latest_run_out(active, _active_stage(conn, row["task_id"], active))
+            _latest_run_out(
+                active,
+                _active_stage(conn, row["task_id"], active),
+                walk_pauses(
+                    conn, task_id=row["task_id"], walk_ids=[active["capability_run_id"]]
+                ).get(active["capability_run_id"], 0),
+            )
             if active is not None
             else None
         ),

@@ -1539,5 +1539,14 @@ describe("reduceRunStreamFrame — the timer leaves out time paused at a check-i
     expect(state.run?.pausedMs).toBe(3 * 60 * 60 * 1000);
     const oneMinuteOn = Date.parse("2026-07-21T13:05:00Z");
     expect(elapsedSeconds(state.run?.startedAt, state.run?.pausedAt, oneMinuteOn, state.run?.pausedMs)).toBe(300);
+
+    // A second check-in: one hour more of waiting, then the run ends.
+    state = [
+      status("paused", "2026-07-21T13:05:00Z", 4),
+      status("running", "2026-07-21T14:05:00Z", 5),
+      status("succeeded", "2026-07-21T14:07:00Z", 6),
+    ].reduce(reduceRunStreamFrame, state);
+    expect(state.run?.pausedMs).toBe(4 * 60 * 60 * 1000);
+    expect(elapsedSeconds(state.run?.startedAt, state.run?.endedAt, oneMinuteOn, state.run?.pausedMs)).toBe(420);
   });
 });

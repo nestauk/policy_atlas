@@ -189,6 +189,8 @@ class LatestRun(BaseModel):
         started_at: When that run started executing.
         ended_at: When that run reached a terminal status, or `None` while
             still running or paused.
+        paused_seconds: On `TaskOut.active_run` only: seconds that run spent
+            in finished pauses at check-ins; its timer leaves them out.
         stage: On `TaskOut.active_run` only: the public stage the task's
             parentless active walk last started, so a scoping task shows the
             parent's stage rather than a child's (task 058, N15). `None` before
@@ -201,6 +203,7 @@ class LatestRun(BaseModel):
     status: RunStatus
     started_at: datetime
     ended_at: datetime | None = None
+    paused_seconds: float = 0
     stage: StageKey | None = None
     stage_label: str | None = None
 

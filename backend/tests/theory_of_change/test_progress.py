@@ -406,3 +406,45 @@ def test_the_walk_kind_reads_the_upload_and_the_report_update() -> None:
     assert kind(None, None) == (None, None)
     assert kind("targeted", {"toc_walk": "draft"}) == (None, None)
     assert kind("longlist", {}) == (None, None)
+
+
+# --- A run's timer leaves out the time it waited at a check-in ----------------------
+
+
+def test_a_walks_pause_time_is_read_from_its_pause_and_carry_on_events(
+    engine: Engine, cleanup: list[uuid.UUID]
+) -> None:
+    from datetime import UTC, datetime
+
+    from policy_atlas.api.routers.common import walk_pauses
+
+    task_id, _ = seed_toc(engine)
+    cleanup.append(task_id)
+    walk, other, never = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    # 10:04 pause, 13:04 carry on (3 hours); 13:10 pause, 14:10 carry on (1 hour);
+    # 14:20 pause again and still waiting, which is not counted yet.
+    # The other walk pauses at 11:00 and is stopped there at 11:30.
+    log = [
+        ("run.parked", walk, 10, 4),
+        ("run.parked", other, 11, 0),
+        ("run.finished", other, 11, 30),
+        ("continuation.claimed", walk, 13, 4),
+        ("run.parked", walk, 13, 10),
+        ("continuation.claimed", walk, 14, 10),
+        ("run.parked", walk, 14, 20),
+    ]
+    with engine.begin() as conn:
+        for sequence, (event_type, walk_id, hour, minute) in enumerate(log, start=100_000):
+            conn.execute(
+                event_log.insert().values(
+                    event_id=uuid.uuid4(),
+                    run_id=None,
+                    task_id=task_id,
+                    sequence=sequence,
+                    event_type=event_type,
+                    occurred_at=datetime(2026, 11, 12, hour, minute, tzinfo=UTC),
+                    payload={"capability_run_id": str(walk_id)},
+                )
+            )
+        pauses = walk_pauses(conn, task_id=task_id, walk_ids=[walk, other, never])
+    assert pauses == {walk: 4 * 3600.0, other: 1800.0}

@@ -616,6 +616,7 @@ export function PastRunLine({
         plan={null}
         startedAt={leadRun?.started_at ?? run.started_at}
         endedAt={run.ended_at ?? undefined}
+        pausedMs={(run.paused_seconds ?? 0) * 1000}
         hasFindings={hasFindings}
         capability={capability}
         purpose={run.purpose}

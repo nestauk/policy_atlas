@@ -3858,6 +3858,8 @@ export interface components {
          *         started_at: When that run started executing.
          *         ended_at: When that run reached a terminal status, or `None` while
          *             still running or paused.
+         *         paused_seconds: On `TaskOut.active_run` only: seconds that run spent
+         *             in finished pauses at check-ins; its timer leaves them out.
          *         stage: On `TaskOut.active_run` only: the public stage the task's
          *             parentless active walk last started, so a scoping task shows the
          *             parent's stage rather than a child's (task 058, N15). `None` before
@@ -3873,6 +3875,11 @@ export interface components {
             capability_run_id: string;
             /** Ended At */
             ended_at?: string | null;
+            /**
+             * Paused Seconds
+             * @default 0
+             */
+            paused_seconds: number;
             /** Stage */
             stage?: ("acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist" | "toc_draft" | "toc_read" | "toc_item_searches" | "toc_select" | "toc_discover" | "toc_merge" | "toc_search_new" | "toc_new_link_searches" | "toc_judge" | "toc_search_again" | "toc_retry_searches" | "toc_figures" | "toc_choose" | "toc_summarise" | "toc_report") | null;
             /** Stage Label */
@@ -5493,6 +5500,9 @@ export interface components {
          *         started_at: When the run started executing.
          *         ended_at: When the run reached a terminal status, or `None` while
          *             still running or paused.
+         *         paused_seconds: Seconds the run spent in finished pauses at
+         *             check-ins, on the list and the one-run reads. The run's working
+         *             time is its span from start to end less this.
          *         artefact_id: The artefact this walk wrote, or `None` when it wrote
          *             none (it has not reached synthesise, or ended before it). A
          *             scoping walk that carries one produced a baseline, whatever its
@@ -5523,6 +5533,11 @@ export interface components {
             follows_capability_run_id?: string | null;
             /** Parent Capability Run Id */
             parent_capability_run_id?: string | null;
+            /**
+             * Paused Seconds
+             * @default 0
+             */
+            paused_seconds: number;
             /**
              * Plan Id
              * Format: uuid
