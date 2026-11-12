@@ -25,7 +25,10 @@ export const CAPABILITIES = [
   {
     key: "theory_of_change",
     name: "Theory of change",
-    available: false,
+    // Shown only where VITE_THEORY_OF_CHANGE=1 at build time (local dev,
+    // staging, tests), like Options scoping above. Production builds leave it
+    // unset until the capability is complete. Delete the flag then.
+    available: import.meta.env.VITE_THEORY_OF_CHANGE === "1",
   },
   {
     key: "map_stakeholders",
@@ -39,7 +42,7 @@ const LABEL_BY_KEY = new Map<string, string>(
 );
 
 /** One of the keys the New task screen can offer (task 044). */
-export type SelectableCapabilityKey = "evidence_search" | "options_scoping";
+export type SelectableCapabilityKey = "evidence_search" | "options_scoping" | "theory_of_change";
 
 /**
  * Whether a URL parameter names a capability a new task can be created with.

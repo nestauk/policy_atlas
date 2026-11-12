@@ -56,6 +56,12 @@ _SINGULAR = {
     "abstracts": "abstract",
     "places": "place",
     "queries": "query",
+    # Task 054: the theory of change's done counts.
+    "boxes": "box",
+    "connections": "connection",
+    "pathways": "pathway",
+    "figures": "figure",
+    "routes found": "route found",
 }
 
 
@@ -208,10 +214,11 @@ def _step_counts(payload: Mapping[str, Any]) -> str | None:
 
 
 def step_sentence(event_type: str, payload: Mapping[str, Any]) -> str:
-    """One line for a step's end: finished with its counts, skipped, or failed.
+    """One line for a step: started, finished with its counts, skipped, or failed.
 
     Args:
-        event_type: ``component.completed``, ``component.skipped`` or
+        event_type: ``component.started`` (a theory of change's chat only,
+            task 054), ``component.completed``, ``component.skipped`` or
             ``component.failed``.
         payload: The event's payload.
 
@@ -220,6 +227,8 @@ def step_sentence(event_type: str, payload: Mapping[str, Any]) -> str:
         skipped.", "Writing didn't complete.".
     """
     label = _step_label(payload)
+    if event_type == "component.started":
+        return f"{label} started." if label else "A step started."
     if event_type == "component.skipped":
         return f"{label} skipped." if label else "A step was skipped."
     if event_type == "component.failed":

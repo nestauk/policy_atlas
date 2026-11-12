@@ -18,6 +18,7 @@ from langgraph.graph import END, StateGraph
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.api.contract import StageKey
 from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY
 from policy_atlas.core import events, liveness
 from policy_atlas.core.embeddings import EmbeddingBackend, StubEmbeddingBackend
@@ -124,6 +125,11 @@ from policy_atlas.runtime.progress import ProgressEmitter
 from policy_atlas.runtime.run_spec import Config
 from policy_atlas.runtime.scoping_plan import ScopingPlan
 from policy_atlas.runtime.task_plan import registry_component_for
+from policy_atlas.theory_of_change import report as toc_report
+from policy_atlas.theory_of_change.backend import StubTocBackend, TocBackend
+from policy_atlas.theory_of_change.check import choose, discover, judge, merge, selecting, summarise
+from policy_atlas.theory_of_change.check import figures as toc_figures
+from policy_atlas.theory_of_change.draft import toc_draft_scope
 
 log = structlog.get_logger()
 
@@ -157,9 +163,18 @@ class HarnessState(TypedDict):
     grounding_judge_backend: GroundingJudgeBackend
     suggest_backend: SuggestBackend
     longlist_backend: LonglistBackend
+    toc_backend: TocBackend
     summary: dict[str, Any] | None
     progress_emitter: ProgressEmitter | None
     error: str | None
+    #: The public stage the runner stamped on this run (task 054, S1), or None.
+    stage: StageKey | None
+
+
+def _stamp(state: HarnessState) -> dict[str, Any]:
+    """The runner's stage stamp for a lifecycle payload (task 054, S1), if any."""
+    stage = state.get("stage")
+    return {"stage": stage} if stage is not None else {}
 
 
 def _run_scope_component(
@@ -186,7 +201,7 @@ def _run_scope_component(
         events.append(
             conn, task_id=task_id, run_id=run_id,
             event_type="component.failed",
-            payload={"component": config.component, "error": err},
+            payload={"component": config.component, "error": err, **_stamp(state)},
         )
         return {**state, "error": err}
 
@@ -205,7 +220,7 @@ def _run_scope_component(
         # the 013 rule: a persisted rejection must persist its reason, or the
         # halt-and-re-gate is undiagnosable from the record.
         reason = getattr(exc, "reason", None)
-        payload: dict[str, Any] = {"component": config.component, "error": err}
+        payload: dict[str, Any] = {"component": config.component, "error": err, **_stamp(state)}
         if reason is not None:
             payload["reason"] = reason
         events.append(
@@ -473,6 +488,49 @@ def _scoping_node(name: str) -> Any:
     return run
 
 
+#: The theory-of-change steps (task 054), each ``(conn, *, task_id, run_id,
+#: context, backend)`` on the ToC backend, like the scoping steps;
+#: ``toc_select`` makes one small pick call per link (C28).
+_TOC_STEPS: dict[str, Callable[..., dict[str, Any]]] = {
+    "toc_draft": toc_draft_scope,
+    "toc_select": selecting.toc_select_scope,
+    "toc_search_new": selecting.toc_search_new_scope,
+    "toc_discover": discover.toc_discover_scope,
+    "toc_merge": merge.toc_merge_scope,
+    "toc_judge": judge.toc_judge_scope,
+    "toc_search_again": judge.toc_search_again_scope,
+    "toc_figures": toc_figures.toc_figures_scope,
+    "toc_choose": choose.toc_choose_scope,
+    "toc_summarise": summarise.toc_summarise_scope,
+    "toc_report": toc_report.toc_report_scope,
+}
+
+
+def _toc_node(name: str) -> Any:
+    def run(state: HarnessState) -> HarnessState:
+        step = _TOC_STEPS[name]  # read at run time, so a test can swap a step
+        kwargs: dict[str, Any] = {"backend": state["toc_backend"]}
+        if name in ("toc_select", "toc_search_new"):
+            # The shared pool: the walk's documents closest to each link (C31).
+            kwargs["embedder"] = state["embedding_backend"]
+        if name == "toc_select":
+            # The seminal works lookup reuses the item searches' OpenAlex backend.
+            kwargs["searchers"] = state["search_backends"]
+        if name in ("toc_judge", "toc_search_again"):
+            # Judge reranks each link's candidates with select's rerank backend
+            # (C5), and picks a searchless link's documents by embedding (C27).
+            kwargs["ranker"] = state["ranking_backend"]
+            kwargs["embedder"] = state["embedding_backend"]
+            # Each link's judgements commit as it is judged (task 054, S8).
+            kwargs["connect"] = state["ingest_connect"]
+        if name == "toc_report":
+            # The report's live frames (task 054's 058 alignment, S6).
+            kwargs["progress"] = state["progress_emitter"]
+        return _run_scope_component(state, ScopeContext, functools.partial(step, **kwargs))
+
+    return run
+
+
 def _run_group(state: HarnessState) -> HarnessState:
     config = state["config"]
     assert config.extraction_run_id is not None  # registry-enforced at compile
@@ -683,6 +741,8 @@ def build_graph() -> Any:
     g.add_node("extract_interventions", _run_extract_interventions)
     for name in _SCOPING_STEPS:
         g.add_node(name, _scoping_node(name))
+    for name in _TOC_STEPS:
+        g.add_node(name, _toc_node(name))
     g.add_node("group", _run_group)
     g.add_node("synthesise", _run_synthesise)
     g.add_node("finish", _finish)
@@ -710,6 +770,7 @@ def build_graph() -> Any:
             "shortlist": "shortlist",
             "group": "group",
             "synthesise": "synthesise",
+            **{name: name for name in _TOC_STEPS},
         },
     )
     g.add_edge("acquire", "finish")
@@ -730,6 +791,8 @@ def build_graph() -> Any:
     g.add_edge("shortlist", "finish")
     g.add_edge("group", "finish")
     g.add_edge("synthesise", "finish")
+    for name in _TOC_STEPS:
+        g.add_edge(name, "finish")
     g.add_edge("finish", END)
     return g.compile()
 
@@ -808,7 +871,9 @@ def run_harness(
     grounding_judge_backend: GroundingJudgeBackend | None = None,
     suggest_backend: SuggestBackend | None = None,
     longlist_backend: LonglistBackend | None = None,
+    toc_backend: TocBackend | None = None,
     progress_emitter: ProgressEmitter | None = None,
+    stage: StageKey | None = None,
 ) -> dict[str, Any]:
     """Run the compiled harness graph for one run, persisting its output.
 
@@ -832,6 +897,8 @@ def run_harness(
             ``None`` runs every document inline on ``conn`` (each in a savepoint).
         ingest_connect: Opens one short committed transaction for that stage's
             own writes (``engine.begin``); ``None`` uses savepoints on ``conn``.
+            The ToC judge commits each link's judgements through it too
+            (task 054, S8).
         screening_backend: Screening backend for the screen component;
             defaults to ``StubScreeningBackend()`` — no default egress, the
             extraction backend pattern (approved gated change 2, task 014).
@@ -882,6 +949,11 @@ def run_harness(
         longlist_backend: Model seam for the longlist, option_profile,
             constrain and theme components (task 045; task 046, S20);
             defaults to ``StubLonglistBackend()`` — no default egress.
+        toc_backend: Model seam for every theory-of-change step (task 054);
+            defaults to ``StubTocBackend()`` — no default egress.
+        stage: The public stage the runner stamped on this run, when its walk
+            names one other than the component's own (an uploaded theory's
+            read, task 054); ``None`` uses the component's.
 
     Returns:
         Harness outcome with ``summary`` populated only after successful
@@ -984,9 +1056,11 @@ def run_harness(
         "longlist_backend": (
             longlist_backend if longlist_backend is not None else StubLonglistBackend()
         ),
+        "toc_backend": toc_backend if toc_backend is not None else StubTocBackend(),
         "summary": None,
         "progress_emitter": progress_emitter,
         "error": None,
+        "stage": stage,
     }
     # Bind run/component correlation once for every log call this component
     # execution makes (structlog's merge_contextvars processor picks these up),
@@ -994,7 +1068,9 @@ def run_harness(
     # the innermost boundary that sees exactly one component execution: each
     # run_harness call dispatches to exactly one node (routed by config.component),
     # and it is the direct caller of node-level component work.
-    stage = STAGE_BY_REGISTRY.get(registry_component_for(config.component))
+    bound = stage if stage is not None else STAGE_BY_REGISTRY.get(
+        registry_component_for(config.component)
+    )
     # The walk this component run belongs to, so its ticks name it (round 11):
     # a longlist walk's option searches run the same stages as the walk.
     walk_id = conn.execute(
@@ -1002,12 +1078,12 @@ def run_harness(
     ).scalar_one_or_none()
     try:
         with liveness.task_liveness(
-            task_id, stage=stage, run_id=walk_id
+            task_id, stage=bound, run_id=walk_id
         ), structlog.contextvars.bound_contextvars(
             task_id=str(task_id), run_id=str(run_id), component=config.component,
         ):
             final: HarnessState = graph.invoke(initial)
     finally:
-        if stage is not None:
-            liveness.tick_hub.end_stage(task_id, stage, walk_id)
+        if bound is not None:
+            liveness.tick_hub.end_stage(task_id, bound, walk_id)
     return {"summary": final.get("summary"), "error": final.get("error")}

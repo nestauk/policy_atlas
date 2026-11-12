@@ -26,6 +26,7 @@ from policy_atlas.api.contract import ErrorBody, ErrorEnvelope
 from policy_atlas.api.settings import IngestMode, Settings, load_settings
 from policy_atlas.core import tracing
 from policy_atlas.core.logging import configure_logging
+from policy_atlas.theory_of_change.edits import EditRefused
 
 log = structlog.get_logger()
 
@@ -54,6 +55,14 @@ _CONFLICT_CODES = {
     "link_project_mismatch",
     "link_source_unfinished",
     "link_source_capability",
+    # Task 054 (C10, C41): an edit made against an old revision, two boxes
+    # already connected, an Undo already applied.
+    "toc_stale_revision",
+    "toc_duplicate",
+    "toc_already_undone",
+    "toc_not_running",
+    # Task 054: the plan is fixed once the theory is drafted (plan edits, uploads).
+    "toc_plan_fixed",
     # Task 055 (P9): Suggest more when every included option already holds a
     # place or was set aside; a shortlist place for an excluded or merged option.
     "nothing_to_propose",
@@ -61,6 +70,19 @@ _CONFLICT_CODES = {
 }
 
 _CAPACITY_CODES = {"chat_capacity"}
+
+#: Task 054 (S14): a readable task that is not a theory of change.
+_NOT_FOUND_CODES = {"toc_not_found"}
+
+#: Task 054 (C15): a capability this deployment has switched off.
+_UNPROCESSABLE_CODES = {
+    "capability_not_enabled",
+    "toc_invalid",
+    # Task 054 increment 5 (C8): a refused upload, or an image that is no theory.
+    "upload_type",
+    "upload_size",
+    "upload_not_theory",
+}
 
 
 class ApiConflict(Exception):
@@ -83,6 +105,41 @@ class ApiConflict(Exception):
         """
         if code not in _CONFLICT_CODES:
             raise ValueError(f"unsupported API conflict code: {code}")
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+class ApiUnprocessable(Exception):
+    """A contract-defined 422 with its own error code, raised by API service adapters.
+
+    Args:
+        code: One of the contract-defined 422 codes.
+        message: Human-readable explanation for the caller.
+    """
+
+    def __init__(self, code: str, message: str) -> None:
+        if code not in _UNPROCESSABLE_CODES:
+            raise ValueError(f"unsupported API unprocessable code: {code}")
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+class ApiNotFound(Exception):
+    """A contract-defined 404 with its own code, for a resource of the wrong kind.
+
+    Raised only after the caller has passed the read check, so it never tells
+    an outsider anything (an unreadable task keeps the generic ``not_found``).
+
+    Args:
+        code: One of the contract-defined 404 codes.
+        message: Human-readable explanation for the caller.
+    """
+
+    def __init__(self, code: str, message: str) -> None:
+        if code not in _NOT_FOUND_CODES:
+            raise ValueError(f"unsupported API not-found code: {code}")
         super().__init__(message)
         self.code = code
         self.message = message
@@ -137,7 +194,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         CORSMiddleware,
         allow_origins=[app_settings.app_origin],
         allow_credentials=False,
-        allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
     )
     _install_exception_handlers(app)
@@ -229,6 +286,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         public_read_router as tasks_public_read_router,
     )
     from policy_atlas.api.routers.tasks import router as tasks_router
+    from policy_atlas.api.routers.toc import router as toc_router
     from policy_atlas.api.routers.waitlist import router as waitlist_router
 
     for router in (
@@ -244,6 +302,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         sse_router,
         read_models_router,
         longlist_router,
+        toc_router,
         waitlist_router,
         *routers,
     ):
@@ -407,9 +466,26 @@ def _install_exception_handlers(app: FastAPI) -> None:
     async def api_conflict_handler(_: Request, exc: ApiConflict) -> JSONResponse:
         return _error_response(409, exc.code, exc.message)
 
+    @app.exception_handler(ApiUnprocessable)
+    async def api_unprocessable_handler(_: Request, exc: ApiUnprocessable) -> JSONResponse:
+        return _error_response(422, exc.code, exc.message)
+
+    @app.exception_handler(ApiNotFound)
+    async def api_not_found_handler(_: Request, exc: ApiNotFound) -> JSONResponse:
+        return _error_response(404, exc.code, exc.message)
+
     @app.exception_handler(ApiCapacity)
     async def api_capacity_handler(_: Request, exc: ApiCapacity) -> JSONResponse:
         return _error_response(429, exc.code, exc.message)
+
+    @app.exception_handler(EditRefused)
+    async def edit_refused_handler(_: Request, exc: EditRefused) -> JSONResponse:
+        # A theory-of-change edit that cannot apply (task 054, C10).
+        if exc.status == 404:
+            return _error_response(404, "toc_not_found", exc.message)
+        if exc.status == 422:
+            return _error_response(422, "toc_invalid", exc.message)
+        return _error_response(409, exc.code, exc.message)
 
     @app.exception_handler(RequestValidationError)
     async def validation_handler(_: Request, exc: RequestValidationError) -> JSONResponse:

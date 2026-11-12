@@ -43,6 +43,8 @@ const activeRows = [
 const CLOSED_TASK_AGENT_ROW = { id: "p-closed", kind: "task_agent", status: "closed", closed_at: iso(4), title: "Planning", created_at: iso(5), entry_artefact_id: null, latest_turn_preview: null };
 
 vi.mock("../api/queries", () => ({
+  // Task 054: the result gate also reads the theory-of-change graph (none here).
+  useToc: () => ({ data: undefined }),
   useTask: () => ({
     data: {
       task_id: "11111111-1111-1111-1111-111111111111",

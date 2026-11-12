@@ -3,10 +3,10 @@
 Frame `type` names and the nineteen pinned `stage` keys are contract (spec §
 SSE) — Hyrum hygiene means nothing else internal (module names, model ids,
 raw payload keys) is ever observable through a frame. Every frame except the
-nine ephemeral ones (`tick`, `artefact.section_delta`,
+ten ephemeral ones (`tick`, `artefact.section_delta`,
 `artefact.section_revising`, `artefact.section_sources`,
 `artefact.section_claim`, `artefact.section_card`, `artefact.source_note`,
-`search.query`, `characterise.themes`)
+`search.query`, `characterise.themes`, `toc.sketch`)
 carries a `sequence` (the `event_log` sequence,
 doubling as the client's reconnect cursor); the ephemeral frames carry
 neither `sequence` nor an `id:` line and are never replayed.
@@ -20,10 +20,12 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
+from policy_atlas.theory_of_change.graph import Layer
+
 from .check_ins import CheckInOut
 from .common import StageKey
 from .runs import RunStatus, StageCount
-from .task_agent import PlanDraft, ScopingPlanDraft
+from .task_agent import PlanDraft, ScopingPlanDraft, TocPlanDraft
 from .tasks import TaskStatus
 
 #: Who decided a resolved check-in. Mirrors `steering_events.DecidedBy`.
@@ -243,6 +245,7 @@ class PlanUpdatedFrame(_PersistedFrameBase):
     type: Literal["plan.updated"]
     plan: PlanDraft | None = None
     scoping: ScopingPlanDraft | None = None
+    toc: TocPlanDraft | None = None
     version: int
 
 
@@ -491,6 +494,56 @@ class CharacteriseThemesFrame(BaseModel):
     occurred_at: datetime
 
 
+class SketchBox(BaseModel):
+    """One box of the theory of change draft as the model wrote it (task 054, S12).
+
+    Args:
+        key: The model's key for the box in this draft ("b1", "b2", ...), not a
+            stored id; connections name their ends by it.
+        layer: The box's column on the canvas.
+        text: The box's words.
+    """
+
+    key: str
+    layer: Layer
+    text: str
+
+
+class SketchLink(BaseModel):
+    """One connection of the draft as the model wrote it (task 054, S12).
+
+    Args:
+        key: The model's key for the connection ("l1", ...).
+        source: The draft key of the box it starts from.
+        target: The draft key of the box it leads to.
+    """
+
+    key: str
+    source: str
+    target: str
+
+
+class TocSketchFrame(BaseModel):
+    """Ephemeral: the theory of change's first draft while it is written (task 054, S12).
+
+    Sent whole each time a box or connection closes in the model's answer:
+    each frame replaces the one before. The boxes come first, then the
+    connections; a connection names its ends by the boxes' draft keys, and
+    only after both boxes were sent. An empty frame (no boxes, no
+    connections) means the draft is being written again: the page drops
+    its sketch. The stored graph (`GET /toc`, read when the `toc_draft`
+    stage completes) replaces the sketch; its ids are not the draft keys. A
+    reconnect gets the sketch so far. Display-only: never persisted, no
+    `id:` line, no `sequence`.
+    """
+
+    type: Literal["toc.sketch"]
+    ephemeral: Literal[True] = True
+    boxes: list[SketchBox]
+    links: list[SketchLink]
+    occurred_at: datetime
+
+
 #: Discriminated union of every SSE frame type, keyed on `type`.
 SseFrame = Annotated[
     RunStatusFrame
@@ -512,6 +565,7 @@ SseFrame = Annotated[
     | ArtefactSectionCardFrame
     | ArtefactSourceNoteFrame
     | SearchQueryFrame
-    | CharacteriseThemesFrame,
+    | CharacteriseThemesFrame
+    | TocSketchFrame,
     Field(discriminator="type"),
 ]

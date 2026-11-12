@@ -1,0 +1,460 @@
+<title>Theory of Change Capability</title>
+<meta name="description" content="How the theory of change capability works in Policy Atlas, for users and for the build: the canvas, the evidence verdicts, the theory's verdict, the evidence check and editing step by step, and how it reuses the Evidence search machinery. Task 054, as built.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=Manrope:wght@400;500;600;700&display=swap">
+<style>
+/* Same layout and palette as the task 053 model-routing explainer: one reading column, figures
+   break out wider, Nesta navy with electric blue as the single accent. Categorical colours:
+   evidence verdicts (supports green, mixed amber, against red, too little grey), neutral boxes,
+   reused machinery (grey), new components (blue). */
+:root {
+  --paper: #ffffff; --ground: #f4f4f5; --ink: #1c1c1e; --ink-2: #4b4b4f; --grey: #646363; --line: #e4e4e7;
+  --navy: #0f294a; --blue: #0000ff; --blue-tint: #ececff;
+  --yellow: #fdb633; --yellow-tint: #fff6e3; --red: #eb003b; --red-tint: #ffe9ee;
+  --g-strong: #18a48c; --g-medium: #f0a823; --g-weak: #d93a12; --g-none: #b4b4bb; --box: #b7bcc6;
+  --c-fail: #9a1bbe; --c-fail-tint: #f6e9fa; --c-reused: #9a9aa3; --c-new: #2d3ff0;
+  --font-display: "Zosia Display", "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Averta", "Manrope", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f294a; --ground: #0b1f38; --ink: #f4f6fa; --ink-2: #c8d6e6; --grey: #a9b7c9; --line: #27405f;
+    --navy: #f4f6fa; --blue: #8c9bff; --blue-tint: #1a2f52;
+    --yellow: #fdb633; --yellow-tint: #2b2a1a; --red: #ff5f85; --red-tint: #3a1a24;
+    --g-strong: #2cc4a8; --g-medium: #fdb633; --g-weak: #ff7a52; --g-none: #8593a8; --box: #6f7d93;
+    --c-fail: #c27ae0; --c-fail-tint: #2e1f45; --c-reused: #6f7d93; --c-new: #8c9bff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f294a; --ground: #0b1f38; --ink: #f4f6fa; --ink-2: #c8d6e6; --grey: #a9b7c9; --line: #27405f;
+  --navy: #f4f6fa; --blue: #8c9bff; --blue-tint: #1a2f52;
+  --yellow: #fdb633; --yellow-tint: #2b2a1a; --red: #ff5f85; --red-tint: #3a1a24;
+  --g-strong: #2cc4a8; --g-medium: #fdb633; --g-weak: #ff7a52; --g-none: #8593a8; --box: #6f7d93;
+  --c-fail: #c27ae0; --c-fail-tint: #2e1f45; --c-reused: #6f7d93; --c-new: #8c9bff;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--paper); color: var(--ink); font-family: var(--font-body); font-size: 17px; line-height: 1.55; padding-block: 0 4rem; padding-inline: 16px; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 72ch; margin: 0 auto; }
+.wide { max-width: 980px; margin-inline: auto; }
+header.masthead { border-bottom: 3px solid var(--navy); padding-block: 1.25rem 1.5rem; margin-bottom: 2.5rem; }
+.eyebrow { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--grey); font-weight: 600; }
+h1, h2, h3 { font-family: var(--font-display); color: var(--navy); text-wrap: balance; line-height: 1.1; margin: 0; }
+h1 { font-size: clamp(2.1rem, 5vw, 3.4rem); font-weight: 800; margin-top: .4rem; }
+h2 { font-size: clamp(1.5rem, 3vw, 2.1rem); font-weight: 800; margin-top: 3rem; margin-bottom: .75rem; }
+h3 { font-size: 1.15rem; font-weight: 700; margin-top: 1.75rem; margin-bottom: .4rem; font-family: var(--font-body); }
+p { margin: 0 0 1rem; }
+.lede { font-size: 1.2rem; color: var(--ink-2); max-width: 60ch; margin-top: 1rem; }
+a { color: var(--blue); }
+code { overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; background: var(--ground); padding: .05em .35em; border-radius: 3px; }
+ul, ol { padding-left: 1.3rem; }
+li { margin-bottom: .35rem; }
+.part { font-family: var(--font-display); font-weight: 800; font-size: .85rem; letter-spacing: .1em; text-transform: uppercase; color: var(--blue); border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 3.5rem; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); margin: 1.5rem 0 0; }
+.tile { background: var(--paper); padding: 1rem 1.1rem; }
+.tile .num { font-family: var(--font-display); font-size: 2.6rem; font-weight: 800; line-height: 1; color: var(--navy); font-variant-numeric: tabular-nums; }
+.tile .num.accent { color: var(--blue); }
+.tile .lab { font-size: .85rem; color: var(--grey); margin-top: .35rem; line-height: 1.3; }
+figure { margin: 1.5rem 0 2rem; }
+.fig-scroll { overflow-x: auto; }
+figure svg { display: block; width: 100%; min-width: 640px; height: auto; color: var(--ink); }
+figure svg text { fill: currentColor; }
+figcaption { font-size: .9rem; color: var(--ink-2); margin-top: .6rem; max-width: 70ch; }
+figcaption b { color: var(--ink); }
+.legend { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; font-size: .85rem; color: var(--ink-2); margin: .5rem 0 0; }
+.legend span::before { content: ""; display: inline-block; width: 18px; height: 0; border-top: 3px var(--style, solid) var(--dot); margin-right: .45rem; vertical-align: 4px; }
+.legend span.sq::before { width: 10px; height: 10px; border: 0; background: var(--dot); vertical-align: -1px; border-radius: 2px; }
+table { border-collapse: collapse; width: 100%; font-size: .92rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: .78rem; letter-spacing: .05em; text-transform: uppercase; color: var(--grey); font-weight: 600; }
+.scroll { overflow-x: auto; }
+.grade { display: inline-block; font-weight: 700; font-size: .78rem; letter-spacing: .05em; text-transform: uppercase; padding: .1rem .5rem; border-radius: 3px; border: 1.5px solid var(--gc); color: var(--gc); white-space: nowrap; }
+.note { border-left: 4px solid var(--yellow); background: var(--yellow-tint); padding: .8rem 1rem; margin: 1.25rem 0; font-size: .95rem; }
+.key { border-left: 4px solid var(--blue); background: var(--blue-tint); padding: .8rem 1rem; margin: 1.25rem 0; font-size: .95rem; }
+.steps { counter-reset: step; list-style: none; padding: 0; margin: 1rem 0; display: grid; gap: .6rem; }
+.steps li { position: relative; padding-left: 2.6rem; }
+.steps li::before { counter-increment: step; content: counter(step); position: absolute; left: 0; top: .05rem; width: 1.9rem; height: 1.9rem; border-radius: 50%; background: var(--navy); color: var(--paper); font-family: var(--font-display); font-weight: 800; display: grid; place-items: center; font-size: .95rem; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin: 1rem 0; }
+.two > div { border-top: 3px solid var(--line); padding-top: .6rem; min-width: 0; }
+.two b.h { display: block; font-family: var(--font-display); color: var(--navy); font-size: 1.1rem; margin-bottom: .3rem; }
+.toc { font-size: .95rem; color: var(--ink-2); margin: 1.25rem 0 0; display: flex; flex-wrap: wrap; gap: .3rem .9rem; }
+.toc a { white-space: nowrap; }
+footer { margin-top: 3.5rem; padding-top: 1rem; border-top: 1px solid var(--line); font-size: .85rem; color: var(--grey); }
+.ex { border: 1px solid var(--line); background: var(--ground); padding: 1rem 1.1rem; margin: 1rem 0; font-size: .95rem; }
+.ex .q { font-weight: 700; color: var(--navy); }
+.ex p { margin: .35rem 0 0; }
+.tag { display: inline-block; font-size: .72rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 0 .4rem; border-radius: 3px; vertical-align: 1px; margin-left: .35rem; }
+.tag.reused { color: var(--grey); border: 1px solid var(--c-reused); }
+.tag.new { color: var(--c-new); border: 1px solid var(--c-new); }
+.steps li .sub { display: block; color: var(--ink-2); font-size: .95rem; margin-top: .2rem; }
+</style>
+
+<header class="masthead wrap">
+  <div class="eyebrow">Policy Atlas · task 054 · how it works, 6 November 2026</div>
+  <h1>How the theory of change capability works</h1>
+  <p class="lede">A user describes an intervention and the change they want from it, or brings a theory they already have. Policy Atlas drafts the causal chain on a canvas in the Magenta Book's layout, then checks every step against research and policy documents while the user edits. Each connection shows how strong the evidence is that this step works, for this population and place, and the report opens with a verdict on the theory as a whole.</p>
+  <div class="tiles">
+    <div class="tile"><div class="num">5</div><div class="lab">Magenta Book layers: inputs, outputs, short and long-term outcomes, impact</div></div>
+    <div class="tile"><div class="num">6</div><div class="lab">evidence verdicts per connection, from one weighing rule</div></div>
+    <div class="tile"><div class="num">6 + 3</div><div class="lab">success and failure pathways kept at most</div></div>
+    <div class="tile"><div class="num accent">~5 min</div><div class="lab">for the evidence check, after a draft of about a minute</div></div>
+  </div>
+  <nav class="toc" aria-label="Contents">
+    <a href="#journey">A session</a><a href="#canvas">The canvas</a><a href="#grades">Verdicts</a><a href="#pipeline">How it is built</a><a href="#check">The check, step by step</a><a href="#editing">Editing, step by step</a><a href="#own">Your own theory</a><a href="#data">What is stored</a><a href="#evals">Evals</a><a href="#order">Built and next</a>
+  </nav>
+</header>
+
+<main>
+<div class="wrap part">Part 1 · What the user sees</div>
+
+<section class="wrap" id="what">
+  <h2>What a theory of change is</h2>
+  <p>A theory of change is an explicit account of how an intervention is expected to bring about a change: the chain of steps, the assumptions each step depends on, and how strong the evidence is behind them. HM Treasury's Magenta Book treats it as the first step of any evaluation. The diagram shows the theory; the theory itself is the reasoning and the evidence.</p>
+  <p>Users told us that building one by hand is valuable but slow, and that they want two things from a tool: evidence they can audit, and a clear difference between a step with <b>too little evidence</b> and a step with <b>evidence against it</b>.</p>
+  <p>The screens are drawn in the <b>wireframes</b> (<code>wireframes.html</code> and <code>wireframes-editing.html</code> in the task folder). This page explains what happens behind them.</p>
+</section>
+
+<section class="wrap" id="journey">
+  <h2>A session, start to finish</h2>
+  <ol class="steps">
+    <li><b>Start.</b> From New task, in one of three ways: describe the intervention or the change you want; upload a picture or PDF of a theory you already have; or choose "Start drafting yourself" and draw on an empty canvas.</li>
+    <li><b>Plan.</b> The Task Agent asks at most two questions: the change you want, in words you could measure, and whether you already have a theory. Everything else is suggested in the plan, where you can edit it, including which years of evidence count (from 2000 by default).</li>
+    <li><b>Sense check.</b> When the plan is ready, two quick searches look for evaluations of the whole intervention, and one call asks whether the route from intervention to goal is plausible. If it is not, or if evaluations found it did not work, the Task Agent says so in the chat, with its sources. It never blocks: you decide.</li>
+    <li><b>Draft, in about a minute.</b> The canvas appears at once, and the Task Agent says that this is a first draft from reasoning and that it is now checking it.</li>
+    <li><b>Evidence check, about 5 minutes.</b> Connections show a still grey line until checked. You can edit, ask questions, or leave; a check you start meanwhile waits in a queue, and Stop ends the current one after its step. You get the usual notification when it ends.</li>
+    <li><b>Read.</b> The report opens with the theory's verdict. The canvas suits people who think in diagrams; <b>Detailed information</b> under it suits people who read. Both show the same theory and evidence, and codes such as #4 in the report and the chat link to the canvas.</li>
+    <li><b>Refine.</b> Edit the theory, challenge a document's scores, find more evidence, or ask for a review of the theory's shape. Proposed changes wait as suggestions beside the canvas. Every change is in History, and your own changes can be undone.</li>
+    <li><b>Share and download.</b> A PDF report, PNG and SVG pictures, a draw.io file, CSV and JSON, all made in the browser. A public link shows the theory read-only, without downloads.</li>
+  </ol>
+</section>
+
+<section class="wrap" id="canvas">
+  <h2>Diagram 1: the canvas</h2>
+  <p>The canvas follows the Magenta Book's layers from left to right. Boxes are the steps and stay neutral; each carries a code such as #4. The connections between them carry the evidence: the line style shows the verdict. A dashed vertical line, the accountability ceiling, separates what the programme directly influences from what it contributes to. A warning triangle marks the <b>critical connection</b>, to test first. Routes that could go wrong sit below a line. The example is simplified from a real run on minimum unit pricing for alcohol in Scotland.</p>
+</section>
+
+<section class="wide">
+  <figure>
+    <div class="fig-scroll">
+    <svg viewBox="0 0 980 370" role="img" aria-label="Example canvas. Five columns: Inputs, Outputs, Short-term outcomes, Long-term outcomes, Impact. A dashed vertical line after the outputs separates what the programme directly influences from what it contributes to. Neutral rounded boxes: price floor on shop sales; cheap, strong alcohol costs more; cheap alcohol is less affordable; heavier drinkers buy fewer units; heavier drinkers drink fewer units; fewer alcohol hospital admissions. Connections: the first two are solid green, supported; the third is long-dashed green, leaning supports; the fourth is solid amber, mixed; the last, to the impact, is short-dashed grey, not enough evidence, and carries a warning triangle as the critical connection. Below a line labelled If it goes wrong: from heavier drinkers buy fewer units to drinkers cut spending on food, long-dashed red, leaning against.">
+      <defs>
+        <marker id="m-s" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1.5 L9 5 L1 8.5 z" style="fill: var(--g-strong)"/></marker>
+        <marker id="m-m" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1.5 L9 5 L1 8.5 z" style="fill: var(--g-medium)"/></marker>
+        <marker id="m-w" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1.5 L9 5 L1 8.5 z" style="fill: var(--g-weak)"/></marker>
+        <marker id="m-n" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1.5 L9 5 L1 8.5 z" style="fill: var(--g-none)"/></marker>
+      </defs>
+      <g font-family="inherit" font-size="13">
+        <g font-size="12.5" font-weight="600" text-anchor="middle" style="fill: var(--grey)">
+          <text x="95" y="24">Inputs</text><text x="280" y="24">Outputs</text><text x="477" y="24">Short-term outcomes</text><text x="682" y="24">Long-term outcomes</text><text x="882" y="24">Impact</text>
+        </g>
+        <!-- the accountability ceiling -->
+        <line x1="376" y1="38" x2="376" y2="232" stroke-dasharray="5 5" style="stroke: var(--grey)"/>
+        <text x="368" y="246" font-size="11" text-anchor="end" style="fill: var(--grey)">directly influenced</text>
+        <text x="384" y="246" font-size="11" style="fill: var(--grey)">contributes to</text>
+        <!-- links -->
+        <path d="M170 90 L203 90" fill="none" stroke-width="2.2" stroke-linecap="round" marker-end="url(#m-s)" style="stroke: var(--g-strong)"/>
+        <path d="M355 90 L393 90" fill="none" stroke-width="2.2" stroke-linecap="round" marker-end="url(#m-s)" style="stroke: var(--g-strong)"/>
+        <path d="M477 118 L477 150" fill="none" stroke-width="2.2" stroke-dasharray="12 5" stroke-linecap="round" marker-end="url(#m-s)" style="stroke: var(--g-strong)"/>
+        <path d="M560 180 L598 180" fill="none" stroke-width="2.2" stroke-linecap="round" marker-end="url(#m-m)" style="stroke: var(--g-medium)"/>
+        <path d="M765 180 L803 180" fill="none" stroke-width="2.2" stroke-dasharray="6 5" stroke-linecap="round" marker-end="url(#m-n)" style="stroke: var(--g-none)"/>
+        <path d="M477 208 L477 298" fill="none" stroke-width="2.2" stroke-dasharray="12 5" stroke-linecap="round" marker-end="url(#m-w)" style="stroke: var(--g-weak)"/>
+        <!-- the critical connection -->
+        <path d="M784 160 L793 175 L775 175 Z" style="fill: var(--yellow); stroke: var(--navy)" stroke-width="1.2"/>
+        <!-- boxes -->
+        <g stroke-width="1.5" style="fill: var(--paper); stroke: var(--box)">
+          <rect x="20" y="62" width="150" height="56" rx="10"/><rect x="205" y="62" width="150" height="56" rx="10"/>
+          <rect x="395" y="62" width="165" height="56" rx="10"/><rect x="395" y="152" width="165" height="56" rx="10"/>
+          <rect x="600" y="152" width="165" height="56" rx="10"/><rect x="805" y="152" width="155" height="56" rx="10"/>
+          <rect x="395" y="300" width="165" height="56" rx="10"/>
+        </g>
+        <g font-weight="600" style="fill: var(--navy)">
+          <text x="34" y="86">Price floor on</text><text x="34" y="104">shop sales</text>
+          <text x="219" y="86">Cheap, strong</text><text x="219" y="104">alcohol costs more</text>
+          <text x="409" y="86">Cheap alcohol is</text><text x="409" y="104">less affordable</text>
+          <text x="409" y="176">Heavier drinkers</text><text x="409" y="194">buy fewer units</text>
+          <text x="614" y="176">Heavier drinkers</text><text x="614" y="194">drink fewer units</text>
+          <text x="819" y="176">Fewer alcohol</text><text x="819" y="194">hospital admissions</text>
+          <text x="409" y="324">Drinkers cut</text><text x="409" y="342">spending on food</text>
+        </g>
+        <line x1="20" y1="262" x2="960" y2="262" style="stroke: var(--line)"/>
+        <text x="20" y="282" font-size="12.5" font-weight="600" style="fill: var(--grey)">If it goes wrong</text>
+      </g>
+    </svg>
+    </div>
+    <div class="legend">
+      <span style="--dot: var(--g-strong)">supported</span>
+      <span style="--dot: var(--g-strong); --style: dashed">leaning supports</span>
+      <span style="--dot: var(--g-medium)">mixed</span>
+      <span style="--dot: var(--g-weak); --style: dashed">leaning against</span>
+      <span style="--dot: var(--g-weak); --style: dotted">evidence against</span>
+      <span style="--dot: var(--g-none); --style: dashed">not enough evidence</span>
+      <span style="--dot: var(--g-none)">not checked yet</span>
+    </div>
+    <figcaption><b>Four levels of detail.</b> Look at the lines to see where the theory is weak. Hover over anything for one line. Click it to open a panel with the evidence: each document's support, quote, relevance and quality, and the size of change it reports. Or scroll to <b>Detailed information</b>: the verdict, a summary, each pathway in plain sentences that cite their sources, how it could fail, what to test first, how it could be expanded, supporting activities, an <b>Assumptions</b> table of every condition with its evidence, and the references. That section is also the PDF report.</figcaption>
+  </figure>
+</section>
+
+<section class="wrap" id="grades">
+  <h2>One verdict on every connection</h2>
+  <p>Theory-based evaluation tests the links in a causal chain and the assumptions under them (White 2009; Mayne 2015, 2017). A box is a result: it needs a clear definition and a way to measure it, not a grade of its own. So Policy Atlas grades only connections, and the assumptions are not separate objects: each connection names the <b>conditions</b> it needs. "It worked there" is not "it will work here" (Cartwright and Hardie 2012), so every document is also scored on how well its finding carries over.</p>
+  <div class="two">
+    <div><b class="h">What the judge says</b>For each document and connection: its <b>support</b> for the step (strong, weak, mixed, refutes, or not about it), with one quote that code checks against the source text, and its <b>relevance</b>, 0 to 3: how many extra assumptions it takes to carry the finding to this population, place and time.</div>
+    <div><b class="h">How code weighs it</b><b>Quality</b>, 1 to 3, comes from the study's appraisal (a systematic review or trial scores high, an opinion piece low). A document weighs quality × relevance ÷ 9, so one strong, fully relevant study weighs 1. Support counts +2, +1, 0 or −2. This is a simplified BEAM, the Balance Evidence Assessment Method (Christie et al. 2023).</div>
+  </div>
+  <div class="scroll"><table>
+    <thead><tr><th>verdict</th><th>rule, from the total weight W and the weighted average support S</th></tr></thead>
+    <tbody>
+      <tr><td><span class="grade" style="--gc: var(--g-strong)">Supported</span></td><td>W of 1 or more, S of +1 or more, and under a quarter of the weight refutes.</td></tr>
+      <tr><td><span class="grade" style="--gc: var(--g-strong)">Leaning supports</span></td><td>S of +0.5 or more, with W of 1 or more but not enough for Supported, or with W between 4/9 and 1.</td></tr>
+      <tr><td><span class="grade" style="--gc: var(--g-medium)">Mixed</span></td><td>W of 1 or more and S between −0.5 and +0.5.</td></tr>
+      <tr><td><span class="grade" style="--gc: var(--g-weak)">Leaning against</span></td><td>S of −0.5 or less, short of Evidence against.</td></tr>
+      <tr><td><span class="grade" style="--gc: var(--g-weak)">Evidence against</span></td><td>W of 1 or more and S of −1 or less.</td></tr>
+      <tr><td><span class="grade" style="--gc: var(--g-none)">Not enough evidence</span></td><td>W under 4/9, about half of one strong, relevant study, or thin evidence that leans neither way.</td></tr>
+    </tbody>
+  </table></div>
+  <p>The verdict is worked out from the stored judgements each time the page asks and is never saved, so it cannot drift from its evidence. A connection within reach of another verdict is marked <i>close to the threshold</i>: one more document could change it. The <b>critical connection</b> is the weakest step that matters: the lowest verdict on a kept success pathway, and of those, the one on most pathways.</p>
+  <div class="two">
+    <div><b class="h">Robust models count as fair studies</b>A modelling study normally scores low on quality. If the judge finds it built on real outcome data, tested for uncertainty or validated, it counts at quality 2: enough for a fair weight, never the top.</div>
+    <div><b class="h">Web pages count by their publisher</b>A page from a trusted publisher, such as gov.uk, the Evaluation Task Force, a regulator or a What Works Centre, counts by its appraisal like any document. Any other page counts at quality 1.</div>
+  </div>
+  <h3>The theory's verdict, on two questions</h3>
+  <p>The report opens with one verdict on the whole theory. <b>Mechanism</b>: can this intervention cause this change at all (plausible or implausible)? <b>Evidence</b>: what do the graded connections and the evaluations of the whole programme say (supports, mixed, too little or against)? A headline sentence and the step that carries the theory come with it. A full check adds one search for evaluations of the whole programme, judged in the same pool as the connections, because they can be missed step by step. In red-team runs, nonsense theories came out <i>implausible</i>, not merely "too little evidence".</p>
+  <div class="note"><b>No overall score, and no counts on the canvas.</b> The verdict is two words and a sentence; the evidence behind every connection is one click away.</div>
+</section>
+
+<div class="wrap part">Part 2 · How it is built</div>
+
+<section class="wrap" id="pipeline">
+  <h2>Diagram 2: mostly existing machinery</h2>
+  <p>The capability sits on what Policy Atlas already has. The Task Agent, the search loop, classification and appraisal of study quality all come from the Evidence search, unchanged. The per-connection searches reuse the small "option search" walks that Options scoping already runs in parallel. New code covers only what nothing in the repo did yet: drafting a causal graph, reading a diagram, picking and judging documents against one causal step, weighing the verdicts, choosing between pathways, and writing short cited sentences and the report.</p>
+</section>
+<section class="wide">
+  <figure>
+    <div class="fig-scroll">
+    <svg viewBox="0 0 980 450" role="img" aria-label="Pipeline in four rows. Row one, plan and draft: Task Agent conversation, existing pattern; sense check, new; draft the theory, new; or read your diagram, new. Row two, evidence check: search per connection plus the whole programme, existing option-search walks on OpenAlex and Overton; pick up to 10 per connection, new; discover routes the draft missed, new; merge, new; search the new links, existing; judge, new. Row three, after judging: figures, new; classify, existing; appraise, existing; verdict by fixed rule, new; choose pathways, new; report and theory verdict, new. Row four, any time after the draft: edit, find more evidence, review the theory, ask in the chat, download.">
+      <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
+      <g font-family="inherit" font-size="12">
+        <text x="20" y="28" font-weight="700" font-size="11" letter-spacing=".06em" style="fill: var(--grey)">1 · PLAN AND DRAFT</text>
+        <rect x="20" y="40" width="200" height="56" rx="6" style="fill: var(--ground); stroke: var(--c-reused)"/>
+        <text x="120" y="64" text-anchor="middle" font-weight="600">Task Agent conversation</text>
+        <text x="120" y="82" text-anchor="middle" font-size="11" style="fill: var(--grey)">existing pattern, new prompt</text>
+        <line x1="220" y1="68" x2="246" y2="68" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+        <rect x="250" y="40" width="200" height="56" rx="6" fill-opacity=".14" stroke-width="1.5" style="fill: var(--c-new); stroke: var(--c-new)"/>
+        <text x="350" y="64" text-anchor="middle" font-weight="600">Sense check</text>
+        <text x="350" y="82" text-anchor="middle" font-size="11">plausible? evaluations?</text>
+        <line x1="450" y1="68" x2="476" y2="68" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+        <rect x="480" y="40" width="200" height="56" rx="6" fill-opacity=".14" stroke-width="1.5" style="fill: var(--c-new); stroke: var(--c-new)"/>
+        <text x="580" y="64" text-anchor="middle" font-weight="600">Draft the theory</text>
+        <text x="580" y="82" text-anchor="middle" font-size="11">pathways, links, conditions</text>
+        <text x="710" y="72" text-anchor="middle" font-size="11" style="fill: var(--grey)">or</text>
+        <rect x="740" y="40" width="220" height="56" rx="6" fill-opacity=".14" stroke-width="1.5" style="fill: var(--c-new); stroke: var(--c-new)"/>
+        <text x="850" y="64" text-anchor="middle" font-weight="600">Read your diagram</text>
+        <text x="850" y="82" text-anchor="middle" font-size="11">image or PDF, kept as drawn</text>
+
+        <path d="M580 96 V120 H90 V140" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+
+        <text x="960" y="134" text-anchor="end" font-weight="700" font-size="11" letter-spacing=".06em" style="fill: var(--grey)">2 · EVIDENCE CHECK, ONCE PER CONNECTION</text>
+        <rect x="20" y="144" width="140" height="70" rx="6" style="fill: var(--ground); stroke: var(--c-reused)"/>
+        <text x="90" y="166" text-anchor="middle" font-weight="600">Search</text>
+        <text x="90" y="183" text-anchor="middle" font-size="10.5">OpenAlex · Overton</text>
+        <text x="90" y="198" text-anchor="middle" font-size="10.5" style="fill: var(--grey)">+ whole programme</text>
+        <line x1="160" y1="179" x2="176" y2="179" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+        <rect x="180" y="144" width="140" height="70" rx="6" fill-opacity=".14" stroke-width="1.5" style="fill: var(--c-new); stroke: var(--c-new)"/>
+        <text x="250" y="174" text-anchor="middle" font-weight="600">Pick</text>
+        <text x="250" y="192" text-anchor="middle" font-size="10.5">up to 10 per connection</text>
+        <line x1="320" y1="179" x2="336" y2="179" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+        <rect x="340" y="144" width="140" height="70" rx="6" fill-opacity=".14" stroke-width="1.5" style="fill: var(--c-new); stroke: var(--c-new)"/>
+        <text x="410" y="174" text-anchor="middle" font-weight="600">Discover</text>
+        <text x="410" y="192" text-anchor="middle" font-size="10.5">routes the draft missed</text>
+        <line x1="480" y1="179" x2="496" y2="179" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+        <rect x="500" y="144" width="140" height="70" rx="6" fill-opacity=".14" stroke-width="1.5" style="fill: var(--c-new); stroke: var(--c-new)"/>
+        <text x="570" y="174" text-anchor="middle" font-weight="600">Merge</text>
+        <text x="570" y="192" text-anchor="middle" font-size="10.5">fold duplicates</text>
+        <line x1="640" y1="179" x2="656" y2="179" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+        <rect x="660" y="144" width="140" height="70" rx="6" style="fill: var(--ground); stroke: var(--c-reused)"/>
+        <text x="730" y="174" text-anchor="middle" font-weight="600">Search new links</text>
+        <text x="730" y="192" text-anchor="middle" font-size="10.5" style="fill: var(--grey)">and pick for them</text>
+        <line x1="800" y1="179" x2="816" y2="179" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+        <rect x="820" y="144" width="140" height="70" rx="6" fill-opacity=".14" stroke-width="1.5" style="fill: var(--c-new); stroke: var(--c-new)"/>
+        <text x="890" y="174" text-anchor="middle" font-weight="600">Judge</text>
+        <text x="890" y="192" text-anchor="middle" font-size="10.5">support, relevance, quote</text>
+        <text x="890" y="206" text-anchor="middle" font-size="10.5">thin links: second search</text>
+
+        <path d="M890 214 V240 H90 V262" fill="none" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+
+        <text x="960" y="256" text-anchor="end" font-weight="700" font-size="11" letter-spacing=".06em" style="fill: var(--grey)">3 · AFTER JUDGING</text>
+        <rect x="20" y="266" width="140" height="62" rx="6" fill-opacity=".14" stroke-width="1.5" style="fill: var(--c-new); stroke: var(--c-new)"/>
+        <text x="90" y="292" text-anchor="middle" font-weight="600">Figures</text>
+        <text x="90" y="310" text-anchor="middle" font-size="10.5">size of change</text>
+        <line x1="160" y1="297" x2="176" y2="297" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+        <rect x="180" y="266" width="140" height="62" rx="6" style="fill: var(--ground); stroke: var(--c-reused)"/>
+        <text x="250" y="292" text-anchor="middle" font-weight="600">Classify</text>
+        <text x="250" y="310" text-anchor="middle" font-size="10.5" style="fill: var(--grey)">what kind of study?</text>
+        <line x1="320" y1="297" x2="336" y2="297" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+        <rect x="340" y="266" width="140" height="62" rx="6" style="fill: var(--ground); stroke: var(--c-reused)"/>
+        <text x="410" y="292" text-anchor="middle" font-weight="600">Appraise</text>
+        <text x="410" y="310" text-anchor="middle" font-size="10.5" style="fill: var(--grey)">quality score 1 to 5</text>
+        <line x1="480" y1="297" x2="496" y2="297" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+        <rect x="500" y="266" width="140" height="62" rx="6" fill-opacity=".14" stroke-width="1.5" style="fill: var(--c-new); stroke: var(--c-new)"/>
+        <text x="570" y="292" text-anchor="middle" font-weight="600">Verdict</text>
+        <text x="570" y="310" text-anchor="middle" font-size="10.5">fixed rule, in code</text>
+        <line x1="640" y1="297" x2="656" y2="297" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+        <rect x="660" y="266" width="140" height="62" rx="6" fill-opacity=".14" stroke-width="1.5" style="fill: var(--c-new); stroke: var(--c-new)"/>
+        <text x="730" y="292" text-anchor="middle" font-weight="600">Choose</text>
+        <text x="730" y="310" text-anchor="middle" font-size="10.5">within 6 + 3 pathways</text>
+        <line x1="800" y1="297" x2="816" y2="297" stroke="currentColor" stroke-width="1.5" marker-end="url(#a2)"/>
+        <rect x="820" y="266" width="140" height="62" rx="6" stroke-width="1.5" style="fill: var(--paper); stroke: var(--c-new)"/>
+        <text x="890" y="288" text-anchor="middle" font-weight="600">Write</text>
+        <text x="890" y="304" text-anchor="middle" font-size="10.5">sentences, report,</text>
+        <text x="890" y="318" text-anchor="middle" font-size="10.5">theory's verdict</text>
+
+        <rect x="20" y="356" width="940" height="66" rx="6" stroke-dasharray="4 3" style="fill: var(--paper); stroke: var(--c-reused)"/>
+        <text x="40" y="380" font-weight="700" font-size="11" letter-spacing=".06em" style="fill: var(--grey)">ANY TIME AFTER THE DRAFT</text>
+        <text x="40" y="406" font-size="12"><tspan font-weight="600">Edit</tspan> · checked writes    <tspan font-weight="600">Find more evidence</tspan> · new search    <tspan font-weight="600">Review the theory</tspan> · new    <tspan font-weight="600">Ask in the chat</tspan> · Task Agent    <tspan font-weight="600">Download</tspan> · in the browser</text>
+        <text x="20" y="444" font-size="11" style="fill: var(--grey)">Edits can happen at every stage. Edited steps are flagged; you keep the evidence or check again.</text>
+      </g>
+    </svg>
+    </div>
+    <div class="legend">
+      <span class="sq" style="--dot: var(--c-reused)">reused from Evidence search or Options scoping</span>
+      <span class="sq" style="--dot: var(--c-new)">new for theory of change</span>
+    </div>
+    <figcaption><b>Reading abstracts only, for now.</b> The check reads titles and abstracts, like the Options scoping longlist, so a full check takes minutes. Each step asks the route file for a model tier, not a model: <b>fast</b> (GPT-6 Luna) for picking, figures and classifying; <b>standard</b> (GPT-6.1 Terra) for the Task Agent, the sense check, discovery, judging and summarising; <b>frontier</b> (GPT-6.1 Sol) for drafting, merging, choosing, the report, the verdict, reviews and reading diagrams. The draft moved to Sol on 6 November: 87 seconds against Terra's 54 on the same theory, at the same cost, with three more mechanisms drafted. The same models run through OpenAI directly or through Amazon Bedrock.</figcaption>
+  </figure>
+</section>
+<section class="wrap" id="check">
+  <h2>The evidence check, step by step</h2>
+  <p>This runs in the background after the draft. An <b>item</b> is one thing the check tests: a connection. Boxes are not items.</p>
+  <ol class="steps">
+    <li><b>Turn each connection into a fixed question.</b><span class="tag new">new</span>
+      <span class="sub">Code writes the text, so the same theory always gives the same search: "If cheap alcohol becomes less affordable, for heavier drinkers, then they buy fewer alcohol units, because keeping previous purchases would take more of their budget…". Each connection also stores a fingerprint of its wording.</span></li>
+    <li><b>Search once per connection.</b><span class="tag reused">reused</span>
+      <span class="sub">Five calls: OpenAlex by meaning on the sentence (20 results), the same with the plan's place (10), the step's keywords with "systematic review" and with "randomised controlled trial", and Overton by meaning (10). Up to 60 records per connection, within the plan's years, at most 80 connections per check. Eight connections search at once, in their own pool, using the walks Options scoping already runs. A full check adds one search for evaluations of the whole programme.</span></li>
+    <li><b>Add the field's most-cited works.</b><span class="tag reused">reused</span>
+      <span class="sub">The Evidence search's citation chase counts which works the pool's papers cite most, and looks up to 25 of them up in one OpenAlex call, so an older study that shaped the field is not missed.</span></li>
+    <li><b>Pick up to ten documents per connection.</b><span class="tag new">new</span>
+      <span class="sub">The candidates are the connection's own results, the nearest documents the other connections found, and the most-cited works. Missing abstracts are fetched from Crossref. A fast model picks the ten that best test the step; Find more evidence asks for forty, from a search with twice the results.</span></li>
+    <li><b>Discover what the draft missed.</b><span class="tag new">new</span>
+      <span class="sub">A pass over the screened documents, in batches, looks for mechanisms and failure modes the draft does not have. Each becomes a candidate pathway, labelled "found in the evidence". On a theory the user uploaded or drew, the routes found wait as one suggestion instead of changing the canvas.</span></li>
+    <li><b>Merge.</b><span class="tag new">new</span>
+      <span class="sub">Boxes and pathways that say the same thing are folded together; boxes the user wrote are never folded automatically. Pathways that do not reach the intended change for this population and place are set aside, each with a reason. This needs no evidence, so it runs before judging and nothing is judged twice.</span></li>
+    <li><b>Search the new links.</b><span class="tag reused">reused</span>
+      <span class="sub">Connections that discovery added get their own search and pick, like the drafted ones.</span></li>
+    <li><b>Judge every pair.</b><span class="tag new">new</span>
+      <span class="sub">One call per connection and document gives its support, one quote and its relevance. The same call notes any condition the support holds under, any case study and indicator for the boxes at either end, and for a model whether it is robust. The existing quote checker confirms each quote; a judgement without a verified quote is dropped.</span></li>
+    <li><b>Search again for thin connections.</b><span class="tag new">new</span>
+      <span class="sub">A connection the judge leaves with <i>Not enough evidence</i> gets one more search, once. The query writer is shown the earlier queries and asked to write in the vocabulary of the research that would test the step (the constructs, outcomes and mechanisms a researcher would name), and the searches by meaning use its research-style paraphrase instead of the step's own sentence. Ten new documents are picked and judged, and they count. On the advertising theory the first such run brought 96 documents new to the task from 472 results, where a repeat of the same queries had brought 1 from 83, and six of eleven thin connections moved up. Find more evidence runs the same reformulated search by hand.</span></li>
+    <li><b>Read the size of change.</b><span class="tag new">new</span>
+      <span class="sub">For each document judged on topic, a fast model lifts the effect it reports: the measure, value, confidence interval, unit, population, place and year, each with its quote.</span></li>
+    <li><b>Classify and appraise.</b><span class="tag reused">reused</span>
+      <span class="sub">The Evidence search steps, unchanged, on the documents the judge found on topic only: what kind of study it is, and how good (a score from 1 to 5).</span></li>
+    <li><b>Weigh the verdicts.</b><span class="tag new">new</span>
+      <span class="sub">Code, not a model: the rule above, from the stored judgements, on every read. Only judgements on the connection's current wording count.</span></li>
+    <li><b>Choose.</b><span class="tag new">new</span>
+      <span class="sub">If more than six success or three failure pathways remain, the most promising and best evidenced stay; the rest are set aside with a reason. Conditions recorded on supports that a connection does not yet name are added to it. Every change to something the user made is flagged and keeps the user's version.</span></li>
+    <li><b>Write, then check the citations.</b><span class="tag new">new</span>
+      <span class="sub">One call writes each connection's title and evidence sentence and each box's description; another writes the report; a third gives the theory's verdict. Code checks every citation: a sentence may cite only its own connection's judged documents, or for a box its case studies. A sentence that fails is replaced by a fixed one.</span></li>
+    <li><b>Tell the user.</b><span class="tag reused">reused</span>
+      <span class="sub">The usual run notification, and a short message from the Task Agent with the verdict.</span></li>
+  </ol>
+  <p>Check again and Find more evidence skip the second search: there the user is steering. A check on named connections only, such as Find evidence for a new connection, runs the search, pick, judge and write steps, and leaves out discovery, merging, choosing and the report.</p>
+  <figure>
+    <div class="ex">
+      <div class="q">One connection, two documents</div>
+      <p>Connection #3 in the minimum unit pricing run: "if cheap alcohol becomes less affordable, heavier drinkers buy fewer alcohol units".</p>
+      <p><b>A controlled time series of purchases in Scotland</b> quotes "reductions of purchased alcohol only occurred in the households that bought the most alcohol": <i>strong</i> support, relevance 3, quality 3, so it weighs 1.</p>
+      <p><b>A study of white cider and heavy drinkers</b> quotes "consumption levels amongst the heaviest drinkers were maintained": <i>refutes</i>, relevance 3, quality 2, so it weighs 2/3.</p>
+      <p>With the other documents for #3, the balance came out <b>Supported</b>. A Russian study of counterfeit alcohol was judged <i>not about</i> the step and did not count.</p>
+    </div>
+  </figure>
+</section>
+
+<section class="wrap" id="editing">
+  <h2>Editing, step by step</h2>
+  <p>Users asked to start editing at once rather than wait for the check. Three things make that safe: every judgement remembers the exact wording it judged, every row carries a revision number, and every change is an event in History.</p>
+  <ol class="steps">
+    <li><b>Every edit is a checked write.</b>
+      <span class="sub">Adding, changing, moving or deleting a box or connection sends the row's revision number with the change. If someone or something changed the row meanwhile, the edit is refused with "this changed since you opened it", and the canvas reloads. Each accepted edit writes one History event, with who made it.</span></li>
+    <li><b>An edit flags the step; nothing reruns on its own.</b>
+      <span class="sub">The connection keeps its evidence and verdict, labelled "for the previous wording", and reads "Edited · check pending". Changing a box marks every connection that touches it. The user decides: <b>Keep the evidence</b>, recorded as their choice, or <b>Check again</b>.</span></li>
+    <li><b>Check again changes as little as possible.</b>
+      <span class="sub">Only the documents already judged for that step are judged again, ranked for the new wording, with no new search. <b>Find more evidence</b> runs a new search; documents it finds wait for the user's Accept before they count.</span></li>
+    <li><b>New connections are checked on request.</b>
+      <span class="sub">A connection the user draws gets <b>Find evidence</b>. Connections that arrive in an accepted suggestion, after the first check, are checked at once.</span></li>
+    <li><b>The user can challenge the evidence.</b>
+      <span class="sub">Change a document's support or relevance (the model's scores stay visible), remove a document, or add a study by its DOI.</span></li>
+    <li><b>Review the theory.</b>
+      <span class="sub">A frontier model reads the theory's shape: steps on no pathway, gaps, missing failure routes. The button offers it after five or more edits since the last review. What it proposes becomes a suggestion; "Update the report" rewrites the report on request.</span></li>
+    <li><b>Suggestions wait beside the canvas.</b>
+      <span class="sub">From a review, from the chat, from a later upload, and from the evidence on a theory the user drew. Hovering over one shows it faded on the canvas; each route is accepted or rejected on its own, and an accepted route is one step in History.</span></li>
+    <li><b>The user's changes can be undone.</b>
+      <span class="sub">From History: an edit or an accepted suggestion comes back as it was. Undo skips any row changed since, and says which.</span></li>
+    <li><b>Policy Atlas's own changes are flagged.</b>
+      <span class="sub">Discover, merge and choose run on the theory as it is when each starts. They may merge, reword or set aside things the user made, but each change stores the reason and the user's version.</span></li>
+    <li><b>One check at a time.</b>
+      <span class="sub">A check started while another runs waits in a queue and starts when it ends. Stop ends the running check before its next step; what it finished stays on the canvas.</span></li>
+  </ol>
+</section>
+
+<section class="wrap" id="own">
+  <h2>Your own theory</h2>
+  <div class="two">
+    <div><b class="h">Upload a diagram</b>A PNG, JPEG or PDF of an existing theory, from the new-task page or the chat. A vision call reads it, and the canvas shows it as drawn. What would complete it, such as a failure route or a missing outcome, waits as suggestions, route by route. A later upload never changes the canvas: what it adds becomes one suggestion.</div>
+    <div><b class="h">Draw it yourself</b>"Start drafting yourself" opens an empty canvas. Boxes and connections drawn before any draft are your sketch; the draft keeps a sketch that has connections and suggests the rest.</div>
+  </div>
+  <p>Files are checked by type and by their first bytes, at most 10 MB and 10 PDF pages, and kept in a private, encrypted S3 bucket, retained. The original appears in the plan under "Starting point", for the owner and colleagues; it is never on the public view. History records each file's name, size and fingerprint.</p>
+</section>
+
+<section class="wrap" id="data">
+  <h2>What is stored</h2>
+  <p>Nine tables, following the Options scoping pattern. Everything else is reused: tasks, plans, the Task Agent's conversation, stored documents and their classification and appraisal, chats and the event log.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>table</th><th>holds</th></tr></thead>
+    <tbody>
+      <tr><td><code>toc_box</code></td><td>Each box: layer, code, text, result criteria, indicator, its description, who made and last edited it, and its position on the canvas if moved.</td></tr>
+      <tr><td><code>toc_link</code></td><td>Each connection: its two ends; if, for, then and because; the conditions it needs; its title and evidence sentence; whether it is the critical one; the wording the user chose to keep evidence for.</td></tr>
+      <tr><td><code>toc_band_item</code></td><td>Context and supporting activities.</td></tr>
+      <tr><td><code>toc_pathway</code>, <code>toc_pathway_link</code></td><td>Success and failure pathways, kept or set aside, with reasons, and their connections in order.</td></tr>
+      <tr><td><code>toc_item_evidence</code></td><td>Each judgement: the connection, the document, its support, verified quote and relevance, any condition, case study or indicator, the wording it judged, and any score the user changed, with who changed it.</td></tr>
+      <tr><td><code>toc_figure</code></td><td>The size of change each judged document reports, with its quote.</td></tr>
+      <tr><td><code>toc_proposal</code></td><td>Suggestions from a review, the chat, the evidence or an upload, and what the user decided.</td></tr>
+      <tr><td><code>task_upload</code></td><td>Uploaded files: where they are in S3, name, type, size and fingerprint. Shared by every capability.</td></tr>
+    </tbody>
+  </table></div>
+  <p>Every graph row also carries a revision number and, where Policy Atlas changed the user's work, the reason and the user's version. The verdicts are never stored.</p>
+</section>
+
+<section class="wrap" id="evals">
+  <h2>How we know it works</h2>
+  <p>No public dataset of real theories of change exists; they live as figures inside PDFs. So we built our own reference sets from published reports, and test each part where a labelled set exists.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>eval</th><th>question it answers</th><th>data</th></tr></thead>
+    <tbody>
+      <tr><td><b>Structure checks</b></td><td>Is every draft well formed: layers in order, no loose boxes, at most two conditions per connection and none repeated, at least one failure pathway? A draft that fails is redrafted once.</td><td>Runs on every draft, in code.</td></tr>
+      <tr><td><b>Rebuild a published theory</b></td><td>From the written brief, how many of the published boxes does the run find, do the layers agree, and are the same links weak?</td><td>Six reference maps from four published UK theories of change (Environmental Principles, Changing Futures at three levels, Climate Action Wales, the Child Poverty Strategy), with a written protocol.</td></tr>
+      <tr><td><b>Sense and verdict</b></td><td>Does the theory's verdict call a nonsense theory implausible, and a sound one plausible?</td><td>Red-team theories, from sound to absurd: 93 of 93 judgements right on the two axes.</td></tr>
+      <tr><td><b>Read a diagram</b></td><td>Does the vision call recover the boxes and arrows of a drawn theory?</td><td>Synthetic diagrams in four layouts, and published GOV.UK figures.</td></tr>
+      <tr><td><b>A published evaluation</b></td><td>Does a run find what an evaluation of the real policy found?</td><td>Minimum unit pricing in Scotland, against Public Health Scotland's final evaluation (2023).</td></tr>
+    </tbody>
+  </table></div>
+  <p>Next: the judge on public labelled data (SciFact, Check-COVID, PubMedQA, Evidence Inference), with the rate at which a challenge is mistaken for support; more published theories; and a blind expert panel.</p>
+</section>
+
+<section class="wrap" id="order">
+  <h2>Built, and next</h2>
+  <p>A simple core first, tried on real topics and tuned over repeated live runs, then the increments, each used in the app before the next started. The capability sits behind a server setting: on in staging for colleagues to try, off in production until it is complete.</p>
+  <ol class="steps">
+    <li><b>Core.</b> The new task kind, the Task Agent and the sense check, the draft, the evidence check on OpenAlex and Overton, the verdicts and the cited sentences, the canvas, the panel, Detailed information and the theory's verdict.</li>
+    <li><b>Editing.</b> Checked writes, "check pending" with Keep the evidence and Check again, challenging the evidence, reviews, suggestions, History with Undo.</li>
+    <li><b>Your own theory.</b> Uploaded pictures and PDFs, drawing your own, and the uploads bucket.</li>
+    <li><b>Downloads.</b> The PDF report, PNG, SVG, draw.io, CSV and JSON.</li>
+  </ol>
+  <p><b>Next:</b> web search as a third source (pages counted by their publisher); a stress-test chat on the critical connection; "Design a theory of change" from an option in Options scoping, sharing its documents; full text for the connections that need it; PowerPoint export.</p>
+  <p>The full design is in the capability spec under <code>docs/specs/capabilities/theory-of-change/</code>; the screens are in <code>wireframes.html</code> and <code>wireframes-editing.html</code>; the decisions are in ADR 0042.</p>
+</section>
+</main>
+
+<footer class="wrap">Task 054 · how it works · 6 November 2026.</footer>

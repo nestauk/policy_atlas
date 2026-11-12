@@ -26,6 +26,8 @@ vi.mock("../api/queries", async (importOriginal) => {
   return {
     ...actual,
     useTask: vi.fn(),
+    // Task 054: the chats gate reads the theory graph (none here).
+    useToc: vi.fn(() => ({ data: undefined })),
     useArtefact: vi.fn(),
     useConversations: vi.fn(),
     useLandscape: vi.fn(),

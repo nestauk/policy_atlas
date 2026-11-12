@@ -270,3 +270,40 @@ export function SearchIcon(props: IconProps) {
     </Glyph>
   );
 }
+
+/** Attach a file: a paperclip (the theory of change's upload, on the new
+ *  task form and the Task Agent's composer). */
+export function PaperclipIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="m14 7.33-5.67 5.67a3.33 3.33 0 0 1-4.67-4.67L9.33 2.67a2.33 2.33 0 0 1 3.33 3.33l-5.67 5.67a1.33 1.33 0 0 1-2-2L10 4.67" />
+    </Glyph>
+  );
+}
+
+/** Fit: the whole diagram in view (the theory of change canvas's controls). */
+export function FitIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <rect x="3.5" y="3.5" width="9" height="9" />
+    </Glyph>
+  );
+}
+
+/** Full screen: four corners opening out. */
+export function FullScreenIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M2.5 6V2.5H6M13.5 6V2.5H10M2.5 10v3.5H6M13.5 10v3.5H10" />
+    </Glyph>
+  );
+}
+
+/** Leave full screen: the four corners folding in. */
+export function ExitFullScreenIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M6 2.5V6H2.5M10 2.5V6h3.5M6 13.5V10H2.5M10 13.5V10h3.5" />
+    </Glyph>
+  );
+}

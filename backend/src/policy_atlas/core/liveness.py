@@ -20,7 +20,10 @@ sources are assigned to them; the hub keeps both for a newly connected
 browser until the run ends (task 058, round 9). The longlist walk's two
 clusterings pass on their names the same way: the options found while
 sources are assigned to them, then the themes found while options are
-(round 11), each kept under its stage.
+(round 11), each kept under its stage. While the theory of change's first draft
+is written, the boxes and connections the model has closed so far are passed on
+as one sketch, sent whole each time; the hub keeps the latest for a newly
+connected browser until the draft's stage ends (task 054, S12).
 
 Nothing here is saved to the database. The durable record stays in
 ``event_log``; these messages may be lost (a full queue is emptied and
@@ -281,6 +284,33 @@ class ThemesFound:
     stage: ThemesStage = "characterise"
 
 
+#: One sketched box: ``(key, layer, text)``, the model's draft key (task 054, S12).
+type SketchBox = tuple[str, str, str]
+#: One sketched connection: ``(key, source, target)``, its ends as draft box keys.
+type SketchLink = tuple[str, str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class TocSketch:
+    """The theory of change's first draft as it is written (task 054, S12).
+
+    Display-only and sent whole: each message replaces the one before. An
+    empty sketch means "start again" (the draft is written again). The
+    stored graph, read when the draft's stage completes, replaces it.
+
+    Attributes:
+        boxes: The boxes closed so far, in the order written.
+        links: The connections closed so far, in the order written.
+        occurred_at: When the message was sent.
+        stage: The stage drawing it (``toc_draft``), so its end forgets it.
+    """
+
+    boxes: tuple[SketchBox, ...]
+    links: tuple[SketchLink, ...]
+    occurred_at: datetime
+    stage: str | None = None
+
+
 type HubMessage = (
     Tick
     | SectionDelta
@@ -291,6 +321,7 @@ type HubMessage = (
     | SourceNote
     | SearchQuery
     | ThemesFound
+    | TocSketch
 )
 
 
@@ -361,13 +392,16 @@ class _TaskMemory:
     #: and 11), in the order first found.
     themes: dict[str, ThemesFound] = field(default_factory=dict)
     themes_at: float = 0.0
+    #: The theory of change's draft so far, while it is written (task 054, S12).
+    sketch: TocSketch | None = None
+    sketch_at: float = 0.0
     #: Stages the run has ended: a late tick for one is ignored, so it cannot
     #: bring the stage back until it starts again.
     ended_stages: set[_StageKey] = field(default_factory=set)
 
     def keeps_run_lists(self) -> bool:
-        """Whether the run's source notes, search queries or themes are remembered."""
-        return bool(self.source_notes or self.search_queries or self.themes)
+        """Whether the run's source notes, search queries, themes or sketch are remembered."""
+        return bool(self.source_notes or self.search_queries or self.themes or self.sketch)
 
 
 def _now_utc() -> datetime:
@@ -473,8 +507,9 @@ class TickHub:
 
         Returns:
             The queue, and the remembered state: the run's search queries
-            so far (each in its latest state, in the order first sent) and
-            its themes once found; then the last tick of each stage (in the
+            so far (each in its latest state, in the order first sent),
+            its themes once found and the theory of change draft's sketch
+            so far; then the last tick of each stage (in the
             order the stages first appeared), then, if a section is being
             written, one ``replace`` delta carrying its text so far (even
             when empty, so a client drops what it held before), the sources
@@ -900,6 +935,36 @@ class TickHub:
             memory.themes_at = self._clock()
             self._fan_out(task_id, message)
 
+    def publish_sketch(
+        self,
+        task_id: uuid.UUID,
+        *,
+        boxes: Sequence[SketchBox],
+        links: Sequence[SketchLink],
+        stage: str | None = None,
+    ) -> None:
+        """Send the draft's sketch so far, and remember it until its stage ends.
+
+        Each sketch replaces the one before; an empty one clears the page's.
+
+        Args:
+            task_id: The task.
+            boxes: ``(key, layer, text)`` of each box so far, in order.
+            links: ``(key, source, target)`` of each connection so far, in order.
+            stage: The stage drawing it.
+        """
+        message = TocSketch(
+            boxes=tuple((key, layer, _clean(text)) for key, layer, text in boxes),
+            links=tuple((key, source, target) for key, source, target in links),
+            occurred_at=_now_utc(),
+            stage=stage,
+        )
+        with self._lock:
+            memory = self._tasks.setdefault(task_id, _TaskMemory())
+            memory.sketch = message
+            memory.sketch_at = self._clock()
+            self._fan_out(task_id, message)
+
     def clear_draft(self, task_id: uuid.UUID) -> None:
         """Forget the section draft, its sources, citations and cards, and any held append.
 
@@ -987,6 +1052,9 @@ class TickHub:
             if stage == "synthesise":
                 memory.draft = None
                 memory.pending_delta = None
+            if memory.sketch is not None and memory.sketch.stage == stage:
+                # The stored graph is read once the draft's stage ends.
+                memory.sketch = None
             self._forget_if_empty(task_id, memory)
 
     def open_stage(
@@ -1086,6 +1154,8 @@ class TickHub:
                     memory.search_queries = {}
                 if memory.themes and now - memory.themes_at >= MEMORY_TTL_SECONDS:
                     memory.themes = {}
+                if memory.sketch is not None and now - memory.sketch_at >= MEMORY_TTL_SECONDS:
+                    memory.sketch = None
                 if (
                     not memory.stages
                     and memory.draft is None
@@ -1147,6 +1217,8 @@ class TickHub:
             snapshot.extend(memory.search_queries.values())
         if memory.themes and now - memory.themes_at < MEMORY_TTL_SECONDS:
             snapshot.extend(memory.themes.values())
+        if memory.sketch is not None and now - memory.sketch_at < MEMORY_TTL_SECONDS:
+            snapshot.append(memory.sketch)
         for stage_memory in memory.stages.values():
             last = stage_memory.last
             if last is None or now - stage_memory.updated_at >= MEMORY_TTL_SECONDS:
@@ -1485,6 +1557,20 @@ def publish_themes(
     task_id = _task_id.get()
     if task_id is not None:
         tick_hub.publish_themes(task_id, themes=themes, stage=stage)
+
+
+def publish_toc_sketch(boxes: Sequence[SketchBox], links: Sequence[SketchLink]) -> None:
+    """Publish the theory of change draft's sketch so far for the bound task (task 054, S12).
+
+    Does nothing when no task is bound.
+
+    Args:
+        boxes: ``(key, layer, text)`` of each box closed so far, in order.
+        links: ``(key, source, target)`` of each connection closed so far, in order.
+    """
+    task_id = _task_id.get()
+    if task_id is not None:
+        tick_hub.publish_sketch(task_id, boxes=boxes, links=links, stage=_stage.get())
 
 
 def clear_section_draft() -> None:

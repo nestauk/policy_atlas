@@ -722,3 +722,19 @@
   the xdist name collision into the poll-deadline concept. The build's "re-run alone" and
   "the fix is the deadline" candidates were ordered, not contradicted. Declined as knowledge:
   the walk's `extract:interventions` stall figures (task-specific, in verification.md).
+
+## 2026-11-05 — task 054 (theory of change), the review stack before PR #114
+
+Added: [lossy-downgrades-refuse-on-their-own-data](lossy-downgrades-refuse-on-their-own-data.md),
+[public-leg-reads-carry-no-names](public-leg-reads-carry-no-names.md),
+[dead-surface-cuts-sweep-scripts-too](dead-surface-cuts-sweep-scripts-too.md) (from the stack's
+findings); [retry-layers-multiply](retry-layers-multiply.md),
+[xyflow-in-this-codebase](xyflow-in-this-codebase.md),
+[agent-line-without-a-model-call](agent-line-without-a-model-call.md),
+[lower-grade-colours-the-canvas](lower-grade-colours-the-canvas.md) and
+[missing-source-key-fails-open](missing-source-key-fails-open.md) (from the build's knowledge
+candidates in verification.md § Review handoff). Folded: the `global.openai.` model-id prefix
+into [bedrock-route-facts](bedrock-route-facts.md). Declined: "two checkouts share one test
+database" (superseded by task 056's per-worker copies and
+[parallel-agent-test-databases](parallel-agent-test-databases.md)); "vitest setup takes 15
+minutes under load" (a machine condition, not a system fact; kept in verification.md).

@@ -3,7 +3,7 @@ type: Integration quirk
 title: Bedrock from London — which models answer, through which API, with which key variable
 description: From eu-west-2 the GPT-5.6 family (Terra, Luna, Sol) answers through Bedrock's OpenAI-compatible endpoint under global.* profiles only (gpt-5.4-mini is absent, gpt-5.5 is US-only); Claude and Cohere answer through eu.* profiles via boto3 Converse / InvokeModel; each route names its key variable (Bedrock routes read AWS_BEARER_TOKEN_BEDROCK for both clients), and a missing Bedrock variable surfaces as an AccessDeniedException naming the IAM user; Terra refuses function tools without reasoning_effort "none" but parses structured output without it.
 tags: [bedrock, openai, claude, cohere, boto3, credentials, live-probe]
-timestamp: 2026-10-21
+timestamp: 2026-11-05
 ---
 
 # Rules
@@ -48,6 +48,10 @@ timestamp: 2026-10-21
   returns `inputTokens`/`outputTokens`/`totalTokens` (input excludes cached reads);
   Cohere returns the input token count in the `x-amzn-bedrock-input-token-count`
   response header, not the body.
+- **Model ids carry a prefix.** The Bedrock routes name the same OpenAI models as
+  `global.openai.gpt-6-luna` (Terra, Sol alike). A price table keyed by the OpenAI id must strip
+  `global.openai.` before the lookup (`theory_of_change/cost.py`, `scripts/cost_per_run.py`), or
+  every Bedrock call reports as unpriced (054 review, Codex, 2026-11-05).
 
 # Citations
 

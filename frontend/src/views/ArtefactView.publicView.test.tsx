@@ -7,6 +7,7 @@ import { AuthContext } from "../auth/AuthContext";
 import type { AuthApi } from "../auth/types";
 import { ArtefactView } from "./ArtefactView";
 import { PublicViewProvider } from "./publicView";
+import { tocEvidenceFixture, tocGraphFixture } from "./toc/fixture";
 
 // The public view (task 037) must never open the run stream (the events
 // route is not on the public surface) — stub the SSE-backed store to its
@@ -66,6 +67,8 @@ function renderPublicArtefact(project: Record<string, unknown> = PROJECT) {
     );
     requestedPaths.push(url.pathname);
     if (url.pathname === `/api/v1/tasks/${TASK_ID}`) return jsonResponse(project);
+    if (url.pathname === `/api/v1/tasks/${TASK_ID}/toc`) return jsonResponse({ ...tocGraphFixture(), task_id: TASK_ID });
+    if (url.pathname === `/api/v1/tasks/${TASK_ID}/toc/evidence`) return jsonResponse(tocEvidenceFixture());
     if (url.pathname.endsWith("/longlist")) return new Response(JSON.stringify({ detail: "not found" }), { status: 404 });
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/artefact`) return jsonResponse(ARTEFACT);
     if (url.pathname === `/api/v1/tasks/${TASK_ID}/landscape`) return jsonResponse(LANDSCAPE);
@@ -115,6 +118,16 @@ describe("ArtefactView — public view issues only public-surface requests (task
 
     expect(requestedPaths.some((path) => path.includes("conversations"))).toBe(false);
     expect(screen.queryByText("Ask about this analysis")).not.toBeInTheDocument();
+  });
+});
+
+describe("ArtefactView — a public theory of change (task 054, C17)", () => {
+  it("renders the theory from the public reads only", async () => {
+    const { requestedPaths } = renderPublicArtefact({ ...PROJECT, capability: "theory_of_change" });
+
+    await waitFor(() => expect(requestedPaths).toContain(`/api/v1/tasks/${TASK_ID}/toc`));
+    expect(requestedPaths.some((path) => path.includes("conversations"))).toBe(false);
+    expect(requestedPaths).toContain(`/api/v1/tasks/${TASK_ID}/toc/evidence`);
   });
 });
 

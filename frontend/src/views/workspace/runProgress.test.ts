@@ -503,6 +503,24 @@ const RETIRED_STAGE_LABELS = [
   "Writing the report",
 ];
 
+/** The theory of change's step labels (task 054's 058 alignment, A9 and
+ *  A19): the server's since its stage keys, so none may be typed in the
+ *  browser. "Screening" and "Classifying" are shared words the app uses
+ *  elsewhere, and "Reading your diagram" is also the upload's own reading
+ *  line, so the guard names only the theory's own labels. */
+const TOC_STAGE_LABELS = [
+  "Drafting the theory",
+  "Searching for each connection",
+  "Looking for other routes",
+  "Merging similar steps",
+  "Searching for the new connections",
+  "Judging the evidence",
+  "Searching again for thin connections",
+  "Finding the size of change",
+  "Choosing pathways",
+  "Writing titles and summaries",
+];
+
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
@@ -517,6 +535,15 @@ describe("one source of stage copy (task 058, N17)", () => {
     const hits = sourceFiles(root).flatMap((path) => {
       const text = readFileSync(path, "utf8");
       return RETIRED_STAGE_LABELS.filter((label) => text.includes(label)).map((label) => `${relative(root, path)}: ${label}`);
+    });
+    expect(hits).toEqual([]);
+  });
+
+  it("keeps the theory of change's step labels on the server (task 054, A9)", () => {
+    const root = "src";
+    const hits = sourceFiles(root).flatMap((path) => {
+      const text = readFileSync(path, "utf8");
+      return TOC_STAGE_LABELS.filter((label) => text.includes(label)).map((label) => `${relative(root, path)}: ${label}`);
     });
     expect(hits).toEqual([]);
   });

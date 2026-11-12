@@ -40,6 +40,8 @@ vi.mock("react-router", () => ({
   ),
 }));
 vi.mock("../../../api/queries", () => ({
+  // Task 054: the result gate also reads the theory-of-change graph (none here).
+  useToc: () => ({ data: undefined }),
   useConversations: (_taskId: string, query?: { kind?: string }) => ({
     data: {
       data:

@@ -97,6 +97,10 @@ class PolicyAtlasStack(Stack):
         # field to the app secret first, then switch the route in pa_config.json.
         model_route = be_config.get("model_route", "openai-direct")
         ingest_mode = be_config.get("ingest_mode")
+        # Task 054 (C15): the API creates theory-of-change tasks only where this
+        # is "1". On in staging for colleagues to try; off in production until
+        # the capability is complete.
+        theory_of_change = "1" if be_config.get("theory_of_change") else "0"
         if ingest_mode not in INGEST_MODES:
             raise ValueError(
                 f"backend.ingest_mode must be one of {INGEST_MODES} in pa_config.json, "
@@ -170,6 +174,19 @@ class PolicyAtlasStack(Stack):
             model_route=model_route,
         )
 
+        # Files users give a task (task 054 increment 5; one bucket for every
+        # capability, owner 2026-11-03). Private, encrypted, HTTPS only, and kept
+        # if the stack is ever deleted: they are users' work. Only the backend
+        # reads it; the browser never does.
+        uploads_bucket = s3.Bucket(self, "UploadsBucket",
+            bucket_name=be_config["upload_bucket_name"],
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            encryption=s3.BucketEncryption.S3_MANAGED,
+            enforce_ssl=True,
+            versioned=False,
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+
         be_task_def = ecs.FargateTaskDefinition(self, "PolicyAtlasBackendTaskDef",
             cpu=be_config["cpu"],
             memory_limit_mib=be_config["memory_limit_mib"],
@@ -197,6 +214,8 @@ class PolicyAtlasStack(Stack):
                 # runs inside the shared dev Langfuse project.
                 "LANGFUSE_TRACING_ENVIRONMENT": env_name,
                 "POLICY_ATLAS_MODEL_ROUTE": model_route,
+                "POLICY_ATLAS_UPLOAD_BUCKET": uploads_bucket.bucket_name,
+                "POLICY_ATLAS_THEORY_OF_CHANGE": theory_of_change,
                 "POLICY_ATLAS_INGEST_MODE": ingest_mode,
                 "POLICY_ATLAS_INGEST_QUEUE_URL": ingest.queue.queue_url,
             },
@@ -207,6 +226,11 @@ class PolicyAtlasStack(Stack):
             )],
             stop_timeout=Duration.seconds(10),
         )
+
+        # The backend reads, writes and deletes uploads under tasks/ only, through
+        # its task role: AWS hands the container short-lived credentials, so no
+        # keys are stored anywhere.
+        uploads_bucket.grant_read_write(be_task_def.task_role, "tasks/*")
 
         # No task-role secret grants: ECS injects container secrets through the
         # EXECUTION role (CDK grants it via ecs.Secret.from_secrets_manager);

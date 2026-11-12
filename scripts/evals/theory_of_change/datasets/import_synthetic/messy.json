@@ -1,0 +1,98 @@
+{
+ "title": "School breakfast clubs and attainment",
+ "boxes": [
+  {
+   "id": "a1",
+   "text": "Fund free breakfast clubs in schools in deprived areas",
+   "layer": "input"
+  },
+  {
+   "id": "a2",
+   "text": "Train staff to run clubs",
+   "layer": "input"
+  },
+  {
+   "id": "p1",
+   "text": "Clubs open 8am every school day",
+   "layer": "output"
+  },
+  {
+   "id": "p2",
+   "text": "More pupils eat breakfast",
+   "layer": "output"
+  },
+  {
+   "id": "s1",
+   "text": "Pupils arrive on time",
+   "layer": "outcome_short"
+  },
+  {
+   "id": "s2",
+   "text": "Better concentration in morning lessons",
+   "layer": "outcome_short"
+  },
+  {
+   "id": "l1",
+   "text": "Attendance rises",
+   "layer": "outcome_long"
+  },
+  {
+   "id": "l2",
+   "text": "Higher reading and maths progress",
+   "layer": "outcome_long"
+  },
+  {
+   "id": "m1",
+   "text": "Narrower attainment gap at age 11",
+   "layer": "impact"
+  }
+ ],
+ "arrows": [
+  [
+   "a1",
+   "p1"
+  ],
+  [
+   "a2",
+   "p1"
+  ],
+  [
+   "p1",
+   "p2"
+  ],
+  [
+   "p1",
+   "s1"
+  ],
+  [
+   "p2",
+   "s2"
+  ],
+  [
+   "s1",
+   "l1"
+  ],
+  [
+   "s2",
+   "l2"
+  ],
+  [
+   "l1",
+   "m1"
+  ],
+  [
+   "l2",
+   "m1"
+  ]
+ ],
+ "assumptions": [],
+ "arrow_labels": [
+  {
+   "on": [
+    "p2",
+    "s2"
+   ],
+   "text": "if pupils are hungry at home"
+  }
+ ]
+}

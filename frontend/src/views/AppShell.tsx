@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { Link, Outlet, useLocation, useParams } from "react-router";
+import { useFinishAlerts } from "./finishAlerts";
 
 import { useArchiveTask, useUpdateTask } from "../api/mutations";
 import { useCheckIns, useMe, useProject, useTask } from "../api/queries";
@@ -316,6 +317,8 @@ export function AppShell() {
   // a public Task briefly opened the run stream and mounted the chat panel
   // before access was known. Both gate on the query having resolved.
   const taskResolved = task.data !== undefined;
+  // Browser alerts when a task's work finishes, on any page (owner, 2026-11-04).
+  useFinishAlerts();
   const inWorkspace = base !== null && location.pathname === base;
   // Every task tab but Agent (038 V8, owner ruling 2026-09-05): the Agent
   // tab lists the same conversations in its own sidebar and shows the

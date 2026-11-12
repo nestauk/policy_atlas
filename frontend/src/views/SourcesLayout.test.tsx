@@ -7,6 +7,7 @@ import { SourcesLayout } from "./SourcesLayout";
 import * as queries from "../api/queries";
 
 vi.mock("../api/queries", () => ({
+  useTask: vi.fn(() => ({ data: { capability: "evidence_search" }, isPending: false })),
   useFunnel: vi.fn(),
 }));
 
@@ -134,6 +135,17 @@ describe("SourcesLayout — the four Sources subview tabs", () => {
     expect(screen.getByRole("navigation", { name: "Sources" }).closest(".mx-auto")).toHaveClass(
       "max-w-[1180px]",
     );
+  });
+
+  it("has no Themes tab for a theory of change, which has no themes (task 054)", () => {
+    mockFunnel(0);
+    vi.mocked(queries.useTask).mockReturnValueOnce({
+      data: { capability: "theory_of_change" },
+      isPending: false,
+    } as unknown as ReturnType<typeof queries.useTask>);
+    renderLayout(`/tasks/${TASK_ID}/sources/all`);
+    expect(screen.queryByRole("link", { name: "Themes" })).toBeNull();
+    expect(screen.getByRole("link", { name: "All sources" })).toBeInTheDocument();
   });
 });
 

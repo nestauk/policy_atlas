@@ -571,6 +571,7 @@ def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
         assert plan_after_newer_turn.json() == {
             "plan": first.json()["plan"],
             "scoping": None,
+            "toc": None,
             "capability": "evidence_search",
             "version": 0,
             "status": "draft",
@@ -713,6 +714,7 @@ def test_task_agent_rehydrates_after_restart_and_get_plan_reads_stored_draft(
         assert draft_after_restart.json() == {
             "plan": first.json()["plan"],
             "scoping": None,
+            "toc": None,
             "capability": "evidence_search",
             "version": 0,
             "status": "draft",
@@ -791,6 +793,7 @@ def test_failed_turn_retries_in_place_and_stale_rules_are_honest(
                 "decision": None,
                 # Task 045's applied longlist verb: absent on a planning turn.
                 "action": None,
+                "sources": [],
             }
         ]
         retried = post_turn(

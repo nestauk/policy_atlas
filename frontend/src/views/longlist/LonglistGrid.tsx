@@ -8,7 +8,8 @@ import { useTask } from "../../api/queries";
 import { SECTION_EXPAND_LINK_CLASS } from "../ArtefactOutline";
 import { isRunActive } from "../scopingActivity";
 import { Select } from "../../ui/brand/Select";
-import { ShortlistToggle, useOptionActions, WithTooltip } from "./optionActions";
+import { WithTooltip } from "../../ui/brand/actionControls";
+import { ShortlistToggle, useOptionActions } from "./optionActions";
 import { ExcludeIcon } from "../../ui/brand/icons";
 import {
   GRID_COLUMN_LINES,

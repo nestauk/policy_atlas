@@ -1,0 +1,50 @@
+{
+ "title": "Minimum unit pricing for alcohol",
+ "boxes": [
+  {
+   "id": "b1",
+   "text": "Legislation sets a 50p minimum price per unit",
+   "layer": "input"
+  },
+  {
+   "id": "b2",
+   "text": "Retailers reprice cheap, strong alcohol",
+   "layer": "input"
+  },
+  {
+   "id": "b3",
+   "text": "Cheapest drinks cost more",
+   "layer": "output"
+  },
+  {
+   "id": "b4",
+   "text": "Heavier drinkers buy fewer units",
+   "layer": "outcome_short"
+  },
+  {
+   "id": "b5",
+   "text": "Fewer alcohol-related deaths",
+   "layer": "impact"
+  }
+ ],
+ "arrows": [
+  [
+   "b1",
+   "b2"
+  ],
+  [
+   "b2",
+   "b3"
+  ],
+  [
+   "b3",
+   "b4"
+  ],
+  [
+   "b4",
+   "b5"
+  ]
+ ],
+ "assumptions": [],
+ "arrow_labels": []
+}

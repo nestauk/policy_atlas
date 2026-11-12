@@ -41,6 +41,20 @@
   "backend/src/policy_atlas/runtime/option_design_prompt.py": "5e2a957edc580f84670574ddeccd9bbd0528bb26f6ea6607f0249cbece34973c",
   "backend/src/policy_atlas/runtime/task_agent_prompt.py": "e3c152b1fabab6e19527ad0bef389edb74cadbb9efb5e74d97de1663f968c77a",
   "backend/src/policy_atlas/runtime/task_agent_scoping_prompt.py": "343288929c9be405eb87e836f31b5149047992ac0d9b33e65440b5e8f0d6593c",
-  "backend/src/policy_atlas/runtime/task_plan.py": "7ebc38595c1a8478e09cd272c9234d5beea9ba611b8535127cc371ab7f9404a9",
-  "backend/src/policy_atlas/runtime/title_prompt.py": "9e5528ae1ffdbdeed7103b83334b216339bff5b21b8a999925c80da85c71fc05"
+  "backend/src/policy_atlas/runtime/task_agent_toc_prompt.py": "097695ef946f24aee4303c5083c9738ffa1391115e5e3d20d7cce1873fe0928e",
+  "backend/src/policy_atlas/runtime/task_plan.py": "6ddd48c052f33cb15e12a8d6ea3295390db6e47735229aeda6cb8134c5d82ac7",
+  "backend/src/policy_atlas/runtime/title_prompt.py": "9e5528ae1ffdbdeed7103b83334b216339bff5b21b8a999925c80da85c71fc05",
+  "backend/src/policy_atlas/theory_of_change/check/choose_prompt.py": "255401410af21ec1fc6575fb71885df1119ed52e43dbf287cfc58ef2b8d2daf6",
+  "backend/src/policy_atlas/theory_of_change/check/discover_prompt.py": "3d236ce6f4503aa068e3f2911c692274b9812db057a87c4be94a926d6df0e281",
+  "backend/src/policy_atlas/theory_of_change/check/figures_prompt.py": "0e6403cf53914d695865249e49dec284c7c12fce329c9a3b8764f4b53676ef12",
+  "backend/src/policy_atlas/theory_of_change/check/item_search_prompt.py": "abea8471f3637e0f79474b6151656de42ffe461a7a74a83d45e70be0fa18996f",
+  "backend/src/policy_atlas/theory_of_change/check/judge_prompt.py": "7771ded5da98218d7e36cc116c0a5d424dae5d2abe677d5617d754395da41a7d",
+  "backend/src/policy_atlas/theory_of_change/check/merge_prompt.py": "4fc376d292f9a4e11427dacac1a887549b2e506ed4fdfdc877f8189f6498d5c5",
+  "backend/src/policy_atlas/theory_of_change/check/pick_prompt.py": "d26b670715e724c608746334c02ca069b4684939a2ba5012dfd91f6b13bdfacd",
+  "backend/src/policy_atlas/theory_of_change/check/summary_prompt.py": "beb6576ce246c94f728694b4014216bdc9a98386b817f2baf2ae52ac677a62a4",
+  "backend/src/policy_atlas/theory_of_change/draft_prompt.py": "22a7c05c5cb6433ab9d66e316cf23472c4c3f6dc226b903a2d1d9a01f1bad86a",
+  "backend/src/policy_atlas/theory_of_change/import_prompt.py": "de9d9f658bb150330357f4f0456d4e44126c206fef0fc4d0bd41eb8db756f980",
+  "backend/src/policy_atlas/theory_of_change/plausibility_prompt.py": "7e15d139a9ecbe9d168755bbcd55f73f92dacb15bf27c9782fa2d0bdc0ded479",
+  "backend/src/policy_atlas/theory_of_change/report_prompt.py": "a2b9ca16c95a91d58f5c6adc00024079544566e57b49779016841d3a6d20086c",
+  "backend/src/policy_atlas/theory_of_change/review_prompt.py": "be17773521f8f011694af185f217b1812ccbf8b58a922a11fc3b074000f35114"
 }

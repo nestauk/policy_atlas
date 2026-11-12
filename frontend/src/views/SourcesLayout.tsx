@@ -1,14 +1,29 @@
-import { NavLink, Outlet, useParams } from "react-router";
+import { Navigate, NavLink, Outlet, useParams } from "react-router";
 
-import { useFunnel } from "../api/queries";
+import { useFunnel, useTask } from "../api/queries";
 import { cn } from "../ui/brand/cn";
 import { SOURCES_LABELS } from "../lib/vocabulary";
 import { WIDE_PAGE_CLASS } from "./listPageChrome";
+import { isToc } from "./scopingActivity";
+import { ThemesView } from "./ThemesView";
 import { GROWING_RULE_ACTIVE_CLASS, GROWING_RULE_CLASS } from "../ui/brand/Nav";
 import { sourcesSubtabChoice, type SourcesSubtab } from "./lifecycle";
 
 /**
- * Sources layout: Themes, Landscape and All sources always render; Findings
+ * The Sources tab's first page: Themes, or (for a theory of change, which has
+ * no themes; task 054) a redirect to All sources. Nothing until the task is
+ * known, so Themes never flashes first.
+ */
+export function SourcesIndex() {
+  const { taskId = "" } = useParams();
+  const task = useTask(taskId);
+  if (task.isPending) return null;
+  return isToc(task.data) ? <Navigate to="all" replace /> : <ThemesView />;
+}
+
+/**
+ * Sources layout: Themes, Landscape and All sources always render (a theory
+ * of change has no Themes tab: All sources is its first page); Findings
  * is a fourth tab present ONLY when the funnel reports a nonzero findings
  * count (rubric 24) — an analysis that never ran deep enough to extract
  * findings gets no tab to click into, not a disabled or empty one.
@@ -19,11 +34,12 @@ import { sourcesSubtabChoice, type SourcesSubtab } from "./lifecycle";
 export function SourcesLayout() {
   const { taskId = "" } = useParams();
   const funnel = useFunnel(taskId);
+  const task = useTask(taskId);
   const base = `/tasks/${taskId}/sources`;
   const hasFindings = typeof funnel.data?.findings === "number" && funnel.data.findings > 0;
 
   const tabs: Array<{ label: string; subtab: SourcesSubtab; end: boolean }> = [
-    { label: SOURCES_LABELS.themes, subtab: "", end: true },
+    ...(isToc(task.data) ? [] : [{ label: SOURCES_LABELS.themes, subtab: "" as const, end: true }]),
     { label: SOURCES_LABELS.landscape, subtab: "/landscape", end: false },
     { label: SOURCES_LABELS.all, subtab: "/all", end: false },
     ...(hasFindings ? [{ label: SOURCES_LABELS.findings, subtab: "/findings" as const, end: false }] : []),

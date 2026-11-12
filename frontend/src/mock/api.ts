@@ -1,3 +1,4 @@
+import { tocEvidenceFixture, tocGraphFixture } from "../views/toc/fixture";
 import type { SseFrame } from "../api/sseFrame";
 import type { AuthApi } from "../auth/types";
 import type { components } from "../api/gen/types";
@@ -81,6 +82,7 @@ import {
   mockNoteStale,
   MOCK_SHORTLIST_PLACES_TARGET,
   resetMockShortlist,
+  mockTocSketchFrames,
 } from "./fixtures";
 
 type MeOut = components["schemas"]["MeOut"];
@@ -442,6 +444,19 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     return json({ accepted: true });
   }
 
+  // Task 054: a theory-of-change task reads the Result page's fixture, so the
+  // canvas, panel and Detailed information can be looked at without a backend.
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/toc`)) {
+    // While the scripted live draft runs, the stored graph is still empty.
+    if (mockTocDraft !== null && !mockTocDraft.drafted) {
+      return json({ ...tocGraphFixture(), task_id: MOCK_TASK_ID, boxes: [], links: [], pathways: [], report: null, check_status: "drafting" });
+    }
+    return json({ ...tocGraphFixture(), task_id: MOCK_TASK_ID });
+  }
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/toc/evidence`)) {
+    return json(tocEvidenceFixture());
+  }
+
   // Task 044 (C10): create is ONE request carrying the kind of work, the
   // projects and the tasks it starts from. The mock stores the capability so
   // the New task screen's two paths are exercisable without a backend; it
@@ -450,8 +465,8 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   if (method === "POST" && path.endsWith("/api/v1/tasks")) {
     const body = await requestBody(request, init);
     const capability =
-      isRecord(body) && body.capability === "options_scoping"
-        ? "options_scoping"
+      isRecord(body) && (body.capability === "options_scoping" || body.capability === "theory_of_change")
+        ? body.capability
         : "evidence_search";
     const fromTaskIds =
       isRecord(body) && Array.isArray(body.from_task_ids)
@@ -1405,6 +1420,7 @@ function mockChatTitle(message: string): string {
 /** Install the client-level fetch interceptor only after VITE_MOCK is selected. */
 export function installMockApi() {
   const realFetch = globalThis.fetch.bind(globalThis);
+  startMockTocDraftFromPage();
   const mockAuth: AuthApi = {
     getAccessToken: async () => "mock-access-token",
     signIn: () => undefined,
@@ -1442,6 +1458,11 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
         controller.enqueue(encoder.encode(toSse(frame)));
       };
 
+      if (mockTocDraft !== null) {
+        await mockTocDraftWalk(emit, nextSequence, mockTocDraft);
+        return;
+      }
+
       if (mockTask.capability === "options_scoping") {
         await scopingBaselineWalk(emit, nextSequence);
         // Task 045 (6.3): the stream stays open for the longlist walks the
@@ -1460,7 +1481,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
 
       emit(runStatus("running", nextSequence()));
       // The approved plan's steps give the card its rows to come (task 058, N5).
-      emit({ type: "plan.updated", plan: currentPlan, scoping: null, version: 1, occurred_at: frameTime(), sequence: nextSequence() });
+      emit({ type: "plan.updated", plan: currentPlan, scoping: null, toc: null, version: 1, occurred_at: frameTime(), sequence: nextSequence() });
       // The search (round 9): the queries are written, then each goes out
       // and comes back with its count, the line naming the query out; then
       // one citations pass, described in words.
@@ -2459,4 +2480,62 @@ async function mockLonglistWalk(
   mockTask.active_run = null;
   mockTask.has_longlist = true;
   emit(runStatus("succeeded", nextSequence(), walkId));
+}
+
+// --- task 054 (S12): the theory of change's first draft, drawn live ------
+
+/** The scripted live draft, when the page asked for one; `drafted` once the
+ *  stored graph exists (`GET /toc` then returns the fixture's graph). */
+let mockTocDraft: { redraw: boolean; drafted: boolean } | null = null;
+
+/**
+ * Mock mode only: `?mockToc=draft` (or `redraw`, whose first draft fails its
+ * checks and is drawn again) on the page's address opens the mock task as a
+ * theory of change whose first draft is being written, so the canvas's live
+ * sketch can be watched on the Result tab without a backend. `?mockPace=`
+ * scales the script's waits (0.25 plays it four times faster).
+ */
+function startMockTocDraftFromPage() {
+  const params = new URLSearchParams(globalThis.location?.search ?? "");
+  const pace = Number(params.get("mockPace"));
+  if (Number.isFinite(pace) && pace > 0) setMockPace(pace);
+  const kind = params.get("mockToc");
+  if (kind !== "draft" && kind !== "redraw") return;
+  mockTocDraft = { redraw: kind === "redraw", drafted: false };
+  const now = new Date().toISOString();
+  mockTask.capability = "theory_of_change";
+  currentRun = {
+    capability_run_id: MOCK_RUN_ID,
+    task_id: MOCK_TASK_ID,
+    plan_id: MOCK_PLAN_ID,
+    plan_version: 1,
+    status: "running",
+    started_at: now,
+    ended_at: null,
+    artefact_id: null,
+  };
+  mockTask.latest_run = latestRunOf(currentRun);
+  mockTask.active_run = latestRunOf(currentRun);
+  runStarted.resolve();
+}
+
+/** The draft walk as the server streams it: the stage starts, the sketch
+ *  frames arrive at the measured pace (`MOCK_SKETCH_PACING_MS`), the stored
+ *  graph is written, then the stage and the walk complete. */
+async function mockTocDraftWalk(emit: (frame: SseFrame) => void, nextSequence: () => number, draft: { redraw: boolean; drafted: boolean }) {
+  emit(runStatus("running", nextSequence()));
+  emit(stageStarted("toc_draft", nextSequence()));
+  let last = Date.parse("2026-11-10T11:00:00Z");
+  for (const frame of mockTocSketchFrames({ redraw: draft.redraw })) {
+    const at = Date.parse(frame.occurred_at);
+    await pace(at - last);
+    last = at;
+    emit({ ...frame, occurred_at: frameTime() });
+  }
+  // The pathways and the rest are written after the last connection.
+  await pace(4_000);
+  draft.drafted = true;
+  emit(stageCompleted("toc_draft", { boxes: 10, links: 9, pathways: 3 }, nextSequence()));
+  emit(runStatus("succeeded", nextSequence()));
+  finishRun("succeeded");
 }

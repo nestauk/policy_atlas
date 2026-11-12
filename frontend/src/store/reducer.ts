@@ -24,7 +24,7 @@ import {
  * That set resets whenever the sequence actually advances. Together this
  * makes folding the same frame stream twice, or resuming the fold from
  * any mid-stream cursor (however the redelivery is sliced), produce the
- * same final state. The nine ephemeral frame types are the deliberate
+ * same final state. The ten ephemeral frame types are the deliberate
  * exception: they carry no `sequence` at all and never advance
  * `lastSequence`. `tick` updates only the transient `liveness` slice;
  * `artefact.section_delta` and `artefact.section_revising` update only a
@@ -35,7 +35,8 @@ import {
  * `artefact.source_note` adds to the run's `liveSourceNotes`, one per source
  * (round 8); `search.query` adds or updates a row of `liveSearchQueries` and
  * `characterise.themes` sets `liveThemes`, `liveOptions` or
- * `liveOptionThemes` by its `stage` (rounds 9 and 11). A replay carries none of them, so folding a replay rebuilds
+ * `liveOptionThemes` by its `stage` (rounds 9 and 11); `toc.sketch` sets or
+ * removes `liveSketch` (task 054, S12). A replay carries none of them, so folding a replay rebuilds
  * `prose` and `citations` alone.
  */
 /** Task 045 (A3): a stage frame names its walk; one from a different walk
@@ -165,6 +166,23 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
     return { ...state, [slot]: names };
   }
 
+  if (frame.type === "toc.sketch") {
+    // Sent whole each time (task 054, S12): it replaces the sketch; an empty
+    // one means the draft is being written again, so the sketch goes.
+    if (frame.boxes.length === 0 && frame.links.length === 0) {
+      const next = { ...state };
+      delete next.liveSketch;
+      return next;
+    }
+    return {
+      ...state,
+      liveSketch: {
+        boxes: frame.boxes.map(({ key, layer, text }) => ({ key, layer, text })),
+        links: frame.links.map(({ key, source, target }) => ({ key, source, target })),
+      },
+    };
+  }
+
   if (frame.type === "artefact.section_revising") {
     const section = state.liveSections[frame.index];
     if (section === undefined || section.state === "filled") return state;
@@ -253,6 +271,7 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
         delete next.liveThemes;
         delete next.liveOptions;
         delete next.liveOptionThemes;
+        delete next.liveSketch;
       }
       return next;
     }

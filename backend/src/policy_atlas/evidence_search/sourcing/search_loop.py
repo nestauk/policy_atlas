@@ -19,6 +19,7 @@ from datetime import date
 from functools import partial
 from typing import Any, Literal, TypedDict, cast
 
+import structlog
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
 
@@ -48,7 +49,9 @@ from policy_atlas.evidence_search.sourcing.search_prompts import (
     validated_queries,
 )
 
-SearchDepth = Literal["rapid", "standard", "deep"]
+log = structlog.get_logger()
+
+SearchDepth = Literal["rapid", "standard", "deep", "link"]
 SearchDirectiveError = _SearchDirectiveError
 QueryOrigin = Literal[
     "generated",
@@ -60,9 +63,11 @@ QueryOrigin = Literal[
     "snowball_forward",
     "snowball_backward",
     "semantic",
+    "semantic_place",
     "landmark",
     "suggestion_doi",
     "suggestion_title",
+    "seminal",  # a work the theory-of-change check's documents cite most (task 054)
 ]
 CallVerb = Literal[
     "search",
@@ -109,7 +114,19 @@ DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
         "policy_cap": 200,
         "call_budget": {"openalex": 45, "overton": 30},
     },
+    # The theory-of-change link search (task 054, C27, C31): two OpenAlex
+    # semantic calls and one Overton call on the first line of the intent (the
+    # link sentence), and one generated keyword query with the review and trial
+    # clauses; every distinct result kept. See ``_link_pools``.
+    "link": {
+        "papers_cap": 60,
+        "policy_cap": 60,
+        "call_budget": {"openalex": 4, "overton": 1},
+    },
 }
+
+#: The place suffix of the link depth's second OpenAlex call (C27).
+LINK_PLACE_SUFFIX = " in the United Kingdom"
 
 
 SR_CLAUSE = '("systematic review" OR "meta-analysis" OR "narrative synthesis")'
@@ -529,19 +546,21 @@ def parse_search_directive(
         return "rapid", None, None
     if not isinstance(raw, dict):
         raise SearchDirectiveError("search directive must be an object")
-    unknown = set(raw) - {"depth", "filters", "guidance", "record_cap"}
+    unknown = set(raw) - {"depth", "filters", "guidance", "record_cap", "link_scale", "reformulate"}
     if unknown:
         raise SearchDirectiveError("search directive contains unknown keys")
     # Validated here (this is the fail-closed gate for the whole directive) and
-    # read back by `parse_record_cap`, so the 3-tuple this function has always
-    # returned is unchanged for its existing callers.
+    # read back by `parse_record_cap` and `parse_link_scale`, so the 3-tuple this
+    # function has always returned is unchanged for its existing callers.
     parse_record_cap(context)
+    parse_link_scale(context)
+    parse_reformulate(context)
     depth: SearchDepth = "rapid"
     if "depth" in raw:
         raw_depth = raw["depth"]
         if not isinstance(raw_depth, str) or raw_depth not in DEPTH_CONSTANTS:
             raise SearchDirectiveError(
-                "search directive depth must be 'rapid', 'standard', or 'deep'"
+                "search directive depth must be 'rapid', 'standard', 'deep' or 'link'"
             )
         depth = raw_depth
     if "filters" in raw and raw["filters"] is None:
@@ -552,6 +571,56 @@ def parse_search_directive(
             raw["guidance"], error=SearchDirectiveError, max_chars=DIRECTIVE_STRING_MAX
         )
     return depth, raw.get("filters"), guidance
+
+
+def parse_reformulate(context: dict[str, Any]) -> bool:
+    """Whether the link depth searches by meaning on the generated paraphrase (C44).
+
+    Returns:
+        ``search.reformulate`` when the directive carries it, else ``False``.
+
+    Raises:
+        SearchDirectiveError: If it is not a boolean, or the depth is not ``link``.
+    """
+    raw = context.get("search")
+    if not isinstance(raw, dict) or "reformulate" not in raw:
+        return False
+    value = raw["reformulate"]
+    if not isinstance(value, bool):
+        raise SearchDirectiveError("search directive reformulate must be a boolean")
+    if value and raw.get("depth") != "link":
+        raise SearchDirectiveError("search directive reformulate needs depth 'link'")
+    return value
+
+
+#: Ceiling on the link depth's result multiplier (C44): the five calls never
+#: ask for more than four times their usual results.
+LINK_SCALE_MAX = 4
+
+
+def parse_link_scale(context: dict[str, Any]) -> int:
+    """The link depth's result multiplier from the search directive (C44).
+
+    Returns:
+        ``search.link_scale`` when the directive carries it, else 1.
+
+    Raises:
+        SearchDirectiveError: If it is not an integer in ``1..LINK_SCALE_MAX``,
+            or the depth is not ``link``.
+    """
+    raw = context.get("search")
+    if not isinstance(raw, dict) or "link_scale" not in raw:
+        return 1
+    value = raw["link_scale"]
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise SearchDirectiveError("search directive link_scale must be an integer")
+    if not 1 <= value <= LINK_SCALE_MAX:
+        raise SearchDirectiveError(
+            f"search directive link_scale must be between 1 and {LINK_SCALE_MAX}"
+        )
+    if raw.get("depth") != "link":
+        raise SearchDirectiveError("search directive link_scale needs depth 'link'")
+    return value
 
 
 #: Ceiling on a directive-supplied per-backend record cap: the deepest rung's
@@ -944,6 +1013,28 @@ def _semantic_record_passes(validated: dict[str, Any], record: dict[str, Any]) -
             return False
     countries = validated.get("author_affiliation_countries")
     return not countries or pool.country_predicate(record, set(countries))
+
+
+def _semantic_scope(
+    variants: list[dict[str, Any]],
+) -> tuple[dict[str, str], list[str], Callable[[dict[str, Any]], bool] | None, list[str]]:
+    """The wire params, local filters and local check every semantic call shares.
+
+    The variants split only the keyword calls' country clause (at most 100
+    codes per request); every local country check sees the whole list.
+
+    Returns:
+        ``(wire, local_filters, keep, countries)``.
+    """
+    countries = [
+        code for variant in variants for code in variant.get("author_affiliation_countries") or []
+    ]
+    local_scope = (
+        {**variants[0], "author_affiliation_countries": countries} if countries else variants[0]
+    )
+    wire, local_filters = _semantic_filter_parts(local_scope)
+    keep = (lambda record: _semantic_record_passes(local_scope, record)) if local_filters else None
+    return wire, local_filters, keep, countries
 
 
 def _without_country_filter(wire_params: dict[str, str]) -> dict[str, str]:
@@ -1467,16 +1558,7 @@ def _openalex_leg(
         )
         for plan, wire in keyword_plans
     ]
-    # The variants split only the keyword calls' country clause (at most 100
-    # codes per request); every local country check sees the whole list.
-    countries = [
-        code for variant in variants for code in variant.get("author_affiliation_countries") or []
-    ]
-    local_scope = (
-        {**variants[0], "author_affiliation_countries": countries} if countries else variants[0]
-    )
-    semantic_wire, local_filters = _semantic_filter_parts(local_scope)
-    keep = (lambda record: _semantic_record_passes(local_scope, record)) if local_filters else None
+    semantic_wire, local_filters, keep, countries = _semantic_scope(variants)
     semantic_specs = [
         _CallSpec(
             verb="search_semantic",
@@ -1617,17 +1699,14 @@ def _openalex_leg(
     return search.entries([c.record for c in ranked], "openalex"), summary, local_filters
 
 
-def _overton_leg(
-    search: _Pass,
-    backend: acquire.SearchBackendBase,
-    *,
-    intent: str,
-    paraphrases: list[str],
-    validated: dict[str, Any],
-    wire: dict[str, str],
-) -> tuple[list[PoolEntry], _LegSummary]:
-    """Relevance results, title dedup, landmarks, ranking: the policy pool."""
-    summary = _LegSummary()
+def _overton_fetch(
+    backend: acquire.SearchBackendBase, validated: dict[str, Any], wire: dict[str, str]
+) -> Callable[[str], Fetch]:
+    """The Overton search for one text, with the source-country post filter when set.
+
+    Raises:
+        SearchDirectiveError: If the post filter is set and the backend cannot apply it.
+    """
     post_filter = validated.get("source_country_post_filter")
     if isinstance(post_filter, list) and not hasattr(backend, "search_with_post_filter"):
         # Fail closed: silently searching unfiltered would admit
@@ -1649,6 +1728,146 @@ def _overton_leg(
                 ),
             )
         return _search_fetch(backend, query, wire)
+
+    return fetch_for
+
+
+#: The link depth's keyword calls: the clause added and the origin naming the list.
+_LINK_KEYWORD_CLAUSES: tuple[tuple[str, QueryOrigin], ...] = (
+    (SR_CLAUSE, "variant_sr"),
+    (RCT_CLAUSE, "variant_rct"),
+)
+
+
+def _link_pools(
+    passes: dict[str, _Pass],
+    backends: list[acquire.SearchBackendBase],
+    *,
+    text: str,
+    keyword: str | None,
+    cap: int,
+    scale: int = 1,
+    variants: dict[str, list[dict[str, Any]]],
+    validated: dict[str, dict[str, Any]],
+    wires: dict[str, list[dict[str, str]]],
+) -> tuple[dict[str, list[PoolEntry]], list[str]]:
+    """The link depth's search: five calls for one link, ``cap`` records at most (C27, C31).
+
+    ``scale`` multiplies every call's results (C44, Find more evidence).
+
+    OpenAlex semantic search on the sentence (origin ``semantic``) and on the
+    sentence with :data:`LINK_PLACE_SUFFIX` (``semantic_place``); the one
+    generated ``keyword`` query on OpenAlex keyword search with the systematic
+    review clause (``variant_sr``) and the trial clause (``variant_rct``), when
+    there is one; and Overton, itself a search by meaning, on the sentence
+    (``verbatim``). No citation chasing or landmarks. Duplicates are
+    dropped by the usual paper and policy keys; the copy that ranks higher in
+    its own list is kept (the earlier list on a tie). Each record's origin and
+    pool rank go on its ``source.acquired`` event, and each list's own order
+    survives in the pool rank, so the check walk's selection step can rebuild
+    the ranked lists.
+
+    Returns:
+        The pool entries per backend (the kept records first, so acquire's cap
+        is the number kept), and the semantic filters applied locally.
+    """
+    found: dict[str, list[list[dict[str, Any]]]] = {}
+    backend_of: dict[int, str] = {}
+    local_filters: list[str] = []
+    for backend in backends:
+        search = passes[backend.name]
+        calls: list[ExecutedCall | None] = []
+        if backend.name == "openalex":
+            extended = cast(acquire.ExtendedSearchBackend, backend)
+            wire, local_filters, keep, _ = _semantic_scope(variants["openalex"])
+            # The results each call keeps (C27): 20 by meaning, 10 by meaning and place.
+            semantic_calls: list[tuple[str, int, QueryOrigin]] = [
+                (text, 20 * scale, "semantic"),
+                (text + LINK_PLACE_SUFFIX, 10 * scale, "semantic_place"),
+            ]
+            keyword_calls: list[tuple[str, QueryOrigin, dict[str, str]]] = [
+                (_compose_variant(keyword, clause), origin, keyword_wire)
+                for clause, origin in _LINK_KEYWORD_CLAUSES
+                for keyword_wire in wires["openalex"]
+                if keyword
+            ]
+            calls = search.execute_batch(
+                backend,
+                [
+                    *(
+                        _CallSpec(
+                            verb="search_semantic",
+                            query=query,
+                            origin=origin,
+                            wire_params=wire,
+                            max_records=size,
+                            fetch=_semantic_fetch(extended, query, wire),
+                            keep=keep,
+                        )
+                        for query, size, origin in semantic_calls
+                    ),
+                    *(
+                        _CallSpec(
+                            verb="search",
+                            query=query,
+                            origin=origin,
+                            wire_params=keyword_wire,
+                            max_records=10 * scale,
+                            fetch=_search_fetch(backend, query, keyword_wire),
+                        )
+                        for query, origin, keyword_wire in keyword_calls
+                    ),
+                ],
+            )
+        elif backend.name == "overton":
+            wire = wires["overton"][0]
+            calls = [
+                search.execute(
+                    backend,
+                    _CallSpec(
+                        verb="search",
+                        query=text,
+                        origin="verbatim",
+                        wire_params=wire,
+                        max_records=10 * scale,
+                        fetch=_overton_fetch(backend, validated["overton"], wire)(text),
+                    ),
+                )
+            ]
+        for call in calls:
+            if call is not None:
+                found.setdefault(backend.name, []).append(call.records)
+                backend_of.update({id(record): backend.name for record in call.records})
+
+    def key(record: dict[str, Any]) -> str:
+        if backend_of[id(record)] == "overton":
+            return "overton:" + pool.policy_key(record)
+        return "openalex:" + pool.paper_key(record)
+
+    lists = [*found.get("openalex", []), *found.get("overton", [])]
+    kept = pool.interleave(lists, key)[:cap]
+    pools = {
+        backend.name: passes[backend.name].entries(
+            [record for record in kept if backend_of[id(record)] == backend.name], backend.name
+        )
+        for backend in backends
+    }
+    return pools, local_filters
+
+
+def _overton_leg(
+    search: _Pass,
+    backend: acquire.SearchBackendBase,
+    *,
+    intent: str,
+    paraphrases: list[str],
+    validated: dict[str, Any],
+    wire: dict[str, str],
+) -> tuple[list[PoolEntry], _LegSummary]:
+    """Relevance results, title dedup, landmarks, ranking: the policy pool."""
+    summary = _LegSummary()
+    post_filter = validated.get("source_country_post_filter")
+    fetch_for = _overton_fetch(backend, validated, wire)
 
     # 1. Three relevance-ordered searches sharing OVERTON_DOCS documents.
     per_text = -(-pool.OVERTON_DOCS // 3)
@@ -1722,6 +1941,61 @@ def _overton_leg(
     return search.entries([c.record for c in ranked], "overton"), summary
 
 
+#: The context key of a search that only looks up given DOIs (task 054, C42: a
+#: study the user adds to a theory-of-change link).
+USER_DOIS_KEY = "lookup_dois"
+
+
+def _acquire_user_dois(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    context: acquire.AcquireContext,
+    backends: list[acquire.SearchBackendBase],
+    embedder: EmbeddingBackend | None,
+    dois: list[str],
+) -> dict[str, Any]:
+    """Look up the user's DOIs in OpenAlex and acquire them: no generation, no ranking."""
+    openalex = [backend for backend in backends if backend.name == "openalex"]
+    started = time.monotonic()
+    records: list[dict[str, Any]] = []
+    error = None
+    try:
+        records = openalex[0].lookup_dois(dois) if openalex else []
+    except Exception as exc:  # a provider failure leaves the link with nothing new
+        log.warning("search.user_doi_lookup_failed", error=type(exc).__name__)
+        error = type(exc).__name__
+    call = ExecutedCall(
+        backend_name="openalex",
+        verb="lookup_dois",
+        query=" ".join(dois),
+        query_origin="suggestion_doi",
+        wire_params={},
+        records=records,
+        status="ok" if error is None else "error",
+        error=error,
+    )
+    counts = acquire.acquire_sources(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=context,
+        backends=openalex,
+        embedder=embedder,
+        executed_calls=[call],
+        depth="link",
+    )
+    counts["search"] = {
+        "depth": "link",
+        "user_dois": len(dois),
+        "wall_clock_s": time.monotonic() - started,
+        "generation_calls": 0,
+    }
+    counts["usage_totals"] = UsageAccumulator().payload()
+    return counts
+
+
 def run_search(
     conn: Connection,
     *,
@@ -1757,6 +2031,17 @@ def run_search(
         SearchDirectiveError: If the search directive or filters are malformed.
         RuntimeError: If generation fails.
     """
+    user_dois = context.context.get(USER_DOIS_KEY)
+    if user_dois:
+        return _acquire_user_dois(
+            conn,
+            task_id=task_id,
+            run_id=run_id,
+            context=context,
+            backends=backends,
+            embedder=embedder,
+            dois=[str(doi) for doi in user_dois],
+        )
     depth, raw_filters, guidance = parse_search_directive(context.context)
     constants = DEPTH_CONSTANTS[depth]
     names = [backend.name for backend in backends]
@@ -1766,6 +2051,8 @@ def run_search(
     scope_wire_params = _scope_wire_params_payload(wires) if raw_filters is not None else None
     round_index = count_search_runs(conn, task_id=task_id, scope_id=context.scope_id) + 1
     record_cap = parse_record_cap(context.context)
+    link_scale = parse_link_scale(context.context)
+    reformulate = parse_reformulate(context.context)
     started = time.monotonic()
     # Task 058, round 9: the line appears at once, while the queries are
     # written, then counts what the queries find as each comes back.
@@ -1774,13 +2061,23 @@ def run_search(
     live = _LiveSearch(round_index, publish_queries=not _is_option_search(conn, context.scope_id))
     live.writing_queries()
 
-    wire, usage = generation_backend.generate_queries(
-        QueriesPayload(intent=context.intent, guidance=guidance)
-    )
     usage_totals = UsageAccumulator()
-    usage_totals.add(usage)
-    queries, paraphrases = validated_queries(wire)
-    queries_dropped = len(wire.queries) - len(queries)
+    queries: list[str] = []
+    paraphrases: list[str] = []
+    queries_dropped = 0
+    try:
+        wire, usage = generation_backend.generate_queries(
+            QueriesPayload(intent=context.intent, guidance=guidance)
+        )
+    except Exception:
+        if depth != "link":
+            raise
+        # The link search still runs its searches by meaning (C31).
+        log.warning("search.link_keyword_generation_failed", scope_id=str(context.scope_id))
+    else:
+        usage_totals.add(usage)
+        queries, paraphrases = validated_queries(wire)
+        queries_dropped = len(wire.queries) - len(queries)
     live.started()
 
     # The two legs run side by side (plan S13): one pass state per backend, so
@@ -1790,7 +2087,7 @@ def run_search(
     variant_count = {name: len(variants[name]) for name in names}
     passes = {name: _Pass(constants, variant_count, live=live) for name in names}
     leg_jobs: dict[str, Callable[[], Any]] = {}
-    for backend in backends:
+    for backend in backends if depth != "link" else []:
         if backend.name == "openalex":
             leg_jobs[backend.name] = partial(
                 _openalex_leg,
@@ -1825,6 +2122,23 @@ def run_search(
                 pools[name], summaries[name], local_filters = outcome
             else:
                 pools[name], summaries[name] = outcome
+    if depth == "link":
+        # The link sentence is the intent's first line (``item_text``). A
+        # reformulated search (C44) searches by meaning on the generated
+        # research-style paraphrase instead, when the writer gave one.
+        sentence = context.intent.strip().splitlines()[0]
+        reformulated = reformulate and bool(paraphrases)
+        pools, local_filters = _link_pools(
+            passes,
+            backends,
+            text=paraphrases[0] if reformulated else sentence,
+            keyword=queries[0] if queries else None,
+            cap=record_cap or constants["papers_cap"],
+            scale=link_scale,
+            variants=variants,
+            validated=validated,
+            wires=wires,
+        )
     executed = [call for name in names for call in passes[name].executed]
     calls_made = {name: passes[name].calls.get(name, 0) for name in names}
     ranked_count = {name: passes[name].ranked_count.get(name, 0) for name in names}
@@ -1861,6 +2175,7 @@ def run_search(
         "queries_zero_result": {name: legs[name].zero_result_queries for name in names},
         "queries_dropped": queries_dropped,
         "fallback_to_verbatim": {name: legs[name].fallback_to_verbatim for name in names},
+        "reformulated": depth == "link" and reformulate and bool(paraphrases),
         "wall_clock_s": time.monotonic() - started,
         "generation_calls": 1,
         "semantic_local_filters": local_filters,

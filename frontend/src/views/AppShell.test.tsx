@@ -77,6 +77,10 @@ const sseState = vi.hoisted(() => ({
 }));
 
 vi.mock("../api/queries", () => ({
+  // Task 054: the result gate also reads the theory-of-change graph (none here).
+  useToc: () => ({ data: undefined }),
+  // Task 054: the finish alerts read the task list on every page.
+  useTasks: () => ({ data: undefined }),
   useMe: () => ({ data: meState.data }),
   useTask: (taskId: string) => ({
     data: taskId && !taskState.pending

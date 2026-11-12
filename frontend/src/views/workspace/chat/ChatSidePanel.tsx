@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router";
 
 import { useArtefact, useConversations } from "../../../api/queries";
@@ -9,6 +9,7 @@ import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
 import { usePlanPanel } from "../../planPanel";
 import { useChatsEnabled } from "../../taskResult";
 import { TaskAgentPane } from "../TaskAgentPane";
+import { usePanelWidth } from "../usePanelWidth";
 import { ChatPane } from "./ChatPane";
 import { ChangingText } from "../ChangingText";
 import { Tooltip, TooltipProvider } from "../../../ui/radix/Tooltip";
@@ -23,61 +24,6 @@ import {
 } from "./conversationState";
 import { DraftChatPane } from "./DraftChatPane";
 import { ChatsIcon, ExpandIcon, PanelCloseIcon, PlusIcon, iconButtonClass } from "../../../ui/brand/icons";
-
-/** Resize bounds (px) — the workspace rail's own clamp. */
-const PANEL_MIN = 280;
-const PANEL_MAX = 640;
-const PANEL_DEFAULT = 416;
-const KEY_STEP = 24;
-
-/** Drag/keyboard width for the left-hand panel (handle on its RIGHT edge —
- *  the workspace rail's own geometry, so the delta math matches it). */
-function usePanelWidth() {
-  const [px, setPx] = useState(PANEL_DEFAULT);
-  const dragFrom = useRef<{ x: number; width: number } | null>(null);
-  const clamp = (value: number) => Math.min(Math.max(value, PANEL_MIN), PANEL_MAX);
-
-  const onPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
-    const panel = (event.currentTarget as HTMLElement).parentElement;
-    if (panel === null) return;
-    dragFrom.current = { x: event.clientX, width: panel.getBoundingClientRect().width };
-    const handle = event.currentTarget as HTMLElement;
-    handle.setPointerCapture(event.pointerId);
-    const onMove = (move: PointerEvent) => {
-      const from = dragFrom.current;
-      if (from === null) return;
-      setPx(clamp(from.width + (move.clientX - from.x)));
-    };
-    const onUp = () => {
-      dragFrom.current = null;
-      handle.removeEventListener("pointermove", onMove);
-      handle.removeEventListener("pointerup", onUp);
-    };
-    handle.addEventListener("pointermove", onMove);
-    handle.addEventListener("pointerup", onUp);
-  }, []);
-
-  const onKeyDown = useCallback((event: React.KeyboardEvent<HTMLElement>) => {
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-    event.preventDefault();
-    setPx((current) => clamp(current + (event.key === "ArrowRight" ? KEY_STEP : -KEY_STEP)));
-  }, []);
-
-  return {
-    width: `${px}px`,
-    separatorProps: {
-      role: "separator" as const,
-      "aria-orientation": "vertical" as const,
-      "aria-label": "Resize the chat panel",
-      "aria-valuemin": PANEL_MIN,
-      "aria-valuemax": PANEL_MAX,
-      "aria-valuenow": px,
-      tabIndex: 0 as const,
-      onPointerDown,
-      onKeyDown,
-    },
-  };
-}
 
 const HEADER_BUTTON = iconButtonClass("chrome");
 
@@ -121,7 +67,7 @@ export function ChatSidePanel({
 }) {
   const { activeConversationId, draftEntryArtefactId, setActiveConversation, openDraftChat } = useActiveConversation();
   const [listOpen, setListOpen] = useState(false);
-  const panel = usePanelWidth();
+  const panel = usePanelWidth({ label: "Resize the chat panel", initial: 416 });
   const conversations = useConversations(taskId, { status: "active" });
   const rows = conversations.data?.data ?? [];
   const chatRows = rows.filter((row) => row.kind === "chat");
@@ -136,6 +82,9 @@ export function ChatSidePanel({
   const draftOpen = activeConversationId === DRAFT_CHAT_ID;
   const artefact = useArtefact(taskId);
   const chatsEnabled = useChatsEnabled(taskId);
+  // The sidebar does not open by itself on any kind of task (task 054,
+  // decision 11, reversing round 7's theory-of-change rule): the run status
+  // bar shows the run, and the reader opens the Task Agent from it.
   const stream = useRunStream(taskId);
   const checkInWaiting = stream.pendingCheckIn != null;
   const openLatestOrTaskAgent = () => {

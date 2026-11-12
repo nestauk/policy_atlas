@@ -1,13 +1,9 @@
-import { useState } from "react";
-
-import { cn } from "../ui/brand/cn";
-import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
+import { DownloadMenu } from "./DownloadMenu";
 import {
   artefactMarkdown,
   downloadFilename,
   triggerTextDownload,
 } from "./artefactPresentation";
-import { buttonVariants } from "../ui/brand/Button";
 
 /**
  * Report download: PDF via the existing print stylesheet, markdown as a
@@ -23,74 +19,22 @@ export function ArtefactDownload({
   /** The task's question, the page's title; null keeps the artefact's own. */
   question?: string | null;
 }) {
-  const [open, setOpen] = useState(false);
-
-  const downloadMarkdown = () => {
-    setOpen(false);
-    triggerTextDownload(
-      downloadFilename(artefact.title, "md"),
-      artefactMarkdown(artefact, question),
-      "text/markdown",
-    );
-  };
-
-  const downloadPdf = () => {
-    setOpen(false);
-    // Expand handlers on sections listen for `beforeprint` and flushSync
-    // their open state; print then captures the full report.
-    window.print();
-  };
-
   return (
-    <div className="print-hide shrink-0">
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-haspopup="menu"
-            aria-expanded={open}
-            className={buttonVariants({ variant: "outline", size: "md" })}
-          >
-            Download
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              className="h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </button>
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-44 p-0">
-          <ul role="menu" className="flex flex-col py-1">
-            {(
-              [
-                ["PDF", downloadPdf],
-                ["Markdown", downloadMarkdown],
-              ] as const
-            ).map(([label, onSelect], index) => (
-              <li key={label} role="none">
-                {index > 0 && <div className="border-t border-line" />}
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={onSelect}
-                  className={cn(
-                    "block w-full cursor-pointer px-3 py-2.5 text-left text-body text-navy hover:bg-blue-tint-2 hover:text-blue",
-                  )}
-                >
-                  {label}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </PopoverContent>
-      </Popover>
-    </div>
+    <DownloadMenu
+      items={[
+        // Expand handlers on sections listen for `beforeprint` and flushSync
+        // their open state; print then captures the full report.
+        { label: "PDF", onSelect: () => window.print() },
+        {
+          label: "Markdown",
+          onSelect: () =>
+            triggerTextDownload(
+              downloadFilename(artefact.title, "md"),
+              artefactMarkdown(artefact, question),
+              "text/markdown",
+            ),
+        },
+      ]}
+    />
   );
 }

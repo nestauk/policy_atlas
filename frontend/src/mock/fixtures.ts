@@ -38,6 +38,21 @@ export const STAGE_PRESENTATION: Record<StageKey, readonly [label: string, blurb
   constrain: ["Applying your constraints", "Each option checked against the plan's limits."],
   theme: ["Grouping into themes", "Included options grouped into themes."],
   shortlist: ["Shortlisting", "Proposing options for close reading."],
+  toc_draft: ["Drafting the theory", "Boxes, connections and pathways from the plan."],
+  toc_read: ["Reading your diagram", "Boxes, connections and pathways from your diagram."],
+  toc_item_searches: ["Searching for each connection", "One search per connection."],
+  toc_select: ["Screening", "Reading each abstract against its connection."],
+  toc_discover: ["Looking for other routes", "Routes in the evidence the theory does not show."],
+  toc_merge: ["Merging similar steps", "Boxes and pathways that say the same thing, folded together."],
+  toc_search_new: ["Searching for the new connections", "One search per connection that discovery added."],
+  toc_new_link_searches: ["Searching for the new connections", "One search per connection that discovery added."],
+  toc_judge: ["Judging the evidence", "Each document against its connection."],
+  toc_search_again: ["Searching again for thin connections", "A second search, in the words of the research."],
+  toc_retry_searches: ["Searching again for thin connections", "A second search, in the words of the research."],
+  toc_figures: ["Finding the size of change", "The figures each document reports."],
+  toc_choose: ["Choosing pathways", "The best-evidenced routes kept."],
+  toc_summarise: ["Writing titles and summaries", "Plain titles and one sentence per connection."],
+  toc_report: ["Writing the report", "The report, as it is written."],
 };
 
 /** The server's `STAGE_COUNTS` (task 058, N17): the done row's counts, each
@@ -62,6 +77,21 @@ export const STAGE_COUNTS: Record<StageKey, ReadonlyArray<readonly [string, stri
   constrain: [["excluded", "excluded"]],
   theme: [["themes", "themes"]],
   shortlist: [["shortlisted", "shortlisted"]],
+  toc_draft: [["boxes", "boxes"], ["links", "connections"], ["pathways", "pathways"]],
+  toc_read: [["boxes", "boxes"], ["links", "connections"], ["pathways", "pathways"]],
+  toc_item_searches: [["total", "searches"], ["sources", "found"]],
+  toc_select: [["screened", "read"], ["relevant", "relevant"]],
+  toc_discover: [["accepted", "routes found"]],
+  toc_merge: [["merged", "merged"]],
+  toc_search_new: [["links", "connections"]],
+  toc_new_link_searches: [["total", "searches"], ["sources", "found"]],
+  toc_judge: [["judgements", "judged"], ["test_them", "test them"]],
+  toc_search_again: [["links", "connections"], ["judgements", "judged"]],
+  toc_retry_searches: [["total", "searches"], ["sources", "found"]],
+  toc_figures: [["figures", "figures"]],
+  toc_choose: [["kept", "kept"], ["set_aside", "set aside"]],
+  toc_summarise: [],
+  toc_report: [],
 };
 
 /** The card row each stage belongs to: classify and appraise share one row;
@@ -86,6 +116,21 @@ export const STAGE_ROW: Record<StageKey, string> = {
   constrain: "constrain",
   theme: "theme",
   shortlist: "shortlist",
+  toc_draft: "toc_draft",
+  toc_read: "toc_read",
+  toc_item_searches: "toc_item_searches",
+  toc_select: "toc_select",
+  toc_discover: "toc_discover",
+  toc_merge: "toc_merge",
+  toc_search_new: "toc_search_new",
+  toc_new_link_searches: "toc_search_new",
+  toc_judge: "toc_judge",
+  toc_search_again: "toc_search_again",
+  toc_retry_searches: "toc_search_again",
+  toc_figures: "toc_figures",
+  toc_choose: "toc_choose",
+  toc_summarise: "toc_summarise",
+  toc_report: "toc_report",
 };
 
 /** One plan step in the server's words: its label, blurb and row. */
@@ -2501,4 +2546,90 @@ export function mockLonglist(): components["schemas"]["LonglistOut"] {
     },
     plan_inputs_changed: mockShortlistState.inputsChanged,
   };
+}
+
+type TocSketchFrame = components["schemas"]["TocSketchFrame"];
+type SketchBox = components["schemas"]["SketchBox"];
+type SketchLink = components["schemas"]["SketchLink"];
+
+/** The live draft's boxes, in the order the model writes them: the same words
+ *  and layers as the ToC graph fixture (`views/toc/fixture.ts`, `BOXES`), so
+ *  the stored graph that replaces the sketch matches it. Keys are the model's
+ *  draft keys, not stored ids. */
+const MOCK_SKETCH_BOXES: SketchBox[] = [
+  { key: "b1", layer: "input", text: "Ban on less healthy food ads" },
+  { key: "b2", layer: "input", text: "Nutrient profiling rules, enforced by Ofcom" },
+  { key: "b3", layer: "output", text: "Fewer less healthy food ads shown" },
+  { key: "b4", layer: "output", text: "Some products reformulated to pass the rules" },
+  { key: "b5", layer: "outcome_short", text: "Children see fewer ads for less healthy food" },
+  { key: "b6", layer: "outcome_short", text: "Children ask for and pick healthier food" },
+  { key: "b7", layer: "outcome_long", text: "Households buy fewer calories from less healthy food" },
+  { key: "b8", layer: "impact", text: "Fewer children living with obesity at age 10 to 11" },
+  { key: "b9", layer: "failure_outcome", text: "Brands shift spend to brand ads and influencers" },
+  { key: "b10", layer: "failure_outcome", text: "Children's exposure barely falls" },
+];
+
+/** The live draft's connections, after every box, in the order written (the
+ *  graph fixture's links 1 to 9, ends as draft keys). */
+const MOCK_SKETCH_LINKS: SketchLink[] = [
+  [1, 3],
+  [2, 4],
+  [3, 5],
+  [5, 6],
+  [6, 7],
+  [4, 6],
+  [7, 8],
+  [3, 9],
+  [9, 10],
+].map(([source, target], i) => ({ key: `l${i + 1}`, source: `b${source}`, target: `b${target}` }));
+
+/** Measured on Bedrock (task 054, S12, 2026-11-10): the first box after about
+ *  30 to 40 s of thinking, then a box every 1.3 s and a connection every 1.7 s. */
+export const MOCK_SKETCH_PACING_MS = { firstBox: 32_000, box: 1_300, link: 1_700 } as const;
+
+function sketchFrame(boxes: SketchBox[], links: SketchLink[], at: number): TocSketchFrame {
+  return {
+    type: "toc.sketch",
+    ephemeral: true,
+    boxes,
+    links,
+    occurred_at: new Date(Date.parse("2026-11-10T11:00:00Z") + at).toISOString(),
+  };
+}
+
+/**
+ * A scripted live draft of the theory of change (`toc.sketch`, task 054, S12),
+ * as the server sends it: one frame per closed box, then one per closed
+ * connection, each carrying the whole sketch so far (each replaces the one
+ * before). With `redraw`, the first draft fails its checks once it is drawn:
+ * an empty frame resets the sketch, then the retry is drawn again from the
+ * first box. The sketch ends when the `toc_draft` stage completes; the page
+ * then reads the stored graph (`GET /toc`), which replaces it.
+ *
+ * Args:
+ *   redraw: Include the failed first draft, the reset and the redraw.
+ *
+ * Returns:
+ *   The frames in order, with `occurred_at` spaced by `MOCK_SKETCH_PACING_MS`.
+ */
+export function mockTocSketchFrames({ redraw = false }: { redraw?: boolean } = {}): TocSketchFrame[] {
+  const frames: TocSketchFrame[] = [];
+  let at = MOCK_SKETCH_PACING_MS.firstBox;
+  const draw = () => {
+    for (let n = 1; n <= MOCK_SKETCH_BOXES.length; n += 1) {
+      frames.push(sketchFrame(MOCK_SKETCH_BOXES.slice(0, n), [], at));
+      at += MOCK_SKETCH_PACING_MS.box;
+    }
+    for (let n = 1; n <= MOCK_SKETCH_LINKS.length; n += 1) {
+      frames.push(sketchFrame(MOCK_SKETCH_BOXES, MOCK_SKETCH_LINKS.slice(0, n), at));
+      at += MOCK_SKETCH_PACING_MS.link;
+    }
+  };
+  draw();
+  if (redraw) {
+    frames.push(sketchFrame([], [], at));
+    at += MOCK_SKETCH_PACING_MS.firstBox;
+    draw();
+  }
+  return frames;
 }

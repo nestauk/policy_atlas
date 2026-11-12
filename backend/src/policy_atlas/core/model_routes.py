@@ -77,11 +77,16 @@ class Step:
         timeout_s: How many seconds one request of this step may take before
             the client gives up on it, unless a route says otherwise. Applied
             per request (task 057, D12).
+        first_content_s: For a streamed step only: how many seconds the app
+            waits for the first words of the answer before it gives up on the
+            stream and falls back to the ordinary call (task 054's 058
+            alignment, A11). ``None`` when the step sets no such limit.
     """
 
     tier: str
     reasoning_effort: str
     timeout_s: float
+    first_content_s: float | None = None
 
 
 @dataclass(frozen=True)
@@ -92,11 +97,14 @@ class StepException:
         model: A tier name or a model id, or ``None`` to keep the step's tier.
         reasoning_effort: An effort value, or ``None`` to keep the step's effort.
         timeout_s: A request timeout in seconds, or ``None`` to keep the step's.
+        first_content_s: A time-to-first-content limit in seconds, or ``None``
+            to keep the step's.
     """
 
     model: str | None
     reasoning_effort: str | None
     timeout_s: float | None = None
+    first_content_s: float | None = None
 
 
 #: Embedding requests the stage may keep in flight at most (task 057, D6), when a
@@ -220,6 +228,30 @@ class Route:
             return exception.timeout_s
         return default.timeout_s
 
+    def first_content_for(self, step: str) -> float | None:
+        """Return how long a streamed step waits for its first words on this route.
+
+        In plain terms: a streamed call that has sent nothing readable after
+        this many seconds is abandoned, and the step makes its ordinary
+        (non-streamed) call instead. The step's ``timeout_s`` still bounds the
+        wait between pieces once words arrive.
+
+        Args:
+            step: A step name from the ``[steps]`` table.
+
+        Returns:
+            The route's override for the step when it sets ``first_content_s``,
+            else the step's own ``first_content_s``, else ``None`` (no limit).
+
+        Raises:
+            RuntimeError: If the step is not in the ``[steps]`` table.
+        """
+        default = self._step(step)
+        exception = self.step_exceptions.get(step)
+        if exception is not None and exception.first_content_s is not None:
+            return exception.first_content_s
+        return default.first_content_s
+
 
 def _require(table: Mapping[str, Any], key: str, where: str) -> Any:
     if key not in table:
@@ -241,15 +273,21 @@ def _choice(table: Mapping[str, Any], key: str, where: str, allowed: tuple[str, 
     return str(value)
 
 
-def _timeout(value: Any, where: str) -> float:
-    """Check a ``timeout_s`` value: a number of seconds above zero."""
+def _timeout(value: Any, where: str, key: str = "timeout_s") -> float:
+    """Check a ``timeout_s`` (or ``first_content_s``) value: a number of seconds above zero."""
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise RuntimeError(
-            f"{where}: 'timeout_s' must be a number of seconds, not {type(value).__name__}"
+            f"{where}: {key!r} must be a number of seconds, not {type(value).__name__}"
         )
     if not value > 0:
-        raise RuntimeError(f"{where}: 'timeout_s' is {value!r}; it must be above zero")
+        raise RuntimeError(f"{where}: {key!r} is {value!r}; it must be above zero")
     return float(value)
+
+
+def _first_content(table: Mapping[str, Any], where: str) -> float | None:
+    """Read an optional ``first_content_s``: ``None`` when absent."""
+    value = table.get("first_content_s")
+    return None if value is None else _timeout(value, where, "first_content_s")
 
 
 def _pool_cap(table: Mapping[str, Any], where: str) -> int:
@@ -279,11 +317,14 @@ def _parse_steps(raw: Mapping[str, Any], where: str) -> dict[str, Step]:
                 f"and timeout_s, not {type(value).__name__}"
             )
         here = f"{where} step {name!r}"
-        _no_stray_keys(value, ("tier", "reasoning_effort", "timeout_s"), here)
+        _no_stray_keys(
+            value, ("tier", "reasoning_effort", "timeout_s", "first_content_s"), here
+        )
         steps[name] = Step(
             tier=str(_require(value, "tier", here)),
             reasoning_effort=_choice(value, "reasoning_effort", here, REASONING_EFFORTS),
             timeout_s=_timeout(_require(value, "timeout_s", here), here),
+            first_content_s=_first_content(value, here),
         )
     return steps
 
@@ -298,7 +339,9 @@ def _parse_exception(name: str, value: Any, where: str) -> StepException:
             f"{where}: step {name!r} must be a string or a table, not {type(value).__name__}"
         )
     here = f"{where} step {name!r}"
-    _no_stray_keys(value, ("model", "reasoning_effort", "timeout_s"), here)
+    _no_stray_keys(
+        value, ("model", "reasoning_effort", "timeout_s", "first_content_s"), here
+    )
     if not value:
         raise RuntimeError(f"{here}: an empty table changes nothing; remove it")
     effort = value.get("reasoning_effort")
@@ -314,6 +357,7 @@ def _parse_exception(name: str, value: Any, where: str) -> StepException:
         model=str(model) if model is not None else None,
         reasoning_effort=str(effort) if effort is not None else None,
         timeout_s=_timeout(timeout, here) if timeout is not None else None,
+        first_content_s=_first_content(value, here),
     )
 
 

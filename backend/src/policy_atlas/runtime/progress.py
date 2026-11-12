@@ -49,6 +49,15 @@ class ProgressEmitter:
         self._skeleton_emitted = False
         self._disabled = False
 
+    def fresh(self) -> ProgressEmitter:
+        """Return a new emitter for the same task and run, with no skeleton sent yet.
+
+        For a writer that starts its report again on the page (the theory of
+        change report's fallback, task 054's 058 alignment): the new emitter
+        may send a fresh skeleton.
+        """
+        return ProgressEmitter(self._engine, task_id=self._task_id, run_id=self._run_id)
+
     def emit_skeleton(
         self,
         sections: Sequence[dict[str, str]],

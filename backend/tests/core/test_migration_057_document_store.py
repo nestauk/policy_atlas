@@ -30,7 +30,6 @@ import pytest
 from alembic import command
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, select, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
@@ -320,10 +319,10 @@ def test_the_revisions_round_trip(engine: Engine) -> None:
             # The extension stays installed (documented).
             assert conn.execute(text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")).first()
 
-        command.upgrade(cfg, "head")
+        # REV3, not "head": task 054's chain now follows it (rebased 2026-11-05).
+        command.upgrade(cfg, REV3)
         with engine.begin() as conn:
-            # Head, which later revisions may move past rev3.
-            assert _current_revision(conn) == ScriptDirectory.from_config(cfg).get_current_head()
+            assert _current_revision(conn) == REV3
             columns = _columns(conn, "chunk_embedding")
             assert {"embedding", "tokens"} <= set(columns)
             assert "vector" not in columns

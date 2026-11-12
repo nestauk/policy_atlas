@@ -6,15 +6,17 @@ non-credential request parameter so differing filters do not collide. API keys
 and polite-pool mailto values are excluded from cache structures.
 """
 
+import html
 import os
 import re
 import threading
 import time
 from collections import OrderedDict
 from collections.abc import Callable, Iterable
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from typing import Any, cast
-from urllib.parse import parse_qsl, urlparse
+from urllib.parse import parse_qsl, quote, urlparse
 
 import httpx
 import structlog
@@ -892,7 +894,7 @@ def _chunks(values: list[str], size: int) -> Iterable[list[str]]:
 
 
 def _normalize_doi_for_filter(doi: str) -> str | None:
-    # Behavioral twin of acquire._normalize_doi (the cross-backend identity
+    # Behavioral twin of acquire.normalize_doi (the cross-backend identity
     # key). Kept local so the transport module never imports the DB layer;
     # any prefix-handling change must land in both.
     candidate = doi.strip().lower()
@@ -1075,3 +1077,88 @@ def _validate_overton_next_page_url(next_page_url: str) -> str:
     if parsed.scheme != "https" or parsed.hostname != "app.overton.io":
         raise SearchTransportError(status_code=None, host=parsed.hostname or "")
     return next_page_url
+
+
+# --- Crossref abstracts (task 054, C30) -------------------------------------------
+# Many OpenAlex works carry a DOI but no abstract. Crossref often has the
+# publisher's abstract, marked up in JATS (an XML format publishers use). One
+# lookup per DOI, in parallel, with a short timeout; any failure means no
+# abstract, never an error. The theory-of-change link pick calls this only
+# when its model backend is live.
+
+CROSSREF_URL = "https://api.crossref.org/works/{doi}"
+CROSSREF_TIMEOUT_S = 5.0
+#: Crossref's polite pool allows about 3 requests at once.
+CROSSREF_WORKERS = 3
+#: The wait before the one retry after a 429 when Crossref sends no Retry-After,
+#: and the longest Retry-After honoured.
+CROSSREF_RETRY_S = 1.0
+CROSSREF_RETRY_MAX_S = 10.0
+
+_TAG = re.compile(r"<[^>]+>")
+
+
+def _plain(jats: str) -> str:
+    """JATS markup to plain text: tags dropped, entities decoded, spaces collapsed."""
+    text = " ".join(html.unescape(_TAG.sub(" ", jats)).split())
+    return text.removeprefix("Abstract ").strip()
+
+
+def _user_agent() -> str:
+    # Crossref's "polite pool": a contact address in the User-Agent.
+    email = os.environ.get("OPENALEX_EMAIL")
+    return f"PolicyAtlas/1.0 (mailto:{email})" if email else "PolicyAtlas/1.0"
+
+
+def crossref_abstracts(dois: list[str], *, client: httpx.Client | None = None) -> dict[str, str]:
+    """Look up each DOI's abstract on Crossref.
+
+    Args:
+        dois: DOIs, bare (``10.1/abc``).
+        client: Optional HTTP client (tests pass one with a mock transport).
+
+    A 429 (too many requests) is retried once, after its Retry-After or
+    :data:`CROSSREF_RETRY_S`. One summary line is logged per call.
+
+    Returns:
+        DOI → plain-text abstract, for the DOIs Crossref had one for.
+    """
+    if not dois:
+        return {}
+    http = client or httpx.Client(timeout=CROSSREF_TIMEOUT_S, headers={"User-Agent": _user_agent()})
+
+    def one(doi: str) -> tuple[str, str | None, bool]:
+        """``(doi, abstract or None, whether the lookup failed)``."""
+        url = CROSSREF_URL.format(doi=quote(doi, safe="/"))
+        try:
+            response = http.get(url)
+            if response.status_code == 429:
+                try:
+                    wait = float(response.headers.get("Retry-After", CROSSREF_RETRY_S))
+                except ValueError:
+                    wait = CROSSREF_RETRY_S
+                time.sleep(min(max(wait, 0.0), CROSSREF_RETRY_MAX_S))
+                response = http.get(url)
+            response.raise_for_status()
+            jats = response.json().get("message", {}).get("abstract")
+        except Exception as exc:  # noqa: BLE001 - a missing abstract is not an error
+            log.debug("crossref.abstract_failed", doi=doi, error_type=type(exc).__name__)
+            return doi, None, True
+        return doi, (_plain(jats) or None) if isinstance(jats, str) else None, False
+
+    try:
+        with ThreadPoolExecutor(max_workers=CROSSREF_WORKERS) as executor:
+            results = list(executor.map(one, dois))
+    finally:
+        if client is None:
+            http.close()
+    found = {doi: text for doi, text, _ in results if text}
+    failed = sum(1 for _, _, error in results if error)
+    log.info(
+        "crossref.summary",
+        asked=len(dois),
+        found=len(found),
+        no_abstract=len(dois) - len(found) - failed,
+        failed=failed,
+    )
+    return found

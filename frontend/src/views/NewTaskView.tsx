@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { blobUrl } from "../lib/blobUrl";
 import { useNavigate, useSearchParams } from "react-router";
 
 import { useProjects, useTasks } from "../api/queries";
@@ -10,13 +11,18 @@ import {
 } from "../lib/capabilities";
 import { useDocumentTitle } from "../lib/title";
 import { COPY, PROJECT, TASK } from "../lib/vocabulary";
-import { Button } from "../ui/brand/Button";
+import { Button, buttonVariants } from "../ui/brand/Button";
 import { Card } from "../ui/brand/Card";
+import { CloseButton } from "../ui/brand/CloseButton";
+import { PaperclipIcon } from "../ui/brand/icons";
 import { MultiSelect } from "../ui/brand/MultiSelect";
 import { cn } from "../ui/brand/cn";
+import { LINK_CLASS } from "../ui/brand/inlineActions";
 import { CAPTION_LABEL_CLASS } from "../ui/brand/label";
 import { useMakeProject } from "./projectActions";
 import { ProjectPicker } from "./ProjectPicker";
+import { AttachFileButton } from "./toc/uploads";
+import type { TocUploadHandOff } from "./workspace/TaskAgentPane";
 
 /** Step one: pick a kind of work. Two of the four can run. */
 function CapabilityList({ onPick }: { onPick: (key: SelectableCapabilityKey) => void }) {
@@ -114,7 +120,38 @@ const FORM_COPY: Record<
     placeholder: "e.g. How can we reduce the number of young people not in education, employment or training?",
     submitLabel: "Prepare plan",
   },
+  theory_of_change: {
+    heading: "What change do you want to explain?",
+    blurb:
+      "Describe the change you want or the intervention you have in mind. Policy Atlas will draft a theory of change and check each step against evidence.\nIf you have an already existing theory of change, upload it as an image or PDF and Policy Atlas will check it against evidence.",
+    placeholder:
+      "Describe the change you want, the intervention you have in mind, or paste a theory of change you already have.",
+    submitLabel: "Start",
+  },
 };
+
+/** Upload your own theory of change: a paperclip, then the picked file with a way to remove it. */
+function AttachTheory({ file, onFile }: { file: File | null; onFile: (file: File | null) => void }) {
+  const url = file !== null && file.type !== "application/pdf" ? blobUrl(file) : null;
+  if (file !== null) {
+    return (
+      <div className="flex min-w-0 shrink-0 items-center gap-2 border border-line bg-paper py-1 pr-1 pl-3">
+        {url !== null ? <img src={url} alt="" className="h-10 w-14 object-contain" /> : <PaperclipIcon className="shrink-0 text-grey" />}
+        <span className="max-w-[14rem] truncate text-meta font-semibold text-navy">{file.name}</span>
+        <CloseButton aria-label={`Remove ${file.name}`} onClick={() => onFile(null)} />
+      </div>
+    );
+  }
+  return (
+    <AttachFileButton
+      onFile={onFile}
+      className={cn(buttonVariants({ variant: "outline" }), "shrink-0 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-blue")}
+      iconClassName="shrink-0"
+    >
+      Upload your theory
+    </AttachFileButton>
+  );
+}
 
 /** Step two: the question, and as little else as possible beside it. */
 function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
@@ -161,43 +198,57 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
   const makeProject = useMakeProject();
   const [projectFailed, setProjectFailed] = useState(false);
   const navigate = useNavigate();
+  // A theory of change can start from the user's own diagram (task 054, increment 5).
+  const [file, setFile] = useState<File | null>(null);
   const pending = create.isPending || makeProject.isPending;
-  const canSend = question.trim().length > 0 && !pending;
+  const canSend = (question.trim().length > 0 || file !== null) && !pending;
   const copy = FORM_COPY[capability];
 
-  const createTask = (taskProjectId: string | null) =>
+  // Create the task and open it. `draw` goes straight to the empty canvas: the user
+  // draws the theory without the Task Agent (owner, 2026-11-05). An upload opens with its file.
+  const createTask = (taskProjectId: string | null, draw: boolean) => {
+    const upload = draw ? null : file;
     create.mutate(
       {
-        question,
+        question: question.trim() !== "" ? question : upload !== null ? `My own theory of change (${upload.name})` : "My own theory of change",
         projectId: taskProjectId,
         capability,
         fromTaskIds,
       },
       {
-        // The Agent tab streams the opening turn (task 058, N9): the words
-        // the person typed travel with the navigation, with the turn id
-        // minted here so a repeated mount can never post it twice.
-        onSuccess: (task) =>
-          void navigate(`/tasks/${task.task_id}`, {
-            state: { openingTurn: { message: question.trim(), clientTurnId: crypto.randomUUID() } },
-          }),
+        // A drawn theory opens on the empty canvas; an upload opens with its
+        // file. Otherwise the Agent tab streams the opening turn (task 058,
+        // N9): the words the person typed travel with the navigation, with
+        // the turn id minted here so a repeated mount can never post it twice.
+        onSuccess: (task) => {
+          if (draw) void navigate(`/tasks/${task.task_id}/result`);
+          else if (upload !== null)
+            void navigate(`/tasks/${task.task_id}`, {
+              state: { tocFile: upload, note: question.trim() } satisfies TocUploadHandOff,
+            });
+          else
+            void navigate(`/tasks/${task.task_id}`, {
+              state: { openingTurn: { message: question.trim(), clientTurnId: crypto.randomUUID() } },
+            });
+        },
       },
     );
+  };
 
-  const submit = () => {
-    if (!canSend) return;
+  const submit = (draw = false) => {
+    if (draw ? pending : !canSend) return;
     // A name typed in the picker but not created yet is made first, then
     // the task in it (round 13); a blank one reads as None.
     const name = namingProject?.trim() ?? "";
     if (namingProject !== null && name !== "") {
       setProjectFailed(false);
       makeProject.make(name, {
-        onSuccess: ({ projectId }) => createTask(projectId),
+        onSuccess: ({ projectId }) => createTask(projectId, draw),
         onError: () => setProjectFailed(true),
       });
       return;
     }
-    createTask(namingProject !== null || projectId === "" ? null : projectId);
+    createTask(namingProject !== null || projectId === "" ? null : projectId, draw);
   };
 
   return (
@@ -213,7 +264,7 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
       <h1 className="text-display font-extrabold tracking-[-0.5px] text-navy text-pretty max-md:text-title">
         {copy.heading}
       </h1>
-      <p className="mt-3 max-w-prose text-lead font-normal leading-[25px] text-grey text-pretty max-md:text-body max-md:leading-snug">
+      <p className="whitespace-pre-line mt-3 max-w-prose text-lead font-normal leading-[25px] text-grey text-pretty max-md:text-body max-md:leading-snug">
         {copy.blurb}
       </p>
 
@@ -230,15 +281,37 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
           rows={3}
           placeholder={copy.placeholder}
           value={question}
-          onChange={(event) => setQuestion(event.target.value)}
+          onChange={(event) => {
+            setQuestion(event.target.value);
+            // Grow with the text, up to half the screen; then it scrolls.
+            event.target.style.height = "auto";
+            event.target.style.height = `${event.target.scrollHeight}px`;
+          }}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
               submit();
             }
           }}
-          className="block min-h-[5.5rem] w-full resize-none border-0 bg-transparent p-0 text-lead leading-[25px] text-ink focus-visible:outline-none"
+          className="block max-h-[50vh] min-h-[5.5rem] w-full resize-none overflow-y-auto border-0 bg-transparent p-0 text-lead leading-[25px] text-ink focus-visible:outline-none"
         />
+        {/* A theory of change can start from the user's own diagram, or from an empty canvas. */}
+        {capability === "theory_of_change" && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <AttachTheory file={file} onFile={setFile} />
+            {/* Hidden while a file is attached: drawing your own would drop the file. */}
+            {file === null && (
+              <button
+                type="button"
+                onClick={() => submit(true)}
+                disabled={pending}
+                className={cn(LINK_CLASS, "shrink-0 text-meta leading-5")}
+              >
+                Start drafting yourself →
+              </button>
+            )}
+          </div>
+        )}
       </div>
       <p className="mt-2 text-meta font-normal leading-5 text-grey">
         Enter to send · Shift+Enter for a new line

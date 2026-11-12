@@ -777,12 +777,21 @@ Frame vocabulary (discriminated union, `type` names are contract):
 | `artefact.source_note` | `{source_id, title, note, occurred_at, ephemeral: true}` | **ephemeral**: a source note as it is written (task 058, round 8) |
 | `search.query` | `{backend, query, kind, results, occurred_at, ephemeral: true}` | **ephemeral**: a search query as it runs, normalised and bounded (task 058, round 9) |
 | `characterise.themes` | `{themes: [{label, description}], stage, occurred_at, ephemeral: true}` | **ephemeral**: the themes as they are found (task 058, round 9) |
+| `toc.sketch` | `{boxes: [{key, layer, text}], links: [{key, source, target}], occurred_at, ephemeral: true}` | **ephemeral**: the theory of change's first draft while it is written (task 054, S12) |
 
-`stage` keys are the pinned stable component vocabulary, nineteen keys
-(task 058, S1). Evidence search: `acquire`, `screen`, `classify`, `appraise`,
-`ingest`, `characterise`, `select`, `extract`, `group`, `synthesise`. Options
-scoping: `inherit`, `suggest`, `option_searches`, `extract_interventions`,
-`longlist`, `option_profile`, `constrain`, `theme`, `shortlist`. Labels,
+`stage` keys are the pinned stable component vocabulary, thirty-four keys
+(task 058, S1; task 054's 058 alignment). Evidence search: `acquire`, `screen`,
+`classify`, `appraise`, `ingest`, `characterise`, `select`, `extract`, `group`,
+`synthesise`. Options scoping: `inherit`, `suggest`, `option_searches`,
+`extract_interventions`, `longlist`, `option_profile`, `constrain`, `theme`,
+`shortlist`. Theory of change: `toc_draft`, `toc_read` (the draft walk of an
+uploaded theory), `toc_item_searches`, `toc_select`, `toc_discover`,
+`toc_merge`, `toc_search_new`, `toc_new_link_searches`, `toc_judge`,
+`toc_search_again`, `toc_retry_searches`, `toc_figures`, `toc_choose`,
+`toc_summarise`, `toc_report`; the check also uses the shared `classify` and
+`appraise`. Each fan-out of item searches has its own key and the same label as
+the step that runs it. A ToC walk has no plan steps, so its rows come from the
+frames alone; frames with the same label render as one row. Labels,
 blurbs and the activity text are server-supplied presentation from one table
 (`api/stage_vocabulary.py`, task 058 N17) and may change; the client renders
 them and keeps no stage copy of its own. A plan step carries a `row` key:
@@ -808,9 +817,20 @@ raw payload keys) is observable. The frontend store must rebuild idempotently fr
 replay alone — mid-run refresh, server restart with a parked pending
 check-in, and reconnect-mid-stream are the tested cases.
 
+`toc.sketch` (task 054, S12) draws the theory of change's first draft while
+the model writes it. Each frame carries every box and connection written so
+far and replaces the one before: boxes first, then connections, a connection
+only after both its boxes. Keys are the model's draft keys (`b1`, `l1`), not
+stored ids. An empty frame means the draft is being written again (the stream
+failed and the ordinary call runs, or the draft failed its checks and is
+retried): the page drops its sketch. The stored graph (`GET /toc`, read when
+`toc_draft` completes) replaces the sketch. A reconnect gets the sketch so far
+from process-local memory, cleared when the stage ends. Only a draft that
+becomes the canvas as written is sketched; a user's own diagram is not.
+
 `artefact.*` frames other than the ephemeral ones (`tick`, the five
-`artefact.*` frames marked ephemeral, `search.query` and
-`characterise.themes`) are durable presentation/progress records, not partial artefact reads or authoritative
+`artefact.*` frames marked ephemeral, `search.query`,
+`characterise.themes` and `toc.sketch`) are durable presentation/progress records, not partial artefact reads or authoritative
 artefact content: whole-section prose is sent for live rendering, while the
 report — the artefact of record — is committed only when synthesis completes.
 `artefact.section_delta` and `artefact.section_revising` (task 058, S3) are

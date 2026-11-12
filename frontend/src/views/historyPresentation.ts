@@ -22,6 +22,8 @@ export type HistoryEntry = {
   failed: boolean;
   /** What the row opens to, when the source carries anything. */
   details?: HistoryDetail[];
+  /** A theory-of-change edit the reader may undo (task 054): its event id. */
+  undoEventId?: string;
 };
 
 /** One run, folded to its outcome line, its steps behind "Show steps". */
@@ -58,6 +60,15 @@ export type HistoryViewer = {
   ownerName: string | null;
   /** The task's capability, which names its runs. */
   capability?: string;
+};
+
+/** One theory-of-change edit, as `GET .../toc/history` gives it (task 054). */
+type EditLike = {
+  event_id: string;
+  at: string;
+  who: string;
+  what: string;
+  undoable: boolean;
 };
 
 type DecisionLike = {
@@ -144,6 +155,8 @@ function stopAfter(quoted: string): string {
 
 function turnSentence(turn: TurnLike, subject: string): { sentence: string; lines?: string[] } {
   const message = turn.user_message.trim();
+  // A code-authored line has no user message (task 054, J3).
+  if (message === "") return { sentence: "The Task Agent posted an update." };
   const failed = turn.status === "failed" ? " This didn't send." : "";
   if (confirmTarget(message) !== null) {
     const body = message.split("\n").slice(0, -1).join("\n").trim();
@@ -212,6 +225,9 @@ function runLine(
  * who acted already in them; the turns name the owner, "You" only for the
  * owner (H6).
  *
+ * A theory of change's edits join them, so the conversation, the checks and
+ * the user's changes read as one record.
+ *
  * Ordering is by timestamp, with the Task Agent turn's own index and the
  * decision's sequence breaking ties, so two records written in the same
  * instant keep the order they were actually recorded in.
@@ -220,6 +236,7 @@ function runLine(
  *   decisions: The task's decision log, any order.
  *   turns: The task's Task Agent turns, any order.
  *   viewer: Who is reading (defaults to the owner, unnamed).
+ *   edits: A theory of change's edits, any order (task 054).
  *
  * Returns:
  *   The rows in the order they happened.
@@ -228,6 +245,7 @@ export function mergeHistory(
   decisions: readonly DecisionLike[] | undefined,
   turns: readonly TurnLike[] | undefined,
   viewer: HistoryViewer = { isOwner: true, ownerName: null },
+  edits: readonly EditLike[] = [],
 ): HistoryItem[] {
   // The tiebreak rides alongside the row rather than on it, so it cannot leak
   // into what the view renders.
@@ -302,6 +320,22 @@ export function mergeHistory(
     rows.push({
       tiebreak: recorded[0].sequence,
       item: { kind: "run", id: `run-${runId}`, at: steps[0].at, sentence, failed, steps },
+    });
+  }
+
+  // A theory of change's edits to its boxes, connections and evidence (task
+  // 054): who changed what, with Undo where the server allows it.
+  for (const [index, edit] of edits.entries()) {
+    rows.push({
+      tiebreak: index,
+      item: {
+        kind: "entry",
+        id: `edit-${edit.event_id}`,
+        at: edit.at,
+        sentence: `${edit.what} (${edit.who})`,
+        failed: false,
+        undoEventId: edit.undoable ? edit.event_id : undefined,
+      },
     });
   }
 

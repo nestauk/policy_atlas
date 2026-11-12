@@ -100,6 +100,7 @@ function sampleFrames(): SseFrame[] {
     {
       type: "plan.updated",
       scoping: null,
+      toc: null,
       plan: planDraft(),
       version: 2,
       occurred_at: "2026-07-21T10:00:21Z",
@@ -198,6 +199,7 @@ describe("reduceRunStreamFrame — equal-sequence distinct-type frames", () => {
       {
         type: "plan.updated",
       scoping: null,
+      toc: null,
         plan: planDraft(),
         version: 2,
         occurred_at: "2026-07-21T10:00:20Z",
@@ -862,6 +864,49 @@ describe("reduceRunStreamFrame — streamed drafts", () => {
     });
     expect(state.liveOptions).toBeUndefined();
     expect(state.liveOptionThemes).toBeUndefined();
+  });
+
+  it("the draft's sketch is replaced by each frame, dropped by an empty one, and goes with the run (task 054, S12)", () => {
+    const sketch = (boxes: number, links: number): SseFrame => ({
+      type: "toc.sketch",
+      boxes: Array.from({ length: boxes }, (_, i) => ({ key: `b${i + 1}`, layer: "input", text: `Box ${i + 1}` })),
+      links: Array.from({ length: links }, (_, i) => ({ key: `l${i + 1}`, source: "b1", target: `b${i + 2}` })),
+      occurred_at: "2026-07-28T10:00:40Z",
+      ephemeral: true,
+    });
+    const base = fold(createInitialRunStreamState(), writingFrames());
+    expect(base.liveSketch).toBeUndefined();
+    let state = reduceRunStreamFrame(base, sketch(1, 0));
+    state = reduceRunStreamFrame(state, sketch(2, 1));
+    expect(state.liveSketch).toEqual({
+      boxes: [
+        { key: "b1", layer: "input", text: "Box 1" },
+        { key: "b2", layer: "input", text: "Box 2" },
+      ],
+      links: [{ key: "l1", source: "b1", target: "b2" }],
+    });
+    expect(state.lastSequence).toBe(base.lastSequence);
+    // The draft is written again: the page drops its sketch, then draws anew.
+    state = reduceRunStreamFrame(state, sketch(0, 0));
+    expect(state.liveSketch).toBeUndefined();
+    state = reduceRunStreamFrame(state, sketch(1, 0));
+    expect(state.liveSketch?.boxes).toHaveLength(1);
+    // The run ends; the next top-level run starts without it.
+    state = reduceRunStreamFrame(state, {
+      type: "run.status",
+      capability_run_id: TASK_RUN_ID,
+      status: "succeeded",
+      occurred_at: "2026-07-28T10:04:00Z",
+      sequence: 98,
+    });
+    state = reduceRunStreamFrame(state, {
+      type: "run.status",
+      capability_run_id: OTHER_RUN_ID,
+      status: "running",
+      occurred_at: "2026-07-28T10:05:00Z",
+      sequence: 99,
+    });
+    expect(state.liveSketch).toBeUndefined();
   });
 
   it("an intro slot keeps its role and completes with its prose (round 8)", () => {

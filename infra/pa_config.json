@@ -14,7 +14,9 @@
                 "ingest_mode": "queued",
                 "run_executor_max": 10,
                 "db_pool_size": 15,
-                "db_max_overflow": 10
+                "db_max_overflow": 10,
+                "upload_bucket_name": "policy-atlas-v3-staging-uploads",
+                "theory_of_change": true
             }
         },
         "deploy_analytics": true
@@ -34,7 +36,9 @@
                 "ingest_mode": "queued",
                 "run_executor_max": 10,
                 "db_pool_size": 15,
-                "db_max_overflow": 10
+                "db_max_overflow": 10,
+                "upload_bucket_name": "policy-atlas-v3-prod-uploads",
+                "theory_of_change": false
             }
         },
         "deploy_analytics": true

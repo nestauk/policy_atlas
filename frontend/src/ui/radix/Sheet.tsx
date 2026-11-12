@@ -1,6 +1,7 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useEffect, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 
+import { portalContainer } from "./portal";
 import { cn } from "../brand/cn";
 import { exitRuns } from "../motion/motion";
 import { CloseButton } from "../brand/CloseButton";
@@ -71,7 +72,8 @@ export function SheetContent({
   side?: "right" | "left";
 }) {
   return (
-    <DialogPrimitive.Portal>
+    // In full screen only the full-screen element shows, so the sheet opens inside it.
+    <DialogPrimitive.Portal container={portalContainer()}>
       <DialogPrimitive.Overlay className={SHEET_SCRIM_CLASS} />
       <DialogPrimitive.Content
         className={cn(

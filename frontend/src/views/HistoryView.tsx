@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 import { useParams } from "react-router";
 
-import { useDecisions, useTaskAgentTurns, useTask } from "../api/queries";
+import { useDecisions, useTaskAgentTurns, useTask, useToc } from "../api/queries";
 import { formatDate } from "../lib/dates";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
@@ -19,9 +19,11 @@ import {
   type HistoryEntry,
   type HistoryRun,
 } from "./historyPresentation";
+import { isToc } from "./scopingActivity";
 import { LIFECYCLE_PAGE_CLASS } from "./listPageChrome";
 import { ListEmpty, ListError } from "../ui/brand/list/ListStates";
 import { DisclosureChevron } from "../ui/brand/Disclosure";
+import { UndoToast, useTocEditor, type Editor } from "./toc/Editing";
 
 const PAGE_SIZE = 200;
 
@@ -61,13 +63,20 @@ const DISCLOSURE_CLASS =
  * began the work and the conversation that shaped the plan. Both are merged
  * in here, so they appear above the run events rather than nowhere. Rows are
  * grouped by day, each run folds to its outcome line, and every sentence
- * names who acted (round 10).
+ * names who acted (round 10). A theory of change's edits are merged in too,
+ * with Undo for an editor (task 054).
  */
 export function HistoryView() {
   const { taskId = "" } = useParams();
   const task = useTask(taskId);
   const decisions = useDecisions(taskId, { page_size: PAGE_SIZE });
   const turns = useTaskAgentTurns(taskId, { page_size: PAGE_SIZE });
+  const toc = useToc(isToc(task.data) ? taskId : "");
+  // Only an editor reads a theory's edits: the list names people.
+  const { editor, toast, dismissToast, undoLast, error: editError, history: edits } = useTocEditor(
+    taskId,
+    toc.data?.can_edit === true,
+  );
   useDocumentTitle(task.data?.name, LIFECYCLE_LABELS.history);
   const headingId = useId();
 
@@ -84,11 +93,16 @@ export function HistoryView() {
   const items =
     isPending || isError
       ? []
-      : mergeHistory(decisions.data?.data, turns.data?.data, {
-          isOwner: task.data?.is_owner ?? true,
-          ownerName: task.data?.owner_display ?? null,
-          capability: task.data?.capability,
-        });
+      : mergeHistory(
+          decisions.data?.data,
+          turns.data?.data,
+          {
+            isOwner: task.data?.is_owner ?? true,
+            ownerName: task.data?.owner_display ?? null,
+            capability: task.data?.capability,
+          },
+          edits,
+        );
   const days = groupByDay(items);
 
   return (
@@ -115,6 +129,12 @@ export function HistoryView() {
         <ListEmpty label="Nothing yet.">Your question and what follows will be listed here.</ListEmpty>
       )}
 
+      {editError !== null && (
+        <p role="alert" className="mb-2 text-body text-red">
+          {editError}
+        </p>
+      )}
+
       {days.map((day) => (
         <section key={day.key} aria-labelledby={`history-day-${day.key}`} className="mt-4 first-of-type:mt-0">
           {/* The day heading stays at the top of the pane while its rows
@@ -128,12 +148,13 @@ export function HistoryView() {
           <ol aria-labelledby={`history-day-${day.key}`} className={FRAME_CLASS}>
             {day.items.map((item) => (
               <li key={item.id} className="border-b border-line last:border-b-0">
-                {item.kind === "run" ? <RunRow run={item} /> : <EntryRow entry={item} />}
+                {item.kind === "run" ? <RunRow run={item} /> : <EntryRow entry={item} editor={editor} />}
               </li>
             ))}
           </ol>
         </section>
       ))}
+      {toast !== null && <UndoToast text={toast} onUndo={undoLast} onClose={dismissToast} />}
     </main>
   );
 }
@@ -179,7 +200,7 @@ function Sentence({
  * a step's counts) is a disclosure; a row without is plain text in its list
  * item, not a disabled button (H9).
  */
-function EntryRow({ entry, step = false }: { entry: HistoryEntry; step?: boolean }) {
+function EntryRow({ entry, step = false, editor }: { entry: HistoryEntry; step?: boolean; editor?: Editor }) {
   const [open, setOpen] = useState(false);
   const detailsId = useId();
   // A run's step: a tighter row on the run's spine, its words indented off it.
@@ -193,6 +214,17 @@ function EntryRow({ entry, step = false }: { entry: HistoryEntry; step?: boolean
       <div className={cn(ROW_GRID, padding)}>
         <RowTime at={entry.at} className={timeClass} />
         <Sentence item={entry} className={textClass} />
+        {/* A theory-of-change edit the reader may undo (task 054). */}
+        {editor !== undefined && entry.undoEventId !== undefined && (
+          <button
+            type="button"
+            disabled={editor.busy}
+            onClick={() => editor.run({ kind: "undo", eventId: entry.undoEventId as string }, "Undid a change")}
+            className={cn(QUIET_CONTROL_CLASS, "self-start text-meta [grid-area:mark]")}
+          >
+            Undo
+          </button>
+        )}
       </div>
     );
   }

@@ -1,7 +1,9 @@
+import { useStartRun } from "../../api/mutations";
 import { usePlan } from "../../api/queries";
 import type { components } from "../../api/gen/types";
 import type { ReactNode } from "react";
 
+import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { useArrives } from "../../ui/motion/arrivals";
@@ -75,13 +77,55 @@ export function PlanCard({
   });
   const scopingStart = useScopingPlanStart({ taskId, runActive });
 
+  const startToc = useStartRun(taskId);
   const planOut = planQuery.data;
   // Task 044: a scoping turn's readiness lives on `scoping`, never `plan`.
   const scoping = isScoping(planOut);
   const plan: PlanDraft | null = scoping ? null : (planOut?.plan ?? null);
+  // A theory-of-change plan (task 054) lives on `toc`; its start drafts the theory.
+  const toc = planOut?.toc ?? null;
   const approved = planOut?.status === "approved";
   const scopingReady = scoping && planOut?.scoping?.ready === true;
-  if (!approved) return null;
+  // A theory of change reads "Theory of change plan" over the plan's title,
+  // and leaves as the draft starts, as Evidence search's card does (task 054,
+  // § 8); the report page keeps the plan one click away.
+  if (toc !== null && approved && toc.ready) {
+    const title = toc.title ?? toc.question ?? "";
+    return (
+      <Collapse show={!started}>
+        <PlanReadyBox arrivalId={`plan-card:${planOut?.version ?? ""}`} leaving={started}>
+          <p className="text-body font-semibold text-navy">Theory of change plan</p>
+          {title !== "" && <p className="mt-0.5 text-meta text-grey">{scrub(title)}</p>}
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-3">
+            {isOwner && (
+              <Button
+                variant="start"
+                size="entry"
+                disabled={streaming || runActive || startToc.isPending}
+                onClick={() => startToc.mutate(undefined)}
+              >
+                Draft the theory
+              </Button>
+            )}
+            <button
+              type="button"
+              data-plan-opener=""
+              onClick={() => onReviewPlan?.()}
+              className={cn(LINK_CLASS, "text-body")}
+            >
+              Review the plan
+            </button>
+          </div>
+          {startToc.isError && (
+            <p role="alert" className="mt-3 text-body text-red">
+              The draft couldn't start. Try again.
+            </p>
+          )}
+        </PlanReadyBox>
+      </Collapse>
+    );
+  }
+  if (!approved || toc !== null) return null;
   if (scoping ? !scopingReady : plan === null || !plan.ready) return null;
 
   // Scoping starts from the card only while the plan has never been built;

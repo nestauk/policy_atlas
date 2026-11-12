@@ -2,6 +2,7 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 
 import { cn } from "../brand/cn";
+import { portalContainer } from "./portal";
 
 /*
  * Tooltip (Radix copy-in) — the hover rung of the citation ladder.
@@ -79,7 +80,7 @@ export function Tooltip({
       }}
     >
       <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
-      <TooltipPrimitive.Portal>
+      <TooltipPrimitive.Portal container={portalContainer()}>
         <TooltipPrimitive.Content
           sideOffset={6}
           collisionPadding={8}

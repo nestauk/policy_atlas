@@ -21,6 +21,8 @@ API_ENVIRONMENT_NAMES = {
     "LOG_FORMAT",
     "LANGFUSE_TRACING_ENVIRONMENT",
     "POLICY_ATLAS_MODEL_ROUTE",
+    "POLICY_ATLAS_UPLOAD_BUCKET",
+    "POLICY_ATLAS_THEORY_OF_CHANGE",
     "POLICY_ATLAS_INGEST_MODE",
     "POLICY_ATLAS_INGEST_QUEUE_URL",
 }
@@ -73,6 +75,73 @@ def test_api_container_has_the_complete_deployed_plain_environment_map():
     assert environment["POLICY_ATLAS_MODEL_ROUTE"] == "openai-direct"
     assert environment["POLICY_ATLAS_INGEST_MODE"] == "queued"
     assert "IngestQueue" in json.dumps(environment["POLICY_ATLAS_INGEST_QUEUE_URL"])
+    assert environment["POLICY_ATLAS_UPLOAD_BUCKET"] == {"Ref": _uploads_bucket_id()}
+    assert environment["POLICY_ATLAS_THEORY_OF_CHANGE"] == "1"
+
+
+def test_theory_of_change_is_on_in_staging_only():
+    """Task 054 (C15): colleagues try it on staging; production stays off."""
+    config = json.loads((REPO_ROOT / "infra/pa_config.json").read_text())
+    backends = {env: config[env]["policy_atlas_config"]["backend"] for env in config}
+    assert {env: backend.get("theory_of_change") for env, backend in backends.items()} == {
+        "staging": True,
+        "prod": False,
+    }
+
+
+def _uploads_bucket_id(template: dict | None = None) -> str:
+    """The logical id of the uploads bucket (task 054 increment 5)."""
+    return next(
+        name
+        for name, resource in _resources(template or TEMPLATES["app"], "AWS::S3::Bucket")
+        if resource["Properties"].get("BucketName") == "policy-atlas-v3-staging-uploads"
+    )
+
+
+def test_the_uploads_bucket_is_private_encrypted_https_only_and_retained():
+    template = TEMPLATES["app"]
+    bucket_id = _uploads_bucket_id()
+    bucket = template["Resources"][bucket_id]
+    assert bucket["DeletionPolicy"] == "Retain" and bucket["UpdateReplacePolicy"] == "Retain"
+    properties = bucket["Properties"]
+    assert properties["PublicAccessBlockConfiguration"] == {
+        "BlockPublicAcls": True,
+        "BlockPublicPolicy": True,
+        "IgnorePublicAcls": True,
+        "RestrictPublicBuckets": True,
+    }
+    rules = properties["BucketEncryption"]["ServerSideEncryptionConfiguration"]
+    assert rules[0]["ServerSideEncryptionByDefault"]["SSEAlgorithm"] == "AES256"
+    assert "VersioningConfiguration" not in properties
+    # A bucket policy refuses any request that is not over HTTPS.
+    policy = next(
+        resource["Properties"]["PolicyDocument"]["Statement"]
+        for _, resource in _resources(template, "AWS::S3::BucketPolicy")
+        if resource["Properties"]["Bucket"] == {"Ref": bucket_id}
+    )
+    assert any(
+        statement["Effect"] == "Deny"
+        and statement["Condition"] == {"Bool": {"aws:SecureTransport": "false"}}
+        for statement in policy
+    )
+
+
+def test_only_the_api_task_role_may_use_the_uploads_bucket_under_tasks():
+    template = TEMPLATES["app"]
+    bucket_id = _uploads_bucket_id()
+    granted = [
+        resource
+        for _, resource in _resources(template, "AWS::IAM::Policy")
+        if bucket_id in str(resource["Properties"]["PolicyDocument"])
+    ]
+    assert len(granted) == 1
+    roles = granted[0]["Properties"]["Roles"]
+    api = _task_definition("policy-atlas-v3-api")
+    role_id = api["TaskRoleArn"]["Fn::GetAtt"][0]
+    assert roles == [{"Ref": role_id}]
+    statements = granted[0]["Properties"]["PolicyDocument"]["Statement"]
+    objects = [s for s in statements if "s3:PutObject" in s["Action"]]
+    assert objects and all("/tasks/*" in str(s["Resource"]) for s in objects)
 
 
 def test_api_container_references_database_and_app_secrets_without_values():

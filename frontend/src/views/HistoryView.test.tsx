@@ -12,6 +12,12 @@ vi.mock("../api/queries", () => ({
   useTask: vi.fn(),
   useDecisions: vi.fn(),
   useTaskAgentTurns: vi.fn(),
+  useToc: vi.fn(() => ({ data: null })),
+  useTocHistory: vi.fn(() => ({ data: [] })),
+}));
+
+vi.mock("../api/mutations", () => ({
+  useTocEdit: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
 
 type Read = { data?: unknown; isPending?: boolean; isError?: boolean; error?: unknown; refetch?: () => void };

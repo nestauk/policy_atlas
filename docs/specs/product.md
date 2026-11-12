@@ -60,7 +60,7 @@ the **work product**.
 | Declared capabilities producing inspectable artefacts via bounded plans | Full clearance workflow, Teams/Word replacement |
 | Grounded blocks, structured provenance, gaps, patterns, appraisal | Full RBAC, artefact-scoped visibility, per-item sensitivity gates |
 | Anchored comments, catch-me-up, versioning, lock-on-advance, decision log | Private deployments (seams preserved) |
-| **Evidence Base** capability only | All other capabilities (Options Assessment, Impact, Transferability, VfM, ToC, Risk) |
+| **Evidence Base** capability; **Theory of change** behind a build flag (task 054, ADR 0042) | All other capabilities (Options Assessment, Impact, Transferability, VfM, Risk) |
 
 The practical rule: when in doubt, favour features that improve the **inspectable body**
 (evidence, artefacts, provenance, comments, versions, audit) over features that imply a

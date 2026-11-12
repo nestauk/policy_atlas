@@ -33,9 +33,9 @@ from policy_atlas.evidence_search.sourcing.acquire import (
     SearchBackend,
     _map_openalex_work,
     _map_overton_document,
-    _normalize_doi,
     _reconstruct_abstract,
     acquire_sources,
+    normalize_doi,
 )
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.run_spec import Plan, compile
@@ -183,7 +183,7 @@ def test_acquire_table_count(conn: Connection) -> None:
     # Link between two tasks); 38 -> 43: task 045 adds `option`,
     # `option_membership`, `option_relation`, `longlist_result` and
     # `intervention_profile_record`; no evidence-search table changed.
-    assert len(metadata.tables) == 43
+    assert len(metadata.tables) == 52  # task 054 adds toc_figure, toc_proposal and task_upload
 
 
 def seed_coverage_row(
@@ -292,7 +292,7 @@ def test_reconstruct_abstract_from_committed_fixture() -> None:
     ],
 )
 def test_normalize_doi(raw: str | None, expected: str | None) -> None:
-    assert _normalize_doi(raw) == expected
+    assert normalize_doi(raw) == expected
 
 
 def test_map_openalex_envelope() -> None:
@@ -765,6 +765,37 @@ def test_source_acquired_events(conn: Connection) -> None:
         e for e in events.read(conn, pid) if e["event_type"] == "source.acquired"
     ]
     assert len(acquired_events_after) == 24
+    # ...and an evidence search says nothing about the documents it held already.
+    assert not [e for e in events.read(conn, pid) if e["event_type"] == "source.seen_again"]
+
+
+def test_a_theory_of_change_search_says_which_held_documents_it_found_again(
+    conn: Connection,
+) -> None:
+    """Only a theory-of-change search writes ``source.seen_again``, once per held document."""
+    pid, rid = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    acquire(conn, pid, rid, scope_id)
+    held = {
+        e["payload"]["task_source_snapshot_id"]
+        for e in events.read(conn, pid)
+        if e["event_type"] == "source.acquired"
+    }
+    backends = [OpenAlexFixtureBackend(), OvertonFixtureBackend()]
+    toc_context = AcquireContext(
+        scope_id=scope_id, intent="Test intent", context={"capability": "theory_of_change"}
+    )
+    acquire_sources(
+        conn,
+        task_id=pid,
+        run_id=seed_run(conn, pid),
+        context=toc_context,
+        backends=cast("list[SearchBackend]", backends),
+        executed_calls=executed_calls_for(backends, toc_context.intent),
+    )
+    seen_again = [e for e in events.read(conn, pid) if e["event_type"] == "source.seen_again"]
+    assert {e["payload"]["task_source_snapshot_id"] for e in seen_again} == held
+    assert len(seen_again) == len(held)
 
 
 # --- Coverage record + adequacy verdict ---

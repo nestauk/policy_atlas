@@ -34,11 +34,12 @@ import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
 import { COPY } from "../lib/vocabulary";
 import { RESULT_VIEWS, resultView } from "./lifecycle";
-import { hasLonglist, isBaselineArtefact, statusRun } from "./scopingActivity";
+import { hasLonglist, isBaselineArtefact, isToc, statusRun } from "./scopingActivity";
 import { useChatsEnabled } from "./taskResult";
 import { LonglistBuilding, LonglistView } from "./longlist/LonglistView";
 import { isLonglistBuilding, LONGLIST_WALK_STAGES } from "./longlist/longlistPresentation";
 import { usePlanPanel } from "./planPanel";
+import { TocResult } from "./toc/TocResult";
 import { ShortlistView } from "./longlist/ShortlistView";
 import { Tabs, TabsList, TabsTrigger } from "../ui/radix/Tabs";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
@@ -594,6 +595,7 @@ export function CitationProvenanceBlock({
   context,
   quote,
   fallbackNote,
+  hideNumber = false,
   evidenceType = null,
   strength = null,
   judgement = null,
@@ -601,7 +603,9 @@ export function CitationProvenanceBlock({
   sourceId = null,
   quotes,
 }: {
+  /** Reference number; `hideNumber` drops the "[n]" for callers with no numbering. */
   n: number | null;
+  hideNumber?: boolean;
   sourceTitle: string;
   /** A source id/title to open the dossier with, or `null` when the
    *  citation carries nothing dossier-linkable (renders plain text). */
@@ -645,7 +649,7 @@ export function CitationProvenanceBlock({
       <div className={judgement !== null ? "my-3" : "mb-3"}>
         {/* The number in its own column, so a long title wraps beside it. */}
         <p className="flex items-baseline gap-1.5 text-body font-semibold text-navy [overflow-wrap:anywhere]">
-          <span className="shrink-0 font-normal tabular-nums text-grey">[{n ?? "—"}]</span>
+          {!hideNumber && <span className="shrink-0 font-normal tabular-nums text-grey">[{n ?? "—"}]</span>}
           {sourceRef !== null ? (
             <button
               type="button"
@@ -1604,7 +1608,7 @@ const PLACEHOLDER_WIDTHS: readonly (readonly number[])[] = [
   [91, 64],
 ];
 
-function PlaceholderLines({
+export function PlaceholderLines({
   index,
   still,
   className = "",
@@ -1649,8 +1653,11 @@ export type DraftRun = {
 type DraftSpan = { start: number; end: number };
 
 /** How a draft is laid out: paragraphs apart by blank lines, or the key
- *  findings' list, one item per line. */
-type DraftLayout = "prose" | "list";
+ *  findings' list, one item per line; "numbered" is the same list with the
+ *  report's numbers in place of the squares, for a list the committed
+ *  report numbers (the theory of change's "What to test first"), so the
+ *  markers hold through the swap. */
+type DraftLayout = "prose" | "list" | "numbered";
 
 /** Blank lines part paragraphs; any line break parts list items. */
 const PARAGRAPH_BREAK = /\n[ \t]*\n\s*/g;
@@ -1737,7 +1744,7 @@ export function draftBlocks(
     }
   });
 
-  const separator = layout === "list" ? LINE_BREAK : PARAGRAPH_BREAK;
+  const separator = layout === "prose" ? PARAGRAPH_BREAK : LINE_BREAK;
   const blocks: DraftRun[][] = [[]];
   const piece = (run: DraftRun, from: number, to: number, last: boolean): DraftRun | null => {
     const text = run.text.slice(from, to);
@@ -1757,7 +1764,7 @@ export function draftBlocks(
     const out = piece(run, from, run.text.length, true);
     if (out !== null) blocks[blocks.length - 1].push(out);
   }
-  if (layout === "list") {
+  if (layout !== "prose") {
     for (const block of blocks) {
       const first = block[0];
       const marker = first === undefined ? null : ITEM_MARKER.exec(first.text);
@@ -2001,7 +2008,7 @@ function DraftProse({
   className?: string;
 }) {
   const blocks = draftBlocks(draft, revising, claims, layout, settling);
-  const list = layout === "list";
+  const list = layout !== "prose";
   const tailStart = blocks.at(-1)?.[0]?.start ?? 0;
   const cuts = (batches ?? []).filter((cut) => cut > tailStart);
   const render = (runs: DraftRun[], at: number) =>
@@ -2011,6 +2018,19 @@ function DraftProse({
       <DraftBlockView runs={runs} list={list} heldRevising={heldRevising} cuts={cuts} />
     );
   const rootClass = `max-w-prose-measure ${REPORT_BODY_CLASS} ${checking ? "draft-checking" : ""} ${className}`;
+  if (layout === "numbered") {
+    // The committed list's own numbers and spacing (`DetailedInformation`'s
+    // `LIST`), so nothing moves when it replaces this one.
+    return (
+      <div data-testid="draft-prose" aria-hidden={ariaHidden || undefined} className={rootClass}>
+        <ol className="mt-2 list-decimal space-y-1.5 pl-5">
+          {blocks.map((runs, at) => (
+            <li key={at}>{render(runs, at)}</li>
+          ))}
+        </ol>
+      </div>
+    );
+  }
   if (list) {
     return (
       <div data-testid="draft-prose" aria-hidden={ariaHidden || undefined} className={rootClass}>
@@ -2041,7 +2061,7 @@ function DraftProse({
 
 /** The draft as it streams: paced in the browser (`useRevealedText`), its
  *  height held while a revision shortens it. */
-function LiveDraft({
+export function LiveDraft({
   draft,
   revising,
   claims,
@@ -2312,7 +2332,7 @@ export function liveReferences(sections: readonly LiveSection[]): { n: number; t
 
 /** The lines under a live section's heading: the key findings' note, the
  *  sources the writer is drawing on, and the action line with the live mark. */
-function LiveSubhead({
+export function LiveSubhead({
   section,
   active,
   activity,
@@ -3037,7 +3057,7 @@ export function ReportToBe({
 }
 
 /** The Result tab's small link to the plan document. Not printed. */
-function SeePlanLink({ onClick, className }: { onClick: () => void; className?: string }) {
+export function SeePlanLink({ onClick, className }: { onClick: () => void; className?: string }) {
   return (
     <button type="button" onClick={onClick} className={cn(QUIET_CONTROL_CLASS, "print-hide text-meta", className)}>
       See the plan
@@ -3331,6 +3351,9 @@ export function ArtefactView() {
   // While a longlist walk runs the Result is the longlist being built
   // (task 058, N24), before and after the longlist read first answers.
   const building = !isPublicView && isLonglistBuilding(task.data, stream.stages);
+  // A theory of change is public like the Result tab (C17): the graph and its
+  // evidence are on the public read leg.
+  if (isToc(task.data)) return <TocResult taskId={taskId} />;
   // The report's expand state is the task's, kept while the reader moves
   // between its tabs (owner, round 12).
   return (

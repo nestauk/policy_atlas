@@ -362,11 +362,15 @@ function requestScrollToSection(id: string): void {
  *
  * Entries with `kind: "part"` render as clickable part headings (Executive
  * summary, Full report) that scroll to the matching anchor on the page.
+ * `className` places it where a page sets it inside its paper
+ * (`ContentsBeside`).
  */
 export function ContentsSidebar({
   entries,
+  className,
 }: {
   entries: SidebarEntry[];
+  className?: string;
 }) {
   const navEntries = useMemo(() => sidebarNavEntries(entries), [entries]);
   const [activeId, setActiveId] = useState<string | null>(navEntries[0]?.id ?? null);
@@ -412,7 +416,10 @@ export function ContentsSidebar({
   return (
     <nav
       aria-label="Contents"
-      className="max-md:hidden mb-6 w-full shrink-0 pt-4 md:sticky md:top-0 md:mb-0 md:max-h-[calc(100svh-10rem)] md:w-56 md:self-start md:overflow-y-auto md:pr-4"
+      className={cn(
+        "max-md:hidden mb-6 w-full shrink-0 pt-4 md:sticky md:top-0 md:mb-0 md:max-h-[calc(100svh-10rem)] md:w-56 md:self-start md:overflow-y-auto md:pr-4",
+        className,
+      )}
     >
       <ul className="space-y-1 border-l border-line">
         {entries.map((entry, index) =>

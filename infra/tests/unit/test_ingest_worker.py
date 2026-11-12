@@ -268,8 +268,13 @@ def test_api_task_role_may_only_send_to_the_ingest_queue():
         for logical_id, resource in _resources(APP, "AWS::IAM::Policy")
         if logical_id.startswith("PolicyAtlasBackendTaskDefTaskRole")
     ]
-    (policy,) = task_role_policies
-    (statement,) = policy["PolicyDocument"]["Statement"]
+    # The role also reads and writes the uploads bucket (task 054); one statement names SQS.
+    (statement,) = [
+        statement
+        for policy in task_role_policies
+        for statement in policy["PolicyDocument"]["Statement"]
+        if any(action.startswith("sqs:") for action in statement["Action"])
+    ]
     assert statement["Effect"] == "Allow"
     assert "sqs:SendMessage" in statement["Action"]
     assert "sqs:GetQueueAttributes" in statement["Action"]

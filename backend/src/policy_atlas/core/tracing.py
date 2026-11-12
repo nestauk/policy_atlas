@@ -110,7 +110,28 @@ def get_langfuse() -> Langfuse | None:
             f"Langfuse host must be https:// (or http://localhost): got {host!r}. "
             "Full-I/O traces must not travel over plaintext HTTP."
         )
-    return Langfuse(host=host)
+    return Langfuse(host=host, mask=hide_files)
+
+
+#: What a trace shows in place of a file sent to a model (a user's uploaded diagram).
+FILE_LEFT_OUT = "[file left out of the trace]"
+
+
+def hide_files(*, data: Any, **_: Any) -> Any:
+    """Replace files embedded in a model call (``data:`` URLs) before they reach Langfuse.
+
+    A user's uploaded diagram goes to the model as a ``data:image/...`` URL.
+    Langfuse would try to copy it to its own file storage, which our server
+    does not have (it answers 500), and the copy would put the user's file in
+    a second place. The trace keeps everything else.
+    """
+    if isinstance(data, str):
+        return FILE_LEFT_OUT if data.startswith("data:") and ";base64," in data[:100] else data
+    if isinstance(data, dict):
+        return {key: hide_files(data=value) for key, value in data.items()}
+    if isinstance(data, list | tuple):
+        return [hide_files(data=value) for value in data]
+    return data
 
 
 @contextmanager
@@ -339,9 +360,7 @@ def traced_attempts[T](
 
 
 @contextmanager
-def trace_scope(
-    session_id: uuid.UUID | None = None, user_id: str | None = None
-) -> Iterator[None]:
+def trace_scope(session_id: uuid.UUID | None = None, user_id: str | None = None) -> Iterator[None]:
     """Propagate session/user ids to every observation opened inside the scope.
 
     SDK 4.13 has no ``update_current_trace`` (the pre-fix code silently no-opped
@@ -710,9 +729,7 @@ def extraction_score_summary(
             data_type="NUMERIC",
         )
     failure_count = sum(
-        block.get("failed", 0)
-        for block in profiles.values()
-        if isinstance(block, dict)
+        block.get("failed", 0) for block in profiles.values() if isinstance(block, dict)
     )
     client.score_current_trace(
         name="extraction_failure_count",
@@ -932,9 +949,7 @@ def screening_score_summary(
             )
     if "stage2_screened" in summary:
         stage2_screened = summary["stage2_screened"]
-        demoted_share = (
-            summary.get("demoted", 0) / stage2_screened if stage2_screened > 0 else 0.0
-        )
+        demoted_share = summary.get("demoted", 0) / stage2_screened if stage2_screened > 0 else 0.0
         client.score_current_trace(
             name="stage2_demoted_share",
             value=demoted_share,
@@ -975,9 +990,7 @@ def classification_score_summary(
     classified = summary.get("classified", 0)
     by_type = summary.get("by_type", {})
     unknown_share = (
-        by_type.get("Unknown / Insufficient information", 0) / classified
-        if classified > 0
-        else 0.0
+        by_type.get("Unknown / Insufficient information", 0) / classified if classified > 0 else 0.0
     )
     client.score_current_trace(
         name="unknown_share",

@@ -23,6 +23,7 @@ from policy_atlas.api.deps import (
     get_executor,
     get_runner_backends,
     get_settings,
+    get_title_backend,
 )
 from policy_atlas.api.routers.access import accessible_task
 from policy_atlas.api.routers.common import (
@@ -32,15 +33,23 @@ from policy_atlas.api.routers.common import (
     run_artefact_id_column,
     run_out,
     run_purpose_column,
+    run_scope_context_column,
 )
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
+from policy_atlas.api.titles import TitleWriter, in_background, name_task_from_question
 from policy_atlas.core import tracing
 from policy_atlas.core.schema import capability_run, task_agent_transcript
-from policy_atlas.runtime.capability_registry import latest_approved_plan_row, validate_plan
+from policy_atlas.runtime.capability_registry import (
+    THEORY_OF_CHANGE,
+    expect_toc_plan,
+    latest_approved_plan_row,
+    validate_plan,
+)
 from policy_atlas.runtime.option_search import unattended_plan
 from policy_atlas.runtime.runner import RunnerBackends, run_plan
 from policy_atlas.runtime.scoping_plan import LONGLIST_PURPOSE
+from policy_atlas.theory_of_change.store import has_graph
 
 log = structlog.get_logger()
 
@@ -122,6 +131,13 @@ def _dispatch_run(
         # Opened inside the executor worker: contextvars do not cross a plain
         # executor.submit. run_plan opens its own session scope per component.
         with tracing.trace_scope(user_id=user_id):
+            if capability == THEORY_OF_CHANGE and evidence_scope_id is None:
+                # Imported here: the opener imports this module.
+                from policy_atlas.api.toc_start import start_scope
+
+                # Start drafts, or (a graph already on the canvas) checks it
+                # again in full: the S4 restart rule.
+                evidence_scope_id = start_scope(engine, task_id=task_id, plan_row=plan_row)
             outcome = run_plan(
                 engine,
                 task_id=task_id,
@@ -137,9 +153,10 @@ def _dispatch_run(
                 # impossible to start (task 044). A longlist walk (its own
                 # intent record passed in) runs unattended: it does not pause
                 # (task 045, D1).
+                # A theory-of-change plan is unattended by its model (C12).
                 plan=(
                     unattended_plan(plan_row["payload"])  # type: ignore[arg-type]
-                    if evidence_scope_id is not None
+                    if evidence_scope_id is not None and capability != THEORY_OF_CHANGE
                     else validate_plan(capability, plan_row["payload"])
                 ),
                 plan_id=plan_row["plan_id"],  # type: ignore[arg-type]
@@ -160,11 +177,41 @@ def _dispatch_run(
                     capability=capability,
                     backends=backends,
                 )
+            if capability == THEORY_OF_CHANGE:
+                from policy_atlas.api.toc_start import run_toc_sequence
+
+                # Draft → check, inline on this worker (S4).
+                run_toc_sequence(
+                    engine, task_id=task_id, first_outcome=outcome, backends=backends
+                )
     except Exception:
         log.exception("api.run_dispatch_failed", task_id=str(task_id))
     finally:
+        queued = None
         with _dispatch_lock:
-            _dispatching_tasks.discard(task_id)
+            if capability == THEORY_OF_CHANGE:
+                # A check queued while this walk ran starts now, on this worker.
+                from policy_atlas.api.toc_start import take_queued_check
+
+                try:
+                    with engine.begin() as conn:
+                        queued = take_queued_check(conn, task_id)
+                except Exception:
+                    log.exception("api.toc_queue_failed", task_id=str(task_id))
+            if queued is None:
+                _dispatching_tasks.discard(task_id)
+    if queued is not None:
+        scope_id, next_plan_row, next_user = queued
+        _dispatch_run(
+            engine,
+            task_id=task_id,
+            capability=capability,
+            plan_row=next_plan_row,
+            backends=backends,
+            user_id=next_user or user_id,
+            evidence_scope_id=scope_id,
+            capability_run_id=uuid.uuid4(),
+        )
 
 
 def _run_follow_on_longlist(
@@ -262,7 +309,12 @@ def _await_new_run(
     while time.monotonic() < deadline:
         with engine.connect() as conn:
             rows = conn.execute(
-                select(capability_run, run_artefact_id_column(), run_purpose_column())
+                select(
+                    capability_run,
+                    run_artefact_id_column(),
+                    run_purpose_column(),
+                    run_scope_context_column(),
+                )
                 .where(capability_run.c.task_id == task_id)
                 .order_by(
                     capability_run.c.started_at.desc(),
@@ -288,8 +340,17 @@ def create_run(
     settings: Annotated[Settings, Depends(get_settings)],
     executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
     backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
+    titles: Annotated[TitleWriter, Depends(get_title_backend)],
 ) -> RunOut:
-    """Dispatch an approved plan off the request path and return its walk row."""
+    """Dispatch an approved plan off the request path and return its walk row.
+
+    Starting a theory of change also names the task from the plan's question,
+    unless the user has named it (task 058, round 14, as Evidence search and
+    options scoping name theirs when the question part is confirmed). Its
+    Task Agent has no question part: Start is where the user confirms the
+    question, and the plan is fixed once the draft exists (S7).
+    """
+    toc_question: str | None = None
     with _dispatch_lock:
         with engine.begin() as conn:
             access = accessible_task(
@@ -315,10 +376,15 @@ def create_run(
                 .where(task_agent_transcript.c.task_id == task_id)
                 .where(task_agent_transcript.c.status == "completed")
             ).scalar_one()
+            # Once a theory of change has a graph, no turn changes its plan
+            # (task 054, S7), so a later turn does not make it stale.
             if (
                 approved_plan.source_turn_index is not None
                 and latest_completed_turn is not None
                 and approved_plan.source_turn_index < latest_completed_turn
+                and not (
+                    access.row["capability"] == THEORY_OF_CHANGE and has_graph(conn, task_id)
+                )
             ):
                 raise ApiConflict(
                     "plan_stale",
@@ -332,6 +398,8 @@ def create_run(
                     )
                 )
             }
+            if access.row["capability"] == THEORY_OF_CHANGE:
+                toc_question = expect_toc_plan(approved_plan).question
             _dispatching_tasks.add(task_id)
         executor.submit(
             _dispatch_run,
@@ -342,11 +410,27 @@ def create_run(
             backends=backends,
             user_id=user.user_id,
         )
-    created = _await_new_run(engine, task_id=task_id, existing_ids=existing_ids)
-    # Once the runtime row exists, the database's ``running`` count owns
-    # capacity accounting; keeping the launch reservation would double-count.
-    with _dispatch_lock:
-        _dispatching_tasks.discard(task_id)
+    try:
+        created = _await_new_run(engine, task_id=task_id, existing_ids=existing_ids)
+    finally:
+        # Once the runtime row exists, the database's ``running`` count owns
+        # capacity accounting; keeping the launch reservation would double-count.
+        # A Start whose row never came gives it back too, so the task is not
+        # fenced until the server restarts.
+        with _dispatch_lock:
+            _dispatching_tasks.discard(task_id)
+    if toc_question is not None:
+        question = toc_question
+
+        def _name_task() -> None:
+            # Under the user's scope, opened in the new thread as the Task
+            # Agent turn's naming does (context variables do not cross a
+            # thread start). A restart with the same question makes no call.
+            with tracing.trace_scope(user_id=user.user_id):
+                name_task_from_question(engine, titles, task_id=task_id, question=question)
+
+        # Only once the walk's row exists: a Start that fails names nothing.
+        in_background(_name_task, name=f"policy-atlas-task-title-{task_id}")
     return created
 
 
@@ -374,7 +458,12 @@ def list_runs(
             select(func.count()).select_from(capability_run).where(*where)
         ).scalar_one()
         rows = conn.execute(
-            select(capability_run, run_artefact_id_column(), run_purpose_column())
+            select(
+                capability_run,
+                run_artefact_id_column(),
+                run_purpose_column(),
+                run_scope_context_column(),
+            )
             .where(*where)
             .order_by(capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc())
             .offset((page - 1) * page_size)
@@ -401,7 +490,12 @@ def get_run(
     with engine.connect() as conn:
         accessible_task(conn, task_id=task_id, user_id=user.user_id, write=False)
         row = conn.execute(
-            select(capability_run, run_artefact_id_column(), run_purpose_column())
+            select(
+                capability_run,
+                run_artefact_id_column(),
+                run_purpose_column(),
+                run_scope_context_column(),
+            )
             .where(capability_run.c.task_id == task_id)
             .where(capability_run.c.capability_run_id == run_id)
         ).mappings().one_or_none()
@@ -420,3 +514,75 @@ def _walk_stages(
     from policy_atlas.api.routers.sse import walk_stages
 
     return walk_stages(conn, task_id=task_id, walk_ids=walk_ids)
+
+
+def start_toc_check(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    link_ids: list[uuid.UUID],
+    user_id: str,
+    settings: Settings,
+    executor: ThreadPoolExecutor,
+    backends: RunnerBackends,
+    mode: str = "new_items",
+    studies: dict[str, list[str]] | None = None,
+) -> uuid.UUID | None:
+    """Start a check walk named on links (task 054, C40), as Start does for a whole walk.
+
+    The caller has checked the write grade. While the task has a walk, the
+    check is queued and starts when that walk ends (``_dispatch_run``).
+
+    Returns:
+        The new walk's id, or ``None`` when the check was queued.
+
+    Raises:
+        ApiConflict: ``capacity``.
+        HTTPException: 400 when the task has no approved plan.
+    """
+    # Imported here: the opener imports this module.
+    from policy_atlas.api.toc_start import mint_scope, queue_check
+    from policy_atlas.runtime.toc_plan import TOC_WALK_CHECK
+
+    walk_id = uuid.uuid4()
+    with _dispatch_lock:
+        with engine.begin() as conn:
+            plan_row = latest_approved_plan_row(conn, task_id)
+            if plan_row is None:
+                raise HTTPException(status_code=400, detail="no approved plan")
+            if active_parentless_walk(conn, task_id) is not None or task_id in _dispatching_tasks:
+                # A walk is running: this check waits and starts when it ends.
+                queue_check(
+                    conn,
+                    task_id=task_id,
+                    link_ids=[str(link_id) for link_id in link_ids],
+                    mode=mode,
+                    studies=studies,
+                    user_id=user_id,
+                )
+                return None
+            if executor_full(conn, settings.run_executor_max):
+                raise ApiConflict("capacity", "the walk executor is at capacity")
+            scope_id = mint_scope(
+                conn,
+                task_id=task_id,
+                plan_row=plan_row,
+                toc_walk=TOC_WALK_CHECK,
+                links=[str(link_id) for link_id in link_ids],
+                mode=mode,
+                started_by=user_id,
+                studies=studies,
+            )
+            _dispatching_tasks.add(task_id)
+        executor.submit(
+            _dispatch_run,
+            engine,
+            task_id=task_id,
+            capability=THEORY_OF_CHANGE,
+            plan_row=dict(plan_row),
+            backends=backends,
+            user_id=user_id,
+            evidence_scope_id=scope_id,
+            capability_run_id=walk_id,
+        )
+    return walk_id

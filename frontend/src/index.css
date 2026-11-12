@@ -511,6 +511,58 @@
   }
 }
 
+/* Theory of change canvas (task 054, C36): the line style shows the link's
+   evidence verdict. Supported solid green; Leaning supports long green
+   dashes; Mixed solid amber (owner, 2026-11-04); Not enough
+   evidence grey dashed; Leaning against long red dashes; Not
+   confident dotted red. The critical link carries a warning triangle
+   (CriticalMark), not a thicker line. A connection being searched or
+   checked is a thicker, darker grey line that breathes on the shared 1.6 s
+   rhythm, arrowhead included (owner, 2026-11-10: blue read as a verdict
+   colour, a travelling dot was too busy); still under reduced motion.
+   An unchecked one is a still grey line. Scoped under .react-flow so the library's own edge
+   styles, loaded later, do not win. */
+.react-flow .toc-edge {
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+/* A verdict's line takes its tone from `ui/brand/verdictTones.tsx` (an
+   inline stroke); these set only its dash. */
+.react-flow .toc-edge--not_sure_insufficient { stroke-dasharray: 6 5; }
+.react-flow .toc-edge--against { stroke-dasharray: 2 5; }
+.react-flow .toc-edge--leaning_supports { stroke-dasharray: 12 5; }
+.react-flow .toc-edge--leaning_against { stroke-dasharray: 12 5; }
+.react-flow .toc-edge--pending {
+  stroke: var(--color-grey);
+  stroke-width: 3;
+  animation: breathe 1.6s ease-in-out infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+.react-flow .toc-edge--unchecked { stroke: var(--color-line-2); }
+/* Keyboard focus on a box or a connection: DESIGN's 2px blue outline, offset 2px. */
+.react-flow .react-flow__node-box:focus-visible,
+.react-flow .react-flow__edge:focus-visible { outline: 2px solid var(--color-blue); outline-offset: 2px; }
+/* An uploaded theory waiting for review: a connection Policy Atlas suggested (task 054, increment 5). */
+.react-flow .toc-edge--suggested { stroke: var(--color-blue); stroke-dasharray: 4 4; }
+.react-flow .toc-edge--drawn { stroke: var(--color-navy); }
+.react-flow .toc-edge--preview { stroke: var(--color-blue); stroke-dasharray: 5 4; opacity: 0.6; }
+.react-flow .toc-edge--selected { stroke-width: 3; }
+/* Dividers drawn only into the downloaded image (views/toc/exports.ts). */
+.toc-export-only { display: none; }
+.toc-exporting .toc-export-only { display: block; }
+.react-flow .toc-edge-halo { fill: none; stroke: var(--color-blue); stroke-opacity: 0.18; stroke-width: 12; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+/* PDF: the panel is hidden (aside), the canvas and toolbar stay. */
+.toc-print-image { display: none; }
+@media print {
+  .toc-canvas { height: 520px !important; break-inside: avoid; }
+  /* Report (PDF) from the Download menu: the whole canvas as a picture, in place of the bar and the live canvas. */
+  #toc-canvas:has(.toc-print-image) > :not(.toc-print-image) { display: none !important; }
+  .toc-print-image { display: block; width: 100%; height: auto; break-inside: avoid; }
+}
+
 /* ---------------------------------------------------------------------------
  * Task 058, brief P: the report while it is written.
  *

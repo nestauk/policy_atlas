@@ -43,6 +43,7 @@ from policy_atlas.runtime.scoping_plan import (
 )
 from policy_atlas.runtime.steering import LATTICE_POINTS, PausePoint
 from policy_atlas.runtime.task_plan import ComposedChain, TaskPlan, compose
+from policy_atlas.runtime.toc_plan import TocPlan, compose_toc
 
 #: The Evidence search capability key. Named rather than spelled out at each
 #: call site so the constant-capability readers (the ones whose *input type* is
@@ -52,13 +53,16 @@ EVIDENCE_SEARCH = "evidence_search"
 #: The options-scoping capability key.
 OPTIONS_SCOPING = "options_scoping"
 
-#: Either capability's plan model. The runner and the continuation reducer are
+#: The theory-of-change capability key (task 054).
+THEORY_OF_CHANGE = "theory_of_change"
+
+#: Any capability's plan model. The runner and the continuation reducer are
 #: capability-agnostic *chassis* — they carry a plan without knowing which kind
 #: it is — while almost everything they hand it to is Evidence search code
 #: typed on ``TaskPlan``. Those hand-offs go through :func:`expect_task_plan`,
 #: so a scoping plan reaching an Evidence search path is a loud ``TypeError``
 #: and not a silent wrong answer.
-AnyPlan = TaskPlan | ScopingPlan
+AnyPlan = TaskPlan | ScopingPlan | TocPlan
 
 
 class UnknownCapability(LookupError):
@@ -105,6 +109,7 @@ class TaskAgentProfile:
         part_ids: The part (card) ids this Task Agent may propose.
         no_primary_parts: Part ids whose options carry no primary.
         degrade_suggestions: Whether malformed suggested answers are dropped.
+        after_turn: Optional hook after every turn (task 054).
         after_approve: Optional ``(engine, task_id, plan, agent)`` →
             ``(plan, reply note)``, run outside any transaction once a turn
             approves a plan.
@@ -131,6 +136,14 @@ class TaskAgentProfile:
     after_approve: (
         Callable[[Engine, uuid.UUID, Any, Any], tuple[AnyPlan, str | None]] | None
     ) = None
+    #: ``(engine, task_id, turn, user_id)`` → a note added to the reply, after any
+    #: turn: the theory of change stores proposed edits and clarifications here
+    #: (task 054, C46, C49).
+    after_turn: Callable[[Engine, uuid.UUID, Any, str], str | None] | None = None
+    #: ``(reply, note)`` → the reply with ``after_approve``'s note; default: the
+    #: note after the reply. The theory of change drops "start it" sentences
+    #: when the note warns the plan may not work (task 054, red team).
+    merge_note: Callable[[str, str], str] | None = None
 
 
 @dataclass(frozen=True)
@@ -176,7 +189,13 @@ def _options_scoping_task_agent() -> TaskAgentProfile:
     return OPTIONS_SCOPING_TASK_AGENT
 
 
-#: The registry. Both capabilities as of phase 3.2 (X3).
+def _toc_task_agent() -> TaskAgentProfile:
+    from policy_atlas.runtime.task_agent_toc import TOC_TASK_AGENT
+
+    return TOC_TASK_AGENT
+
+
+#: The registry: Evidence search, options scoping (task 044), theory of change (task 054).
 CAPABILITIES: dict[str, CapabilitySpec] = {
     EVIDENCE_SEARCH: CapabilitySpec(
         plan_model=TaskPlan,
@@ -193,6 +212,13 @@ CAPABILITIES: dict[str, CapabilitySpec] = {
         # end-walk disposition are phase 5.2.
         lattice={BASELINE_CONFIRM: PausePoint("after_component", "synthesise")},
         load_task_agent=_options_scoping_task_agent,
+    ),
+    THEORY_OF_CHANGE: CapabilitySpec(
+        plan_model=TocPlan,
+        compose=compose_toc,
+        # Empty: a theory-of-change walk never pauses (C12).
+        lattice={},
+        load_task_agent=_toc_task_agent,
     ),
 }
 
@@ -436,4 +462,25 @@ def expect_scoping_plan(plan: BaseModel) -> ScopingPlan:
     """
     if not isinstance(plan, ScopingPlan):
         raise TypeError(f"this path handles scoping plans only, got {type(plan).__name__}")
+    return plan
+
+
+def expect_toc_plan(plan: BaseModel) -> TocPlan:
+    """Narrow a registry-validated plan to the theory-of-change model.
+
+    The mirror of :func:`expect_task_plan` for the theory-of-change paths.
+
+    Args:
+        plan: A plan returned by :func:`validate_plan`.
+
+    Returns:
+        The same object, typed.
+
+    Raises:
+        TypeError: If the plan is not a theory-of-change plan.
+    """
+    if not isinstance(plan, TocPlan):
+        raise TypeError(
+            f"this path handles theory-of-change plans only, got {type(plan).__name__}"
+        )
     return plan

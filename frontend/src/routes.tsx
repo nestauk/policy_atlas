@@ -11,10 +11,9 @@ import { OptionCard } from "./views/longlist/OptionCard";
 import { NewTaskView } from "./views/NewTaskView";
 import { ProjectDetailView, ProjectsView } from "./views/ProjectsView";
 import { ShareView } from "./views/ShareView";
-import { SourcesLayout } from "./views/SourcesLayout";
+import { SourcesIndex, SourcesLayout } from "./views/SourcesLayout";
 import { SourcesView } from "./views/SourcesView";
 import { TasksListView } from "./views/TasksListView";
-import { ThemesView } from "./views/ThemesView";
 import { WorkspaceView } from "./views/WorkspaceView";
 import { PrivacyView } from "./views/legal/PrivacyView";
 import { TermsView } from "./views/legal/TermsView";
@@ -41,7 +40,7 @@ function LandscapeFallback() {
 /** The Sources sub-tree, shared verbatim by the authenticated app and the
  *  public task view (task 037) — same paths, same components. */
 const sourcesChildren = [
-  { index: true, element: <ThemesView /> },
+  { index: true, element: <SourcesIndex /> },
   {
     path: "landscape",
     element: (

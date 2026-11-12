@@ -14,8 +14,9 @@ import {
   taskAgentConversationId,
   useActiveConversation,
 } from "./workspace/chat/conversationState";
-import { cardRows, currentRow, elapsedSeconds, formatElapsed, rowLink, walkKind } from "./workspace/runProgress";
+import { cardRows, currentRow, elapsedSeconds, formatElapsed, isFinished, rowLink, walkKind } from "./workspace/runProgress";
 import { useRunWords } from "./workspace/runWords";
+import { useChainStart, waitsForCheck } from "./workspace/tocWalks";
 
 /** A stream with no run, for the shell before the live layer is enabled. */
 const NO_STREAM = createInitialRunStreamState();
@@ -116,8 +117,16 @@ export function RunStatusBar() {
     latestRun.capability_run_id === run?.id &&
     latestRun.status !== "running" &&
     latestRun.status !== "paused";
+  // A theory of change's automatic chain reads as one run (task 054, S10):
+  // the bar keeps its words between the draft and the check, and its timer
+  // runs from the draft's start. Read from the stream alone: the bar has no
+  // runs read.
+  const tocTask = live?.capability === "theory_of_change";
+  const clock = useNow(tocTask && run !== null && isFinished(run.status));
+  const holding = tocTask && waitsForCheck(run, stream.stages, null, false, clock);
+  const chainStart = useChainStart(tocTask ? run : null, stream.stages);
   const ticking =
-    (run?.status === "running" || run?.status === "paused") && task.data !== undefined && !readSaysEnded;
+    ((run?.status === "running" || run?.status === "paused") && task.data !== undefined && !readSaysEnded) || holding;
   const conversations = useConversations(taskId, { status: "active" });
   const { activeConversationId, setActiveConversation } = useActiveConversation();
   const wide = useSidebarAvailable();
@@ -185,7 +194,7 @@ export function RunStatusBar() {
           rest: restParts.join(" · "),
           words,
           paused,
-          elapsed: formatElapsed(elapsedSeconds(run.startedAt, undefined, nowMs)),
+          elapsed: formatElapsed(elapsedSeconds(chainStart ?? run.startedAt, undefined, nowMs)),
           key: paused ? "paused" : (row?.key ?? "start"),
           link,
         }

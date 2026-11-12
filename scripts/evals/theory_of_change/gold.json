@@ -1,0 +1,111 @@
+{
+  "_about": "Lead-built gold set for the task 054 agentic search eval (docs/tasks/054-toc-integration/agentic-search.md). 2 to 4 decisive studies per link, chosen from a manual search before any arm ran; DOIs verified in OpenAlex on 2026-10-27. 'expected' is the grade band per question that the grade rule should give over this set. Stance is the lead's reading of the abstract. Eval criteria are lead-only: do not edit without the lead.",
+  "2fcea71a-290a-4da4-ab12-110c5879e924": {
+    "label": "Ban -> restricted ads absent (compliance)",
+    "gold": [
+      {"doi": "10.1371/journal.pone.0031578", "question": "here", "stance": "supports"},
+      {"url": "https://web.archive.org/web/2011/http://stakeholders.ofcom.org.uk/binaries/research/tv-research/hfss-review-final.pdf", "title": "Ofcom (2010) HFSS advertising restrictions: final review", "question": "here", "stance": "supports"},
+      {"url": "https://www.asa.org.uk/news/banning-ads-for-hfss-food-appearing-in-children-s-online-media.html", "title": "ASA (2019) Avatar monitoring sweep", "question": "here", "stance": "mixed"},
+      {"doi": "10.1016/j.socscimed.2021.114548", "question": "elsewhere", "stance": "supports"}
+    ],
+    "expected": {"elsewhere": "weak-medium", "here": "medium"},
+    "note": "Regulator monitoring is the main evidence; tests the trusted-publisher web rule (C23)."
+  },
+  "5635a336-7f75-405d-b888-2200c0f82e4b": {
+    "label": "Restricted ads absent -> children see fewer (critical)",
+    "gold": [
+      {"doi": "10.1371/journal.pone.0031578", "question": "here", "stance": "challenges"},
+      {"doi": "10.1017/s1368980019003355", "question": "elsewhere", "stance": "supports"},
+      {"doi": "10.1111/obr.13447", "question": "elsewhere", "stance": "supports"},
+      {"doi": "10.1371/journal.pmed.1003212", "question": "here", "stance": "supports"}
+    ],
+    "expected": {"elsewhere": "medium-strong", "here": "weak-medium"},
+    "note": "The challenge link: an arm that misses Adams 2012 overstates 'holds here'. Royo-Bordonada 2025 (10.1186/s13690-025-01774-2) is a fair extra challenge."
+  },
+  "80c7d89b-a1ca-499e-8759-3203b7662cce": {
+    "label": "Fewer ads seen -> fewer requests",
+    "gold": [
+      {"doi": "10.1001/jamapediatrics.2022.1037", "question": "elsewhere", "stance": "supports"},
+      {"doi": "10.1080/02650487.2006.11072986", "question": "elsewhere", "stance": "supports"},
+      {"doi": "10.1017/s136898001600135x", "question": "elsewhere", "stance": "supports"},
+      {"doi": "10.1111/ijpo.13018", "question": "elsewhere", "stance": "challenges"}
+    ],
+    "expected": {"elsewhere": "medium-strong", "here": "none-weak"},
+    "note": "No peer-reviewed UK study found; CRUK 2018 survey is unverified, so 'here' stays low."
+  },
+  "8e2b4385-e314-423e-89f3-cf7e02260c46": {
+    "label": "Fewer requests -> household purchases",
+    "gold": [
+      {"doi": "10.1371/journal.pmed.1003915", "question": "here", "stance": "supports"},
+      {"doi": "10.1509/jmkr.48.5.799", "question": "elsewhere", "stance": "supports"},
+      {"doi": "10.1371/journal.pmed.1004463", "question": "elsewhere", "stance": "supports"},
+      {"doi": "10.1017/s136898001600135x", "question": "elsewhere", "stance": "supports"}
+    ],
+    "expected": {"elsewhere": "weak-medium", "here": "weak-medium"},
+    "note": "Not separable: the strong designs test ads -> purchases as a bundle. The judge should not credit them fully to this step."
+  },
+  "b2eff091-ee50-47dc-a0d7-ad5e02e72d62": {
+    "label": "Fewer ads seen -> fewer snacks (acute)",
+    "gold": [
+      {"doi": "10.3945/ajcn.115.120022", "question": "elsewhere", "stance": "supports"},
+      {"doi": "10.1111/obr.12812", "question": "elsewhere", "stance": "supports"},
+      {"doi": "10.1017/s1368980007001231", "question": "here", "stance": "supports"},
+      {"doi": "10.1542/peds.2018-2554", "question": "here", "stance": "supports"}
+    ],
+    "expected": {"elsewhere": "strong", "here": "medium-strong"},
+    "note": "The easy link: every arm should get it. A miss here means the pipeline, not the search, is broken."
+  },
+  "2018a1e8-af22-4dc5-8056-6d73a01d6f62": {
+    "label": "Lower excess energy -> lower obesity",
+    "gold": [
+      {"doi": "10.1136/bmj.38077.458438.ee", "question": "elsewhere", "stance": "supports"},
+      {"doi": "10.1542/peds.2005-0983", "question": "elsewhere", "stance": "mixed"},
+      {"doi": "10.1016/s2213-8587(13)70051-2", "question": "elsewhere", "stance": "supports"},
+      {"doi": "10.1371/journal.pmed.1003212", "question": "here", "stance": "supports"}
+    ],
+    "expected": {"elsewhere": "medium-strong", "here": "medium"},
+    "note": "The motivating link (weak as run). de Ruyter 2012 (10.1056/nejmoa1203034) counts as a decisive find too; James 2007 (10.1136/bmj.39342.571806.55) is the durability challenge."
+  },
+  "70e659fa-1c70-407e-891c-ba03fc0de5fb": {
+    "label": "Choosing less healthy food less -> less energy",
+    "gold": [
+      {"url": "https://www.gov.uk/government/publications/calorie-reduction-the-scope-and-ambition-for-action", "title": "PHE (2018) Calorie reduction: the scope and ambition for action", "question": "here", "stance": "supports"},
+      {"doi": "10.1136/bmjopen-2018-027546", "question": "here", "stance": "supports"},
+      {"doi": "10.1016/j.cmet.2019.05.008", "question": "elsewhere", "stance": "supports"},
+      {"doi": "10.1111/ijpo.12735", "question": "elsewhere", "stance": "mixed"}
+    ],
+    "expected": {"elsewhere": "weak-medium", "here": "medium"},
+    "note": "Tested by descriptive facts (White 2009). The planner should ask for national diet surveys, not trials."
+  },
+  "fa4927e3-05b8-4140-8e25-614a43893fe8": {
+    "label": "Failure: marketing shifts elsewhere",
+    "gold": [
+      {"url": "https://dera.ioe.ac.uk/id/eprint/8709/", "title": "Department of Health (2008) Changes in food and drink advertising and promotion to children 2003-2007", "question": "here", "stance": "supports"},
+      {"doi": "10.1017/s1368980023002872", "question": "elsewhere", "stance": "supports"},
+      {"doi": "10.1186/s13690-025-01774-2", "question": "elsewhere", "stance": "supports"},
+      {"doi": "10.1111/obr.13932", "question": "elsewhere", "stance": "mixed"}
+    ],
+    "expected": {"elsewhere": "medium", "here": "weak-medium"},
+    "note": "Failure link: 'supports' means evidence that the failure happens."
+  },
+  "a2742bca-4313-4849-abc3-9221a423acd1": {
+    "label": "Fewer ads -> foods judged less healthy (thin)",
+    "gold": [
+      {"doi": "10.1016/j.socscimed.2007.05.011", "question": "elsewhere", "stance": "mixed"},
+      {"doi": "10.3390/nu11040875", "question": "elsewhere", "stance": "supports"},
+      {"doi": "10.1155/2013/408582", "question": "elsewhere", "stance": "challenges"}
+    ],
+    "expected": {"elsewhere": "weak-medium", "here": "none-weak"},
+    "note": "Thin: most studies measure liking, not perceived healthiness. An arm that reaches strong here has inflated the grade."
+  },
+  "20fe790e-bbb6-4eb3-a7a8-5f94c54c45af": {
+    "label": "Failure: parents still exposed (thin)",
+    "gold": [
+      {"doi": "10.1017/s1368980013001067", "question": "elsewhere", "stance": "supports"},
+      {"doi": "10.1186/s12889-020-09881-1", "question": "elsewhere", "stance": "supports"},
+      {"doi": "10.1371/journal.pmed.1003915", "question": "here", "stance": "supports"}
+    ],
+    "expected": {"elsewhere": "weak-medium", "here": "weak"},
+    "note": "Thin: no study tests whether parents' exposure cancels the child effect. Expect low grades in every arm."
+  }
+}

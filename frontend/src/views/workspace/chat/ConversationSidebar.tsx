@@ -10,26 +10,32 @@ import { PanelCloseIcon, PlusIcon, iconButtonClass } from "../../../ui/brand/ico
 
 const STORAGE_KEY = "policy-atlas:chats-sidebar";
 
-/** The reader's last choice, per browser; shut until they open it. */
-function readInitialOpen(): boolean {
+/** A value this browser keeps for the reader; null when none is stored or storage is blocked. */
+export function readStored(key: string): string | null {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "open") return true;
-    if (stored === "shut") return false;
+    return localStorage.getItem(key);
   } catch {
-    // Storage blocked: fall through to the viewport default.
+    return null;
   }
-  // Shut by default (owner, 2026-09-05): the conversation gets the screen
-  // until the reader asks for the list.
-  return false;
+}
+
+/** Keep a value for the reader in this browser: best effort only. */
+export function writeStored(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Storage blocked: the default applies next time.
+  }
+}
+
+/** The reader's last choice, per browser. Shut by default (owner, 2026-09-05):
+ *  the conversation gets the screen until the reader asks for the list. */
+function readInitialOpen(): boolean {
+  return readStored(STORAGE_KEY) === "open";
 }
 
 function storeOpen(open: boolean) {
-  try {
-    localStorage.setItem(STORAGE_KEY, open ? "open" : "shut");
-  } catch {
-    // Best effort only.
-  }
+  writeStored(STORAGE_KEY, open ? "open" : "shut");
 }
 
 /** The Agent tab's left column: every conversation in the Task (038 V8,

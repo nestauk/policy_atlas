@@ -12,6 +12,7 @@ export type {
   LiveSearchQuery,
   LiveSection,
   LiveSource,
+  LiveSketch,
   LiveSourceNote,
   LiveTheme,
   PlanDraft,

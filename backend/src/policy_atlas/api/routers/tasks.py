@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import Connection
 
-from policy_atlas.api.app import ApiConflict
+from policy_atlas.api.app import ApiConflict, ApiUnprocessable
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import (
     LIST_PAGE_SIZE_DEFAULT,
@@ -22,7 +22,7 @@ from policy_atlas.api.contract import (
     TaskOut,
     TaskUpdate,
 )
-from policy_atlas.api.deps import get_conn, get_current_user, get_optional_user
+from policy_atlas.api.deps import get_conn, get_current_user, get_optional_user, get_settings
 from policy_atlas.api.identity import owner_display_for
 from policy_atlas.api.lifecycle import archive_task, rename_task
 from policy_atlas.api.routers.access import (
@@ -40,6 +40,7 @@ from policy_atlas.api.routers.common import (
     memberships_for_tasks,
     task_out,
 )
+from policy_atlas.api.settings import Settings
 from policy_atlas.core import events
 from policy_atlas.core.schema import (
     app_user,
@@ -49,7 +50,7 @@ from policy_atlas.core.schema import (
     task,
     task_link,
 )
-from policy_atlas.runtime.capability_registry import EVIDENCE_SEARCH
+from policy_atlas.runtime.capability_registry import EVIDENCE_SEARCH, THEORY_OF_CHANGE
 
 log = structlog.get_logger()
 
@@ -396,6 +397,7 @@ def create_task(
     payload: TaskCreate,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> TaskOut:
     """Create one active task owned by the authenticated subject.
 
@@ -411,12 +413,21 @@ def create_task(
     the thing it was created for. So any refusal below rolls the task row back
     with it.
 
+    A theory of change is refused unless the server setting is on (task 054,
+    C15), before anything is written.
+
     Raises:
         HTTPException: 404 when a named source task is not readable by the
             caller.
+        ApiUnprocessable: 422 ``capability_not_enabled`` for a theory of
+            change while ``POLICY_ATLAS_THEORY_OF_CHANGE`` is off.
         ApiConflict: 409 ``visibility_conflict``, ``link_source_capability``,
             ``link_project_mismatch`` or ``link_source_unfinished``.
     """
+    if payload.capability == THEORY_OF_CHANGE and not settings.theory_of_change_enabled:
+        raise ApiUnprocessable(
+            "capability_not_enabled", "theory of change is not enabled on this server"
+        )
     now = datetime.now(UTC)
     task_id = uuid.uuid4()
     conn.execute(
