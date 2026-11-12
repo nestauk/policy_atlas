@@ -195,6 +195,18 @@ describe("mergeHistory", () => {
       expect(rows[1].sentence).toBe("You chose “Looks right, assess these” at the check-in.");
     });
 
+    it("leaves the wait at a check-in out of the run's time", () => {
+      const decisions = [
+        step(1, "2026-11-03T09:00:00Z", "run.opened", "Opened an evidence-search run."),
+        step(2, "2026-11-03T09:04:00Z", "run.parked", "Policy Atlas paused for a check-in."),
+        // Three hours later the owner answers; the run then works 6 more minutes.
+        { ...step(3, "2026-11-03T12:04:00Z", "steering.decision", "You chose “Looks right”."), decided_by: "user" },
+        step(4, "2026-11-03T12:10:00Z", "run.finished", "Finished the run."),
+      ];
+      const rows = mergeHistory(decisions, [], { isOwner: true, ownerName: null, capability: "evidence_search" });
+      expect(run(rows[0]).sentence).toBe("Ran the evidence search · 10 min");
+    });
+
     it("marks a run that stopped or failed, and says so in words", () => {
       const stopped = mergeHistory(
         [step(1, "2026-11-03T09:00:00Z", "run.opened", "Opened."), step(2, "2026-11-03T09:12:00Z", "run.interrupted", "Interrupted the run.")],

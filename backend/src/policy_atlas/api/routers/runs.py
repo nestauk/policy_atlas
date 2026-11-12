@@ -34,6 +34,7 @@ from policy_atlas.api.routers.common import (
     run_out,
     run_purpose_column,
     run_scope_context_column,
+    walk_pauses,
 )
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
@@ -469,10 +470,17 @@ def list_runs(
             .offset((page - 1) * page_size)
             .limit(page_size)
         ).mappings().all()
-        stages = _walk_stages(conn, task_id, [row["capability_run_id"] for row in rows])
+        walk_ids = [row["capability_run_id"] for row in rows]
+        stages = _walk_stages(conn, task_id, walk_ids)
+        pauses = walk_pauses(conn, task_id=task_id, walk_ids=walk_ids)
     return Page(
         data=[
-            run_out(row).model_copy(update={"stages": stages.get(row["capability_run_id"], [])})
+            run_out(row).model_copy(
+                update={
+                    "stages": stages.get(row["capability_run_id"], []),
+                    "paused_seconds": pauses.get(row["capability_run_id"], 0),
+                }
+            )
             for row in rows
         ],
         pagination=PageMeta(page=page, page_size=page_size, total_items=int(total)),
@@ -500,9 +508,12 @@ def get_run(
             .where(capability_run.c.capability_run_id == run_id)
         ).mappings().one_or_none()
         stages = _walk_stages(conn, task_id, [run_id]) if row is not None else {}
+        pauses = walk_pauses(conn, task_id=task_id, walk_ids=[run_id]) if row is not None else {}
     if row is None:
         raise HTTPException(status_code=404, detail="resource not found")
-    return run_out(row).model_copy(update={"stages": stages.get(run_id, [])})
+    return run_out(row).model_copy(
+        update={"stages": stages.get(run_id, []), "paused_seconds": pauses.get(run_id, 0)}
+    )
 
 
 def _walk_stages(

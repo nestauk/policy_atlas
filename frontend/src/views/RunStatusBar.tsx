@@ -194,7 +194,7 @@ export function RunStatusBar() {
           rest: restParts.join(" · "),
           words,
           paused,
-          elapsed: formatElapsed(elapsedSeconds(chainStart ?? run.startedAt, undefined, nowMs)),
+          elapsed: formatElapsed(elapsedSeconds(chainStart ?? run.startedAt, run.pausedAt, nowMs, run.pausedMs)),
           key: paused ? "paused" : (row?.key ?? "start"),
           link,
         }

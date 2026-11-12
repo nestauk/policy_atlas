@@ -88,7 +88,7 @@ export function TaskListRow({
   // A running row's step and its timer (round 14: a long step truncates,
   // the timer always shows).
   const liveStep = running ? scrub(activeRun?.stage_label ?? "") : null;
-  const liveTimer = running ? formatElapsed(elapsedSeconds(activeRun?.started_at, undefined, nowMs), { withSeconds: false }) : null;
+  const liveTimer = running ? formatElapsed(elapsedSeconds(activeRun?.started_at, undefined, nowMs, (activeRun?.paused_seconds ?? 0) * 1000), { withSeconds: false }) : null;
   const statusLabel = liveStep !== null ? `${liveStep} · ${liveTimer}` : scrub(statusWord);
   const safeName = scrub(name);
   const safeProjects = showProjectPrefix

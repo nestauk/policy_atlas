@@ -3735,7 +3735,7 @@
         "type": "object"
       },
       "LatestRun": {
-        "description": "The derived latest-run read model carried on a task.\n\nArgs:\n    capability_run_id: Identity of the task's most recent run.\n    status: That run's current status.\n    started_at: When that run started executing.\n    ended_at: When that run reached a terminal status, or `None` while\n        still running or paused.\n    stage: On `TaskOut.active_run` only: the public stage the task's\n        parentless active walk last started, so a scoping task shows the\n        parent's stage rather than a child's (task 058, N15). `None` before\n        the walk starts a stage, and on every other use of this shape.\n    stage_label: The server's label for `stage` (the stage vocabulary),\n        or `None` with it.",
+        "description": "The derived latest-run read model carried on a task.\n\nArgs:\n    capability_run_id: Identity of the task's most recent run.\n    status: That run's current status.\n    started_at: When that run started executing.\n    ended_at: When that run reached a terminal status, or `None` while\n        still running or paused.\n    paused_seconds: On `TaskOut.active_run` only: seconds that run spent\n        in finished pauses at check-ins; its timer leaves them out.\n    stage: On `TaskOut.active_run` only: the public stage the task's\n        parentless active walk last started, so a scoping task shows the\n        parent's stage rather than a child's (task 058, N15). `None` before\n        the walk starts a stage, and on every other use of this shape.\n    stage_label: The server's label for `stage` (the stage vocabulary),\n        or `None` with it.",
         "properties": {
           "capability_run_id": {
             "format": "uuid",
@@ -3753,6 +3753,10 @@
               }
             ],
             "title": "Ended At"
+          },
+          "paused_seconds": {
+            "title": "Paused Seconds",
+            "type": "number"
           },
           "stage": {
             "anyOf": [
@@ -6867,7 +6871,7 @@
         "type": "object"
       },
       "RunOut": {
-        "description": "A capability run resource.\n\nArgs:\n    capability_run_id: The run's identity.\n    task_id: Owning task.\n    plan_id: Identity of the plan the run executes.\n    plan_version: Plan version current at run creation.\n    status: Current run status.\n    started_at: When the run started executing.\n    ended_at: When the run reached a terminal status, or `None` while\n        still running or paused.\n    artefact_id: The artefact this walk wrote, or `None` when it wrote\n        none (it has not reached synthesise, or ended before it). A\n        scoping walk that carries one produced a baseline, whatever its\n        terminal status (task 044 review, C5/C6).\n    parent_capability_run_id: The walk that dispatched this one (a longlist\n        walk's option search), or `None` for a parentless walk (task 045).\n    purpose: The walk's intent-record purpose (`baseline`, `longlist`,\n        `targeted`, ...), or `None` for an Evidence search walk.\n    stages: The walk's own steps in the order started (task 058, round\n        11), on the list and the one-run reads; empty elsewhere.\n    toc_walk: A theory-of-change walk's kind, or `None` for any other\n        walk (task 054, S3).\n    follows_capability_run_id: For a check the server started by itself\n        after a draft, that draft walk's id; `None` otherwise (task 054,\n        S3).",
+        "description": "A capability run resource.\n\nArgs:\n    capability_run_id: The run's identity.\n    task_id: Owning task.\n    plan_id: Identity of the plan the run executes.\n    plan_version: Plan version current at run creation.\n    status: Current run status.\n    started_at: When the run started executing.\n    ended_at: When the run reached a terminal status, or `None` while\n        still running or paused.\n    paused_seconds: Seconds the run spent in finished pauses at\n        check-ins, on the list and the one-run reads. The run's working\n        time is its span from start to end less this.\n    artefact_id: The artefact this walk wrote, or `None` when it wrote\n        none (it has not reached synthesise, or ended before it). A\n        scoping walk that carries one produced a baseline, whatever its\n        terminal status (task 044 review, C5/C6).\n    parent_capability_run_id: The walk that dispatched this one (a longlist\n        walk's option search), or `None` for a parentless walk (task 045).\n    purpose: The walk's intent-record purpose (`baseline`, `longlist`,\n        `targeted`, ...), or `None` for an Evidence search walk.\n    stages: The walk's own steps in the order started (task 058, round\n        11), on the list and the one-run reads; empty elsewhere.\n    toc_walk: A theory-of-change walk's kind, or `None` for any other\n        walk (task 054, S3).\n    follows_capability_run_id: For a check the server started by itself\n        after a draft, that draft walk's id; `None` otherwise (task 054,\n        S3).",
         "properties": {
           "artefact_id": {
             "anyOf": [
@@ -6921,6 +6925,10 @@
               }
             ],
             "title": "Parent Capability Run Id"
+          },
+          "paused_seconds": {
+            "title": "Paused Seconds",
+            "type": "number"
           },
           "plan_id": {
             "format": "uuid",
