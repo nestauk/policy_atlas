@@ -389,3 +389,123 @@ against 16.3 / 21.1 / 22.8 for keyword seeds alone; the two routes overlap littl
 ground-truth seeds per review together against 4.1 and 5.6 apart). Under a cent per
 search. Luna `exp_d` with combined seeds: 16.8 / 24.7 / 27.2, below keyword-only at cap 200 (18.5); suspected cause is sending boolean-block queries to semantic search; `--semantic-texts intent` (three calls): 18.9 / 23.8 / 26.3, parity with keyword-only on luna. Best overall remains mini + production prompt + combined seeds (21.9 / 28.1). Run folders:
 `shared+semantic-c6e320-s200-k200-f200p10c300t20` and `semantic-c6e320-...`.
+
+## 2026-11-10 — Recall by documents kept, and CLEF TAR for comparison with Wang et al.
+
+Question: how does **production** search recall grow as the search keeps more documents,
+up to keeping everything its queries match? The aim is a figure we can set beside
+Wang et al. (SIGIR 2023, arXiv 2302.03495; reassessment arXiv 2505.07155). Both papers
+keep **every** PubMed result of a Boolean query (set-based scoring, no cut-off; the 2025
+paper only rejects queries that return 0 or more than 1,000,000 records). On CLEF TAR,
+expert queries reach recall 0.83–0.84 at precision about 0.021, which is about 40
+retrieved records per relevant study. The best LLM queries reach 0.50 (ChatGPT, 2023)
+and 0.65 (o1, 2025) at precision 0.075–0.084, about 7–8 records per relevant study.
+
+New files:
+- `scripts/evals/search/ground_truth/getters/get_clef_tar.py`: CLEF TAR 2017 + 2018,
+  the 72 Cochrane diagnostic test accuracy reviews Wang et al. used (2018 Task 2 copy:
+  42 training + 30 testing topics), abstract-level labels, intent = review title.
+  Cutoff = the search end date (2018 `pubdates.txt`), or for 2017 the publication date
+  of the newest pool record OpenAlex knows (the pools stop at 2012–2014, so they were
+  retrieved on the search date). Langfuse dataset `retrieval-ground-truth-clef-tar`.
+  6,204 of 6,224 relevant PubMed ids are in OpenAlex; 5,194 have a DOI, so about 16% of
+  the relevant studies cannot be scored.
+- `scripts/evals/search/experiments/recall_by_docs_kept.py`: one production Broadest
+  search per review (no screen, rolled back) with the paper cap lifted in-process, so
+  every pooled paper is kept with its pool rank. Levels up to the pool size are exact
+  production cuts (400 = Broadest). Beyond the pool: the rest of what the production
+  keyword and semantic searches returned, in production's seed order (`fetched` = all
+  of it). `max` = also every OpenAlex match of each plain production query, found with
+  `meta.count` plus a `doi:` membership filter. Production's 200 policy documents are in
+  every level. Results: `scripts/evals/search/results/docs_kept/<dataset>-2026-11-10/`.
+
+Results, mean over reviews. No failed provider calls in either run.
+
+**mini (15 reviews)**
+
+| level | papers kept (mean) | docs kept (median, incl. policy) | recall |
+|---|---:|---:|---:|
+| 100 | 99 | 295 | 14.8% |
+| 200 | 199 | 395 | 17.8% |
+| 400 (Broadest) | 398 | 594 | 22.8% |
+| 500 | 498 | 694 | 24.6% |
+| 1,000 | 917 | 1,189 | 26.9% |
+| fetched | 1,208 | 1,353 | 27.5% |
+| max | 51,505 | 1,968 | 30.1% |
+
+**CLEF TAR (72 reviews)**, papers only, comparable with Wang et al.:
+
+| level | papers kept (median) | papers per relevant study (median) | recall, studies with a DOI | recall, all relevant | precision |
+|---|---:|---:|---:|---:|---:|
+| 100 | 100 | 1.8 | 37.4% | 33.4% | 0.195 |
+| 200 | 199 | 3.6 | 48.3% | 42.8% | 0.142 |
+| 400 (Broadest) | 398 | 7.1 | 61.3% | 53.9% | 0.101 |
+| 500 | 496 | 8.9 | 67.2% | 59.1% | 0.091 |
+| fetched | 711 | 12.2 | 69.9% | 61.4% | 0.066 |
+| max | 711 | 13.0 | 70.3% | 61.8% | 0.063 |
+
+"Recall, all relevant" counts the studies with no DOI as misses, as Wang's denominator
+does. Precision here is on papers only.
+
+What we learned:
+- **At the same workload, production is level with the best LLM queries in the
+  papers.** At about 7 records per relevant study (the Broadest cut), production finds
+  54% of all relevant studies (61% of those with a DOI), against 0.50 for ChatGPT and
+  0.65 for o1. It reaches about 60% at 9–13 records per relevant study. It stays well
+  below expert queries (0.84), which use about 40 records per relevant study.
+- **Keeping more documents stops helping early.** On CLEF TAR, recall rises fast up to
+  the pool (about 600 papers) and then flattens: everything fetched adds 2.7 points, and
+  "every match of every query" only 0.4 more. On mini: 22.8% at Broadest, 27.5% for
+  everything fetched, 30.1% with no limit. **The ceiling is in the queries, not the
+  caps.**
+- **The production keyword queries are narrow.** On CLEF TAR a review's five plain
+  queries match only tens to a few hundred records in OpenAlex in total (for example
+  23, 4, 149, 0 and 95). Most of the pool comes from semantic search and citation
+  chasing. On 57 of 72 reviews, production fetched every match of every keyword query.
+- **One generated query had no brackets, and it was far too broad** (mini, parental leave
+  review): `maternity OR paternity leave AND depression OR anxiety` matches 637,883
+  records, and production keeps its first 200. It is a query-writing bug. Per the R&D
+  rule it is noted here and not fixed yet; it explains the mini `max` mean (51,505).
+  The median is 1,968.
+- Method notes: (a) joining the queries with OR in one OpenAlex search undercounts the
+  single queries' own results (OpenAlex parses the joined query differently), so `max`
+  is built from the per-query counts: exact when every match was fetched, an upper
+  bound otherwise; (b) a variant query (query AND a review or trial clause) sometimes
+  returns 2–3 records that its plain query does not.
+
+Caveats: CLEF TAR is medical (diagnostic test accuracy), not policy. We search OpenAlex,
+which has no MeSH subject headings; Wang searched PubMed. Our input is only the title,
+with no seed studies, as in Wang's zero-shot runs. Mini Broadest here is 22.8%, against
+25.3% on 2026-10-12; the queries are written again on every run, and that changes the
+number. Cost was not traced (the runs had no Langfuse client). By estimate it was under
+$5: one query-writing call per review, about 770 embeddings per review, about 45
+OpenAlex and 18 Overton search calls, and up to a few dozen $0.0001 OpenAlex calls for
+`max`.
+
+## 2026-11-10 — More semantic search texts: does recall go past the plateau?
+
+Question: production recall levels off at about 740 papers per CLEF TAR review. Part of the cause is that semantic search returns at most 50 results per text, and production sends 8 texts that overlap a lot. Do more varied semantic texts find more of the relevant studies?
+
+Method: `recall_by_docs_kept.py --extra-semantic paraphrases similar`. It reuses the cached production runs and adds new semantic searches with production's filter and date cut-off. Two arms:
+- **paraphrases**: 12 extra texts per question, written by the production query model with `prompts/semantic_texts_exp_a.txt` (the texts differ in vocabulary, named tests or interventions, populations, outcomes and study types).
+- **similar**: the titles of the top 10 pool papers, used as semantic texts.
+
+Each arm's new papers are added to "fetched" (all that production returned). No failed calls. Cost under $2.
+
+| Dataset | Row | Papers kept (mean) | Recall, DOI studies | Recall, all relevant | Precision (papers) |
+|---|---|---:|---:|---:|---:|
+| CLEF TAR (72) | fetched | 743 | 69.9% | 61.4% | 0.066 |
+| | + paraphrases | 897 | 74.1% | 64.9% | 0.061 |
+| | + similar | 930 | 71.9% | 63.1% | 0.057 |
+| | + both | 1,066 | 75.2% | 65.9% | 0.054 |
+| Mini (15) | fetched | 1,208 | 27.5% | | |
+| | + paraphrases | 1,617 | 34.8% | | |
+| | + similar | 1,493 | 28.1% | | |
+| | + both | 1,888 | 35.3% | | |
+
+Findings:
+- Paraphrases are the useful arm: +4.2 points on CLEF TAR for about 150 more papers, and +7.3 points on mini for about 410 more papers. This is better than "max" (all records the keyword queries match), which gave only +0.4 and +2.6 points.
+- Similar-paper texts add little (+2.0 and +0.6 points). They find papers close to what we already have.
+- Both arms together add only about 1 point more than paraphrases alone.
+- The gain is in "fetched", not in what production keeps. The extra semantic results reach production only if they get into the 200 seeds (`pool.SEEDS`). A follow-up could add paraphrase texts to production and test a larger seed count.
+- CLEF TAR still stays below Wang's expert queries (R 0.83 at about 5,300 records per review), but our recall (all relevant, 65.9%) is now about level with o1 (0.65) on far fewer records.

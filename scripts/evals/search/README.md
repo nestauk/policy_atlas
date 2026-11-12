@@ -27,6 +27,7 @@ One item in the ground truth is one review:
 | **YEF** (Youth Endowment Fund) evidence and gap map (preventing youth violence) | One strand of the map, for example mentoring | Yes, as above |
 | **Campbell** Systematic Reviews (a social-policy review journal, read through OpenAlex) | One published review | No. See "Limits" below. |
 | **SR4ALL** (a public corpus of 300,000 systematic reviews) | One social-science review | No. See "Limits" below. |
+| **CLEF TAR** 2017 + 2018 (Conference and Labs of the Evaluation Forum, Technology-Assisted Review: 72 Cochrane medical reviews of diagnostic tests) | One review | Yes. Experts judged each study on its title and abstract. Used only to compare with published studies (dataset `retrieval-ground-truth-clef-tar`), not as a policy benchmark. About 16% of the relevant studies have no DOI and cannot be scored. |
 
 ### How the intent is made
 
@@ -106,6 +107,8 @@ Keeping more results costs more later: every kept result is screened and stored 
 ### Experiments
 
 Search R&D experiments that are not part of the measured baselines or the production runs live in [results/analyses/2026-10-06-search-experiments.md](results/analyses/2026-10-06-search-experiments.md), one section per experiment script, with the dated results in `docs/tasks/047-search-rnd/notes.md`. As of 2026-10-06 the best measured configuration there (generated queries plus semantic search as seeds, a reference-frequency snowball, forward citation chasing, specificity ranking) reaches about 22% recall at 200 candidates on the mini set, against 3% for a plain OpenAlex search; see the file for the numbers and the caveats. The Overton side (what carries over, how the two sources share one cap, the date-order finding) is in [results/analyses/2026-10-07-overton-experiments.md](results/analyses/2026-10-07-overton-experiments.md), with notes in `docs/tasks/049-improve-overton-search/notes.md`. The design experiments that settled the task 051 proposal (cap curve on Luna, screened seeds, reformulation, the policy-document cap) are in [results/analyses/2026-10-09-design-experiments.md](results/analyses/2026-10-09-design-experiments.md), notes in `docs/tasks/051-improve-production-search-screen/notes.md`.
+
+`experiments/recall_by_docs_kept.py` asks how production search recall grows as the search keeps more documents: at the production caps (100, 200, 400 papers), at larger levels (500, 1,000, 2,000), at everything the searches fetched, and at everything the production queries match in OpenAlex with no limit. With `--extra-semantic paraphrases similar` it also adds extra semantic (meaning-based) searches: 12 varied texts written by the query model, or the titles of the top 10 pool papers. It makes the production pipeline comparable with published studies that keep every result a query returns. Its docstring explains the method; results go to `results/docs_kept/` and the dated notes to `docs/tasks/047-search-rnd/notes.md`.
 
 ### Cost
 
@@ -226,6 +229,13 @@ uv run --project backend --env-file backend/.env python scripts/evals/search/gro
 
 # Upload the full dataset: the same with sample_full and --dataset retrieval-ground-truth-full (no --include-from)
 # Upload the 4 hand-made reviews: uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth/upload.py (reads input/)
+
+# CLEF TAR (medical reviews, for comparison with published studies): fetch, then upload
+uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth/getters/get_clef_tar.py
+uv run --project backend --env-file backend/.env python scripts/evals/search/ground_truth/upload.py \
+    --reviews scripts/evals/search/results/ground_truth/clef_tar_reviews.csv \
+    --references scripts/evals/search/results/ground_truth/clef_tar_references.csv \
+    --dataset retrieval-ground-truth-clef-tar
 ```
 
 An upload adds and updates items. It never deletes them. If a review drops out of a sample, delete its item in Langfuse by hand.
@@ -243,6 +253,9 @@ uv run --project backend --env-file backend/.env python scripts/evals/search/che
 # Sweep: smoke test, then the full sweep
 uv run --project backend --env-file backend/.env python scripts/evals/search/experiments/sweep_record_cap.py --caps 50 --generation-backends shared --repeats 1
 uv run --project backend --env-file backend/.env python scripts/evals/search/experiments/sweep_record_cap.py
+
+# Recall by documents kept: production search, no screening, levels up to "no limit"
+uv run --project backend --env-file backend/.env python scripts/evals/search/experiments/recall_by_docs_kept.py --dataset retrieval-ground-truth-clef-tar
 ```
 
 The baselines call each service **once** and save the raw results in `results/cache/`. Later runs score from the cache and cost nothing. Use `--refresh` only when you need fresh results: Consensus charges for every call.
