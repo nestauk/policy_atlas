@@ -3713,3 +3713,15 @@ Found by the 064a review stack (2026-11-16) and left as seams:
   clock and the quota counts by the database clock. Both hosts are NTP-synced in one
   region, so the skew is seconds at a 365-day boundary; a database default would
   remove it.
+- **The event-log sequence retry is exhausted by a theory-of-change check's fan-out
+  (found by this slice's CI, not caused by it).** `events.append` assigns
+  `max(sequence)+1` per task and retries 32 times on collision (045 sized that as "about
+  the number of writers at once"). A check walk sends six child acquire walks that each
+  write a dozen events in under a second, so the parent's own append can lose more than
+  32 races on a slow runner: seen once locally (`test_judge_commits`, verification run 2)
+  and once on CI (`test_check_steps`, run 43921736642), the dispatch failing with
+  `uq_event_log_task_sequence` after the children finished. `dev`'s last twelve CI runs
+  were green and 064a adds no event writer, so it is a pre-existing ceiling the ToC
+  fan-out (width 6, wider than the longlist's 4) never re-checked. Fix in a follow-on:
+  take `pg_advisory_xact_lock(hashtext(task_id))` around the read-and-insert in
+  `append`, or the per-walk sequence already deferred under § Options scoping longlist.
