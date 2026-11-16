@@ -90,6 +90,17 @@ is a branch deletion the owner can do at any time.
 
 Sourced research notes live in `docs/tasks/064-security-hardening/research/` (gitignored).
 
+## The ops portal is a separate task, not a slice of 064
+
+The ops portal (owner notes, 2026-11-16) is its own task, expected as 065 with three slices:
+**065a** SES wiring for both pools (verified domain per account, branded templates,
+production sending access requested for both accounts); **065b** a second IP-gated ECS
+service from the same image with the ops routes and the Cognito write permissions on its own
+task role; **065c** self-service account creation by email domain. The dependencies on this
+programme are one-way: 064a to 064c need nothing from it; **064d waits for 065a**, because
+email MFA needs the pool's own SES sender; the H-07 privacy notice waits for the whole of
+065. 064a's `user offboard` is the function 065b reuses.
+
 ## Later slices in brief
 
 ### 064b WAF and CAPTCHA
