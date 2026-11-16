@@ -67,8 +67,8 @@ is a branch deletion the owner can do at any time.
   normal `dev` → staging → `main` → production path with no special handling.
 - **Staging and production share the same numbers** (quota 50 tasks per year, 3 concurrent
   runs per user) unless a slice says otherwise.
-- **Admins have no task quota.** The concurrent-run cap applies to everyone, because it
-  protects the server, not the budget.
+- **Admins have no task quota and no concurrent-run cap.** (The run cap was first ruled
+  to apply to everyone; the owner exempted administrators on 2026-11-16 before 064a merged.)
 - **Tier.** Every slice touches auth, production config or schema, so none is below Tier 3.
   064a and 064b are Tier 4 (migration, production config).
 

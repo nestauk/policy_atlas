@@ -121,7 +121,8 @@ Mapping: 400 `malformed` · 401 `unauthenticated` · **403 `forbidden`**
 task's visibility while it is in a project — change the project's
 visibility, or leave the task out of it) | `user_capacity` (the task's
 owner already has `RUNS_PER_USER` runs in progress, counted on the tasks
-they own; the global `capacity` bound is separate — task 064a Q7) | `task_quota` (the caller has created
+they own; administrators are exempt; the global `capacity` bound is separate
+— task 064a Q7) | `task_quota` (the caller has created
 `TASK_QUOTA_PER_YEAR` tasks in the last 365 days; administrators are
 exempt — task 064a Q8) | `confirm_expired` (a check-in confirmation
 arrived after its window — task 064a Q15) · 422 `validation_error`

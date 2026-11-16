@@ -19,7 +19,8 @@ development database.
 | `make audit` (after the owner's go, 2026-11-16) | pass | the owner asked for the fix before the PR: `uv lock --upgrade-package` on both (`opentelemetry-api` 1.45.2, `opentelemetry-sdk` 1.45.2, `opentelemetry-semantic-conventions` 0.66b2, `tornado` 6.6.1; lock file only, no `pyproject.toml` change). The app imports with the new versions. "No known vulnerabilities found." |
 | `make verify` (review self-verify gate, run 1, HEAD edee7a0e) | **fail** | 2 failed, 4,821 passed: `test_search_single_pass.py::test_generation_failure_raises_and_harness_records_component_failed` (pinned a plain `RuntimeError`'s message that Q3 now reduces to the class name; missed by the build's Q3 inventory) and `test_runs_router.py::test_a_failed_dispatch_interrupts_only_the_walk_it_minted` (waited on the dispatch reservation, which `create_run` drops as soon as the row exists; passed alone three times). Both tests fixed. |
 | `make verify` (run 2, after the two test fixes) | **fail** | 1 failed, 4,822 passed: `test_judge_commits.py::test_a_retried_judge_skips_the_links_it_wrote_and_leaves_no_duplicates`, a file this slice does not touch. Its captured output shows a stray theory-of-change dispatch thread from an earlier test in the same worker colliding on `uq_event_log_task_sequence` before any 064a code ran. Passed in run 1 and three times alone: a pre-existing isolation flake, not this slice's. |
-| `make verify` (run 3, after every review fix) | see § Review findings, last row | the full chain, run to the end |
+| `make verify` (run 3, after every review fix) | see § Review findings | the full chain, run to the end |
+| `make verify` (run 4, after the administrator run-cap exemption) | pass | EXIT 0: backend 4,830 passed, 1 skipped (the new administrator test in the run); infra tests, typecheck, lint, frontend (138 files, 1,992 tests, build OK) and OKF validate green. |
 
 ## Checks beyond the build
 
@@ -46,7 +47,8 @@ development database.
     at `create_run` and `admit_and_mint` all four cases (fourth start refused, another
     user admitted, paused not counted, two reservations plus one row refused at 3); at
     `start_toc_check` refused for A and admitted for B (the counting is shared code); a
-    collaborator starting on A's task while A holds three is refused.
+    collaborator starting on A's task while A holds three is refused; an administrator
+    holding three is admitted (owner ruling 2026-11-16, after the review stack).
   - Q8 `tests/api/test_tasks_router.py`: the 51st task in a year refused with
     `task_quota` at the real default of 50; an administrator admitted; a row 366 days old
     not counted; archived rows counted. `test_me_router.py`: `used` and `limit` for a
@@ -281,6 +283,13 @@ on the branch in the review commit.
   typecheck, lint, `make -C infra test` (119 passed), frontend chain (138 files, 1,992
   tests, build OK) and `okf-validate` (217 concepts after the step-8 records, 0
   violations) green. The flaky judge test of run 2 passed.
+- **Owner change after the stack, before merge (2026-11-16):** administrators are exempt
+  from the per-user run cap, as they are from the task quota. One guard in
+  `user_at_run_cap` (`runs.py`) through `_is_admin`, so all three start sites inherit it;
+  `_is_admin`'s docstring, the closed reader list in `test_admin_leg.py` (reader (vi)),
+  ADR 0033 decision 4, ADR 0045 decision 1, the spec, `infra/DEPLOYMENT.md` and the
+  programme map say so; the contract's Q7 row is marked superseded. One test added
+  (`test_an_administrator_has_no_run_cap`). `make verify` run 4: see § Commands run.
 
 ## Rubric status
 

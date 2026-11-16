@@ -2,7 +2,7 @@
 
 - **Status:** Accepted — 2026-08-24 (owner, with the 033 contract and plan approvals).
   **Amended 2026-11-16** by [ADR 0045](0045-per-user-run-cap-task-quota-offboarding.md)
-  on the administrator flag's reader list (decision 4: five readers, not four).
+  on the administrator flag's reader list (decision 4: six readers, not four).
 - **Date:** 2026-08-24
 - **Task:** 033-organisations · contract rev 3.0 approved 2026-08-24 · plan rev 2.0
   approved 2026-08-24. Both were rewritten after adversarial review; the contract review
@@ -77,8 +77,9 @@ Three constraints bound the answer:
    body can reach it.
 
    Only four places may read the flag — the row-access helper's admin leg, the listing
-   scope resolver, the `owner_email` filter gate, and the `/me` projection (a fifth,
-   task creation's quota exemption, was added by ADR 0045 on 2026-11-16) — and that
+   scope resolver, the `owner_email` filter gate, and the `/me` projection (a fifth, task
+   creation's quota exemption, and a sixth, the per-user run cap's exemption, were added
+   by ADR 0045 on 2026-11-16) — and that
    closed list is asserted structurally, because `is_admin` is a broad name and broad names
    attract unrelated checks.
 

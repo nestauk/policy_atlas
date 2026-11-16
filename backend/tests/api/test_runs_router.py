@@ -29,7 +29,7 @@ from policy_atlas.core.schema import (
     task,
     task_plan,
 )
-from tests.api.org_support import make_task, seeded, tenancy_client
+from tests.api.org_support import make_task, ops_enrol, seeded, tenancy_client
 from tests.api.resource_support import api_client, create_task
 from tests.helpers import delete_task_data, now, seed_scope, seed_walk
 
@@ -278,6 +278,22 @@ def test_a_fourth_start_is_refused_and_another_persons_start_is_not(
             assert refused.status_code == 409, refused.text
             assert refused.json()["error"]["code"] == "user_capacity"
             assert _past_the_cap(_start(client, b.headers, bs))
+        finally:
+            _drop(engine, created)
+
+
+def test_an_administrator_has_no_run_cap(engine: Engine, tmp_path: Path) -> None:
+    """Three running walks do not stop an administrator's fourth start (owner ruling 2026-11-16)."""
+    with tenancy_client(tmp_path, count=1, overrides={get_settings: _wide_executor}) as (
+        client,
+        (admin,),
+    ):
+        with seeded(engine) as conn:
+            ops_enrol(conn, user_id=admin.user_id, is_admin=True)
+        created = _seed_walks(engine, admin.user_id, ["running"] * 3)
+        try:
+            created.append(fourth := _new_task(engine, admin.user_id))
+            assert _past_the_cap(_start(client, admin.headers, fourth))
         finally:
             _drop(engine, created)
 

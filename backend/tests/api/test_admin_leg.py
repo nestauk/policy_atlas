@@ -847,6 +847,10 @@ def test_no_write_under_the_api_can_set_is_admin() -> None:
 #: - `routers/tasks.py::create_task` — reader **(v)**, task creation's quota
 #:   exemption (task 064a, ADR 0045), asked through `_is_admin`. The first
 #:   write path to consult the flag; it still sets nothing.
+#: - `routers/runs.py::user_at_run_cap` — reader **(vi)**, the per-user run
+#:   cap's exemption (task 064a, owner ruling 2026-11-16), asked through
+#:   `_is_admin` for the task's owner. One function serves all three start
+#:   sites.
 #:
 #: Any further entry is a defect and needs its own amendment.
 _IS_ADMIN_READERS = {
@@ -854,6 +858,7 @@ _IS_ADMIN_READERS = {
     "routers/me.py": {"get_me"},
     "contract/tenancy.py": {"MeOut"},
     "routers/tasks.py": {"create_task"},
+    "routers/runs.py": {"user_at_run_cap"},
 }
 
 

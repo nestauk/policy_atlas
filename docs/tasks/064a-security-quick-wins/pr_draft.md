@@ -25,7 +25,7 @@ Task folder: `docs/tasks/064a-security-quick-wins/`. Decision record:
 **Stopping one person from using up the whole server**
 
 4. One person can have at most 3 runs going at the same time. The server has 10 slots in total,
-   so before this one person could take all of them.
+   so before this one person could take all of them. Administrators are exempt.
 5. One person can create at most 50 tasks in a year. Administrators are exempt. The app shows a
    banner when someone reaches the limit.
 
@@ -132,9 +132,10 @@ search of old logs for leaked secrets is done after this PR.
 - **The 3-run limit** is checked in three places where a run can start. All three count the same
   way: runs that are already running plus runs that are about to start. The count is done while
   holding the lock that guards run starts, so two requests at the same moment cannot both pass.
-- **The 50-task limit** is checked in the one function that creates tasks. The administrator
-  exemption is the fifth place in the code that reads the "is admin" flag, so the earlier
-  decision record (ADR 0033) is updated to say so.
+  Administrators are exempt, through the same check as the task limit.
+- **The 50-task limit** is checked in the one function that creates tasks. The two administrator
+  exemptions are the fifth and sixth places in the code that read the "is admin" flag, so the
+  earlier decision record (ADR 0033) is updated to say so.
 - **Offboarding** handles four cases: the person is in an organisation, has left it, has no row
   in our database, or has no Cognito account any more. Each case reports what it did. If Cognito
   refuses, nothing in our database is changed.

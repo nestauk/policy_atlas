@@ -26,7 +26,7 @@ from policy_atlas.api.deps import (
     get_settings,
     get_title_backend,
 )
-from policy_atlas.api.routers.access import accessible_task
+from policy_atlas.api.routers.access import _is_admin, accessible_task
 from policy_atlas.api.routers.common import (
     active_parentless_walk,
     executor_walk,
@@ -105,7 +105,9 @@ def user_at_run_cap(conn: Connection, *, user_id: str | None, cap: int) -> bool:
     would admit any number of simultaneous starts. Call it before the
     caller's own task joins the reservation set, so that task is not counted.
     The cap is on the owner's tasks, so the sites pass the task's owner and a
-    collaborator with write access cannot lift it.
+    collaborator with write access cannot lift it. An administrator owner is
+    exempt (owner ruling 2026-11-16, like the task quota): reader **(vi)** of
+    ``is_admin`` in the closed list of ADR 0033, through :func:`_is_admin`.
 
     Args:
         conn: Open database connection.
@@ -117,7 +119,7 @@ def user_at_run_cap(conn: Connection, *, user_id: str | None, cap: int) -> bool:
     Returns:
         ``True`` when the person is at or over the limit.
     """
-    if user_id is None:
+    if user_id is None or _is_admin(conn, user_id):
         return False
     running = conn.execute(
         select(func.count())

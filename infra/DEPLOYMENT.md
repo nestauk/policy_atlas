@@ -780,7 +780,7 @@ fixture corpus are intentionally omitted from the deployed task.
 | `POLICY_ATLAS_FIXTURE_CORPUS` | omitted (development/test fixture override) | `evidence_search/sourcing/ingest_full_text.py` |
 | `POLICY_ATLAS_SEARCH_CACHE_TTL_S` | omitted (development tuning; application default) | `evidence_search/sourcing/search_live.py` |
 | `RUN_EXECUTOR_MAX` | config value: `backend.run_executor_max` | `api/settings.py` |
-| `RUNS_PER_USER` | config value: `backend.runs_per_user` (3 in both environments; task 064a, Q7): how many runs one person may have running at once | `api/settings.py` |
+| `RUNS_PER_USER` | config value: `backend.runs_per_user` (3 in both environments; task 064a, Q7): how many runs one person may have running at once; administrators are exempt | `api/settings.py` |
 | `TASK_QUOTA_PER_YEAR` | config value: `backend.task_quota_per_year` (50 in both environments; task 064a, Q8): how many tasks one person may create in a rolling 365 days; administrators are exempt | `api/settings.py` |
 | `SSE_HEARTBEAT_SECONDS` | omitted (application default: 15) | `api/settings.py` |
 | `SSE_POLL_INTERVAL_SECONDS` | omitted (application default: 0.4) | `api/settings.py` |
@@ -815,7 +815,7 @@ deployment, like any other secret.
 `RUN_EXECUTOR_MAX=10`, `DB_POOL_SIZE=15`, `DB_MAX_OVERFLOW=10`, task 2 vCPU /
 8 GB (initial hypothesis — measured under load, not just arithmetic). Within
 that ceiling one person may hold at most `RUNS_PER_USER=3` running runs (task
-064a, Q7), administrators included, so no single person can take every slot.
+064a, Q7); administrators are exempt, like the task quota. No single ordinary user can take every slot.
 A run waiting at a check-in is paused and does not count.
 
 **Shared-provider-rate-limit caveat:** OpenAI rate limits are shared across all

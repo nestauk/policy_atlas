@@ -40,8 +40,10 @@ scans every module under `api/` for the name `is_admin` in any scope.
    walks, joined to the task owner, plus the user's tasks in the reservation set that will
    occupy a worker. Reservations count because the run row is written after the lock is
    released; counting rows alone admits N simultaneous starts. Refusal is
-   `409 user_capacity`. The cap applies to administrators. Resuming after a check-in stays
-   uncapped. The two-start window the global cap already has is accepted for the user cap
+   `409 user_capacity`. Administrators are exempt, through the same `_is_admin` helper as
+   the quota (reader (vi) of ADR 0033's closed list; the owner changed this ruling on
+   2026-11-16 after the review stack, before merge — the contract's "applies to admins too"
+   is superseded). Resuming after a check-in stays uncapped. The two-start window the global cap already has is accepted for the user cap
    too.
 
 2. **A task quota per user, counted on rows, with no new table.** `task_quota_per_year`

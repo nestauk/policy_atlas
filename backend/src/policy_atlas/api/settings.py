@@ -26,7 +26,8 @@ class Settings:
         database_url: SQLAlchemy database URL.
         run_executor_max: Maximum number of concurrent walk workers.
         runs_per_user: Maximum number of walks one person's tasks may hold on
-            the walk executor at once (``RUNS_PER_USER``; task 064a, Q7).
+            the walk executor at once; administrators are exempt
+            (``RUNS_PER_USER``; task 064a, Q7).
         task_quota_per_year: How many tasks one person may create in any
             365 days; administrators are exempt (``TASK_QUOTA_PER_YEAR``;
             task 064a, Q8).
