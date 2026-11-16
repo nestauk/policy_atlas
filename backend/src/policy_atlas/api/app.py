@@ -65,6 +65,12 @@ _CONFLICT_CODES = {
     # place or was set aside; a shortlist place for an excluded or merged option.
     "nothing_to_propose",
     "not_included",
+    # Task 064a (Q7): the caller's tasks already hold `runs_per_user` walks.
+    "user_capacity",
+    # Task 064a (Q8): the caller created `task_quota_per_year` tasks in 365 days.
+    "task_quota",
+    # Task 064a (Q15): a free-text preview's confirm token is gone; compile again.
+    "confirm_expired",
 }
 
 _CAPACITY_CODES = {"chat_capacity"}
@@ -250,7 +256,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         return response
 
     @app.get("/healthz")
-    def healthz() -> dict[str, str]:
+    async def healthz() -> dict[str, str]:
         """Report process liveness without touching external dependencies."""
         return {"status": "ok"}
 

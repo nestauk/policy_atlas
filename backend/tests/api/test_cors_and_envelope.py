@@ -107,3 +107,12 @@ def _assert_unauthenticated(response: Any) -> None:
     assert response.status_code == 401
     assert response.headers["WWW-Authenticate"] == "Bearer"
     assert response.json()["error"]["code"] == "unauthenticated"
+
+
+def test_healthz_is_async_so_it_needs_no_pool_thread() -> None:
+    import inspect
+
+    from policy_atlas.api.app import create_app
+
+    routes = [r for r in create_app().routes if getattr(r, "path", "") == "/healthz"]
+    assert inspect.iscoroutinefunction(routes[0].endpoint)  # type: ignore[attr-defined]

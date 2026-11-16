@@ -293,7 +293,7 @@ def test_app_stack_deploy_invariant_values_are_template_pinned():
     _, target_group = _resources(
         TEMPLATES["app"], "AWS::ElasticLoadBalancingV2::TargetGroup"
     )[0]
-    assert target_group["Properties"]["HealthCheckPath"] == "/readyz"
+    assert target_group["Properties"]["HealthCheckPath"] == "/healthz"
 
 
 def test_metabase_database_is_separate_encrypted_and_guarded():
@@ -999,6 +999,45 @@ def test_aurora_cluster_is_encrypted_guarded_and_backed_up():
     assert properties["BackupRetentionPeriod"] == 7
 
 
+def test_production_aurora_cluster_keeps_35_days_of_backups():
+    # Staging is synthesized above; build the production database stack too
+    # (needs no AWS credentials, same as staging) and read its retention.
+    prod_db_config = _load_environments("db_config.json")["prod"]
+    prod_stack = DatabaseStack(
+        cdk.App(),
+        "PaV3DatabaseStackProd",
+        db_config=prod_db_config,
+        env=ENV,
+        env_name="prod",
+        ssm_connectivity=NETWORK_STACK.ssm_connectivity,
+    )
+    _, cluster = _resources(
+        Template.from_stack(prod_stack).to_json(), "AWS::RDS::DBCluster"
+    )[0]
+    assert cluster["Properties"]["BackupRetentionPeriod"] == 35
+
+
+def test_api_trusts_forwarded_headers_only_from_the_vpc_range():
+    _, task_definition = _resources(TEMPLATES["app"], "AWS::ECS::TaskDefinition")[0]
+    container = task_definition["Properties"]["ContainerDefinitions"][0]
+    environment = {item["Name"]: item["Value"] for item in container["Environment"]}
+    # The synth uses CDK's placeholder VPC lookup, whose range is 1.2.3.4/5.
+    assert environment["FORWARDED_ALLOW_IPS"] == "1.2.3.4/5"
+
+
+def test_https_listener_uses_the_recommended_tls_policy():
+    listeners = [
+        resource["Properties"]
+        for _, resource in _resources(
+            TEMPLATES["network"], "AWS::ElasticLoadBalancingV2::Listener"
+        )
+        if resource["Properties"]["Port"] == 443
+    ]
+    assert [listener["SslPolicy"] for listener in listeners] == [
+        "ELBSecurityPolicy-TLS13-1-2-2021-06"
+    ]
+
+
 def test_vpc_lookup_context_queries_are_filtered_by_vpc_name_tag():
     # `CloudAssembly.manifest` presently cannot deserialize manifests containing
     # lookup-only stack artifacts (their templateFile is undefined).  CDK's
@@ -1028,8 +1067,9 @@ def test_cognito_user_pool_is_operator_managed_and_retained():
 
 def test_cognito_password_policy_keeps_default_rules_with_30_day_temporary_passwords():
     _, user_pool = _resources(TEMPLATES["app"], "AWS::Cognito::UserPool")[0]
+    assert user_pool["Properties"]["DeletionProtection"] == "ACTIVE"
     assert user_pool["Properties"]["Policies"]["PasswordPolicy"] == {
-        "MinimumLength": 8,
+        "MinimumLength": 12,
         "RequireLowercase": True,
         "RequireUppercase": True,
         "RequireNumbers": True,
@@ -1116,6 +1156,15 @@ def test_cloudfront_uses_oac_with_spa_fallback_and_certificate():
         (403, 200, "/index.html"),
         (404, 200, "/index.html"),
     }
+
+    # Plain-HTTP requests are redirected to HTTPS on both behaviours, and the
+    # oldest accepted TLS version is pinned.
+    assert config["DefaultCacheBehavior"]["ViewerProtocolPolicy"] == "redirect-to-https"
+    assert all(
+        behavior["ViewerProtocolPolicy"] == "redirect-to-https"
+        for behavior in config["CacheBehaviors"]
+    )
+    assert config["ViewerCertificate"]["MinimumProtocolVersion"] == "TLSv1.2_2021"
 
     index_behavior = config["CacheBehaviors"][0]
     assert index_behavior["PathPattern"] == "/index.html"

@@ -206,6 +206,14 @@ class PolicyAtlasStack(Stack):
                 "APP_ORIGIN": f"https://{domain_name}",
                 "PA_BACKEND_MODE": "live",
                 "RUN_EXECUTOR_MAX": str(be_config["run_executor_max"]),
+                "RUNS_PER_USER": str(be_config["runs_per_user"]),
+                "TASK_QUOTA_PER_YEAR": str(be_config["task_quota_per_year"]),
+                # Uvicorn (the web server) takes the client address from the
+                # leftmost X-Forwarded-For entry when the request comes from a
+                # trusted proxy. "*" would trust anyone, letting a client write
+                # that entry; the VPC (private network) range trusts only the
+                # load balancer.
+                "FORWARDED_ALLOW_IPS": vpc.vpc_cidr_block,
                 "DB_POOL_SIZE": str(be_config["db_pool_size"]),
                 "DB_MAX_OVERFLOW": str(be_config["db_max_overflow"]),
                 "LOG_LEVEL": "INFO",
@@ -279,7 +287,11 @@ class PolicyAtlasStack(Stack):
             port=be_config["internal_port"],
             protocol=elbv2.ApplicationProtocol.HTTP,
             health_check=elbv2.HealthCheck(
-                path="/readyz",
+                # /healthz only proves the process is up. /readyz also opens a
+                # database connection, so a bad database secret would make the
+                # load balancer kill every task in a loop. deploy.sh checks
+                # /readyz once after the rollout instead.
+                path="/healthz",
                 interval=Duration.seconds(30),
                 timeout=Duration.seconds(5),
                 healthy_threshold_count=2,
@@ -361,6 +373,7 @@ class PolicyAtlasStack(Stack):
             default_behavior=cloudfront.BehaviorOptions(
                 origin=frontend_origin,
                 cache_policy=cloudfront.CachePolicy.CACHING_OPTIMIZED,
+                viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
                 response_headers_policy=security_headers,
                 function_associations=[www_redirect_association],
             ),
@@ -368,11 +381,15 @@ class PolicyAtlasStack(Stack):
                 "/index.html": cloudfront.BehaviorOptions(
                     origin=frontend_origin,
                     cache_policy=index_html_cache_policy,
+                    viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
                     response_headers_policy=security_headers,
                     function_associations=[www_redirect_association],
                 ),
             },
             certificate=certificate,
+            # Explicit pin of today's default (oldest allowed TLS version, the
+            # encryption protocol for HTTPS) so it cannot drift.
+            minimum_protocol_version=cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
             domain_names=[domain_name, f"www.{domain_name}"],
             default_root_object="index.html",
             error_responses=[

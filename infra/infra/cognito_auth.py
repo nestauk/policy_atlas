@@ -35,7 +35,7 @@ class CognitoAuth(Construct):
             # any rule it omits is off. 30 days because `--invite manual` hands
             # passwords over out of band, which routinely outlasts the 7-day default.
             password_policy=cognito.PasswordPolicy(
-                min_length=8,
+                min_length=12,
                 require_lowercase=True,
                 require_uppercase=True,
                 require_digits=True,
@@ -43,6 +43,8 @@ class CognitoAuth(Construct):
                 temp_password_validity=Duration.days(30),
             ),
             removal_policy=RemovalPolicy.RETAIN,
+            # Blocks accidental deletion of the user pool (and every account in it).
+            deletion_protection=True,
         )
 
         self.client = cognito.UserPoolClient(

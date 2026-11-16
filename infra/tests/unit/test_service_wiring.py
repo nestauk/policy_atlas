@@ -15,6 +15,9 @@ API_ENVIRONMENT_NAMES = {
     "APP_ORIGIN",
     "PA_BACKEND_MODE",
     "RUN_EXECUTOR_MAX",
+    "RUNS_PER_USER",
+    "TASK_QUOTA_PER_YEAR",
+    "FORWARDED_ALLOW_IPS",
     "DB_POOL_SIZE",
     "DB_MAX_OVERFLOW",
     "LOG_LEVEL",
@@ -67,6 +70,9 @@ def test_api_container_has_the_complete_deployed_plain_environment_map():
     assert environment["APP_ORIGIN"] == "https://v3.policyatlas.uk"
     assert environment["PA_BACKEND_MODE"] == "live"
     assert environment["RUN_EXECUTOR_MAX"] == "10"
+    assert environment["RUNS_PER_USER"] == "3"
+    assert environment["TASK_QUOTA_PER_YEAR"] == "50"
+    assert environment["FORWARDED_ALLOW_IPS"] == "1.2.3.4/5"
     assert environment["DB_POOL_SIZE"] == "15"
     assert environment["DB_MAX_OVERFLOW"] == "10"
     assert environment["LOG_LEVEL"] == "INFO"

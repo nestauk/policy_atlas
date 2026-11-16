@@ -72,7 +72,7 @@ class DatabaseStack(Stack):
             credentials=rds.Credentials.from_generated_secret("dbadmin"),
             removal_policy=RemovalPolicy.SNAPSHOT,
             # Review-stack hardening (026 step 7): encryption at rest, delete
-            # guard, 7-day backups. NB StorageEncrypted cannot be toggled in
+            # guard, backups (retention days from db_config.json). NB StorageEncrypted cannot be toggled in
             # place, and the pinned cluster/instance identifiers mean
             # CloudFormation cannot swap in a replacement either (the
             # create-before-delete collides on the name — the update FAILS).
@@ -80,7 +80,7 @@ class DatabaseStack(Stack):
             # scheduled while the DB holds smoke data only.
             storage_encrypted=True,
             deletion_protection=True,
-            backup=rds.BackupProps(retention=Duration.days(7)),
+            backup=rds.BackupProps(retention=Duration.days(db_config["backup_retention_days"])),
             vpc=vpc,
             vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS),
             cluster_identifier="policy-atlas-v3-db-cluster",

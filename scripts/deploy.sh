@@ -572,7 +572,21 @@ scale_up_service() {
         --region "$DEPLOY_REGION" \
         --cluster "$CLUSTER_ARN" \
         --services "$ECS_SERVICE_NAME"
-    echo "PASS: API service scaled to one task"
+    # The load balancer now checks /healthz (is the process up?), which no
+    # longer proves the database secret works. /readyz opens a database
+    # connection, so ask it directly: up to 10 tries, 15 s apart.
+    local attempt
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+        if curl --fail --silent --output /dev/null "$API_BASE_URL/readyz"; then
+            break
+        fi
+        if [[ "$attempt" == 10 ]]; then
+            echo "FAIL: $API_BASE_URL/readyz never returned 200" >&2
+            return 1
+        fi
+        sleep 15
+    done
+    echo "PASS: API service scaled to one task and /readyz answers 200"
 }
 
 require_production_build_environment() {

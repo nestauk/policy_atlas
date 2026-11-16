@@ -55,4 +55,9 @@ EXPOSE 8000
 
 USER app
 
-CMD ["uvicorn", "policy_atlas.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+# The load balancer keeps idle connections open for 120 s, but uvicorn's default
+# is 5 s, which closed them first and caused 502 errors; 125 s outlasts the
+# balancer. --proxy-headers gives the real client address (from X-Forwarded-For,
+# trusted only from FORWARDED_ALLOW_IPS). --no-server-header stops the
+# "server: uvicorn" response header.
+CMD ["uvicorn", "policy_atlas.api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--timeout-keep-alive", "125", "--proxy-headers", "--no-server-header"]
