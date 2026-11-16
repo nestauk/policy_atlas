@@ -31,15 +31,17 @@ Slice-specific:
         true, and the copy was owner-reviewed before the build ended.
 11. [ ] **B1.** `is_ops` has no HTTP writer; the reader list is closed and asserted by a test;
         `ops grant` and `ops revoke` emit the post-commit admin trace; `user offboard` clears it.
-12. [ ] **B2.** In `ops` mode the app serves only health and `/api/v1/ops/*` (no `/me`), every
-        non-health route carries the ops-role dependency, and the ops lifespan constructs no run
+12. [ ] **B2.** In `ops` mode the app serves only health, `/api/v1/ops/*` and the ops pages'
+        static bundle (no `/me`; `/` and `/people` answer with its `index.html`), every
+        `/api/v1/ops/*` route carries the ops-role dependency, and the ops lifespan constructs no run
         executor and calls no startup sweep, continuation drainer or ingest consumer (asserted with
         those entry points patched). In `api` mode no `/api/v1/ops` path exists. All are tests.
 13. [ ] **B3.** The public API task role carries no `cognito-idp` action; the ops task role
         carries only the five listed, scoped to the pool ARN. The ops hostname is reachable only
         through listener rules on host header plus source address from the ops SSM parameter;
         `scripts/deploy.sh` validates and sizes that parameter and stops both services before
-        migrating. Both roles are synth-pinned.
+        migrating. Both roles, the ops callback URLs and the ops `APP_ORIGIN` are synth-pinned.
+        The image carries the ops bundle at `/app/ops-ui`.
 14. [ ] **B4, B9.** Every ops write calls a command function, inserts one `ops_action` row in
         the same transaction and emits one `ops.action` line, each with the caller's subject; no
         route re-implements a command; browser-created accounts always have an organisation;
@@ -47,11 +49,13 @@ Slice-specific:
         200 with it; a non-ops token creates no `app_user` row through the ops host.
 15. [ ] **B5.** The runtime image imports `policy_atlas.ops.commands` without the `ops`
         dependency group (a test runs the import with the stubs absent, or the build proves it).
-16. [ ] **B6, B7.** The public `/me` carries `is_ops`; the `/ops` navigation entry shows only
-        when it is true; the page calls the ops host from `VITE_OPS_API_BASE_URL` using types
+16. [ ] **B6, B7.** The ops pages are a second Vite entry built by `pnpm build:ops`, served at
+        `https://ops.<domain>` with their own shell (no New, Tasks or Projects); the public
+        bundle has no ops route, link or code and `MeOut` is unchanged; the pages use types
         generated from `frontend/openapi-ops.json`; the public OpenAPI document has no ops path;
-        `make openapi-sync` and `make drift-check` cover both documents; offboard asks for
-        confirmation.
+        `make openapi-sync` and `make drift-check` cover both documents; a non-ops person sees
+        the "does not have the ops role" state; several people can be selected and acted on
+        together with one audit row each; offboard confirms by typing the address.
 17. [ ] **B10.** ADR 0046 is Accepted with a date, amends ADR 0033 decision 4 and the 033 Out
         list, records the rejected shapes, the C4 abuse ceiling and the production ordering rule.
 18. [ ] **B11, ensure-account.** `ops_action` is append-only with no route that updates or
@@ -73,4 +77,10 @@ Slice-specific:
 22. [ ] **B12.** The four override columns exist with `CHECK (>= 0)`; only the resolver reads
         them; the task-create check, the run-cap check and `/me` call the resolver; precedence,
         `0` as no limit, the admin exemption and clearing are tested; the CLI and the ops routes
-        write through `set_quota` with one `ops_action` row per call.
+        write through `set_quota` with one `ops_action` row per call; the "Runs in progress"
+        field carries the capacity warning.
+23. [ ] **B13.** The ops service's task reads the ops database secret, not the master one; the
+        `pa_ops` grants match the B13 list exactly (a test as `pa_ops` is refused `DELETE` on
+        `app_user` and `SELECT` on `capability_run`, and the ops writes succeed); `deploy.sh`
+        runs `db-role sync` after migrations; the downgrade drops the role with the service
+        stopped.
