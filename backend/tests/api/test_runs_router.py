@@ -2,15 +2,36 @@
 
 from __future__ import annotations
 
+import time
 import uuid
+from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, cast
 
+import pytest
+from fastapi import Request
+from fastapi.testclient import TestClient
+from httpx import Response
+from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
+from policy_atlas.api.app import ApiConflict
+from policy_atlas.api.deps import get_settings
+from policy_atlas.api.routers import runs as runs_router
+from policy_atlas.api.settings import Settings
 from policy_atlas.core import events
-from policy_atlas.core.schema import artefact, capability_run, evidence_scope, runs
+from policy_atlas.core.schema import (
+    artefact,
+    capability_run,
+    evidence_scope,
+    runs,
+    task,
+    task_plan,
+)
+from tests.api.org_support import make_task, seeded, tenancy_client
 from tests.api.resource_support import api_client, create_task
-from tests.helpers import delete_task_data, now
+from tests.helpers import delete_task_data, now, seed_scope, seed_walk
 
 
 def test_runs_require_approved_plan_and_hide_cross_owner_tasks(tmp_path: Path) -> None:
@@ -201,3 +222,257 @@ def test_a_walk_carries_its_own_steps_and_not_its_option_searches(
         finally:
             with engine.begin() as conn:
                 delete_task_data(conn, task_id)
+
+
+# --- task 064a: the per-person run cap (Q7) and the failed dispatch (Q14) ---------
+
+
+def _wide_executor(request: Request) -> Settings:
+    """The app's settings with a global cap no shared-database row can reach."""
+    return replace(cast(Settings, request.app.state.settings), run_executor_max=1000)
+
+
+def _seed_walks(engine: Engine, owner: str, statuses: list[str]) -> list[uuid.UUID]:
+    """One task per status, owned by ``owner``, each holding one parentless walk."""
+    task_ids = []
+    with seeded(engine) as conn:
+        for status in statuses:
+            task_id = make_task(conn, owner_user_id=owner)
+            seed_walk(conn, task_id, capability="evidence_search", status=status)
+            task_ids.append(task_id)
+    return task_ids
+
+
+def _new_task(engine: Engine, owner: str) -> uuid.UUID:
+    with seeded(engine) as conn:
+        return make_task(conn, owner_user_id=owner)
+
+
+def _start(client: TestClient, headers: dict[str, str], task_id: uuid.UUID) -> Response:
+    return cast(Response, client.post(f"/api/v1/tasks/{task_id}/runs", headers=headers, json={}))
+
+
+def _past_the_cap(response: Response) -> bool:
+    """The task has no plan, so a start the cap admits stops at the next check (400)."""
+    return response.status_code == 400 and response.json()["error"]["code"] == "malformed"
+
+
+def _drop(engine: Engine, task_ids: list[uuid.UUID]) -> None:
+    with engine.begin() as conn:
+        for task_id in task_ids:
+            delete_task_data(conn, task_id)
+
+
+def test_a_fourth_start_is_refused_and_another_persons_start_is_not(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Three running walks fill one person's allowance; it is theirs alone."""
+    with tenancy_client(tmp_path, count=2, overrides={get_settings: _wide_executor}) as (
+        client,
+        (a, b),
+    ):
+        created = _seed_walks(engine, a.user_id, ["running"] * 3)
+        try:
+            created += [fourth := _new_task(engine, a.user_id), bs := _new_task(engine, b.user_id)]
+            refused = _start(client, a.headers, fourth)
+            assert refused.status_code == 409, refused.text
+            assert refused.json()["error"]["code"] == "user_capacity"
+            assert _past_the_cap(_start(client, b.headers, bs))
+        finally:
+            _drop(engine, created)
+
+
+def test_a_collaborator_cannot_lift_the_owners_cap(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The cap is counted for the task's owner, whoever presses Start.
+
+    Write is owner-only today (``access.py``), so the collaborator's write
+    grade is granted here by hand: the test pins what a future write share
+    would meet.
+    """
+    from policy_atlas.api.routers.access import accessible_task as real
+
+
+    def grant_write(conn: Any, *, task_id: uuid.UUID, user_id: str, **kwargs: Any) -> Any:
+        with seeded(engine) as read:
+            owner = read.execute(
+                select(task.c.owner_user_id).where(task.c.task_id == task_id)
+            ).scalar_one()
+        return real(conn, task_id=task_id, user_id=owner, **kwargs)
+
+    monkeypatch.setattr(runs_router, "accessible_task", grant_write)
+    with tenancy_client(tmp_path, count=2, overrides={get_settings: _wide_executor}) as (
+        client,
+        (a, collaborator),
+    ):
+        created = _seed_walks(engine, a.user_id, ["running"] * 3)
+        try:
+            created.append(fourth := _new_task(engine, a.user_id))
+            refused = _start(client, collaborator.headers, fourth)
+            assert refused.status_code == 409, refused.text
+            assert refused.json()["error"]["code"] == "user_capacity"
+        finally:
+            _drop(engine, created)
+
+
+def test_a_paused_walk_does_not_count_against_the_cap(engine: Engine, tmp_path: Path) -> None:
+    with tenancy_client(tmp_path, count=1, overrides={get_settings: _wide_executor}) as (
+        client,
+        (a,),
+    ):
+        created = _seed_walks(engine, a.user_id, ["running", "running", "paused"])
+        try:
+            created.append(fourth := _new_task(engine, a.user_id))
+            assert _past_the_cap(_start(client, a.headers, fourth))
+        finally:
+            _drop(engine, created)
+
+
+def test_reservations_count_against_the_cap(engine: Engine, tmp_path: Path) -> None:
+    """Two starts whose rows are not written yet plus one running walk fill a cap of three."""
+    with tenancy_client(tmp_path, count=1, overrides={get_settings: _wide_executor}) as (
+        client,
+        (a,),
+    ):
+        created = _seed_walks(engine, a.user_id, ["running"])
+        reserved = [_new_task(engine, a.user_id), _new_task(engine, a.user_id)]
+        created += reserved
+        try:
+            with runs_router._dispatch_lock:
+                runs_router._dispatching_tasks.update(reserved)
+            created.append(fourth := _new_task(engine, a.user_id))
+            refused = _start(client, a.headers, fourth)
+            assert refused.status_code == 409, refused.text
+            assert refused.json()["error"]["code"] == "user_capacity"
+        finally:
+            with runs_router._dispatch_lock:
+                runs_router._dispatching_tasks.difference_update(reserved)
+            _drop(engine, created)
+
+
+def _approved_plan(engine: Engine, task_id: uuid.UUID) -> None:
+    """An approved plan row; its payload is never validated (the tests stub that)."""
+    with seeded(engine) as conn:
+        conn.execute(
+            task_plan.insert().values(
+                plan_id=uuid.uuid4(),
+                task_id=task_id,
+                evidence_scope_id=seed_scope(conn, task_id),
+                version=1,
+                status="approved",
+                payload={},
+                created_at=now(),
+                created_by="user",
+                approved_at=now(),
+            )
+        )
+
+
+def test_a_theory_of_change_check_takes_the_same_cap(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``start_toc_check``, the second admission site in this module."""
+    from policy_atlas.api import toc_start
+
+    settings = Settings("i", "c", None, None, "o", "db", run_executor_max=1000)
+    a, b = f"user-{uuid.uuid4()}", f"user-{uuid.uuid4()}"
+    created = _seed_walks(engine, a, ["running"] * 3)
+    created += [fourth := _new_task(engine, a), bs := _new_task(engine, b)]
+    submitted: list[dict[str, object]] = []
+
+    class Recording:
+        def submit(self, _fn: object, *_args: object, **kwargs: object) -> None:
+            submitted.append(kwargs)
+
+    def start(task_id: uuid.UUID, user_id: str) -> uuid.UUID | None:
+        return runs_router.start_toc_check(
+            engine,
+            task_id=task_id,
+            link_ids=[],
+            user_id=user_id,
+            settings=settings,
+            executor=Recording(),  # type: ignore[arg-type]
+            backends=None,  # type: ignore[arg-type]
+        )
+
+    monkeypatch.setattr(toc_start, "mint_scope", lambda *_a, **_k: uuid.uuid4())
+    try:
+        for task_id in (fourth, bs):
+            _approved_plan(engine, task_id)
+        with pytest.raises(ApiConflict) as caught:
+            start(fourth, a)
+        assert caught.value.code == "user_capacity"
+        assert start(bs, b) is not None
+        assert submitted and submitted[0]["task_id"] == bs
+    finally:
+        with runs_router._dispatch_lock:
+            runs_router._dispatching_tasks.discard(bs)
+        _drop(engine, created)
+
+
+def test_a_failed_dispatch_interrupts_only_the_walk_it_minted(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Q14: the walk row exists, the dispatch raises, and only that id is interrupted.
+
+    Another ``running`` row on the task (a child here) is left alone, and the
+    task can be started again (no ``run_active``).
+    """
+    children: list[uuid.UUID] = []
+
+    def fail_after_the_row(engine: Engine, **kwargs: Any) -> None:
+        with engine.begin() as conn:
+            walk = seed_walk(
+                conn,
+                kwargs["task_id"],
+                capability="evidence_search",
+                status="running",
+                walk_id=kwargs["capability_run_id"],
+                scope_id=kwargs["evidence_scope_id"],
+                plan_id=kwargs["plan_id"],
+            ).walk_id
+            child = seed_walk(
+                conn,
+                kwargs["task_id"],
+                capability="evidence_search",
+                status="running",
+                parent=walk,
+                scope_id=kwargs["evidence_scope_id"],
+                plan_id=kwargs["plan_id"],
+            )
+            children.append(child.walk_id)
+        raise RuntimeError("between pipeline steps")
+
+    monkeypatch.setattr(
+        runs_router, "validate_plan", lambda *_a: SimpleNamespace(source_turn_index=None)
+    )
+    monkeypatch.setattr(runs_router, "run_plan", fail_after_the_row)
+    with tenancy_client(tmp_path, count=1, overrides={get_settings: _wide_executor}) as (
+        client,
+        (a,),
+    ):
+        task_id = _new_task(engine, a.user_id)
+        try:
+            _approved_plan(engine, task_id)
+            first = _start(client, a.headers, task_id)
+            assert first.status_code == 201, first.text
+            walk_id = uuid.UUID(first.json()["capability_run_id"])
+            deadline = time.monotonic() + 10
+            while runs_router.dispatch_reserved(task_id) and time.monotonic() < deadline:
+                time.sleep(0.02)
+            with engine.connect() as conn:
+                statuses = dict(
+                    conn.execute(
+                        select(capability_run.c.capability_run_id, capability_run.c.status)
+                        .where(capability_run.c.task_id == task_id)
+                    ).tuples().all()
+                )
+            assert statuses == {walk_id: "interrupted", children[0]: "running"}
+            again = _start(client, a.headers, task_id)
+            assert again.status_code == 201, again.text
+        finally:
+            deadline = time.monotonic() + 10
+            while runs_router.dispatch_reserved(task_id) and time.monotonic() < deadline:
+                time.sleep(0.02)
+            _drop(engine, [task_id])

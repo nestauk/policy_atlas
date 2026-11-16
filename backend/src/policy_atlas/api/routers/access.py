@@ -252,9 +252,10 @@ def _is_admin(conn: Connection, user_id: str) -> bool:
     **Code-level reader of ``app_user.is_admin`` #2**, serving contract
     § 3a's semantic readers **(iii)** the ``owner_email`` filter gate and
     **(ii)** the listing scope resolver *in full* — its predicate as well as
-    its trace decision. Both need the answer in Python — one to raise 422, one
-    to decide whether the request owes an audit line — and neither can get it
-    from a SQL leg.
+    its trace decision; and **(v)** task creation's quota exemption (task 064a,
+    ADR 0045), called from ``tasks.create_task``. Each needs the answer in
+    Python — one to raise 422, one to decide whether the request owes an audit
+    line, one to skip the quota count — and none can get it from a SQL leg.
 
     Kept as *one* function rather than two inline queries so the structural
     assertion has a closed list to name. An unenrolled caller, or one with no

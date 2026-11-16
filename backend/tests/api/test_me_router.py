@@ -12,8 +12,9 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api.identity import sub_display
-from policy_atlas.core.schema import app_user
-from tests.api.org_support import make_org, ops_enrol, seeded, tenancy_client
+from policy_atlas.core.schema import app_user, task
+from tests.api.org_support import make_org, make_task, ops_enrol, seeded, tenancy_client
+from tests.helpers import delete_task_data
 
 
 def test_me_provisions_an_unenrolled_caller_with_the_sub_rendering(
@@ -36,6 +37,7 @@ def test_me_provisions_an_unenrolled_caller_with_the_sub_rendering(
             "email": None,
             "organisation": None,
             "is_admin": False,
+            "task_quota": {"used": 0, "limit": 50},
         }
 
 
@@ -132,3 +134,31 @@ def test_me_requires_authentication(engine: Engine, tmp_path: Path) -> None:
         response = client.get("/api/v1/me")
         assert response.status_code == 401
         assert response.json()["error"]["code"] == "unauthenticated"
+
+
+def test_me_reports_the_task_quota_and_null_for_an_administrator(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Task 064a (Q8): ``used`` counts the caller's tasks; an exempt caller gets ``null``."""
+    with tenancy_client(tmp_path, count=2) as (client, (caller, admin)):
+        try:
+            with seeded(engine) as conn:
+                for _ in range(2):
+                    make_task(conn, owner_user_id=caller.user_id, status="archived")
+                make_task(conn, owner_user_id=caller.user_id)
+                ops_enrol(conn, user_id=admin.user_id, is_admin=True)
+                make_task(conn, owner_user_id=admin.user_id)
+
+            mine = client.get("/api/v1/me", headers=caller.headers).json()
+            theirs = client.get("/api/v1/me", headers=admin.headers).json()
+
+            assert mine["task_quota"] == {"used": 3, "limit": 50}
+            assert theirs["task_quota"] is None
+        finally:
+            with engine.begin() as conn:
+                for task_id in conn.execute(
+                    select(task.c.task_id).where(
+                        task.c.owner_user_id.in_([caller.user_id, admin.user_id])
+                    )
+                ).scalars():
+                    delete_task_data(conn, task_id)

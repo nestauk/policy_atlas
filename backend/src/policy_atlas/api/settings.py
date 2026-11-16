@@ -25,6 +25,11 @@ class Settings:
         app_origin: Sole browser origin allowed by CORS.
         database_url: SQLAlchemy database URL.
         run_executor_max: Maximum number of concurrent walk workers.
+        runs_per_user: Maximum number of walks one person's tasks may hold on
+            the walk executor at once (``RUNS_PER_USER``; task 064a, Q7).
+        task_quota_per_year: How many tasks one person may create in any
+            365 days; administrators are exempt (``TASK_QUOTA_PER_YEAR``;
+            task 064a, Q8).
         jwks_cache_ttl_seconds: Duration for which a fetched JWKS is retained.
         sse_poll_interval_seconds: Durable-tail poll cadence for SSE clients.
         sse_heartbeat_seconds: Idle interval before an SSE keep-alive comment.
@@ -45,6 +50,8 @@ class Settings:
     app_origin: str
     database_url: str = field(repr=False)
     run_executor_max: int = 2
+    runs_per_user: int = 3
+    task_quota_per_year: int = 50
     jwks_cache_ttl_seconds: int = 300
     sse_poll_interval_seconds: float = 0.4
     sse_heartbeat_seconds: float = 15.0
@@ -98,6 +105,8 @@ def load_settings() -> Settings:
         app_origin=app_origin,
         database_url=database_url,
         run_executor_max=_positive_int("RUN_EXECUTOR_MAX", default=2),
+        runs_per_user=_positive_int("RUNS_PER_USER", default=3),
+        task_quota_per_year=_positive_int("TASK_QUOTA_PER_YEAR", default=50),
         jwks_cache_ttl_seconds=_positive_int("OIDC_JWKS_CACHE_TTL_SECONDS", default=300),
         sse_poll_interval_seconds=_positive_float("SSE_POLL_INTERVAL_SECONDS", default=0.4),
         sse_heartbeat_seconds=_positive_float("SSE_HEARTBEAT_SECONDS", default=15.0),

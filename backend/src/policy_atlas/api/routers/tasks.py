@@ -27,6 +27,7 @@ from policy_atlas.api.identity import owner_display_for
 from policy_atlas.api.lifecycle import archive_task, rename_task
 from policy_atlas.api.routers.access import (
     OWNER_EMAIL_MAX,
+    _is_admin,
     accessible_task,
     assignable_project,
     creator_org_id,
@@ -39,6 +40,7 @@ from policy_atlas.api.routers.common import (
     links_for_tasks,
     memberships_for_tasks,
     task_out,
+    tasks_created_since,
 )
 from policy_atlas.api.settings import Settings
 from policy_atlas.core import events
@@ -414,19 +416,30 @@ def create_task(
     with it.
 
     A theory of change is refused unless the server setting is on (task 054,
-    C15), before anything is written.
+    C15), before anything is written. So is a create past the caller's
+    yearly quota (task 064a, Q8; ADR 0045): administrators are exempt, which
+    makes this route the fifth named reader of the administrator flag.
 
     Raises:
         HTTPException: 404 when a named source task is not readable by the
             caller.
         ApiUnprocessable: 422 ``capability_not_enabled`` for a theory of
             change while ``POLICY_ATLAS_THEORY_OF_CHANGE`` is off.
-        ApiConflict: 409 ``visibility_conflict``, ``link_source_capability``,
-            ``link_project_mismatch`` or ``link_source_unfinished``.
+        ApiConflict: 409 ``task_quota``, ``visibility_conflict``,
+            ``link_source_capability``, ``link_project_mismatch`` or
+            ``link_source_unfinished``.
     """
     if payload.capability == THEORY_OF_CHANGE and not settings.theory_of_change_enabled:
         raise ApiUnprocessable(
             "capability_not_enabled", "theory of change is not enabled on this server"
+        )
+    if (
+        not _is_admin(conn, user.user_id)
+        and tasks_created_since(conn, user.user_id, days=365) >= settings.task_quota_per_year
+    ):
+        raise ApiConflict(
+            "task_quota",
+            f"you have reached the limit of {settings.task_quota_per_year} tasks per year",
         )
     now = datetime.now(UTC)
     task_id = uuid.uuid4()

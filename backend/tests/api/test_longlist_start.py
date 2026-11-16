@@ -24,7 +24,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api import longlist_start
@@ -39,12 +39,14 @@ from policy_atlas.core.schema import (
     evidence_scope,
     longlist_result,
     runs,
+    task,
     task_plan,
 )
 from policy_atlas.options_scoping.longlist_intent import compile_longlist_intent
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
 from policy_atlas.runtime.conversation_lifecycle import ensure_active_task_agent_conversation
 from policy_atlas.runtime.scoping_plan import ScopingPlan
+from tests.api.org_support import make_task, seeded
 from tests.api.resource_support import api_client, create_task
 from tests.api.test_baseline_gate_checkin import _option, _own, _park_at_gate
 from tests.helpers import now, seed_scope, seed_walk
@@ -361,6 +363,7 @@ def test_the_route_opens_exactly_the_version_it_confirmed(engine: Engine) -> Non
                 executor=executor,  # type: ignore[arg-type]
                 backends=_runner_backends(),
                 user=AuthenticatedUser(user_id="user-1"),
+                user_cap=99,
             )
         assert caught.value.code == "plan_stale"
         assert executor.submitted == []
@@ -401,7 +404,9 @@ def test_an_evidence_search_task_has_no_opener_path(engine: Engine, tmp_path: Pa
             refused = _confirm(client, owner, task_id, uuid.uuid4())
         assert refused.status_code == 422, refused.text
         with pytest.raises(longlist_start.LonglistRefused) as caught:
-            longlist_start.admit_and_mint(engine, task_id=task_id, capacity=99)
+            longlist_start.admit_and_mint(
+                engine, task_id=task_id, capacity=99, user_cap=99, user_id="dev-user"
+            )
         assert caught.value.reason == "not_scoping"
         error = longlist_start.http_error(caught.value)
         assert getattr(error, "status_code", None) == 422
@@ -422,7 +427,9 @@ def test_a_plan_too_long_to_screen_is_refused_before_anything_is_minted(
         insert_scoping_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=scoping_plan())
         monkeypatch.setattr(longlist_start, "compose_longlist_screen_intent", too_long)
         with pytest.raises(longlist_start.LonglistRefused) as caught:
-            longlist_start.admit_and_mint(engine, task_id=task_id, capacity=99)
+            longlist_start.admit_and_mint(
+                engine, task_id=task_id, capacity=99, user_cap=99, user_id="dev-user"
+            )
         assert caught.value.reason == "plan_too_long"
         with engine.connect() as conn:
             purposes = conn.execute(
@@ -451,7 +458,9 @@ def test_the_screen_input_keeps_its_place_when_the_walk_opens(
     try:
         task_id, scope_id = seed_scoping_task(engine)
         insert_scoping_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
-        admitted = longlist_start.admit_and_mint(engine, task_id=task_id, capacity=99)
+        admitted = longlist_start.admit_and_mint(
+            engine, task_id=task_id, capacity=99, user_cap=99, user_id="dev-user"
+        )
         with runs_router._dispatch_lock:
             runs_router._dispatching_tasks.discard(task_id)
         with engine.connect() as conn:
@@ -499,7 +508,9 @@ def test_the_capacity_rule_counts_parentless_walks_only(engine: Engine) -> None:
                     status="running",
                     parent=parent,
                 )
-        admitted = longlist_start.admit_and_mint(engine, task_id=task_id, capacity=capacity)
+        admitted = longlist_start.admit_and_mint(
+            engine, task_id=task_id, capacity=capacity, user_cap=99, user_id="dev-user"
+        )
         with runs_router._dispatch_lock:
             runs_router._dispatching_tasks.discard(task_id)
         assert admitted.plan_row["plan_id"] == plan_id
@@ -507,7 +518,9 @@ def test_the_capacity_rule_counts_parentless_walks_only(engine: Engine) -> None:
         with engine.begin() as conn:
             seed_walk(conn, other_id, scope_id=other_scope, plan_id=other_plan, status="running")
         with pytest.raises(longlist_start.LonglistRefused) as caught:
-            longlist_start.admit_and_mint(engine, task_id=task_id, capacity=capacity)
+            longlist_start.admit_and_mint(
+                engine, task_id=task_id, capacity=capacity, user_cap=99, user_id="dev-user"
+            )
         assert caught.value.reason == "capacity"
     finally:
         _cleanup(engine, other_id)
@@ -545,13 +558,17 @@ def test_the_capacity_rule_leaves_out_an_added_option_search(engine: Engine) -> 
                 plan_id=other_plan,
             )
             seed_walk(conn, other_id, scope_id=targeted, plan_id=other_plan, status="running")
-        admitted = longlist_start.admit_and_mint(engine, task_id=task_id, capacity=capacity)
+        admitted = longlist_start.admit_and_mint(
+            engine, task_id=task_id, capacity=capacity, user_cap=99, user_id="dev-user"
+        )
         with runs_router._dispatch_lock:
             runs_router._dispatching_tasks.discard(task_id)
         assert admitted.plan_row["version"] == 1
         # It still fences its own task.
         with pytest.raises(longlist_start.LonglistRefused) as caught:
-            longlist_start.admit_and_mint(engine, task_id=other_id, capacity=99)
+            longlist_start.admit_and_mint(
+                engine, task_id=other_id, capacity=99, user_cap=99, user_id="dev-user"
+            )
         assert caught.value.reason == "run_active"
     finally:
         _cleanup(engine, other_id)
@@ -883,7 +900,9 @@ def test_the_follow_on_is_asked_for_only_by_a_standing_default(
 
 def test_a_task_row_is_required(engine: Engine) -> None:
     with pytest.raises(LookupError):
-        longlist_start.admit_and_mint(engine, task_id=uuid.uuid4(), capacity=99)
+        longlist_start.admit_and_mint(
+            engine, task_id=uuid.uuid4(), capacity=99, user_cap=99, user_id="dev-user"
+        )
 
 
 
@@ -983,3 +1002,86 @@ def test_a_longlist_walk_never_parks_even_under_frequent(
         assert _approved(engine, task_id)["payload"]["steering_mode"] == "frequent"
     finally:
         _cleanup(engine, task_id)
+
+
+# --- task 064a (Q7): the per-person run cap at the third admission site ------------
+
+
+def _owned_scoping_task(engine: Engine, owner: str) -> uuid.UUID:
+    """A scoping task with an approved plan, owned by ``owner``."""
+    task_id, scope_id = seed_scoping_task(engine)
+    insert_scoping_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=scoping_plan())
+    with engine.begin() as conn:
+        conn.execute(update(task).where(task.c.task_id == task_id).values(owner_user_id=owner))
+    return task_id
+
+
+def _walks_for(engine: Engine, owner: str, statuses: list[str]) -> list[uuid.UUID]:
+    """One task per status, owned by ``owner``, each holding one parentless walk."""
+    task_ids = []
+    with seeded(engine) as conn:
+        for status in statuses:
+            task_id = make_task(conn, owner_user_id=owner)
+            seed_walk(conn, task_id, capability="evidence_search", status=status)
+            task_ids.append(task_id)
+    return task_ids
+
+
+def _admit(engine: Engine, task_id: uuid.UUID, user_id: str) -> None:
+    longlist_start.admit_and_mint(
+        engine, task_id=task_id, capacity=1000, user_cap=3, user_id=user_id
+    )
+    with runs_router._dispatch_lock:
+        runs_router._dispatching_tasks.discard(task_id)
+
+
+def _refused_reason(engine: Engine, task_id: uuid.UUID, user_id: str) -> str:
+    with pytest.raises(longlist_start.LonglistRefused) as caught:
+        _admit(engine, task_id, user_id)
+    return caught.value.reason
+
+
+def test_the_opener_refuses_a_fourth_walk_for_one_person_only(engine: Engine) -> None:
+    a, b = f"user-{uuid.uuid4()}", f"user-{uuid.uuid4()}"
+    created = _walks_for(engine, a, ["running"] * 3)
+    try:
+        created += [fourth := _owned_scoping_task(engine, a), bs := _owned_scoping_task(engine, b)]
+        assert _refused_reason(engine, fourth, a) == "user_capacity"
+        assert getattr(
+            longlist_start.http_error(longlist_start.LonglistRefused("user_capacity", "x")),
+            "code",
+            None,
+        ) == "user_capacity"
+        _admit(engine, bs, b)
+    finally:
+        for task_id in created:
+            _cleanup(engine, task_id)
+
+
+def test_the_opener_leaves_a_paused_walk_out_of_the_cap(engine: Engine) -> None:
+    a = f"user-{uuid.uuid4()}"
+    created = _walks_for(engine, a, ["running", "running", "paused"])
+    try:
+        created.append(fourth := _owned_scoping_task(engine, a))
+        _admit(engine, fourth, a)
+    finally:
+        for task_id in created:
+            _cleanup(engine, task_id)
+
+
+def test_the_opener_counts_reservations_against_the_cap(engine: Engine) -> None:
+    a = f"user-{uuid.uuid4()}"
+    created = _walks_for(engine, a, ["running"])
+    with seeded(engine) as conn:
+        reserved = [make_task(conn, owner_user_id=a), make_task(conn, owner_user_id=a)]
+    created += reserved
+    try:
+        with runs_router._dispatch_lock:
+            runs_router._dispatching_tasks.update(reserved)
+        created.append(fourth := _owned_scoping_task(engine, a))
+        assert _refused_reason(engine, fourth, a) == "user_capacity"
+    finally:
+        with runs_router._dispatch_lock:
+            runs_router._dispatching_tasks.difference_update(reserved)
+        for task_id in created:
+            _cleanup(engine, task_id)

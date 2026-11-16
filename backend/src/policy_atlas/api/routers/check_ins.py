@@ -25,6 +25,7 @@ from policy_atlas.api.deps import (
     get_engine,
     get_executor,
     get_runner_backends,
+    get_settings,
 )
 from policy_atlas.api.longlist_start import (
     LonglistRefused,
@@ -33,6 +34,7 @@ from policy_atlas.api.longlist_start import (
 )
 from policy_atlas.api.routers.access import accessible_task
 from policy_atlas.api.run_io import ParkIO
+from policy_atlas.api.settings import Settings
 from policy_atlas.core import events, tracing
 from policy_atlas.core.schema import capability_run
 from policy_atlas.runtime.agent_backend import AgentBackend
@@ -194,6 +196,7 @@ def respond_to_check_in(
     executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
     backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
     agent: Annotated[AgentBackend, Depends(get_agent_backend)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> FreeTextCompileOut | Response:
     """Compile or durably answer one check-in, dispatching continuations after commit."""
     with engine.connect() as conn:
@@ -257,6 +260,7 @@ def respond_to_check_in(
                 backends=backends,
                 executor=executor,
                 user_id=user.user_id,
+                user_cap=settings.runs_per_user,
                 await_run=False,
             )
         except LonglistRefused as exc:
