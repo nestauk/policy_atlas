@@ -22,8 +22,9 @@ Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in [docs/specs/](../../
 > ops address itself, not from the public app (this adopts F10, which revision 2 had declined;
 > B2, B3, B6, B7, B9, B10); quota controls on the ops pages, including simultaneous tasks with a
 > warning (B12); the people list acts on several people at once (B6); and a least-privilege
-> database login for the ops service (B13, proposed by the lead, awaiting the owner's yes).
-> Re-approval: _pending_ · Plan approved: _pending_ · ADR: 0046 (0045 belongs to 064a).
+> database login for the ops service (B13). **Revision 3 approved 2026-11-16 · owner** (B13
+> included).
+> Re-approval: 2026-11-16 · owner · Plan approved: _pending_ · ADR: 0046 (0045 belongs to 064a).
 
 ## Goal
 
@@ -124,8 +125,8 @@ before its SES production access is granted and B before C.
    after the explainer and wireframes).
 7. Quotas, including simultaneous tasks, are editable on the ops pages, with a warning on the
    runs field (owner, 2026-11-16).
-8. Proposed, awaiting the owner: the ops service uses a database login that can only touch the
-   tables it needs (B13).
+8. The ops service uses a database login that can only touch the tables it needs (B13; owner,
+   2026-11-16).
 
 ## The work
 
