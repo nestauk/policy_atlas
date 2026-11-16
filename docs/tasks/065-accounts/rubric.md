@@ -77,7 +77,7 @@ Slice-specific:
 22. [ ] **B12.** The four override columns exist with `CHECK (>= 0)`; only the resolver reads
         them; the task-create check, the run-cap check and `/me` call the resolver; precedence,
         `0` as no limit, the admin exemption and clearing are tested; the CLI and the ops routes
-        write through `set_quota` with one `ops_action` row per call; the "Runs in progress"
+        write through `set_quota` with one `ops_action` row per call; the "Simultaneous tasks"
         field carries the capacity warning.
 23. [ ] **B13.** The ops service's task reads the ops database secret, not the master one; the
         `pa_ops` grants match the B13 list exactly (a test as `pa_ops` is refused `DELETE` on
