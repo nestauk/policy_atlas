@@ -12,10 +12,13 @@ development database.
 | `make verify` (build-open baseline, HEAD 700e754c) | pass | gate 1 |
 | `make -C infra test` (baseline) | pass | 116 passed |
 | `make verify` (gate 2, after Phases 1, 2, 4, 5) | pass | one run covered the four phases; they were then committed by path |
-| `make -C infra test` (Phase 6, run by the build) | pass | 119 passed (three new: production retention 35, forwarded range, redirect) |
+| `make -C infra test` (Phase 6, run by the build) | pass | 119 passed (three new: production retention 35, forwarded range, listener TLS policy; the redirect is an assertion added to an existing test) |
 | `make frontend-verify` (Phase 3 frontend, run by the build) | pass | 138 files, 1,991 tests, build OK |
-| `make verify` (step-6 exit, all seven phases in the tree) | pass | gate 3; includes the infra suite and the frontend chain |
+| `make verify` (step-6 exit, all seven phases in the tree) | **claimed pass, not reproducible** | gate 3 as the build recorded it. The review's self-verify gate (below) found one pre-existing test red from Phase 1 onward, so this claim and the gate-2 claim above cannot have been true on the committed tree. Treated as a finding (§ Review findings, contract verifier 1). |
 | `make audit` | **fail** | two advisories in dependencies this slice does not touch: `opentelemetry-api` 1.45.1 (CVE-2026-126360, fix 1.45.2) and `tornado` 6.6 (CVE-2026-126347, fix 6.6.1). Dependency changes are gated; left for the owner. Not caused by this slice: the same run is red on `dev`. |
+| `make verify` (review self-verify gate, run 1, HEAD edee7a0e) | **fail** | 2 failed, 4,821 passed: `test_search_single_pass.py::test_generation_failure_raises_and_harness_records_component_failed` (pinned a plain `RuntimeError`'s message that Q3 now reduces to the class name; missed by the build's Q3 inventory) and `test_runs_router.py::test_a_failed_dispatch_interrupts_only_the_walk_it_minted` (waited on the dispatch reservation, which `create_run` drops as soon as the row exists; passed alone three times). Both tests fixed. |
+| `make verify` (run 2, after the two test fixes) | **fail** | 1 failed, 4,822 passed: `test_judge_commits.py::test_a_retried_judge_skips_the_links_it_wrote_and_leaves_no_duplicates`, a file this slice does not touch. Its captured output shows a stray theory-of-change dispatch thread from an earlier test in the same worker colliding on `uq_event_log_task_sequence` before any 064a code ran. Passed in run 1 and three times alone: a pre-existing isolation flake, not this slice's. |
+| `make verify` (run 3, after every review fix) | see § Review findings, last row | the full chain, run to the end |
 
 ## Checks beyond the build
 
@@ -179,37 +182,139 @@ sign-in (Q10). Results go in this section when run.
 
 ## Review findings
 
-_Added after the review stack (step 7)._
+Step 7 ran on 2026-11-16 in a fresh conversation. Every line of the slice was Claude-written
+(see § Review handoff), so the Codex pass anchored the heterogeneous half; the Claude half
+was `/code-review` at `medium`. Lanes: contract verifier (pinned Opus, read-only), Codex
+adversarial (read-only rescue job `task-mwjblg8k-dwr1kw`), `/code-review medium`,
+`/security-review`, the lead's own read of the product diff, and a trace lane (the Q9
+`EXPLAIN` re-run). Every finding below was adjudicated by the lead; "adopted" means fixed
+on the branch in the review commit.
 
-- **Contract verifier:**
-- **`/code-review`:**
-- **`/security-review`:**
-- **Adversarial review:**
-- **`/simplify`:**
-- **`/okf validate`:**
+- **Lead, before any lane (self-verify gate):** `make verify` was red on HEAD (two tests,
+  table above). Adopted: both tests fixed. The waitlist honeypot test had lost its proof
+  (it relied on a 409 for a second signup, which Q2 removed, so a 201 proved nothing);
+  adopted: it now asserts the stored row's name. The Q9 `EXPLAIN` was re-run through the
+  real `included_source_count` construct: bitmap index scan on the new index, 1,221 rows
+  into the window, 51 rows out, 1.3 ms — the recorded "after" shape.
+- **Contract verifier (Opus):** rubric items 1, 3, 4, 8, 9 pass; 2 failed at HEAD (above);
+  5 failed at HEAD on the honeypot test; 6 partial (two of four cap cases at
+  `start_toc_check`); 7 partial; 10 pending. Nine flagged deviations: all adopted as-is
+  except deviation 6 (the two missing cap cases were added rather than waived) and
+  deviation 8 (the Q10 refusal, changed below). One unflagged deviation adopted: Q11 reads
+  the address range from the VPC lookup, not `network_config.json`, which has no such
+  key; the contract's "leftmost X-Forwarded-For" wording also describes uvicorn wrongly
+  (it takes the rightmost untrusted address, the right outcome). High: the green-gate
+  claims (adopted as a finding, recorded above and in the failure log). Medium: the Q3
+  `reason` rule admits library exceptions (`urllib.error.URLError`, `ssl.SSLError`,
+  `UnicodeDecodeError` carry one) — adopted: a `reason` counts only when it is a string
+  code (ADR 0045 § As built 7); the Q14 test's "other running run" was a child of the
+  minted walk, so a regression to "mark the task's latest parentless walk" would have
+  passed — adopted: the other row is now a parentless walk on the same task, finished
+  before the re-start assertion; ADR 0033 carried no "amended by" note — adopted. Low:
+  `web-api.md` said "no write path reads it" beside the new reader, and described
+  `user_capacity` as the caller's — adopted; the ToC editor mapped `capacity` but not
+  `user_capacity` — adopted (`Editing.tsx`); contract § Out still excluded the quota
+  display the banner provides — adopted (wording); pr_draft Q3 omitted the `reason` rule
+  — adopted; the pre-064a drift of the 409 code lists — deferred (not this slice's).
+- **`/code-review` (medium, 8 findings):** (1) `offboard_user` refused when the `app_user`
+  row exists but the Cognito account is gone, leaving public links live with no command
+  to finish — **adopted**, convergent with Codex and the verifier's note on deviation 8;
+  the database half now runs and the first step says "no Cognito account in the pool"
+  (ADR 0045 § As built 4; two tests). (2) A failed first JWKS fetch with no cached keys
+  held the 30 s slot, so a blip at boot refused every token for a window — **adopted**
+  (§ As built 6; test). (3) The quota count is a read-then-insert with no lock, so two
+  parallel creates can both pass — **declined**: the contract accepts it ("the window is
+  one request"). (4) The `reason` rule — adopted, as above. (5) `admit_and_mint` with
+  `user_cap=None` returned a 409 reading "you already have None runs" — **adopted**: a
+  missing `user_cap` with `check_capacity` raises `ValueError` (test). (6) The
+  `user_capacity` sentence says "you" while the cap is counted on the owner — **declined**
+  for the sentence (write access is owner-only, so nobody sees the mismatch; deferred
+  seam), adopted for `web-api.md`. (7) `DEPLOYMENT.md` § ops CLI and `JUMPBOX.md` still
+  listed three Cognito permissions, "nothing more", contradicting the offboard paragraph
+  — **adopted**, both docs. (8) `safe_error(exc)[:200]` appears at two sites — **declined**:
+  two call sites do not earn a parameter.
+- **`/security-review`:** no finding at or above the confidence bar. Examined and held:
+  the Cognito `ListUsers` filter (both CLI values pass `_require_filter_safe`; the
+  database-sourced subject is a verified JWT subject; the filter grammar has no boolean
+  operators); JWKS lookup (an unknown key id ends in 401 only; keys are replaced
+  wholesale; the failure log carries the class name only); the run cap and quota keyed on
+  the owner and the verified subject, all four web creation paths through `create_task`;
+  `FORWARDED_ALLOW_IPS` with uvicorn 0.51's range support and nothing reading the client
+  address; the waitlist conflict path; the migration's bound parameters.
+- **Adversarial review (Codex, read-only):** six major, one minor. (1) `start_toc_check`
+  never released its reservation, so a running check counted as a reservation and a row,
+  two of a person's three slots — **adopted** (pre-064a on the global cap, material under
+  the per-user cap; § As built 5; a test with a real executor shows the release while the
+  walk runs and the queued check chaining on the same worker). (2) `create_run` drops its
+  reservation after the 10 s wait whether or not the row was written — **deferred**
+  (pre-064a; `docs/deferred.md`). (3) The quota's two clocks (API `created_at`, database
+  count) — **declined with a deferred note**: same-region NTP hosts, seconds of skew at a
+  365-day boundary. (4) A key set with a `keys` list but no usable RSA key overwrote the
+  cache with `{}` — **adopted** (§ As built 6; test). (5) Requests for a known key wait on
+  the refresh lock while one fetch runs — **declined**: the contract specifies the lock
+  across the fetch and this replaces N fetches with one; serving the stale key during the
+  fetch is a deferred seam. (6) The offboard reverse case — adopted, as above. Minor: the
+  `policy_atlas.` namespace rule trusts `SearchTransportError`, whose message carries the
+  search backend's host — **declined**: the rule is the contract's, the host is a public
+  API's; noted as a seam.
+- **Trace lane:** no live model runs in this slice's evidence; the only run-time
+  evidence is the Q9 plan, re-run above through the real construct.
+- **`/simplify`:** not run as a separate pass. `/code-review medium` carried the
+  cleanup angles (its finding 8 was the one reuse item, declined with a reason), and a
+  second same-family pass over the same diff adds nothing (task-cycle-review § Step 7).
+- **`/okf validate`:** inside `make verify` (run 3).
+- **Convergence:** the offboard reverse case was raised by three reads (code-review,
+  Codex, verifier), the `reason` rule by three (lead, code-review, verifier, with Codex's
+  namespace variant), the JWKS edge cases by two lanes from different angles. Unique to
+  one lane and adopted: the ToC reservation (Codex), the Q14 test's weak "other run"
+  (verifier), the `user_cap=None` message (code-review), the IAM doc contradiction
+  (code-review). Each lane earned its place.
+- **Fake-done check on the review's own fixes:** no test was relaxed; the two red tests
+  changed their pinned text to the rule's output with a note, the Q14 test got stricter,
+  the honeypot test regained a proof, and every product change carries a test that fails
+  without it.
+- **Final gate (run 3, the tree this PR carries):** `make verify` **pass**, run to the
+  end: backend 4,829 passed, 1 skipped (the two repaired tests, the strengthened Q14
+  test, the two added cap cases, the ToC release test, the two JWKS tests, the two
+  offboard tests, the `admit_and_mint` test and the `safe_error` case all in the run);
+  typecheck, lint, `make -C infra test` (119 passed), frontend chain (138 files, 1,992
+  tests, build OK) and `okf-validate` (217 concepts after the step-8 records, 0
+  violations) green. The flaky judge test of run 2 passed.
 
 ## Rubric status
 
-1. Contract rows Q1 to Q17 true in code: **holds**, with the flagged deviations above
-   (Q3 four sites not five; Q7 checked against the owner).
-2. `make verify` and `make -C infra test`: **holds locally**; the staging live checks
-   are **not yet run** (they need the deploy).
+Updated by the review stack, 2026-11-16.
+
+1. Contract rows Q1 to Q17 true in code: **holds**, with the deviations the stack
+   confirmed (Q3 four sites not five; Q7 checked against the owner; Q11's range from the
+   VPC lookup; the `reason` rule narrowed to string codes).
+2. `make verify` and `make -C infra test`: **holds after the review fixes** (run 3,
+   § Review findings); the build's gate claims were not reproducible. The staging live
+   checks are **not yet run** (they need the deploy).
 3. No gated change beyond the list: **holds** (one index migration, three config keys,
-   six infra settings, the `CMD` and one environment variable, one deploy-script check,
-   three codes added and one removed, spec and OpenAPI). Three router files outside the
-   contract's "In" list changed to carry a setting; no new seam.
-4. No generated files edited by hand: **holds** (`make openapi-sync` run twice).
-5. No tests weakened: **holds**; the reader test gains exactly `routers/tasks.py:
-   create_task` and its walk is stricter; two runner tests changed their expected error
-   text with a note; `test_image_hygiene.py` and `test_service_wiring.py` changed only
-   their pinned values.
-6. One failing-on-old-code test per problem: **holds** for the tests listed above; "fails
-   on the old code" was demonstrated for Q1 and Q16 and follows by construction for the
-   others (new codes, new paths, new index).
-7. Evidence recorded with the `EXPLAIN` pair: **holds**.
-8. Deferred seams listed: **holds** (`docs/deferred.md` § Security quick wins).
-9. ADR 0045 accepted and `DEPLOYMENT.md` documents the keys and the command: **holds**.
-10. Tier 4 review stack: **not yet run** (step 7, fresh conversation).
+   seven infra settings for six problems since Q13 pins two, the `CMD` and one
+   environment variable, one deploy-script check, three codes added and one removed, spec
+   and OpenAPI). Three router files outside the contract's "In" list changed to carry a
+   setting; no new seam.
+4. No generated files edited by hand: **holds** (`make openapi-sync` run twice;
+   `make drift-check` OK in the stack).
+5. No tests weakened: **holds after the review fixes**. At HEAD the honeypot test had
+   lost its proof unannounced (fixed). The reader test gains exactly `routers/tasks.py:
+   create_task` and its walk is stricter; three tests (two runner, one search loop)
+   changed their expected error text to the Q3 rule's output with a note;
+   `test_image_hygiene.py` and `test_service_wiring.py` changed only their pinned values.
+6. One failing-on-old-code test per problem: **holds**; the two missing
+   `start_toc_check` cases (paused not counted, reservations counted) were added in the
+   stack. "Fails on the old code" was demonstrated for Q1 and Q16 and follows by
+   construction for the others (new codes, new paths, new index).
+7. Evidence recorded with the `EXPLAIN` pair: **holds**; the pair was re-run in the
+   stack through the real construct.
+8. Deferred seams listed: **holds** (`docs/deferred.md` § Security quick wins, extended
+   with the stack's six seams).
+9. ADR 0045 accepted and `DEPLOYMENT.md` documents the keys and the command: **holds**;
+   ADR 0033 now carries the "amended by" note.
+10. Tier 4 review stack: **ran** (§ Review findings). `/simplify` folded into
+    `/code-review medium`'s cleanup angles with the justification recorded there.
 
 ## Intent & assumptions
 

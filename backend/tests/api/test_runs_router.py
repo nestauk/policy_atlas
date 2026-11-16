@@ -13,7 +13,7 @@ import pytest
 from fastapi import Request
 from fastapi.testclient import TestClient
 from httpx import Response
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api.app import ApiConflict
@@ -397,18 +397,123 @@ def test_a_theory_of_change_check_takes_the_same_cap(
         )
 
     monkeypatch.setattr(toc_start, "mint_scope", lambda *_a, **_k: uuid.uuid4())
+    # Paused walks do not count: two running and one paused leave c one slot.
+    c = f"user-{uuid.uuid4()}"
+    created += _seed_walks(engine, c, ["running", "running", "paused"])
+    created += [cs := _new_task(engine, c)]
+    # Reservations count: one running row plus two tasks in the reservation
+    # set put d at three.
+    d = f"user-{uuid.uuid4()}"
+    created += _seed_walks(engine, d, ["running"])
+    created += (reserved := [_new_task(engine, d), _new_task(engine, d)])
+    created += [ds := _new_task(engine, d)]
     try:
-        for task_id in (fourth, bs):
+        for task_id in (fourth, bs, cs, ds):
             _approved_plan(engine, task_id)
         with pytest.raises(ApiConflict) as caught:
             start(fourth, a)
         assert caught.value.code == "user_capacity"
         assert start(bs, b) is not None
         assert submitted and submitted[0]["task_id"] == bs
+        assert start(cs, c) is not None
+        with runs_router._dispatch_lock:
+            runs_router._dispatching_tasks.update(reserved)
+        with pytest.raises(ApiConflict) as caught:
+            start(ds, d)
+        assert caught.value.code == "user_capacity"
     finally:
         with runs_router._dispatch_lock:
-            runs_router._dispatching_tasks.discard(bs)
+            runs_router._dispatching_tasks.difference_update({bs, cs, ds, *reserved})
         _drop(engine, created)
+
+
+def test_a_theory_of_change_check_gives_its_reservation_back_once_the_row_exists(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Held for the whole check, the reservation counted twice against both caps.
+
+    Once the row exists the database count owns the slot. A check queued while
+    the walk runs is chained on the same worker and takes its own reservation
+    for its own pre-insert window.
+    """
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    from policy_atlas.api import toc_start
+
+    settings = Settings("i", "c", None, None, "o", "db", run_executor_max=1000)
+    owner = f"user-{uuid.uuid4()}"
+    task_id = _new_task(engine, owner)
+    hold = threading.Event()
+
+    def write_row_then_wait(engine_: Engine, **kwargs: Any) -> SimpleNamespace:
+        with engine_.begin() as conn:
+            seed_walk(
+                conn,
+                kwargs["task_id"],
+                capability="theory_of_change",
+                status="running",
+                walk_id=kwargs["capability_run_id"],
+                scope_id=kwargs["evidence_scope_id"],
+                plan_id=kwargs["plan_id"],
+            )
+        hold.wait(10)
+        return SimpleNamespace(follow_on=None)
+
+    def rows() -> dict[uuid.UUID, str]:
+        with engine.connect() as conn:
+            return dict(
+                conn.execute(
+                    select(capability_run.c.capability_run_id, capability_run.c.status).where(
+                        capability_run.c.task_id == task_id
+                    )
+                ).tuples().all()
+            )
+
+    def wait_for(condition: Any) -> bool:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if condition():
+                return True
+            time.sleep(0.02)
+        return False
+
+    monkeypatch.setattr(
+        runs_router, "validate_plan", lambda *_a: SimpleNamespace(source_turn_index=None)
+    )
+    monkeypatch.setattr(runs_router, "run_plan", write_row_then_wait)
+    monkeypatch.setattr(toc_start, "run_toc_sequence", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        toc_start, "mint_scope", lambda conn, *, task_id, **_k: seed_scope(conn, task_id)
+    )
+    executor = ThreadPoolExecutor(max_workers=1)
+    try:
+        _approved_plan(engine, task_id)
+
+        def start() -> uuid.UUID | None:
+            return runs_router.start_toc_check(
+                engine,
+                task_id=task_id,
+                link_ids=[],
+                user_id=owner,
+                settings=settings,
+                executor=executor,
+                backends=None,  # type: ignore[arg-type]
+            )
+
+        walk_id = start()
+        assert walk_id is not None
+        assert wait_for(lambda: not runs_router.dispatch_reserved(task_id))
+        assert rows() == {walk_id: "running"}  # released while the walk still runs
+        assert start() is None  # a running walk: the second check is queued
+        hold.set()
+        assert wait_for(lambda: len(rows()) == 2 and not runs_router.dispatch_reserved(task_id))
+    finally:
+        hold.set()
+        executor.shutdown(wait=True)
+        with runs_router._dispatch_lock:
+            runs_router._dispatching_tasks.discard(task_id)
+        _drop(engine, [task_id])
 
 
 def test_a_failed_dispatch_interrupts_only_the_walk_it_minted(
@@ -416,14 +521,16 @@ def test_a_failed_dispatch_interrupts_only_the_walk_it_minted(
 ) -> None:
     """Q14: the walk row exists, the dispatch raises, and only that id is interrupted.
 
-    Another ``running`` row on the task (a child here) is left alone, and the
-    task can be started again (no ``run_active``).
+    The other ``running`` row is a parentless walk on the same task, the
+    shape another surface would leave by starting in the gap after the
+    reservation is dropped (the contract's hazard); it is left alone. Once
+    it ends, the task can be started again (no ``run_active``).
     """
-    children: list[uuid.UUID] = []
+    others: list[uuid.UUID] = []
 
     def fail_after_the_row(engine: Engine, **kwargs: Any) -> None:
         with engine.begin() as conn:
-            walk = seed_walk(
+            seed_walk(
                 conn,
                 kwargs["task_id"],
                 capability="evidence_search",
@@ -431,17 +538,16 @@ def test_a_failed_dispatch_interrupts_only_the_walk_it_minted(
                 walk_id=kwargs["capability_run_id"],
                 scope_id=kwargs["evidence_scope_id"],
                 plan_id=kwargs["plan_id"],
-            ).walk_id
-            child = seed_walk(
+            )
+            other = seed_walk(
                 conn,
                 kwargs["task_id"],
                 capability="evidence_search",
                 status="running",
-                parent=walk,
                 scope_id=kwargs["evidence_scope_id"],
                 plan_id=kwargs["plan_id"],
             )
-            children.append(child.walk_id)
+            others.append(other.walk_id)
         raise RuntimeError("between pipeline steps")
 
     monkeypatch.setattr(
@@ -458,17 +564,28 @@ def test_a_failed_dispatch_interrupts_only_the_walk_it_minted(
             first = _start(client, a.headers, task_id)
             assert first.status_code == 201, first.text
             walk_id = uuid.UUID(first.json()["capability_run_id"])
+            # `create_run` drops the reservation as soon as the row exists,
+            # before the executor thread reaches its failure branch, so wait
+            # for the minted walk itself to leave `running` (review stack).
             deadline = time.monotonic() + 10
-            while runs_router.dispatch_reserved(task_id) and time.monotonic() < deadline:
+            while time.monotonic() < deadline:
+                with engine.connect() as conn:
+                    statuses = dict(
+                        conn.execute(
+                            select(capability_run.c.capability_run_id, capability_run.c.status)
+                            .where(capability_run.c.task_id == task_id)
+                        ).tuples().all()
+                    )
+                if statuses.get(walk_id) != "running":
+                    break
                 time.sleep(0.02)
-            with engine.connect() as conn:
-                statuses = dict(
-                    conn.execute(
-                        select(capability_run.c.capability_run_id, capability_run.c.status)
-                        .where(capability_run.c.task_id == task_id)
-                    ).tuples().all()
+            assert statuses == {walk_id: "interrupted", others[0]: "running"}
+            with engine.begin() as conn:
+                conn.execute(
+                    update(capability_run)
+                    .where(capability_run.c.capability_run_id == others[0])
+                    .values(status="succeeded", ended_at=now())
                 )
-            assert statuses == {walk_id: "interrupted", children[0]: "running"}
             again = _start(client, a.headers, task_id)
             assert again.status_code == 201, again.text
         finally:

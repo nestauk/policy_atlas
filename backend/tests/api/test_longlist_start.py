@@ -1085,3 +1085,9 @@ def test_the_opener_counts_reservations_against_the_cap(engine: Engine) -> None:
             runs_router._dispatching_tasks.difference_update(reserved)
         for task_id in created:
             _cleanup(engine, task_id)
+
+
+def test_admit_and_mint_fails_loudly_without_a_user_cap(engine: Engine) -> None:
+    """A start surface that forgets ``user_cap`` is a wiring bug, not a 409 to show."""
+    with pytest.raises(ValueError, match="user_cap"):
+        longlist_start.admit_and_mint(engine, task_id=uuid.uuid4(), capacity=99, user_id="dev-user")

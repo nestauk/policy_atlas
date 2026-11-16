@@ -121,6 +121,41 @@ def test_valid_token_still_verifies_after_failed_refresh(
     ]
 
 
+def test_a_key_set_with_no_usable_key_keeps_the_old_keys(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A ``keys`` list that holds no RSA key is a failed refresh, not an empty cache."""
+    with httpx.Client() as client:
+        provider = JwksProvider(settings, client)
+        good = provider.get_key("a-1")
+        provider._read_jwks = lambda: {"keys": [{"kty": "oct", "kid": "x"}]}  # type: ignore[method-assign]
+        provider._expires_at = 0.0
+        _advance_clock(monkeypatch, auth._MIN_REFRESH_INTERVAL_SECONDS + 1)
+        with capture_logs() as logs:
+            assert provider.get_key("a-1") is good
+    assert {
+        "event": "auth.jwks_refresh_failed",
+        "log_level": "error",
+        "error_class": "NoUsableKeys",
+    } in logs
+
+
+def test_a_failed_first_fetch_does_not_hold_the_window(settings: Settings) -> None:
+    """With no keys at all, the next lookup may try again at once (a blip at boot)."""
+    with httpx.Client() as client:
+        provider = JwksProvider(settings, client)
+        working = provider._read_jwks
+
+        def broken_source() -> dict[str, Any]:
+            raise httpx.ConnectError("unreachable")
+
+        provider._read_jwks = broken_source  # type: ignore[method-assign]
+        with pytest.raises(httpx.ConnectError):
+            provider.get_key("a-1")
+        provider._read_jwks = working  # type: ignore[method-assign]
+        assert provider.get_key("a-1") is not None  # no clock advance needed
+
+
 def test_new_key_is_found_once_the_interval_has_passed(
     settings: Settings, key_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -118,8 +118,8 @@ same ten lines in `JwksProvider.get_key` and `refresh`, with one test file.
   tests for each.
 - **Out:** WAF, CAPTCHA, CSP, MFA, threat protection, SES (064b to 064d). Spend caps and a
   usage table. Request body size limits (H-02). Any change to the de-enrol semantics of ADR
-  0033. A quota display in the frontend (the error message is enough for this slice). The
-  Cognito feature tier.
+  0033. A quota display in the frontend beyond the Q8 banner (a running count is a
+  follow-on). The Cognito feature tier.
 
 ## Constraints & approval gates
 

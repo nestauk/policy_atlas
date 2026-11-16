@@ -249,6 +249,7 @@ def _dispatch_run(
             )
     finally:
         queued = None
+        next_id = uuid.uuid4()
         with _dispatch_lock:
             if capability == THEORY_OF_CHANGE:
                 # A check queued while this walk ran starts now, on this worker.
@@ -261,8 +262,14 @@ def _dispatch_run(
                     log.exception("api.toc_queue_failed", task_id=str(task_id))
             if queued is None:
                 _dispatching_tasks.discard(task_id)
+            else:
+                # This walk's reservation was given back when its row appeared
+                # (review stack, 2026-11-16); the chained check has its own
+                # pre-insert window, so reserve again and release on its row.
+                _dispatching_tasks.add(task_id)
     if queued is not None:
         scope_id, next_plan_row, next_user = queued
+        release_when_open(engine, task_id=task_id, capability_run_id=next_id)
         _dispatch_run(
             engine,
             task_id=task_id,
@@ -271,7 +278,7 @@ def _dispatch_run(
             backends=backends,
             user_id=next_user or user_id,
             evidence_scope_id=scope_id,
-            capability_run_id=uuid.uuid4(),
+            capability_run_id=next_id,
         )
 
 
@@ -665,4 +672,8 @@ def start_toc_check(
             evidence_scope_id=scope_id,
             capability_run_id=walk_id,
         )
+    # Give the reservation back once the row exists, as the other start
+    # surfaces do; held for the whole check it counted twice against both
+    # caps (review stack, 2026-11-16).
+    release_when_open(engine, task_id=task_id, capability_run_id=walk_id)
     return walk_id

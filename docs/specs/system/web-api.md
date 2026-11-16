@@ -106,8 +106,8 @@ structurally as a closed code-site list (`_access.admin_read_leg` and
 `owner_email` gate and the trace decision — plus `me.get_me`, the
 `MeOut` field declaration, and `tasks.create_task`, whose task-quota
 exemption is the one administrator behaviour that is not a read — task
-064a Q8, ADR 0045); no write path reads it, and no HTTP surface can set
-it.
+064a Q8, ADR 0045); that exemption is the only write path that reads it,
+and no HTTP surface can set it.
 
 ## Error envelope
 
@@ -119,9 +119,9 @@ Mapping: 400 `malformed` · 401 `unauthenticated` · **403 `forbidden`**
 `task_agent_turn_in_progress` | `chat_turn_in_progress` | `stale_turn` |
 `no_completed_run` | `plan_stale` | **`visibility_conflict`** (setting a
 task's visibility while it is in a project — change the project's
-visibility, or leave the task out of it) | `user_capacity` (the caller
-already has `RUNS_PER_USER` runs in progress; the global `capacity` bound
-is separate — task 064a Q7) | `task_quota` (the caller has created
+visibility, or leave the task out of it) | `user_capacity` (the task's
+owner already has `RUNS_PER_USER` runs in progress, counted on the tasks
+they own; the global `capacity` bound is separate — task 064a Q7) | `task_quota` (the caller has created
 `TASK_QUOTA_PER_YEAR` tasks in the last 365 days; administrators are
 exempt — task 064a Q8) | `confirm_expired` (a check-in confirmation
 arrived after its window — task 064a Q15) · 422 `validation_error`

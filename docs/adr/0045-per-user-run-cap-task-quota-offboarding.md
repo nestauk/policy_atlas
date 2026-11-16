@@ -123,3 +123,27 @@ Three details settled during the build, within the decisions above:
    server settings, so the frontend's sentences name no limit; the banner reads its
    number from `/me`. `useCreateTask` invalidates `/me` on success, so the banner appears
    on the create that reaches the limit, not on the next page load.
+
+Four more settled by the review stack (2026-11-16), also within the decisions above:
+
+4. **Offboarding a row whose Cognito account is already gone runs the database half.**
+   Decision 5 said "Cognito first"; it did not say what to do when the pool has no
+   account to disable (deleted by hand, or the pool replaced). Refusing left the person's
+   public links live with no command to switch them off. The command now reports "no
+   Cognito account in the pool" as its first step and continues; it refuses only when
+   neither the pool nor the database knows the person.
+5. **A theory-of-change check gives its reservation back once its row exists**, as the
+   other start surfaces do. Held for the whole check (as task 054 built it), the task
+   counted as a reservation and as a running row at the same time, which took two of a
+   person's three slots under decision 1. A check queued behind a running walk reserves
+   again for its own pre-insert window.
+6. **A key set with no usable key is a failed refresh**, so the previous keys are kept
+   (task 064a Q16 said "a failed refresh keeps the previous keys"; an empty list had
+   slipped past that as a success). And a failed first fetch, when there are no keys at
+   all, does not hold the 30-second slot: nobody can verify anyway, and holding it would
+   turn a blip at boot into a window of refused tokens.
+7. **A `reason` attribute counts only when it is a string code.** Task 064a Q3's rule
+   keeps the message of any exception "carrying a `reason` attribute"; library
+   exceptions carry one too (`urllib.error.URLError`, `ssl.SSLError`,
+   `UnicodeDecodeError`), as an object. Only a string code marks a structured product
+   rejection.

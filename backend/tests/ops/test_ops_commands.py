@@ -1182,6 +1182,45 @@ def test_offboard_of_an_account_with_no_app_user_row_is_cognito_only(conn: Conne
     assert _user_row(conn, sub) is None
 
 
+def test_offboard_of_a_row_whose_cognito_account_is_gone_still_cleans_the_database(
+    conn: Connection,
+) -> None:
+    """The account was deleted from the pool by hand; the row and the links remain."""
+    org = _org(conn)
+    sub = fresh_sub()
+    ops_enrol(conn, user_id=sub, org_id=org.org_id, email=unique_email("deleted-upstream"))
+    public = _public_task(conn, owner=sub, org_id=org.org_id)
+
+    with cognito() as (client, stubber):
+        stubber.add_response(
+            "list_users",
+            {"Users": []},
+            {"UserPoolId": POOL_ID, "Filter": f'sub = "{sub}"', "Limit": 1},
+        )
+        result = commands.offboard_user(conn, client, pool_id=POOL_ID, sub=sub)
+        stubber.assert_no_pending_responses()  # no disable, no sign-out
+
+    assert result.steps[0].startswith("no Cognito account in the pool")
+    assert result.de_enrolment is not None
+    assert result.links_made_private == 1
+    assert _is_public(conn, public) is False
+    assert _user_row(conn, sub).org_id is None
+
+
+def test_offboard_refuses_when_neither_the_pool_nor_the_database_knows_them(
+    conn: Connection,
+) -> None:
+    sub = fresh_sub()
+    with cognito() as (client, stubber):
+        stubber.add_response(
+            "list_users",
+            {"Users": []},
+            {"UserPoolId": POOL_ID, "Filter": f'sub = "{sub}"', "Limit": 1},
+        )
+        with pytest.raises(OpsError, match="Nothing was changed"):
+            commands.offboard_user(conn, client, pool_id=POOL_ID, sub=sub)
+
+
 @pytest.mark.parametrize("failing", ["admin_disable_user", "admin_user_global_sign_out"])
 def test_offboard_leaves_the_database_untouched_when_cognito_fails(
     conn: Connection, failing: str

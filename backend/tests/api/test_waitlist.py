@@ -82,7 +82,6 @@ def test_waitlist_rejects_invalid_email(tmp_path: Path, engine: Engine) -> None:
 
 def test_waitlist_honeypot_fakes_success_and_stores_nothing(tmp_path: Path, engine: Engine) -> None:
     """A filled `website` honeypot gets a 201 but no row is created."""
-    del engine
     email = _email("bot")
     with api_client(tmp_path) as (client, _owner, _other):
         trapped = client.post(
@@ -95,13 +94,18 @@ def test_waitlist_honeypot_fakes_success_and_stores_nothing(tmp_path: Path, engi
             },
         )
         assert trapped.status_code == 201, trapped.text
-        # Same email signs up cleanly afterwards — proof the trapped
-        # request inserted nothing.
+        # A duplicate is a 201 too since task 064a (Q2), so the follow-up
+        # signup no longer proves anything on its own: the row's name does.
         real = client.post(
             "/api/v1/waitlist",
             json={"email": email, "name": "Real Person", "role_or_reason": "Research"},
         )
         assert real.status_code == 201, real.text
+    with engine.connect() as check:
+        rows = check.execute(
+            select(waitlist_entry.c.name).where(waitlist_entry.c.email == email)
+        ).all()
+    assert [r.name for r in rows] == ["Real Person"]
 
 
 def test_waitlist_organisation_optional(tmp_path: Path, engine: Engine) -> None:

@@ -373,7 +373,9 @@ synth-time context query and must not run before the VPC exists.
      Cognito goes first on purpose: if the database step fails, the account is
      already disabled and running the command again finishes the rest. A
      person with a Cognito account but no row in the application database gets
-     the Cognito step only, and the command says so. Two things it cannot do:
+     the Cognito step only, and the command says so; a person whose Cognito
+     account was already deleted but whose row remains gets the database steps
+     only, reported the same way. Two things it cannot do:
      an access token already issued stays valid for up to 60 minutes, and a
      progress stream that is open when the command runs stays open until the
      run ends. It needs `AdminDisableUser` and `AdminUserGlobalSignOut` on the
@@ -846,7 +848,9 @@ wrappers (`make user-create ENV=... EMAIL=... NAME=... [ORG=...]` — see the
 Makefile's ops block; `scripts/ops_run.sh` performs this section's setup
 and tunnel automatically, reusing an already-open one), under the operator's own IAM
 (Cognito `cognito-idp:ListUsers` + `cognito-idp:AdminCreateUser` +
-`cognito-idp:AdminSetUserPassword`, nothing more — see `JUMPBOX.md` § Security notes). It is **not** run as an ECS
+`cognito-idp:AdminSetUserPassword`, plus `cognito-idp:AdminDisableUser` and
+`cognito-idp:AdminUserGlobalSignOut` for `user offboard` since task 064a, nothing
+more — see `JUMPBOX.md` § Security notes). It is **not** run as an ECS
 task: Cognito permission belongs to the human operator, not to a task
 role, and the API task role gains no Cognito permission. Every command
 verifies the resolved AWS account and user pool against the connected

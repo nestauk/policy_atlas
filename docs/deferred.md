@@ -3685,3 +3685,31 @@ programme map in `docs/tasks/064-security-hardening/programme.md` carries the la
   left as is, noted by the Q3 build.
 - **`AdminUserGlobalSignOut` on an already disabled account.** The offboard rerun path
   assumes it succeeds; confirmed on staging at the Q10 live check, not before.
+
+Found by the 064a review stack (2026-11-16) and left as seams:
+
+- **Serving a known key while another thread refreshes.** Once the key cache expires,
+  every authenticated request waits on the refresh lock while one thread fetches the
+  key set (up to the HTTP client's 5-second timeout), once per 30-second window at
+  most. Before 064a each of those requests fetched on its own and a failure signed
+  everyone out, so this is strictly better; serving the stale key during the fetch
+  would remove the wait.
+- **`create_run` drops its reservation after the 10-second wait for the row** whether
+  or not the worker has written it (pre-064a behaviour). A slow insert can let a later
+  start pass both counts. Keeping the reservation until the row is observed or the
+  worker reports failure would close it.
+- **Product exceptions that embed a host name.** `safe_error` (Q3) trusts the
+  `policy_atlas.` namespace; `SearchTransportError` puts the search backend's host in
+  its message. That host is a public API's, not a secret, but the rule is a namespace
+  rule, not a per-class allowlist.
+- **The 409 code lists drifted before 064a.** `web-api.md` omits `link_*`,
+  `nothing_to_propose`, `not_included` and `toc_*`; `errors.ts` lacks `toc_*`. The
+  064a codes are consistent across all three places; the older gaps are not this
+  slice's.
+- **`user_capacity` wording for a collaborator.** The cap is counted on the task's
+  owner (ADR 0045 § As built 1) and the sentence says "you". Write access is
+  owner-only today, so nobody sees the mismatch; revisit if collaborators gain Start.
+- **The quota's two clocks.** `create_task` stamps `created_at` from the API host's
+  clock and the quota counts by the database clock. Both hosts are NTP-synced in one
+  region, so the skew is seconds at a 365-day boundary; a database default would
+  remove it.

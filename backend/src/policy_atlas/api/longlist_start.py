@@ -173,8 +173,7 @@ def admit_and_mint(
             the worker the baseline already held.
         capacity: The executor's width; required when ``check_capacity``.
         user_cap: The per-person limit (``settings.runs_per_user``), counted
-            for the task's owner; required when ``check_capacity`` (``None``
-            reads as at the limit).
+            for the task's owner; required when ``check_capacity``.
         executor: The walk executor to submit to, or ``None`` to submit nothing
             (the follow-on runs the walk inline).
         backends: The runner backend bundle (with ``executor``).
@@ -188,7 +187,11 @@ def admit_and_mint(
 
     Raises:
         LonglistRefused: If the admission or the plan refuses.
+        ValueError: If ``check_capacity`` is on and ``user_cap`` was not given
+            (a wiring mistake, not a refusal to show the user).
     """
+    if check_capacity and user_cap is None:
+        raise ValueError("user_cap is required when check_capacity is true")
     with _dispatch_lock:
         with engine.begin() as conn:
             task_row = task_lock(conn, task_id)
@@ -200,13 +203,12 @@ def admit_and_mint(
                 raise LonglistRefused("run_active", "the task already has an active run")
             if check_capacity and executor_full(conn, capacity):
                 raise LonglistRefused("capacity", "the walk executor is at capacity")
-            if check_capacity and (
-                user_cap is None
-                or user_at_run_cap(conn, user_id=task_row["owner_user_id"], cap=user_cap)
-            ):
-                raise LonglistRefused(
-                    "user_capacity", f"you already have {user_cap} runs in progress"
-                )
+            if check_capacity:
+                assert user_cap is not None  # checked at entry
+                if user_at_run_cap(conn, user_id=task_row["owner_user_id"], cap=user_cap):
+                    raise LonglistRefused(
+                        "user_capacity", f"you already have {user_cap} runs in progress"
+                    )
             current = latest_approved_plan_row(conn, task_id)
             if current is None:
                 raise LonglistRefused("no_plan", "the task has no approved plan")

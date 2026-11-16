@@ -99,7 +99,14 @@ class JwksProvider:
                 return key
             if now - self._last_refresh_at >= _MIN_REFRESH_INTERVAL_SECONDS:
                 self._last_refresh_at = now
-                self.refresh()
+                try:
+                    self.refresh()
+                except Exception:
+                    # `refresh` raises only when there are no keys at all,
+                    # so nobody can verify anyway: give the slot back, or a
+                    # blip at boot would reject every token for a window.
+                    self._last_refresh_at = float("-inf")
+                    raise
                 key = self._keys.get(kid)
         if key is None:
             raise KeyError(kid)
@@ -108,9 +115,9 @@ class JwksProvider:
     def refresh(self) -> None:
         """Refresh the cached JWKS from its configured local or remote source.
 
-        A failed read or a malformed key set keeps the previous keys and logs
-        `auth.jwks_refresh_failed`; the error is raised only when there are no
-        previous keys to fall back on.
+        A failed read, a malformed key set or one with no usable RSA key
+        keeps the previous keys and logs `auth.jwks_refresh_failed`; the
+        error is raised only when there are no previous keys to fall back on.
 
         Raises:
             ValueError: If the JWKS is malformed and no keys were cached before.
@@ -139,6 +146,11 @@ class JwksProvider:
                 keys[kid] = RSAAlgorithm.from_jwk(json.dumps(raw_key))
             except (TypeError, ValueError):
                 continue
+        if not keys and self._keys:
+            # A list with no usable RSA key is a failed refresh too: keep the
+            # working set rather than sign everyone out (review stack).
+            log.error("auth.jwks_refresh_failed", error_class="NoUsableKeys")
+            return
         self._keys = keys
         self._expires_at = time.monotonic() + self._settings.jwks_cache_ttl_seconds
         log.info("auth.jwks_refreshed", key_count=len(keys))

@@ -561,3 +561,9 @@ def test_safe_error_keeps_product_shaped_messages() -> None:
     assert harness.safe_error(product("scope not ready")) == "scope not ready"
     assert harness.safe_error(reasoned("forced collision")) == "forced collision"
     assert harness.safe_error(ValueError("host=db.internal")) == "ValueError"
+    # A library ``reason`` is an object, not a code: the message stays out.
+    import urllib.error
+
+    url_error = urllib.error.URLError(OSError("connect to db.internal refused"))
+    assert url_error.reason is not None
+    assert harness.safe_error(url_error) == "URLError"

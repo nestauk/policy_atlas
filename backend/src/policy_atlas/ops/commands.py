@@ -1043,6 +1043,9 @@ def offboard_user(
       links off; de-enrol is skipped because it would refuse.
     - **No** ``app_user`` **row** (a Cognito account that never reached the
       app): Cognito only.
+    - **No Cognito account** but a row (the account was deleted from the pool
+      earlier): the database half only, reported as such. Neither a row nor
+      an account is a refusal.
 
     Args:
         conn: Open connection inside the command's transaction.
@@ -1056,8 +1059,9 @@ def offboard_user(
 
     Raises:
         OpsError: If neither or both selectors are given, the address is
-            stored on more than one row, the pool has no such account, or
-            Cognito refuses either call (the database is then untouched).
+            stored on more than one row, neither the pool nor the database
+            knows the person, or Cognito refuses either call (the database
+            is then untouched).
     """
     if (email is None) == (sub is None):
         raise OpsError("give exactly one of --email or --sub")
@@ -1087,30 +1091,40 @@ def offboard_user(
             user = _find_user_by_email(cognito, pool_id=pool_id, email=email)
             found_sub = _sub_of(user.get("Attributes", [])) if user is not None else ""
             row = _lock_user(conn, found_sub) if found_sub else None
-    if user is None:
+    if row is not None:
+        user_id = str(row["user_id"])
+    elif user is not None:
+        user_id = _sub_of(user.get("Attributes", []))
+    else:
         raise OpsError(f"no account in the pool for {email or sub}. Nothing was changed.")
-    user_id = str(row["user_id"]) if row is not None else _sub_of(user.get("Attributes", []))
     who = email or (row["email"] if row is not None else None) or user_id
-    username = user["Username"]
 
-    # Cognito first. A failure here raises before any database write.
-    try:
-        cognito.admin_disable_user(UserPoolId=pool_id, Username=username)
-    except ClientError as error:
-        code = error.response.get("Error", {}).get("Code", "") or "ClientError"
-        raise OpsError(
-            f"Cognito refused to disable {who} ({code}). Nothing was changed."
-        ) from error
-    try:
-        cognito.admin_user_global_sign_out(UserPoolId=pool_id, Username=username)
-    except ClientError as error:
-        code = error.response.get("Error", {}).get("Code", "") or "ClientError"
-        raise OpsError(
-            f"the Cognito account for {who} is DISABLED, but signing it out everywhere "
-            f"failed ({code}). Nothing in the database was changed. Re-run "
-            f"`user offboard --sub {user_id}` to finish."
-        ) from error
-    steps = ["disabled the Cognito account", "signed out everywhere (refresh tokens revoked)"]
+    if user is None:
+        # The account was deleted from the pool earlier (by hand, or the pool
+        # was replaced) but the row remains: nothing to disable, and the
+        # database half must still run or their public links stay live
+        # (review stack, 2026-11-16).
+        steps = ["no Cognito account in the pool (deleted earlier): nothing to disable"]
+    else:
+        username = user["Username"]
+        # Cognito first. A failure here raises before any database write.
+        try:
+            cognito.admin_disable_user(UserPoolId=pool_id, Username=username)
+        except ClientError as error:
+            code = error.response.get("Error", {}).get("Code", "") or "ClientError"
+            raise OpsError(
+                f"Cognito refused to disable {who} ({code}). Nothing was changed."
+            ) from error
+        try:
+            cognito.admin_user_global_sign_out(UserPoolId=pool_id, Username=username)
+        except ClientError as error:
+            code = error.response.get("Error", {}).get("Code", "") or "ClientError"
+            raise OpsError(
+                f"the Cognito account for {who} is DISABLED, but signing it out everywhere "
+                f"failed ({code}). Nothing in the database was changed. Re-run "
+                f"`user offboard --sub {user_id}` to finish."
+            ) from error
+        steps = ["disabled the Cognito account", "signed out everywhere (refresh tokens revoked)"]
 
     if row is None:
         steps.append("no app_user row: Cognito only, the database was not touched")
