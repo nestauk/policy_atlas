@@ -52,3 +52,6 @@ command makes it redundant.
   (`docs/deferred.md` § Codebase health). `make test` gives each worker its own copy
   (`tests/conftest.py`, task 056); a second suite on the same Postgres still needs its own
   `DATABASE_URL` name.
+- A pytest run outside `make test` must set `DATABASE_URL` to the `*_test` database
+  (`postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas_test`
+  locally) or conftest refuses; every delegated agent on 064a hit this once.

@@ -1,7 +1,11 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (058 (`task/058-perceived-latency`, perceived latency) adds one migration, `c4e8a2f6d1b3`
+stands (064a (`task/064a-security-quick-wins`, security quick wins; ADR 0045) adds one migration,
+`b1e7c3a9d5f2` (an index on screening results, built `CONCURRENTLY`; its downgrade drops it) —
+`alembic upgrade head` against the dev DB after pulling it; two optional env vars with defaults,
+`RUNS_PER_USER` (3) and `TASK_QUOTA_PER_YEAR` (50); the container `CMD` gains uvicorn flags and
+reads `FORWARDED_ALLOW_IPS`, set by the stack, nothing to do locally; 058 (`task/058-perceived-latency`, perceived latency) adds one migration, `c4e8a2f6d1b3`
 (`project.archived_at`, nullable, no table rewrite; its downgrade drops the column and loses the
 archive times) — `alembic upgrade head` after pulling it — and three frontend packages for the
 Landscape map (`d3-geo`, `topojson-client`, `world-atlas`) — `pnpm install` in `frontend/`; it adds
