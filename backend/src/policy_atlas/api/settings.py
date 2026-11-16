@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from math import isfinite
 from pathlib import Path
 from typing import Literal
@@ -43,7 +43,7 @@ class Settings:
     oidc_jwks_url: str | None
     oidc_jwks_path: Path | None
     app_origin: str
-    database_url: str
+    database_url: str = field(repr=False)
     run_executor_max: int = 2
     jwks_cache_ttl_seconds: int = 300
     sse_poll_interval_seconds: float = 0.4

@@ -516,3 +516,48 @@ def test_failure_evidence_survives_commit(engine: Engine) -> None:
     finally:
         with engine.begin() as conn:
             delete_task_data(conn, pid)
+
+
+@pytest.mark.parametrize(
+    ("component", "patched"),
+    [
+        ("screen", "screen_sources"),  # _run_scope_component
+        ("characterise", "characterise_scope"),  # _run_characterise
+        ("synthesise", "synthesise_scope"),  # _run_synthesise
+    ],
+)
+def test_component_failed_keeps_library_message_out_of_event_log(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch, component: str, patched: str
+) -> None:
+    """Task 064a Q3: a library exception's message (SQL, host names) never
+    reaches the ``component.failed`` payload; only its class name does."""
+    pid, rid = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    char_run_id = seed_run(conn, pid) if component == "synthesise" else None
+    config = compile(
+        Plan(
+            component=component,
+            evidence_scope_id=scope_id,
+            characterisation_run_id=char_run_id,
+        )
+    )
+
+    def leaking(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        del args, kwargs
+        raise RuntimeError("SELECT 1 FROM x WHERE host=db.internal")
+
+    monkeypatch.setattr(harness, patched, leaking)
+    run_harness(conn, config=config, task_id=pid, run_id=rid, provider=StubEchoProvider())
+
+    cf = next(e for e in events.read(conn, pid) if e["event_type"] == "component.failed")
+    assert cf["payload"]["error"] == "RuntimeError"
+    assert "db.internal" not in str(cf["payload"])
+
+
+def test_safe_error_keeps_product_shaped_messages() -> None:
+    """Our own exceptions and ones carrying ``reason`` keep their message."""
+    product = type("ProductError", (RuntimeError,), {"__module__": "policy_atlas.x"})
+    reasoned = type("Reasoned", (RuntimeError,), {"reason": "stage2_supersession_collision"})
+    assert harness.safe_error(product("scope not ready")) == "scope not ready"
+    assert harness.safe_error(reasoned("forced collision")) == "forced collision"
+    assert harness.safe_error(ValueError("host=db.internal")) == "ValueError"

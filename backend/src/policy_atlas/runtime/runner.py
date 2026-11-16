@@ -97,7 +97,7 @@ from policy_atlas.runtime.capability_registry import (
 )
 from policy_atlas.runtime.continuation_state import ContinuationState, ResumeDecision
 from policy_atlas.runtime.conversation_lifecycle import close_task_agent_conversation
-from policy_atlas.runtime.harness import run_harness
+from policy_atlas.runtime.harness import run_harness, safe_error
 from policy_atlas.runtime.progress import ProgressEmitter
 from policy_atlas.runtime.run_spec import Plan, compile
 from policy_atlas.runtime.scoping_plan import LONGLIST_PURPOSE, TARGETED_PURPOSE, ScopingPlan
@@ -2714,7 +2714,12 @@ def _build_bundle(
                     section_budget=section_budget,
                 )
     except Exception as exc:  # noqa: BLE001 — fail-safe to no bundle (watch discipline 5)
-        log.warning("runner.bundle_build_failed", steer_point=name, error=_bounded_error(exc))
+        log.warning(
+            "runner.bundle_build_failed",
+            steer_point=name,
+            error=_bounded_error(exc),
+            exc_info=True,
+        )
         return None
     return None
 
@@ -6194,6 +6199,7 @@ def _run_step_attempt(
                         task_id=str(task_id),
                         run_id=str(run_id),
                         error=_bounded_error(exc),
+                        exc_info=True,
                     )
         # A successful harness result has committed with the component work;
         # append its terminal lifecycle event separately so the payload remains
@@ -6229,6 +6235,7 @@ def _run_step_attempt(
             registry_component=registry_component,
             run_id=str(run_id),
             error=error,
+            exc_info=True,
         )
         _record_failure_backstop(
             engine,
@@ -6348,7 +6355,8 @@ def _record_component_timing(
 
 
 def _bounded_error(exc: Exception) -> str:
-    return f"{type(exc).__name__}: {str(exc)[:200]}"
+    """``safe_error`` capped at 200 characters; callers log ``exc_info=True``."""
+    return safe_error(exc)[:200]
 
 
 def _stamped_stage(

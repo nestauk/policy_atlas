@@ -19165,7 +19165,7 @@
     },
     "/api/v1/waitlist": {
       "post": {
-        "description": "Record a Request-access signup on the waitlist.\n\nArgs:\n    payload: Validated signup body.\n    conn: Open database connection.\n\nReturns:\n    Minimal acknowledgement of the new row.\n\nRaises:\n    ApiConflict: When the email is already on the waitlist.",
+        "description": "Record a Request-access signup on the waitlist.\n\nArgs:\n    payload: Validated signup body.\n    conn: Open database connection.\n\nReturns:\n    Minimal acknowledgement of the new row.",
         "operationId": "signup_api_v1_waitlist_post",
         "requestBody": {
           "content": {

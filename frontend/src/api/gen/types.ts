@@ -1825,9 +1825,6 @@ export interface paths {
          *
          *     Returns:
          *         Minimal acknowledgement of the new row.
-         *
-         *     Raises:
-         *         ApiConflict: When the email is already on the waitlist.
          */
         post: operations["signup_api_v1_waitlist_post"];
         delete?: never;

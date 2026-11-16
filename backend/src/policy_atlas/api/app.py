@@ -46,8 +46,6 @@ _CONFLICT_CODES = {
     # answer — the two ways out are changing the Project's visibility and
     # leaving the Task out of the Project.
     "visibility_conflict",
-    # Splash waitlist: the email is already on waitlist_entry.
-    "already_registered",
     # Task 044 (C11, C12): a task can only start from a task it shares a
     # project with, and only from one whose latest walk has finished — and
     # only from an Evidence search, whose report is what inheritance reads

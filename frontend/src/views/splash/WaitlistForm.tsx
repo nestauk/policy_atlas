@@ -13,7 +13,7 @@ export const WAITLIST_LIMITS = {
   roleOrReason: 1000,
 } as const;
 
-type FormStatus = "idle" | "submitting" | "success" | "already" | "error";
+type FormStatus = "idle" | "submitting" | "success" | "error";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -89,11 +89,6 @@ export function WaitlistForm() {
       const body = (await response.json().catch(() => null)) as {
         error?: { code?: string; message?: string };
       } | null;
-      if (response.status === 409 && body?.error?.code === "already_registered") {
-        setStatus("already");
-        setMessage("You're already on the list with this email.");
-        return;
-      }
       setStatus("error");
       setMessage(body?.error?.message ?? "Something went wrong. Please try again.");
     } catch {
@@ -102,7 +97,7 @@ export function WaitlistForm() {
     }
   };
 
-  const done = status === "success" || status === "already";
+  const done = status === "success";
   const disabled = done || status === "submitting";
 
   const emailOverMsg = overLimitMessage(email.length, WAITLIST_LIMITS.email);
