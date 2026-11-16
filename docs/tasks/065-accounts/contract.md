@@ -7,7 +7,7 @@ task (065)". That file is on the `task/064a-security-quick-wins` branch and reac
 the 064a merge; this contract repeats what it needs, so it reads cold without it.
 Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in [docs/specs/](../../specs/index.md).
 
-> **Status:** revision 3, awaiting re-approval. Revision 1 approved 2026-11-16 · owner, after
+> **Status:** revision 3.1, approved 2026-11-16 · owner (plan gate). Revision 1 approved 2026-11-16 · owner, after
 > discussing six decisions (sweep in the ops service; page in the app; resend instead of
 > reissue; domain table by CLI; templates before the sender flips; no lifespan jobs in ops
 > mode). Contract-stage adversarial review 2026-11-16: Codex, 10 findings (record in the
@@ -25,12 +25,13 @@ Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in [docs/specs/](../../
 > database login for the ops service (B13). **Revision 3 approved 2026-11-16 · owner** (B13
 > included).
 > Re-approval: 2026-11-16 · owner. **Revision 3.1 (2026-11-16, from the plan-stage Codex review,
-> awaiting the owner's yes at the plan gate):** B13's grant list follows what the command
+> approved by the owner at the plan gate, 2026-11-16):** B13's grant list follows what the command
 > functions already do (one `DELETE`, on `project_membership`; column-level `UPDATE`s; a trigger
 > so the ops login can clear but never set `is_admin` or `is_ops`); B6's bulk offboard shows every
 > person and takes the count as the typed confirmation; B1 states that de-enrol and offboard
-> clear the flags through the ops host. · Plan approved: _pending_ · ADR: 0046 (0045 belongs to
-> 064a).
+> clear the flags through the ops host. · Plan approved: 2026-11-16 · owner (draft 2) · ADR:
+> [0046](../../adr/0046-ops-service-ops-pages-self-signup-and-ops-database-login.md), Accepted
+> 2026-11-16 (0045 belongs to 064a).
 
 ## Goal
 

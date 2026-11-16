@@ -1,11 +1,12 @@
 # Implementation plan: 065-accounts
 
-> Status: **draft 2, awaiting the owner's plan gate.** Draft 1 was reviewed read-only by the
+> Status: **approved 2026-11-16 · owner (draft 2).** The build runs in a fresh conversation. Draft 1 was reviewed read-only by the
 > Codex lane on 2026-11-16 (12 findings: 3 blockers, 8 material, 1 minor; the record stays
 > local under `research/`); every finding is folded here (§ Folded findings). Contract:
 > [contract.md](contract.md) revision 3, approved 2026-11-16, with the revision 3.1 amendments
-> to B1, B6 and B13 that this review produced and that the owner confirms at this gate.
-> Rubric: [rubric.md](rubric.md), 23 items. ADR 0046 is written at step 4, after this gate.
+> to B1, B6 and B13 that this review produced, confirmed by the owner at this gate.
+> Rubric: [rubric.md](rubric.md), 23 items. ADR:
+> [0046](../../adr/0046-ops-service-ops-pages-self-signup-and-ops-database-login.md), Accepted 2026-11-16.
 > Terms, items (A1 to A4, B1 to B13, C1 to C6) and the eleven live checks are defined in the
 > contract and not restated here. Executor routing follows `docs/agentic-ops/harness.md`
 > § Agent-side model routing: judgment-bearing build work to `codex` from a machine-verifiable
@@ -171,7 +172,7 @@ rule (P10 now states both), the second Vite entry and vitest (P3 now states the 
 reuse, `tsc -b` and the include glob), executor routing (unchanged; every `lead` mark below
 carries its reason), and draft 1's 064a handling (removed by the rebase).
 
-## Open for the plan gate
+## Open for the plan gate (both accepted by the owner, 2026-11-16)
 
 1. **Contract revision 3.1** (B1, B6, B13 as amended today) and the two plan refinements P1
    (bundle built by the deploy script) and P5 (grants follow the code). Recommendation:
