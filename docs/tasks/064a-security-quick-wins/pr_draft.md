@@ -76,6 +76,29 @@ has eighteen lines for seventeen findings.)
 advisories. Both libraries are updated to their patched versions in the lock file:
 `opentelemetry-api` 1.45.2 and `tornado` 6.6.1. The check is green.
 
+## Size of the diff
+
+14 commits; 96 files, +4,961 / −295 lines against `dev`. Under half of the new lines are task
+records (the review that started the programme, the programme map, and this slice's contract,
+plan, rubric, verification and this description). Product code is about 15 per cent; tests are
+about twice the product code.
+
+| what | files | added | removed |
+|---|---:|---:|---:|
+| backend product code (`backend/src`) | 22 | 659 | 120 |
+| database migration (`backend/alembic`, the new index) | 1 | 69 | 0 |
+| backend tests (`backend/tests`) | 19 | 1,471 | 43 |
+| frontend product code (`frontend/src`: the quota banner, error text, `/me` field) | 10 | 53 | 21 |
+| frontend tests | 2 | 69 | 0 |
+| generated API files (`frontend/openapi.json`, `types.ts`, written by `make openapi-sync`) | 2 | 65 | 14 |
+| infrastructure code and config (`infra/infra`, `pa_config.json`, `db_config.json`) | 6 | 33 | 6 |
+| infrastructure tests (`infra/tests`) | 3 | 59 | 3 |
+| deploy and container (`scripts/deploy.sh`, `backend/Dockerfile`) | 2 | 21 | 2 |
+| dependencies (`backend/uv.lock`, the two patched libraries) | 1 | 55 | 55 |
+| task records (`docs/tasks`: the original review, programme map, contract, plan, rubric, verification, this draft) | 7 | 1,819 | 0 |
+| decision records and knowledge (`docs/adr` 0033 and 0045, `docs/knowledge`) | 11 | 355 | 2 |
+| other docs (`docs/deferred.md`, specs, agentic-ops, `infra/DEPLOYMENT.md`, `infra/JUMPBOX.md`, `AGENTS.md`, `.gitignore`) | 10 | 233 | 29 |
+
 ## Proof it works
 
 Evidence: `docs/tasks/064a-security-quick-wins/verification.md`.
