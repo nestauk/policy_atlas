@@ -27,7 +27,8 @@ Task folder: `docs/tasks/064a-security-quick-wins/`. Decision record:
 4. One person can have at most 3 runs going at the same time. The server has 10 slots in total,
    so before this one person could take all of them. Administrators are exempt.
 5. One person can create at most 50 tasks in a year. Administrators are exempt. The app shows a
-   banner when someone reaches the limit.
+   banner when someone reaches the limit. `make dev` sets the local limit to 100,000 so local
+   development is never refused.
 
 **Fixing things that broke or hung**
 
