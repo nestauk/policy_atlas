@@ -90,16 +90,109 @@ is a branch deletion the owner can do at any time.
 
 Sourced research notes live in `docs/tasks/064-security-hardening/research/` (gitignored).
 
-## The ops portal is a separate task, not a slice of 064
+## The ops portal is a separate task (065), not a slice of 064
 
-The ops portal (owner notes, 2026-11-16) is its own task, expected as 065 with three slices:
-**065a** SES wiring for both pools (verified domain per account, branded templates,
-production sending access requested for both accounts); **065b** a second IP-gated ECS
-service from the same image with the ops routes and the Cognito write permissions on its own
-task role; **065c** self-service account creation by email domain. The dependencies on this
-programme are one-way: 064a to 064c need nothing from it; **064d waits for 065a**, because
-email MFA needs the pool's own SES sender; the H-07 privacy notice waits for the whole of
-065. 064a's `user offboard` is the function 065b reuses.
+The owner's notes of 2026-11-16 ask for three things: (1) non-technical team members can
+create accounts and organisations and move people between organisations; (2) people who
+meet a rule, such as an email address at a known domain, can get an account without an
+operator; (3) the emails the system sends come from Amazon SES (Simple Email Service) and
+look like Nesta's. This section records how that work is shaped and how it touches the
+security programme, so the next conversation can write the 065 contracts from it. Nothing
+here is built yet.
+
+### How accounts work today
+
+- Sign-in is one Amazon Cognito user pool per environment, with the classic hosted sign-in
+  page. The API only ever reads the token's subject. The pool is bare on purpose: no self
+  sign-up, no groups, no Lambda triggers, and the **default Cognito email sender**, which is
+  capped at 50 messages a day and often lands in spam. That is why operators hand over
+  temporary passwords by hand today.
+- An account is two things: a Cognito user, and an `app_user` row holding display name,
+  email, organisation and the admin flag. The row appears on the first `/me` call. Only the
+  ops CLI (`backend/src/policy_atlas/ops/`) ever sets the organisation, the email or the
+  admin flag: `user create`, `user enrol`, `user resync`, `user reissue`, `user de-enrol`,
+  `rows assign`, `admin grant`, `admin revoke`, and after 064a `user offboard`. The CLI
+  needs the operator's own AWS credentials and passes an environment check. Its logic is
+  plain functions in `ops/commands.py`, so another caller can reuse them.
+- The splash-page waitlist writes a row and nothing else. Nobody is notified, operators read
+  the table by hand, and no account follows from it.
+- ADR 0033 made the admin flag read-only and declared any admin surface or user directory
+  out of scope. An ops portal reopens that decision and needs its own ADR.
+
+### The shape, in three slices
+
+**065a SES wiring.** Everything else depends on invitations arriving. Cognito cannot send
+through another account's SES, so Nesta's shared SES account cannot carry this mail; each
+project account owns an SES identity for its own domain. The slice: verify
+`v3.policyatlas.uk` (staging) and `policyatlas.uk` (production) in SES with Easy DKIM through
+the Route 53 zones the certificate stack already uses; point each pool's email
+configuration at a sender such as `no-reply@` that domain, with the address in
+`pa_config.json` per environment; put branded HTML templates for invitation, code and
+password-reset messages in CDK (Cognito templates take HTML up to 20,000 characters, no
+Lambda needed). The long pole is the **SES production-access request**, one per account,
+with a first AWS answer within 96 hours. **Both accounts request it**: the owner ruled on
+2026-11-16 that staging has real testers, so the SES sandbox (verified recipients only) is
+not enough there. Start both requests before anything else in 065.
+
+**065b the ops service.** A separate instance reachable only from allowlisted addresses,
+the way Metabase is run today, rather than an ops page inside the public app. The Metabase
+pattern transfers as is: a hostname on the shared load balancer (`ops.policyatlas.uk`,
+`ops.v3.policyatlas.uk`), listener rules on host header plus source address, fed from an
+SSM parameter of up to 8 address ranges (`infra/metabase_allowlist.py`). The service is the
+**same backend image** as the API, started with a flag that mounts the ops routes, which
+the public API never mounts; one codebase, nothing to keep in step. It gets the smallest
+task size, because it does nothing heavy. Its page lists organisations and the waitlist
+with a "create account in organisation X" button, and offers enrol, move, de-enrol,
+offboard and reassign, each calling the existing command functions. What it needs beyond
+the routes: an `ops` role on `app_user`, separate from the admin flag, so ADR 0033's "admin
+never writes" rule stays true, with the grant CLI-only so no HTTP route can escalate; the
+**Cognito admin permissions on the ops service's task role only**, so the public API keeps
+no AWS write permission and a bug in a public route can never create or disable an account;
+an audit line per action in the same shape as the CLI's trace; the type-stub imports in the
+ops package moved under a type-checking guard, because the container image drops that
+dependency group. Login and the ops role still apply inside the allowlist: the address
+gate is a network boundary, not an identity. Costs to accept: one more ECS task, and ops
+work only from allowlisted addresses, so the non-technical team members must be on the
+office network or VPN when they use it. Rejected: the Cognito console (it cannot write
+`app_user`), Metabase (read-only), a Retool-style tool (a second system with its own login),
+and a path-pattern rule in front of ops routes on the public service (the public task role
+would still hold the Cognito permission, which undoes the main benefit).
+
+**065c self-service by email domain.** The lazy version needs no Cognito change. The
+"Request access" form stays as it is. The backend checks the address's domain against an
+organisation-to-domain table that the ops page manages. A match calls the same create-user
+function with that organisation, and Cognito sends the branded invitation with a temporary
+password valid for 30 days; reading it proves ownership of the mailbox, which is the
+"token link with expiry" the owner described. No match writes a waitlist row as now, and
+an operator approves it from the ops page. The response to the form is the same in both
+cases, so nothing about which domains are known is revealed. Auto-enrolment is safe
+because every new row defaults to private. Two alternatives not taken now: Cognito native
+self sign-up with a Lambda that rejects domains (moves access policy into the identity
+provider, which ADR 0033 avoided), and passwordless sign-in (needs the Essentials tier,
+three custom-auth Lambdas and a custom sign-in page; no native magic link exists).
+
+### Open questions for the 065 contracts
+
+- Which `gov.uk` and other domains map to which organisation, and whether a domain maps to
+  one shared organisation or several. Colleagues in one organisation see each other's
+  org-visible work, so this is a tenancy decision, not a config detail.
+- Whether the Tech Team accepts the project accounts owning SES identities. Nesta's
+  guidance points to the shared SES account; Cognito forces this one.
+- The 8-address-range cap on the allowlist, and whether every ops user is covered by the
+  office network or VPN.
+
+### How 065 and 064 depend on each other
+
+One-way, and only through 065a:
+
+- **064a, 064b, 064c need nothing from 065.** They run now.
+- **064d waits for 065a**, because email MFA needs the pool's own SES sender; TOTP is the
+  fallback if SES slips.
+- **The H-07 privacy notice waits for all of 065**, because it must describe self-service
+  sign-up, the ops role and the ops service.
+- **065b reuses 064a's work**: `user offboard`, and the pattern of Cognito permissions
+  living on an operator's credentials rather than on the public API.
+- 065a can start in parallel with 064a; the SES access requests should go in first.
 
 ## Later slices in brief
 
