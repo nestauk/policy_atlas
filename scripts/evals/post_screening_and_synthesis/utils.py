@@ -33,6 +33,11 @@ TEST_SET_SHEET_ID = "1ysmdUcOXGLjtse5KgsGlYIpdpQ8vwf1YSOToevAAhns"
 TEST_SET_SHEET_NAME = "POST_test_set"
 # Eval-side model for extraction and judging (decision, 2026-10-21).
 MODEL = "gpt-5.6-luna"
+# Per-request settings every eval call sends (task 057 moved them off the client).
+# Long timeout for whole-briefing calls; "medium" is the provider default the eval
+# sent before task 056 made every call state its effort.
+TIMEOUT_S = 600.0
+REASONING_EFFORT = "medium"
 # Langfuse experiment name; also the `experiment` metadata key on every eval trace.
 EXPERIMENT = "synthesis-coverage"
 # Langfuse dataset: one item per briefing with ground truth.
@@ -201,10 +206,8 @@ def norm_title(title: str | None) -> str:
 
 
 def openai_client() -> OpenAI:
-    """An OpenAI client from ``OPENAI_API_KEY``; long timeout for whole-briefing calls."""
-    return resolve_openai_client(
-        None, backend_name="synthesis eval", timeout=600.0, max_retries=2
-    )
+    """An OpenAI client on the selected route; each call sends ``TIMEOUT_S`` itself."""
+    return resolve_openai_client(None, backend_name="synthesis eval")
 
 
 def prompt(name: str) -> tuple[str, str]:
