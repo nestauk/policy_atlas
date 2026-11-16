@@ -1,5 +1,12 @@
 # Spec update log
 
+## 2026-11-16 (task 064a, security quick wins)
+* **Update**: [Web API § error codes](system/web-api.md) — the 409 list gains `user_capacity`
+  (one person's run cap, Q7), `task_quota` (50 tasks per rolling year, administrators exempt,
+  Q8) and `confirm_expired` (raised before, never listed, Q15); `already_registered` is removed
+  because the waitlist now answers a duplicate email with the same 201 and writes nothing
+  (Q2). `GET /me` gains the optional `task_quota {used, limit}` object. ADR 0045.
+
 ## 2026-11-09 (task 054, the 058 alignment pass)
 Owner-accepted spec changes S-1 to S-3 of
 [plan-058-alignment.md](../tasks/054-toc-integration/plan-058-alignment.md) § 10.

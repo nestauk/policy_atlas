@@ -2299,8 +2299,9 @@ omissions.
   only consumers. Until it lands, `frontend/src/lib/vocabulary.ts` stays the single place
   the mapping is written down.
 - **MFA on the Cognito pool** — the pool is `MfaConfiguration: None` and its password
-  policy restates Cognito's defaults (8 characters, upper/lower/number/symbol; explicit
-  since 2026-10-01, when temporary-password validity went to 30 days). That was proportionate while every account could read only
+  policy is Cognito's defaults with a 12-character minimum (upper/lower/number/symbol;
+  explicit since 2026-10-01, when temporary-password validity went to 30 days; the
+  minimum rose from 8 to 12 in task 064a, Q6, for passwords set from then on). That was proportionate while every account could read only
   its owner's work. 033's `is_admin` (owner call (f)) changes the calculus: an admin
   account reads every row in every organisation, `private` included, behind a password
   alone. **Owner ruling 2026-08-24: recorded as a known accepted risk, not fixed in 033** —
@@ -2312,22 +2313,25 @@ omissions.
 - **Deleting a user from the ops CLI, and ownership transfer — coupled** (owner,
   2026-08-24). 033 creates and enrols Cognito users but does not delete them: a delete
   that cannot reassign the person's work would strand it, and transfer is itself Out, so
-  the two ship together or not at all. Until then **de-enrolment is the only removal
-  lever**, and it carries two consequences whoever offboards a real user must know:
-  **(1) it does not stop them signing in** — the Cognito account survives, so an
-  offboarded person still authenticates and still sees their own work; disabling or
-  deleting the account is a Cognito operation done outside this tooling;   **(2) erasure is
-  two-part** — de-enrolment clears `org_id` and `is_admin` from the application
-  database and keeps `email` and `display_name` so the person stays findable.
-  The address in Cognito is untouched either way, so a genuine erasure
-  request needs the Cognito side handled separately.
+  the two ship together or not at all. Until then the removal lever is **`user offboard`**
+  (task 064a, Q10; ADR 0045 decision 5): it disables the Cognito account, revokes its
+  refresh tokens, de-enrols the person and switches off their public task links. Two
+  consequences remain for whoever offboards a real user: **(1) a window stays open** — an
+  access token already issued is valid for up to 60 minutes, and a progress stream open
+  at that moment stays open until its run ends (a `disabled` check on every request
+  would close it at the price of a database read per request; deferred); **(2) erasure
+  is two-part** — offboarding clears `org_id` and `is_admin` from the application
+  database and keeps `email` and `display_name` so the person stays findable, and the
+  Cognito account is disabled, not deleted, so a genuine erasure request still needs the
+  Cognito side handled separately.
 - **Three standing discrepancies in the published privacy notice** (escalated by 033,
   2026-08-24; the owner ruled that the slice does not edit legal copy, so these are open
   items for whoever owns the notice — the page names a Data Protection Officer):
   **(1) § 7** states that on request personal data "will be permanently deleted from our
   Amazon Aurora PostgreSQL database". No lever in the product does that: de-enrolment
   keeps every Task, query, result and transcript, keeps the `sub`, leaves the Cognito
-  account untouched, and leaves seven days of Aurora backups.
+  account untouched, and leaves the Aurora backups (7 days on staging, 35 on production
+  since task 064a, Q17).
   **(2) § 3** calls the email "the only user-specific identifier we store" — the `sub` is
   one too, and until 033 the database stored no email at all, so the sentence has been
   inaccurate in the other direction.
@@ -3651,3 +3655,33 @@ unbuilt increments are in ADR 0042 § Amendment 2026-11-05.
   creation; ES findings reuse; the cross-task duplicate gap; the Miro API; E3, E4, E5, E7, E8;
   removing the build flag; an upload retention rule; J9 (how an older theory signals it may be
   out of date).
+
+## Security quick wins (task 064a seams)
+
+Deferred at the 064a plan gate (owner, 2026-11-16) or found during the build. The
+programme map in `docs/tasks/064-security-hardening/programme.md` carries the later slices
+(WAF and CAPTCHA, CSP, MFA, SES).
+
+- **Spend caps and per-user chat and planner turn limits.** The task quota (Q8) bounds
+  how many tasks a person creates, not what a task costs. A usage table with spend per
+  user is the next step once the quota has run for a while (ADR 0045 § Alternatives).
+- **A quota display beyond the banner.** `GET /me` already returns `task_quota.used` and
+  `limit`; the frontend shows a banner only at the limit. A running count on the new-task
+  page or in the account menu is a small follow-on.
+- **A per-user allowance above 50.** The quota is one number for everyone except
+  administrators. A person who legitimately needs more is handled by an administrator
+  today; a per-user column was ruled out of scope for this slice.
+- **The 60-minute window after `user offboard`.** An access token already issued keeps
+  working until it expires, and an open progress stream outlives it. A `disabled` check
+  on every request would close it at the price of a database read per request.
+- **Resuming after a check-in is uncapped.** The per-user run cap (Q7) applies at the
+  three start surfaces; resuming a paused walk has no capacity check, because the
+  person's decision is already committed when the resume runs (owner item 1, plan gate).
+- **Request body size limits (review finding H-02).** Not in this slice.
+- **Library text inside steering rejections.** `steering.py` wraps pydantic
+  `ValidationError`, `ValueError` and `TypeError` text into `SteeringAdjustmentError`,
+  which `safe_error` (Q3) treats as product-shaped, so that text reaches the event log.
+  It most likely echoes the person's own steering input rather than SQL or host names;
+  left as is, noted by the Q3 build.
+- **`AdminUserGlobalSignOut` on an already disabled account.** The offboard rerun path
+  assumes it succeeds; confirmed on staging at the Q10 live check, not before.

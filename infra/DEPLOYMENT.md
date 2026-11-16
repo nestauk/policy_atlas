@@ -351,6 +351,34 @@ synth-time context query and must not run before the VPC exists.
      signed in; needs `AdminSetUserPassword`). The durable fix is SES-backed pool email
      (docs/deferred.md § Organisations — SES entry).
 
+     **Removing a person's access (task 064a, Q10).** `user de-enrol` changes
+     the database only: the person's Cognito account still signs in and their
+     public links stay public. `user offboard` is the command to use when
+     someone leaves:
+
+     ```bash
+     uv run python -m policy_atlas.ops --env staging user offboard --email <user-email>
+     # or: ... user offboard --sub <cognito-subject>
+     ```
+
+     It runs three steps in this order and prints each one: (1) in Cognito,
+     disable the account and revoke its refresh tokens (`AdminDisableUser`,
+     `AdminUserGlobalSignOut`), so the person cannot sign in again or renew a
+     session; (2) in the database, de-enrol the person if they are still
+     enrolled or hold the administrator flag (an already de-enrolled person is
+     skipped, not refused, and an administrator's removal writes the same trace
+     line as `admin revoke`); (3) set every task they own to not public, so
+     their share links stop working. Projects shared with their organisation
+     are left as they are: that sharing is the organisation's, not theirs.
+     Cognito goes first on purpose: if the database step fails, the account is
+     already disabled and running the command again finishes the rest. A
+     person with a Cognito account but no row in the application database gets
+     the Cognito step only, and the command says so. Two things it cannot do:
+     an access token already issued stays valid for up to 60 minutes, and a
+     progress stream that is open when the command runs stays open until the
+     run ends. It needs `AdminDisableUser` and `AdminUserGlobalSignOut` on the
+     pool, from the operator's own credentials.
+
      The invitation goes through the `COGNITO_DEFAULT` sender (the pool has no
      `EmailConfiguration`), which is capped at 50 messages a day and needs a
      real deliverable mailbox.
@@ -446,6 +474,51 @@ call counts as one more poll, not a failure. The previous
 `aws ecs wait tasks-stopped` gave up after about 10 minutes, too short for task
 057's backfill. `make deploy-migration-wait-test` checks the loop against a
 stubbed `aws`.
+
+**Readiness check after the service is stable (task 064a, Q4).** The load
+balancer's health check now asks the API only "is the process alive"
+(`/healthz`), not "can you reach the database" (`/readyz`). That is deliberate:
+with the old check a short database outage made ECS replace the only container
+and kill every run on it. The price is that a deploy with a broken database
+secret would look healthy. So after `services-stable`, `deploy.sh` calls
+`/readyz` once (up to ten tries, 15 seconds apart) and fails the deploy if it
+never returns 200. `/readyz` stays available for diagnosis.
+
+**Before each deploy: who is at the task quota (task 064a, Q8).** Each person
+may create at most `backend.task_quota_per_year` tasks (50) in any rolling
+365-day window; administrators are exempt. Someone already at or over the limit
+sees the quota banner and cannot create tasks from the moment the slice is
+deployed. Run this over the § 6 tunnel before the deploy so the owner knows who
+that is (it is informational; nothing in the deploy depends on it):
+
+```sql
+SELECT owner_user_id, count(*) AS tasks_in_last_365_days
+FROM task
+WHERE created_at >= now() - interval '365 days'
+GROUP BY owner_user_id
+HAVING count(*) >= 50
+ORDER BY tasks_in_last_365_days DESC;
+```
+
+**After task 064a's first deploy: search the old logs once (review finding
+H-06).** Until task 064a, every JSON error log carried the local variables of
+each stack frame, so user text and the first characters of a secret could have
+reached CloudWatch. The fix stops new leaks; it does nothing about lines already
+stored (CloudWatch keeps them 30 days). Someone with console access opens
+CloudWatch Logs Insights, selects the API service's log group for the
+environment, and runs:
+
+```
+fields @timestamp, @message
+| filter @message like /"locals"/ or @message like /api_key/ or @message like /password/ or @message like /dbadmin/
+| sort @timestamp desc
+| limit 200
+```
+
+If a real secret value appears, rotate the database password (the cluster
+secret) and the provider keys in `policy_atlas_v3/app`, then force a new
+deployment. Record the result, found or not found, in the task's
+`verification.md`. Do this on both environments.
 
 **Task 057 release: run its two migrations before the deploy (recommended).**
 Task 057 adds two revisions that are safe to run while the service is up:
@@ -682,6 +755,7 @@ fixture corpus are intentionally omitted from the deployed task.
 | `DATABASE_URL` | Secrets Manager field: DB secret `db_connection_string` | `api/settings.py`, `core/db.py` |
 | `DB_MAX_OVERFLOW` | config value: `backend.db_max_overflow` | `api/settings.py` |
 | `DB_POOL_SIZE` | config value: `backend.db_pool_size` | `api/settings.py` |
+| `FORWARDED_ALLOW_IPS` | stack value: the VPC's address range (`vpc_cidr_block` from the app stack's VPC lookup; task 064a, Q11) | uvicorn (not the application): only a proxy inside the VPC, which is the load balancer, may set the client address in `X-Forwarded-For`; `*` would let any client write it |
 | `LANGFUSE_HOST` | Secrets Manager field: `policy_atlas_v3/app` `LANGFUSE_HOST` | `core/tracing.py` |
 | `LANGFUSE_BASE_URL` | omitted (equivalent alias of `LANGFUSE_HOST`) | `core/tracing.py` |
 | `LANGFUSE_PUBLIC_KEY` | Secrets Manager field: `policy_atlas_v3/app` `LANGFUSE_PUBLIC_KEY` | `core/tracing.py` |
@@ -704,6 +778,8 @@ fixture corpus are intentionally omitted from the deployed task.
 | `POLICY_ATLAS_FIXTURE_CORPUS` | omitted (development/test fixture override) | `evidence_search/sourcing/ingest_full_text.py` |
 | `POLICY_ATLAS_SEARCH_CACHE_TTL_S` | omitted (development tuning; application default) | `evidence_search/sourcing/search_live.py` |
 | `RUN_EXECUTOR_MAX` | config value: `backend.run_executor_max` | `api/settings.py` |
+| `RUNS_PER_USER` | config value: `backend.runs_per_user` (3 in both environments; task 064a, Q7): how many runs one person may have running at once | `api/settings.py` |
+| `TASK_QUOTA_PER_YEAR` | config value: `backend.task_quota_per_year` (50 in both environments; task 064a, Q8): how many tasks one person may create in a rolling 365 days; administrators are exempt | `api/settings.py` |
 | `SSE_HEARTBEAT_SECONDS` | omitted (application default: 15) | `api/settings.py` |
 | `SSE_POLL_INTERVAL_SECONDS` | omitted (application default: 0.4) | `api/settings.py` |
 
@@ -735,7 +811,10 @@ deployment, like any other secret.
 
 **Capacity values** (sized together for a 10-concurrent-run ceiling):
 `RUN_EXECUTOR_MAX=10`, `DB_POOL_SIZE=15`, `DB_MAX_OVERFLOW=10`, task 2 vCPU /
-8 GB (initial hypothesis — measured under load, not just arithmetic).
+8 GB (initial hypothesis — measured under load, not just arithmetic). Within
+that ceiling one person may hold at most `RUNS_PER_USER=3` running runs (task
+064a, Q7), administrators included, so no single person can take every slot.
+A run waiting at a check-in is paused and does not count.
 
 **Shared-provider-rate-limit caveat:** OpenAI rate limits are shared across all
 concurrent runs on the one instance. At full concurrency, runs degrade to
@@ -835,7 +914,9 @@ in committable form — CI's font-guard stays green.
   real safety net is the dark launch: with no organisations enrolled the
   behaviour is byte-identical to pre-033, and **de-enrolling an
   organisation reverts it without a deploy**. A schema downgrade is a last
-  resort requiring a backup restore first (Aurora keeps 7 days).
+  resort requiring a backup restore first (Aurora keeps automatic backups for
+  7 days on staging and 35 days on production, `backup_retention_days` in
+  `db_config.json` since task 064a).
 - **Manual downgrade procedure (last resort — the ECS migration task runs
   `alembic upgrade head` only and has no downgrade path):** scale the API
   to zero → restore or snapshot the cluster → open the § 6 tunnel → from
@@ -863,6 +944,13 @@ in committable form — CI's font-guard stays green.
   revisions above the refusal already undone and committed; check `alembic current`
   afterwards and decide whether to upgrade back to head or carry on. Before task 057 a
   refusal rolled the whole downgrade back.
+- **Task 064a (security quick wins):** every change reverts by deploying the
+  previous image and CDK state, with four notes. The one migration adds an
+  index only; its downgrade drops the index. The Cognito pool now has deletion
+  protection: a deliberate pool replacement must turn it off first, which is
+  the point. Lowering `backup_retention_days` again discards the backups older
+  than the new value. The 12-character password minimum cannot be undone for
+  people who already set a longer password, which is harmless.
 - **Automation:** disable the GitHub Environment or revoke its OIDC role trust to
   stop new deploys, then revert the workflow change. This does not repair an
   already interrupted stop→migrate→scale sequence; use the recovery procedure in

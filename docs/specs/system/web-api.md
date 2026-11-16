@@ -81,7 +81,9 @@ cross-org and — where the route excludes them — archived rows are the same
 404). Visible-but-not-writable → **403 `forbidden`**.
 
 `GET /api/v1/me` → `{user_id, display_name, email, organisation:
-{org_id, name} | null, is_admin}` — provisions the caller's `app_user` row
+{org_id, name} | null, is_admin, task_quota: {used, limit} | null}` (the
+quota object is `null` for an administrator, who has no quota — task 064a
+Q8) — provisions the caller's `app_user` row
 just-in-time with `ON CONFLICT DO NOTHING` (a once-per-user insert that
 never clobbers ops-set fields; ops enrolment is the deliberate
 `DO UPDATE`). `get_current_user` stays DB-free and Cognito-free.
@@ -98,12 +100,14 @@ logged: one line per direct row read (`admin_read`), one per cross-org
 listing or search request including zero-result searches
 (`admin_listing`), one per SSE subscribe and per re-authorisation batch
 (`admin_stream_read`). Nothing is emitted for a read the caller was
-entitled to anyway. The flag has exactly four readers, asserted
+entitled to anyway. The flag has exactly five readers, asserted
 structurally as a closed code-site list (`_access.admin_read_leg` and
 `_access._is_admin` — which between them serve the row/listing legs, the
-`owner_email` gate and the trace decision — plus `me.get_me` and the
-`MeOut` field declaration); no write path reads it, and no HTTP surface
-can set it.
+`owner_email` gate and the trace decision — plus `me.get_me`, the
+`MeOut` field declaration, and `tasks.create_task`, whose task-quota
+exemption is the one administrator behaviour that is not a read — task
+064a Q8, ADR 0045); no write path reads it, and no HTTP surface can set
+it.
 
 ## Error envelope
 
@@ -115,8 +119,12 @@ Mapping: 400 `malformed` · 401 `unauthenticated` · **403 `forbidden`**
 `task_agent_turn_in_progress` | `chat_turn_in_progress` | `stale_turn` |
 `no_completed_run` | `plan_stale` | **`visibility_conflict`** (setting a
 task's visibility while it is in a project — change the project's
-visibility, or leave the task out of it) | **`already_registered`**
-(waitlist email already present) · 422 `validation_error`
+visibility, or leave the task out of it) | `user_capacity` (the caller
+already has `RUNS_PER_USER` runs in progress; the global `capacity` bound
+is separate — task 064a Q7) | `task_quota` (the caller has created
+`TASK_QUOTA_PER_YEAR` tasks in the last 365 days; administrators are
+exempt — task 064a Q8) | `confirm_expired` (a check-in confirmation
+arrived after its window — task 064a Q15) · 422 `validation_error`
 (Pydantic detail list under `details`, assert on `loc`/`type` not `msg`;
 also the code for a non-admin passing `owner_email` and for a PATCH body
 carrying both `visibility` and `project_ids` — not a third semantic) ·
@@ -143,7 +151,8 @@ Splash-page **Request access** intake. Public — no bearer token.
 
 - `POST /api/v1/waitlist` `{email, name, organisation?, role_or_reason,
   website?}` → 201 `{entry_id, email, created_at}`. Email is lower-cased and
-  unique (`409 already_registered` on conflict). Organisation is optional;
+  unique: a duplicate email gets the same 201 and writes nothing (so the
+  endpoint cannot reveal who is registered). Organisation is optional;
   blank becomes null. Response omits organisation and role/reason. `website`
   is a honeypot (hidden on the form): any non-empty value gets a fake 201
   and stores nothing. No admin list/export in v1 — ops query the

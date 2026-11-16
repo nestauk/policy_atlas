@@ -105,3 +105,21 @@ scans every module under `api/` for the name `is_admin` in any scope.
 - Deferred, in `docs/deferred.md`: spend caps and per-user chat and planner turn limits;
   a quota display beyond the banner; the 60-minute token window and open streams after
   offboarding; a per-user allowance above 50.
+
+## As built (2026-11-16, task 064a build)
+
+Three details settled during the build, within the decisions above:
+
+1. **The run cap is checked against the task's owner, not the caller.** Decision 1
+   counts walks on the tasks a person owns. The three sites therefore pass
+   `task.owner_user_id` to the check, so a collaborator with write access could not lift
+   an owner above the cap. Today write access is owner-only, so this changes no current
+   behaviour; it fixes the identity the rule is stated in.
+2. **The reader-list test is stricter.** The structural walk matched only the name
+   `is_admin`, so a call to the `_is_admin` helper from another module would not have
+   registered. The walk now also counts `_is_admin` calls outside `access.py`, which is
+   how the fifth entry (`routers/tasks.py: create_task`) is asserted.
+3. **The error sentences carry no numbers.** `user_capacity` and `task_quota` are
+   server settings, so the frontend's sentences name no limit; the banner reads its
+   number from `/me`. `useCreateTask` invalidates `/me` on success, so the banner appears
+   on the create that reaches the limit, not on the next page load.
