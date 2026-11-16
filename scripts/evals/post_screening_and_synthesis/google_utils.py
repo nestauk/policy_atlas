@@ -1,8 +1,9 @@
 """Read a Google Sheet with a service account.
 
 Not a script. Set-up: create a service account, share the sheet with its email, and
-save its JSON key file as ``infra/.credentials/afsmumsnet-454163761a82.json`` (gitignored).
-``GOOGLE_SHEETS_CREDENTIALS`` in ``backend/.env`` overrides that path.
+save its JSON key file as ``infra/.credentials/afsmumsnet-454163761a82.json``
+(gitignored). ``GOOGLE_SHEETS_CREDENTIALS`` in ``backend/.env`` overrides that path;
+a relative value is taken from the repo root.
 """
 
 from __future__ import annotations
@@ -15,7 +16,9 @@ from googleapiclient.discovery import build
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 REPO_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_CREDENTIALS = REPO_ROOT / "infra" / ".credentials" / "afsmumsnet-454163761a82.json"
+DEFAULT_CREDENTIALS = (
+    REPO_ROOT / "infra" / ".credentials" / "afsmumsnet-454163761a82.json"
+)
 
 
 def fetch_sheet(sheet_id: str, sheet_name: str) -> list[dict[str, str]]:
@@ -31,10 +34,12 @@ def fetch_sheet(sheet_id: str, sheet_name: str) -> list[dict[str, str]]:
     Raises:
         FileNotFoundError: If the key file is missing.
     """
-    credentials = Credentials.from_service_account_file(
-        os.environ.get("GOOGLE_SHEETS_CREDENTIALS", str(DEFAULT_CREDENTIALS)),
-        scopes=SCOPES,
+    # A relative path in the env var is taken from the repo root, so notebooks whose
+    # working directory is this folder find the same file as scripts run from the root.
+    key_path = REPO_ROOT / (
+        os.environ.get("GOOGLE_SHEETS_CREDENTIALS") or DEFAULT_CREDENTIALS
     )
+    credentials = Credentials.from_service_account_file(str(key_path), scopes=SCOPES)
     service = build("sheets", "v4", credentials=credentials, cache_discovery=False)
     rows = (
         service.spreadsheets()
