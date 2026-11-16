@@ -1,13 +1,17 @@
 # Implementation plan: 065-accounts
 
-> Status: **draft 1, awaiting the plan-stage adversarial review and the owner's plan gate.**
-> Contract: [contract.md](contract.md) revision 3, approved 2026-11-16 (B13 included). Rubric:
-> [rubric.md](rubric.md), 23 items. ADR 0046 is written at step 4, after this gate. Terms,
-> items (A1 to C6, B12, B13) and the eleven live checks are defined in the contract and not
-> restated here. Executor routing follows `docs/agentic-ops/harness.md` § Agent-side model
-> routing: judgment-bearing build work to `codex` from a machine-verifiable brief, mechanical
-> volume to `fast-worker`, frontend to `frontend-designer`, copy and seam design to the lead.
-> The build runs in a fresh conversation with task-cycle-build, opening on Phase 0.
+> Status: **draft 2, awaiting the owner's plan gate.** Draft 1 was reviewed read-only by the
+> Codex lane on 2026-11-16 (12 findings: 3 blockers, 8 material, 1 minor; the record stays
+> local under `research/`); every finding is folded here (§ Folded findings). Contract:
+> [contract.md](contract.md) revision 3, approved 2026-11-16, with the revision 3.1 amendments
+> to B1, B6 and B13 that this review produced and that the owner confirms at this gate.
+> Rubric: [rubric.md](rubric.md), 23 items. ADR 0046 is written at step 4, after this gate.
+> Terms, items (A1 to A4, B1 to B13, C1 to C6) and the eleven live checks are defined in the
+> contract and not restated here. Executor routing follows `docs/agentic-ops/harness.md`
+> § Agent-side model routing: judgment-bearing build work to `codex` from a machine-verifiable
+> brief, mechanical volume to `fast-worker`, frontend to `frontend-designer`, copy and seam
+> design to the lead. The build runs in a fresh conversation with task-cycle-build, opening
+> on Phase 0.
 
 ## Context
 
@@ -27,120 +31,155 @@ deploy script and the database login (9). Each phase ends with its tests green, 
 phase builds on verified seams. C comes last because the sweep lives in the ops service and
 calls the ensure-account command.
 
-The worktree branches from `dev`, which does not yet carry 064a. Two things wait for the 064a
-merge and are done at the PR, not before: the migration chain rebase (B8) and the
-`user offboard` route and bulk action (B4, B6), which call 064a's `offboard_user`. Until then
-the offboard route is built against the command's signature on the 064a branch and its test
-is marked to run once the merge lands (P12).
+**Base branch.** `task/065-accounts` was rebased onto `task/064a-security-quick-wins` on
+2026-11-16 (finding 1), so 064a's `offboard_user`, `user_at_run_cap` and
+`tasks_created_since` are present and the migration chain already follows 064a's. The PR
+opens after 064a merges to `dev`, with one more rebase then (B8).
 
 ## Decisions taken in this plan
 
 - **P1. The ops bundle is built by `scripts/deploy.sh`, not inside the Dockerfile.** The image
   is a CDK `DockerImageAsset` with `backend/` as its build context, so the frontend sources are
   not in the context, and the deploy script already builds the public bundle with the same
-  `VITE_*` values. The script runs `pnpm build:ops` into `backend/ops-ui/` (gitignored) before
-  `cdk deploy`, and the Dockerfile copies `ops-ui/` into the image at `/app/ops-ui`. A deploy
-  gate check fails when the directory is absent, and the Dockerfile copies it from a stage so
-  a local image build without the bundle still succeeds with an empty directory. *This refines
-  B3's "Node build stage" wording to the same outcome with no Node toolchain in the image
-  build; flagged for the plan gate as a minor contract refinement.*
+  `VITE_*` values. The script runs `pnpm build:ops` before `cdk deploy`; the ops Vite config
+  writes straight to `../backend/ops-ui/` (`build.outDir`, `emptyOutDir: true`; gitignored),
+  and the Dockerfile copies `ops-ui/` into the image at `/app/ops-ui` through a stage that
+  tolerates its absence, so a local image build still succeeds. A deploy gate check fails
+  when `backend/ops-ui/index.html` is absent, and `tests/scripts` asserts the built image
+  contains `index.html` and the hashed assets (finding 12). *Refines B3's "Node build stage"
+  wording to the same outcome with no Node toolchain in the image build.*
 - **P2. The ops bundle's API base is same-origin.** `VITE_API_BASE_URL=/api` for the ops build;
   the ops app serves `/api/v1/ops/*` and the pages from one origin, so no cross-origin call
-  and no second base-URL variable (B3, B6).
+  and no second base-URL variable (B3, B6). The other `VITE_*` values (OIDC authority and
+  client id) are the ones the deploy script already exports for the public build.
 - **P3. One frontend project, a second entry.** `frontend/ops.html` → `src/ops/main.tsx` reuses
   `AuthProvider`, the generated client shape, `ui/brand` and the Tailwind theme; the ops
-  router and views live under `src/ops/`. `pnpm build:ops` is `vite build --config
-  vite.ops.config.ts` with `build.outDir = dist-ops` and the `ops.html` input; the public
-  `pnpm build` is untouched. Vitest covers `src/ops/` in the existing run.
+  router and views live under `src/ops/`. `vite.ops.config.ts` imports the base config and
+  overrides only `build.rollupOptions.input` (`ops.html`) and `build.outDir` (P1), so the
+  React compiler and Tailwind plugins are the same objects; `pnpm build:ops` is `tsc -b &&
+  vite build --config vite.ops.config.ts`, and `tsconfig.app.json` already includes `src/`,
+  so `src/ops/` type-checks in the same build. Vitest's include glob covers `src/ops/` with
+  no config change; the public `pnpm build` and `dist/` are untouched (a test asserts no
+  ops chunk in `dist/`).
 - **P4. The ops database secret carries a full connection string, like the master secret.** CDK
-  creates `policy_atlas_v3/ops_db` with a generated `password` and the template
-  `{"username": "pa_ops"}`. The deploy step `python -m policy_atlas.ops db-role sync`, run by
-  the migration task with the master login, (1) sets `LOGIN` and the password on `pa_ops`,
-  (2) composes the ops URL from the master URL's host and database with the `pa_ops`
-  credentials, and (3) writes it to the secret's `db_connection_string` field. The ops task's
-  `DATABASE_URL` is `ecs.Secret.from_secrets_manager(ops_db_secret, field=
-  "db_connection_string")`, the same shape as the API's, so `settings.py` is unchanged. The
-  migration task role gets `secretsmanager:GetSecretValue` and `PutSecretValue` on that one
-  secret (synth-pinned). Order holds because the deploy script runs the sync before it starts
-  the ops service (B13; § Deploy order).
-- **P5. The `pa_ops` grant list is what the command functions do today, no wider.** Read from
-  `ops/commands.py` (064a branch): `SELECT, INSERT, UPDATE` on `app_user`, `organisation`,
-  `organisation_domain`, `waitlist_entry`; `SELECT, INSERT` on `ops_action`; `SELECT` and
-  `UPDATE (org_id, visibility, is_public, updated_at)` on `task`; `SELECT` and `UPDATE
-  (org_id, visibility)` on `project`; `SELECT, DELETE` on `project_membership` (the
-  cross-owner severing in `_sever_cross_owner_memberships`). `SELECT` on `capability_run` is
-  **not** granted: the run-cap check (064a Q7) runs on the API only, and the ops people list
-  shows tasks created in the last 365 days (a `task` read), not runs in progress. *B13's text
-  says "no `DELETE` anywhere" and "`UPDATE (org_id)`"; the commands already delete membership
-  rows and update three more columns, so the grant follows the code. Flagged for the plan
-  gate as a contract correction; the contract's intent (nothing beyond what the ops writes
-  need) holds.*
-- **P6. The grant list is pinned by a test, not by prose.** A test in `tests/ops/` runs the
-  migration, then `SET ROLE pa_ops` on a connection and asserts: every ops write in the
-  conformance suite succeeds; `DELETE FROM app_user`, `DELETE FROM task`, `SELECT FROM
-  capability_run` and `UPDATE task SET title` are refused with `InsufficientPrivilege`. The
-  test database user is a superuser (compose), so `SET ROLE` works there; on RDS the master
-  user owns the role and the deploy step sets the password.
+  creates `policy_atlas_v3/ops_db` with the template `{"username": "pa_ops"}` and a generated
+  `password` (`exclude_punctuation` so the value is URL-safe; the sync still escapes it). The
+  sync is a **separate entrypoint**, `python -m policy_atlas.ops.db_role sync`, that imports
+  nothing from `ops.cli` (no `--env`, no Cognito or STS verification; finding 3). It (1) reads
+  the whole secret JSON, (2) runs `ALTER ROLE pa_ops LOGIN PASSWORD <literal>` with the
+  password quoted by `psycopg.sql.Literal` (bound parameters are not allowed in `ALTER ROLE`),
+  (3) builds the ops URL with `sqlalchemy.engine.URL.create` from the master URL's host, port
+  and database and the `pa_ops` credentials, (4) writes the **full** JSON back with
+  `db_connection_string` added or replaced (`PutSecretValue` replaces the whole value;
+  finding 7). It never logs the URL or the password; a test with reserved characters in the
+  password asserts both. The **migration task's command** becomes `sh -c "alembic upgrade
+  head && python -m policy_atlas.ops.db_role sync"`, its environment gains
+  `OPS_DB_SECRET_ARN`, and its task role gets `secretsmanager:GetSecretValue` and
+  `PutSecretValue` on that one secret; the synth test pins the command, the variable and the
+  two actions. The ops task's `DATABASE_URL` is `ecs.Secret.from_secrets_manager(ops_db_secret,
+  field="db_connection_string")`, the same shape as the API's, so `settings.py` is unchanged.
+  The field exists before the ops service first starts because the deploy script runs the
+  migration task (and so the sync) before it starts the ops service (§ Deploy order).
+- **P5. The `pa_ops` grant list is contract B13 revision 3.1**, which follows what the command
+  functions do today and no more: column-level `UPDATE`s, the one `DELETE` on
+  `project_membership`, schema `USAGE` without `CREATE`, nothing on `capability_run` or
+  `alembic_version`, and the trigger that lets the ops login clear `is_admin` and `is_ops`
+  but never set them (findings 5, 6). The run-cap check (064a Q7) runs on the API only; the
+  ops people list shows tasks created in the last 365 days (a `task` read), not simultaneous
+  tasks.
+- **P6. The grant list is pinned by a test that logs in as `pa_ops`, not by `SET ROLE`.** The
+  test fixture creates the role with `LOGIN` and a password in the worker's test database
+  (the compose user may), opens a second engine as `pa_ops`, runs every ops write of the
+  conformance suite through it, and asserts each refusal B13 lists with `InsufficientPrivilege`
+  (finding 6). Staging check (11) repeats the refusals over the real secret.
 - **P7. The quota resolver lives beside `tasks_created_since`** in `routers/common.py`:
   `effective_limits(conn, user_id) -> Limits(task_quota: int | None, runs: int | None)`,
   `None` meaning no limit (0 in the column, or admin for the task quota). The three callers
   (task create, run start, `/me`) replace their direct `settings.*` reads with it; the
   settings values become the resolver's defaults. One test module pins the precedence.
-- **P8. Ops routes are thin.** Each route resolves its target, opens the transaction, calls
-  one command function, inserts the `ops_action` row and logs, in that order, in one helper
-  `record_action(conn, actor, action, target, outcome)` used by every route and by the sweep.
-  Bulk routes take a list of subjects and loop that helper per subject, collecting outcomes;
-  one failure is recorded and the loop continues (B6). The route module is `routers/ops.py`;
-  the router is included only when `settings.service_role == "ops"`.
-- **P9. Ops mode is a settings field, not a second factory.** `Settings.service_role:
-  Literal["api", "ops"]` from `POLICY_ATLAS_SERVICE_ROLE`. `create_app` picks the router set
-  and the lifespan from it: `_lifespan` (unchanged) for `api`, a new `_ops_lifespan` that
-  builds the engine, the HTTP client and the authenticator, starts the sweep task when the
-  flag is on, and shuts them down. The static mount is `StaticFiles(directory=/app/ops-ui,
-  html=True)` at `/` with a catch-all that returns `index.html` for non-`/api` paths, added
-  only in ops mode and only when the directory exists (tests run without it and assert the
-  catch-all from a temporary directory).
+- **P8. Ops routes are thin, and the audit row is inside the transaction while the log line
+  is after it.** Each route resolves its target, calls one command function and inserts the
+  `ops_action` row through one helper `record_action(conn, actor, action, target, outcome)`;
+  the `ops.action` log line is emitted by the route **after** the transaction commits, the
+  way the CLI's post-commit admin trace works. Bulk routes take a list of subjects and run
+  each subject inside its own savepoint (`conn.begin_nested()`): a failure rolls back that
+  savepoint only, records a `failed` outcome row for that subject, and the loop continues
+  (finding 8). The conformance test for the loop triggers a real SQL failure (a violated
+  constraint), not a command-level refusal. The route module is `routers/ops.py`; the router
+  is included only when `settings.service_role == "ops"`.
+- **P9. Ops mode is a settings field, not a second factory, and the pages are a fallback, not
+  a root mount.** `Settings.service_role: Literal["api", "ops"]` from
+  `POLICY_ATLAS_SERVICE_ROLE`. `create_app` picks the router set and the lifespan from it:
+  `_lifespan` (unchanged) for `api`, a new `_ops_lifespan` that builds the engine, the HTTP
+  client and the authenticator, starts the sweep task when the flag is on, and shuts them
+  down. In ops mode the health and `/api/v1/ops/*` routes are registered first, Vite's hashed
+  assets are mounted at `/assets` only, and a final `GET /{path:path}` route returns
+  `index.html` for any path that does not start with `/api` and 404 for one that does
+  (finding 4). Route-order tests cover `/people`, `/assets/x.js`, `/api/v1/ops/organisations`
+  and `/api/v1/tasks`. The directory comes from `OPS_UI_DIR` (default `/app/ops-ui`); tests
+  point it at a temporary directory, and when it is absent the fallback is not registered.
 - **P10. The sweep is a plain asyncio task** in the ops lifespan: `while True: await
-  asyncio.sleep(60); await asyncio.to_thread(sweep_once, engine, cognito, settings)`.
-  `sweep_once` is a pure function in `ops/sweep.py` that takes the clock, so the unit tests
-  call it directly with a fake Cognito and a fixed clock and never sleep. The hourly cap is a
-  count of `ops_action` rows with actor `sweep` and action `invite` in the last hour, so a
-  restart does not reset it.
+  asyncio.sleep(60); await asyncio.to_thread(sweep_once, engine, cognito, settings)`; the
+  lifespan's `finally` cancels it and awaits the cancellation before disposing the engine, so
+  a stop never leaves a half-run tick. `sweep_once` is a pure function in `ops/sweep.py` that
+  takes the clock, so the unit tests call it directly with a fake Cognito and a fixed clock
+  and never sleep. The hourly cap is a count of `ops_action` rows with actor `sweep` and
+  action `invite` in the last hour, so a restart does not reset it. **Idempotency of the
+  terminal outcomes:** before handling a row the sweep looks for an `ops_action` row with
+  actor `sweep`, target the waitlist row id and outcome `enrolled_elsewhere`; if one exists
+  the row is skipped without a new log line. A `failed` outcome row does not block a retry
+  (finding 9). The Requests page derives the orange "Check" state from that terminal row.
+  The sweep is not one of the API's lifespan jobs, so web-api.md § Deployment posture's
+  one-process rule is untouched; the plan adds a sentence there saying so (Phase 12).
 - **P11. The ensure-account command reuses `create_user`'s pieces, not its entry point.**
   `ensure_account_enrolled` calls the existing `_find_sub_by_email`, the Cognito create path
   with `--invite email` semantics, and `_enrol`; it never calls `create_user` itself (whose
   "exists and org given" refusal is the retry case). `create_user` and the CLI are unchanged
   (contract § Terms).
-- **P12. Offboard waits for 064a.** The route and the bulk action call `offboard_user` from
-  064a. In this worktree the function does not exist, so the route module imports it lazily
-  and the conformance test for offboard is skipped with the reason "needs 064a merge" until
-  the rebase at the PR, where the skip is removed and the test must pass before the PR opens.
-  Everything else in B is independent of 064a.
-- **P13. Email copy is written by the lead** in Phase 2 as two HTML files; agents never write
+- **P12. Email copy is written by the lead** in Phase 2 as two HTML files; agents never write
   it. The owner reviews the files in a browser at the Phase 2 gate (A2).
-- **P14. Regeneration closes every phase that changes a contract model.** `make openapi-sync`
+- **P13. Regeneration closes every phase that changes a contract model.** `make openapi-sync`
   then `make drift-check` after Phases 4 (quota on `/me`) and 6 (the ops document); the ops
   document's generation is added to both targets in Phase 6.
-- **P15. Codex briefs are one seam each** with a file boundary and a named test command
+- **P14. Codex briefs are one seam each** with a file boundary and a named test command
   (§ Briefs). The build conversation dispatches them one at a time, or in parallel where the
   files do not overlap.
-- **P16. Staging is the only live environment this slice touches.** Production receives A
+- **P15. Staging is the only live environment this slice touches.** Production receives A
   after the PR merges (its SES is ready); B and C reach production in later deploys, C only
   after 064b (C4). The eleven live checks run on staging from the branch deploy the owner
   triggers, as 057 and 058 did.
 
+## Folded findings (Codex, draft 1)
+
+| # | Severity | Folded as |
+|---|---|---|
+| 1 | blocker | branch rebased onto 064a; P12 of draft 1 (offboard skip) removed; § Context "Base branch" |
+| 2 | blocker | § Deploy order: the ops secret and the service exports are checked **after** `cdk deploy`, before stop and migrate; only the allowlist parameter and the bundle are checked before |
+| 3 | blocker | P4: separate entrypoint `ops.db_role`; migration task command runs both; synth-pinned |
+| 4 | material | P9: routes first, `/assets` mount, final non-`/api` fallback, route-order tests |
+| 5 | material | contract B13 revision 3.1 and rubric 23 amended; owner confirms at this gate |
+| 6 | material | B13: column grants, `USAGE` without `CREATE`, the set-true trigger, login-as-`pa_ops` test, staging check (11) |
+| 7 | material | P4: read-modify-write of the full secret, `URL.create`, quoted literal, reserved-character test, no logging |
+| 8 | material | P8: savepoint per subject, log after commit, real SQL-failure test |
+| 9 | material | P10: terminal-outcome predicate on `ops_action`; retries for `failed` |
+| 10 | material | contract B6 revision 3.1 and rubric 16: the dialog lists every person, the count is typed |
+| 11 | material | § Gate map: full after Phases 5, 7 and 9 |
+| 12 | minor | P1: one output path, `../backend/ops-ui/`; image test |
+
+The reviewer named four targets it did not cover: the asyncio sweep and the one-process
+rule (P10 now states both), the second Vite entry and vitest (P3 now states the config
+reuse, `tsc -b` and the include glob), executor routing (unchanged; every `lead` mark below
+carries its reason), and draft 1's 064a handling (removed by the rebase).
+
 ## Open for the plan gate
 
-1. **P1** (ops bundle built by the deploy script, copied into the image) and **P5** (the
-   grant list follows the code, including `DELETE` on `project_membership`) refine the
-   contract's B3 and B13 wording. Recommendation: accept both; the outcomes the contract
-   names are unchanged.
-2. **Bulk offboard confirmation.** The wireframe confirms a single offboard by typing the
-   address. For a bulk offboard, recommendation: type the number of people ("3") instead,
-   since typing every address is unworkable.
-3. **The ops people list's "Tasks this year" column** reads `task` for every person listed.
-   With under a hundred people one query per page load is fine; recommendation: one grouped
-   query, no cache, and a `ponytail:` note naming the ceiling.
+1. **Contract revision 3.1** (B1, B6, B13 as amended today) and the two plan refinements P1
+   (bundle built by the deploy script) and P5 (grants follow the code). Recommendation:
+   accept all; the outcomes the contract names are unchanged, and the database now refuses
+   what the contract's prose used to promise.
+2. **The ops people list's "Tasks this year" column** reads `task` for every person listed.
+   With under a hundred people one grouped query per page load is fine; recommendation: one
+   grouped query, no cache, and a `ponytail:` note naming the ceiling.
 
 ## Gate map (binding)
 
@@ -151,28 +190,29 @@ is marked to run once the merge lands (P12).
 | After Phase 2 | fast + owner copy review | files, no code paths |
 | After Phase 3 | full | schema (mandatory class) |
 | After Phase 4 | full + `drift-check` | commands, resolver, `/me` regeneration |
-| After Phase 5 | fast | app factory and lifespan; no schema |
+| After Phase 5 | full | the auth-facing application boundary (finding 11) |
 | After Phase 6 | full + `drift-check` | routes; ops OpenAPI document and types |
-| After Phase 7 | synth tests + fast | infra and image |
+| After Phase 7 | synth tests + full | IAM, image, service composition (finding 11) |
 | After Phase 8 | fast per round | frontend surfaces |
-| After Phase 9 | fast + `deploy-build-guard-test` | deploy script and db-role |
-| After Phase 10 | full | sweep touches schema readers; last backend phase |
+| After Phase 9 | full + `deploy-build-guard-test` | deploy sequencing and the secret path (finding 11) |
+| After Phase 10 | full | sweep; last backend phase |
 | Phase 11 (staging) | the eleven live checks | contract § Acceptance |
 | Step-6 exit | full | exit (spine) |
 
-Phases 5 and 7 share no schema or reader contact with their neighbours and gate on fast;
-Phase 1 is infra only and gates on the synth tests. Everything else carries a full run.
+Only Phases 1, 2 and 8 gate below a full run: infra-only, files-only and frontend rounds.
 
 ## Deploy order (binding for Phase 9 and Phase 11)
 
-`scripts/deploy.sh` keeps its stop → migrate → start shape and gains four things, in this
-order: (1) gate checks: the ops allowlist parameter (same validator as Metabase's, parameter
-name from `pa_config.json`), the ops database secret exists, `backend/ops-ui/` is present;
-(2) before `cdk deploy`: `pnpm build:ops` with `VITE_API_BASE_URL=/api` and the same OIDC
-values; (3) stop the API **and** the ops service, run migrations, then `db-role sync` in the
-same migration task definition with the sync command, then start the API, then the ops
-service; (4) the Metabase single-count invariant extends to the ops service. The downgrade
-path is the mirror: stop both, downgrade, start. Rollback for each step is the contract's
+`scripts/deploy.sh` keeps its stop → migrate → start shape and gains, in this order:
+(1) **before `cdk deploy`:** the ops allowlist parameter check (same validator as
+Metabase's, parameter name from `pa_config.json`), `pnpm build:ops` into `backend/ops-ui/`
+(P1), and the bundle presence check; (2) **`cdk deploy`**, which creates the ops secret, the
+ops service and its SSM exports on the first run; (3) **after CDK, before stop:** the ops
+secret exists, the ops service and target group are exported (finding 2); (4) stop the API
+**and** the ops service; run the migration task, whose command now runs `alembic upgrade
+head` and then the `db_role sync` (P4); start the API, then the ops service; (5) the
+Metabase single-count invariant extends to the ops service. The downgrade path is the
+mirror: stop both, downgrade, start. Rollback for each step is the contract's
 (§ Constraints) and each is exercised once in Phase 11.
 
 ## Phases
@@ -202,23 +242,24 @@ path is the mirror: stop both, downgrade, start. Rollback for each step is the c
 - Gate: owner opens the two HTML files and approves the copy (A2).
 
 ### Phase 3 — Schema (B1, B4, B11, B12, B13, C1, C2)
-- codex: one Alembic migration after the worktree's head (`f9c6e3b8d4a2`), additive:
-  `app_user.is_ops`, `app_user.invited_at`, the four quota override columns with
-  `CHECK (>= 0)`, `ops_action`, `organisation_domain`, the two `waitlist_entry` columns, the
-  `pa_ops` role (idempotent `DO` block, `NOLOGIN`) and the P5 grants; the downgrade reverses
-  all of it including `DROP ROLE` (after `REVOKE`). `core/schema.py` tables updated. Done:
-  `alembic upgrade head` then `downgrade -1` then `upgrade head` on the test database leaves
-  no diff; `make verify` green.
-- codex: the P6 privilege test in `tests/ops/test_pa_ops_grants.py` (the positive half is
-  completed in Phase 6 when the routes exist; the negative half passes now).
+- codex: one Alembic migration after 064a's head, additive: `app_user.is_ops`,
+  `app_user.invited_at`, the four quota override columns with `CHECK (>= 0)`, `ops_action`,
+  `organisation_domain`, the two `waitlist_entry` columns, the `pa_ops` role (idempotent `DO`
+  block, `NOLOGIN`), the B13 grants and the `app_user` trigger; the downgrade reverses all of
+  it (`REVOKE`, drop trigger, `DROP ROLE`). `core/schema.py` tables updated. Done: `alembic
+  upgrade head` then `downgrade -1` then `upgrade head` on the test database leaves no diff;
+  `make verify` green.
+- codex: the P6 privilege test in `tests/ops/test_pa_ops_login.py`: the fixture that creates
+  the login, the refusal half now; the positive half (every ops write) is completed in
+  Phase 6 when the routes exist.
 
 ### Phase 4 — Commands, resolver and `/me` (B11 helper, B12, ensure-account, `set_quota`)
 - codex: `ops/commands.py` gains `ensure_account_enrolled` (P11) and `set_quota`; `ops/cli.py`
   gains `ops grant|revoke`, `user quota`, `org quota`, `org domain add|remove`, each with the
-  post-commit admin trace where the contract says so; `user offboard` clears `is_ops` (a
-  one-line change rebased onto 064a at the PR, P12). Unit tests per B9 and B12 for the
-  command branches and the Cognito-created-then-database-failed retry. Done: `pytest
-  tests/ops` green; `grep -n "def create_user" ops/commands.py` unchanged by diff.
+  post-commit admin trace where the contract says so; `user offboard` clears `is_ops`. Unit
+  tests per B9 and B12 for the command branches and the Cognito-created-then-database-failed
+  retry. Done: `pytest tests/ops` green; `grep -n "def create_user" ops/commands.py`
+  unchanged by diff.
 - codex: `routers/common.py` `effective_limits` (P7) and its three callers; `MeOut.task_quota`
   null for no limit; tests for precedence, zero, admin exemption, clearing. Done: `pytest
   tests/api/test_me_router.py tests/api/test_tasks*.py tests/api/test_run*.py` green.
@@ -229,76 +270,87 @@ path is the mirror: stop both, downgrade, start. Rollback for each step is the c
 
 ### Phase 5 — Ops mode (B2)
 - codex: `Settings.service_role` (P9); `create_app` picks routers and lifespan by it;
-  `_ops_lifespan` per P9 with the sweep task hook left as a no-op callable until Phase 10;
-  the static mount and catch-all. Tests per B9's route-table rows, the patched-lifespan test
-  (executor constructor and `continuation.startup_sweep` never called in ops mode), the
-  catch-all from a temporary directory, and `api` mode serving no static file. Done:
-  `pytest tests/api/test_service_role.py` green; `make verify-fast` green.
+  `_ops_lifespan` per P9 and P10 with the sweep task hook left as a no-op callable until
+  Phase 10; the `/assets` mount and the fallback route. Tests per B9's route-table rows, the
+  patched-lifespan test (executor constructor and `continuation.startup_sweep` never called
+  in ops mode), the route-order tests of P9 from a temporary directory, and `api` mode
+  serving no static file. Done: `pytest tests/api/test_service_role.py` green.
+- Gate: full.
 
 ### Phase 6 — Ops routes and the ops OpenAPI document (B4, B7, B9, C5's read)
 - lead: the route list and the request and response models in `api/contract/ops.py` (seam
   design: the shapes the page and the types are generated from). Why lead: seam design.
-- codex: `routers/ops.py` per P8, every write through `record_action`; the resend route with
-  the 429 cooldown on `invited_at`; bulk variants of set-quota, move, resend, de-enrol and
-  offboard (offboard per P12); the requests list with the three states (C5); the ops-role
-  dependency and the closed reader list for `is_ops` (asserted like 033's `is_admin` list).
-  Conformance tests per B9 (401, 403, 200; no `app_user` row from a non-ops token; one
-  `ops_action` row per write and per bulk subject; the loop continues past a failure).
-  Done: `pytest tests/api/test_ops_router.py tests/api/test_api_conformance.py` green.
+- codex: `routers/ops.py` per P8, every write through `record_action` and the post-commit
+  log; the resend route with the 429 cooldown on `invited_at`; bulk variants of set-quota,
+  move, resend, de-enrol and offboard with a savepoint per subject; the requests list with
+  the three states (C5, reading the sweep's terminal rows per P10); the ops-role dependency
+  and the closed reader list for `is_ops` (asserted like 033's `is_admin` list). Conformance
+  tests per B9 (401, 403, 200; no `app_user` row from a non-ops token; one `ops_action` row
+  per write and per bulk subject; the loop continues past a real SQL failure). Done: `pytest
+  tests/api/test_ops_router.py tests/api/test_api_conformance.py` green.
 - codex: `export_openapi.py --mode ops` writing `frontend/openapi-ops.json`; `package.json`
   `gen:ops` → `src/api/gen/types-ops.ts`; `make openapi-sync` and `make drift-check` cover
   both; the public document asserted to contain no `/api/v1/ops` path. Done: `make
   openapi-sync && make drift-check` clean; a test asserts the public document has no ops path.
-- codex: complete the positive half of the P6 grant test by running the ops conformance
-  writes as `pa_ops`. Done: the test is green both halves.
+- codex: complete the positive half of the P6 login test by running the ops conformance
+  writes as `pa_ops`, including a de-enrol that clears `is_admin` (allowed) and an attempted
+  set to true (refused by the trigger). Done: the test is green both halves.
 - Gate: full + `drift-check`.
 
 ### Phase 7 — Infrastructure and image (B3, B13 secret)
 - codex: `policy_atlas_stack.py` ops service per B3 following the Metabase block (task
-  definition with the ops environment and the ops database secret, service with
+  definition with the ops environment and `DATABASE_URL` from the ops secret, service with
   `desired_count` 0, target group, listener rules on host header plus source addresses from
-  the new SSM parameter via `metabase_allowlist.py` given the parameter name, A record), the
-  ops task role's five Cognito actions scoped to the pool, the migration task role's two
-  Secrets Manager actions on the ops secret (P4), the ops `APP_ORIGIN`, and the callback and
-  logout URLs in `cognito_auth.py`. `pa_config.json` `ops` and `self_signup` blocks for both
-  environments. Synth tests: both task roles (no `cognito-idp` on the API's; exactly five on
-  the ops'), the listener rule shape, the callback URLs, the ops `APP_ORIGIN`, the secret
-  template. Done: `pytest infra/tests` green; `cdk synth` for both environments succeeds.
+  the new SSM parameter via `metabase_allowlist.py` given the parameter name, A record, the
+  SSM exports the deploy script reads), the ops task role's five Cognito actions scoped to
+  the pool, the ops secret (P4), the migration task's command, `OPS_DB_SECRET_ARN` and its two
+  Secrets Manager actions, the ops `APP_ORIGIN`, and the callback and logout URLs in
+  `cognito_auth.py`. `pa_config.json` `ops` and `self_signup` blocks for both environments.
+  Synth tests: both task roles (no `cognito-idp` on the API's; exactly five on the ops'), the
+  listener rule shape, the callback URLs, the ops `APP_ORIGIN`, the secret template, the
+  migration command and its two actions. Done: `pytest infra/tests` green; `cdk synth` for
+  both environments succeeds.
 - fast-worker: `backend/Dockerfile` copies `ops-ui/` into `/app/ops-ui` through a stage that
   tolerates its absence (P1); `backend/.dockerignore` keeps `ops-ui/` in; `.gitignore` adds
-  `backend/ops-ui/`. Done: `docker build backend/` succeeds with and without the directory.
-- Gate: synth tests + fast.
+  `backend/ops-ui/`; `tests/scripts` asserts `index.html` in the built image when the
+  directory is present. Done: `docker build backend/` succeeds with and without the directory.
+- Gate: synth tests + full.
 
 ### Phase 8 — Ops pages (B6, B12 forms, C5)
 - lead: the section list, the states and every line of copy for the ops pages, from the
   owner's explainer and wireframes (People with multi-select, Add a person, Set a quota with
   the "Simultaneous tasks" warning, Requests with three states, Organisations with the move
-  panel, offboard confirmation by typing). Why lead: copy and direction.
-- frontend-designer: `frontend/ops.html`, `vite.ops.config.ts`, `src/ops/` (router, shell,
-  the five views, the confirmation dialog, the "does not have the ops role" state on a 403),
-  using `types-ops.ts`, the shared auth provider and `ui/brand`; `pnpm build:ops`; vitest for
-  each view's states against a mock of the ops routes (`src/ops/mock`). Done: `pnpm test` and
-  `pnpm build:ops` green; `pnpm build` output unchanged (no ops chunk in `dist/`).
+  panel, offboard confirmation by address or by count under the full list). Why lead: copy
+  and direction.
+- frontend-designer: `frontend/ops.html`, `vite.ops.config.ts` (P3), `src/ops/` (router,
+  shell, the five views, the confirmation dialog, the "does not have the ops role" state on a
+  403), using `types-ops.ts`, the shared auth provider and `ui/brand`; `pnpm build:ops`;
+  vitest for each view's states against a mock of the ops routes (`src/ops/mock`). Done:
+  `pnpm test` and `pnpm build:ops` green; `pnpm build` output unchanged (no ops chunk in
+  `dist/`).
 - frontend-designer: one polish pass per task-cycle-build § Step 5b after the lead's review.
 - Gate: fast per round.
 
 ### Phase 9 — Deploy script and the database login (B3, B13, § Deploy order)
-- codex: `ops/db_role.py` and the CLI command `db-role sync` (P4: `ALTER ROLE ... LOGIN
-  PASSWORD`, compose the URL, `PutSecretValue`); a unit test with a fake Secrets Manager and
-  the test database. `scripts/deploy.sh` per § Deploy order, with the ops allowlist parameter
-  check mirroring `check_metabase_allowlist_parameter`, the secret check, the bundle check,
-  the `build:ops` step, the stop-both-then-start-API-then-ops sequence and the single-count
-  invariant; `tests/scripts` extended (the `deploy-build-guard-test` target). Done: `make
-  deploy-build-guard-test` green; `shellcheck scripts/deploy.sh` clean.
-- Gate: fast + `deploy-build-guard-test`.
+- codex: `ops/db_role.py` with its own `__main__` (P4); unit tests with a fake Secrets
+  Manager and the test database, a reserved-character password, and an assertion that no
+  log record contains the password or the URL. `scripts/deploy.sh` per § Deploy order, with
+  the ops allowlist parameter check mirroring `check_metabase_allowlist_parameter`, the
+  `build:ops` step and bundle check before CDK, the secret and export checks after CDK, the
+  stop-both-then-start-API-then-ops sequence and the single-count invariant; `tests/scripts`
+  extended (the `deploy-build-guard-test` target) for the new order and the first-deploy
+  path. Done: `make deploy-build-guard-test` green; `shellcheck scripts/deploy.sh` clean.
+- Gate: full + `deploy-build-guard-test`.
 
 ### Phase 10 — Sweep (C3, C4, C6)
-- codex: `ops/sweep.py` `sweep_once` per P10 and the lifespan hook; the domain match (exact,
-  lower-cased, no subdomain); stamping; the hourly cap from `ops_action`; the three
-  ensure-account outcomes; retry on failure; actor `sweep` rows. Unit tests per C6 with a
-  fake Cognito and a fixed clock. Conformance: the public waitlist response byte-identical
-  for a listed and an unlisted domain. Done: `pytest tests/ops/test_sweep.py
-  tests/api/test_waitlist*.py` green; the flag-false test asserts the task is never created.
+- codex: `ops/sweep.py` `sweep_once` per P10 and the lifespan hook with cancellation; the
+  domain match (exact, lower-cased, no subdomain); stamping; the hourly cap from
+  `ops_action`; the three ensure-account outcomes with the terminal-outcome predicate; retry
+  after `failed`; actor `sweep` rows. Unit tests per C6 with a fake Cognito and a fixed
+  clock, plus "enrolled elsewhere is logged once across two ticks". Conformance: the public
+  waitlist response byte-identical for a listed and an unlisted domain. Done: `pytest
+  tests/ops/test_sweep.py tests/api/test_waitlist*.py` green; the flag-false test asserts the
+  task is never created; a lifespan test asserts the task is cancelled and awaited on exit.
 - Gate: full.
 
 ### Phase 11 — Staging and the live checks (contract § Acceptance, § Constraints "Rollback")
@@ -307,28 +359,29 @@ path is the mirror: stop both, downgrade, start. Rollback for each step is the c
   `email.enabled` true, `ops.desired_count` 1, `self_signup.enabled` true on staging only.
   The eleven checks, each with a timestamp in `verification.md`; the invitation's
   `Authentication-Results` header with the address redacted; the deployed task-role policies
-  for both services; `psql` as `pa_ops` for check (11). Then each rollback once (A, B, C) and
-  the re-enable. Why lead: live operations with the owner.
+  for both services; `psql` as `pa_ops` over the real secret for check (11). Then each
+  rollback once (A, B, C) and the re-enable. Why lead: live operations with the owner.
 
 ### Phase 12 — Docs and exit
 - fast-worker: `docs/deferred.md` (SES entry discharged; admin-surface entry reopened; new
   seams: domains beyond `nesta.org.uk`, the domain table on the ops pages, application-sent
-  email, the ops action log on the ops pages); `web-api.md` § Auth boundary and § Waitlist
-  additive paragraphs; `infra/DEPLOYMENT.md` ops section (the allowlist parameter, the
-  secret, the ops address, the first ops grant).
+  email, the ops action log on the ops pages); `web-api.md` § Auth boundary, § Waitlist and
+  § Deployment posture (the sweep is an ops-service job, not an API one) additive paragraphs;
+  `infra/DEPLOYMENT.md` ops section (the allowlist parameter, the secret, the ops address,
+  the first ops grant, the first-deploy order).
 - lead: ADR 0046 status Accepted with the date (drafted at step 4, confirmed here);
   `verification.md` complete; step-6 exit full verify.
 
 ## Briefs (one seam each; the build conversation fills the file list from the phase)
 
 Each Codex brief states: read-only context files, the files it may change, the contract ids,
-the done command, and "do not edit `dev`'s migrations, generated files or `create_user`".
-Frontend briefs go to `frontend-designer` with the lead's copy attached and `DESIGN.md`
-named. No brief writes user-facing copy or email copy.
+the done command, and "do not edit `dev`'s or 064a's migrations, generated files or
+`create_user`". Frontend briefs go to `frontend-designer` with the lead's copy attached and
+`DESIGN.md` named. No brief writes user-facing copy or email copy.
 
 ## What the plan does not do
 
 - No change to the public bundle beyond `frontend/public/brand/email-logo.png` (A2).
-- No production deploy of B or C in this slice (P16).
+- No production deploy of B or C in this slice (P15).
 - No edit of the domain table from the ops pages, no second domain, no MFA, nothing in the
   contract's Out list.

@@ -55,7 +55,8 @@ Slice-specific:
         generated from `frontend/openapi-ops.json`; the public OpenAPI document has no ops path;
         `make openapi-sync` and `make drift-check` cover both documents; a non-ops person sees
         the "does not have the ops role" state; several people can be selected and acted on
-        together with one audit row each; offboard confirms by typing the address.
+        together with one audit row each; offboard confirms by typing the address (one person) or
+        the count under the full list of names (several).
 17. [ ] **B10.** ADR 0046 is Accepted with a date, amends ADR 0033 decision 4 and the 033 Out
         list, records the rejected shapes, the C4 abuse ceiling and the production ordering rule.
 18. [ ] **B11, ensure-account.** `ops_action` is append-only with no route that updates or
@@ -80,7 +81,8 @@ Slice-specific:
         write through `set_quota` with one `ops_action` row per call; the "Simultaneous tasks"
         field carries the capacity warning.
 23. [ ] **B13.** The ops service's task reads the ops database secret, not the master one; the
-        `pa_ops` grants match the B13 list exactly (a test as `pa_ops` is refused `DELETE` on
-        `app_user` and `SELECT` on `capability_run`, and the ops writes succeed); `deploy.sh`
-        runs `db-role sync` after migrations; the downgrade drops the role with the service
-        stopped.
+        `pa_ops` grants match the B13 list exactly, including the trigger; a test connected as
+        `pa_ops` with a password passes every ops write and is refused each statement B13 lists;
+        `deploy.sh` runs the sync after migrations and before starting the ops service; the
+        downgrade revokes, drops the trigger and the role with the service stopped; staging
+        check (11) is recorded.
