@@ -109,10 +109,19 @@ def _assert_unauthenticated(response: Any) -> None:
     assert response.json()["error"]["code"] == "unauthenticated"
 
 
-def test_healthz_is_async_so_it_needs_no_pool_thread() -> None:
+def test_healthz_is_async_so_it_needs_no_pool_thread(tmp_path: Path) -> None:
     import inspect
 
-    from policy_atlas.api.app import create_app
-
-    routes = [r for r in create_app().routes if getattr(r, "path", "") == "/healthz"]
+    # Explicit settings with a throwaway key: `create_app()` with none reads the
+    # environment, which on CI has no dev-issuer key file (PR #120's first run).
+    settings = Settings(
+        "http://dev-issuer.local",
+        "healthz-test",
+        None,
+        init(tmp_path / "issuer"),
+        "http://app.example.test",
+        "postgresql+psycopg://unused/unused",
+    )
+    app = create_app(settings=settings)
+    routes = [r for r in app.routes if getattr(r, "path", "") == "/healthz"]
     assert inspect.iscoroutinefunction(routes[0].endpoint)  # type: ignore[attr-defined]
