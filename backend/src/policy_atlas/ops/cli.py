@@ -10,6 +10,7 @@ The command tree, with every global option before the subcommand::
       user  resync    --email E
       user  reissue   --email E
       user  de-enrol  (--email E | --sub SUB)
+      user  offboard  (--email E | --sub SUB)
       rows  assign    (--task ID | --project ID) --org ORG
       admin grant     (--email E | --sub SUB)
       admin revoke    (--email E | --sub SUB)
@@ -40,8 +41,8 @@ did not land.
 (:func:`_trace`). Contract § 3a wants the line to be evidence, and a line
 written inside the transaction is a durable claim about a write a failed commit
 then threw away. One mechanism serves every command that moves ``is_admin`` —
-``admin grant``, ``admin revoke``, and the ``is_admin`` a ``user de-enrol``
-clears.
+``admin grant``, ``admin revoke``, and the ``is_admin`` a ``user de-enrol`` or
+``user offboard`` clears.
 
 The one place that ordering cannot save anything is ``user create``: the Cognito
 account is made before the database is touched, because its ``sub`` is the key.
@@ -266,6 +267,17 @@ def build_parser() -> argparse.ArgumentParser:
     de_enrol_subject.add_argument("--email", type=_email)
     de_enrol_subject.add_argument("--sub")
 
+    user_offboard = user.add_parser(
+        "offboard",
+        help=(
+            "lock a person out: disable their Cognito account and sign them out "
+            "everywhere, then de-enrol them and make their public task links private"
+        ),
+    )
+    offboard_subject = user_offboard.add_mutually_exclusive_group(required=True)
+    offboard_subject.add_argument("--email", type=_email)
+    offboard_subject.add_argument("--sub")
+
     rows = groups.add_parser("rows", help="row assignment").add_subparsers(
         dest="command", required=True
     )
@@ -410,6 +422,10 @@ def _dispatch(
             )
         if args.command == "de-enrol":
             return commands.de_enrol_user(conn, email=args.email, sub=args.sub)
+        if args.command == "offboard":
+            return commands.offboard_user(
+                conn, cognito, pool_id=target.user_pool_id, email=args.email, sub=args.sub
+            )
         if args.command == "create" and args.org is None:
             return commands.create_user(
                 conn,

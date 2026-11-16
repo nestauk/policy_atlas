@@ -1082,3 +1082,197 @@ def test_admin_grant_takes_a_real_row_lock_by_address_and_by_sub(engine: Engine)
                         commands.set_admin(operator_b, sub=sub, grant=True)
                 attempt.rollback()
         held.rollback()
+
+
+# --- user offboard -------------------------------------------------------------
+#
+# The Stubber answers calls strictly in the order they were queued, and fails the
+# call on any other operation or parameter. So queuing `admin_disable_user` before
+# `admin_user_global_sign_out` *is* the order assertion: a swapped order fails.
+
+
+def _expect_lookup_by_sub(stubber: Any, *, sub: str) -> None:
+    stubber.add_response(
+        "list_users",
+        {"Users": [{"Username": sub, "Attributes": [{"Name": "sub", "Value": sub}]}]},
+        {"UserPoolId": POOL_ID, "Filter": f'sub = "{sub}"', "Limit": 1},
+    )
+
+
+def _expect_lock_out(stubber: Any, *, sub: str, fail: str | None = None) -> None:
+    """Queue the disable then the global sign-out; ``fail`` names the one that errors."""
+    for operation in ("admin_disable_user", "admin_user_global_sign_out"):
+        params = {"UserPoolId": POOL_ID, "Username": sub}
+        if operation == fail:
+            stubber.add_client_error(
+                operation, service_error_code="InternalErrorException", expected_params=params
+            )
+            return
+        stubber.add_response(operation, {}, params)
+
+
+def _public_task(conn: Connection, *, owner: str, org_id: uuid.UUID | None) -> uuid.UUID:
+    task_id = make_task(conn, owner_user_id=owner, org_id=org_id, visibility="org")
+    conn.execute(update(task).where(task.c.task_id == task_id).values(is_public=True))
+    return task_id
+
+
+def _is_public(conn: Connection, task_id: uuid.UUID) -> bool:
+    return bool(
+        conn.execute(select(task.c.is_public).where(task.c.task_id == task_id)).scalar_one()
+    )
+
+
+def test_offboard_disables_then_signs_out_then_de_enrols_and_privatises_links(
+    conn: Connection,
+) -> None:
+    org = _org(conn)
+    sub = fresh_sub()
+    email = unique_email("offboard")
+    ops_enrol(conn, user_id=sub, org_id=org.org_id, email=email)
+    public = _public_task(conn, owner=sub, org_id=org.org_id)
+    private = make_task(conn, owner_user_id=sub, org_id=org.org_id)
+    someone_elses = _public_task(conn, owner=fresh_sub(), org_id=org.org_id)
+
+    with cognito() as (client, stubber):
+        _expect_lookup_by_sub(stubber, sub=sub)
+        _expect_lock_out(stubber, sub=sub)
+        result = commands.offboard_user(conn, client, pool_id=POOL_ID, email=email)
+        stubber.assert_no_pending_responses()
+
+    assert result.de_enrolment is not None
+    assert result.links_made_private == 1
+    assert (_is_public(conn, public), _is_public(conn, private)) == (False, False)
+    assert _is_public(conn, someone_elses) is True
+    assert _user_row(conn, sub).org_id is None
+    assert result.admin_changes() == ()  # not an administrator: nothing to trace
+    assert "disabled the Cognito account" in result.summary()
+
+
+def test_offboard_of_an_already_de_enrolled_person_skips_de_enrol(conn: Connection) -> None:
+    """M-02's main case: removed from the organisation earlier, login still working."""
+    sub = fresh_sub()
+    email = unique_email("gone")
+    ops_enrol(conn, user_id=sub, org_id=None, email=email)
+    public = _public_task(conn, owner=sub, org_id=None)
+
+    with cognito() as (client, stubber):
+        _expect_lookup_by_sub(stubber, sub=sub)
+        _expect_lock_out(stubber, sub=sub)
+        result = commands.offboard_user(conn, client, pool_id=POOL_ID, sub=sub)
+        stubber.assert_no_pending_responses()
+
+    assert result.de_enrolment is None
+    assert "de-enrol skipped: not enrolled" in result.steps
+    assert result.links_made_private == 1
+    assert _is_public(conn, public) is False
+
+
+def test_offboard_of_an_account_with_no_app_user_row_is_cognito_only(conn: Connection) -> None:
+    sub = fresh_sub()
+    email = unique_email("never-arrived")
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=sub)
+        _expect_lock_out(stubber, sub=sub)
+        result = commands.offboard_user(conn, client, pool_id=POOL_ID, email=email)
+        stubber.assert_no_pending_responses()
+
+    assert (result.user_id, result.de_enrolment, result.links_made_private) == (sub, None, 0)
+    assert any("Cognito only" in step for step in result.steps)
+    assert _user_row(conn, sub) is None
+
+
+@pytest.mark.parametrize("failing", ["admin_disable_user", "admin_user_global_sign_out"])
+def test_offboard_leaves_the_database_untouched_when_cognito_fails(
+    conn: Connection, failing: str
+) -> None:
+    org = _org(conn)
+    sub = fresh_sub()
+    email = unique_email("stuck")
+    ops_enrol(conn, user_id=sub, org_id=org.org_id, email=email, is_admin=True)
+    public = _public_task(conn, owner=sub, org_id=org.org_id)
+
+    with cognito() as (client, stubber):
+        _expect_lookup_by_sub(stubber, sub=sub)
+        _expect_lock_out(stubber, sub=sub, fail=failing)
+        with pytest.raises(OpsError, match="InternalErrorException"):
+            commands.offboard_user(conn, client, pool_id=POOL_ID, email=email)
+        stubber.assert_no_pending_responses()
+
+    row = _user_row(conn, sub)
+    assert (row.org_id, row.is_admin) == (org.org_id, True)
+    assert _is_public(conn, public) is True
+
+
+def test_offboarding_an_administrator_carries_the_admin_revoke_trace(conn: Connection) -> None:
+    org = _org(conn)
+    sub = fresh_sub()
+    ops_enrol(conn, user_id=sub, org_id=org.org_id, email=unique_email("admin-out"), is_admin=True)
+    with cognito() as (client, stubber):
+        _expect_lookup_by_sub(stubber, sub=sub)
+        _expect_lock_out(stubber, sub=sub)
+        result = commands.offboard_user(conn, client, pool_id=POOL_ID, sub=sub)
+    assert [(c.subject, c.direction) for c in result.admin_changes()] == [(sub, "revoke")]
+    assert _user_row(conn, sub).is_admin is False
+
+
+def test_cli_user_offboard_reaches_the_command_and_traces_the_revoke(
+    engine: Engine, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``user offboard --email`` through the real entrypoint, environment check and all.
+
+    The trace is the same ``ops.admin_change`` line ``admin revoke`` writes
+    (``cli._trace``), read off stdout as ``test_ops_cli`` does.
+    """
+    import json
+
+    from policy_atlas.ops.cli import main
+    from tests.ops.support import FakeSts, expect_environment
+
+    monkeypatch.setenv("LOG_FORMAT", "json")
+    sub = fresh_sub("cognito")
+    email = unique_email("cli-offboard")
+    with seeded(engine) as setup:
+        ops_enrol(setup, user_id=sub, org_id=make_org(setup), email=email, is_admin=True)
+        public = _public_task(setup, owner=sub, org_id=None)
+
+    lines: list[str] = []
+    with cognito() as (client, stubber):
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        _expect_lookup_by_sub(stubber, sub=sub)
+        _expect_lock_out(stubber, sub=sub)
+        status = main(
+            [
+                "--env",
+                "staging",
+                "--expected-account",
+                "111122223333",
+                "--user-pool-id",
+                POOL_ID,
+                "user",
+                "offboard",
+                "--email",
+                email,
+            ],
+            engine=engine,
+            cognito=client,
+            sts=FakeSts(),
+            write=lines.append,
+        )
+        stubber.assert_no_pending_responses()
+
+    assert status == 0
+    assert any("offboarded" in line for line in lines)
+    traced = [
+        entry
+        for entry in (
+            json.loads(line)
+            for line in capsys.readouterr().out.splitlines()
+            if line.startswith("{")
+        )
+        if entry.get("event") == "ops.admin_change"
+    ]
+    assert [(entry["subject"], entry["direction"]) for entry in traced] == [(sub, "revoke")]
+    with seeded(engine) as check:
+        assert _is_public(check, public) is False
+        assert _user_row(check, sub).org_id is None
