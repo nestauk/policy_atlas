@@ -6,7 +6,7 @@ The task is **done only if every box holds**. Ids (A1 to C6) are the contract's;
 1. [ ] Implementation satisfies [contract.md](contract.md), items A1 to C6.
 2. [ ] `make verify` passes; `make openapi-sync` and `make drift-check` are clean; the infra
        synth tests pass; the declared staging live checks pass and are recorded.
-3. [ ] No approval-gated change snuck in unapproved: schema (B1, C1, C2), auth/tenancy (B1,
+3. [ ] No approval-gated change snuck in unapproved: schema (B1, B4, B11, B12, C1, C2), auth/tenancy (B1,
        B4), production config (A1, B3), public interface (B7), deploy script (B3). Nothing else
        of those classes changed.
 4. [ ] No generated files or secrets edited by hand; the allowlist address ranges, temporary
@@ -70,3 +70,7 @@ Slice-specific:
         staging (A: `email.enabled` false; B: `desired_count` 0 then the downgrade with the
         service stopped; C: the flag false then the downgrade), and no rollback drops a table
         while a service that reads it runs.
+22. [ ] **B12.** The four override columns exist with `CHECK (>= 0)`; only the resolver reads
+        them; the task-create check, the run-cap check and `/me` call the resolver; precedence,
+        `0` as no limit, the admin exemption and clearing are tested; the CLI and the ops routes
+        write through `set_quota` with one `ops_action` row per call.
