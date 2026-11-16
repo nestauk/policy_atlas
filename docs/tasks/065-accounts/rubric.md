@@ -27,32 +27,46 @@ Slice-specific:
        false the pool has no email configuration. No CDK resource creates an SES identity or DNS
        record.
 10. [ ] **A2.** Both templates are HTML files under `infra/email/`, contain `{####}`, the
-        invitation contains `{username}`, and the copy was owner-reviewed before the build ended.
+        invitation contains `{username}`, they are set on the pool only with `email.enabled`
+        true, and the copy was owner-reviewed before the build ended.
 11. [ ] **B1.** `is_ops` has no HTTP writer; the reader list is closed and asserted by a test;
         `ops grant` and `ops revoke` emit the post-commit admin trace; `user offboard` clears it.
-12. [ ] **B2.** In `ops` mode the app serves only health, `/me` and `/api/v1/ops/*`, and starts
-        no run executor, startup sweep, continuation drainer or ingest consumer. In `api` mode no
-        `/api/v1/ops` path exists. Both are tests.
+12. [ ] **B2.** In `ops` mode the app serves only health and `/api/v1/ops/*` (no `/me`), every
+        non-health route carries the ops-role dependency, and the ops lifespan constructs no run
+        executor and calls no startup sweep, continuation drainer or ingest consumer (asserted with
+        those entry points patched). In `api` mode no `/api/v1/ops` path exists. All are tests.
 13. [ ] **B3.** The public API task role carries no `cognito-idp` action; the ops task role
         carries only the five listed, scoped to the pool ARN. The ops hostname is reachable only
-        through listener rules on host header plus source address from the ops SSM parameter,
-        and `scripts/deploy.sh` validates and sizes that parameter. Both roles are synth-pinned.
-14. [ ] **B4, B9.** Every ops write calls the existing command function and emits one
-        `ops.action` line with the caller's subject; no route re-implements a command; 401 without
-        a token, 403 without the role, 200 with it.
+        through listener rules on host header plus source address from the ops SSM parameter;
+        `scripts/deploy.sh` validates and sizes that parameter and stops both services before
+        migrating. Both roles are synth-pinned.
+14. [ ] **B4, B9.** Every ops write calls a command function, inserts one `ops_action` row in
+        the same transaction and emits one `ops.action` line, each with the caller's subject; no
+        route re-implements a command; browser-created accounts always have an organisation;
+        resend is 429 within an hour of the last send; 401 without a token, 403 without the role,
+        200 with it; a non-ops token creates no `app_user` row through the ops host.
 15. [ ] **B5.** The runtime image imports `policy_atlas.ops.commands` without the `ops`
         dependency group (a test runs the import with the stubs absent, or the build proves it).
-16. [ ] **B6, B7.** `/me` carries `is_ops`; the `/ops` navigation entry shows only when it is
-        true; the page calls the ops host from `VITE_OPS_API_BASE_URL`; offboard asks for
+16. [ ] **B6, B7.** The public `/me` carries `is_ops`; the `/ops` navigation entry shows only
+        when it is true; the page calls the ops host from `VITE_OPS_API_BASE_URL` using types
+        generated from `frontend/openapi-ops.json`; the public OpenAPI document has no ops path;
+        `make openapi-sync` and `make drift-check` cover both documents; offboard asks for
         confirmation.
 17. [ ] **B10.** ADR 0046 is Accepted with a date, amends ADR 0033 decision 4 and the 033 Out
-        list, and records the rejected shapes.
-18. [ ] **C1 to C3.** The domain table exists with the CLI commands; the public waitlist route
-        and its response are unchanged; the sweep runs only in ops mode, stamps on success,
-        retries after failure, stamps without sending when the address already exists, and matches
-        domains exactly (lower-cased, no subdomains).
-19. [ ] **C4, C6.** The form response is byte-identical for a listed and an unlisted domain
-        (conformance test); the one-invitation-per-address ceiling is stated in the ADR.
-20. [ ] **Rollback.** Each step's rollback in contract § Constraints was exercised at least once
-        on staging or in the synth tests (A: `email.enabled` false; B: `desired_count` 0; C: the
-        migration downgrade round-trips).
+        list, records the rejected shapes, the C4 abuse ceiling and the production ordering rule.
+18. [ ] **B11, ensure-account.** `ops_action` is append-only with no route that updates or
+        deletes it; the ensure-account command's three branches and the Cognito-created-then-
+        database-failed retry are tested; the CLI's `create_user` is unchanged.
+19. [ ] **C1 to C3.** The domain table exists with the CLI commands; the public waitlist route
+        and its response are unchanged; the sweep runs only in ops mode with the self-signup flag
+        true, stamps on success, retries after failure, enrols without sending when the address
+        exists unenrolled, leaves an address enrolled elsewhere for an operator, stops at the hourly
+        cap, and matches domains exactly (lower-cased, no subdomains).
+20. [ ] **C4, C6.** The form response is byte-identical for a listed and an unlisted domain
+        (conformance test); the ceiling (one per address, `max_per_hour`, listed domains only,
+        resend cooldown) and the rule that production enables self-signup only after 064b's rate
+        rule are stated in the ADR.
+21. [ ] **Rollback.** Each step's rollback in contract § Constraints was exercised once on
+        staging (A: `email.enabled` false; B: `desired_count` 0 then the downgrade with the
+        service stopped; C: the flag false then the downgrade), and no rollback drops a table
+        while a service that reads it runs.
