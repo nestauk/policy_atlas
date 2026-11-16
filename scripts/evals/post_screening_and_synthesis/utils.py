@@ -1,7 +1,6 @@
 """Shared paths, readers and model helpers for the post-screening synthesis coverage eval.
 
-Not a script. Imported by ``ground_truth.py``, ``run_synthesis.py``, ``upload.py`` and
-the tests after ``_bootstrap``.
+Not a script. Imported by the numbered scripts and the tests after ``_bootstrap``.
 """
 
 from __future__ import annotations
@@ -14,6 +13,7 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
+from google_utils import fetch_sheet
 from openai import OpenAI
 from policy_atlas.core.openai_client import resolve_openai_client
 from policy_atlas.evidence_search.sourcing.ingest_full_text import (
@@ -22,17 +22,23 @@ from policy_atlas.evidence_search.sourcing.ingest_full_text import (
 )
 
 ROOT = Path(__file__).resolve().parent
-TEST_SET_CSV = ROOT / "inputs" / "POST_test_set.csv"
 BRIEFINGS_DIR = ROOT / "inputs" / "briefings"
 GROUND_TRUTH_DIR = ROOT / "ground_truth"
 DATASETS_DIR = ROOT / "datasets"
 RESULTS_DIR = ROOT / "results" / "runs"
 PROMPTS_DIR = ROOT / "prompts"
 
+# The test set lives in a Google Sheet (one row per briefing) so the team can add to it.
+TEST_SET_SHEET_ID = "1ysmdUcOXGLjtse5KgsGlYIpdpQ8vwf1YSOToevAAhns"
+TEST_SET_SHEET_NAME = "POST_test_set"
 # Eval-side model for extraction and judging (decision, 2026-10-21).
 MODEL = "gpt-5.6-luna"
 # Langfuse experiment name; also the `experiment` metadata key on every eval trace.
 EXPERIMENT = "synthesis-coverage"
+# Langfuse dataset: one item per briefing with ground truth.
+DATASET = "synthesis-coverage"
+# Separator for the ref_labels column of key_facts.csv.
+LABEL_SEP = "|"
 CONTENT_TYPES = {
     ".pdf": "application/pdf",
     ".html": "text/html",
@@ -41,25 +47,49 @@ CONTENT_TYPES = {
 }
 
 
-def load_test_set(doc_ids: list[str] | None = None) -> list[dict[str, str]]:
-    """Rows of the POST test set CSV, optionally filtered to the given Doc IDs.
+def filter_test_set(
+    rows: list[dict[str, str]], doc_ids: list[str] | None
+) -> list[dict[str, str]]:
+    """The test-set rows whose ``Doc ID`` is in ``doc_ids``, in sheet order.
 
     Args:
-        doc_ids: Doc IDs to keep, or None for all 19.
+        rows: Test-set rows, one per briefing.
+        doc_ids: Doc ID slugs (e.g. ``effects_artificial_light``) to keep, or None
+            for all.
 
     Raises:
-        ValueError: If a requested Doc ID is not in the CSV.
+        ValueError: If a requested Doc ID is not in the rows.
     """
-    with TEST_SET_CSV.open(newline="", encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
     if doc_ids is None:
         return rows
     wanted = set(doc_ids)
-    rows = [r for r in rows if r["Doc ID"] in wanted]
-    missing = wanted - {r["Doc ID"] for r in rows}
+    kept = [r for r in rows if r["Doc ID"] in wanted]
+    missing = wanted - {r["Doc ID"] for r in kept}
     if missing:
         raise ValueError(f"unknown Doc ID(s): {sorted(missing)}")
-    return rows
+    return kept
+
+
+def load_test_set(doc_ids: list[str] | None = None) -> list[dict[str, str]]:
+    """Rows of the test-set Google Sheet, optionally filtered to the given Doc IDs.
+
+    Columns: ``Doc ID``, ``Type``, ``Title``, ``URL``, ``Published``,
+    ``Research question``.
+
+    Raises:
+        ValueError: If a requested Doc ID is not in the sheet.
+    """
+    return filter_test_set(fetch_sheet(TEST_SET_SHEET_ID, TEST_SET_SHEET_NAME), doc_ids)
+
+
+def ref_cache_path(doc_id: str, label: str) -> Path:
+    """Where ``00_update_ground_truth.py`` caches one resolved reference."""
+    return (
+        DATASETS_DIR
+        / doc_id
+        / "refs"
+        / (re.sub(r"[^A-Za-z0-9_.-]+", "_", label) + ".json")
+    )
 
 
 def load_kept(doc_id: str, name: str) -> list[dict[str, str]]:

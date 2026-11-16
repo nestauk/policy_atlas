@@ -8,86 +8,92 @@ The search and screening evals (`../search`, `../screening`) cover the earlier s
 
 ## What is being measured
 
-One item is one published briefing from `inputs/POST_test_set.csv` (19 briefings: 4 CAPE rapid evidence assessments, 6 POSTbriefs, 5 POSTnotes, 4 POST rapid responses). For each briefing:
+One item is one published briefing from the team's test-set Google Sheet (tab `POST_test_set`; 19 briefings at the time of writing: 4 CAPE rapid evidence assessments, 6 POSTbriefs, 5 POSTnotes, 4 POST rapid responses). The sheet is the source of truth: add a row there to add a briefing. Each briefing has a slug in the `Doc ID` column, such as `effects_artificial_light`; the slug names its briefing file, its ground-truth and cache folders, its run folder and its Langfuse dataset item. For each briefing:
 
-1. **Ground truth.** A model extracts the briefing's reference list and 15 to 40 key facts, each fact tied to the references it cites. A human checks both lists and marks rows to keep.
+1. **Ground truth.** Three model calls. The first extracts the briefing's reference list. The second is given that list and the briefing and returns the briefing's key points, each tied to the references it cites. The third sees only the key points, not the briefing, and breaks each into atomic facts: one claim per fact, self-contained, so the judge can grade it alone. Withholding the briefing from the third call stops detail the point does not state from leaking into the facts. The model chooses how many points and how many facts per point. Each fact row carries its point's id and text. A human checks both lists and marks rows to keep.
 2. **Corpus.** Each kept reference is resolved to text: OpenAlex by DOI or strict title match, then the production URL cascade, fetcher and parser. A reference with no full text but an OpenAlex abstract enters as `abstract_only`. One with neither is dropped and recorded.
 3. **Run.** A task is seeded with an approved plan at the chosen analysis depth, the corpus is ingested as uploads, and every source gets a stage-1 `relevant` screen row. The plan walk then runs with no search backends, so acquire adds nothing and the walk's own stage-1 screen has nothing to do. `screen_full` (standard and deep) runs as in production; its demotions are recorded.
 4. **Judge.** The report's markdown (citation markers stripped) is graded against each key fact by a model, one call per fact. Verdicts: `fully_represented`, `partially_represented`, `not_represented`, `misrepresented`, `uncertain`.
 
-**Coverage** is the share of key facts judged `fully_represented`. It is reported with two denominators: all checked facts (`coverage_all`), and only facts with at least one reference that made it into the corpus (`coverage_ingested`). The gap between them is the cost of unfetchable sources, not of the pipeline.
+**Coverage** is the share of key facts judged `fully_represented`. It is reported with two denominators: all checked facts (`coverage_all`), and only facts with at least one reference that made it into the corpus (`coverage_ingested`). The gap between them is the cost of unfetchable sources, not of the pipeline. Each has a lenient twin (`coverage_all_lenient`, `coverage_ingested_lenient`) whose numerator also counts `partially_represented`. The gap between strict and lenient is the share of facts the report touches but states incompletely.
 
 The eval-side model for extraction and judging is `gpt-5.6-luna`. The pipeline runs with its production backends and models.
+
+## Data
+
+The important raw data is:
+
+* [Google Sheets] `05. Evals >> synthesis >> Post test set`: this is a reference sheet that records: the short slug for each briefing; its title; when it was published; the corresponding RQ that will be run through the Policy Atlas pipeline.
+
+* [s3] `eval/datasets/synthesis/inputs/briefings/` This folder contains the downloaded pdf/html files for the briefings used in this experiment. They were downloaded by hand because the POST domain blocks bots.
 
 ## Files
 
 ```
-utils.py                   paths, CSV readers, parser and model helpers
-ground_truth.py            extract | resolve
-run_synthesis.py           seed, run, report, judge, score, run folder, Langfuse
-upload.py                  key facts -> Langfuse dataset `synthesis-coverage` (dry run by default)
-prompts/extract_v1.txt     references + key facts
-prompts/judge_v1.txt       one fact vs report -> verdict
+00_update_ground_truth.py  sheet vs Langfuse -> extract + resolve the new briefings
+01_upload_to_langfuse.py   ground truth -> S3 and Langfuse dataset `synthesis-coverage` (dry run by default)
+02_run_evals.py            seed, run, report, judge, score, run folder, Langfuse experiment
+utils.py                   paths, sheet and CSV readers, parser and model helpers
+google_utils.py            Google Sheets read with a service account
+plot_coverage.py           ingested-denominator coverage per briefing -> html and png in the run folder (--run <folder>)
+prompts/extract_references_v1.txt   reference list
+prompts/extract_key_points_v1.txt   key points with reference labels
+prompts/decompose_facts_v1.txt      key points -> atomic facts (no briefing)
+prompts/judge_v1.txt                one fact vs report -> verdict
 tests/test_synthesis.py    offline self-checks (part of `make eval-check`)
-inputs/POST_test_set.csv   the 19 briefings (S3)
-inputs/briefings/<id>.*    hand-downloaded briefings (S3)
-ground_truth/<id>/         references.csv, key_facts.csv, corpus_resolution.csv (human-checked, S3)
-datasets/<id>/refs/        resolved reference text cache (S3)
-results/runs/<date>-<depth>-<label>/<id>/   report.md, facts.csv, corpus.csv, eval_results.json (gitignored, S3)
+inputs/briefings/<slug>.*  hand-downloaded briefings (S3)
+ground_truth/<slug>/       references.csv, key_facts.csv, corpus_resolution.csv (human-checked, S3)
+datasets/<slug>/refs/      resolved reference text cache (S3)
+results/runs/<date>-<depth>-<label>/<slug>/   report.md, facts.csv, corpus.csv, eval_results.json (gitignored, S3)
 ```
 
-## Commands
+The script numbers are the steps a person takes, in order.
 
-All from the repo root. Keys come from `backend/.env`; the database is the local dev one.
+## Quickstart
 
-No CSV is in git (the repo-wide `*.csv` rule), so a fresh checkout starts with `sync_s3.py synthesis download`, and edited ground truth is kept with `upload-datasets`.
+Run all commands from the repo root. The OpenAI and Langfuse keys come from `backend/.env`. The Google service-account key that the sheet is shared with lives at `infra/.credentials/afsmumsnet-454163761a82.json` (gitignored); set `GOOGLE_SHEETS_CREDENTIALS` in `backend/.env` only to point somewhere else. The database is the local dev one.
 
+To download the reference data and the extracted key facts and references for each one:
 ```sh
-# 0. Fetch the test set, briefings, ground truth and caches.
+# Once per checkout: fetch the briefings, ground truth and caches.
 uv run --project backend python scripts/evals/sync_s3.py synthesis download
-
-# 1. Download the briefing by hand into inputs/briefings/<Doc ID>.pdf (or .html for a
-#    rapid response: save the page). parliament.uk blocks scripted fetches.
-
-# 2. Extract references and key facts, then check the `keep` column by hand.
-uv run --project backend --env-file backend/.env \
-    python scripts/evals/post_screening_and_synthesis/ground_truth.py extract --docs 16 5
-
-# 3. Resolve each kept reference to text (cached; a rerun is network-free).
-uv run --project backend --env-file backend/.env \
-    python scripts/evals/post_screening_and_synthesis/ground_truth.py resolve --docs 16 5
-
-# 4. Push the key facts to Langfuse (dry run without --upload).
-uv run --project backend --env-file backend/.env \
-    python scripts/evals/post_screening_and_synthesis/upload.py --upload
-
-# 5. Run. Without --no-langfuse the run is a Langfuse experiment on the dataset.
-uv run --project backend --env-file backend/.env \
-    python scripts/evals/post_screening_and_synthesis/run_synthesis.py \
-    --docs 16 --depth deep --run-label mini
-
-# 6. Keep the files.
-uv run --project backend python scripts/evals/sync_s3.py synthesis upload-datasets
-uv run --project backend python scripts/evals/sync_s3.py synthesis upload results/runs/<folder>
 ```
 
-`extract` refuses to overwrite ground truth without `--force`, so human edits survive. If a reference was dropped because the briefing gives no DOI and the URL is paywalled, add the DOI to `references.csv` and rerun `resolve`.
+To add a new briefing to the dataset:
+
+1. Add details in the Google Sheet and add the pdf/html to the s3 bucket at `eval/datasets/synthesis/inputs/briefings/`
+
+2. Run `uv run --project backend python scripts/evals/post_screening_and_synthesis/00_update_ground_truth.py`. This will extract the references and key facts for the new briefing.
+
+3. Check the LLM outputs (key facts; references)
+
+4. Push the ground truth to S3 and the key facts to Langfuse: `uv run --project backend --env-file backend/.env \
+    python scripts/evals/post_screening_and_synthesis/01_upload_to_langfuse.py --upload`
+
+To run the evals (one by one for each briefing - in the example, we just specify `airports_health_impacts`. List all of them in the command to run the evals for all 15):
+```
+uv run --project backend --env-file backend/.env \
+    python scripts/evals/post_screening_and_synthesis/02_run_evals.py \
+    --docs airports_health_impacts --depth deep --run-label mini
+```
 
 Rapid responses cite by hyperlink and have no reference list. For an `.html` briefing the extract step marks each external link `[n]` in the text and appends a generated list, so those references have the link text as title and no authors or year.
 
 ## Outputs
 
-Per briefing, the run folder holds `report.md`, `facts.csv` (one row per fact with verdict, supporting quote and rationale), `corpus.csv` (one row per ingested reference with text basis and stage-2 status) and `eval_results.json` (task, scope and capability-run ids, the Langfuse session id, git commit, judge model and prompt hash, token totals, and the scores).
+Per briefing, the run folder holds `report.md`, `facts.csv` (one row per fact with its point id, verdict, supporting quote and rationale), `corpus.csv` (one row per ingested reference with text basis and stage-2 status) and `eval_results.json` (task, scope and capability-run ids, the Langfuse session id, git commit, judge model and prompt hash, token totals, and the scores).
 
 The judge's cost is recorded as `judge_llm_cost_usd_computed`: computed from the price table in `../screening/metrics.py`, not spent. The pipeline's own spend is read from Langfuse by session id (see `docs/knowledge/eval-cost-figures-name-their-unit.md`).
 
-When the Langfuse keys are set, the eval's own calls are traced too. Each judge call is a generation named `eval.synthesis.judge` in the same session as the briefing's pipeline walk; each extract call is a generation named `eval.synthesis.extract`. Both carry `experiment: synthesis-coverage` and the prompt version in their metadata, so they are filterable alongside the pipeline's traces and separate from user sessions, which carry a user id and no `experiment` key. `--no-langfuse` turns all of it off.
+When the Langfuse keys are set, the eval's own calls are traced too. Each judge call is a generation named `eval.synthesis.judge` in the same session as the briefing's pipeline walk; the three extract calls are generations named `eval.synthesis.extract_references`, `eval.synthesis.extract_key_points` and `eval.synthesis.decompose_facts`. All carry `experiment: synthesis-coverage` and the prompt version in their metadata, so they are filterable alongside the pipeline's traces and separate from user sessions, which carry a user id and no `experiment` key. `--no-langfuse` turns all of it off.
 
 Task rows are kept in the database so a report can be opened in the app by task id.
 
 ## Limits
 
 - The judge is a model. Spot-check its verdicts against `report.md` before trusting a number.
+- Coverage is a mean over facts, so a key point split into five facts weighs five times one split into one. `point_id` in `facts.csv` lets you regroup by point.
+- The judge runs once per fact, so its cost scales with how finely the extractor splits the points.
 - A dropped reference lowers `coverage_all` but not `coverage_ingested`. Compare both.
-- Resolution runs once and is cached by reference label. A changed `references.csv` row needs its cache file under `datasets/<id>/refs/` deleted.
+- Resolution runs once and is cached by reference label. A changed `references.csv` row needs its cache file under `datasets/<slug>/refs/` deleted.
 - Two references with the same URL become two sources. Mark one `keep=n`.

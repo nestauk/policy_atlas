@@ -98,6 +98,14 @@ dev = [
     "types-psycopg2",
     "pytest-socket>=0.8.0",
     "ipykernel>=7.3.0",
+    # Eval notebooks/plots under scripts/evals: charts + Google Sheets access
+    "matplotlib",
+    "plotly",
+    "kaleido",  # plotly static PNG export (plot_coverage.py)
+    "google-auth",
+    "google-auth-httplib2",  # lets google-api-python-client use google-auth credentials
+    "google-api-python-client>=2",  # Sheets API (google_utils.py)
+    "requests",  # determine_which_refs_are_in_overton.py; already a transitive of langsmith
 ]
 
 # Task 033 (approved dependency gate, contract rev 3.0 § 10): the operator CLI's

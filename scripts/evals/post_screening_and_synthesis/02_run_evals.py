@@ -1,11 +1,11 @@
-"""Run the post-screening chain on a briefing's own references and grade the report.
+"""Step 2: run the post-screening chain on a briefing's own references and grade the report.
 
-Usage (from the repo root; needs DATABASE_URL, OPENAI_API_KEY and, unless
-``--no-langfuse``, the Langfuse keys in backend/.env):
+Usage (from the repo root; needs DATABASE_URL, OPENAI_API_KEY, GOOGLE_SHEETS_CREDENTIALS
+and, unless ``--no-langfuse``, the Langfuse keys in backend/.env):
 
     uv run --project backend --env-file backend/.env \\
-        python scripts/evals/post_screening_and_synthesis/run_synthesis.py \\
-        --docs 16 --depth landscape --no-langfuse
+        python scripts/evals/post_screening_and_synthesis/02_run_evals.py \\
+        --docs airports_health_impacts --depth landscape --no-langfuse
 
 Per briefing: a task with an approved plan is seeded, every resolved reference is
 ingested as an upload with a stage-1 ``relevant`` screen row (so the walk's own
@@ -28,17 +28,19 @@ from typing import Any, Literal
 
 import _bootstrap  # noqa: F401
 from utils import (
+    DATASET,
     EXPERIMENT,
+    LABEL_SEP,
     MODEL,
     RESULTS_DIR,
     load_kept,
     load_test_set,
     openai_client,
     prompt,
+    ref_cache_path,
     write_csv,
 )
 from evals_search_utils import git_commit
-from ground_truth import LABEL_SEP, ref_cache_path
 from langfuse import Evaluation, propagate_attributes
 from metrics import cost_usd
 from openai import OpenAI
@@ -63,11 +65,11 @@ from policy_atlas.runtime.task_plan import AnalysisDepth, TaskPlan, _enabled_com
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.engine import Engine
-from upload import DATASET
 
 CORPUS_FIELDS = ["label", "text_basis", "n_chunks", "stage2_status"]
 FACT_FIELDS = [
     "fact_id",
+    "point_id",
     "statement",
     "ref_labels",
     "ingested",
@@ -119,7 +121,7 @@ def load_resolved(doc_id: str) -> list[dict[str, Any]]:
         path = ref_cache_path(doc_id, ref["label"])
         if not path.exists():
             raise FileNotFoundError(
-                f"run `ground_truth.py resolve --docs {doc_id}` first: {path}"
+                f"run `00_update_ground_truth.py --rerun {doc_id}` first: {path}"
             )
         out.append(json.loads(path.read_text(encoding="utf-8")))
     return out
@@ -343,6 +345,9 @@ def score(
 ) -> dict[str, Any]:
     """Coverage over all facts and over facts with at least one ingested source.
 
+    Strict coverage counts ``fully_represented`` only; lenient coverage also counts
+    ``partially_represented``.
+
     Args:
         facts: Kept rows of ``key_facts.csv``.
         verdicts: ``fact_id -> verdict`` string.
@@ -354,14 +359,20 @@ def score(
     ingested = [
         f for f in facts if set(f["ref_labels"].split(LABEL_SEP)) & ingested_labels
     ]
-    fully_ingested = sum(
-        1 for f in ingested if verdicts[f["fact_id"]] == "fully_represented"
-    )
+    strict = {"fully_represented"}
+    lenient = {"fully_represented", "partially_represented"}
+
+    def share(rows: list[dict[str, str]], accepted: set[str]) -> float:
+        hits = sum(1 for f in rows if verdicts[f["fact_id"]] in accepted)
+        return hits / len(rows) if rows else 0.0
+
     return {
         "n_facts": len(facts),
         "n_ingested": len(ingested),
-        "coverage_all": counts["fully_represented"] / len(facts) if facts else 0.0,
-        "coverage_ingested": fully_ingested / len(ingested) if ingested else 0.0,
+        "coverage_all": share(facts, strict),
+        "coverage_ingested": share(ingested, strict),
+        "coverage_all_lenient": share(facts, lenient),
+        "coverage_ingested_lenient": share(ingested, lenient),
         **{f"n_{v}": c for v, c in counts.items()},
     }
 
@@ -415,6 +426,7 @@ def run_doc(
         [
             {
                 "fact_id": f["fact_id"],
+                "point_id": f["point_id"],
                 "statement": f["statement"],
                 "ref_labels": f["ref_labels"],
                 "ingested": "y"
@@ -470,7 +482,9 @@ def run_doc(
         f"doc {doc_id}: walk {outcome.status}, report {len(report)} chars, "
         f"stage-2 demoted {record['n_stage2_demoted']}, "
         f"coverage all={scores['coverage_all']:.2f} "
-        f"ingested={scores['coverage_ingested']:.2f} -> {out}"
+        f"ingested={scores['coverage_ingested']:.2f} "
+        f"(lenient {scores['coverage_all_lenient']:.2f} / "
+        f"{scores['coverage_ingested_lenient']:.2f}) -> {out}"
     )
     return record
 
@@ -481,6 +495,10 @@ def item_scores(*, output: dict[str, Any], **_: Any) -> list[Evaluation]:
     return [
         Evaluation(name="coverage_all", value=scores["coverage_all"]),
         Evaluation(name="coverage_ingested", value=scores["coverage_ingested"]),
+        Evaluation(name="coverage_all_lenient", value=scores["coverage_all_lenient"]),
+        Evaluation(
+            name="coverage_ingested_lenient", value=scores["coverage_ingested_lenient"]
+        ),
         Evaluation(name="n_facts", value=scores["n_facts"]),
         Evaluation(name="n_fully", value=scores["n_fully_represented"]),
         Evaluation(name="n_misrepresented", value=scores["n_misrepresented"]),
@@ -498,7 +516,7 @@ def item_scores(*, output: dict[str, Any], **_: Any) -> list[Evaluation]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--docs", nargs="+", required=True, help="Doc IDs")
+    parser.add_argument("--docs", nargs="+", required=True, help="Doc ID slugs")
     parser.add_argument(
         "--depth", choices=("landscape", "standard", "deep"), default="deep"
     )
@@ -527,7 +545,8 @@ def main() -> None:
     missing = set(by_id) - {i.input["doc_id"] for i in items}
     if missing:
         raise SystemExit(
-            f"docs {sorted(missing)} are not in dataset {DATASET!r}; run upload.py"
+            f"docs {sorted(missing)} are not in dataset {DATASET!r}; "
+            "run 01_upload_to_langfuse.py"
         )
     _, judge_sha = prompt("judge_v1")
     meta = {
