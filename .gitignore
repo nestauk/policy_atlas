@@ -43,6 +43,9 @@ scripts/evals/screening/results/*
 !scripts/evals/screening/results/history.md
 !scripts/evals/screening/results/analyses/
 
+# Theory of change eval: downloaded files
+scripts/evals/theory_of_change/downloads/
+
 # Node / frontend build artifacts (never committed)
 node_modules/
 .vite/
