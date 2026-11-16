@@ -29,20 +29,23 @@ from policy_atlas.core.schema import (
     task_source_snapshot,
 )
 from policy_atlas.core.schema import chunk as chunk_table
+from policy_atlas.core.tokens import word_tokens
 from policy_atlas.core.usage import UsageResult
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.evidence_search.synthesis.grounding_judge import (
     JudgeResponseWire,
     StubGroundingJudgeBackend,
 )
-from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+from policy_atlas.evidence_search.synthesis.section_prompt import (
     ChunkCitationWire,
     ClaimWire,
     SectionProposalWire,
     SectionProseWire,
     SectionRepairWire,
-    SectionTurn,
     SectionWire,
+)
+from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+    SectionTurn,
     StubSynthesisBackend,
 )
 from policy_atlas.evidence_search.synthesis.synthesise import (
@@ -185,7 +188,8 @@ def _seed_envelope_chunk(
             unit_policy=UNIT_POLICY,
             unit_index=0,
             unit_locator={"start": 0, "end": len(content)},
-            vector=StubEmbeddingBackend().embed_texts([content])[0],
+            embedding=StubEmbeddingBackend().embed_texts([content])[0],
+            tokens=sorted(word_tokens(content)),
             created_at=now(),
         )
     )
@@ -376,6 +380,53 @@ def test_characterisation_only_stub_writes_substrate_and_rollup(conn: Connection
     # No headline finding/chunk claims survive, so the key-findings pass mints
     # no block — the explicit absence path (ADR 0015 §8).
     assert row.counts["key_findings"] == {"present": False, "reason": "no_headline_claims"}
+
+
+class _OneFallbackBackend(StubSynthesisBackend):
+    """A stub whose process-wide fallback counter already holds earlier runs' count.
+
+    The first section turn adds one fallback, as a streamed write that fell
+    back would.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.stream_fallbacks = 3  # earlier runs in the same process
+
+    def section_turn(
+        self,
+        seed: dict[str, Any],
+        transcript: list[Any],
+        *,
+        force_emit: bool,
+    ) -> UsageResult[SectionTurn]:
+        if self.stream_fallbacks == 3:
+            self.stream_fallbacks += 1
+        return super().section_turn(seed, transcript, force_emit=force_emit)
+
+
+def test_the_rollup_counts_only_this_runs_stream_fallbacks(conn: Connection) -> None:
+    """Task 058 review: the backend's counter is process-wide; the row carries this run's."""
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    characterisation_run_id = seed_run(conn, task_id)
+    seed_characterisation(
+        conn, task_id, scope_id, characterisation_run_id, themes={"theme-a": []}
+    )
+
+    _run_synthesise(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        characterisation_run_id=characterisation_run_id,
+        backend=_OneFallbackBackend(),
+    )
+
+    row = conn.execute(
+        select(synthesis_result).where(synthesis_result.c.task_id == task_id)
+    ).one()
+    assert row.counts["stream_fallbacks"] == 1
 
 
 def test_chunk_substrate_writes_verified_unselected_citations(conn: Connection) -> None:
@@ -656,7 +707,8 @@ def test_uploaded_full_text_doc_feeds_chunk_lane(conn: Connection) -> None:
             unit_policy=UNIT_POLICY,
             unit_index=0,
             unit_locator={"start": 0, "end": len(content)},
-            vector=embedder.embed_texts([content])[0],
+            embedding=embedder.embed_texts([content])[0],
+            tokens=sorted(word_tokens(content)),
             created_at=now(),
         )
     )
@@ -681,7 +733,13 @@ def test_text_basis_matches_across_both_retrieval_paths(conn: Connection) -> Non
     ``chunk_text_basis_case`` helper — pin that both report the identical
     ``text_basis`` per chunk for a mixed corpus (one ingested full-text doc,
     one abstract-only doc)."""
-    from policy_atlas.evidence_search.synthesis.synthesis_tools import build_retrieval_scope
+    from policy_atlas.evidence_search.synthesis.synthesis_tools import (
+        ChunkRetriever,
+        PassThroughChunkReranker,
+        SynthesisDirective,
+        borrowed_connection,
+        build_retrieval_scope,
+    )
     from policy_atlas.evidence_search.synthesis.synthesise import _load_screened_chunks
 
     task_id, run_id = seed_task_and_run(conn)
@@ -723,7 +781,8 @@ def test_text_basis_matches_across_both_retrieval_paths(conn: Connection) -> Non
             unit_policy=UNIT_POLICY,
             unit_index=0,
             unit_locator={"start": 0, "end": len(abstract_content)},
-            vector=StubEmbeddingBackend().embed_texts([abstract_content])[0],
+            embedding=StubEmbeddingBackend().embed_texts([abstract_content])[0],
+            tokens=sorted(word_tokens(abstract_content)),
             created_at=now(),
         )
     )
@@ -736,14 +795,26 @@ def test_text_basis_matches_across_both_retrieval_paths(conn: Connection) -> Non
         appraised_tss_ids=set(),
     )
     scope = build_retrieval_scope(
-        conn, task_id=task_id, scope_id=scope_id, selected_tss_ids=set()
+        conn,
+        task_id=task_id,
+        scope_id=scope_id,
+        selected_tss_ids=set(),
+        connect=borrowed_connection(conn),
     )
+    # Every chunk here carries the word "chunk", so one search returns them all
+    # (task 057: the search is the only way the retrieval path reads chunks).
+    results = ChunkRetriever(
+        scope,
+        embedder=StubEmbeddingBackend(),
+        directive=SynthesisDirective(),
+        reranker=PassThroughChunkReranker(),
+    ).search("chunk")
 
-    # scope.chunks is embedding-scoped, chunk_by_id is not — every chunk here
+    # The search is embedding-scoped, chunk_by_id is not — every chunk here
     # has an embedding, so the two keysets must still coincide exactly.
-    assert set(chunk_by_id) == set(scope.chunks)
-    for chunk_id, info in chunk_by_id.items():
-        assert info.text_basis == scope.chunks[chunk_id]["text_basis"]
+    assert {result["chunk_record_id"] for result in results} == set(chunk_by_id)
+    for result in results:
+        assert result["text_basis"] == chunk_by_id[result["chunk_record_id"]].text_basis
     assert chunk_by_id[str(abstract_chunk_id)].text_basis == "abstract_only"
     other_bases = {
         info.text_basis for cid, info in chunk_by_id.items() if cid != str(abstract_chunk_id)

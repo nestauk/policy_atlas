@@ -68,9 +68,6 @@ from policy_atlas.api.longlist_start import LonglistRefused
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import longlist_result, option, task_agent_transcript
-from policy_atlas.evidence_search.synthesis.synthesis_tools import (
-    RetrievalUnitCapError,
-)
 from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.runtime.agent_backend import AgentBackend
 from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING
@@ -103,7 +100,6 @@ NOTHING_PENDING_REPLY = "There is nothing waiting to be confirmed."
 WHICH_OPTION_REPLY = "Which option do you mean? Name it as it appears on the longlist."
 WHAT_TO_ADD_REPLY = "What option would you like to add? Describe it in a few words."
 DESIGN_UNAVAILABLE_REPLY = "Policy Atlas could not read a design from those words; try again."
-TOO_MANY_DOCUMENTS_REPLY = "There are too many documents to search at once; ask about one option."
 NO_SCOPE_REPLY = "There is no finished longlist to answer from yet."
 OPTION_GONE_REPLY = "That option is no longer on the longlist."
 
@@ -116,12 +112,12 @@ _VERB_PHRASE: dict[str, str] = {
 
 def exclude_proposal(name: str, reason: str | None) -> str:
     """The sorting turn's words for a proposed *exclude*."""
-    return f"Exclude *{name}*? Reason: *{reason or 'none given'}*. Confirm to apply."
+    return f"Exclude {name}? Reason: {reason or 'none given'}. Confirm to apply."
 
 
 def include_proposal(name: str) -> str:
     """The sorting turn's words for a proposed *include again*."""
-    return f"Include *{name}* again? Confirm to apply."
+    return f"Include {name} again? Confirm to apply."
 
 
 def add_proposal(design: OptionDesign) -> str:
@@ -129,7 +125,7 @@ def add_proposal(design: OptionDesign) -> str:
     description = design.description.rstrip(" .")
     features = "; ".join(feature.rstrip(" .;") for feature in design.design_features)
     return (
-        f"Add *{design.name}* — {description}? Design: {features}. "
+        f"Add {design.name} — {description}? Design: {features}. "
         "Confirm to add it and search for it."
     )
 
@@ -150,19 +146,19 @@ def still_waiting(pending: PendingAction) -> str:
 
 def _applied_reply(verb: Verb, name: str) -> str:
     if verb == "exclude":
-        return f"Excluded *{name}*."
+        return f"Excluded {name}."
     if verb == "include_again":
-        return f"Included *{name}* again."
-    return f"Added *{name}*. Searching for its evidence now."
+        return f"Included {name} again."
+    return f"Added {name}. Searching for its evidence now."
 
 
 def _already_reply(name: str, state: str) -> str:
-    return f"*{name}* is already {state}."
+    return f"{name} is already {state}."
 
 
 def _replaced_prefix(previous: PendingAction) -> str:
     return (
-        f"This replaces the earlier proposal to {_VERB_PHRASE[previous.verb]} *{previous.label}*."
+        f"This replaces the earlier proposal to {_VERB_PHRASE[previous.verb]} {previous.label}."
     )
 
 
@@ -600,34 +596,23 @@ def _answer(
         return _Turn(TaskAgentTurnOut(reply=NO_SCOPE_REPLY, kind="reply", **base), pending)
     with engine.connect() as conn:
         window = transcript_rows.answer_window(conn, task_id, conversation_id)
-    try:
-        prose, payload = answer_over_scope(
-            engine,
-            task_id=task_id,
-            scope=scope,
-            entry_artefact_id=None,
-            window=window,
-            question=question,
-            backends=AnswerBackends(
-                chat=chat_backend,
-                embedding=embedding_backend,
-                langfuse=tracing.get_langfuse(),
-            ),
-            trace_run_id=transcript_id,
-            # A Task Agent turn keeps the task's session (ADR 0038).
-            trace_session_id=task_id,
-            conversation_id=conversation_id,
-        )
-    except RetrievalUnitCapError as exc:
-        log.warning(
-            "longlist_turn_retrieval_cap",
-            task_id=str(task_id),
-            unit_count=exc.unit_count,
-            cap=exc.cap,
-        )
-        return _Turn(
-            TaskAgentTurnOut(reply=TOO_MANY_DOCUMENTS_REPLY, kind="reply", **base), pending
-        )
+    prose, payload = answer_over_scope(
+        engine,
+        task_id=task_id,
+        scope=scope,
+        entry_artefact_id=None,
+        window=window,
+        question=question,
+        backends=AnswerBackends(
+            chat=chat_backend,
+            embedding=embedding_backend,
+            langfuse=tracing.get_langfuse(),
+        ),
+        trace_run_id=transcript_id,
+        # A Task Agent turn keeps the task's session (ADR 0038).
+        trace_session_id=task_id,
+        conversation_id=conversation_id,
+    )
     return _Turn(
         TaskAgentTurnOut(
             reply=prose,

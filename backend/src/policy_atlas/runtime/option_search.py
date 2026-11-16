@@ -20,7 +20,9 @@ holds none of them (P1):
   apply the cap (the user's own and the report-derived first, never dropped;
   the model's suggestions fill the rest), skip on a rebuild every entrant that
   already has a finished option search (P12), dispatch one child walk each,
-  and emit the ``option_searches`` stage's start.
+  and emit the ``option_searches`` stage's start; then publish the stage's
+  count at once and keep it current while the walk's own search runs (a
+  daemon poll the join stops; task 058, round 12).
 - :func:`join_option_searches` — before ``screen_abstract`` (task 046,
   S2; the children only acquire): wait, outside any
   transaction, for every child to reach a terminal status, bounded by
@@ -39,24 +41,31 @@ child's intent record is ``evidence_scope`` with ``purpose = 'targeted'`` and
 
 from __future__ import annotations
 
+import math
 import threading
 import time
 import uuid
-from collections.abc import Mapping
-from concurrent.futures import Future
+from collections.abc import Callable, Mapping
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import structlog
 from pydantic import ValidationError
-from sqlalchemy import select, update
+from sqlalchemy import Integer, cast, func, select, update
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.stage_vocabulary import activity
 from policy_atlas.core import events, tracing
-from policy_atlas.core.schema import capability_run, event_log, evidence_scope, option
+from policy_atlas.core.liveness import tick_hub
+from policy_atlas.core.schema import capability_run, event_log, evidence_scope, option, runs
 from policy_atlas.options_scoping.design import OptionDesign
-from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
+from policy_atlas.runtime.capability_registry import (
+    OPTIONS_SCOPING,
+    THEORY_OF_CHANGE,
+    validate_plan,
+)
 from policy_atlas.runtime.scoping_plan import (
     ACQUIRE_ONLY_KEY,
     BASELINE_CONFIRM,
@@ -64,7 +73,8 @@ from policy_atlas.runtime.scoping_plan import (
     TARGETED_PURPOSE,
     ScopingPlan,
 )
-from policy_atlas.runtime.walk_pool import option_search_pool
+from policy_atlas.runtime.toc_plan import TOC_LINK_SCALE_KEY, TOC_REFORMULATE_KEY
+from policy_atlas.runtime.walk_pool import TOC_ITEM_WIDTH, option_search_pool, toc_item_pool
 
 if TYPE_CHECKING:
     from policy_atlas.runtime.runner import RunnerBackends
@@ -73,6 +83,17 @@ log = structlog.get_logger()
 
 #: The stage key both barriers emit under (Phase 4.4 maps it to a frame).
 OPTION_SEARCHES_STAGE = "option_searches"
+
+#: The stage a theory-of-change check walk's item searches run under (task 054, S3).
+TOC_ITEM_SEARCHES_STAGE = "toc_item_searches"
+
+#: The stage of the second fan-out: item searches for the kept links discovery
+#: added, which had no search of their own (task 054, C32).
+TOC_NEW_LINK_SEARCHES_STAGE = "toc_new_link_searches"
+
+#: The stage of the third fan-out: one reformulated search per link the judge
+#: left with too little evidence (task 054, C44).
+TOC_RETRY_SEARCHES_STAGE = "toc_retry_searches"
 
 #: How long the longlist walk waits for its option searches, counted from the
 #: join (the parent's own broad chain has already run by then). Fifteen
@@ -100,6 +121,9 @@ _FINISHED = frozenset({"succeeded", "degraded"})
 # join abandoned before it opened its row never starts.
 _futures: dict[uuid.UUID, Future[None]] = {}
 _abandoned: set[uuid.UUID] = set()
+# The fan-out's progress polls, one per longlist walk (task 058, round 12):
+# the thread and the event that stops it.
+_progress_polls: dict[uuid.UUID, tuple[threading.Thread, threading.Event]] = {}
 _handles_lock = threading.Lock()
 
 
@@ -157,45 +181,25 @@ def run_option_search(
     Returns:
         The child walk's ``capability_run_id``.
     """
-    plan = unattended_plan(plan_row["payload"])
-    plan_id = uuid.UUID(str(plan_row["plan_id"]))
-    plan_version = int(plan_row["version"])
-    scope_id = uuid.uuid4()
-    child_id = uuid.uuid4()
     scope_context: dict[str, Any] = {"capability": OPTIONS_SCOPING, "option_id": str(option_id)}
     if parent_capability_run_id is not None:
         # A longlist walk's option search only acquires (task 046, AM4): the
         # composer reads this key; the parent's one screen judges the pool.
         scope_context[ACQUIRE_ONLY_KEY] = True
-    with engine.begin() as conn:
-        conn.execute(
-            evidence_scope.insert().values(
-                evidence_scope_id=scope_id,
-                task_id=task_id,
-                intent=design.as_intent(),
-                context=scope_context,
-                created_at=datetime.now(UTC),
-                purpose=TARGETED_PURPOSE,
-                plan_id=plan_id,
-            )
-        )
-    with _handles_lock:
-        future = tracing.submit_with_context(
-            option_search_pool(),
-            _run_child,
-            engine,
-            task_id=task_id,
-            plan=plan,
-            plan_id=plan_id,
-            plan_version=plan_version,
-            evidence_scope_id=scope_id,
-            capability_run_id=child_id,
-            parent_capability_run_id=parent_capability_run_id,
-            backends=backends,
-            user_id=user_id,
-        )
-        _futures[child_id] = future
-    future.add_done_callback(lambda _done: _forget(child_id))
+    child_id = run_child_search(
+        engine,
+        task_id=task_id,
+        request=ChildSearchRequest(
+            intent=design.as_intent(),
+            context=scope_context,
+            plan=unattended_plan(plan_row["payload"]),
+            plan_id=uuid.UUID(str(plan_row["plan_id"])),
+        ),
+        plan_row=plan_row,
+        parent_capability_run_id=parent_capability_run_id,
+        backends=backends,
+        user_id=user_id,
+    )
     log.info(
         "option_search.dispatched",
         task_id=str(task_id),
@@ -205,6 +209,89 @@ def run_option_search(
             str(parent_capability_run_id) if parent_capability_run_id is not None else None
         ),
     )
+    return child_id
+
+
+@dataclass(frozen=True)
+class ChildSearchRequest:
+    """What one child search runs under (C2): its intent record and where it runs.
+
+    Args:
+        intent: The intent record's intent text.
+        context: The intent record's context (``acquire_only``, the option or
+            link it is for).
+        plan: The plan the child runs, parsed by its dispatcher (an
+            options-scoping child runs :func:`unattended_plan`).
+        plan_id: The plan version the child runs.
+        pool: The pool it runs on; ``None`` is the option-search pool.
+    """
+
+    intent: str
+    context: dict[str, Any]
+    plan: Any
+    plan_id: uuid.UUID
+    pool: Callable[[], ThreadPoolExecutor] | None = None
+
+
+def run_child_search(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    request: ChildSearchRequest,
+    plan_row: Mapping[str, Any],
+    parent_capability_run_id: uuid.UUID | None,
+    backends: RunnerBackends,
+    user_id: str | None,
+) -> uuid.UUID:
+    """Start one capability-neutral child search and return its walk id at once.
+
+    Inserts the ``targeted`` intent record and mints the child's id in one
+    transaction, then submits the walk to the request's pool.
+
+    Args:
+        engine: Database engine.
+        task_id: The task.
+        request: The child's intent record and pool.
+        plan_row: The plan version: ``version`` and ``payload``.
+        parent_capability_run_id: The walk that asked, or ``None``.
+        backends: The runner backend bundle the child walk runs with.
+        user_id: The user to attribute traces to, or ``None``.
+
+    Returns:
+        The child walk's ``capability_run_id``.
+    """
+    scope_id = uuid.uuid4()
+    child_id = uuid.uuid4()
+    with engine.begin() as conn:
+        conn.execute(
+            evidence_scope.insert().values(
+                evidence_scope_id=scope_id,
+                task_id=task_id,
+                intent=request.intent,
+                context=request.context,
+                created_at=datetime.now(UTC),
+                purpose=TARGETED_PURPOSE,
+                plan_id=request.plan_id,
+            )
+        )
+    pool = (request.pool or option_search_pool)()
+    with _handles_lock:
+        future = tracing.submit_with_context(
+            pool,
+            _run_child,
+            engine,
+            task_id=task_id,
+            plan=request.plan,
+            plan_id=request.plan_id,
+            plan_version=int(plan_row["version"]),
+            evidence_scope_id=scope_id,
+            capability_run_id=child_id,
+            parent_capability_run_id=parent_capability_run_id,
+            backends=backends,
+            user_id=user_id,
+        )
+        _futures[child_id] = future
+    future.add_done_callback(lambda _done: _forget(child_id))
     return child_id
 
 
@@ -476,8 +563,39 @@ def child_walks(
     }
 
 
+def child_acquired_total(conn: Connection, *, child_ids: list[uuid.UUID]) -> int:
+    """Return sources acquired by a set of child capability runs.
+
+    Args:
+        conn: Open connection.
+        child_ids: Child capability-run ids.
+
+    Returns:
+        The sum of acquired sources reported by the children.
+    """
+    if not child_ids:
+        return 0
+    total = conn.execute(
+        select(
+            func.coalesce(
+                func.sum(cast(event_log.c.payload["acquired"].astext, Integer)),
+                0,
+            )
+        )
+        .select_from(event_log.join(runs, runs.c.run_id == event_log.c.run_id))
+        .where(event_log.c.event_type == "component.completed")
+        .where(event_log.c.payload["component"].astext == "acquire")
+        .where(runs.c.capability_run_id.in_(child_ids))
+    ).scalar_one()
+    return int(total)
+
+
 def dispatched_children(
-    conn: Connection, *, task_id: uuid.UUID, parent_id: uuid.UUID
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    parent_id: uuid.UUID,
+    stage: str = OPTION_SEARCHES_STAGE,
 ) -> list[uuid.UUID] | None:
     """Return the children a walk's fan-out already dispatched, if it ran.
 
@@ -492,7 +610,7 @@ def dispatched_children(
         .where(event_log.c.task_id == task_id)
         .where(event_log.c.run_id.is_(None))
         .where(event_log.c.event_type == "run.started")
-        .where(event_log.c.payload["component"].astext == OPTION_SEARCHES_STAGE)
+        .where(event_log.c.payload["component"].astext == stage)
         .where(event_log.c.payload["capability_run_id"].astext == str(parent_id))
         .order_by(event_log.c.sequence.desc())
         .limit(1)
@@ -534,23 +652,85 @@ def dispatch_option_searches(
     with engine.connect() as conn:
         already = dispatched_children(conn, task_id=task_id, parent_id=parent_id)
         if already is not None:
+            # Task 058 review: a walk resumed past its join republished the
+            # finished stage's count, which the hub then kept for ten minutes.
+            # Once the stage's completion is written there is nothing to show.
+            joined = conn.execute(
+                select(event_log.c.event_id)
+                .where(event_log.c.task_id == task_id)
+                .where(event_log.c.run_id.is_(None))
+                .where(event_log.c.event_type == "component.completed")
+                .where(event_log.c.payload["component"].astext == OPTION_SEARCHES_STAGE)
+                .where(event_log.c.payload["capability_run_id"].astext == str(parent_id))
+                .limit(1)
+            ).first()
+            if joined is None:
+                _start_progress_poll(
+                    engine, task_id=task_id, parent_id=parent_id, child_ids=already
+                )
             return already
         entrants = entrants_for_search(conn, task_id=task_id, suggest_run_id=suggest_run_id)
+
+    def start(entrant: tuple[uuid.UUID, OptionDesign]) -> uuid.UUID:
+        option_id, design = entrant
+        return run_option_search(
+            engine,
+            task_id=task_id,
+            plan_row=plan_row,
+            design=design,
+            option_id=option_id,
+            parent_capability_run_id=parent_id,
+            backends=backends,
+            user_id=None,
+        )
+
+    return _fan_out(
+        engine,
+        task_id=task_id,
+        parent_id=parent_id,
+        plan_row=plan_row,
+        session_id=session_id,
+        stage=OPTION_SEARCHES_STAGE,
+        items=entrants,
+        start=start,
+        log_event="option_search.fan_out",
+    )
+
+
+def _fan_out[T](
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    parent_id: uuid.UUID,
+    plan_row: Mapping[str, Any],
+    session_id: uuid.UUID | None,
+    stage: str,
+    items: list[T],
+    start: Callable[[T], uuid.UUID],
+    log_event: str,
+    extra: Mapping[str, Any] | None = None,
+) -> list[uuid.UUID]:
+    """Start one child walk per item, then record the stage's start and log the fan-out.
+
+    Args:
+        engine: Database engine.
+        task_id: The task.
+        parent_id: The walk that fans out.
+        plan_row: The walk's plan version (``plan_id``, ``version``).
+        session_id: The walk's tracing session, recorded on the stage event.
+        stage: The fan-out's stage.
+        items: What each child searches.
+        start: Starts one child walk and returns its id.
+        log_event: The fan-out's log line.
+        extra: More fields for the stage event and the log line.
+
+    Returns:
+        The child walks' ids, in dispatch order.
+    """
     child_ids: list[uuid.UUID] = []
     try:
-        for option_id, design in entrants:
-            child_ids.append(
-                run_option_search(
-                    engine,
-                    task_id=task_id,
-                    plan_row=plan_row,
-                    design=design,
-                    option_id=option_id,
-                    parent_capability_run_id=parent_id,
-                    backends=backends,
-                    user_id=None,
-                )
-            )
+        for item in items:
+            child_ids.append(start(item))
         with engine.begin() as conn:
             events.append(
                 conn,
@@ -558,14 +738,15 @@ def dispatch_option_searches(
                 run_id=None,
                 event_type="run.started",
                 payload={
-                    "component": OPTION_SEARCHES_STAGE,
-                    "registry_component": OPTION_SEARCHES_STAGE,
+                    "component": stage,
+                    "registry_component": stage,
                     "plan_id": str(plan_row["plan_id"]),
                     "plan_version": int(plan_row["version"]),
                     "session_id": str(session_id) if session_id is not None else None,
                     "capability_run_id": str(parent_id),
                     "child_capability_run_ids": [str(child) for child in child_ids],
                     "total": len(child_ids),
+                    **(extra or {}),
                 },
             )
     except Exception:
@@ -574,12 +755,120 @@ def dispatch_option_searches(
         _interrupt_children(engine, task_id=task_id, child_ids=child_ids)
         raise
     log.info(
-        "option_search.fan_out",
+        log_event,
         task_id=str(task_id),
         capability_run_id=str(parent_id),
         total=len(child_ids),
+        **(extra or {}),
+    )
+    _start_progress_poll(
+        engine, task_id=task_id, parent_id=parent_id, child_ids=child_ids, stage=stage
     )
     return child_ids
+
+
+def toc_join_timeout(children: int) -> float:
+    """The item-search join timeout: ``max(1800, ceil(n / width) × 300)`` seconds (C2)."""
+    return float(max(1800, math.ceil(children / TOC_ITEM_WIDTH) * 300))
+
+
+def dispatch_toc_item_searches(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    parent_id: uuid.UUID,
+    plan_row: Mapping[str, Any],
+    backends: RunnerBackends,
+    session_id: uuid.UUID | None,
+    links: list[str] | None = None,
+    stage: str = TOC_ITEM_SEARCHES_STAGE,
+    dois: Mapping[str, list[str]] | None = None,
+    scale: int = 1,
+    reformulate: bool = False,
+) -> list[uuid.UUID]:
+    """A check walk's fan-out: one acquire-only item search per link (task 054, S3).
+
+    Links on kept pathways first, at most :data:`TOC_LINK_CAP`; how many were
+    left out is recorded on the stage event. Idempotent like the option
+    searches' fan-out.
+
+    Args:
+        engine: Database engine.
+        task_id: The theory-of-change task.
+        parent_id: The check walk.
+        plan_row: The walk's plan version (``plan_id``, ``version``, ``payload``).
+        backends: The runner backend bundle, passed to every child.
+        session_id: The walk's tracing session, recorded on the stage event.
+        links: The links a named-link check covers, or ``None`` for all.
+        stage: The fan-out's stage: the first, or the new links' (C32).
+        dois: Link id → the DOIs the user added to it (C42): that link's search
+            only looks them up.
+        scale: The result multiplier every item search runs with (C44, Find
+            more evidence); 1 is the ordinary link search.
+        reformulate: Search in the words of the research that would test each
+            step, with the link's earlier queries ruled out (C44).
+
+    Returns:
+        The child walks' ids, in dispatch order.
+    """
+    # Imported here: the ToC steps import the registry, which this module's
+    # importers (the runner) must load first.
+    from policy_atlas.theory_of_change.check.selecting import previous_queries
+    from policy_atlas.theory_of_change.check.shared import item_search_intents
+
+    with engine.connect() as conn:
+        already = dispatched_children(
+            conn, task_id=task_id, parent_id=parent_id, stage=stage
+        )
+        if already is not None:
+            return already
+        intents, left_out = item_search_intents(
+            conn, task_id=task_id, payload=plan_row["payload"], links=links
+        )
+        earlier = (
+            {link: previous_queries(conn, task_id=task_id, link_id=link) for link, _ in intents}
+            if reformulate
+            else {}
+        )
+    plan = validate_plan(THEORY_OF_CHANGE, plan_row["payload"])
+
+    def start(item: tuple[str, str]) -> uuid.UUID:
+        link_id, intent = item
+        return run_child_search(
+            engine,
+            task_id=task_id,
+            request=ChildSearchRequest(
+                intent=intent,
+                context={
+                    "capability": THEORY_OF_CHANGE,
+                    "link_id": link_id,
+                    ACQUIRE_ONLY_KEY: True,
+                    **({TOC_LINK_SCALE_KEY: scale} if scale > 1 else {}),
+                    **({TOC_REFORMULATE_KEY: earlier.get(link_id, [])} if reformulate else {}),
+                    **({"lookup_dois": list(dois[link_id])} if dois and link_id in dois else {}),
+                },
+                plan=plan,
+                plan_id=uuid.UUID(str(plan_row["plan_id"])),
+                pool=toc_item_pool,
+            ),
+            plan_row=plan_row,
+            parent_capability_run_id=parent_id,
+            backends=backends,
+            user_id=None,
+        )
+
+    return _fan_out(
+        engine,
+        task_id=task_id,
+        parent_id=parent_id,
+        plan_row=plan_row,
+        session_id=session_id,
+        stage=stage,
+        items=intents,
+        start=start,
+        log_event="toc_item_search.fan_out",
+        extra={"links_left_out": left_out},
+    )
 
 
 def join_option_searches(
@@ -588,6 +877,7 @@ def join_option_searches(
     task_id: uuid.UUID,
     parent_id: uuid.UUID,
     child_ids: list[uuid.UUID],
+    stage: str = OPTION_SEARCHES_STAGE,
     timeout: float | None = None,
 ) -> JoinOutcome:
     """The join barrier: wait for every child, outside any transaction.
@@ -602,8 +892,9 @@ def join_option_searches(
     Args:
         engine: Database engine.
         task_id: The task.
-        parent_id: The longlist walk.
+        parent_id: The walk that fanned out.
         child_ids: The children the fan-out dispatched.
+        stage: The barrier stage the completion is emitted under.
         timeout: Seconds to wait; ``None`` uses :data:`OPTION_SEARCH_JOIN_TIMEOUT`.
 
     Returns:
@@ -612,9 +903,14 @@ def join_option_searches(
     deadline = time.monotonic() + (OPTION_SEARCH_JOIN_TIMEOUT if timeout is None else timeout)
     statuses: dict[uuid.UUID, str] = {}
     pending: list[uuid.UUID] = list(child_ids)
+    sources = 0
+    # The progress poll started at the fan-out ends here: from now on this
+    # loop publishes the same line (task 058, round 12).
+    _stop_progress_poll(parent_id)
     while True:
-        with engine.connect() as conn:
-            statuses = child_walks(conn, task_id=task_id, parent_id=parent_id)
+        statuses, sources = _publish_progress(
+            engine, task_id=task_id, parent_id=parent_id, child_ids=child_ids, stage=stage
+        )
         pending = [child for child in child_ids if not _ended(child, statuses.get(child))]
         if not pending or time.monotonic() >= deadline:
             break
@@ -636,10 +932,14 @@ def join_option_searches(
             run_id=None,
             event_type="component.completed",
             payload={
-                "component": OPTION_SEARCHES_STAGE,
+                "component": stage,
+                # The walk this stage belongs to: the event has no component
+                # run to name it (task 058, round 11).
+                "capability_run_id": str(parent_id),
                 "total": outcome.total,
                 "finished": outcome.finished,
                 "failed": outcome.failed,
+                "sources": sources,
             },
         )
     log.info(
@@ -652,6 +952,141 @@ def join_option_searches(
         interrupted=len(outcome.interrupted),
     )
     return outcome
+
+
+def _publish_progress(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    parent_id: uuid.UUID,
+    child_ids: list[uuid.UUID],
+    stage: str = OPTION_SEARCHES_STAGE,
+) -> tuple[dict[uuid.UUID, str], int]:
+    """Read the children once and publish the stage's progress tick.
+
+    The one body of the join's loop and the fan-out's progress poll, on the
+    walk's fan-out row: "n of M searches done · S sources" for the option
+    searches, "n of M searches done · S found" for a theory of change's item
+    searches (task 054, A3).
+
+    Args:
+        engine: Database engine.
+        task_id: The task.
+        parent_id: The walk that fanned out.
+        child_ids: The children the fan-out dispatched.
+        stage: The fan-out's stage, which the tick is published under.
+
+    Returns:
+        The children's statuses and the sources they have acquired.
+    """
+    with engine.connect() as conn:
+        statuses = child_walks(conn, task_id=task_id, parent_id=parent_id)
+        sources = child_acquired_total(conn, child_ids=child_ids)
+    finished = sum(1 for child in child_ids if statuses.get(child) in _FINISHED)
+    tick_hub.publish_tick(
+        task_id,
+        stage=stage,
+        activity=(
+            activity(
+                "option_searches.progress",
+                done=finished,
+                total=len(child_ids),
+                sources=sources,
+            )
+            if stage == OPTION_SEARCHES_STAGE
+            else activity(
+                "toc_searches.progress", done=finished, total=len(child_ids), found=sources
+            )
+        ),
+        done=finished,
+        total=len(child_ids),
+        unit="searches",
+        run_id=parent_id,
+    )
+    return statuses, sources
+
+
+def _start_progress_poll(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    parent_id: uuid.UUID,
+    child_ids: list[uuid.UUID],
+    stage: str = OPTION_SEARCHES_STAGE,
+) -> None:
+    """Keep the stage's count current from the fan-out until the join.
+
+    The walk runs its own broad search between the fan-out and the join, so
+    without this the ``option_searches`` row would read nothing until that
+    search ended (task 058, round 12). Publishes the first tick ("0 of M
+    searches done · 0 sources") at once, then a daemon thread re-reads every
+    :data:`OPTION_SEARCH_JOIN_POLL` seconds. It stops when the join or
+    :func:`abandon_children` stops it, when every child has ended, or after
+    :data:`OPTION_SEARCH_JOIN_TIMEOUT` (a walk resumed past its join never
+    joins again). A failed read never touches the walk: the poll logs and
+    stops.
+
+    Args:
+        engine: Database engine.
+        task_id: The task.
+        parent_id: The longlist walk.
+        child_ids: The children the fan-out dispatched.
+        stage: The fan-out's stage, which the ticks are published under.
+    """
+    if not child_ids:
+        return
+    _stop_progress_poll(parent_id)
+    stop = threading.Event()
+    deadline = time.monotonic() + OPTION_SEARCH_JOIN_TIMEOUT
+
+    def publish() -> bool:
+        """Publish once; whether the poll should go on."""
+        try:
+            statuses, _ = _publish_progress(
+                engine, task_id=task_id, parent_id=parent_id, child_ids=child_ids, stage=stage
+            )
+        except Exception:
+            log.warning(
+                "option_search.progress_poll_failed",
+                task_id=str(task_id),
+                capability_run_id=str(parent_id),
+                exc_info=True,
+            )
+            return False
+        ended = all(_ended(child, statuses.get(child)) for child in child_ids)
+        return not ended and time.monotonic() < deadline
+
+    # The first tick at the fan-out itself, before the walk's own search.
+    if not publish():
+        return
+
+    def poll() -> None:
+        while not stop.wait(OPTION_SEARCH_JOIN_POLL):
+            if not publish():
+                break
+        with _handles_lock:
+            handle = _progress_polls.get(parent_id)
+            if handle is not None and handle[1] is stop:
+                del _progress_polls[parent_id]
+
+    thread = threading.Thread(
+        target=poll, name=f"option-search-progress-{parent_id}", daemon=True
+    )
+    with _handles_lock:
+        _progress_polls[parent_id] = (thread, stop)
+    thread.start()
+
+
+def _stop_progress_poll(parent_id: uuid.UUID) -> None:
+    """Stop the walk's progress poll, if one runs, and wait for it to end."""
+    with _handles_lock:
+        handle = _progress_polls.pop(parent_id, None)
+    if handle is None:
+        return
+    thread, stop = handle
+    stop.set()
+    if thread is not threading.current_thread():
+        thread.join(timeout=5.0)
 
 
 def _ended(child: uuid.UUID, status: str | None) -> bool:
@@ -679,7 +1114,12 @@ def _interrupt_children(
     for child in child_ids:
         with _handles_lock:
             future = _futures.get(child)
-            if future is not None and not future.cancel():
+        # Cancel outside the lock: a successful cancel runs the done callback
+        # (``_forget``, which takes the lock) in this thread, and the lock is
+        # not re-entrant. Adding to ``_abandoned`` before ``_end_child`` keeps
+        # the child's own check (``end_if_abandoned``) correct.
+        if future is not None and not future.cancel():
+            with _handles_lock:
                 _abandoned.add(child)
         if _end_child(engine, task_id=task_id, child_id=child, status="interrupted"):
             interrupted.append(child)
@@ -705,8 +1145,21 @@ def abandon_children(
     Returns:
         The children whose row this call ended.
     """
+    _stop_progress_poll(parent_id)
     with engine.connect() as conn:
-        child_ids = dispatched_children(conn, task_id=task_id, parent_id=parent_id)
+        child_ids = [
+            child
+            for stage in (
+                OPTION_SEARCHES_STAGE,
+                TOC_ITEM_SEARCHES_STAGE,
+                TOC_NEW_LINK_SEARCHES_STAGE,
+                TOC_RETRY_SEARCHES_STAGE,
+            )
+            for child in dispatched_children(
+                conn, task_id=task_id, parent_id=parent_id, stage=stage
+            )
+            or []
+        ]
         if not child_ids:
             return []
         statuses = child_walks(conn, task_id=task_id, parent_id=parent_id)

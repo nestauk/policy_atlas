@@ -1,0 +1,349 @@
+/* ---------------------------------------------------------------------------
+ * The Landscape subtab (task 058, landscape polish, lead rulings 2026-11-05).
+ *
+ * - Sections sit on the Sources panel without cards: the pane heading, a Line
+ *   hairline under it, the chart; 40 px between sections, with a Line rule
+ *   above each section after the first.
+ * - Ranked bars are a real table laid out on a grid: the label column, then
+ *   the bar with its value 8 px after the bar's end. Bars are Navy; missing
+ *   data and folded tails are Grey; the row under the pointer washes Blue
+ *   Wash and its bar turns Electric Blue (the one thing under the cursor).
+ *   No axis: every bar carries its number.
+ * - In a narrow container (a phone) the label takes its own line and the bar
+ *   and value run the full width beneath it, so nothing is clipped.
+ * ------------------------------------------------------------------------- */
+
+.landscape-section + .landscape-section {
+  margin-top: 40px;
+  border-top: 1px solid var(--color-line);
+}
+
+.ranked-bars {
+  container-type: inline-size;
+}
+
+/* Grid layout on table elements: the explicit ARIA roles in the markup keep
+   the table semantics in every engine whatever the display value. */
+.ranked-bars__table,
+.ranked-bars__body {
+  display: block;
+  width: 100%;
+}
+
+.ranked-bars__row {
+  display: grid;
+  grid-template-columns: minmax(0, 17rem) minmax(0, 1fr);
+  column-gap: 16px;
+  align-items: center;
+  min-height: 30px;
+  margin-inline: -8px;
+  padding-inline: 8px;
+  position: relative;
+}
+
+/* The row's link stretches over the whole row, so the bar and the value are
+   pointer targets too; the focus ring is drawn round the row. */
+.ranked-bars__link {
+  color: inherit;
+  text-decoration: none;
+  outline: none;
+}
+.ranked-bars__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.ranked-bars__row:has(.ranked-bars__link:focus-visible) {
+  outline: 2px solid var(--color-blue);
+  outline-offset: 2px;
+}
+.ranked-bars__row:has(.ranked-bars__link:focus-visible) .ranked-bars__bar {
+  background-color: var(--color-blue);
+}
+
+.ranked-bars__label {
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  font-weight: 400;
+  color: var(--color-navy);
+  text-align: left;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+  padding-block: 3px;
+}
+
+.ranked-bars__row[data-muted] .ranked-bars__label {
+  color: var(--color-grey);
+}
+
+.ranked-bars__cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 14px;
+}
+
+.ranked-bars__bar {
+  flex: none;
+  height: 14px;
+  min-width: 2px;
+  width: calc((100% - 3.5rem) * var(--share, 0));
+  background-color: var(--color-navy);
+  transition: background-color 150ms ease;
+}
+
+.ranked-bars__row[data-tone="grey"] .ranked-bars__bar {
+  background-color: var(--color-grey);
+}
+
+.ranked-bars__value {
+  transition: color 150ms ease;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  color: var(--color-grey);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ranked-bars__placeholder {
+  height: 14px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ranked-bars__row[data-link]:hover .ranked-bars__bar {
+    background-color: var(--color-blue);
+  }
+  .ranked-bars__row[data-link]:hover .ranked-bars__label,
+  .ranked-bars__row[data-link]:hover .ranked-bars__value {
+    color: var(--color-navy);
+  }
+}
+
+@container (max-width: 30rem) {
+  .ranked-bars__row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 4px;
+    padding-block: 6px;
+  }
+  .ranked-bars__label {
+    padding-block: 0;
+  }
+  /* A stage still to come has no bar line under its label. */
+  .ranked-bars__cell:empty {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ranked-bars__row,
+  .ranked-bars__bar {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * The publication years (owner, round 10): upright Navy columns drawn in
+ * HTML, a value axis of at most four round steps on Line grid lines, the
+ * year labels under the columns. Each column's slot is its full-height
+ * pointer target. A press and drag turns the covered columns Electric Blue
+ * and the band above the columns says the range ("2015 to 2020"); the same
+ * band reads the hovered column's count and year. Colour is the state, so
+ * nothing transitions and reduced motion changes nothing.
+ * ------------------------------------------------------------------------- */
+
+.years-chart__frame {
+  --years-axis: 28px;
+  display: grid;
+  grid-template-rows: 28px 196px auto;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.years-chart__frame--narrow {
+  grid-template-rows: 32px 144px auto;
+}
+
+.years-chart__band {
+  position: relative;
+  margin-left: var(--years-axis);
+}
+.years-chart__label {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  translate: -50% 0;
+  white-space: nowrap;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  font-weight: 600;
+  color: var(--color-blue);
+}
+.years-chart__label--hover {
+  font-weight: 400;
+  color: var(--color-grey);
+}
+
+.years-chart__body {
+  display: grid;
+  grid-template-columns: var(--years-axis) minmax(0, 1fr);
+  min-height: 0;
+}
+
+.years-chart__axis {
+  position: relative;
+}
+.years-chart__axis > span {
+  position: absolute;
+  right: 6px;
+  translate: 0 50%;
+  font-size: var(--text-meta);
+  line-height: 1;
+  color: var(--color-grey);
+  font-variant-numeric: tabular-nums;
+}
+
+.years-chart__plot {
+  position: relative;
+  border-bottom: 1px solid var(--color-line);
+}
+.years-chart__grid {
+  position: absolute;
+  inset-inline: 0;
+  height: 1px;
+  background-color: var(--color-line);
+}
+
+.years-chart__columns {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: stretch;
+  touch-action: pan-y;
+}
+.years-chart__columns[data-choosing] {
+  cursor: pointer;
+}
+.years-chart__columns:focus-visible {
+  outline: 2px solid var(--color-blue);
+  outline-offset: 4px;
+}
+
+.years-chart__column {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.years-chart__column[data-active] {
+  outline: 2px solid var(--color-blue);
+  outline-offset: -2px;
+}
+
+.years-chart__bar {
+  display: block;
+  width: 80%;
+  max-width: 24px;
+  min-height: 2px;
+  background-color: var(--color-navy);
+}
+.years-chart__column[data-blue] .years-chart__bar {
+  background-color: var(--color-blue);
+}
+
+.years-chart__years {
+  display: flex;
+  margin-left: var(--years-axis);
+  padding-top: 6px;
+}
+.years-chart__years > span {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 21px;
+}
+.years-chart__years > span > span {
+  position: absolute;
+  left: 50%;
+  translate: -50% 0;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  color: var(--color-navy);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------------------
+ * Where sources were published, as a map (round 11): a choropleth on the
+ * Natural Earth projection, the land alone on Paper (no globe outline); a country
+ * with sources is Navy by its count (`--fill`, five steps mixed into Paper),
+ * one with none is Line 2; a Paper hairline separates neighbours. Under a
+ * fine pointer the country under it turns Electric Blue, as a bar does, and
+ * the tooltip follows the pointer. Colour is the state: nothing transitions.
+ * ------------------------------------------------------------------------- */
+
+.publisher-map__frame {
+  position: relative;
+}
+
+.publisher-map__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.publisher-map__country {
+  fill: var(--fill, var(--color-line-2));
+  stroke: var(--color-paper);
+  stroke-width: 0.5;
+  stroke-linejoin: round;
+}
+.publisher-map__country[data-link] {
+  cursor: pointer;
+}
+.publisher-map__country[data-hover] {
+  fill: var(--color-blue);
+}
+
+.publisher-map__tooltip {
+  position: absolute;
+  z-index: 1;
+  translate: -50% calc(-100% - 12px);
+  pointer-events: none;
+  white-space: nowrap;
+  padding: 6px 10px;
+  border: 1px solid var(--color-line-2);
+  background-color: var(--color-paper);
+  box-shadow: var(--shadow-tooltip);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  font-weight: 600;
+  color: var(--color-navy);
+}
+
+.publisher-map__legend {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 12px;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  color: var(--color-grey);
+}
+.publisher-map__legend > .tabular-nums:first-child {
+  margin-right: 6px;
+}
+.publisher-map__legend > .tabular-nums:last-child {
+  margin-left: 6px;
+}
+.publisher-map__swatch {
+  width: 24px;
+  height: 10px;
+}
+
+/* The map's placeholder while its module loads: the frame's own shape, so
+   nothing moves when the map lands. */
+.publisher-map__placeholder {
+  aspect-ratio: 960 / 467;
+}

@@ -11,7 +11,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any, Literal, Protocol, cast, runtime_checkable
 
@@ -20,9 +20,12 @@ from langfuse import Langfuse
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.contract import StageKey
+from policy_atlas.api.lifecycle import touch_task
 from policy_atlas.core import events, tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.inference import StubEchoProvider
+from policy_atlas.core.liveness import task_liveness, tick_hub
 from policy_atlas.core.schema import (
     capability_run,
     event_log,
@@ -31,7 +34,6 @@ from policy_atlas.core.schema import (
     task_plan,
 )
 from policy_atlas.core.usage import UsageAccumulator
-from policy_atlas.evidence_search.assess.appraise import DEFAULT_RUBRIC
 from policy_atlas.evidence_search.assess.classification_backend import ClassificationBackend
 from policy_atlas.evidence_search.assess.classify import SKIP_TSS_KEY
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
@@ -48,7 +50,12 @@ from policy_atlas.evidence_search.extract.finding_vetter import (
 )
 from policy_atlas.evidence_search.group.group import GroupClusteringBackendFactory
 from policy_atlas.evidence_search.sourcing.acquire import SearchBackend
-from policy_atlas.evidence_search.sourcing.ingest_full_text import DocumentFetcher
+from policy_atlas.evidence_search.sourcing.ingest_full_text import (
+    ConnectFactory,
+    DocumentFetcher,
+    FixtureFetcher,
+)
+from policy_atlas.evidence_search.sourcing.ingest_queue import QueueClient, build_queue_client
 from policy_atlas.evidence_search.sourcing.search_generation import SearchGenerationBackend
 from policy_atlas.evidence_search.synthesis.grounding_judge import GroundingJudgeBackend
 from policy_atlas.evidence_search.synthesis.synthesis_backend import (
@@ -64,7 +71,7 @@ from policy_atlas.evidence_search.synthesis.synthesise import (
     write_summaries_after_commit,
 )
 from policy_atlas.options_scoping.labels import labels_for_snapshots
-from policy_atlas.options_scoping.longlist.longlist_backend import LonglistBackend
+from policy_atlas.options_scoping.scoping_backend import LonglistBackend
 from policy_atlas.options_scoping.suggest.suggest import SuggestBackend
 from policy_atlas.runtime import option_search, steering_events
 from policy_atlas.runtime.agent_backend import (
@@ -157,6 +164,19 @@ from policy_atlas.runtime.task_plan import (
     TaskPlan,
     registry_component_for,
 )
+from policy_atlas.runtime.toc_plan import (
+    TOC_CHECK_MODE_KEY,
+    TOC_LINKS_KEY,
+    TOC_PURPOSE,
+    TOC_REVIEW_FIRST_KEY,
+    TOC_STUDIES_KEY,
+    TOC_WALK_CHECK,
+    TOC_WALK_KEY,
+    link_scale_for,
+    toc_stop_requested,
+)
+from policy_atlas.theory_of_change.backend import TocBackend
+from policy_atlas.theory_of_change.cost import walk_cost
 
 log = structlog.get_logger()
 
@@ -181,6 +201,19 @@ LLM_BEARING_COMPONENTS = frozenset(
         "theme",
         # Task 046 (R37): option_profile makes the lever-typing calls.
         "option_profile",
+        # Task 054: every theory-of-change step makes model calls.
+        "toc_draft",
+        "toc_select",
+        "toc_search_new",
+        "toc_discover",
+        "toc_merge",
+        "toc_judge",
+        "toc_figures",
+        "toc_choose",
+        "toc_summarise",
+        "toc_report",
+        # Task 055: shortlist makes the one proposal call (and its re-ask).
+        "shortlist",
     }
 )
 SPINE_COMPONENTS = frozenset(SPINE)
@@ -299,6 +332,12 @@ class RunnerBackends:
         longlist: Optional model seam for the options-scoping ``longlist``
             step (task 045); ``None`` lets the harness resolve the
             deterministic ``StubLonglistBackend``.
+        toc: Optional model seam for every theory-of-change step (task
+            054); ``None`` lets the harness resolve ``StubTocBackend``.
+        queue: The full-text ingest queue client (task 057). ``None`` lets the
+            runner build the in-process client over its own engine.
+        connect: Opens one short committed transaction for the full-text stage's
+            own writes (``engine.begin``); ``None`` uses the runner's engine.
     """
 
     embedding: EmbeddingBackend | None = None
@@ -320,6 +359,45 @@ class RunnerBackends:
     langfuse_client: Langfuse | None = None
     suggest: SuggestBackend | None = None
     longlist: LonglistBackend | None = None
+    toc: TocBackend | None = None
+    queue: QueueClient | None = None
+    connect: ConnectFactory | None = None
+
+
+def with_ingest_queue(
+    backends: RunnerBackends,
+    engine: Engine,
+    *,
+    ingest_mode: str,
+    queue_url: str | None = None,
+) -> RunnerBackends:
+    """Return ``backends`` with the full-text ingest queue for ``ingest_mode`` attached.
+
+    The queue's handler fetches with the bundle's document fetcher (the fixture
+    fetcher when the bundle has none, as the harness would), so the bundle's
+    fetcher is set to that same one. Each handler thread takes its own
+    connections from ``engine`` (one short committed transaction per write).
+
+    Args:
+        backends: The bundle without a queue.
+        engine: The engine the queue's workers and the stage's writes use.
+        ingest_mode: ``in_process`` or ``queued`` (``POLICY_ATLAS_INGEST_MODE``).
+        queue_url: The SQS queue URL ``queued`` sends to
+            (``POLICY_ATLAS_INGEST_QUEUE_URL``).
+
+    Returns:
+        A copy of ``backends`` carrying ``queue``, ``connect`` and the fetcher.
+
+    Raises:
+        RuntimeError: ``queued`` without a queue URL.
+    """
+    fetcher = (
+        backends.document_fetcher if backends.document_fetcher is not None else FixtureFetcher()
+    )
+    queue = build_queue_client(
+        ingest_mode, connect=engine.begin, fetcher=fetcher, queue_url=queue_url
+    )
+    return replace(backends, document_fetcher=fetcher, queue=queue, connect=engine.begin)
 
 
 class CheckInIO(Protocol):
@@ -720,12 +798,13 @@ def resolved_skip_ids(
     keep the Evidence search's per-scope discipline.
 
     - ``classify``: the evidence type is inherited-resolved **and** nothing is
-      left for appraise to do — the tier is inherited-resolved too (not a
-      stale rubric), or the type is outside the rubric's domain. Appraise
-      works from this scope's classification rows, so a document whose
-      inherited appraisal is under a stale rubric (or missing, or whose tier
-      is this task's own) is classified here and appraised afresh rather than
-      left without a tier.
+      left for appraise to do — the tier is inherited-resolved too (a score
+      or Unrated, not a stale rubric). Appraise works from this scope's
+      classification rows, so a document whose inherited appraisal is under a
+      stale rubric (or missing, or whose tier is this task's own) is
+      classified here and appraised afresh rather than left without a tier.
+      Since task 056 (D7) every type gets a tier (Unknown and Non-evidence get
+      Unrated), so a type outside the rubric no longer means "nothing to do".
     - ``appraise``: the tier **and** the type are both inherited-resolved and
       the tier is not under a stale rubric (the resolver withholds a stale
       score), so a stale-rubric document is re-appraised, and an inherited
@@ -754,12 +833,10 @@ def resolved_skip_ids(
             continue
         if not label.type_inherited or label.evidence_type is None:
             continue
-        tier_resolved = label.tier_inherited and label.quality_score is not None
-        if component == "appraise":
-            if tier_resolved:
-                skip.add(tss_id)
-            continue
-        if tier_resolved or label.evidence_type not in DEFAULT_RUBRIC:
+        tier_resolved = label.tier_inherited and (
+            label.quality_score is not None or label.unrated
+        )
+        if tier_resolved:
             skip.add(tss_id)
     return skip
 
@@ -951,6 +1028,41 @@ def _run_plan_impl(
     # run, on a resumed walk).
     option_search_children: list[uuid.UUID] | None = None
     option_searches_joined = False
+    # A theory-of-change check walk's item searches (task 054, S3): the same
+    # two barriers, dispatched before the first step and joined before
+    # ``toc_select``. A ToC walk never pauses, so never resumes.
+    toc_check = (
+        purpose == TOC_PURPOSE
+        and scope_context.get(TOC_WALK_KEY) == TOC_WALK_CHECK
+        # Updating the report searches nothing (C45).
+        and scope_context.get(TOC_CHECK_MODE_KEY) != "report"
+    )
+    toc_children: list[uuid.UUID] | None = None
+    toc_joined = False
+    toc_new_joined = False
+    toc_retry_joined = False
+
+    def toc_plan_row() -> dict[str, Any]:
+        return {
+            "plan_id": steering_state.plan_id,
+            "version": steering_state.plan_version,
+            "payload": steering_state.plan.model_dump(mode="json"),
+        }
+
+    def toc_searches_failed(stage: str, reason: str) -> None:
+        """A ToC barrier whose searches did not all finish: a skipped stage and a flag."""
+        step_outcomes.append(
+            RunStepOutcome(
+                component=stage,
+                run_id=None,
+                status="skipped",
+                wall_clock_s=None,
+                skipped=True,
+                reason=reason,
+            )
+        )
+        flagged_events.append({"component": stage, "status": "skipped", "reason": reason})
+
     # The most-recent ATTEMPTED run id per registry component, INCLUDING failed
     # attempts (FIX 1): un-blinds class 9 (downstream_capability_reduced), which
     # scans the walk's attempted run ids for component.failed/skipped events — a
@@ -1075,6 +1187,125 @@ def _run_plan_impl(
 
     while remaining_steps:
         step = remaining_steps.pop(0)
+        # The user stopped a theory-of-change walk (task 054, C48): end it before the
+        # next step; what finished stays.
+        if purpose == TOC_PURPOSE and toc_stop_requested(
+            engine, task_id=task_id, capability_run_id=capability_run_id
+        ):
+            return _finish_run(
+                engine,
+                step_outcomes,
+                flagged_events,
+                status="aborted",
+                capability_run_id=capability_run_id,
+                task_id=task_id,
+            )
+        if toc_check:
+            if toc_children is None:
+                toc_children = option_search.dispatch_toc_item_searches(
+                    engine,
+                    task_id=task_id,
+                    parent_id=capability_run_id,
+                    plan_row=toc_plan_row(),
+                    backends=backend_bundle,
+                    session_id=session_id,
+                    links=scope_context.get(TOC_LINKS_KEY),
+                    dois=scope_context.get(TOC_STUDIES_KEY),
+                    scale=link_scale_for(scope_context),
+                    # Find more evidence searches in new words (C44).
+                    reformulate=scope_context.get(TOC_CHECK_MODE_KEY) == "find_more",
+                )
+            if step.component == "toc_select" and not toc_joined:
+                toc_joined = True
+                joined = option_search.join_option_searches(
+                    engine,
+                    task_id=task_id,
+                    parent_id=capability_run_id,
+                    child_ids=toc_children,
+                    stage=option_search.TOC_ITEM_SEARCHES_STAGE,
+                    timeout=option_search.toc_join_timeout(len(toc_children)),
+                )
+                # A failed item search degrades the walk, never fails it.
+                if joined.failed:
+                    toc_searches_failed(
+                        option_search.TOC_ITEM_SEARCHES_STAGE,
+                        f"{joined.failed} of {joined.total} item searches did not finish",
+                    )
+            # The second fan-out (C32): after merge, the kept links discovery
+            # added get their own item search, dispatched and joined before
+            # ``toc_search_new`` picks their documents.
+            if step.component == "toc_search_new" and not toc_new_joined:
+                toc_new_joined = True
+                from policy_atlas.theory_of_change.check.selecting import links_without_search
+
+                with engine.connect() as conn:
+                    new_links = links_without_search(
+                        conn, task_id=task_id, walk_id=capability_run_id
+                    )
+                if new_links:
+                    stage = option_search.TOC_NEW_LINK_SEARCHES_STAGE
+                    new_children = option_search.dispatch_toc_item_searches(
+                        engine,
+                        task_id=task_id,
+                        parent_id=capability_run_id,
+                        plan_row=toc_plan_row(),
+                        backends=backend_bundle,
+                        session_id=session_id,
+                        links=new_links,
+                        stage=stage,
+                    )
+                    joined = option_search.join_option_searches(
+                        engine,
+                        task_id=task_id,
+                        parent_id=capability_run_id,
+                        child_ids=new_children,
+                        stage=stage,
+                        timeout=option_search.toc_join_timeout(len(new_children)),
+                    )
+                    # A failed search leaves its link to the pool fallback.
+                    if joined.failed:
+                        toc_searches_failed(
+                            stage,
+                            f"{joined.failed} of {joined.total} new-link searches did not finish",
+                        )
+            # The third fan-out (C44): after the judge, a link left with too
+            # little evidence gets one reformulated search, dispatched and joined
+            # before ``toc_search_again`` picks and judges its new documents.
+            if step.component == "toc_search_again" and not toc_retry_joined:
+                toc_retry_joined = True
+                from policy_atlas.theory_of_change.check.selecting import links_without_evidence
+
+                with engine.connect() as conn:
+                    thin_links = links_without_evidence(
+                        conn, task_id=task_id, walk_id=capability_run_id
+                    )
+                if thin_links:
+                    stage = option_search.TOC_RETRY_SEARCHES_STAGE
+                    retry_children = option_search.dispatch_toc_item_searches(
+                        engine,
+                        task_id=task_id,
+                        parent_id=capability_run_id,
+                        plan_row=toc_plan_row(),
+                        backends=backend_bundle,
+                        session_id=session_id,
+                        links=thin_links,
+                        stage=stage,
+                        reformulate=True,
+                    )
+                    joined = option_search.join_option_searches(
+                        engine,
+                        task_id=task_id,
+                        parent_id=capability_run_id,
+                        child_ids=retry_children,
+                        stage=stage,
+                        timeout=option_search.toc_join_timeout(len(retry_children)),
+                    )
+                    # A failed search leaves its link as the judge left it.
+                    if joined.failed:
+                        toc_searches_failed(
+                            stage,
+                            f"{joined.failed} of {joined.total} second searches did not finish",
+                        )
         if purpose == LONGLIST_PURPOSE:
             # The fan-out: the first step after ``suggest`` (whether it
             # succeeded or not — the user's own options are entrants either
@@ -1665,6 +1896,9 @@ def run_plan(
                 option_search.abandon_children(engine, task_id=task_id, parent_id=walk_id)
             except Exception:
                 log.exception("runner.abandon_children_failed", capability_run_id=str(walk_id))
+            # The raise skips ``_finish_run``: the live memory goes here instead
+            # (a no-op for a child walk or one already finished).
+            tick_hub.end_run(task_id, walk_id)
         raise
 
 
@@ -5475,6 +5709,10 @@ def _open_capability_run(
         context (task 046, AM4: it marks an acquire-only option search).
     """
     with engine.begin() as conn:
+        # A run's start is work on the task (task 058, round 10); first in the
+        # transaction, as in ``_finish_run``.
+        if parent_capability_run_id is None:
+            touch_task(conn, task_id)
         capability = capability_of_task(conn, task_id)
         purpose = purpose_of_scope(
             conn, task_id=task_id, evidence_scope_id=evidence_scope_id
@@ -5507,6 +5745,11 @@ def _open_capability_run(
                 "plan_version": plan_version,
             },
         )
+    tick_hub.begin_run(
+        task_id,
+        capability_run_id,
+        parent_run_id=parent_capability_run_id,
+    )
     return capability, purpose, scope_context
 
 
@@ -5521,8 +5764,8 @@ def _finish_run(
     follow_on: str | None = None,
 ) -> RunPlanOutcome:
     with engine.connect() as conn:
-        purpose = conn.execute(
-            select(evidence_scope.c.purpose)
+        walk_scope = conn.execute(
+            select(evidence_scope.c.purpose, capability_run.c.parent_capability_run_id)
             .select_from(
                 capability_run.join(
                     evidence_scope,
@@ -5532,13 +5775,21 @@ def _finish_run(
             )
             .where(capability_run.c.capability_run_id == capability_run_id)
             .where(capability_run.c.task_id == task_id)
-        ).scalar_one_or_none()
-    if purpose == LONGLIST_PURPOSE:
+        ).one_or_none()
+    purpose = walk_scope.purpose if walk_scope is not None else None
+    if purpose in (LONGLIST_PURPOSE, TOC_PURPOSE):
         # Every end of a longlist walk — the spine failed, an abort, or the
         # walk's own finish — ends the option searches the join never waited
         # for, before the walk itself (task 045, S2). After a join, a no-op.
+        # A theory-of-change check walk's item searches end the same way (054).
         option_search.abandon_children(engine, task_id=task_id, parent_id=capability_run_id)
     with engine.begin() as conn:
+        # A run's end is work on the task (task 058, round 10). First in the
+        # transaction, before the walk row is locked: the API takes the task
+        # row before run rows, and one order means no deadlock. Only a walk
+        # the user started: an option search ends inside its parent's run.
+        if walk_scope is not None and walk_scope.parent_capability_run_id is None:
+            touch_task(conn, task_id)
         ended_at = datetime.now(UTC)
         walk = conn.execute(
             select(
@@ -5584,20 +5835,40 @@ def _finish_run(
                 .where(capability_run.c.task_id == task_id)
                 .values(status=status, ended_at=ended_at)
             )
+            finished: dict[str, Any] = {
+                "capability_run_id": str(capability_run_id),
+                "status": status,
+            }
+            if purpose == TOC_PURPOSE and not is_child:
+                # The run-level cost line (task 054, C30): tokens per step, US dollars.
+                finished["cost"] = walk_cost(conn, task_id=task_id, walk_id=capability_run_id)
+                log.info(
+                    "toc_check.cost",
+                    capability_run_id=str(capability_run_id),
+                    **finished["cost"],
+                )
             events.append(
                 conn,
                 task_id=task_id,
                 run_id=None,
                 event_type="run.finished",
-                payload={"capability_run_id": str(capability_run_id), "status": status},
+                payload=finished,
             )
         # A completed run closes its task_agent conversation atomically with the
         # terminal status + run.finished event (029 strand 2): a crash can
         # never leave a succeeded run with an active task_agent conversation.
         # A child walk never does (task 045, P3): the thread the user is
         # watching belongs to its parent. Nor does any option search.
-        if status in ("succeeded", "degraded") and not is_child and not is_option_search:
+        # Nor does a theory-of-change walk (054, S7): the thread stays open
+        # through the check and after it.
+        if (
+            status in ("succeeded", "degraded")
+            and not is_child
+            and not is_option_search
+            and purpose != TOC_PURPOSE
+        ):
             close_task_agent_conversation(conn, task_id=task_id, closed_at=ended_at)
+    tick_hub.end_run(task_id, capability_run_id)
     collation = render_collation(flagged_events)
     log.info("runner.collation", render=collation)
     _log_run_summary(outcomes, status=status)
@@ -5738,6 +6009,13 @@ def _run_step_attempt(
     )
 
     with engine.begin() as conn:
+        stamped = _stamped_stage(
+            conn,
+            task_id=task_id,
+            evidence_scope_id=evidence_scope_id,
+            registry_component=registry_component,
+        )
+        stamp: dict[str, Any] = {"stage": stamped} if stamped is not None else {}
         conn.execute(
             runs.insert().values(
                 run_id=run_id,
@@ -5761,6 +6039,7 @@ def _run_step_attempt(
                 # straight to its trace session (018 A2; None on session-less
                 # paths, e.g. replay drivers).
                 "session_id": str(session_id) if session_id is not None else None,
+                **stamp,
             },
         )
         events.append(
@@ -5781,7 +6060,7 @@ def _run_step_attempt(
             task_id=task_id,
             run_id=run_id,
             event_type="component.started",
-            payload={"component": registry_component},
+            payload={"component": registry_component, **stamp},
         )
     log.info(
         "component.started",
@@ -5802,6 +6081,11 @@ def _run_step_attempt(
             component=step.component,
             session_id=session_id,
         ) as run_span:
+            ingest_backends = backends
+            if registry_component == "ingest_full_text" and backends.queue is None:
+                # A bundle built without the construction paths (tests, stubs):
+                # the in-process queue over this runner's engine.
+                ingest_backends = with_ingest_queue(backends, engine, ingest_mode="in_process")
             with engine.begin() as conn:
                 _apply_directive(
                     conn,
@@ -5838,14 +6122,24 @@ def _run_step_attempt(
                     grounding_judge_backend=backends.grounding_judge,
                     suggest_backend=backends.suggest,
                     longlist_backend=backends.longlist,
+                    toc_backend=backends.toc,
                     search_backends=backends.search_backends,
                     search_generation_backend=backends.search_generation,
-                    document_fetcher=backends.document_fetcher,
+                    document_fetcher=ingest_backends.document_fetcher,
+                    ingest_queue=ingest_backends.queue,
+                    ingest_connect=(
+                        ingest_backends.connect
+                        if ingest_backends.connect is not None
+                        else engine.begin
+                    ),
                     progress_emitter=(
                         ProgressEmitter(engine, task_id=task_id, run_id=run_id)
-                        if registry_component == "synthesise"
+                        # The ToC report streams to the page too (task 054's
+                        # 058 alignment, S6).
+                        if registry_component in ("synthesise", "toc_report")
                         else None
                     ),
+                    stage=stamped,
                 )
                 summary = harness_outcome.get("summary")
                 component_summary = summary if isinstance(summary, dict) else None
@@ -5867,16 +6161,22 @@ def _run_step_attempt(
                     # failure must not fail the run) but inside its run span, so
                     # the summaries trace as the tail of the run, not as root
                     # traces of their own.
-                    summary_accounting = write_summaries_after_commit(
-                        engine,
-                        task_id=task_id,
-                        run_id=run_id,
-                        synthesis_backend=(
-                            backends.synthesis
-                            if backends.synthesis is not None
-                            else StubSynthesisBackend()
-                        ),
-                    )
+                    # Bound to the task, the stage and the walk (round 14): the
+                    # harness's binding has ended by now, and without this the
+                    # pass's lines reach nobody.
+                    with task_liveness(
+                        task_id, stage="synthesise", run_id=capability_run_id
+                    ):
+                        summary_accounting = write_summaries_after_commit(
+                            engine,
+                            task_id=task_id,
+                            run_id=run_id,
+                            synthesis_backend=(
+                                backends.synthesis
+                                if backends.synthesis is not None
+                                else StubSynthesisBackend()
+                            ),
+                        )
                     component_usage = component_summary.get("usage_totals")
                     if isinstance(component_usage, dict):
                         merged_usage = UsageAccumulator()
@@ -5899,13 +6199,19 @@ def _run_step_attempt(
         # append its terminal lifecycle event separately so the payload remains
         # byte-identical to the former node-level append.
         if component_summary is not None:
+            completed_wall_clock_s = time.monotonic() - started
             with engine.begin() as conn:
                 events.append(
                     conn,
                     task_id=task_id,
                     run_id=run_id,
                     event_type="component.completed",
-                    payload={"component": registry_component, **component_summary},
+                    payload={
+                        "component": registry_component,
+                        "wall_clock_s": completed_wall_clock_s,
+                        **component_summary,
+                        **stamp,
+                    },
                 )
             log.info(
                 "component.completed",
@@ -5930,6 +6236,7 @@ def _run_step_attempt(
             run_id=run_id,
             registry_component=registry_component,
             error=error,
+            stamp=stamp,
         )
         with engine.connect() as conn:
             log_entries = events.read_for_run(conn, task_id, run_id)
@@ -6044,6 +6351,39 @@ def _bounded_error(exc: Exception) -> str:
     return f"{type(exc).__name__}: {str(exc)[:200]}"
 
 
+def _stamped_stage(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    evidence_scope_id: uuid.UUID,
+    registry_component: str,
+) -> StageKey | None:
+    """The public stage a component run reports under when its walk names one (task 054, S1).
+
+    An uploaded theory's read is the ``toc_draft`` component in a
+    ``review_first`` draft walk: its lifecycle payloads carry ``"stage":
+    "toc_read"``, which :func:`stage_for_payload` reads first. Every other run
+    reports under its component's own key and carries no stamp.
+
+    Args:
+        conn: Open connection.
+        task_id: The task.
+        evidence_scope_id: The walk's intent record.
+        registry_component: The run's registry component.
+
+    Returns:
+        The stamped stage, or ``None``.
+    """
+    if registry_component != "toc_draft":
+        return None
+    context = conn.execute(
+        select(evidence_scope.c.context)
+        .where(evidence_scope.c.evidence_scope_id == evidence_scope_id)
+        .where(evidence_scope.c.task_id == task_id)
+    ).scalar_one_or_none()
+    return "toc_read" if (context or {}).get(TOC_REVIEW_FIRST_KEY) else None
+
+
 def _record_failure_backstop(
     engine: Engine,
     *,
@@ -6051,6 +6391,7 @@ def _record_failure_backstop(
     run_id: uuid.UUID,
     registry_component: str,
     error: str,
+    stamp: dict[str, Any] | None = None,
 ) -> None:
     with engine.begin() as conn:
         run_row = conn.execute(
@@ -6074,7 +6415,7 @@ def _record_failure_backstop(
                 task_id=task_id,
                 run_id=run_id,
                 event_type="component.failed",
-                payload={"component": registry_component, "error": error},
+                payload={"component": registry_component, "error": error, **(stamp or {})},
             )
 
         run_failed_exists = (
@@ -6225,6 +6566,8 @@ def _usage_totals(
         "completion": usage["completion"] if isinstance(usage.get("completion"), int) else 0,
         "total": usage["total"] if isinstance(usage.get("total"), int) else 0,
         "cached": usage["cached"] if isinstance(usage.get("cached"), int) else 0,
+        "cache_write": usage["cache_write"] if isinstance(usage.get("cache_write"), int) else 0,
+        "reasoning": usage["reasoning"] if isinstance(usage.get("reasoning"), int) else 0,
     }
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import time
 import uuid
@@ -102,6 +103,44 @@ def create_scoping_task(client: TestClient, headers: dict[str, str]) -> str:
     )
 
 
+class TurnResponse:
+    """A posted Task Agent turn, read the way the client reads it (task 058, N9).
+
+    The turn route answers with NDJSON lines (``progress``, ``delta``, then one
+    ``completed`` or ``failed``) once the turn is admitted, and with the usual
+    JSON error before that. :meth:`json` hides the difference for tests that
+    only care about the outcome: the completed turn, the failed line, or the
+    JSON error body.
+
+    Args:
+        response: The raw HTTP response.
+    """
+
+    def __init__(self, response: httpx.Response) -> None:
+        self.raw = response
+        self.status_code = response.status_code
+        self.text = response.text
+        self.headers = response.headers
+        streamed = response.headers.get("content-type", "").startswith("application/x-ndjson")
+        self.events: list[dict[str, Any]] = (
+            [json.loads(line) for line in response.text.splitlines() if line.strip()]
+            if streamed
+            else []
+        )
+
+    def json(self) -> Any:
+        """The completed turn, the failed line, or the JSON error body."""
+        if not self.events:
+            return self.raw.json()
+        last = self.events[-1]
+        return last["turn"] if last["type"] == "completed" else last
+
+
+def post_turn(client: TestClient, url: str, **kwargs: Any) -> TurnResponse:
+    """Post to a Task Agent turn URL and wrap the answer as a :class:`TurnResponse`."""
+    return TurnResponse(cast(httpx.Response, client.post(url, **kwargs)))
+
+
 def task_agent_turn(
     client: TestClient,
     headers: dict[str, str],
@@ -109,22 +148,23 @@ def task_agent_turn(
     message: str,
     *,
     client_turn_id: uuid.UUID | None = None,
-) -> httpx.Response:
-    """Post one Task Agent turn and return the raw response."""
-    response = client.post(
+) -> TurnResponse:
+    """Post one Task Agent turn and return it as a :class:`TurnResponse`."""
+    return post_turn(
+        client,
         f"/api/v1/tasks/{task_id}/task-agent-turns",
         headers=headers,
         json={"message": message, "client_turn_id": str(client_turn_id or uuid.uuid4())},
     )
-    return cast(httpx.Response, response)
 
 
 def task_agent_turn_ok(
     client: TestClient, headers: dict[str, str], task_id: uuid.UUID | str, message: str
 ) -> dict[str, Any]:
-    """Post one Task Agent turn, require a 200 and return its body."""
+    """Post one Task Agent turn, require a completed turn and return it."""
     response = task_agent_turn(client, headers, task_id, message)
     assert response.status_code == 200, response.text
+    assert response.events and response.events[-1]["type"] == "completed", response.text
     return dict(response.json())
 
 
@@ -135,14 +175,16 @@ def to_ready(
     *,
     fresh: bool = True,
 ) -> dict[str, Any]:
-    """Drive the stub scoping conversation to a ready plan in three turns.
+    """Drive the stub scoping conversation to a ready plan in four turns.
+
+    The turns are: question, target, depth, then the risk appetite.
 
     Args:
         fresh: The conversation starts here, so each turn's part (settings,
             then depth) is checked; pass ``False`` after earlier turns.
 
     Returns:
-        The third turn's body, whose plan is ready.
+        The fourth turn's body, whose plan is ready.
     """
     first = task_agent_turn_ok(client, headers, task_id, "Young people are not getting into work.")
     second = task_agent_turn_ok(client, headers, task_id, "16 to 24 year olds")
@@ -151,8 +193,14 @@ def to_ready(
         assert first["part"]["id"] == "settings"
         assert second["scoping_plan"]["ready"] is False
         assert second["part"]["id"] == "depth"
-    ready = task_agent_turn_ok(
+    third = task_agent_turn_ok(
         client, headers, task_id, "[confirm part=depth option=standard_pass]"
+    )
+    if fresh:
+        assert third["scoping_plan"]["ready"] is False
+        assert third["part"]["id"] == "appetite"
+    ready = task_agent_turn_ok(
+        client, headers, task_id, "[confirm part=appetite option=appetite_mostly]"
     )
     assert ready["scoping_plan"]["ready"] is True
     return ready
@@ -180,6 +228,19 @@ def await_walks_ended(engine: Engine, task_ids: list[uuid.UUID]) -> None:
         if active is None:
             return
         time.sleep(0.1)
+
+
+def end_walks(engine: Engine, task_id: uuid.UUID) -> None:
+    """End a test's walks that no thread runs (set ``running`` by hand, or
+    opened by a recording executor), so :func:`await_walks_ended` does not
+    wait out its 60 seconds for them."""
+    with engine.begin() as conn:
+        conn.execute(
+            capability_run.update()
+            .where(capability_run.c.task_id == task_id)
+            .where(capability_run.c.status.in_(("running", "paused")))
+            .values(status="interrupted", ended_at=now())
+        )
 
 
 @pytest.fixture(autouse=True)

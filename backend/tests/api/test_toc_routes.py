@@ -1,0 +1,187 @@
+"""The theory-of-change read routes (task 054, S14; C17)."""
+
+from __future__ import annotations
+
+import uuid
+from pathlib import Path
+
+import pytest
+from sqlalchemy import update
+from sqlalchemy.engine import Engine
+
+from policy_atlas.api.app import create_app
+from policy_atlas.api.dev_issuer import init
+from policy_atlas.api.settings import Settings
+from policy_atlas.core.schema import task, toc_box
+from tests.api.org_support import make_org, ops_enrol, seeded, tenancy_client
+from tests.api.resource_support import (
+    api_client,
+    create_task,
+    remove_committed_tasks,  # noqa: F401 — autouse
+)
+from tests.api.test_api_conformance import _flatten_api_routes
+from tests.helpers import seed_toc_task
+
+CONTEXT = "/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}/context"
+ROUTES = ["/api/v1/tasks/{task_id}/toc", "/api/v1/tasks/{task_id}/toc/evidence", CONTEXT]
+
+
+def _url(route: str, task_id: uuid.UUID | str, evidence_id: uuid.UUID) -> str:
+    return route.format(task_id=task_id, evidence_id=evidence_id)
+
+
+def test_the_reads_are_mounted_and_in_the_openapi_document(tmp_path: Path) -> None:
+    # A throwaway key pair, as the conformance sweep builds it: CI has no local
+    # signing key, and create_app() with no settings reads one from the environment.
+    settings = Settings(
+        "http://dev-issuer.local",
+        "toc-routes-test",
+        None,
+        init(tmp_path / "issuer"),
+        "http://app.example.test",
+        "postgresql+psycopg://unused/unused",
+    )
+    app = create_app(settings=settings)
+    mounted = {route.path for route in _flatten_api_routes(app.routes)}
+    paths = app.openapi()["paths"]
+    for route in ROUTES:
+        assert route in mounted
+        assert "get" in paths[route]
+
+
+@pytest.mark.parametrize("route", ROUTES)
+@pytest.mark.parametrize(
+    "caller,public,expected",
+    [
+        ("anonymous", True, 200),
+        ("anonymous", False, 404),
+        ("owner", False, 200),
+        ("same_org", False, 200),
+        ("cross_org", False, 404),
+    ],
+)
+def test_the_access_matrix(
+    engine: Engine, tmp_path: Path, route: str, caller: str, public: bool, expected: int
+) -> None:
+    with tenancy_client(tmp_path, count=3) as (client, (owner, colleague, outsider)):
+        with seeded(engine) as conn:
+            org = make_org(conn, name="ToC Org")
+            other_org = make_org(conn, name="Other Org")
+            ops_enrol(conn, user_id=owner.user_id, org_id=org, display_name="Owner")
+            ops_enrol(conn, user_id=colleague.user_id, org_id=org, display_name="Colleague")
+            ops_enrol(conn, user_id=outsider.user_id, org_id=other_org, display_name="Outsider")
+            ids = seed_toc_task(conn)
+            conn.execute(
+                update(task)
+                .where(task.c.task_id == ids["task_id"])
+                .values(owner_user_id=owner.user_id, org_id=org, visibility="org", is_public=public)
+            )
+        headers = {
+            "anonymous": None,
+            "owner": owner.headers,
+            "same_org": colleague.headers,
+            "cross_org": outsider.headers,
+        }[caller]
+        response = client.get(_url(route, ids["task_id"], ids["evidence"]), headers=headers)
+        assert response.status_code == expected, response.text
+        if expected == 404:
+            unknown = client.get(_url(route, uuid.uuid4(), ids["evidence"]), headers=headers)
+            assert response.content == unknown.content
+
+
+@pytest.mark.parametrize("route", ROUTES)
+def test_a_public_task_that_is_not_a_theory_is_toc_not_found(tmp_path: Path, route: str) -> None:
+    with api_client(tmp_path) as (client, owner, _other):
+        task_id = create_task(client, owner)
+        shared = client.patch(f"/api/v1/tasks/{task_id}", headers=owner, json={"is_public": True})
+        assert shared.status_code == 200
+        response = client.get(_url(route, task_id, uuid.uuid4()))
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "toc_not_found"
+
+
+def test_the_reads_serve_the_contract_shapes(engine: Engine, tmp_path: Path) -> None:
+    with api_client(tmp_path) as (client, owner, _other):
+        with seeded(engine) as conn:
+            ids = seed_toc_task(conn)
+            conn.execute(
+                update(task).where(task.c.task_id == ids["task_id"]).values(is_public=True)
+            )
+        graph = client.get(f"/api/v1/tasks/{ids['task_id']}/toc")
+        assert graph.status_code == 200, graph.text
+        body = graph.json()
+        assert body["check_status"] == "checked"
+        [link] = body["links"]
+        # The seeded judgement was made for another wording: it does not count.
+        assert link["state"] == "unchecked"
+        assert link["verdict"] == "not_sure_insufficient" and link["near_threshold"] is False
+        assert link["weights"] == {
+            "total_weight": 0.0,
+            "mean_support": 0.0,
+            "refute_share": 0.0,
+            "n_documents": 0,
+        }
+        assert link["evidence_sentence"] is None
+        assert link["assumption_type"] == "delivery"
+        [pathway] = body["pathways"]
+        assert pathway["link_ids"] == [str(ids["link"])] and pathway["broken"] is False
+        assert body["context"] == ["Context line"]
+        assert body["grade_rules"]
+        evidence = client.get(f"/api/v1/tasks/{ids['task_id']}/toc/evidence").json()
+        [doc] = evidence["links"][0]["documents"]
+        assert doc["previous_wording"] is True
+        assert (doc["support"], doc["quote"], doc["relevance"]) == ("weak", "It worked.", 2)
+        # Unscored, so quality 1; weight 1 x 2 / 9.
+        assert (doc["quality"], doc["weight"]) == (1, 0.222)
+        assert doc["evidence_id"] == str(ids["evidence"])
+        assert doc["authors"] == ["Ada Lovelace"]
+
+
+def test_the_context_read_highlights_the_quote_in_its_passage(
+    engine: Engine, tmp_path: Path
+) -> None:
+    with api_client(tmp_path) as (client, owner, _other):
+        with seeded(engine) as conn:
+            ids = seed_toc_task(conn)
+            other = seed_toc_task(conn)
+            conn.execute(
+                update(task)
+                .where(task.c.task_id.in_([ids["task_id"], other["task_id"]]))
+                .values(is_public=True)
+            )
+        url = CONTEXT.format(task_id=ids["task_id"], evidence_id=ids["evidence"])
+        body = client.get(url).json()
+        assert body["context"][body["span_start"] : body["span_end"]] == "It worked."
+        assert "Schools in Leeds" in body["context"]
+        assert body["authorships"] == [{"name": "Ada Lovelace", "institutions": []}]
+        # Another passage of the same document (a figure's quote) is highlighted instead.
+        other_quote = client.get(url, params={"quote": "Schools in Leeds"}).json()
+        span = other_quote["context"][other_quote["span_start"] : other_quote["span_end"]]
+        assert span == "Schools in Leeds"
+        # Another task's judgement is not found under this task.
+        foreign = CONTEXT.format(task_id=ids["task_id"], evidence_id=other["evidence"])
+        assert client.get(foreign).status_code == 404
+
+
+def test_the_public_leg_carries_no_editor_names(engine: Engine, tmp_path: Path) -> None:
+    """D5: an anonymous reader of a public theory sees what changed, never who (task 037)."""
+    with tenancy_client(tmp_path, count=1) as (client, (owner,)):
+        with seeded(engine) as conn:
+            org = make_org(conn, name="ToC Org")
+            ops_enrol(conn, user_id=owner.user_id, org_id=org, display_name="Owner")
+            ids = seed_toc_task(conn)
+            conn.execute(
+                update(task)
+                .where(task.c.task_id == ids["task_id"])
+                .values(owner_user_id=owner.user_id, org_id=org, visibility="org", is_public=True)
+            )
+            conn.execute(
+                update(toc_box)
+                .where(toc_box.c.task_id == ids["task_id"])
+                .values(edited_by=owner.user_id)
+            )
+        url = ROUTES[0].format(task_id=ids["task_id"])
+        anonymous = client.get(url).json()["boxes"]
+        assert anonymous and all(box["edited_by"] is None for box in anonymous)
+        as_owner = client.get(url, headers=owner.headers).json()["boxes"]
+        assert {box["edited_by"] for box in as_owner} == {"Owner"}

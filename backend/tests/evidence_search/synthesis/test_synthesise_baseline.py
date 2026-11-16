@@ -43,7 +43,7 @@ from policy_atlas.evidence_search.synthesis.baseline_prompt import (
     required_titles,
 )
 from policy_atlas.evidence_search.synthesis.grounding_judge import StubGroundingJudgeBackend
-from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+from policy_atlas.evidence_search.synthesis.section_prompt import (
     CaseStudyWire,
     ClaimWire,
     GapPayloadWire,
@@ -51,8 +51,10 @@ from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     NoteWire,
     SectionProposalWire,
     SectionProseWire,
-    SectionTurn,
     SectionWire,
+)
+from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+    SectionTurn,
     StubSynthesisBackend,
 )
 from policy_atlas.evidence_search.synthesis.synthesis_tools import (
@@ -470,6 +472,11 @@ def test_baseline_seed_carries_the_template_and_the_substrate_claim_types(
     for seed in backend.seeds:
         assert seed["template"] == "baseline"
         assert set(seed["available_claim_types"]) == {"chunk", "reasoning", "gap"}
+        # Task 056 X3: no characterise or group ran, so the lookup tool never
+        # offers their kinds; the list is run-stable (same for every section).
+        assert "characterisation_summary" not in seed["available_lookup_kinds"]
+        assert "grouping_groups" not in seed["available_lookup_kinds"]
+        assert seed["available_lookup_kinds"] == backend.seeds[0]["available_lookup_kinds"]
 
 
 # --- A section with nothing behind it ---
@@ -906,7 +913,9 @@ def test_evidence_search_skeleton_still_leads_with_key_findings(conn: Connection
     )
     titles = [entry["title"] for entry in skeleton["sections"]]
     assert titles[0] == "Key findings"
-    assert titles[-1] == CONCLUSIONS_TITLE
+    # Conclusions ends the body; the case-studies slot follows (task 058, round 7)
+    # and the introduction's slot comes last (round 8).
+    assert titles[-3:] == [CONCLUSIONS_TITLE, "Case studies", "Full report"]
     assert SOURCES_SECTION_TITLE not in titles
     row = _rollup(conn, task_id)
     assert row.synthesis_provenance["directive"]["template"] is None

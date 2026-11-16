@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .chat import AnswerPayloadOut
 from .tasks import LatestRun
@@ -68,6 +68,7 @@ PlanStageKey = Literal[
     "screen",
     "classify",
     "appraise",
+    "ingest",
     "characterise",
     "select",
     "extract",
@@ -81,6 +82,22 @@ PlanStageKey = Literal[
     "option_profile",
     "constrain",
     "theme",
+    "shortlist",
+    "toc_draft",
+    "toc_read",
+    "toc_item_searches",
+    "toc_select",
+    "toc_discover",
+    "toc_merge",
+    "toc_search_new",
+    "toc_new_link_searches",
+    "toc_judge",
+    "toc_search_again",
+    "toc_retry_searches",
+    "toc_figures",
+    "toc_choose",
+    "toc_summarise",
+    "toc_report",
 ]
 
 #: Country-group membership provenance. Mirrors
@@ -143,11 +160,15 @@ class PlanStep(BaseModel):
         blurb: Longer user-visible step description (presentation; may
             change).
         stage: Composed-chain stage name the step corresponds to.
+        row: The card row the step belongs to (task 058, N17). Steps that
+            share a row key render as one row, with the row's label; the
+            client groups by this key and decides nothing about rows.
     """
 
     label: str
     blurb: str
     stage: PlanStageKey
+    row: str
 
 
 class PlanDraft(BaseModel):
@@ -227,6 +248,7 @@ ConsiderationAspect = Literal[
     "dependencies",
     "coordination",
     "delivery_complexity",
+    "potential_impact",
     "transferability",
 ]
 
@@ -235,6 +257,10 @@ CheckedAt = Literal["longlist", "assessment", "retrieval"]
 
 #: Scoping depth. Mirrors `scoping_plan.ScopingPlan.depth`.
 ScopingDepth = Literal["rapid", "standard"]
+
+#: How far the shortlist may reach beyond options tried elsewhere (task 055,
+#: S2). Mirrors `scoping_plan.RiskAppetite`.
+ScopingRiskAppetite = Literal["tried_only", "mostly_tried", "open_to_untested"]
 
 #: One entry's kind in Your context. Mirrors `scoping_plan.YourContextEntry`.
 YourContextType = Literal["present_fact", "commitment"]
@@ -383,6 +409,50 @@ class BaselineConfirmedOut(BaseModel):
     plan_version: int
 
 
+class TocPlanDraft(BaseModel):
+    """Draft or approved theory-of-change plan, as surfaced to the client (task 054).
+
+    Mirrors the runtime `TocPlan`. Every field except `ready` may be absent
+    while drafting.
+
+    Args:
+        title: Short user-visible name for the task.
+        question: The user's ask.
+        entry_point: `outcome_first`, `intervention_first` or `existing_theory`.
+        intended_change: The impact, in measurable words.
+        target_population: Who the change is for.
+        intervention: What would be done.
+        dosage: How much of the intervention each beneficiary gets.
+        existing_theory_text: The user's own theory, verbatim.
+        where: The place the theory is for.
+        time_horizon: When the impact is expected.
+        context: What the user said about the setting.
+        published_after: The evidence searched starts at this date (`YYYY-MM-DD`);
+            `None` means any year.
+        published_before: The evidence searched ends at this date, or `None`.
+        assumptions: Every guess the plan is making.
+        ready: Whether the draft has validated into an executable plan.
+    """
+
+    title: str | None = None
+    question: str | None = None
+    entry_point: Literal["outcome_first", "intervention_first", "existing_theory"] | None = None
+    intended_change: str | None = None
+    target_population: str | None = None
+    intervention: str | None = None
+    dosage: str | None = None
+    existing_theory_text: str | None = None
+    #: The user's uploaded diagram behind the existing theory (increment 5).
+    upload_id: uuid.UUID | None = None
+    where: str | None = None
+    time_horizon: str | None = None
+    context: str | None = None
+    published_after: str | None = None
+    published_before: str | None = None
+    assumptions: list[str] = Field(default_factory=list)
+    ready: bool = False
+
+
 class ScopingPlanDraft(BaseModel):
     """Draft or approved options-scoping plan, as surfaced to the client.
 
@@ -410,6 +480,8 @@ class ScopingPlanDraft(BaseModel):
         steps: The three display steps, in order.
         time_band: The coarse compute band for the baseline.
         baseline_confirmed: The confirm-baseline record, once written.
+        risk_appetite: How far the shortlist may reach beyond options tried
+            elsewhere (task 055); set on every approved plan.
         ready: Whether the draft has validated into an executable plan.
     """
 
@@ -431,7 +503,43 @@ class ScopingPlanDraft(BaseModel):
     steps: list[PlanStep] = Field(default_factory=list)
     time_band: str | None = None
     baseline_confirmed: BaselineConfirmedOut | None = None
+    risk_appetite: ScopingRiskAppetite | None = None
     ready: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def steps_are_the_codes(cls, data: Any) -> Any:
+        """Replace stored steps with today's copy, as ``ScopingPlan`` does.
+
+        2026-11-09: a chat turn stored before task 058 carried a draft whose
+        steps had no ``row``, and loading the Agent tab's history failed (500).
+        """
+        # ponytail: lazy import, the runtime module imports this one.
+        from policy_atlas.runtime.scoping_plan import with_current_steps
+
+        return with_current_steps(data)
+
+
+class TocPlanPatch(BaseModel):
+    """Typed replace-field edits for a theory-of-change plan (task 054).
+
+    Omitted fields stay as they are; an empty string clears an optional field.
+    Allowed only until the draft is on the canvas (S7). `published_after` and
+    `published_before` (`YYYY-MM-DD`) set the years of evidence searched; an
+    empty `published_after` means any year.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    intended_change: str | None = Field(default=None, max_length=300)
+    target_population: str | None = Field(default=None, max_length=300)
+    intervention: str | None = Field(default=None, max_length=300)
+    dosage: str | None = Field(default=None, max_length=300)
+    where: str | None = Field(default=None, max_length=120)
+    time_horizon: str | None = Field(default=None, max_length=120)
+    context: str | None = Field(default=None, max_length=2000)
+    published_after: str | None = None
+    published_before: str | None = None
 
 
 class ScopingPlanPatch(BaseModel):
@@ -453,6 +561,9 @@ class ScopingPlanPatch(BaseModel):
         steering_mode: Replacement check-in cadence.
         steer_point_defaults: Replacement standing instructions.
         assumptions: Replacement assumptions.
+        risk_appetite: Replacement risk appetite (task 055). The longlist
+            does not read it, so a patch carrying only this field never makes
+            the longlist out of date.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -468,6 +579,7 @@ class ScopingPlanPatch(BaseModel):
     steering_mode: SteeringMode | None = None
     steer_point_defaults: list[ScopingSteerPointDefaultOut] | None = None
     assumptions: list[str] | None = None
+    risk_appetite: ScopingRiskAppetite | None = None
 
 
 class ConfirmBaselineIn(BaseModel):
@@ -593,6 +705,24 @@ class TurnActionOut(BaseModel):
     capability_run_id: uuid.UUID | None = None
 
 
+class CitedSourceOut(BaseModel):
+    """One source a Task Agent line cites with ``[n]`` (task 054: the sense check).
+
+    Args:
+        n: The marker's number.
+        title: The document's title.
+        url: Where to read it, when known.
+        year: Its publication year, when known.
+        quote: The passage that supports the line, checked against the document.
+    """
+
+    n: int
+    title: str
+    url: str | None = None
+    year: str | None = None
+    quote: str
+
+
 class TaskAgentTurnOut(BaseModel):
     """Response body for one task_agent turn.
 
@@ -606,6 +736,8 @@ class TaskAgentTurnOut(BaseModel):
     Args:
         reply: The task_agent's conversational reply for this turn.
         plan: The full current draft plan.
+        question: The planner's clarifying question, when this turn asks one
+            (task 058, N10); the ``suggestions`` answer it. Null otherwise.
         suggestions: The task_agent's suggested answers to its clarifying
             question, rendered as tappable quick replies. Empty when none.
         part: Structured sequential-task_agent proposal, when this turn carries one.
@@ -615,24 +747,99 @@ class TaskAgentTurnOut(BaseModel):
         scoping_plan: The full current scoping draft, on an options-scoping
             turn. `plan` is null for those turns, and this is null for
             Evidence search turns.
+        toc_plan: The full current theory-of-change draft, on a theory-of-change
+            turn (task 054).
         kind: What this turn is. Absent on turns stored before task 044,
             which are all replies.
         answer: The cited answer, on an `answer` turn.
         decision: The recorded gate decision, on a `decision` turn.
         action: The applied longlist verb, on an `action` turn.
+        sources: The sources the reply's `[n]` markers cite, on a theory-of-change
+            turn whose sense check found evaluations (task 054).
     """
 
     reply: str
     plan: PlanDraft | None = None
+    question: str | None = None
     suggestions: list[str] = Field(default_factory=list)
     part: PartProposalOut | None = None
     conversation_id: uuid.UUID | None = None
     capability: str | None = None
     scoping_plan: ScopingPlanDraft | None = None
+    toc_plan: TocPlanDraft | None = None
     kind: TaskAgentTurnKind | None = None
     answer: AnswerPayloadOut | None = None
     decision: TurnDecisionOut | None = None
     action: TurnActionOut | None = None
+    sources: list[CitedSourceOut] = Field(default_factory=list)
+
+
+class TaskAgentProgressEvent(BaseModel):
+    """What the planner is doing now, sent before its reply starts (task 058, N9).
+
+    Args:
+        label: The user-facing activity line, such as "Drafting the plan".
+    """
+
+    type: Literal["progress"] = "progress"
+    label: str
+
+
+class TaskAgentDeltaEvent(BaseModel):
+    """One new piece of the planner's reply; the pieces joined are the reply.
+
+    Args:
+        text: The next piece of reply text.
+    """
+
+    type: Literal["delta"] = "delta"
+    text: str
+
+
+class TaskAgentCompletedEvent(BaseModel):
+    """The one successful last event: the finished, stored turn.
+
+    Args:
+        turn: The turn exactly as a read of it returns it.
+    """
+
+    type: Literal["completed"] = "completed"
+    turn: TaskAgentTurnOut
+
+
+class TaskAgentFailedEventError(BaseModel):
+    """Failure details that are safe to show the caller.
+
+    Args:
+        code: A stable error code (``task_agent_turn_failed``, or a conflict
+            or capacity code such as ``run_active``).
+        message: A short plain explanation.
+    """
+
+    code: str
+    message: str
+
+
+class TaskAgentFailedEvent(BaseModel):
+    """The one failed last event, sent after the response has started.
+
+    Args:
+        error: What went wrong, in public-safe terms.
+        turn_index: The failed turn's place in the conversation; the stored
+            row is marked failed and may be retried with the same client turn id.
+    """
+
+    type: Literal["failed"] = "failed"
+    error: TaskAgentFailedEventError
+    turn_index: int
+
+
+#: One NDJSON line of ``POST /tasks/{id}/task-agent-turns`` (task 058, N9):
+#: progress and delta lines, then exactly one completed or failed line.
+TaskAgentStreamEvent = Annotated[
+    TaskAgentProgressEvent | TaskAgentDeltaEvent | TaskAgentCompletedEvent | TaskAgentFailedEvent,
+    Field(discriminator="type"),
+]
 
 
 class TaskAgentTranscriptTurnOut(BaseModel):
@@ -645,6 +852,8 @@ class TaskAgentTranscriptTurnOut(BaseModel):
             so a reloaded client can retry its own incomplete latest turn.
         user_message: Submitted user message.
         reply: Task Agent reply, absent until a pending turn completes.
+        question: The planner's clarifying question, read back off the stored
+            turn (task 058, N10). Null when the turn asked none.
         suggestions: Task Agent quick-reply suggestions, if the turn completed.
         part: Structured sequential-task_agent proposal, absent for legacy turns.
         capability: The owning task's capability, absent on legacy turns.
@@ -656,6 +865,8 @@ class TaskAgentTranscriptTurnOut(BaseModel):
         answer: The cited answer, on an `answer` turn.
         decision: The recorded gate decision, on a `decision` turn.
         action: The applied longlist verb, on an `action` turn.
+        sources: The sources the reply's `[n]` markers cite, on a theory-of-change
+            turn whose sense check found evaluations (task 054).
     """
 
     turn_index: int
@@ -663,6 +874,7 @@ class TaskAgentTranscriptTurnOut(BaseModel):
     client_turn_id: uuid.UUID
     user_message: str
     reply: str | None
+    question: str | None = None
     suggestions: list[str] = Field(default_factory=list)
     part: PartProposalOut | None = None
     capability: str | None = None
@@ -673,6 +885,7 @@ class TaskAgentTranscriptTurnOut(BaseModel):
     answer: AnswerPayloadOut | None = None
     decision: TurnDecisionOut | None = None
     action: TurnActionOut | None = None
+    sources: list[CitedSourceOut] = Field(default_factory=list)
 
 
 class PlanOut(BaseModel):
@@ -682,16 +895,20 @@ class PlanOut(BaseModel):
         plan: The current Evidence search plan, or null on a scoping task.
         scoping: The current options-scoping plan, or null on an Evidence
             search task.
+        toc: The current theory-of-change plan (task 054), or null.
         capability: Which of the two the task is, so a reader never has to
             infer it from which field is null.
         version: Plan row version.
         status: Plan status (e.g. `draft`, `approved`).
-        opened_run: The longlist walk `POST .../plan/confirm-baseline` opened,
-            on that route's response. Absent on every other plan read.
+        opened_run: The walk a plan write opened: the longlist walk
+            `POST .../plan/confirm-baseline` opened, or the shortlist walk a
+            `PATCH .../plan` that changed the risk appetite opened (task 055).
+            Null on every other plan read, and when the opener was refused.
     """
 
     plan: PlanDraft | None = None
     scoping: ScopingPlanDraft | None = None
+    toc: TocPlanDraft | None = None
     capability: str = "evidence_search"
     version: int
     status: str
@@ -721,6 +938,8 @@ class PlanPatchIn(BaseModel):
         scoping: Options-scoping edits. Mutually exclusive with every field
             above: an Evidence search field on a scoping task, or `scoping` on
             an Evidence search task, is a 422.
+        toc: Theory-of-change edits (task 054), the same way: only on a
+            theory-of-change task, and alone.
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -735,3 +954,4 @@ class PlanPatchIn(BaseModel):
     published_before: str | None = None
     geography: str | None = None
     scoping: ScopingPlanPatch | None = None
+    toc: TocPlanPatch | None = None

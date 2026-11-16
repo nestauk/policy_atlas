@@ -30,7 +30,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
-from policy_atlas.options_scoping.longlist.lever_types import lever_types_as_data
+from policy_atlas.options_scoping.option_profile.lever_types import lever_types_as_data
 
 SUGGEST_PROMPT_VERSION = "longlist_suggest_v3"
 

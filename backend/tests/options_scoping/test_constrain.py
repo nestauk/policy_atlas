@@ -27,16 +27,16 @@ import json
 import threading
 import uuid
 from datetime import timedelta
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import pytest
 from sqlalchemy import select, update
 from sqlalchemy.engine import Connection
 
 from policy_atlas.api import longlist_actions
-from policy_atlas.api.readmodels import repository
+from policy_atlas.api.read_models import repository
 from policy_atlas.core.schema import longlist_result, option, option_relation, task_source_snapshot
-from policy_atlas.core.usage import UsageResult
+from policy_atlas.core.usage import UsageAccumulator, UsageResult
 from policy_atlas.options_scoping.constrain import constrain as constrain_module
 from policy_atlas.options_scoping.constrain.constrain import (
     AUTHORITY_KEY,
@@ -70,15 +70,17 @@ from policy_atlas.options_scoping.constrain.in_scope import (
     in_scope_evidence,
 )
 from policy_atlas.options_scoping.context import ScopeContext
-from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
 from policy_atlas.options_scoping.longlist.longlist_cluster_prompt import (
     DiscoveredOptionWire,
     OptionDiscoveryResponse,
 )
+from policy_atlas.options_scoping.model_calls import CallOutcome
 from policy_atlas.options_scoping.option_profile.option_profile import (
     option_profile_scope,
 )
+from policy_atlas.options_scoping.scoping_backend import LonglistBackend, StubLonglistBackend
 from policy_atlas.runtime.scoping_plan import TRANSFERABILITY_DEFAULT, find_default
+from tests import progress_recorder
 from tests.helpers import now
 from tests.options_scoping.test_longlist import _Walk
 from tests.runtime.test_baseline_gate import scoping_plan
@@ -1697,3 +1699,114 @@ def test_a_duplicate_merged_in_this_run_gets_no_label(conn: Connection) -> None:
     assert AUTHORITY_KEY in judgements[str(kept)]["1"]
     assert AUTHORITY_KEY not in judgements[str(dup)]["1"]
     assert _latest(walk).counts["authority_labelled"] == 1
+
+
+# --- a user's shortlist place at a Rebuild (task 055, P11, O1) ------------------------
+
+
+def test_a_shortlisted_duplicate_is_never_merged_away(conn: Connection) -> None:
+    walk = _walk(conn)
+    kept, dup = _duplicate_pair(walk, shortlist_state="added_by_you")
+    walk.build(StubLonglistBackend())
+
+    _constrain(walk, _duplicate_breach(kept, dup))
+
+    row = _row(walk, dup)
+    assert row.merged_into_option_id is None
+    assert (row.state, row.shortlist_state) == ("included", "added_by_you")
+    assert (_members(walk, kept), _members(walk, dup)) == (1, 1)
+    assert _latest(walk).counts["merged"] == 0
+    distinct = _latest(walk).judgements[str(dup)]["1"]["distinct"]
+    assert (distinct["verdict"], distinct["reason"]) == ("passes", DUPLICATE_KEPT_REASON)
+
+
+def test_two_shortlisted_duplicates_both_stay(conn: Connection) -> None:
+    walk = _walk(conn)
+    kept, dup = _duplicate_pair(walk, shortlist_state="added_by_you")
+    conn.execute(
+        update(option).where(option.c.option_id == kept).values(shortlist_state="added_by_you")
+    )
+    walk.build(StubLonglistBackend())
+
+    _constrain(walk, _duplicate_breach(kept, dup))
+
+    assert _row(walk, kept).merged_into_option_id is None
+    assert _row(walk, dup).merged_into_option_id is None
+    assert {_row(walk, oid).shortlist_state for oid in (kept, dup)} == {"added_by_you"}
+
+
+def test_an_unshortlisted_duplicate_still_merges_into_a_shortlisted_kept_option(
+    conn: Connection,
+) -> None:
+    walk = _walk(conn)
+    kept, dup = _duplicate_pair(walk)
+    conn.execute(
+        update(option).where(option.c.option_id == kept).values(shortlist_state="added_by_you")
+    )
+    walk.build(StubLonglistBackend())
+
+    _constrain(walk, _duplicate_breach(kept, dup))
+
+    assert _row(walk, dup).merged_into_option_id == kept
+    assert _row(walk, kept).shortlist_state == "added_by_you"
+
+
+def test_a_shortlisted_option_constrain_excludes_keeps_its_place_and_the_breach(
+    conn: Connection,
+) -> None:
+    walk = _walk(conn, _requirement("No benefit sanctions"))
+    kept = walk.option("Youth guarantee")
+    placed = walk.option("Sanctioned work search", shortlist_state="added_by_you")
+    walk.build(StubLonglistBackend())
+    backend = StubLonglistBackend(
+        constrain_responses=_response(
+            [kept, placed], ["req-1", *SCREEN_IDS], verdicts={(placed, "req-1"): "breaks"}
+        )
+    )
+
+    _constrain(walk, backend)
+
+    row = _row(walk, placed)
+    assert (row.state, row.shortlist_state) == ("excluded", "added_by_you")
+    assert row.exclusion["by"] == "constrain"
+    assert row.exclusion["constraint"] == "No benefit sanctions"
+    card = repository.option_out(conn, walk.task_id, placed)
+    assert card is not None
+    assert card.exclusion is not None and card.exclusion.constraint == "No benefit sanctions"
+
+
+# --- Live progress (task 058, N2) ---
+
+
+def test_judge_publishes_batches_done_of_total(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = progress_recorder.install(monkeypatch)
+    lock = threading.Lock()
+    seen = [0]
+
+    def fake_batch(backend: Any, *, batch: list[dict[str, Any]], **_: Any) -> Any:
+        with lock:
+            seen[0] += 1
+            first = seen[0] == 1
+        # The first batch needed a second attempt inside the retry loop.
+        return CallOutcome(name="constrain", value={}, attempts=2 if first else 1, usages=[])
+
+    monkeypatch.setattr(constrain_module, "_judge_batch", fake_batch)
+    options: list[dict[str, object]] = [{"option_id": str(uuid.uuid4())} for _ in range(25)]
+    _, stats, failed = constrain_module._judge(
+        cast("LonglistBackend", object()),
+        plan={},
+        baseline=[],
+        requirements=[],
+        preferences=[],
+        options=options,
+        usage=UsageAccumulator(),
+    )
+
+    assert stats["retries"] == 1
+    assert failed == set()
+    assert all(c["total"] == 3 and c["unit"] == "batches" for c in calls)
+    # The batch that retried counts once: 0, 1, 2, 3.
+    assert sorted(c["done"] for c in calls) == [0, 1, 2, 3]
+    assert max(calls, key=lambda c: c["done"])["activity"] == (
+        "Checking constraints · batch 3 of 3"
+    )

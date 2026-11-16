@@ -10,7 +10,8 @@ and opens a child walk with no parent that never closes the conversation;
 *exclude* records the reason; the buttons and the verbs write the same state
 and one History event each; a turn while a walk runs is ``run_active``; an
 Evidence search task's turns are unchanged; the ordinary chat resolves the
-longlist walk after it runs; ``RetrievalUnitCapError`` is answered honestly.
+longlist walk after it runs. (The retrieval unit cap and its honest reply went
+with task 057's SQL retrieval.)
 
 The longlist is the real component's, built by 6.1's fixture
 (``test_longlist_routes._build``) and committed.
@@ -57,7 +58,7 @@ from policy_atlas.core.schema import (
     task_source_snapshot,
 )
 from policy_atlas.evidence_search.assess.appraise import DEFAULT_RUBRIC_VERSION
-from policy_atlas.evidence_search.synthesis.synthesis_tools import RetrievalUnitCapError
+from policy_atlas.evidence_search.synthesis.synthesis_tools import _ChunkScopeFilters
 from policy_atlas.options_scoping.design import OptionDesign
 from policy_atlas.runtime import option_search
 from policy_atlas.runtime.agent_backend import StubAgentBackend
@@ -69,6 +70,7 @@ from tests.api.org_support import tenancy_client
 from tests.api.resource_support import (  # noqa: F401 — the autouse teardown
     api_client,
     create_task,
+    end_walks,
     remove_committed_tasks_after_walks,
 )
 from tests.api.resource_support import await_walks_ended as _await_walks_ended
@@ -478,8 +480,12 @@ def test_a_document_in_two_scopes_is_one_row_with_the_longlist_labels(
         docs = retriever._scope.docs  # noqa: SLF001 — the frozen retrieval substrate
         assert docs[str(both)]["primary_evidence_type"] == RCT
         assert docs[str(both)]["appraisal_tier"] == "5"
-        units = [u for u in retriever._scope.units if u["tss_id"] == str(both)]  # noqa: SLF001
-        assert len(units) == 2  # one row per document: its chunks are not doubled
+        # One row per document: its chunks are not doubled. The search runs on
+        # its own short connection, after build_chat_readers closed its own.
+        results = retriever.search(
+            "one two", filters=_ChunkScopeFilters(doc_ids=frozenset({str(both)}))
+        )
+        assert sorted(result["content"] for result in results) == ["One", "Two"]
         assert docs[str(pair)]["primary_evidence_type"] == RCT
         assert docs[str(pair)]["appraisal_tier"] == "3"
         assert lookup({"kind": "classification_by_doc", "doc_id": str(both)})["result"] == {
@@ -537,23 +543,6 @@ def test_the_ordinary_chat_resolves_the_longlist_walk_after_it_runs(
         assert resolve_terminal_run_components(engine, task_id=built.task_id) == before
 
 
-def test_a_retrieval_cap_is_answered_honestly(
-    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    def _too_many(*_args: Any, **_kwargs: Any) -> Any:
-        raise RetrievalUnitCapError(unit_count=10, cap=1)
-
-    monkeypatch.setattr(longlist_turns, "answer_over_scope", _too_many)
-    agent = _agent(_sort("question"))
-    with tenancy_client(tmp_path, overrides=_overrides(agent)) as (client, (owner, colleague, _)):
-        built = _org_build(engine, owner, colleague, linked=False)
-        response = _turn(client, owner.headers, built.task_id, "What works?")
-        assert response.status_code == 200, response.text
-        assert response.json()["kind"] == "reply"
-        assert response.json()["reply"] == longlist_turns.TOO_MANY_DOCUMENTS_REPLY
-        assert _latest_row(engine, built.task_id).status == "completed"
-
-
 def test_other_with_nothing_pending_says_what_the_chat_can_do(
     engine: Engine, tmp_path: Path
 ) -> None:
@@ -592,7 +581,7 @@ def test_exclude_is_proposed_then_applied_on_assent_and_writes_what_the_button_w
         assert proposed.status_code == 200, proposed.text
         body = proposed.json()
         assert body["reply"] == (
-            "Exclude *Mentoring*? Reason: *volunteers cannot deliver it*. Confirm to apply."
+            "Exclude Mentoring? Reason: volunteers cannot deliver it. Confirm to apply."
         )
         assert body["kind"] == "reply" and body["action"] is None
         assert body["part"]["id"] == "longlist_action"
@@ -612,7 +601,7 @@ def test_exclude_is_proposed_then_applied_on_assent_and_writes_what_the_button_w
             "label": "Mentoring",
             "capability_run_id": None,
         }
-        assert action["reply"] == "Excluded *Mentoring*."
+        assert action["reply"] == "Excluded Mentoring."
         assert agent.longlist_sort_inputs[1]["pending"] == {
             "verb": "exclude",
             "label": "Mentoring",
@@ -675,7 +664,7 @@ def test_the_button_confirms_include_again_without_a_second_sort(
         )
         assert excluded.status_code == 200, excluded.text
         proposed = _turn(client, owner2.headers, built.task_id, "Bring the youth guarantee back")
-        assert proposed.json()["reply"] == "Include *Youth guarantee* again? Confirm to apply."
+        assert proposed.json()["reply"] == "Include Youth guarantee again? Confirm to apply."
         assert _option_row(engine, guarantee).state == "excluded"
 
         confirmed = _turn(client, owner2.headers, built.task_id, _CONFIRM)
@@ -708,7 +697,7 @@ def test_a_question_never_applies_and_keeps_the_pending_action(
         )
         proposed = _turn(client, owner2.headers, built.task_id, "Drop mentoring")
         assert proposed.json()["reply"] == (
-            "Exclude *Mentoring*? Reason: *none given*. Confirm to apply."
+            "Exclude Mentoring? Reason: none given. Confirm to apply."
         )
         asked = _turn(client, owner2.headers, built.task_id, "Should we? Is there UK evidence?")
         assert asked.status_code == 200, asked.text
@@ -744,8 +733,8 @@ def test_a_different_verb_replaces_the_pending_action_and_other_keeps_it(
             client, owner2.headers, built.task_id, "No, exclude the guarantee, too costly"
         )
         assert replaced.json()["reply"] == (
-            "This replaces the earlier proposal to exclude *Mentoring*. "
-            "Exclude *Youth guarantee*? Reason: *too costly*. Confirm to apply."
+            "This replaces the earlier proposal to exclude Mentoring. "
+            "Exclude Youth guarantee? Reason: too costly. Confirm to apply."
         )
         unmatched = _turn(client, owner2.headers, built.task_id, "Exclude the other one")
         assert unmatched.json()["reply"] == longlist_turns.WHICH_OPTION_REPLY
@@ -754,8 +743,8 @@ def test_a_different_verb_replaces_the_pending_action_and_other_keeps_it(
         assert pending["option_id"] == str(guarantee)
         kept = _turn(client, owner2.headers, built.task_id, "Hmm, not sure")
         assert kept.json()["reply"] == (
-            f"{longlist_turns.OTHER_REPLY}\n\nStill waiting: Exclude *Youth guarantee*? "
-            "Reason: *too costly*. Confirm to apply."
+            f"{longlist_turns.OTHER_REPLY}\n\nStill waiting: Exclude Youth guarantee? "
+            "Reason: too costly. Confirm to apply."
         )
         assert _latest_row(engine, built.task_id).task_agent_state["pending"]["option_id"] == str(
             guarantee
@@ -800,7 +789,7 @@ def test_add_proposes_a_design_then_mints_it_and_opens_a_parentless_walk(
         )
         assert proposed.status_code == 200, proposed.text
         assert proposed.json()["reply"] == (
-            "Add *Wage subsidy* — Employers are paid part of a young recruit's wage? "
+            "Add Wage subsidy — Employers are paid part of a young recruit's wage? "
             "Design: a wage subsidy for six months; for 16 to 24 year olds. "
             "Confirm to add it and search for it."
         )
@@ -956,6 +945,7 @@ def test_a_turn_while_a_walk_runs_is_run_active(engine: Engine, tmp_path: Path) 
         assert response.status_code == 409, response.text
         assert response.json()["error"]["code"] == "run_active"
         assert agent.longlist_sort_calls == 0
+        end_walks(engine, built.task_id)
 
 
 def test_an_evidence_search_task_never_reaches_the_longlist_sort(tmp_path: Path) -> None:
@@ -993,3 +983,28 @@ def test_the_stub_sort_defaults_to_other() -> None:
     sort = agent.sort_longlist_turn("anything", [], pending=None)
     assert sort.kind == "other" and sort.assents_to_pending is False
     assert agent.longlist_sort_calls == 1
+
+
+def test_no_sorting_turn_sentence_carries_an_asterisk() -> None:
+    """Task 058, N20: the names are plain text, so no reply shows literal asterisks."""
+    design = OptionDesign(
+        name="Wage subsidy",
+        description="Employers are paid part of a recruit's wage.",
+        design_features=["Paid for six months"],
+    )
+    pending = longlist_turns.PendingAction(
+        verb="exclude", option_id=uuid.uuid4(), label="Mentoring", reason="too costly"
+    )
+    sentences = [
+        longlist_turns.exclude_proposal("Mentoring", None),
+        longlist_turns.include_proposal("Mentoring"),
+        longlist_turns.add_proposal(design),
+        longlist_turns.proposal_sentence(pending),
+        longlist_turns.still_waiting(pending),
+        longlist_turns._applied_reply("exclude", "Mentoring"),
+        longlist_turns._applied_reply("include_again", "Mentoring"),
+        longlist_turns._applied_reply("add", "Mentoring"),
+        longlist_turns._already_reply("Mentoring", "excluded"),
+        longlist_turns._replaced_prefix(pending),
+    ]
+    assert all("*" not in sentence for sentence in sentences)

@@ -188,8 +188,29 @@ class CancelledEvent(BaseModel):
     turn: ChatTurnOut
 
 
+class ConversationTitledEvent(BaseModel):
+    """The chat's title written from its first message (task 058, round 14).
+
+    Sent once, while the first turn's stream is open, when the ``chat_title``
+    step's line replaces the message's cut; never terminal.
+
+    Args:
+        conversation_id: The chat.
+        title: Its new title.
+    """
+
+    type: Literal["conversation.titled"] = "conversation.titled"
+    conversation_id: uuid.UUID
+    title: str
+
+
 ChatStreamEvent = Annotated[
-    ProgressEvent | DeltaEvent | CompletedEvent | FailedEvent | CancelledEvent,
+    ProgressEvent
+    | DeltaEvent
+    | CompletedEvent
+    | FailedEvent
+    | CancelledEvent
+    | ConversationTitledEvent,
     Field(discriminator="type"),
 ]
 

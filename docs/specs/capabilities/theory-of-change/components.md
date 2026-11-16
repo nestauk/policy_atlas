@@ -1,0 +1,196 @@
+---
+type: Capability spec
+title: Theory of change — component skeleton
+description: The ToC components, which ones are Evidence search or Options scoping components reused as they are, the new ones and why, the web search seam, the data, the model steps, and the build order.
+tags: [capability, theory-of-change, components, draft]
+timestamp: 2026-10-23
+---
+
+# Theory of change — component skeleton
+
+**Status: draft (task 054).** Product intent and rulings are in [capability.md](capability.md).
+This file says how the capability sits on the existing infrastructure. Python paths are under
+`backend/src/policy_atlas/` (the top-level `src/policy_atlas/` holds only stale `__pycache__`
+folders).
+
+**Reuse rule** (from [Options scoping components](../options-scoping/components.md)). Each
+component is **reused** (an existing component, maybe with new parameters), **modified** (an
+existing engine with new input or output) or **new**. Each "new" has a reason.
+
+## Skeleton
+
+```
+[0 inherit, from an option] ─▶ 1 plan ══approve══▶ 2 draft (or 2b import) ─▶
+   item searches (child walks, acquire only; one per link;
+                  OpenAlex · Overton · web) ─▶ join
+   ─▶ 3 select ─▶ 7 discover ─▶ 8 merge ─▶ 8b search new links ─▶ 6 judge ─▶ 4 classify ─▶ 5 appraise ─▶ 9 choose ─▶ 10 summarise
+
+check again   = same-meaning call ─▶ 6 judge on the documents already judged for those links ─▶ 10
+search more   = item searches for the named links ─▶ 3 ─▶ 6 ─▶ 4 ─▶ 5 ─▶ 10 (those links only)
+edits         = flag links *Edited · check pending*; nothing reruns on its own
+chats         = stress test · discuss; no walk
+export        = read endpoints and frontend rendering; no walk
+```
+
+The contract for task 054 (`docs/tasks/054-toc-integration/contract.md`, C3 and C19) is the
+build-level word on the chains and their step names.
+
+## Components
+
+| # | Component | Origin | What ToC uses it for | Realisation |
+|---|---|---|---|---|
+| 0 | inherit | **modified**: shared by ES and OS; gains one direction, from an OS option | Seeds the plan slots from the option and the scoping plan; gives the ToC task a membership row for each of the option's documents (the document itself is shared, not copied), flagged *inherited* and re-screened, with classification and appraisal read from the scoping run. Runs **before** the item searches, so `acquire` does not store those documents again (capability.md § Connections to other tasks). | procedure |
+| 1 | plan | **modified**: the Task Agent profile pattern with ToC slots | The plan conversation and `TocPlan` (capability.md § Plan slots). | agent, lead-authored prompt |
+| 2 | draft | **new**: nothing in the repo writes a causal graph | Candidate success and failure pathways through the Magenta Book layers (C34, 2026-10-28): Inputs and activities, Outputs, Short-term outcomes, Long-term outcomes and Impact, with failure outcomes; 15 to 25 boxes and 1 or 2 impacts; links with mechanisms and conditions; context; supporting activities; result criteria and indicators; the critical connection. Code then checks the graph (the E1 checks), including the allowed steps: input to output, output to short-term outcome, short-term to short-term or long-term outcome, long-term to long-term outcome or impact, and from any of these to a failure outcome. | one call (judgment model) + code checks |
+| 2b | import | **new**: no vision call exists | Reads pasted text, an image or a PDF of an existing theory into the same graph shape, keeping the user's words and labelling what it adds. The file is stored in S3 (§ Uploads). PDF pages become images with `pymupdf` (already a dependency) and go through the existing `chat.completions.parse` path as image parts. | one vision call + the same code checks |
+| — | item search | **reused**: the option-search child walk (`runtime/option_search.py`), at the Evidence search's `link` depth | One acquire-only walk per item (§ Items). Intent = the item text; its first line, the link sentence, is searched as written: OpenAlex by meaning on the sentence (20 results) and on the sentence plus "in the United Kingdom" (10), and Overton on the sentence (10). One query-generation call gives one keyword query, run on OpenAlex with the systematic-review clause and with the trial clause (10 each; C31). Five search calls per link (4 OpenAlex, 1 Overton) and one generation call. Every distinct result is kept (🟡 at most 60). Find more evidence (C44) runs the same five calls reformulated (the query writer sees the link's earlier queries and writes in the research literature's vocabulary; the searches by meaning use its paraphrase) with twice the results and twice the cap, and picks and judges up to 40 documents per link instead of 10. A full or new-items check runs the reformulated search once by itself, after the judge, for every link left with *Not enough evidence*, and judges 10 new documents per link (`toc_search_again`). 🟡 At most 80 links per check (C27, C31, 2026-10-27). | procedure |
+| — | web leg | **new backend** behind the existing `search` verb | OpenAI's web search tool (§ Web search). | procedure |
+| 3 | select | **new**: `toc_select` (C27, C28, C31, 2026-10-27) | No screen: each link search already searched its own sentence by meaning. Each link chooses from its own search's documents plus the 10 documents of the whole walk's searches closest by meaning to its item text (C31), so a study one link found can serve another; the picks are recorded per link, and the judge reads them. A document with a DOI and no abstract first gets its abstract from Crossref, stored on the snapshot (C30). Then one small pick call per link (`toc_pick_v1`, fast tier, links in parallel) chooses the 🟡 10 documents most likely to test the step, from titles and abstract openings; unknown ids are dropped, a short answer is topped up and a failed call replaced by round-robin over the five result lists (abstracts first). A link with 10 or fewer documents keeps them all, with no call. Picked documents are screened in, the rest screened out, in the screen's own rows. | one call per link + code |
+| 4 | classify | **reused**, after the judge (C31) | Evidence type per document, only for documents the judge found on topic (any support other than *not about*, for any link); the judge screens the rest out. Feeds quality Q (C36). | per-doc fan-out |
+| 5 | appraise | **reused**, after the judge (C31) | Appraisal score per document under the existing rubric (1 to 5), for the same documents. Feeds quality Q: 5 or 4 → 3, 3 → 2, lower or unscored → 1 (C36). | code |
+| 8b | search new links | **new**: `toc_search_new` (C32, 2026-10-27) | After merge, each kept link with no search of its own (the links discovery added) gets one item search (dispatched and joined by the runner, stage `toc_new_link_searches`), then the same pick as `select`. Picked documents are screened in and added to the picks the judge reads; a link whose search finds nothing falls back to the nearest pool documents. Not run by Search for more. | item searches + one call per link |
+| 6 | judge | **new**: nothing judges a document against one causal claim | Per link: the documents `toc_select` picked for it (C31; before C31, those its own search found) plus inherited ones (a link with no search of its own, from discover or Search for more, uses the whole screened-in pool), at most *K* (🟡 *K* = 10, so a link with its own search needs no rerank); a link with no search of its own reads the *K* screened-in documents closest by meaning to its item text, from the embeddings acquire stores (C27). One call per link and document (`toc_judge_v6`, C36, 2026-10-28) returns the document's *support* for the step (*strong* · *weak* · *mixed* · *refutes* · *not about this*) with one quote, and its *relevance* R 0 to 3 with a one-line reason (how many extra assumptions carry the finding to the plan's population and place); a support may record a condition; for a modelling study, the call also says whether it is robust (capability § Trust rules). For a link, the same call also returns any **case study** (programme, place) and any **indicator** the document gives for the link's source or target box; for an input source box, the case study records where it was put in place and what it took. The existing quote verifier checks the quote; an unverified answer is stored as *not about this* and counted. | per-pair fan-out + quote check |
+| — | verdict | **new**, code only | One evidence verdict per link (C36, simplified BEAM, 2026-10-28), computed on read in `check/grade.py` from its evidence rows: weight = quality Q × relevance R ÷ 9; *Confident*, *Not sure: mixed*, *Not sure: too little evidence* or *Not confident: evidence against*, with a close-to-the-threshold flag; the theory's confidence is the lowest verdict among critical links. Not stored, so it cannot drift. Thresholds are named constants, calibrated from the evals. | code |
+| 6b | figures | **new**: `toc_figures` (C37, 2026-10-28); reuses IOF's statistics names, `_parse_numeric` and the bounds rules in `quote_verify`, and `QuoteMatcher` | After the judge, one call per judgement that supports or refutes a link (`toc_figures_v1`, fast tier, in parallel) reads the same title and abstract and returns at most 3 figures: a level of the source or target box, or the link's effect, with value, range, unit, effect type, population, place, year, n, k and the exact quote. Code keeps a figure only when its quote is in the text and its number is in the quote (thousands separators, the middle dot, %, a trailing .0, the unicode minus and spaces normalised); a reversed range is dropped; drops are counted. Stored in `toc_figure`; a judgement whose call succeeded is stamped (`figures_checked_at`) and not asked again for the same wording. The link panel's "Size of change" groups figures with the same measure, unit and type as "Evidence suggests A to B (n studies)", never pooled; box panels show a box's levels. | one small call per judged document + code checks |
+| 7 | discover | **new**: the OS intervention profile finds interventions, not mechanisms or failure modes | Batched calls over the screened-in abstracts and pages: mechanisms, outcomes and failure modes the graph does not have, each with its document and quote. They become candidate pathways labelled *found in the evidence*; their links get no search and are judged with the rest. Insert-only. | batched calls |
+| 8 | merge | **new**: nothing in the repo selects among causal routes | Before judging. First folds boxes that name the same change (`toc_merge_v2`, C29): same layer only, never a box the user wrote into one they did not; links are re-pointed, a doubled link becomes one (the user-edited one, else the older) and a link from a box to itself is dropped; the thread lists "Merged box X into Y". Then merges pathways by *distinct* (shared mechanism) and sets aside by *relevant* (does not reach the intended change for the plan's population and place). A one-line reason per pathway; flags changes to user work (T1); the before-state goes in its event. Only links on kept pathways are then checked (C29). | one call + code checks |
+| 9 | choose | **new** | After grading, only above the limits (6 success, 3 failure): keeps by *promising* and *evidence* (the step verdicts per pathway, `toc_choose_v2`). Adds conditions that supports recorded and a link does not name. Re-picks the critical connection: the lowest verdict on a kept success pathway, ties to the link on most pathways (C6 on verdicts). Same reasons, flags and event. | one call + code checks |
+| 10 | summarise | **modified**: a small template call, not the full ES synthesise | `toc_summary_v3` (2026-10-29): a title of at most 8 words and one evidence sentence per link (what the documents found, then whether it applies here), with the documents it cites stored so the panel numbers them; per box a description that does not repeat its definition, indicator or timing, and a "seen in" note from its case studies with its cites (dropped when the box has none, or it cites anything else). Each citation is checked against the item's own documents. The theory's title, summary and narrative are the report's (`toc_report`); the header paragraphs and evaluation questions are gone. | one call + citation check |
+| 10b | report | **new**: `toc_report` (C38, 2026-10-28) | Detailed information as a short narrative report, rebuilt on every check walk after summarise: one frontier call (`toc_report_v1`) writes the prose of five sections (Summary; How change happens; Assumptions and evidence; What to test and measure; Sources and method; shown as "Sources", without the method note, since 2026-10-29). Code builds the inputs (the plan; the theory with box and link codes, verdicts and evidence sentences; the weakest critical links; 5 to 12 assumption rows, critical first then worst verdict, one per condition of the critical and not-Confident links plus one risk per failure-pathway link; the numbered sources), removes and counts unknown codes and any [n] that does not bear on a link the text names, renumbers sources by first citation and writes the source list and the method note (date, judge model). Stored as the step's `component.completed` payload, like the summary's; the read API serves the latest. It takes over the summary's header paragraphs and evaluation questions; the per-link sentences and box descriptions stay. | one call + code checks |
+| — | stress test | **new**: a chat kind with its own prompt | Four questions, one at a time, each tied to a box or link. Conversation only. | chat turns |
+| — | discuss | **reused**: the existing chat and grounded-answer path | The graph and its evidence enter the chat context. | chat turns |
+| — | export | **new**, small | All in the browser: PNG and SVG from the canvas (`html-to-image`), the PDF report through print, CSV references, JSON graph and draw.io XML built client-side. No server export routes. PowerPoint is parked (owner, 2026-11-04). | code |
+
+**Not reused, on purpose:** the ES deep chain (ingest, select, extract, group, full synthesise),
+because this task reads abstracts only; the OS longlist, constrain, theme and shortlist, which
+work at option grain; the prototype's judge-then-filter double pass and score clamps, which a
+single judge, a verified quote and a fixed grade rule replace.
+
+## Items
+
+🟡 An **item** is something the evidence check tests: a link. Boxes are not items (owner,
+2026-10-26). Code builds the item text, so the same graph always gives the same text:
+
+- **Item text:** the link's sentence, "If <if>, for <for>, then <then>, because <because>", the
+  source and target box texts, and the link's conditions, with the question "did this work where
+  it was tried, and does it hold for <population> in <where> now?".
+- **Item hash:** sha256 over the normalised link fields, both box texts and the conditions.
+  Plan-scope fields (population, place) are in the item text but **not** in the hash, so a plan
+  change does not flag every link (C11).
+- A link whose hash differs from the one its evidence counts for reads *Edited · check pending*;
+  its evidence stays until the user keeps it or checks again (contract C19).
+
+## Web search
+
+✅ OpenAI's own web search tool (owner, S7). 🟡 Design:
+
+- **Call path.** The tool needs the OpenAI Responses API, a new call path beside the existing
+  `chat.completions.parse` wrapper in `core/openai_client.py`, with the same tracing and usage
+  records. About $10 per 1,000 tool calls plus tokens (research § 3); up to 80 calls per check.
+- **Route.** On the OpenAI route, the call goes to OpenAI as usual. Bedrock's global routing does
+  not offer the tool: only the `bedrock-mantle` endpoint has hosted web search, in us-east-1 and
+  us-east-2 only. ✅ On the Bedrock route, web search calls alone go to `bedrock-mantle` in
+  us-east-1 (owner, 2026-10-23). 🟡 A `web_search` table on each route in `model_routes.toml`, like
+  the existing `search_queries` one, holds the address and the model name (`openai.gpt-5.6-terra`
+  on Mantle, which takes in-region names, not `global.` ones). The contract checks that the Bedrock
+  key and identity also work in us-east-1.
+- **Frozen, untrusted text.** Each page the tool cites is fetched with the existing full-text
+  fetcher and stored as a source snapshot with source type *web*, its URL, its retrieval time and
+  its text. Page text enters prompts only as quoted data, following
+  [../../system/prompting.md](../../system/prompting.md). No component reads a live page at answer
+  time.
+- **Same funnel.** Web pages are screened, classified and appraised like any document. They count
+  toward flags and *weak*, never toward *medium* or *strong*.
+- **Governance.** Every web call emits the existing search governance event.
+- **ADR.** This opens the open-web seam that
+  [../../system/execution-orchestration.md](../../system/execution-orchestration.md) and
+  `docs/deferred.md` defer. The task ADR records the provider, the injection posture and the cost.
+
+## Uploads
+
+✅ Kept in S3 (owner, S8). 🟡 The file travels as base64 in a JSON request (no multipart dependency),
+size-capped (🟡 10 MB). The backend writes it to a new private, encrypted bucket under the task's
+key. Tasks are archived, never deleted, so the file stays while the task row exists; only the
+operator script that hard-deletes tasks removes it (contract C8). Reads go through a task-scoped route with the task's own access
+check. This is the first user-data bucket (today's buckets hold the frontend and fonts), so it is
+an infrastructure change and closes the "Upload audit-event seam" in `docs/deferred.md`: each
+upload writes an audit event and a trace span.
+
+## Data
+
+🟡 New tables, following the OS precedent; one theory per task. Columns, keys and the three
+revisions are in contract § Schema: `toc_box`, `toc_link`, `toc_band_item`, `toc_pathway`,
+`toc_pathway_link`, `toc_item_evidence` (revision 1); `toc_upload` (revision 2); and
+`task_link.source_option_id` (revision 3). Boxes, links and pathways carry a *changed by Policy
+Atlas* flag with its reason and the user's prior version.
+
+**Layers and codes (C34, C35; revision `80f4e6c430b0`, 2026-10-28).** `toc_box.layer` is one of
+`input`, `output`, `outcome_short`, `outcome_long`, `impact`, `failure_outcome`; earlier
+`outcome` boxes became `outcome_short`. Links also carry a short `title` and the documents their evidence sentence cites
+(`evidence_cites`); boxes a `seen_in` note and its cites; figures a plain `statement`
+(revision `3c2752811cce`, 2026-10-29). The Result page shows the report's title and summary as its
+header; citations everywhere use the Evidence search's `[n]` chip and provenance sheet, showing the
+quote in its passage through the ToC context route. Every box and link has a short `code`, written by code
+when the row is inserted (`theory_of_change.store.insert`) and never reused in a task, even after
+a delete: boxes a layer letter and a number (`A` inputs and activities, `P` outputs, `S`
+short-term, `L` long-term, `I` impact, `F` failure outcomes), links `#1`, `#2`. The canvas shows a
+box's code small and grey in its corner and a dashed accountability ceiling after the outputs
+("Directly influenced" / "Contributes to"); link codes appear only in the link panel heading.
+
+Shared tables, reused: `task`, `plan`, `task_agent_transcript`, `task_link`, `evidence_scope`,
+`capability_run`, `source_snapshot` and the screening, classification and appraisal results,
+`conversation`, `event_log`, `artefact`.
+
+**Links.** Two changes to the existing link rules, in the task-create route and its contract:
+
+- Today a link's source must be an Evidence search task. A ToC target also accepts an Options
+  scoping source, and only with an option named.
+- Today `task_link.option_id` points to an option in the **target** task. A ToC started from an
+  option needs an option in the **source** task. 🟡 Add `source_option_id` with its own composite
+  foreign key to `(option_id, task_id)` on the source side (owner, 2026-10-23).
+
+**Migrations:** three revisions, as contract § Schema states. Item searches reuse the `targeted`
+scope with `acquire_only`; the main ToC walk uses the new `toc` purpose. Web pages are stored as
+`source_snapshot` rows with `text_basis = 'full_text'` and metadata `backend = 'web'`, so no new
+source type is needed.
+
+## Runtime and code
+
+| Touch point | Change |
+|---|---|
+| `runtime/capability_registry.py` | `THEORY_OF_CHANGE` key, a `CapabilitySpec`, a `TaskAgentProfile`; `AnyPlan` gains `TocPlan`. |
+| `runtime/toc_plan.py` (new) | `TocPlan` and `compose_toc`, like `scoping_plan.py`. |
+| `runtime/task_agent_toc.py`, `task_agent_toc_prompt.py` (new) | Task Agent profile and prompt. |
+| `runtime/harness.py` | ToC steps registered as data, like `_SCOPING_STEPS`, and their edges. |
+| `runtime/inherit.py` | The option direction. |
+| `core/openai_client.py` | A Responses API call for the web search tool. |
+| `model_routes.toml`, `core/model_routes.py` | A `web_search` table per route (address and model); on `bedrock-local`, Mantle in us-east-1. |
+| `evidence_search/sourcing/web_pages.py` (new) | Freezes cited web pages (contract C7). |
+| `theory_of_change/` (new package) | As built (tidied 2026-11-06): `graph.py`, `store.py`, `backend.py` (the model seam), `cost.py`; the draft (`draft.py`, `sense_check.py`, `importing.py`), the user's edits (`edits.py`, `proposals.py`, `review.py`), the report (`report.py`) and `seminal.py` as flat modules; `check/` holds one module per check step (`selecting`, `discover`, `merge`, `judge`, `figures`, `choose`, `summarise`) with `shared.py` and `grade.py`. Prompts sit beside their step as `*_prompt.py`. |
+| `model_routes.toml` `[steps]` | As in contract § Prompts and model routes: `task_agent_toc`, `toc_draft`, `toc_import`, `toc_merge`, `toc_choose` (frontier); `toc_discover`, `toc_judge`, `toc_summarise`, `toc_same_meaning`, `toc_stress`, `toc_web` (standard); `toc_pick` (fast, C28). Queries use the existing `search_queries` step. |
+| `scripts/prompt_hashes.json` | New prompt files pinned. |
+| `api/routers/toc.py` (new) | Routes as in the task 054 plan § S14: read the graph with verdicts and link states; edit; keep the evidence; check again; search for more; undo a change; restore a pathway; keep mine; accept a change; upload; exports. Registered in `api/app.py`; `make openapi-sync`. |
+| `api/routers/tasks.py` | The two link-rule changes. |
+| `tests/runtime/test_capability_registry.py` | The "unknown capability" assertion for `theory_of_change` is reversed. |
+| Infrastructure | The uploads bucket and the backend's access to it. |
+| Frontend | `lib/capabilities.ts` flag; `views/toc/` (canvas, reading guide, detail panel, Detailed information, original-file view, stress-test pane); a ToC branch in `views/taskResult.ts`; "Design a theory of change" at the end of the option page. |
+| New dependencies (R12) | `@xyflow/react` (canvas; MIT licence), `html-to-image` pinned to 1.11.11 (PNG and SVG). `python-pptx` was withdrawn with PowerPoint (owner, 2026-11-04). Each goes through the dependency gate. |
+
+## Build order
+
+✅ One programme contract, built iteratively (owner, 2026-10-26: "implement a simple version …
+then iterate a bit, and then build from there"). Tier **4**, with the owner-approved lighter
+review stack (contract C18) and ADR 0042.
+
+| Increment | Delivers | Evals |
+|---|---|---|
+| 1. Core, then iteration | Registry entry, revision 1, `TocPlan`, Task Agent, draft, the check (OpenAlex, Overton), grades, sentences, read-only Result page | E1, E2, E6 during iteration; E2b only with the owner's cost approval |
+| 2. Editing and changes | Canvas editing, *check pending* with Keep and Check again, Task Agent edits, change list with Undo, Keep mine, Restore, plan-change choice | E1 on edited graphs |
+| 3. Web search | Responses call, web pages, Mantle on the Bedrock route | spot checks |
+| 4. Stress test and discuss | `stress_test` chat kind; discuss with ToC context | spot checks |
+| 5. Bring your own theory | Revision 2, uploads bucket, text, image and PDF import | E3, E4 later |
+| 6. Export | PDF report, PNG, SVG, CSV, JSON, draw.io (PowerPoint parked) | manual import checks |
+| 7. Design from an option | Revision 3, the option-page button and back-list, shared documents, the newer-run flag | spot checks |
+
+E7 (back-test against reviews) and E8 (expert panel) run once steps 1 to 5 are stable, before the
+build flag is removed.

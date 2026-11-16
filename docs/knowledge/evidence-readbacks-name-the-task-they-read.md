@@ -29,3 +29,9 @@ The live-trace lane of the 046 review found the mismatch by pulling the stored p
 counts of the three amendment 4 tasks and comparing them with the table (finding LT1). See
 [the live-check drive runbook](live-check-drive-runbook.md) and
 [assert on the row, not the summary](assert-on-row-not-summary.md).
+
+055 addendum (2026-10-27): a **hand** reading is written back into the saved file too. The
+055 build reported M1 as "120 / 120 (hand)" and left `measures.json`'s `M1.passing` at null
+and every per-place mark at null; the review had to re-read a sample (30 / 30) to stand the
+claim up. A measure the verification table reports as read from a file must be in the file,
+hand marks included.

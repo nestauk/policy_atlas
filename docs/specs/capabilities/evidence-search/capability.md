@@ -103,6 +103,14 @@ landscape. Per-component detail in [components.md](components.md).
 
 ## Output structure
 
+- **The live Result tab** (task 058, S5): while the run searches, the Result tab shows the
+  question as the title and one sentence saying the sections are set out when writing begins;
+  from the skeleton, every proposed section shows placeholder lines until its prose arrives;
+  the active section shows the writer's action line, then its prose as the writer streams it
+  (display-only deltas, no claim markers, nothing shown as verified before the judge runs); a
+  sentence the judge failed blurs in place until the repair lands and settles into its new
+  wording with nothing marking it afterwards; the committed section replaces the draft and
+  stays the record. Key findings is written last and says so until its turn.
 - **User-facing sections composed from backend blocks.** The user-facing artefact is report-like **sections**; blocks +
   addressable units are the substrate. **Grounding is a per-unit property**, so a single section
   **mixes grounding modes freely** (a pattern, a cited finding and a gap in one paragraph). The

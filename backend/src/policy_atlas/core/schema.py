@@ -1,9 +1,11 @@
-"""SQLAlchemy Core table metadata — forty-two tables plus one read view.
+"""SQLAlchemy Core table metadata — forty-eight tables plus one read view.
 
 No deferred columns (no same_content_as or lineage key).
 """
 
 import uuid
+from collections.abc import Callable
+from typing import Any
 
 from sqlalchemy import (
     BigInteger,
@@ -22,11 +24,77 @@ from sqlalchemy import (
     Table,
     Text,
     UniqueConstraint,
+    cast,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+from sqlalchemy.engine import Dialect
+from sqlalchemy.sql.elements import BindParameter
+from sqlalchemy.types import UserDefinedType
 
 metadata = MetaData()
+
+
+def vector_literal(value: Any) -> str:
+    """Return pgvector's text form of a vector, ``'[a,b,...]'``.
+
+    One formatter for the column's bind processor and for a query vector passed
+    as a literal (task 057 review, code-review 7), so the stored and the searched
+    vectors are always written the same way.
+    """
+    return "[" + ",".join(repr(float(v)) for v in value) + "]"
+
+
+class Vector(UserDefinedType[list[float]]):
+    """The pgvector ``vector(n)`` column type, without the pgvector Python package.
+
+    pgvector is a PostgreSQL extension that stores a list of numbers (an embedding)
+    in a compact binary form and compares them in SQL. Task 057 adds no Python
+    library for it (contract G3): a vector goes to the database as text such as
+    ``'[0.1,0.2]'``, cast to ``vector(n)`` in the SQL, and comes back as the same
+    text form, which this type parses into a list of floats. The database keeps
+    single-precision (float32) numbers, so a value read back can differ from the
+    one sent after about the seventh significant digit.
+
+    Args:
+        dimensions: The number of values every vector in the column holds.
+    """
+
+    cache_ok = True
+
+    def __init__(self, dimensions: int) -> None:
+        self.dimensions = dimensions
+
+    def get_col_spec(self, **kw: Any) -> str:
+        """Return the column type as PostgreSQL spells it, e.g. ``vector(1536)``."""
+        return f"vector({self.dimensions})"
+
+    def bind_expression(self, bindvalue: BindParameter[list[float]]) -> Any:
+        """Cast the bound text to ``vector(n)`` in the SQL itself."""
+        return cast(bindvalue, self)
+
+    def bind_processor(self, dialect: Dialect) -> Callable[[Any], str | None]:
+        """Turn a list of floats into pgvector's text form, ``'[a,b,...]'``."""
+
+        def process(value: Any) -> str | None:
+            if value is None:
+                return None
+            return vector_literal(value)
+
+        return process
+
+    def result_processor(
+        self, dialect: Dialect, coltype: object
+    ) -> Callable[[Any], list[float] | None]:
+        """Parse pgvector's text form back into a list of floats."""
+
+        def process(value: Any) -> list[float] | None:
+            if value is None:
+                return None
+            body = str(value).strip()[1:-1]
+            return [float(v) for v in body.split(",")] if body else []
+
+        return process
 
 # Task 033 tenancy: an organisation sits above the entity hierarchy, and a row's
 # `org_id` is NULL until its owner is enrolled. NULL never matches NULL — the org
@@ -75,6 +143,8 @@ project = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=True),
     Column("visibility", Text, nullable=False, server_default="private"),
+    # When the owner archived it; NULL while in use (task 058, round 11).
+    Column("archived_at", DateTime(timezone=True), nullable=True),
     CheckConstraint("visibility IN ('org', 'private')", name="ck_project_visibility"),
     Index("ix_project_org_visibility", "org_id", "visibility"),
 )
@@ -119,7 +189,7 @@ task = Table(
     Column("capability", Text, nullable=False, server_default="evidence_search"),
     CheckConstraint("status IN ('active', 'archived')", name="ck_task_status"),
     CheckConstraint(
-        "capability IN ('evidence_search', 'options_scoping')",
+        "capability IN ('evidence_search', 'options_scoping', 'theory_of_change')",
         name="ck_task_capability",
     ),
     CheckConstraint(
@@ -302,6 +372,21 @@ source_snapshot = Table(
     Column("source_locator", Text, nullable=False),
     Column("metadata", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    # Task 057 (D2): the document-store key. body_hash is the SHA-256 of the fetched
+    # bytes before parsing; null on envelope snapshots and on full-text snapshots
+    # made before task 057 (their bytes are gone, so they are never reused by key).
+    # parse_profile / segmentation_policy name the parser and the chunking rule.
+    Column("body_hash", Text, nullable=True),
+    Column("parse_profile", Text, nullable=True),
+    Column("segmentation_policy", Text, nullable=True),
+    # One full-text snapshot per store key (partial: rows without a body hash are
+    # exempt). Built CONCURRENTLY by revision a3d8f6c1e2b4.
+    Index(
+        "uq_source_snapshot_store_key",
+        "body_hash", "parse_profile", "segmentation_policy",
+        unique=True,
+        postgresql_where=text("body_hash IS NOT NULL"),
+    ),
     # No task_id — identity is content, not task.
 )
 
@@ -332,11 +417,18 @@ task_source_snapshot = Table(
     ),
     Column("full_text_status", Text, nullable=False, server_default="not_attempted"),
     Column("full_text_error", Text, nullable=True),
+    # Task 057 (N9, owner G2 addition): per-task breadcrumbs that used to sit in the
+    # shared full-text snapshot's metadata. The run that ingested this document for
+    # this task, and the address its bytes came from.
+    Column("ingested_by_run_id", UUID(as_uuid=True), nullable=True),
+    Column("fetched_from", Text, nullable=True),
     UniqueConstraint("task_id", "source_snapshot_id", name="uq_task_source_snapshot"),
     # Composite unique target for source_screening_result FK
     UniqueConstraint("task_source_snapshot_id", "task_id", name="uq_tss_id_task"),
     CheckConstraint(
-        "full_text_status IN ('not_attempted', 'ingested', 'fetch_failed', 'parse_failed')",
+        # 'queued' (task 057): handed to the ingest queue, no snapshot and no error yet.
+        "full_text_status IN "
+        "('not_attempted', 'queued', 'ingested', 'fetch_failed', 'parse_failed')",
         name="ck_tss_full_text_status",
     ),
     CheckConstraint(
@@ -433,7 +525,7 @@ evidence_scope = Table(
     # Composite unique target for source_screening_result FK
     UniqueConstraint("evidence_scope_id", "task_id", name="uq_evidence_scope_id_task"),
     CheckConstraint(
-        "purpose IN ('baseline', 'longlist', 'variant', 'targeted')",
+        "purpose IN ('baseline', 'longlist', 'variant', 'targeted', 'shortlist', 'toc')",
         name="ck_scope_purpose",
     ),
     # MATCH SIMPLE, per the ``plan.evidence_scope_id`` precedent above it: a
@@ -599,7 +691,11 @@ source_appraisal_result = Table(
     Column("task_source_snapshot_id", UUID(as_uuid=True), nullable=False),
     Column("task_id", UUID(as_uuid=True), nullable=False),
     Column("appraised_by_run_id", UUID(as_uuid=True), nullable=False),
-    Column("quality_score", SmallInteger, nullable=False),  # 1..5, 5 = strongest (v2 rating)
+    # 1..5, 5 = strongest (v2 rating); NULL only on an Unrated row (task 056, D7).
+    Column("quality_score", SmallInteger, nullable=True),
+    # True for a document the classifier typed Unknown or Other (Non-evidence): it is
+    # appraised as "Unrated", has no score, and is citable (task 056, D7).
+    Column("unrated", Boolean, nullable=False, server_default=text("false")),
     Column("rubric_version", Text, nullable=False),  # provenance travels with each appraisal
     Column("appraised_at", DateTime(timezone=True), nullable=False),
     # Cross-task FK guards: all three parents must share the same task_id.
@@ -630,6 +726,10 @@ source_appraisal_result = Table(
         name="uq_sar_scope_source",
     ),
     CheckConstraint("quality_score BETWEEN 1 AND 5", name="ck_sar_quality_score"),
+    CheckConstraint(
+        "(unrated AND quality_score IS NULL) OR (NOT unrated AND quality_score IS NOT NULL)",
+        name="ck_sar_unrated_consistent",
+    ),
     Index("ix_sar_scope_score", "evidence_scope_id", "quality_score"),
 )
 
@@ -698,14 +798,19 @@ chunk_embedding = Table(
     Column("unit_policy", Text, nullable=False),        # e.g. "embedding_unit_policy_v1"
     Column("unit_index", Integer, nullable=False),
     Column("unit_locator", JSONB, nullable=False),      # char offsets into the canonical chunk
-    # Vector as a JSONB float array — code-validated (array, expected dims, finite floats);
-    # pgvector arrives with the retrieve slice, the vectors' first reader (decision 3).
-    Column("vector", JSONB, nullable=False),
+    # Task 057 (N8): the vector in pgvector's binary column (float32), validated in
+    # code before the write (list, 1,536 dims, finite floats), and the unit's
+    # distinct words (core.tokens, sorted) for the word-overlap score. The JSON
+    # ``vector`` column these replaced was dropped by revision 0914321f8de4, which
+    # first checks that every row has an embedding; nullable only by history.
+    Column("embedding", Vector(1536), nullable=True),
+    Column("tokens", ARRAY(Text), nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     UniqueConstraint(
         "chunk_id", "embedding_profile", "unit_policy", "unit_index",
         name="uq_chunk_embedding_unit",
     ),
+    Index("ix_chunk_embedding_tokens", "tokens", postgresql_using="gin"),
 )
 
 characterisation_result = Table(
@@ -1448,7 +1553,7 @@ capability_run = Table(
     # Composite-FK target for runs.capability_run_id.
     UniqueConstraint("capability_run_id", "task_id", name="uq_capr_id_task"),
     CheckConstraint(
-        "capability IN ('evidence_search', 'options_scoping')",
+        "capability IN ('evidence_search', 'options_scoping', 'theory_of_change')",
         name="ck_capr_capability",
     ),
     CheckConstraint(
@@ -1529,11 +1634,16 @@ OPTION_STATES: tuple[str, ...] = ("included", "excluded")
 OPTION_UNIT_KINDS: tuple[str, ...] = ("interventions", "iof", "icf")
 #: The relations between options. ``variant_of`` is reserved for task 3.
 OPTION_RELATION_KINDS: tuple[str, ...] = ("part_of", "variant_of")
+#: An option's place on the shortlist (task 055, contract S6–S10): a Policy
+#: Atlas pick, a place the user added, or a pick the user removed. NULL on the
+#: row means the option holds no place.
+OPTION_SHORTLIST_STATES: tuple[str, ...] = ("proposed", "added_by_you", "set_aside")
 
 _OPTION_ORIGINS_SQL = ", ".join(f"'{o}'" for o in OPTION_ORIGINS)
 _OPTION_STATES_SQL = ", ".join(f"'{s}'" for s in OPTION_STATES)
 _OPTION_UNIT_KINDS_SQL = ", ".join(f"'{k}'" for k in OPTION_UNIT_KINDS)
 _OPTION_RELATION_KINDS_SQL = ", ".join(f"'{k}'" for k in OPTION_RELATION_KINDS)
+_OPTION_SHORTLIST_STATES_SQL = ", ".join(f"'{s}'" for s in OPTION_SHORTLIST_STATES)
 
 option = Table(
     "option",
@@ -1565,6 +1675,11 @@ option = Table(
     # The kept option a duplicate was folded into (constrain's *distinct*
     # merge): its documents moved there and it leaves the list. NULL otherwise.
     Column("merged_into_option_id", UUID(as_uuid=True), nullable=True),
+    # The option's place on the shortlist (task 055): one of
+    # ``OPTION_SHORTLIST_STATES``, or NULL for no place. ``shortlist_reason``
+    # is the one-line reason for a Policy Atlas pick.
+    Column("shortlist_state", Text, nullable=True),
+    Column("shortlist_reason", Text, nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
     ForeignKeyConstraint(
@@ -1584,6 +1699,10 @@ option = Table(
     UniqueConstraint("option_id", "task_id", name="uq_option_id_task"),
     CheckConstraint(f"origin IN ({_OPTION_ORIGINS_SQL})", name="ck_option_origin"),
     CheckConstraint(f"state IN ({_OPTION_STATES_SQL})", name="ck_option_state"),
+    CheckConstraint(
+        f"shortlist_state IN ({_OPTION_SHORTLIST_STATES_SQL})",
+        name="ck_option_shortlist_state",
+    ),
     CheckConstraint("design_version >= 1", name="ck_option_design_version"),
     CheckConstraint("jsonb_typeof(outcomes) = 'array'", name="ck_option_outcomes_array"),
     CheckConstraint(
@@ -1680,6 +1799,10 @@ longlist_result = Table(
     # Keyed ``[option_id][design_version]``: the eight lines (sentence, mark)
     # and the setting (task 046, R45).
     Column("option_profile", JSONB, nullable=False),
+    # The latest shortlist proposal: ``{note, provenance}`` (task 055). The
+    # server default stays: the longlist writer's insert does not name this
+    # column, and a row with no proposal yet reads ``{}``.
+    Column("shortlist", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
     Column("counts", JSONB, nullable=False),
     Column("provenance", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
@@ -1722,4 +1845,379 @@ chat_turn = Table(
         "status IN ('pending', 'completed', 'failed', 'cancelled')",
         name="ck_chat_turn_status",
     ),
+)
+
+# --- Theory of change (task 054, ADR 0042; contract § Schema, revision 1) ---
+#
+# One theory per task, edited in place (C1). Every row carries ``revision``,
+# raised on every write, so a stale edit is refused (C10). ``uq_<table>_id_task``
+# is the cross-task guard: links, pathway steps and judgements name boxes and
+# links of their own task only.
+
+_TOC_ORIGINS_SQL = "'drafted', 'found_in_evidence', 'imported', 'user', 'options_scoping'"
+_TOC_STANCES_SQL = "'supports', 'challenges', 'not_about'"
+_TOC_SUPPORTS_SQL = "'strong', 'weak', 'mixed', 'refutes', 'not_about'"
+
+
+def _toc_common() -> list[Column[Any]]:
+    """``created_at``, ``updated_at`` and ``revision`` (C10)."""
+    return [
+        Column("created_at", DateTime(timezone=True), nullable=False),
+        Column("updated_at", DateTime(timezone=True), nullable=False),
+        Column("revision", Integer, nullable=False, server_default=text("1")),
+    ]
+
+
+def _toc_flags() -> list[Column[Any]]:
+    """The changed-by-Policy-Atlas flag columns (T1, C9)."""
+    return [
+        Column("pa_changed", Boolean, nullable=False, server_default=text("false")),
+        Column("pa_change_reason", Text, nullable=True),
+        Column("prior_version", JSONB, nullable=True),
+        Column("user_edited", Boolean, nullable=False, server_default=text("false")),
+    ]
+
+
+toc_box = Table(
+    "toc_box",
+    metadata,
+    Column("box_id", UUID(as_uuid=True), primary_key=True),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("layer", Text, nullable=False),
+    # Short stable label, e.g. ``S3`` (C35); set by ``theory_of_change.store.insert``.
+    Column("code", Text, nullable=True),
+    Column("text", Text, nullable=False),
+    Column("dosage", Text, nullable=True),
+    Column("result_criteria", JSONB, nullable=False),
+    Column("indicator", Text, nullable=True),
+    # Written by summarise (C20); boxes are described, not graded (W4).
+    Column("description", Text, nullable=True),
+    # Where the change has been seen, from its case studies, and the documents it cites.
+    Column("seen_in", Text, nullable=True),
+    Column("seen_in_cites", JSONB, nullable=True),
+    Column("origin", Text, nullable=False),
+    *_toc_flags(),
+    Column("position", JSONB, nullable=True),
+    # Who last edited the box and when (C41): a user id, resolved to a name on read.
+    Column("edited_by", Text, nullable=True),
+    Column("edited_at", DateTime(timezone=True), nullable=True),
+    *_toc_common(),
+    UniqueConstraint("box_id", "task_id", name="uq_toc_box_id_task"),
+    CheckConstraint(
+        "layer IN ('input', 'output', 'outcome_short', 'outcome_long', 'impact',"
+        " 'failure_outcome')",
+        name="ck_toc_box_layer",
+    ),
+    CheckConstraint(f"origin IN ({_TOC_ORIGINS_SQL})", name="ck_toc_box_origin"),
+    Index("ix_toc_box_task", "task_id"),
+)
+
+toc_link = Table(
+    "toc_link",
+    metadata,
+    Column("link_id", UUID(as_uuid=True), primary_key=True),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("source_box_id", UUID(as_uuid=True), nullable=False),
+    Column("target_box_id", UUID(as_uuid=True), nullable=False),
+    # Short stable label, e.g. ``#5`` (C35); set by ``theory_of_change.store.insert``.
+    Column("code", Text, nullable=True),
+    Column("if_text", Text, nullable=False),
+    Column("for_text", Text, nullable=False),
+    Column("then_text", Text, nullable=False),
+    Column("because_text", Text, nullable=False),
+    # What must hold for the link to work here: the Magenta Book's assumptions (W14).
+    Column("conditions", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
+    Column("sentence", Text, nullable=True),
+    # A short title (at most 8 words), written by summarise.
+    Column("title", Text, nullable=True),
+    # What the documents found and whether it holds here, one sentence (C36),
+    # and the documents (task source snapshot ids) it cites.
+    Column("evidence_sentence", Text, nullable=True),
+    Column("evidence_cites", JSONB, nullable=True),
+    # The two sentences before C36; kept for old rows, no longer written.
+    Column("elsewhere_sentence", Text, nullable=True),
+    Column("here_sentence", Text, nullable=True),
+    Column("critical", Boolean, nullable=False, server_default=text("false")),
+    # The edit-flag columns (C19): which item hash's judgements count, and the
+    # hash a user, a same-meaning check or choose kept them for.
+    Column("counted_hash", Text, nullable=True),
+    Column("kept_hash", Text, nullable=True),
+    Column("kept_by", Text, nullable=True),
+    Column("origin", Text, nullable=False),
+    *_toc_flags(),
+    # Who last edited the link and when (C41).
+    Column("edited_by", Text, nullable=True),
+    Column("edited_at", DateTime(timezone=True), nullable=True),
+    *_toc_common(),
+    UniqueConstraint("link_id", "task_id", name="uq_toc_link_id_task"),
+    UniqueConstraint("task_id", "source_box_id", "target_box_id", name="uq_toc_link_pair"),
+    ForeignKeyConstraint(
+        ["source_box_id", "task_id"],
+        ["toc_box.box_id", "toc_box.task_id"],
+        name="fk_toc_link_source",
+        ondelete="CASCADE",
+    ),
+    ForeignKeyConstraint(
+        ["target_box_id", "task_id"],
+        ["toc_box.box_id", "toc_box.task_id"],
+        name="fk_toc_link_target",
+        ondelete="CASCADE",
+    ),
+    CheckConstraint("source_box_id <> target_box_id", name="ck_toc_link_distinct"),
+    CheckConstraint("kept_by IN ('user', 'check', 'choose')", name="ck_toc_link_kept_by"),
+    CheckConstraint(f"origin IN ({_TOC_ORIGINS_SQL})", name="ck_toc_link_origin"),
+    # At most one critical connection per task (W10).
+    Index("uq_toc_link_one_critical", "task_id", unique=True, postgresql_where=text("critical")),
+)
+
+toc_band_item = Table(
+    "toc_band_item",
+    metadata,
+    Column("item_id", UUID(as_uuid=True), primary_key=True),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("band", Text, nullable=False),
+    Column("text", Text, nullable=False),
+    Column("sort_order", Integer, nullable=False),
+    Column("origin", Text, nullable=False),
+    *_toc_common(),
+    CheckConstraint("band IN ('context', 'supporting')", name="ck_toc_band"),
+    CheckConstraint(f"origin IN ({_TOC_ORIGINS_SQL})", name="ck_toc_band_item_origin"),
+    Index("ix_toc_band_item_task", "task_id"),
+)
+
+toc_pathway = Table(
+    "toc_pathway",
+    metadata,
+    Column("pathway_id", UUID(as_uuid=True), primary_key=True),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("kind", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("reason", Text, nullable=True),
+    Column("label", Text, nullable=False),
+    Column("origin", Text, nullable=False),
+    *_toc_flags(),
+    *_toc_common(),
+    UniqueConstraint("pathway_id", "task_id", name="uq_toc_pathway_id_task"),
+    CheckConstraint("kind IN ('success', 'failure')", name="ck_toc_pathway_kind"),
+    CheckConstraint("status IN ('kept', 'set_aside')", name="ck_toc_pathway_status"),
+    CheckConstraint(f"origin IN ({_TOC_ORIGINS_SQL})", name="ck_toc_pathway_origin"),
+    Index("ix_toc_pathway_task", "task_id"),
+)
+
+# A pathway's links in order. A deleted link leaves a gap: the pathway reads
+# *broken* (contract § Schema).
+toc_pathway_link = Table(
+    "toc_pathway_link",
+    metadata,
+    Column("pathway_id", UUID(as_uuid=True), primary_key=True),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("position", Integer, primary_key=True),
+    Column("link_id", UUID(as_uuid=True), nullable=False),
+    *_toc_common(),
+    ForeignKeyConstraint(
+        ["pathway_id", "task_id"],
+        ["toc_pathway.pathway_id", "toc_pathway.task_id"],
+        name="fk_toc_pathway_link_pathway",
+        ondelete="CASCADE",
+    ),
+    ForeignKeyConstraint(
+        ["link_id", "task_id"],
+        ["toc_link.link_id", "toc_link.task_id"],
+        name="fk_toc_pathway_link_link",
+        ondelete="CASCADE",
+    ),
+)
+
+# One judgement: one link, one document, a stance and quote per question.
+# Insert-only, keyed by the item hash it judged (C10, C19).
+toc_item_evidence = Table(
+    "toc_item_evidence",
+    metadata,
+    Column("evidence_id", UUID(as_uuid=True), primary_key=True),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("link_id", UUID(as_uuid=True), nullable=False),
+    Column("case_box_id", UUID(as_uuid=True), nullable=True),
+    Column("task_source_snapshot_id", UUID(as_uuid=True), nullable=False),
+    Column("capability_run_id", UUID(as_uuid=True), nullable=False),
+    # One verdict per link (C36): the judge's support, its quote and relevance R 0-3.
+    Column("support", Text, nullable=False),
+    Column("quote", Text, nullable=True),
+    Column("relevance", SmallInteger, nullable=False),
+    Column("relevance_reason", Text, nullable=True),
+    # The two questions before C36; kept for old rows, no longer written.
+    Column("stance_elsewhere", Text, nullable=True),
+    Column("quote_elsewhere", Text, nullable=True),
+    Column("stance_here", Text, nullable=True),
+    Column("quote_here", Text, nullable=True),
+    Column("condition", Text, nullable=True),
+    Column("case_study", JSONB, nullable=True),
+    Column("indicator", Text, nullable=True),
+    Column("robust_model", Boolean, nullable=True),
+    Column("item_hash", Text, nullable=False),
+    # When the figures call for this judgement succeeded (C37): not asked again.
+    Column("figures_checked_at", DateTime(timezone=True), nullable=True),
+    # The user's edits to the evidence (C42): removed from the link, their own
+    # scores in place of the judge's, a study they added. User ids, resolved on read.
+    Column("excluded_by", Text, nullable=True),
+    Column("excluded_at", DateTime(timezone=True), nullable=True),
+    Column("support_override", Text, nullable=True),
+    Column("relevance_override", Integer, nullable=True),
+    Column("override_by", Text, nullable=True),
+    Column("override_at", DateTime(timezone=True), nullable=True),
+    Column("added_by", Text, nullable=True),
+    # Evidence found after the first check waits for the user (C44): only
+    # ``counted`` rows count; ``decided_*`` say who accepted or rejected it.
+    Column("status", Text, nullable=False, server_default=text("'counted'")),
+    Column("decided_by", Text, nullable=True),
+    Column("decided_at", DateTime(timezone=True), nullable=True),
+    *_toc_common(),
+    ForeignKeyConstraint(
+        ["link_id", "task_id"],
+        ["toc_link.link_id", "toc_link.task_id"],
+        name="fk_toc_evidence_link",
+        ondelete="CASCADE",
+    ),
+    # Only ``case_box_id`` is nulled when the box goes (PostgreSQL 15+): a
+    # plain SET NULL would null ``task_id`` too.
+    ForeignKeyConstraint(
+        ["case_box_id", "task_id"],
+        ["toc_box.box_id", "toc_box.task_id"],
+        name="fk_toc_evidence_case_box",
+        ondelete="SET NULL (case_box_id)",
+    ),
+    ForeignKeyConstraint(
+        ["task_source_snapshot_id", "task_id"],
+        ["task_source_snapshot.task_source_snapshot_id", "task_source_snapshot.task_id"],
+        name="fk_toc_evidence_tss",
+    ),
+    ForeignKeyConstraint(
+        ["capability_run_id", "task_id"],
+        ["capability_run.capability_run_id", "capability_run.task_id"],
+        name="fk_toc_evidence_capr",
+    ),
+    UniqueConstraint(
+        "link_id", "task_source_snapshot_id", "item_hash", name="uq_toc_evidence_link_doc_hash"
+    ),
+    CheckConstraint(
+        f"stance_elsewhere IN ({_TOC_STANCES_SQL}) AND stance_here IN ({_TOC_STANCES_SQL})",
+        name="ck_toc_evidence_stances",
+    ),
+    CheckConstraint(
+        "(stance_elsewhere = 'not_about' OR quote_elsewhere IS NOT NULL) "
+        "AND (stance_here = 'not_about' OR quote_here IS NOT NULL)",
+        name="ck_toc_evidence_quotes",
+    ),
+    CheckConstraint(f"support IN ({_TOC_SUPPORTS_SQL})", name="ck_toc_evidence_support"),
+    CheckConstraint("relevance BETWEEN 0 AND 3", name="ck_toc_evidence_relevance"),
+    CheckConstraint(
+        "support = 'not_about' OR quote IS NOT NULL", name="ck_toc_evidence_support_quote"
+    ),
+    CheckConstraint(
+        "status IN ('counted', 'pending', 'rejected')", name="ck_toc_item_evidence_status"
+    ),
+    CheckConstraint(
+        "support_override IS NULL OR support_override IN"
+        " ('strong', 'weak', 'mixed', 'refutes', 'not_about')",
+        name="ck_toc_item_evidence_support_override",
+    ),
+    CheckConstraint(
+        "relevance_override IS NULL OR relevance_override BETWEEN 0 AND 3",
+        name="ck_toc_item_evidence_relevance_override",
+    ),
+)
+
+#: Edits Policy Atlas suggests (the review after edits, the Task Agent's chat), each
+#: waiting for the user's Accept or Reject (task 054, C45, C46).
+toc_proposal = Table(
+    "toc_proposal",
+    metadata,
+    Column("proposal_id", UUID(as_uuid=True), primary_key=True),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("source", Text, nullable=False),
+    Column("summary", Text, nullable=False),
+    Column("edits", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
+    Column("report_findings", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
+    Column("status", Text, nullable=False, server_default=text("'open'")),
+    *_toc_common(),
+    CheckConstraint(
+        "source IN ('review', 'chat', 'discover', 'draft')", name="ck_toc_proposal_source"
+    ),
+    CheckConstraint("status IN ('open', 'closed')", name="ck_toc_proposal_status"),
+    Index("ix_toc_proposal_task", "task_id"),
+)
+
+#: One number a judged document reports about a link's cause or effect (C37).
+toc_figure = Table(
+    "toc_figure",
+    metadata,
+    Column("figure_id", UUID(as_uuid=True), primary_key=True),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("link_id", UUID(as_uuid=True), nullable=False),
+    Column("task_source_snapshot_id", UUID(as_uuid=True), nullable=False),
+    Column("item_hash", Text, nullable=False),
+    # source / target: a level of that box; link: the link's effect.
+    Column("box", Text, nullable=False),
+    Column("measure", Text, nullable=False),
+    # As reported, and parsed where it can be (null when not a plain number).
+    Column("value_text", Text, nullable=False),
+    Column("value", Float, nullable=True),
+    Column("ci_lower_text", Text, nullable=True),
+    Column("ci_lower", Float, nullable=True),
+    Column("ci_upper_text", Text, nullable=True),
+    Column("ci_upper", Float, nullable=True),
+    Column("unit", Text, nullable=True),
+    Column("effect_size_type", Text, nullable=False),
+    Column("population", Text, nullable=True),
+    Column("place", Text, nullable=True),
+    Column("year", Text, nullable=True),
+    Column("n", Integer, nullable=True),
+    Column("k", Integer, nullable=True),
+    Column("quote", Text, nullable=False),
+    # One plain sentence explaining the figure (toc_figures_v2).
+    Column("statement", Text, nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    ForeignKeyConstraint(
+        ["link_id", "task_id"],
+        ["toc_link.link_id", "toc_link.task_id"],
+        name="fk_toc_figure_link",
+        ondelete="CASCADE",
+    ),
+    ForeignKeyConstraint(
+        ["task_source_snapshot_id", "task_id"],
+        ["task_source_snapshot.task_source_snapshot_id", "task_source_snapshot.task_id"],
+        name="fk_toc_figure_tss",
+    ),
+    CheckConstraint("box IN ('source', 'target', 'link')", name="ck_toc_figure_box"),
+    CheckConstraint(
+        "effect_size_type IN ('absolute_change', 'relative_change', 'standardised', 'ratio',"
+        " 'level')",
+        name="ck_toc_figure_effect_type",
+    ),
+    Index("ix_toc_figure_task_link", "task_id", "link_id"),
+)
+
+#: Files a user gives a task, for any capability (task 054 increment 5, C8; one
+#: table and one bucket for all, owner 2026-11-03). The file lives in the upload
+#: store (S3, or a local folder in development) under ``object_key``; this row
+#: says what it is, why it was uploaded (``purpose``) and who uploaded it.
+task_upload = Table(
+    "task_upload",
+    metadata,
+    Column("upload_id", UUID(as_uuid=True), primary_key=True),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("purpose", Text, nullable=False),
+    Column("object_key", Text, nullable=False),
+    Column("file_name", Text, nullable=False),
+    Column("content_type", Text, nullable=False),
+    Column("size_bytes", Integer, nullable=False),
+    Column("sha256", Text, nullable=False),
+    Column("uploaded_by", Text, nullable=False),
+    Column("uploaded_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("purpose IN ('toc_theory')", name="ck_task_upload_purpose"),
+    CheckConstraint(
+        "content_type IN ('image/png', 'image/jpeg', 'application/pdf')",
+        name="ck_task_upload_type",
+    ),
+    CheckConstraint("size_bytes > 0 AND size_bytes <= 10485760", name="ck_task_upload_size"),
+    Index("ix_task_upload_task", "task_id"),
 )

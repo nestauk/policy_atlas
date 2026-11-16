@@ -109,7 +109,9 @@ them.**
     each carrying a declared **trust class** (v3.0: OpenAlex, Overton). **Every call emits a
     canonical egress governance event** (§9). ⏸ open-web backend is a deferred seam **behind the
     same verb** (declaration-scoped per component; ingests as frozen chunks — no cite-the-live-web
-    path).
+    path). ✅ **Opened for the theory-of-change check walk only** (ADR 0042): OpenAI's hosted web
+    search, cited pages frozen as untrusted text, fetch-capped; still deferred for every other
+    capability.
   - **`retrieve`** — in-corpus hybrid lexical+vector retrieval over the task corpus; **reads
     the derived index, never the canonical layer**. See *Tier-0 retrieval contract* below.
   - **`lookup`** — deterministic, identifier/filter-addressed, side-effect-free access to
@@ -121,7 +123,8 @@ them.**
     blocks the branch). **`clarify`** — request *missing information* (agent stays decider;
     usually method; can be non-blocking).
 - **Scoped, not core**: compute/calculation (quantitative capabilities only); **`query-findings`**
-  (only capabilities reading the findings layer); any future open-web `search` backend.
+  (only capabilities reading the findings layer); any future open-web `search` backend (the theory-of-change web leg, ADR 0042, is the one
+  exception).
 - **Hard rules**: *provenance is data, `cite` is the action* (no "attach citation" path).
   Trust is **enforced at grounding** (`produce-grounded-block` requires each cited claim
   generated-from + citing only **appraised** evidence) — so search/retrieve and appraise stay
@@ -256,7 +259,13 @@ ask* / *flag & continue* / *silently log & continue*, by **kind of decision × m
   when it lands — never fan out the *conclusion*).
 - **"Serial" ≠ no within-step fan-out** — data-parallel fan-out over a corpus (appraise/extract N
   docs) is **retained**; atomic to the durability engine (block/component boundary = checkpoint),
-  needs no durable cross-branch exactly-once.
+  needs no durable cross-branch exactly-once. *As built (task 057, S3, 2026-11-03):* the
+  full-text reading stage is the first component whose work runs **outside the API process**
+  (queued functions filling the shared document store). The component boundary stays the
+  checkpoint **because** a function's result that lands after the stage closed does not
+  change this run's rows: the link write is guarded on the row still being `queued`, so a
+  late result only joins the store for later runs. The store is the hand-over; no
+  cross-process exactly-once is needed.
 - **Durable, resumable runs** via **block-boundary commits + tool-result memoisation.**
   Parked-branch freshness: resume on **current** structured state, staleness **flagged** (§3.6),
   never silently consumed. Live steering = a signal applied at the **next block boundary**. Agent

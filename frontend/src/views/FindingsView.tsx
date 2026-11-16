@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router";
 
@@ -8,7 +8,6 @@ import { HighlightedContext } from "./ArtefactView";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
-import { Card } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { Tooltip } from "../ui/radix/Tooltip";
@@ -25,7 +24,13 @@ import {
   findingLabel,
   PROFILE_LABEL,
 } from "./findingsVocabulary";
-import { FILTER_CHIP_CLASS, TABLE_HEADER_TEXT_CLASS } from "./sourcesPresentation";
+import { TABLE_HEADER_TEXT_CLASS, filterChipClass } from "./sourcesPresentation";
+import { LABEL_CLASS } from "../ui/brand/label";
+import { cn } from "../ui/brand/cn";
+import { RetryCard } from "../ui/feedback/RetryCard";
+import { PROSE_LINK_CLASS } from "../ui/brand/inlineActions";
+import { ListFootRow, Pagination } from "../ui/brand/list/ListFoot";
+import { DisclosureChevron } from "../ui/brand/Disclosure";
 
 type FindingOut = components["schemas"]["FindingOut"];
 type IofFinding = Extract<FindingOut, { profile: "iof" }>;
@@ -75,7 +80,7 @@ function DefinitionRow({ label, value }: { label: string; value: string | null }
   return (
     <div className="contents">
       <dt className="text-grey">{label}</dt>
-      <dd className="font-medium text-navy">{scrub(value)}</dd>
+      <dd className="text-navy">{scrub(value)}</dd>
     </div>
   );
 }
@@ -113,18 +118,18 @@ function ExactWords({
   });
   return (
     <div>
-      <h3 className="mb-2 text-meta font-bold uppercase tracking-[0.06em] text-grey">
+      <h3 className={cn(LABEL_CLASS, "mb-2")}>
         The exact words
       </h3>
       {context.data?.context !== undefined && context.data.context !== "" ? (
-        <p className="text-body leading-relaxed text-grey">
+        <p className="text-body text-grey">
           <HighlightedContext text={context.data.context} quote={quote} />{" "}
           {finding.quote_verified === true && (
             <span className="not-italic text-green">✓ verified</span>
           )}
         </p>
       ) : typeof quote === "string" && quote !== "" ? (
-        <p className="text-body italic leading-relaxed text-grey">
+        <p className="text-body italic text-grey">
           “{scrub(quote)}”{" "}
           {finding.quote_verified === true && (
             <span className="not-italic text-green">✓ verified</span>
@@ -143,7 +148,7 @@ function IofExpansion({ finding, taskId }: { finding: IofFinding; taskId: string
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div>
-        <h3 className="mb-2 text-meta font-bold uppercase tracking-[0.06em] text-grey">
+        <h3 className={cn(LABEL_CLASS, "mb-2")}>
           Reported numbers
         </h3>
         {stats.length === 0 && finding.estimate_level === null ? (
@@ -194,7 +199,7 @@ function IcfExpansion({ finding, taskId }: { finding: IcfFinding; taskId: string
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div>
-        <h3 className="mb-2 text-meta font-bold uppercase tracking-[0.06em] text-grey">
+        <h3 className={cn(LABEL_CLASS, "mb-2")}>
           Context detail
         </h3>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-caption">
@@ -260,9 +265,9 @@ function FindingRow({
             aria-expanded={expanded}
             aria-label={`${expanded ? "Collapse" : "Expand"} finding: ${scrub(finding.intervention)}`}
             onClick={onToggle}
-            className="cursor-pointer text-caption text-grey focus-visible:outline-2 focus-visible:outline-blue"
+            className="group -m-1.5 inline-flex h-7 w-7 cursor-pointer items-center justify-center"
           >
-            <span aria-hidden="true">{expanded ? "▾" : "▸"}</span>
+            <DisclosureChevron open={expanded} />
           </button>
         </td>
         {showKind && (
@@ -274,7 +279,7 @@ function FindingRow({
             )}
           </td>
         )}
-        <td className="max-w-[260px] px-3 py-3 text-body font-medium leading-snug text-navy">
+        <td className="max-w-[260px] px-3 py-3 text-body leading-snug text-navy">
           {scrub(finding.intervention)}
         </td>
         <td className="max-w-[240px] px-3 py-3 text-body leading-snug text-navy">
@@ -309,7 +314,7 @@ function FindingRow({
         <td className="max-w-[220px] px-3 py-3 text-body leading-snug">
           <Link
             to={`/tasks/${taskId}/sources/all?source=${encodeURIComponent(finding.source_id)}`}
-            className="text-grey hover:text-blue hover:underline"
+            className={PROSE_LINK_CLASS}
           >
             {scrub(finding.source_title)}
           </Link>
@@ -359,6 +364,7 @@ export function FindingsView() {
   });
   const groups = useGroups(taskId);
   const [open, setOpen] = useState<string | null>(null);
+  const top = useRef<HTMLParagraphElement>(null);
 
   const updateParams = (update: (next: URLSearchParams) => void) => {
     setSearchParams((current) => {
@@ -399,11 +405,7 @@ export function FindingsView() {
                 next.delete("page");
               })
             }
-            className={`${FILTER_CHIP_CLASS} ${
-              profile === value
-                ? "border-blue bg-blue-tint text-blue"
-                : "border-line bg-paper text-grey hover:bg-ground"
-            }`}
+            className={filterChipClass(profile === value)}
           >
             {label}
           </button>
@@ -422,11 +424,7 @@ export function FindingsView() {
                 next.delete("page");
               })
             }
-            className={`${FILTER_CHIP_CLASS} ${
-              group === undefined
-                ? "border-blue bg-blue-tint text-blue"
-                : "border-line bg-paper text-grey hover:bg-ground"
-            }`}
+            className={filterChipClass(group === undefined)}
           >
             All groups
           </button>
@@ -450,11 +448,7 @@ export function FindingsView() {
                     next.delete("page");
                   })
                 }
-                className={`${FILTER_CHIP_CLASS} ${
-                  group === candidate.label
-                    ? "border-blue bg-blue-tint text-blue"
-                    : "border-line bg-paper text-grey hover:bg-ground"
-                }`}
+                className={filterChipClass(group === candidate.label)}
               >
                 {scrub(candidate.label)}
               </button>
@@ -465,7 +459,7 @@ export function FindingsView() {
       {findings.isPending && (
         <div aria-busy="true" aria-label="Loading findings" className="mt-5 space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-16 animate-pulse border border-line bg-paper-2" />
+            <div key={i} className="h-16 anim-breathe border border-line bg-paper-2" />
           ))}
         </div>
       )}
@@ -474,25 +468,16 @@ export function FindingsView() {
         (errorCode(findings.error) === "unauthenticated" ? (
           <ReauthRedirect />
         ) : (
-          <Card role="alert" className="mt-5 p-8 text-center text-body text-navy">
-            Findings couldn't be loaded.{" "}
-            <button
-              type="button"
-              className="cursor-pointer font-bold text-blue hover:underline"
-              onClick={() => void findings.refetch()}
-            >
-              Retry
-            </button>
-          </Card>
+          <RetryCard className="mt-5" copy="Findings couldn't be loaded." onRetry={() => void findings.refetch()} />
         ))}
 
       {findings.data !== undefined && (
         <>
-          <p className="mt-4 text-meta text-grey" role="status">
+          <p ref={top} className="mt-4 scroll-mt-4 text-meta text-grey" role="status">
             {totalItems} finding{totalItems === 1 ? "" : "s"}
             {profile !== undefined || group !== undefined ? " match the filters" : ""}
           </p>
-          <div className="mt-2 overflow-x-auto bg-paper shadow-sm ring-1 ring-line">
+          <div className="mt-2 overflow-x-auto bg-paper shadow-paper ring-1 ring-line">
             <table className="w-full text-left">
               <thead className={`border-b border-line bg-paper-2 ${TABLE_HEADER_TEXT_CLASS}`}>
                 <tr>
@@ -546,39 +531,19 @@ export function FindingsView() {
             </table>
           </div>
           {findings.data.pagination.total_items > findings.data.pagination.page_size && (
-            <nav aria-label="Pages" className="mt-5 flex items-center gap-2">
-              <button
-                type="button"
-                disabled={page <= 1}
-                onClick={() =>
-                  updateParams((next) => next.set("page", String(page - 1)))
-                }
-                className="cursor-pointer border border-line-2 px-3 py-2 text-caption font-semibold text-navy disabled:cursor-default disabled:text-line-2"
-              >
-                Previous
-              </button>
-              <span className="text-caption text-grey">
-                Page {page} of{" "}
-                {Math.ceil(
-                  findings.data.pagination.total_items / findings.data.pagination.page_size,
-                )}
-              </span>
-              <button
-                type="button"
-                disabled={
-                  page >=
-                  Math.ceil(
-                    findings.data.pagination.total_items / findings.data.pagination.page_size,
-                  )
-                }
-                onClick={() =>
-                  updateParams((next) => next.set("page", String(page + 1)))
-                }
-                className="cursor-pointer border border-line-2 px-3 py-2 text-caption font-semibold text-navy disabled:cursor-default disabled:text-line-2"
-              >
-                Next
-              </button>
-            </nav>
+            <ListFootRow
+              start={
+                <Pagination
+                  page={page}
+                  totalPages={Math.ceil(findings.data.pagination.total_items / findings.data.pagination.page_size)}
+                  onPage={(target) => {
+                    updateParams((next) => next.set("page", String(target)));
+                    // The reader starts the new page at its first row.
+                    top.current?.scrollIntoView?.({ block: "start" });
+                  }}
+                />
+              }
+            />
           )}
         </>
       )}

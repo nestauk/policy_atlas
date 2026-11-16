@@ -14,8 +14,9 @@
   PR). `<task-id>` is `NNN-slug` (zero-padded). Templates live in `docs/tasks/_templates/`.
 - Agent-side model routing: the lead (Fable 5) plans, judges, synthesizes; delegate volume via
   the pinned agents in `.claude/agents/` — `deep-reasoner` (Opus) for reasoning offload,
-  `fast-worker` (Sonnet) for mechanical sweeps and search — and Codex for the heterogeneous
-  peer (review/rescue). **Prompt-bearing work (product prompts, judge rubrics, eval criteria)
+  `fast-worker` (Sonnet) for mechanical sweeps and search, `frontend-designer` (Opus, loads
+  every frontend design skill and `DESIGN.md` first) for any delegated frontend work — and
+  Codex for the heterogeneous peer (review/rescue). **Prompt-bearing work (product prompts, judge rubrics, eval criteria)
   is lead-only — never delegated to a weaker model.** Details: `docs/agentic-ops/harness.md`
   § Agent-side model routing.
 - Deterministic work (date math, parsing, counting, format conversion) runs as a script or
@@ -47,5 +48,7 @@ command makes it redundant.
   concept ids: do not rename them.
 - Codex jobs: `scripts/codex_job.sh wait <job-id>`. Never hand-roll a status poll
   (`docs/agentic-ops/failure-log.md`, 2026-07-07).
-- Parallel test lanes that share one Postgres break migration round-trips
-  (`docs/deferred.md` § Codebase health). Run the full gate serially.
+- Test lanes that share one Postgres database break migration round-trips
+  (`docs/deferred.md` § Codebase health). `make test` gives each worker its own copy
+  (`tests/conftest.py`, task 056); a second suite on the same Postgres still needs its own
+  `DATABASE_URL` name.

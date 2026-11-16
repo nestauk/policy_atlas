@@ -411,12 +411,12 @@ def test_depth_rows_pin_findings_chain_defaults() -> None:
         "enabler_theme",
         "mechanism_theme",
     )
-    assert TIME_BANDS[("rapid", "landscape")] == "~10-15 min"
+    assert TIME_BANDS[("rapid", "landscape")] == "~5-10 min"  # owner, 2026-11-05
     assert TIME_BANDS[("standard", "landscape")] == "~15-20 min"
     assert TIME_BANDS[("deep", "landscape")] == "~20-25 min"
     assert TIME_BANDS[("rapid", "deep")] == "~75-90 min"
     assert TIME_BANDS[("standard", "deep")] == "~80-95 min"
-    assert TIME_BANDS[("deep", "deep")] == "~90-100 min"
+    assert TIME_BANDS[("deep", "deep")] == "~20-30 min"  # owner, 2026-11-05
 
 
 def test_extract_profile_id_mapping_matches_extract_registry() -> None:

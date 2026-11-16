@@ -1,6 +1,6 @@
-import { useCallback, useReducer } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 
-import { useTaskAgentTurn } from "../api/mutations";
+import { TaskAgentStreamInterruptedError, useTaskAgentTurn } from "../api/mutations";
 import { useTaskAgentTurns } from "../api/queries";
 import { errorCode } from "../lib/errors";
 import type { components } from "../api/gen/types";
@@ -13,7 +13,14 @@ export interface OptimisticTaskAgentTurn {
   clientTurnId: string;
   userMessage: string;
   createdAt: string;
-  status: "pending" | "failed";
+  /** `pending` while the reply streams; `interrupted` when the connection
+   *  dropped mid-stream (the turn finishes on the server and the transcript
+   *  is re-read until it lands); `failed` on a refusal or a failed turn. */
+  status: "pending" | "failed" | "interrupted";
+  /** The reply so far: the stream's `delta` pieces joined (task 058, N9). */
+  reply?: string;
+  /** The stream's latest `progress` label ("Drafting the plan"). */
+  progressLabel?: string;
   errorMessage?: string;
   /** The API's machine-readable conflict code, when the failure carried one. */
   errorCode?: string;
@@ -25,6 +32,9 @@ interface OptimisticTranscriptState {
 
 type OptimisticTranscriptAction =
   | { type: "submitted"; turn: OptimisticTaskAgentTurn }
+  | { type: "progress"; clientTurnId: string; label: string }
+  | { type: "delta"; clientTurnId: string; text: string }
+  | { type: "interrupted"; clientTurnId: string }
   | { type: "reconciled"; clientTurnId: string }
   | { type: "failed"; clientTurnId: string; errorMessage: string; errorCode?: string }
   | { type: "discarded"; clientTurnId: string };
@@ -56,6 +66,15 @@ export function reduceOptimisticTranscript(
             )
           : [...state.turns, action.turn],
       };
+    case "progress":
+      return updateTurn(state, action.clientTurnId, (turn) => ({ ...turn, progressLabel: action.label }));
+    case "delta":
+      return updateTurn(state, action.clientTurnId, (turn) => ({
+        ...turn,
+        reply: (turn.reply ?? "") + action.text,
+      }));
+    case "interrupted":
+      return updateTurn(state, action.clientTurnId, (turn) => ({ ...turn, status: "interrupted" }));
     case "reconciled":
     case "discarded":
       return {
@@ -80,6 +99,22 @@ export function reduceOptimisticTranscript(
       return assertNever(action);
   }
 }
+
+function updateTurn(
+  state: OptimisticTranscriptState,
+  clientTurnId: string,
+  update: (turn: OptimisticTaskAgentTurn) => OptimisticTaskAgentTurn,
+): OptimisticTranscriptState {
+  return {
+    ...state,
+    turns: state.turns.map((turn) => (turn.clientTurnId === clientTurnId ? update(turn) : turn)),
+  };
+}
+
+/** How often the transcript is re-read while an interrupted turn finishes on
+ *  the server, and for how long at most. */
+const INTERRUPTED_REREAD_MS = 2_000;
+const INTERRUPTED_REREAD_CAP_MS = 120_000;
 
 /**
  * Get the retry payload for an incomplete optimistic turn.
@@ -151,10 +186,27 @@ export function useTaskAgentTranscript(
         },
       });
       try {
-        const result = await taskAgentTurn.mutateAsync(input);
+        // The mutation re-reads the transcript before it resolves, so the
+        // durable turn replaces the streamed one with no gap between them.
+        const result = await taskAgentTurn.mutateAsync({
+          ...input,
+          onEvent: (event) => {
+            if (event.type === "progress") {
+              dispatch({ type: "progress", clientTurnId: input.clientTurnId, label: event.label });
+            } else if (event.type === "delta") {
+              dispatch({ type: "delta", clientTurnId: input.clientTurnId, text: event.text });
+            }
+          },
+        });
         dispatch({ type: "reconciled", clientTurnId: input.clientTurnId });
         return result;
       } catch (error) {
+        if (error instanceof TaskAgentStreamInterruptedError) {
+          // The turn is durable and finishes on the server: keep what has
+          // streamed and re-read the transcript until it lands (N9).
+          dispatch({ type: "interrupted", clientTurnId: input.clientTurnId });
+          return null;
+        }
         dispatch({
           type: "failed",
           clientTurnId: input.clientTurnId,
@@ -166,6 +218,33 @@ export function useTaskAgentTranscript(
     },
     [taskAgentTurn],
   );
+
+  // An interrupted turn gives way to its durable row once that row is no
+  // longer pending; until then the transcript is re-read on a short timer.
+  const durable = transcript.data?.data;
+  const interrupted = optimistic.turns.filter((turn) => turn.status === "interrupted");
+  const interruptedKey = interrupted.map((turn) => turn.clientTurnId).join(",");
+  const startedAt = useRef<number | null>(null);
+  const { refetch } = transcript;
+  useEffect(() => {
+    if (interruptedKey === "") {
+      startedAt.current = null;
+      return undefined;
+    }
+    startedAt.current ??= Date.now();
+    let waiting = false;
+    for (const clientTurnId of interruptedKey.split(",")) {
+      const landed = durable?.find((turn) => turn.client_turn_id === clientTurnId);
+      if (landed !== undefined && landed.status !== "pending") {
+        dispatch({ type: "reconciled", clientTurnId });
+      } else {
+        waiting = true;
+      }
+    }
+    if (!waiting || Date.now() - startedAt.current > INTERRUPTED_REREAD_CAP_MS) return undefined;
+    const id = window.setTimeout(() => void refetch(), INTERRUPTED_REREAD_MS);
+    return () => window.clearTimeout(id);
+  }, [durable, interruptedKey, refetch]);
 
   const retry = useCallback(
     async (clientTurnId: string) => {
@@ -193,6 +272,7 @@ export function useTaskAgentTranscript(
     send,
     retry,
     discard,
+    /** True while a turn's reply is streaming in (task 058, N9). */
     isSubmitting: taskAgentTurn.isPending,
   };
 }

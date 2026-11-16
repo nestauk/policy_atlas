@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import threading
 import uuid
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 from typing import Any, Literal, cast
 
 import structlog
@@ -14,7 +16,9 @@ from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql.selectable import Subquery
 
-from policy_atlas.core import events, tracing
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import events, liveness, tracing
+from policy_atlas.core.done_callbacks import add_done_callback_in_context
 from policy_atlas.core.openai_client import CallBudget
 from policy_atlas.core.prompt_fields import clamp_reason, metadata_dict
 from policy_atlas.core.schema import (
@@ -44,7 +48,9 @@ ScreenStatus = Literal["relevant", "not_relevant", "failed", "excluded_retracted
 ScreenBasis = Literal["title_abstract", "title_only", "full_text"]
 
 SCREEN_RETRY_CAP = 1
-MAX_CONCURRENT_STAGE1 = 12
+# 48 (task 057, N10d; was 12): E8 measured the stage-1 set wall 14.4 -> 4.8 s at 48
+# on Bedrock with no 429s. Stage 2 stays at 4 (not measured).
+MAX_CONCURRENT_STAGE1 = 48
 MAX_CONCURRENT_STAGE2 = 4
 
 # Screening-directive criteria list cap (contract decision 2 rev 2.5, plan rev
@@ -534,6 +540,40 @@ def _run_stage1_calls(
     errors: dict[tuple[int, int], Exception] = {}
     usage_totals = UsageAccumulator()
 
+    # Task 058, N2: documents screened so far (first reads only) and the
+    # relevant ones so far (either read). Counted on the future the pool
+    # waits on, never in the serial retry below.
+    progress_lock = threading.Lock()
+    progress = {"screened": 0, "relevant": 0}
+
+    def publish(*, first_read: bool, relevant: bool) -> None:
+        with progress_lock:
+            if first_read:
+                progress["screened"] += 1
+            if relevant:
+                progress["relevant"] += 1
+            screened = progress["screened"]
+            relevant_so_far = progress["relevant"]
+        liveness.publish_progress(
+            activity=activity(
+                "screen.abstracts",
+                remaining=baseline - screened,
+                relevant=relevant_so_far,
+            ),
+            done=screened,
+            total=None,
+            unit="abstracts",
+        )
+
+    def on_done(rep_index: int, future: Future[Any]) -> None:
+        relevant = False
+        if future.exception() is None:
+            rep, _usage = future.result()
+            relevant = rep.decision in ("relevant", "unsure")
+        publish(first_read=rep_index == 0, relevant=relevant)
+
+    publish(first_read=False, relevant=False)
+
     def run_batch(tasks: list[tuple[int, int]]) -> None:
         batch_errors: dict[tuple[int, int], Exception] = {}
         submitted: list[tuple[tuple[int, int], Future[Any]]] = []
@@ -543,17 +583,14 @@ def _run_stage1_calls(
                     batch_errors[key] = RuntimeError("call budget exhausted")
                     continue
                 doc_index, rep_index = key
-                submitted.append(
-                    (
-                        key,
-                        tracing.submit_with_context(
-                            executor,
-                            screening_backend.screen_envelope,
-                            docs[doc_index].payload,
-                            rep_index=rep_index,
-                        ),
-                    )
+                future = tracing.submit_with_context(
+                    executor,
+                    screening_backend.screen_envelope,
+                    docs[doc_index].payload,
+                    rep_index=rep_index,
                 )
+                add_done_callback_in_context(future, partial(on_done, rep_index))
+                submitted.append((key, future))
             wait([future for _, future in submitted])
         for key, future in submitted:
             try:
@@ -789,6 +826,95 @@ def _run_stage1(
         "usage_totals": usage_totals,
         "screen_generation": generation,
         "rescreen": rescreen,
+    }
+
+
+def screen_in(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    context: ScreenContext,
+    tss_ids: set[uuid.UUID],
+    status: Literal["relevant", "not_relevant"],
+    reason: str,
+    rescreen: bool = False,
+) -> dict[str, Any]:
+    """Screen chosen documents in or out by code, with no model call (task 054, C27).
+
+    Writes the same stage-1 rows and ``source.screened`` events the screen
+    writes: each chosen document not yet screened in this scope gets
+    ``status`` at full confidence, ``reason`` the event's only flag. A
+    retracted document is excluded as the screen excludes it.
+
+    Args:
+        conn: Open connection inside the component transaction.
+        task_id: The task.
+        run_id: This run.
+        context: The scope being screened.
+        tss_ids: The documents to screen.
+        status: ``relevant`` (screened in) or ``not_relevant`` (screened out).
+        reason: Why, recorded on each event.
+        rescreen: Screen documents that already have a row: the new rows go
+            in at the next screen generation, which wins for those documents
+            only (the re-screen mechanism, ADR 0022).
+
+    Returns:
+        ``screened``, ``status`` and ``excluded_retracted`` counts.
+    """
+    generation = _next_screen_generation(conn, scope_id=context.scope_id) if rescreen else 0
+    docs = [
+        doc
+        for doc in _load_stage1_docs(
+            conn,
+            task_id=task_id,
+            scope_id=context.scope_id,
+            intent=context.intent,
+            rescreen=rescreen,
+        )
+        if doc.tss_id in tss_ids
+    ]
+    kept, retracted = _exclude_retracted_docs(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        context=context,
+        all_docs=docs,
+        generation=generation,
+    )
+    for doc in kept:
+        _insert_screen_row(
+            conn,
+            task_id=task_id,
+            run_id=run_id,
+            scope_id=context.scope_id,
+            tss_id=doc.tss_id,
+            status=status,
+            basis=doc.basis,
+            confidence=1.0,
+            stage=1,
+            generation=generation,
+        )
+        _append_screened_event(
+            conn,
+            task_id=task_id,
+            run_id=run_id,
+            scope_id=context.scope_id,
+            source_snapshot_id=doc.source_snapshot_id,
+            tss_id=doc.tss_id,
+            status=status,
+            basis=doc.basis,
+            confidence=1.0,
+            stage=1,
+            reps=[],
+            agreement={"agreeing": 0, "survivors": 0},
+            flags=[reason],
+            generation=generation,
+        )
+    return {
+        "screened": len(docs),
+        status: len(kept),
+        "excluded_retracted": len(retracted),
     }
 
 
@@ -1050,20 +1176,38 @@ def _run_stage2_reps(
     errors: dict[int, Exception] = {}
     usage_totals = UsageAccumulator()
 
+    # Task 058, N2: one count per document, on the pool's own future; the
+    # serial retry below never publishes.
+    done = 0
+    lock = threading.Lock()
+    total = len(tasks)
+
+    def publish_done(finished: Future[Any] | None) -> None:
+        nonlocal done
+        with lock:
+            if finished is not None:
+                done += 1
+            n = done
+        liveness.publish_progress(
+            activity=activity("screen.full_texts", done=n, total=total),
+            done=n,
+            total=total,
+            unit="documents",
+        )
+
+    publish_done(None)
+
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_STAGE2) as executor:
         submitted: list[tuple[int, Future[Any]]] = []
         for doc_index in tasks:
             if not budget.reserve():
                 errors[doc_index] = RuntimeError("call budget exhausted")
                 continue
-            submitted.append(
-                (
-                    doc_index,
-                    tracing.submit_with_context(
-                        executor, screening_backend.screen_fulltext, payloads[doc_index]
-                    ),
-                )
+            future = tracing.submit_with_context(
+                executor, screening_backend.screen_fulltext, payloads[doc_index]
             )
+            add_done_callback_in_context(future, publish_done)
+            submitted.append((doc_index, future))
         wait([future for _, future in submitted])
         for doc_index, future in submitted:
             try:

@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .common import reject_explicit_nulls
+from .common import StageKey, reject_explicit_nulls
 from .runs import RunStatus
 from .tenancy import Visibility
 
@@ -26,8 +26,9 @@ TASK_NAME_MAX = 200
 
 #: The kinds of work a task can do (task 044, ADR 0037 decision 1). Written at
 #: creation and never changed — turning one task into another is what a Link
-#: is for (D2).
-Capability = Literal["evidence_search", "options_scoping"]
+#: is for (D2). ``theory_of_change`` (task 054) is refused on create unless the
+#: server setting is on (C15).
+Capability = Literal["evidence_search", "options_scoping", "theory_of_change"]
 
 
 class TaskCreate(BaseModel):
@@ -188,12 +189,25 @@ class LatestRun(BaseModel):
         started_at: When that run started executing.
         ended_at: When that run reached a terminal status, or `None` while
             still running or paused.
+        paused_seconds: On `TaskOut.active_run` only: seconds that run spent
+            in finished pauses at check-ins; its timer leaves them out.
+        stage: On `TaskOut.active_run` only: the public stage the task's
+            parentless active walk last started, so a scoping task shows the
+            parent's stage rather than a child's (task 058, N15). `None` before
+            the walk starts a stage, and on every other use of this shape.
+        stage_label: The server's label for `stage` (the stage vocabulary),
+            or `None` with it.
     """
 
     capability_run_id: uuid.UUID
     status: RunStatus
     started_at: datetime
     ended_at: datetime | None = None
+    # A factory, as for a list field: the generated front-end type then has
+    # the field as optional, so a client object without it is still valid.
+    paused_seconds: float = Field(default_factory=float)
+    stage: StageKey | None = None
+    stage_label: str | None = None
 
 
 class TaskLinkOut(BaseModel):

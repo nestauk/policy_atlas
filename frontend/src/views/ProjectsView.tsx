@@ -1,28 +1,51 @@
-import { useState } from "react";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 
-import { useMe, useProject, useProjects, useTasks } from "../api/queries";
-import { useCreateProject, useUpdateProject } from "../api/mutations";
+import type { components } from "../api/gen/types";
+import {
+  queryKeys,
+  useMe,
+  useProject,
+  useProjectsPaged,
+  useTasksPaged,
+} from "../api/queries";
+import { useArchiveProject, useUpdateProject } from "../api/mutations";
+import { formatDate } from "../lib/dates";
 import { isConflictCode, conflictSentences } from "../lib/errors";
+import { Figures } from "../lib/figures";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
-import { PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
-import { Button } from "../ui/brand/Button";
+import { COPY, PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
 import { Card } from "../ui/brand/Card";
+import {
+  PAGE_COLUMN_CLASS,
+  PAGE_CONTROL_CLASS,
+  PageBackLink,
+  PageHeader,
+  PagePrimary,
+} from "../ui/brand/PageHeader";
 import { useToast } from "../ui/radix/Toast";
 import {
-  listPageTitleClass,
-  listSecondaryActionClass,
   newTaskHref,
-  newestTaskUpdateByProject,
-  projectLastUpdated,
+  projectListRowGridClass,
+  projectListRowGridClassWithOwner,
+  rowFigureCellClass,
+  rowAccessibleName,
+  rowNameCellClass,
+  rowOwnerCellClass,
   showOwnerColumn,
-  sortProjectsByLastUpdated,
 } from "./listPageChrome";
 import type { Scope } from "./ScopeSwitcher";
-import { ScopeSwitcher } from "./ScopeSwitcher";
-import { TaskListActions, TaskListPanel } from "./TaskListPanel";
+import { ARCHIVED_HEADING_CLASS, ArchivedToggle, ScopeSwitcher } from "./ScopeSwitcher";
+import { FindTasks, TaskListPanel, pagedTasks, type MoreTasks } from "./TaskListPanel";
+import { FindPopover } from "./FindPopover";
+import { ProjectNameField } from "./ProjectPicker";
+import { RowFold, RowMenuControl, RowRenameField, useDepartingRows } from "./ListRowMenu";
+import { ProjectName, projectArchiveSentence, soloTaskCount } from "./NameMenu";
 import { VisibilityControl, visibilityOutcomeLine } from "./VisibilityControl";
+import { LIST_FRAME_CLASS, ListEmpty, ListError, ListSkeleton } from "../ui/brand/list/ListStates";
+import { ListFootRow, ShowMore } from "../ui/brand/list/ListFoot";
 
 /**
  * Projects: named groupings of tasks, and nothing else.
@@ -31,19 +54,10 @@ import { VisibilityControl, visibilityOutcomeLine } from "./VisibilityControl";
  * shows a name and a count and stops there. Anything more would imply the
  * grouping has a state, which it does not.
  */
-/** `ProjectOut` carries a derived `task_count` but no last-task-updated
- *  timestamp, so this overview still leans on the global tasks page to
- *  derive "most recently active" per project (`newestTaskUpdateByProject`
- *  below) — asking per-project would be N+1 requests for a list page.
- *  Server page-size cap (`PAGE_SIZE_MAX`, web-api.md § Pagination): raised
- *  from the 50-row default so this remains an approximation rather than
- *  systematically wrong, not a fix — a workspace with more than 200 active
- *  tasks across projects can still miss a newer update that falls
- *  outside this page. `ProjectDetailView` does not share the *last-update*
- *  limitation: it fetches its own member list via `project_id`, which is
- *  exact up to the same 200-row cap (task 033 phase 10a) rather than the
- *  50-row default. */
-const PROJECTS_OVERVIEW_TASKS_PAGE_SIZE = 200;
+/** A project's own task list asks for the server's largest page (200,
+ *  `PAGE_SIZE_MAX`, web-api.md § Pagination) rather than the default, with
+ *  "Show more" past it (round 10). */
+const PROJECT_TASKS_PAGE_SIZE = 200;
 
 export function ProjectsView() {
   useDocumentTitle(PROJECT.many);
@@ -52,148 +66,335 @@ export function ProjectsView() {
   // an unenrolled caller's page — including its queries — stays unchanged.
   const hasSwitcher = me.data?.organisation != null;
   const [scope, setScope] = useState<Scope>("mine");
-  const projects = useProjects(hasSwitcher ? { scope } : undefined);
-  const tasksQuery = useTasks(
-    hasSwitcher
-      ? { page_size: PROJECTS_OVERVIEW_TASKS_PAGE_SIZE, scope }
-      : { page_size: PROJECTS_OVERVIEW_TASKS_PAGE_SIZE },
+  // The Archived toggle (owner, round 11), as on Tasks: the archived
+  // projects of the open scope. Off, the queries are as before.
+  const [archived, setArchived] = useState(false);
+  const archivedFilter = archived ? { status: "archived" as const } : {};
+  // Paged by the server, 20 a page (round 12); "Show more" asks for the
+  // next page of the list on screen, as on Tasks.
+  const projects = useProjectsPaged(
+    hasSwitcher ? { scope, ...archivedFilter } : archived ? archivedFilter : undefined,
   );
-  const create = useCreateProject();
-  const [name, setName] = useState("");
+  // The server orders the projects by their last activity
+  // (`last_activity_at`, round 12) and the page keeps its order, so a page
+  // that arrives with "Show more" lands below the rows already shown.
+  const { rows, more } = pagedProjects(projects);
   const [creating, setCreating] = useState(false);
-  const taskUpdatedAt = newestTaskUpdateByProject(tasksQuery.data?.data ?? []);
-  const rows = sortProjectsByLastUpdated(projects.data?.data ?? [], taskUpdatedAt);
-  const showOwner = showOwnerColumn(hasSwitcher, rows);
+  // An archived row folds away where it stood (owner, round 12).
+  const { shown, depart } = useDepartingRows(rows, (project) => project.project_id);
+  // After "Show more", focus moves to the first project that arrived (as on
+  // Tasks), found by id: a project already listed is dropped from the new
+  // page, so the arrivals' position is not the old row count.
+  const listRef = useRef<HTMLUListElement>(null);
+  const listedBefore = useRef<ReadonlySet<string> | null>(null);
+  useEffect(() => {
+    const before = listedBefore.current;
+    if (before === null) return;
+    const index = rows.findIndex((project) => !before.has(project.project_id));
+    if (index === -1) return;
+    listedBefore.current = null;
+    listRef.current?.querySelectorAll<HTMLAnchorElement>(":scope > li a[href]")[index]?.focus();
+  }, [rows]);
+  const showOwner = showOwnerColumn(hasSwitcher, rows, scope);
   const isAdminWideList = hasSwitcher && me.data?.is_admin === true && scope === "all";
   const ownerlessLabel = isAdminWideList ? TENANCY_COPY.noOrganisation : TENANCY_COPY.ownerlessRow;
 
   return (
-    <main className="mx-auto max-w-[1180px] px-6 py-10">
-      <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
-        <h1 className={listPageTitleClass}>{PROJECT.many}</h1>
-        <div className="flex items-center gap-4">
-          {hasSwitcher && <ScopeSwitcher scope={scope} onChange={setScope} />}
-          {!creating && (
-            <Button className="px-6 py-3.5 text-body" onClick={() => setCreating(true)}>
-              New {PROJECT.lower}
-            </Button>
-          )}
-        </div>
-      </header>
-
-      {isAdminWideList && (
-        <p role="status" className="mb-4 text-meta font-semibold text-grey">
-          {TENANCY_COPY.adminWiderList}
-        </p>
-      )}
-
-      {creating && (
-        <Card className="mb-8 max-w-md p-5">
-          <form
-            className="flex flex-col gap-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const trimmed = name.trim();
-              if (!trimmed) return;
-              create.mutate(
-                { name: trimmed },
-                {
-                  onSuccess: () => {
-                    setName("");
-                    setCreating(false);
-                  },
-                },
-              );
-            }}
-          >
-            <label className="text-meta font-semibold text-navy" htmlFor="new-project-name">
-              {PROJECT.one} name
-            </label>
-            <input
-              id="new-project-name"
-              autoFocus
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              className="border border-line-2 bg-paper px-3 py-2.5 text-body focus-visible:outline-2 focus-visible:outline-blue"
-            />
-            {create.isError && (
-              <p role="alert" className="text-body text-red">
-                The {PROJECT.lower} couldn't be created. Try again.
+    <main className={PAGE_COLUMN_CLASS}>
+      <PageHeader
+        title={PROJECT.many}
+        actions={
+          // The header keeps only the primary (owner, round 11). It stays
+          // in its slot while the form is open, disabled, so the header
+          // does not reflow; the form's Create is the shared name field's
+          // outline Create (round 13).
+          <PagePrimary onClick={() => setCreating(true)} disabled={creating}>
+            New {PROJECT.lower}
+          </PagePrimary>
+        }
+        filters={hasSwitcher ? <ScopeSwitcher scope={scope} onChange={setScope} /> : null}
+        // As on Tasks: the admin's note, then the magnifier.
+        aside={
+          <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-2">
+            {isAdminWideList && (
+              <p role="status" className="text-meta font-semibold text-grey">
+                {TENANCY_COPY.adminWiderList}
               </p>
             )}
-            <div className="flex items-center gap-2">
-              <Button type="submit" disabled={create.isPending || !name.trim()}>
-                Create
-              </Button>
-              <Button type="button" variant="ghost" onClick={() => setCreating(false)}>
-                Cancel
-              </Button>
-            </div>
-          </form>
+            <FindPopover
+              items={rows.map((project) => ({
+                id: project.project_id,
+                label: project.name,
+                href: `/projects/${project.project_id}`,
+                updatedAt: project.last_activity_at,
+              }))}
+              copy={{ label: COPY.findProject, noun: PROJECT.lowerMany }}
+              className="-mr-3"
+            />
+          </div>
+        }
+      />
+
+      {/* The New project form is the one name field and Create (round 13;
+          the picker's "New project…" uses the same): a label over it. */}
+      {creating && (
+        <Card className="mt-4 max-w-md p-5">
+          <label className="mb-3 block text-meta font-semibold text-navy" htmlFor="new-project-name">
+            {PROJECT.one} name
+          </label>
+          <ProjectNameField
+            id="new-project-name"
+            label={`${PROJECT.one} name`}
+            onCreated={() => setCreating(false)}
+            onCancel={() => setCreating(false)}
+          />
         </Card>
       )}
 
-      {projects.isPending && (
-        <div aria-busy="true" aria-label={`Loading ${PROJECT.lowerMany}`} className="space-y-2">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="h-14 animate-pulse border border-line bg-paper-2" />
+      <div className="mt-4">
+        {/* With the archive open, the list says what it is (owner, round 11). */}
+        {archived && <h2 className={ARCHIVED_HEADING_CLASS}>Archived</h2>}
+        {projects.isPending && <ListSkeleton label={`Loading ${PROJECT.lowerMany}`} />}
+
+        {/* A page after the first that fails keeps the rows and offers Retry
+            under them; only a failed first page replaces the list. */}
+        {projects.isError && !projects.isFetchNextPageError && (
+          <ListError actionLabel="Try again" onRetry={() => void projects.refetch()}>
+            Couldn&apos;t load your {PROJECT.lowerMany}.
+          </ListError>
+        )}
+
+        {projects.data !== undefined &&
+          !projects.isError &&
+          rows.length === 0 &&
+          !creating &&
+          (archived ? (
+            <ListEmpty label={`No archived ${PROJECT.lowerMany}`} />
+          ) : (
+            <ListEmpty label={`No ${PROJECT.lowerMany} yet`}>
+              A {PROJECT.lower} groups related {TASK.lowerMany} under one name.
+            </ListEmpty>
           ))}
-        </div>
-      )}
 
-      {projects.data !== undefined && projects.data.data.length === 0 && !creating && (
-        <Card role="status" className="mx-auto max-w-md p-8 text-center">
-          <h2 className="text-heading font-extrabold text-navy">No {PROJECT.lowerMany} yet</h2>
-          <p className="mt-1.5 text-body text-grey">
-            A {PROJECT.lower} groups related {TASK.lowerMany} under one name.
-          </p>
-        </Card>
-      )}
-
-      {(projects.data?.data.length ?? 0) > 0 && (
-        <ul role="list" className="border border-line-2 bg-paper">
-          {rows.map((project) => {
-            const lastUpdated = projectLastUpdated(project, taskUpdatedAt);
-            return (
-              <li key={project.project_id} className="border-b border-line last:border-b-0">
-                <Link
-                  to={`/projects/${project.project_id}`}
-                  className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3.5 no-underline hover:bg-blue-tint-2"
-                >
-                  <span className="min-w-0 flex-1 text-body font-semibold text-navy max-md:w-full max-md:flex-none">
-                    {scrub(project.name)}
-                  </span>
-                  {showOwner && (
-                    <span className="text-meta text-grey">
-                      {project.owner_display !== null ? scrub(project.owner_display) : ownerlessLabel}
-                    </span>
-                  )}
-                  <span className="text-meta text-grey">
-                    {project.task_count === 1
-                      ? `1 ${TASK.lower}`
-                      : `${project.task_count} ${TASK.lowerMany}`}
-                  </span>
-                  <time
-                    dateTime={lastUpdated}
-                    className="w-28 shrink-0 text-right text-caption tabular-nums text-grey max-md:w-auto max-md:text-left"
-                  >
-                    {new Date(lastUpdated).toLocaleDateString()}
-                  </time>
-                </Link>
+        {rows.length > 0 && (
+          <ul ref={listRef} role="list" className={LIST_FRAME_CLASS}>
+            {shown.map(({ row: project, leaving }) => (
+              <li key={project.project_id} className="group border-b border-line last:border-b-0">
+                <RowFold leaving={leaving}>
+                  <ProjectRowWithMenu
+                    project={project}
+                    lastUpdated={project.last_activity_at}
+                    showOwner={showOwner}
+                    ownerlessLabel={ownerlessLabel}
+                    onArchived={() => depart(project.project_id)}
+                  />
+                </RowFold>
               </li>
-            );
-          })}
-        </ul>
-      )}
+            ))}
+          </ul>
+        )}
+
+        {more.error && rows.length > 0 && (
+          <div className="mt-4">
+            <ListError actionLabel="Retry" onRetry={more.onRetry}>
+              Couldn&apos;t load your {PROJECT.lowerMany}.
+            </ListError>
+          </div>
+        )}
+
+        {/* The list's foot: "Show more" while the server holds more (round
+            12), the archived toggle at the right (round 11). */}
+        <ListFootRow
+          start={
+            rows.length > 0 && more.hasMore && !more.error ? (
+              <ShowMore
+                loading={more.loading}
+                onShowMore={() => {
+                  listedBefore.current = new Set(rows.map((project) => project.project_id));
+                  more.onShowMore();
+                }}
+              />
+            ) : null
+          }
+          end={<ArchivedToggle pressed={archived} onToggle={() => setArchived((on) => !on)} />}
+        />
+      </div>
     </main>
   );
 }
 
-/** One task: its tasks, with the same list chrome as the Tasks page. */
+type ProjectRow = components["schemas"]["ProjectOut"];
+
+/**
+ * One project row with its menu (owner, round 12): the row's link, and
+ * beside it, for the project's owner only, the control that opens Rename
+ * and Archive. Rename turns the row into the name's field; Archive, once
+ * confirmed, folds the row away (`onArchived`). An archived project offers
+ * Rename only.
+ */
+function ProjectRowWithMenu({
+  project,
+  lastUpdated,
+  showOwner,
+  ownerlessLabel,
+  onArchived,
+}: {
+  project: ProjectRow;
+  lastUpdated: string;
+  showOwner: boolean;
+  ownerlessLabel: string;
+  onArchived: () => void;
+}) {
+  const update = useUpdateProject(project.project_id);
+  const archive = useArchiveProject(project.project_id);
+  const [editing, setEditing] = useState(false);
+  const control = useRef<HTMLButtonElement>(null);
+  const pending = update.isPending || archive.isPending;
+  const label = `${PROJECT.one} settings`;
+  const date = formatDate(lastUpdated, "short");
+  const owner = project.is_owner
+    ? "You"
+    : project.owner_display !== null
+      ? scrub(project.owner_display)
+      : ownerlessLabel;
+  const count = project.task_count === 1 ? `1 ${TASK.lower}` : `${project.task_count} ${TASK.lowerMany}`;
+
+  if (editing) {
+    return (
+      <RowRenameField
+        name={project.name}
+        label={label}
+        fieldLabel={`${PROJECT.one} name`}
+        rename={(next, done) => update.mutate({ name: next }, { onSuccess: done.onSuccess, onError: done.onError })}
+        renameError={`The ${PROJECT.lower} couldn't be renamed. Try again.`}
+        pending={pending}
+        onClose={() => {
+          setEditing(false);
+          window.setTimeout(() => control.current?.focus(), 0);
+        }}
+      />
+    );
+  }
+
+  return (
+    <>
+      <Link
+        to={`/projects/${project.project_id}`}
+        // Its content in order, as the task rows (round 10).
+        aria-label={rowAccessibleName([
+          scrub(project.name),
+          showOwner && owner !== TENANCY_COPY.ownerlessRow ? owner : null,
+          count,
+          date,
+        ])}
+        className={showOwner ? projectListRowGridClassWithOwner : projectListRowGridClass}
+      >
+        <span className={`${rowNameCellClass} font-semibold text-navy max-md:col-span-2`}>
+          {scrub(project.name)}
+        </span>
+        {showOwner && <span className={`${rowOwnerCellClass} max-md:hidden`}>{owner}</span>}
+        <span className={`${rowFigureCellClass} max-md:text-left`}>
+          <Figures text={count} />
+        </span>
+        <time dateTime={lastUpdated} className={rowFigureCellClass}>
+          <Figures text={date} />
+        </time>
+      </Link>
+      {project.is_owner && (
+        <RowMenuControl
+          label={label}
+          name={project.name}
+          controlRef={control}
+          pending={pending}
+          onRename={() => setEditing(true)}
+          archive={
+            project.archived_at != null
+              ? undefined
+              : (_, done) =>
+                  archive.mutate(undefined, {
+                    onSuccess: () => {
+                      done.onSuccess();
+                      onArchived();
+                    },
+                    onError: done.onError,
+                  })
+          }
+          archiveSentence={projectArchiveSentence(soloTaskCount(project))}
+          archiveError={`The ${PROJECT.lower} couldn't be archived. Try again.`}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * A paged project list's rows and its foot, as `pagedTasks` for tasks: the
+ * pages in order, a project already listed dropped (one that changes
+ * between two requests can cross a page boundary).
+ *
+ * Args:
+ *   result: A `useProjectsPaged` result.
+ *
+ * Returns:
+ *   The loaded rows and the foot's state.
+ */
+function pagedProjects(result: ReturnType<typeof useProjectsPaged>): {
+  rows: ProjectRow[];
+  more: MoreTasks;
+} {
+  const seen = new Set<string>();
+  const rows: ProjectRow[] = [];
+  for (const page of result.data?.pages ?? []) {
+    for (const row of page.data) {
+      if (seen.has(row.project_id)) continue;
+      seen.add(row.project_id);
+      rows.push(row);
+    }
+  }
+  const askForNext = () => void result.fetchNextPage();
+  return {
+    rows,
+    more: {
+      hasMore: result.hasNextPage,
+      loading: result.isFetchingNextPage,
+      error: result.isFetchNextPageError,
+      onShowMore: askForNext,
+      onRetry: askForNext,
+    },
+  };
+}
+
+/**
+ * The project's row from any Projects list already in the cache (every
+ * scope), so a project opened from the Projects page has its name,
+ * description and visibility on the first frame instead of after its own
+ * request: the header is whole before anything below it draws, and nothing
+ * moves when the detail lands and replaces it.
+ */
+function listedProject(client: QueryClient, projectId: string): ProjectRow | undefined {
+  // Both shapes share the key's head: a picker's one page (`useProjects`)
+  // and the Projects page's pages (`useProjectsPaged`, round 12).
+  const lists = client.getQueriesData<{ data: ProjectRow[] } | { pages: { data: ProjectRow[] }[] }>({
+    queryKey: queryKeys.projects().slice(0, 2),
+  });
+  for (const [, cached] of lists) {
+    if (cached === undefined) continue;
+    const pages = "pages" in cached ? cached.pages : [cached];
+    for (const page of pages) {
+      const row = page.data.find((candidate) => candidate.project_id === projectId);
+      if (row !== undefined) return row;
+    }
+  }
+  return undefined;
+}
+
+/** One project: its tasks, with the same list chrome as the Tasks page. */
 export function ProjectDetailView() {
   const { projectId = "" } = useParams();
   const me = useMe();
   const project = useProject(projectId);
+  const queryClient = useQueryClient();
+  const shown = project.data ?? listedProject(queryClient, projectId);
   // Server-side `project_id` filter (task 033 phase 10a) — this used to
   // filter the global 50-row tasks page client-side, silently
   // under-reporting once a project's membership (or the caller's visible
@@ -201,15 +402,16 @@ export function ProjectDetailView() {
   // server-max convention as the overview page above: without it this call
   // still falls back to the 50-row default and a project with 51+ tasks
   // would silently truncate.
-  const tasksQuery = useTasks({
+  // Past the 200-row page, "Show more" asks for the next (round 10).
+  const tasksQuery = useTasksPaged({
     project_id: projectId,
-    page_size: PROJECTS_OVERVIEW_TASKS_PAGE_SIZE,
+    page_size: PROJECT_TASKS_PAGE_SIZE,
   });
+  const { rows: tasks, more } = pagedTasks(tasksQuery);
   const updateProject = useUpdateProject(projectId);
   const toast = useToast();
-  useDocumentTitle(project.data?.name, PROJECT.one);
+  useDocumentTitle(shown?.name, PROJECT.one);
 
-  const tasks = tasksQuery.data?.data ?? [];
   const hasSwitcher = me.data?.organisation != null;
   const showOwner = showOwnerColumn(hasSwitcher, tasks);
   const isAdminWideList = hasSwitcher && me.data?.is_admin === true;
@@ -234,46 +436,70 @@ export function ProjectDetailView() {
   };
 
   return (
-    <main className="mx-auto max-w-[1180px] px-6 py-10">
-      <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <Link to="/projects" className={listSecondaryActionClass}>
-            ← {PROJECT.many}
-          </Link>
-          <h1 className={`${listPageTitleClass} mt-2`}>
-            {project.data === undefined ? "" : scrub(project.data.name)}
-          </h1>
-          {project.data?.description != null && (
-            <p className="mt-2 max-w-prose text-body text-grey">
-              {scrub(project.data.description)}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-4">
-          {project.data !== undefined && (
-            <VisibilityControl
-              visibility={project.data.visibility}
-              isOwner={project.data.is_owner}
-              pending={updateProject.isPending}
-              onChange={changeVisibility}
+    <main className={PAGE_COLUMN_CLASS}>
+      <PageHeader
+        context={<PageBackLink to="/projects">← {PROJECT.many}</PageBackLink>}
+        // From the Projects list's cache when we came from there; otherwise
+        // empty while the project loads, keeping its line box.
+        // The name with its menu, Rename and Archive (owner, round 11).
+        title={
+          shown === undefined ? (
+            ""
+          ) : (
+            <ProjectName
+              projectId={projectId}
+              name={shown.name}
+              isOwner={shown.is_owner}
+              archived={shown.archived_at != null}
+              soloTasks={soloTaskCount(shown)}
             />
-          )}
-          <TaskListActions rows={tasks} newTaskHref={newTaskHref(projectId)} />
-        </div>
-      </header>
-
-      <TaskListPanel
-        rows={tasks}
-        isPending={project.isPending || tasksQuery.isPending}
-        isError={project.isError || tasksQuery.isError}
-        onRetry={() => {
-          void project.refetch();
-          void tasksQuery.refetch();
-        }}
-        loaded={project.data !== undefined && tasksQuery.data !== undefined}
-        showOwner={showOwner}
-        ownerlessLabel={ownerlessLabel}
+          )
+        }
+        actions={<PagePrimary to={newTaskHref(projectId)}>{COPY.newTask}</PagePrimary>}
+        filters={
+          shown?.description != null ? (
+            <p className="max-w-prose text-body text-grey">{scrub(shown.description)}</p>
+          ) : null
+        }
+        // The magnifier, then Make private (round 11: the header keeps
+        // only the primary).
+        aside={
+          <div className="flex items-center gap-x-2">
+            <FindTasks rows={tasks} className={shown === undefined ? "-mr-3" : undefined} />
+            {shown !== undefined && (
+              <VisibilityControl
+                visibility={shown.visibility}
+                isOwner={shown.is_owner}
+                pending={updateProject.isPending}
+                onChange={changeVisibility}
+                // -mr-3: the label's right edge on the column's, under the primary.
+                className={`${PAGE_CONTROL_CLASS} -mr-3`}
+              />
+            )}
+          </div>
+        }
       />
+
+      <div className="mt-4">
+        <TaskListPanel
+          rows={tasks}
+          isPending={project.isPending || tasksQuery.isPending}
+          isError={project.isError || (tasksQuery.isError && !tasksQuery.isFetchNextPageError)}
+          onRetry={() => {
+            void project.refetch();
+            void tasksQuery.refetch();
+          }}
+          loaded={project.data !== undefined && tasksQuery.data !== undefined}
+          showOwner={showOwner}
+          ownerlessLabel={ownerlessLabel}
+          more={more}
+          empty={
+            <ListEmpty label={COPY.noTasks}>
+              {TASK.many} you start here join this {PROJECT.lower}.
+            </ListEmpty>
+          }
+        />
+      </div>
     </main>
   );
 }

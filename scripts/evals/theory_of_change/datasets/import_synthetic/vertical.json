@@ -1,0 +1,105 @@
+{
+ "title": "Changing Futures: support for adults facing multiple disadvantage",
+ "boxes": [
+  {
+   "id": "m1",
+   "text": "People live safe, stable and fulfilling lives",
+   "layer": "impact"
+  },
+  {
+   "id": "l1",
+   "text": "Fewer crises and emergency admissions",
+   "layer": "outcome_long"
+  },
+  {
+   "id": "l2",
+   "text": "Stable housing is sustained",
+   "layer": "outcome_long"
+  },
+  {
+   "id": "s1",
+   "text": "People trust their keyworker",
+   "layer": "outcome_short"
+  },
+  {
+   "id": "s2",
+   "text": "Services share plans and information",
+   "layer": "outcome_short"
+  },
+  {
+   "id": "p1",
+   "text": "Each person has one named keyworker",
+   "layer": "output"
+  },
+  {
+   "id": "p2",
+   "text": "Local partners agree a joint plan",
+   "layer": "output"
+  },
+  {
+   "id": "a1",
+   "text": "Fund keyworkers in 15 areas",
+   "layer": "input"
+  },
+  {
+   "id": "a2",
+   "text": "Bring local services together",
+   "layer": "input"
+  }
+ ],
+ "arrows": [
+  [
+   "a1",
+   "p1"
+  ],
+  [
+   "a2",
+   "p2"
+  ],
+  [
+   "p1",
+   "s1"
+  ],
+  [
+   "p2",
+   "s2"
+  ],
+  [
+   "s1",
+   "l1"
+  ],
+  [
+   "s2",
+   "l2"
+  ],
+  [
+   "s1",
+   "l2"
+  ],
+  [
+   "l1",
+   "m1"
+  ],
+  [
+   "l2",
+   "m1"
+  ]
+ ],
+ "assumptions": [
+  {
+   "text": "Assumption: caseloads stay small enough to build trust",
+   "on": [
+    "p1",
+    "s1"
+   ]
+  },
+  {
+   "text": "Assumption: partners keep funding after the programme",
+   "on": [
+    "p2",
+    "s2"
+   ]
+  }
+ ],
+ "arrow_labels": []
+}

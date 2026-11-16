@@ -1,6 +1,7 @@
 services:
   db:
-    image: postgres:16
+    # Task 057: the chunk-retrieval query uses the pgvector extension, and pg17 matches the Aurora engine.
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_USER: policy_atlas
       POSTGRES_PASSWORD: policy_atlas

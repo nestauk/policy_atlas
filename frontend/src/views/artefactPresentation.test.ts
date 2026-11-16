@@ -1,33 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { mockArtefact } from "../mock/fixtures";
-import { mostRelevantSources, sectionNavLabel, artefactMarkdown, downloadFilename, fullReportIntro, splitLeadColon, cardEvidenceChipLabels, numberedAuthorships, referenceAuthorsLine } from "./artefactPresentation";
-
-describe("referenceAuthorsLine", () => {
-  it("returns null for absent or empty authorships", () => {
-    expect(referenceAuthorsLine(undefined)).toBeNull();
-    expect(referenceAuthorsLine([])).toBeNull();
-    expect(referenceAuthorsLine([{ name: "" }])).toBeNull();
-  });
-
-  it("joins up to three names in full", () => {
-    expect(referenceAuthorsLine([{ name: "A One" }])).toBe("A One");
-    expect(
-      referenceAuthorsLine([{ name: "A One" }, { name: "B Two" }, { name: "C Three" }]),
-    ).toBe("A One, B Two, C Three");
-  });
-
-  it("truncates a fourth author to et al.", () => {
-    expect(
-      referenceAuthorsLine([
-        { name: "A One" },
-        { name: "B Two" },
-        { name: "C Three" },
-        { name: "D Four" },
-      ]),
-    ).toBe("A One, B Two, C Three et al.");
-  });
-});
+import { mostRelevantSources, sectionNavLabel, artefactMarkdown, downloadFilename, fullReportIntro, splitLeadColon, numberedAuthorships } from "./artefactPresentation";
 
 describe("numberedAuthorships", () => {
   it("dedupes institutions and numbers them by first appearance", () => {
@@ -123,17 +97,19 @@ describe("mostRelevantSources", () => {
         blocks: [
           {
             claims: [
-              { citations: [{ source_id: "z-low", source_title: "Zeta report", appraisal_label: "low" }] },
-              { citations: [{ source_id: "a-high", source_title: "Alpha report", appraisal_label: "high" }] },
-              // Same tier as z-low ("low"), so this pair breaks on title.
-              { citations: [{ source_id: "b-low", source_title: "Beta report", appraisal_label: "low" }] },
+              { citations: [{ source_id: "z-low", source_title: "Zeta report", appraisal_label: "Weak" }] },
+              { citations: [{ source_id: "a-high", source_title: "Alpha report", appraisal_label: "Very strong" }] },
+              // Same tier as z-low ("Weak"), so this pair breaks on title.
+              { citations: [{ source_id: "b-low", source_title: "Beta report", appraisal_label: "Weak" }] },
+              // Unrated (task 056) sorts after every scored label, so it drops off a top three.
+              { citations: [{ source_id: "0-unrated", source_title: "Aardvark report", appraisal_label: "Unrated" }] },
             ],
           },
         ],
       },
     ];
     const result = mostRelevantSources(sections);
-    // All three have citationCount 1: high tier first, then low-tier ties broken A→Z.
+    // All four have citationCount 1: strongest tier first, then Weak ties broken A→Z, Unrated last.
     expect(result.map((s) => s.sourceId)).toEqual(["a-high", "b-low", "z-low"]);
   });
 
@@ -146,7 +122,7 @@ describe("mostRelevantSources", () => {
             claims: [
               { citations: [{ source_id: "unknown-tier", source_title: "Unknown tier", appraisal_label: "not_a_real_tier" }] },
               { citations: [{ source_id: "no-tier", source_title: "No tier at all" }] },
-              { citations: [{ source_id: "high-tier", source_title: "High tier", appraisal_label: "high" }] },
+              { citations: [{ source_id: "high-tier", source_title: "High tier", appraisal_label: "Strong" }] },
             ],
           },
         ],
@@ -253,12 +229,12 @@ describe("artefactMarkdown", () => {
       },
     ],
     references: [
-      { n: 1, title: "A study", year: 2022, venue: "BMJ Open" },
+      { n: 1, title: "A study", year: 2022, venue: "BMJ Open", url: "https://doi.org/10.1000/a" },
       {
         n: 2,
         title: "An authored study",
         year: 2021,
-        authorships: [{ name: "A One" }, { name: "B Two" }],
+        authorships: [{ name: "Alex One" }, { name: "Bea Two" }],
       },
     ],
   };
@@ -273,8 +249,16 @@ describe("artefactMarkdown", () => {
     expect(markdown).toContain("## Full report");
     expect(markdown).not.toContain("group the evidence by theme");
     expect(markdown).toContain("### References");
-    expect(markdown).toContain("1. A study (2022, BMJ Open)");
-    expect(markdown).toContain("2. An authored study — A One, B Two (2021)");
+    // The page's citation form (round 10, C5), the full address at the end.
+    expect(markdown).toContain("1. A study (2022). BMJ Open. https://doi.org/10.1000/a");
+    expect(markdown).toContain("2. One A, Two B (2021). An authored study.");
+  });
+
+  it("heads the file with the question, as the page does, and keeps the title without one", () => {
+    const question = "What helps children eat breakfast?";
+    expect(artefactMarkdown(artefact, question).split("\n")[0]).toBe(`# ${question}`);
+    expect(artefactMarkdown(artefact).split("\n")[0]).toBe("# Policy options for healthier childhoods");
+    expect(artefactMarkdown(artefact, "  ").split("\n")[0]).toBe("# Policy options for healthier childhoods");
   });
 
   it("omits an unverified summary — same honesty as the on-screen callout", () => {
@@ -289,7 +273,7 @@ describe("artefactMarkdown", () => {
     expect(markdown).toMatch(/^1\. /m);
   });
 
-  it("bolds lead-colon key-findings bullets and lists most relevant sources before the body", () => {
+  it("bolds lead-colon key-findings bullets and lists most relevant sources at the end of the executive summary", () => {
     const markdown = artefactMarkdown({
       title: "Report",
       summary: "Takeaway.",
@@ -331,7 +315,10 @@ describe("artefactMarkdown", () => {
     });
     expect(markdown).toContain("- **Universal breakfast helped:** eleven of fifteen evaluations reported higher uptake.");
     expect(markdown).toContain("- No colon on this line.");
+    // In the page's order (owner, round 11): after the key findings, before
+    // the Full report and its body.
     expect(markdown.indexOf("### Most relevant sources")).toBeGreaterThan(markdown.indexOf("### Key findings"));
+    expect(markdown.indexOf("### Most relevant sources")).toBeLessThan(markdown.indexOf("## Full report"));
     expect(markdown.indexOf("### Most relevant sources")).toBeLessThan(markdown.indexOf("### What works"));
     expect(markdown).toContain("**A breakfast study**");
   });
@@ -348,24 +335,6 @@ describe("fullReportIntro", () => {
 
   it("returns null when no generated intro is available", () => {
     expect(fullReportIntro(3)).toBeNull();
-  });
-});
-
-describe("cardEvidenceMeta", () => {
-  it("falls back to claim citations when rollup metadata is absent", () => {
-    expect(
-      cardEvidenceChipLabels({
-        strength: null,
-        design: null,
-        claims: [
-          {
-            citations: [
-              { appraisal_label: "Strong", evidence_type: "RCTs and Quasi-Experimental Studies" },
-            ],
-          },
-        ],
-      }),
-    ).toEqual(["Strong", "RCTs and Quasi-Experimental Studies"]);
   });
 });
 
@@ -399,7 +368,8 @@ describe("artefactMarkdown case studies", () => {
     expect(markdown).toContain("### Case studies");
     expect(markdown).toContain("**Finland — School meals**");
     expect(markdown).toContain("Universal provision since 1948.");
-    expect(markdown).toContain("high · Trial · Since 1948");
+    // The page's order: the type, then the strength (round 12).
+    expect(markdown).toContain("Trial · high · Since 1948");
     expect(markdown).toContain("**Sweden — Free lunches**");
   });
 
@@ -555,3 +525,4 @@ describe("downloadFilename", () => {
     expect(downloadFilename("???", "pdf")).toBe("report.pdf");
   });
 });
+

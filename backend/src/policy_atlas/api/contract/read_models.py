@@ -15,7 +15,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .sse import DecidedBy
-from .task_agent import ExtractProfile, OptionDesignOut
+from .task_agent import ExtractProfile, OptionDesignOut, ScopingRiskAppetite
 from .tasks import LatestRun
 
 #: The longest user text an option route accepts (the option's words, a reason).
@@ -192,6 +192,11 @@ class EvidenceItemOut(BaseModel):
         appraisal_tier: Optional appraisal tier label.
         cited: Whether this source is cited in the artefact.
         url: Optional source URL.
+        full_text_url: The address the full text was collected from (an
+            http(s) link a reader can open), or `None` when no full text was
+            collected.
+        full_text_status: Where the full text's fetch stands: `queued`
+            while the ingest is pending (task 058, round 14).
     """
 
     source_id: uuid.UUID
@@ -219,6 +224,18 @@ class EvidenceItemOut(BaseModel):
     # the provider's LLM-written description (flagged as such).
     abstract: str | None = None
     abstract_source: Literal["provider", "llm_description"] | None = None
+    # Task 058, round 10: the publisher country by its one display name, the
+    # value the Landscape chart's row shows and the `country` filter takes;
+    # null when the provider sent none (the chart's "Not reported").
+    country: str | None = None
+    # Task 058, round 12: where the full text came from, for the All sources
+    # "Full text" link; null unless the text was collected.
+    full_text_url: str | None = None
+    # Task 058, round 14: where the full text's fetch stands. `queued` is a
+    # fetch handed to the ingest queue and not yet back ("Collecting…").
+    full_text_status: Literal[
+        "not_attempted", "queued", "ingested", "fetch_failed", "parse_failed"
+    ] = "not_attempted"
 
 
 class FindingBaseOut(BaseModel):
@@ -364,6 +381,11 @@ class DecisionOut(BaseModel):
         capability_run_id: The walk the underlying event belongs to, when
             the event carries a run (task 045) — lets the thread tell a
             hidden child walk's lines from its parent's. Null otherwise.
+        actor_display: The display name of the person who acted (task 058,
+            round 10), never an email; null for Policy Atlas's own acts. The
+            summary already names them ("You" for the reader).
+        actor_is_viewer: Whether the person who acted is the reader; null
+            when no person acted (Policy Atlas's acts, a step's line).
     """
 
     sequence: int
@@ -373,6 +395,8 @@ class DecisionOut(BaseModel):
     decided_by: DecidedBy | None = None
     detail: dict[str, Any] | None = None
     capability_run_id: uuid.UUID | None = None
+    actor_display: str | None = None
+    actor_is_viewer: bool | None = None
 
 
 class CitationOut(BaseModel):
@@ -386,9 +410,6 @@ class CitationOut(BaseModel):
             citation resolves to one (joins to the sources/dossier surface).
         source_title: Cited source's title (envelope metadata).
         quote: The quoted span from the source.
-        grounding_tier: Optional grounding-judge tier label.
-        grounding_rationale: The grounding judge's recorded reason for the
-            tier, when one was persisted with the verdict.
         appraisal_label: Optional appraisal label.
         evidence_type: The cited document's classified evidence type — the
             input the appraisal rubric scores from.
@@ -401,8 +422,6 @@ class CitationOut(BaseModel):
     source_id: uuid.UUID | None = None
     source_title: str
     quote: str
-    grounding_tier: str | None = None
-    grounding_rationale: str | None = None
     appraisal_label: str | None = None
     evidence_type: str | None = None
     text_basis: str | None = None
@@ -478,6 +497,9 @@ class ClaimOut(BaseModel):
         span: Character offsets `[start, end]` into the block's `prose`, or
             `None`.
         citations: Citations attached to this claim (citation-type only).
+        grounding_tier: The grounding judge's verdict on the claim, when it
+            was checked (task 058, round 13: the claim's, not each citation's).
+        grounding_rationale: The judge's recorded reason for the verdict.
         theme: Named themes or groups referenced by a theme claim.
     """
 
@@ -486,6 +508,8 @@ class ClaimOut(BaseModel):
     text: str
     span: tuple[int, int] | None = None
     citations: list[CitationOut] = Field(default_factory=list)
+    grounding_tier: str | None = None
+    grounding_rationale: str | None = None
     weakly_grounded: bool | None = None
     gap: GapOut | None = None
     theme: ThemeRefOut | None = None
@@ -660,23 +684,58 @@ class CoverageOut(BaseModel):
 
 
 class CoverageQueryOut(BaseModel):
-    """One completed query and its result count for a public backend."""
+    """One completed query and its result count for a public backend.
+
+    Args:
+        query: The query as written.
+        results: The records the call returned.
+        query_id: The query's key for the sources filter
+            (`GET /tasks/{id}/evidence?query=`; task 058, round 12).
+    """
 
     query: str
     results: int
+    query_id: int
+
+
+class CoveragePassOut(BaseModel):
+    """One citations or lookup pass of a finished search (task 058, round 11).
+
+    Args:
+        pass_: `citations` (the works citing the best-connected sources) or
+            `lookup` (cited works or documents fetched by id). Serialised as
+            `pass`.
+        query: The pass in words, as a finished search names it: "Followed
+            citations from 40 sources", "Looked up 120 cited works",
+            "Looked up 30 cited documents". Never its ids.
+        results: The records the pass's calls returned.
+        query_id: The pass's key for the sources filter
+            (`GET /tasks/{id}/evidence?query=`; task 058, round 12): the
+            records every call of the pass returned.
+    """
+
+    model_config = ConfigDict(populate_by_name=True, serialize_by_alias=True)
+
+    pass_: Literal["citations", "lookup"] = Field(alias="pass")
+    query: str
+    results: int
+    query_id: int
 
 
 class CoverageBackendDetailOut(BaseModel):
     """Post-run source counts for one public backend.
 
     ``relevant`` is deliberately task-wide in C.1; per-query relevance
-    was not recorded and is therefore absent.
+    was not recorded and is therefore absent. ``queries`` are the written
+    searches (topic and semantic); ``passes`` the citations and lookup passes
+    in the order they ran (round 11). ``results`` counts both.
     """
 
     backend: str
     results: int
     relevant: int
     queries: list[CoverageQueryOut] = Field(default_factory=list)
+    passes: list[CoveragePassOut] = Field(default_factory=list)
 
 
 class ChunkContextOut(BaseModel):
@@ -720,6 +779,11 @@ OptionOrigin = Literal["clustered", "suggested", "from_evidence_search", "added_
 
 #: An option's state. "No in-scope evidence" is a condition, not a state.
 OptionState = Literal["included", "excluded"]
+
+#: An option's place on the shortlist (task 055): a Policy Atlas pick, a
+#: place the user added, or a pick the user removed. Mirrors
+#: `schema.OPTION_SHORTLIST_STATES`.
+ShortlistState = Literal["proposed", "added_by_you", "set_aside"]
 
 #: Who excluded an option: the constrain step, or the user.
 ExclusionBy = Literal["constrain", "user"]
@@ -770,12 +834,16 @@ class LonglistThemeOut(BaseModel):
         name: Theme name.
         description: One-line description.
         option_ids: The theme's options, in display order.
+        document_count: The theme's distinct documents across its options,
+            each counted once (task 058, round 14): the rows
+            `GET /tasks/{id}/evidence?theme=` lists.
     """
 
     theme_id: uuid.UUID
     name: str
     description: str
     option_ids: list[uuid.UUID] = Field(default_factory=list)
+    document_count: int = 0
 
 
 class ExclusionOut(BaseModel):
@@ -832,6 +900,7 @@ ProfileLineKey = Literal[
     "dependencies",
     "coordination",
     "delivery_complexity",
+    "potential_impact",
 ]
 ProfileMark = Literal["less", "more"]
 AuthorityLabel = Literal["within_your_power", "needs_action_by", "unclear"]
@@ -863,10 +932,14 @@ class OptionProfileOut(BaseModel):
         lines: The eight lines, in display order.
         settings: The delivery setting, main first, then the second; empty
             when none is named (R41).
+        acts_on: Whom the option acts on directly, the model's words in its
+            order (task 058, round 12); empty for a whole-system instrument and
+            for a profile written before round 12.
     """
 
     lines: list[ProfileLineOut]
     settings: list[str]
+    acts_on: list[str] = Field(default_factory=list)
 
 
 class AuthorityOut(BaseModel):
@@ -907,6 +980,41 @@ class OutcomeCountsOut(BaseModel):
 
     evaluating_documents: int = 0
     by_outcome: list[OutcomeCountOut] = Field(default_factory=list)
+
+
+class ShortlistStateOut(BaseModel):
+    """An option's place on the shortlist (task 055).
+
+    Args:
+        state: `proposed` (Policy Atlas's pick), `added_by_you`, or
+            `set_aside` (a pick the user removed).
+        reason: The one-line reason for a Policy Atlas pick; `null` otherwise.
+    """
+
+    state: ShortlistState
+    reason: str | None = None
+
+
+class MaturityOut(BaseModel):
+    """How well tried an option is, read from its coverage (task 055, item 7).
+
+    Args:
+        rung: `proposal_only` (no document names it) · `described` (documents
+            describe or recommend it) · `evaluated` (a document measured an
+            effect) · `reviewed` (a systematic review or meta-analysis did).
+        design_mix: The evaluating documents' evidence types as text, most
+            frequent first; empty when none evaluated it.
+        none_in_your_setting: It was evaluated, but not in the plan's Where
+            country.
+        latest_evaluation_year: The newest evaluating document's year.
+        stale: The newest evaluation is more than five years old.
+    """
+
+    rung: Literal["proposal_only", "described", "evaluated", "reviewed"]
+    design_mix: str = ""
+    none_in_your_setting: bool = False
+    latest_evaluation_year: int | None = None
+    stale: bool = False
 
 
 class OptionSummaryOut(BaseModel):
@@ -955,6 +1063,10 @@ class OptionSummaryOut(BaseModel):
             document measured (R76).
         outcomes_total: The outcome count of the plan the longlist was built
             from (R76).
+        shortlist: Its place on the shortlist (task 055); `null` when it
+            holds none.
+        maturity: Its maturity rung (task 055); `null` for a longlist
+            written before the rung existed.
     """
 
     option_id: uuid.UUID
@@ -983,6 +1095,8 @@ class OptionSummaryOut(BaseModel):
     evaluated_countries: list[EvaluatedCountryOut] = Field(default_factory=list)
     outcomes_evaluated: int = 0
     outcomes_total: int = 0
+    shortlist: ShortlistStateOut | None = None
+    maturity: MaturityOut | None = None
 
 
 class LeverTypeOut(BaseModel):
@@ -995,6 +1109,30 @@ class LeverTypeOut(BaseModel):
 
     key: str
     definition: str
+
+
+class ShortlistOut(BaseModel):
+    """The latest shortlist proposal on a longlist (task 055).
+
+    Args:
+        note: The proposal's short "what this leaves out" note; `null` before
+            the first proposal.
+        provenance: How the proposal was made (prompt version, model,
+            appetite, plan version, …); empty before the first proposal.
+        places_target: How many places a proposal fills to.
+        stale: The proposal does not match the plan's current risk appetite,
+            or a built longlist has no proposal yet. The view then asks the
+            user to press Suggest more to re-propose.
+        note_stale: The note was written against other places than the
+            shortlist now holds (task 058, round 14): `POST
+            /tasks/{id}/shortlist/note` rewrites it. `false` with no note.
+    """
+
+    note: str | None = None
+    provenance: dict[str, Any] = Field(default_factory=dict)
+    places_target: int = 5
+    stale: bool
+    note_stale: bool = False
 
 
 class LonglistOut(BaseModel):
@@ -1018,6 +1156,17 @@ class LonglistOut(BaseModel):
             earlier version can show that version's wording (task 046).
         taxonomy_version: The lever-type list version.
         depth_label: The depth label every longlist surface carries.
+        shortlist: The latest shortlist proposal (task 055).
+        plan_inputs_changed: The current approved plan differs from the plan
+            the longlist was built from in a field the longlist reads, so a
+            rebuild would give a different longlist. A change to the risk
+            appetite alone leaves it false (task 055, A6).
+        question: The current approved plan's question (the page heading).
+        where: The current approved plan's setting, e.g. "England".
+        risk_appetite: The current approved plan's risk appetite.
+
+    The last three repeat plan fields so a public link, which cannot read
+    the owner-only plan, shows the same heading and words as the owner.
     """
 
     run_id: uuid.UUID
@@ -1034,6 +1183,11 @@ class LonglistOut(BaseModel):
     )
     taxonomy_version: str | None = None
     depth_label: Literal["scoping pass"] = "scoping pass"
+    shortlist: ShortlistOut
+    plan_inputs_changed: bool = False
+    question: str | None = None
+    where: str | None = None
+    risk_appetite: ScopingRiskAppetite | None = None
 
 
 class EvidenceProfileOut(BaseModel):
@@ -1106,6 +1260,10 @@ class OptionDocumentOut(BaseModel):
         evidence_type: Its evidence type, when classified.
         tier: Its quality tier label, when appraised.
         year: Its publication year, when the metadata has one.
+        authors: Its authors' names, in order, as the reference line names
+            them (task 058, round 12); empty when unknown.
+        venue: Where it was published, as the evidence row's `venue`
+            (task 058, round 12), or `None`.
         place: Where it was studied: its where-tried top level.
         programme_name: The programme name of its first member record under
             the option (by role order); `null` when none is given or the
@@ -1126,6 +1284,8 @@ class OptionDocumentOut(BaseModel):
     evidence_type: str | None = None
     tier: str | None = None
     year: int | None = None
+    authors: list[str] = Field(default_factory=list)
+    venue: str | None = None
     place: str | None = None
     programme_name: str | None = None
     tried_on_kind: str | None = None
@@ -1184,7 +1344,8 @@ class PlaceSentenceOut(BaseModel):
     """One place of an option's evaluating documents and its sentence (task 046, amendment 4, R80).
 
     Args:
-        place: The place: a country's short English name, or "No single place".
+        place: The place: a country's short English name, or after the
+            countries "Several countries", "Place not stated" or "Other".
         sentence: What the evaluations in that place are.
         generated: The sentence was generated and passed the trace check;
             ``false`` for the code-built template.
@@ -1278,3 +1439,48 @@ class OptionAddedOut(BaseModel):
 
     option: OptionOut
     opened_run: LatestRun | None = None
+
+
+#: Where an option's own search stands (task 058, N22): no child walk yet,
+#: the walk running or paused, the walk finished with a result, or the walk
+#: ended without one (failed, aborted or interrupted).
+OptionSearchStatus = Literal["queued", "searching", "searched", "failed"]
+
+
+class OptionProgressOut(BaseModel):
+    """One option row while the longlist is being built (task 058, N22).
+
+    Args:
+        option_id: The option's identity.
+        name: Its name.
+        description: Its one-line description.
+        origin: Where it came from.
+        state: Included or excluded.
+        merged_into_option_id: The kept option a duplicate was folded into,
+            or `None`.
+        search_status: Where the option's own search stands.
+        found: How many sources that search found (its acquire count), or
+            `None` until the search has finished acquiring.
+    """
+
+    option_id: uuid.UUID
+    name: str
+    description: str
+    origin: OptionOrigin
+    state: OptionState
+    merged_into_option_id: uuid.UUID | None = None
+    search_status: OptionSearchStatus
+    found: int | None = None
+
+
+class OptionsOut(BaseModel):
+    """The `options` read: every option row of the task, with its search (N22).
+
+    Served from the end of the suggest stage, before the longlist exists; an
+    empty list before suggest has written any option.
+
+    Args:
+        options: The task's options, oldest first.
+    """
+
+    options: list[OptionProgressOut] = Field(default_factory=list)

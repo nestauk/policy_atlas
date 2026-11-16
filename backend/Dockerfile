@@ -29,7 +29,12 @@ RUN uv sync --no-dev --no-group ops --frozen
 
 FROM python:3.12-slim
 
-RUN groupadd --system app && useradd --system --gid app --create-home --home-dir /app app
+# useradd makes the home directory private (mode 700). AWS Lambda runs a container image
+# as its own user, not the image's USER, so the ingest function could not enter /app and
+# never started (emulator check, task 057). chmod 755: world-readable, no write; the venv
+# and the source are read-only at runtime anyway.
+RUN groupadd --system app && useradd --system --gid app --create-home --home-dir /app app \
+    && chmod 755 /app
 
 WORKDIR /app
 
@@ -37,6 +42,12 @@ COPY --from=builder --chown=app:app /app/.venv ./.venv
 COPY --from=builder --chown=app:app /app/src ./src
 COPY --from=builder --chown=app:app /app/alembic ./alembic
 COPY --from=builder --chown=app:app /app/alembic.ini ./alembic.ini
+
+# Compile every Python file to bytecode once, at build time (task 057, N13).
+# Without this, each fresh container (an API task or an ingest function) compiles
+# about 6,500 files on its first import: 6 to 8 s of cold start, 2 to 4 s with
+# the bytecode shipped. The laptop's own bytecode is kept out by .dockerignore.
+RUN python -m compileall -q /app/.venv /app/src
 
 ENV PATH="/app/.venv/bin:$PATH"
 

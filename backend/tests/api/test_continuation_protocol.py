@@ -649,7 +649,7 @@ def test_abort_emits_terminal_event_and_abandons_plan(engine: Engine) -> None:
     task_id: uuid.UUID | None = None
     try:
         task_id, _scope_id, capability_run_id, check_in_id = _park_walk(engine)
-        answer_check_in(
+        answer = answer_check_in(
             engine,
             task_id=task_id,
             check_in_id=check_in_id,
@@ -680,6 +680,12 @@ def test_abort_emits_terminal_event_and_abandons_plan(engine: Engine) -> None:
         ]
         assert len(finished) == 1
         assert finished[0]["payload"]["status"] == "aborted"
+        # Task 058 review: the abort chosen from the card's option names it, so
+        # History can quote the card's words.
+        [decision] = [
+            row for row in log_rows if row["event_id"] == answer.decision_event_id
+        ]
+        assert decision["payload"]["option_id"] == "abort"
         # SSE replay derives run.status frames from run.* events, so the store
         # sees the terminal transition (review findings adv-M5/codex-5).
         assert "abandoned" in plan_statuses
@@ -726,5 +732,88 @@ def test_event_sequence_allocation_survives_concurrent_writers(engine: Engine) -
         assert len(rows) == 40
         assert sequences == sorted(sequences)
         assert len(set(sequences)) == 40
+    finally:
+        _cleanup(engine, task_id)
+
+
+def test_a_run_and_its_check_in_answer_touch_the_task(engine: Engine) -> None:
+    """Task 058, round 10: run start, a check-in answer and run end each move
+    the task's modified time, so the Tasks list's newest-first is real; the
+    decision records the option the person chose."""
+    from datetime import UTC, datetime
+
+    from policy_atlas.core.schema import task as task_table
+
+    long_ago = datetime(2020, 1, 1, tzinfo=UTC)
+
+    def backdate(task_id: uuid.UUID) -> None:
+        with engine.begin() as conn:
+            conn.execute(
+                update(task_table)
+                .where(task_table.c.task_id == task_id)
+                .values(updated_at=long_ago)
+            )
+
+    def touched(task_id: uuid.UUID) -> bool:
+        with engine.connect() as conn:
+            stamp = conn.execute(
+                select(task_table.c.updated_at).where(task_table.c.task_id == task_id)
+            ).scalar_one()
+        return bool(stamp > long_ago)
+
+    task_id: uuid.UUID | None = None
+    try:
+        task_id, scope_id = _seed_task(engine)
+        backdate(task_id)
+        plan = _base_plan(steering_mode="frequent", search_effort="standard")
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
+        outcome = run_plan(
+            engine,
+            task_id=task_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=_ParkOnceIO(),
+        )
+        assert outcome.status == "paused" and outcome.capability_run_id is not None
+        assert touched(task_id)  # the run's start
+        with engine.connect() as conn:
+            check_in_id = next(
+                entry["event_id"]
+                for entry in reversed(events.read(conn, task_id))
+                if entry["event_type"] == "steering.pause"
+            )
+        backdate(task_id)
+        answer = answer_check_in(
+            engine,
+            task_id=task_id,
+            check_in_id=check_in_id,
+            response=_continue_response(),
+            actor="user-1",
+        )
+        assert touched(task_id)  # the answer
+        with engine.connect() as conn:
+            decision = next(
+                entry
+                for entry in events.read(conn, task_id)
+                if entry["event_id"] == answer.decision_event_id
+            )
+        assert decision["payload"]["option_id"] == "continue"
+        assert claim_continuation(
+            engine, task_id=task_id, capability_run_id=outcome.capability_run_id
+        )
+        backdate(task_id)
+        finished = execute_continuation(
+            engine,
+            task_id=task_id,
+            capability_run_id=outcome.capability_run_id,
+            backends=_runner_backends(),
+            io=NullIO(),
+        )
+        assert finished.status == "succeeded"
+        assert touched(task_id)  # the run's end
     finally:
         _cleanup(engine, task_id)

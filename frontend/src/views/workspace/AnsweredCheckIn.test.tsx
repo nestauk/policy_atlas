@@ -1,8 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { ResolvedDecision } from "../../store";
-import { recordSessionAnsweredCheckIn } from "../../store/thread";
+import type { ResolvedDecision, StageEntry } from "../../store";
 import type { CheckInOut } from "../../store/types";
 import { AnsweredCheckIn } from "./AnsweredCheckIn";
 
@@ -17,66 +16,94 @@ function decision(overrides: Partial<ResolvedDecision>): ResolvedDecision {
   };
 }
 
-describe("AnsweredCheckIn", () => {
-  it("echoes who decided and the typed prose", () => {
+const STAGES: StageEntry[] = [
+  { stage: "acquire", label: "Searching and screening", status: "completed" } as StageEntry,
+];
+
+const CHECK_IN: CheckInOut = {
+  boundary: "after_component",
+  bundle: null,
+  check_in_id: "c1",
+  component: "acquire",
+  created_at: "2026-07-28T10:00:00Z",
+  kind: "steer_point",
+  options: [
+    { id: "continue", label: "Looks right, assess these", description: "", requires_user_input: false, suggested: true, why: null, endorsement: null },
+    { id: "deepen_search", label: "Search deeper", description: "", requires_user_input: false, suggested: false, why: null, endorsement: null },
+  ],
+  render: "Does this look right before I assess the sources?",
+  rerun_component: null,
+  segment_reentry_allowed: false,
+  sequence: 8,
+  stage: "acquire",
+  status: "decided",
+  triggers: [],
+};
+
+describe("AnsweredCheckIn (task 058, N19)", () => {
+  it("builds You chose from the durable frame: the option's own label and where it sat", () => {
     render(
       <AnsweredCheckIn
-        decision={decision({ response: { text: "prioritise UK school-based studies" } })}
+        decision={decision({ response: { kind: "option", option_id: "continue", params: null } })}
+        checkIn={CHECK_IN}
+        stages={STAGES}
       />,
     );
-    expect(screen.getByText("Answered")).toBeInTheDocument();
-    expect(screen.getByText("You decided")).toBeInTheDocument();
-    expect(screen.getByText(/prioritise UK school-based studies/)).toBeInTheDocument();
+    expect(
+      screen.getByText("You chose: Looks right, assess these · after searching and screening"),
+    ).toBeInTheDocument();
+  });
+
+  it("reads the same with nothing in session storage (a reload, another device)", () => {
+    window.sessionStorage.clear();
+    render(
+      <AnsweredCheckIn
+        decision={decision({ response: { kind: "option", option_id: "deepen_search" } })}
+        checkIn={CHECK_IN}
+        stages={STAGES}
+      />,
+    );
+    expect(screen.getByText(/^You chose: Search deeper/)).toBeInTheDocument();
+  });
+
+  it("words a stop and a free-text steer", () => {
+    const { rerender } = render(
+      <AnsweredCheckIn decision={decision({ response: { kind: "abort" } })} checkIn={CHECK_IN} stages={STAGES} />,
+    );
+    expect(screen.getByText("You chose: Stop the run · after searching and screening")).toBeInTheDocument();
+    rerender(
+      <AnsweredCheckIn
+        decision={decision({ response: { text: "prioritise UK school-based studies" } })}
+        checkIn={CHECK_IN}
+        stages={STAGES}
+      />,
+    );
+    expect(screen.getByText(/^You chose: prioritise UK school-based studies/)).toBeInTheDocument();
   });
 
   it("attributes a decision the Agent took to the Agent (038 V4)", () => {
-    // `agent` is the wire literal; the backend canonicalises a stored
-    // `orchestrator` to it on read, so this is the only key to label.
-    render(<AnsweredCheckIn decision={decision({ decidedBy: "agent" })} />);
-    expect(screen.getByText("The Agent decided")).toBeInTheDocument();
+    render(
+      <AnsweredCheckIn
+        decision={decision({ decidedBy: "agent", response: { option_id: "continue" } })}
+        checkIn={CHECK_IN}
+        stages={STAGES}
+      />,
+    );
+    expect(screen.getByText(/^The Agent decided: Looks right, assess these/)).toBeInTheDocument();
   });
 
-  it("never renders raw params — only allowlisted friendly-labelled detail", () => {
+  it("never renders raw params or ids", () => {
     render(
       <AnsweredCheckIn
         decision={decision({
           response: { option_id: "raw_id_should_not_render", internal_blob: "x9" },
           decidedBy: "standing_default",
         })}
+        stages={STAGES}
       />,
     );
     expect(screen.queryByText(/raw_id_should_not_render/)).toBeNull();
     expect(screen.queryByText(/internal_blob/)).toBeNull();
-    expect(screen.getByText("Your standing rule decided")).toBeInTheDocument();
     expect(screen.getByText("The run continued as suggested.")).toBeInTheDocument();
-  });
-
-  it("keeps the selected label visible and discloses the rejected server options", () => {
-    const checkIn: CheckInOut = {
-      boundary: "after_component",
-      bundle: null,
-      check_in_id: "c1",
-      component: "screen_full",
-      created_at: "2026-07-28T10:00:00Z",
-      kind: "pause",
-      options: [
-        { id: "continue", label: "Continue with this evidence", description: "", requires_user_input: false, suggested: true, why: null, endorsement: null },
-        { id: "adjust", label: "Change the approach", description: "", requires_user_input: false, suggested: false, why: null, endorsement: null },
-      ],
-      render: "Screening paused.",
-      rerun_component: null,
-      segment_reentry_allowed: false,
-      sequence: 8,
-      stage: "screen",
-      status: "decided",
-      triggers: [],
-    };
-    recordSessionAnsweredCheckIn("c1", "Continue with this evidence", ["Change the approach"]);
-
-    render(<AnsweredCheckIn decision={decision({})} checkIn={checkIn} />);
-
-    expect(screen.getByText("Continue with this evidence")).toBeInTheDocument();
-    expect(screen.getByText("Other options")).toBeInTheDocument();
-    expect(screen.getByText("Change the approach")).toBeInTheDocument();
   });
 });

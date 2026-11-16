@@ -86,6 +86,7 @@ The lanes:
   `agent-skills:security-auditor` subagent at Tier 3+, `/security-review` at Tier ≤2 —
   **never both on the same diff**.
 - **Adversarial review** — challenge the approach: `/codex:adversarial-review`
+  (findings are adjudicated into `verification.md`; the raw review is not committed)
   (user-typed, diff-shaped) or a read-only `codex-rescue` brief; Tier 2+. At Tier 3+ the
   two heterogeneous reviewers are this Codex pass plus `/code-review medium` (family
   diversity, not reviewer count). Add `agent-skills:test-engineer` only when a coverage
@@ -128,6 +129,18 @@ covers **verification.md's flagged minor deviations** (014, 2026-07-08): each on
 resolution the build made unilaterally within the contract's vocabulary — the stack
 confirms or contests every one explicitly (adopt as-is / require change / escalate as
 a contract problem); a deviation nobody re-examined is drift with a paper trail.
+
+## Frontend-heavy slices — design lane and second polish round (owner, 2026-11-04)
+
+- **Design lane** in the step-7 stack: the pinned `frontend-designer` agent, briefed
+  read-only, reviews the built surfaces against the annex and returns ordered material
+  fixes. The
+  contract-verifier checks behaviours against the annex's cited version, never looks.
+  "Differs from the mock" is not a finding; "differs from the annex" is.
+- **Second polish round** after the stack's fixes land: the agent pass and the owner
+  pass from task-cycle-build § Step 5b run again, with the same rules (annex updated,
+  commits on green, owner sign-off recorded in `verification.md`). Then step 8.
+- `verification.md` carries live-dev screenshots of every changed surface.
 
 ## Step 8 — Durable records + PR
 

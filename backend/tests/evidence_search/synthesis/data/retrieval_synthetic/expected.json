@@ -1,0 +1,4770 @@
+{
+ "boost_appraisal_tiers": {
+  "candidates": [
+   [
+    "a3",
+    0.17726615236258436
+   ],
+   [
+    "b1",
+    0.11612903225806451
+   ],
+   [
+    "b2",
+    0.11163461538461537
+   ],
+   [
+    "b6",
+    0.10998134328358208
+   ],
+   [
+    "b4",
+    0.10909090909090909
+   ],
+   [
+    "b3",
+    0.10469968387776606
+   ],
+   [
+    "a2",
+    0.08028169014084506
+   ],
+   [
+    "a1",
+    0.076
+   ],
+   [
+    "a7",
+    0.07307692307692307
+   ],
+   [
+    "b5",
+    0.047368421052631574
+   ],
+   [
+    "e5",
+    0.04285714285714286
+   ],
+   [
+    "c3",
+    0.018531717747683533
+   ],
+   [
+    "c1",
+    0.01777875329236172
+   ],
+   [
+    "h2",
+    0.01756756756756757
+   ],
+   [
+    "d1",
+    0.014492753623188406
+   ],
+   [
+    "d4",
+    0.014285714285714285
+   ],
+   [
+    "c4",
+    0.008333333333333333
+   ],
+   [
+    "c2",
+    0.007792207792207792
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a3",
+    "content_length": 47,
+    "content_sha256": "2c75c5d8f310ee86",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.17726615236258436,
+    "origin": "selected",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b1",
+    "content_length": 107,
+    "content_sha256": "a6decf48363b0ca2",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.11612903225806451,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b2",
+    "content_length": 33,
+    "content_sha256": "72855b6e2fcda7dd",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.11163461538461537,
+    "origin": "unselected_screened",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b6",
+    "content_length": 34,
+    "content_sha256": "e0cafed6d90dfd6d",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.10998134328358208,
+    "origin": "unselected_screened",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b4",
+    "content_length": 39,
+    "content_sha256": "9c9dda8a77a0541e",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.10909090909090909,
+    "origin": "unselected_screened",
+    "sequence": 3,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b3",
+    "content_length": 57,
+    "content_sha256": "ae18efe68fbf5fbf",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.10469968387776606,
+    "origin": "unselected_screened",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a2",
+    "content_length": 59,
+    "content_sha256": "acaa91a419180da9",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.08028169014084506,
+    "origin": "selected",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a1",
+    "content_length": 54,
+    "content_sha256": "f3a969f707a54b09",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.076,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2020
+   }
+  ]
+ },
+ "boost_columns": {
+  "candidates": [
+   [
+    "b3",
+    0.21390845070422534
+   ],
+   [
+    "b2",
+    0.1883076923076923
+   ],
+   [
+    "b1",
+    0.18587608261159225
+   ],
+   [
+    "c2",
+    0.1789659743703049
+   ],
+   [
+    "b6",
+    0.17888888888888888
+   ],
+   [
+    "c1",
+    0.1585811163275952
+   ],
+   [
+    "a1",
+    0.11969246031746031
+   ],
+   [
+    "a7",
+    0.1165807962529274
+   ],
+   [
+    "a2",
+    0.11429217548620534
+   ],
+   [
+    "a3",
+    0.11016806722689075
+   ],
+   [
+    "a6",
+    0.10379041248606465
+   ],
+   [
+    "a4",
+    0.10272146118721462
+   ],
+   [
+    "b4",
+    0.09999999999999998
+   ],
+   [
+    "d1",
+    0.093297974927676
+   ],
+   [
+    "b5",
+    0.0911392405063291
+   ],
+   [
+    "d6",
+    0.08782051282051281
+   ],
+   [
+    "e6",
+    0.0866943866943867
+   ],
+   [
+    "e1",
+    0.08658008658008658
+   ],
+   [
+    "d7",
+    0.082039911308204
+   ],
+   [
+    "e3",
+    0.07919254658385094
+   ],
+   [
+    "c3",
+    0.07228915662650603
+   ],
+   [
+    "d3",
+    0.04838709677419355
+   ],
+   [
+    "d2",
+    0.04477611940298507
+   ],
+   [
+    "d4",
+    0.03658536585365854
+   ],
+   [
+    "e2",
+    0.03614457831325302
+   ],
+   [
+    "e4",
+    0.03529411764705882
+   ],
+   [
+    "h1",
+    0.017105263157894738
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b3",
+    "content_length": 57,
+    "content_sha256": "ae18efe68fbf5fbf",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.21390845070422534,
+    "origin": "unselected_screened",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b2",
+    "content_length": 33,
+    "content_sha256": "72855b6e2fcda7dd",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.1883076923076923,
+    "origin": "unselected_screened",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b1",
+    "content_length": 107,
+    "content_sha256": "a6decf48363b0ca2",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.18587608261159225,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c2",
+    "content_length": 46,
+    "content_sha256": "21511782c2d2847a",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.1789659743703049,
+    "origin": "unselected_screened",
+    "sequence": 1,
+    "text_basis": "abstract_only",
+    "year": 2022
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b6",
+    "content_length": 34,
+    "content_sha256": "e0cafed6d90dfd6d",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.17888888888888888,
+    "origin": "unselected_screened",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c1",
+    "content_length": 46,
+    "content_sha256": "82e6e6a32fcf65ee",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.1585811163275952,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "abstract_only",
+    "year": 2022
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a1",
+    "content_length": 54,
+    "content_sha256": "f3a969f707a54b09",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11969246031746031,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a7",
+    "content_length": 862,
+    "content_sha256": "76a701275aefd607",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.1165807962529274,
+    "origin": "selected",
+    "sequence": 6,
+    "text_basis": "full_text",
+    "window_end": 2362,
+    "window_start": 1500,
+    "year": 2020
+   }
+  ]
+ },
+ "boost_screen_confidence": {
+  "candidates": [
+   [
+    "a1",
+    0.22993551587301586
+   ],
+   [
+    "a7",
+    0.22395784543325528
+   ],
+   [
+    "a2",
+    0.21956128448665763
+   ],
+   [
+    "a3",
+    0.21163865546218488
+   ],
+   [
+    "a6",
+    0.19938684503901893
+   ],
+   [
+    "a4",
+    0.19733333333333333
+   ],
+   [
+    "e6",
+    0.13004158004158006
+   ],
+   [
+    "e1",
+    0.12987012987012986
+   ],
+   [
+    "c2",
+    0.11931064958020327
+   ],
+   [
+    "e3",
+    0.1187888198757764
+   ],
+   [
+    "c1",
+    0.1057207442183968
+   ],
+   [
+    "e2",
+    0.05421686746987952
+   ],
+   [
+    "e4",
+    0.052941176470588235
+   ],
+   [
+    "c3",
+    0.04819277108433735
+   ],
+   [
+    "b3",
+    0.03565140845070423
+   ],
+   [
+    "b2",
+    0.031384615384615386
+   ],
+   [
+    "b1",
+    0.030979347101932047
+   ],
+   [
+    "b6",
+    0.02981481481481482
+   ],
+   [
+    "h1",
+    0.020394736842105264
+   ],
+   [
+    "b4",
+    0.01666666666666667
+   ],
+   [
+    "d1",
+    0.015549662487945998
+   ],
+   [
+    "b5",
+    0.01518987341772152
+   ],
+   [
+    "d6",
+    0.014636752136752137
+   ],
+   [
+    "d7",
+    0.013673318551367332
+   ],
+   [
+    "d3",
+    0.008064516129032258
+   ],
+   [
+    "d2",
+    0.007462686567164179
+   ],
+   [
+    "d4",
+    0.006097560975609756
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a1",
+    "content_length": 54,
+    "content_sha256": "f3a969f707a54b09",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.22993551587301586,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a7",
+    "content_length": 862,
+    "content_sha256": "76a701275aefd607",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.22395784543325528,
+    "origin": "selected",
+    "sequence": 6,
+    "text_basis": "full_text",
+    "window_end": 2362,
+    "window_start": 1500,
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a2",
+    "content_length": 59,
+    "content_sha256": "acaa91a419180da9",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.21956128448665763,
+    "origin": "selected",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a3",
+    "content_length": 47,
+    "content_sha256": "2c75c5d8f310ee86",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.21163865546218488,
+    "origin": "selected",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a6",
+    "content_length": 34,
+    "content_sha256": "03a88ff7382625fe",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.19938684503901893,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a4",
+    "content_length": 49,
+    "content_sha256": "4e6a0d8b97768d67",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.19733333333333333,
+    "origin": "selected",
+    "sequence": 3,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e6",
+    "content_length": 30,
+    "content_sha256": "0ff7fffc3e44a5b7",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.13004158004158006,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e1",
+    "content_length": 42,
+    "content_sha256": "82b7d64fae3b2396",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.12987012987012986,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2024
+   }
+  ]
+ },
+ "boost_tags": {
+  "candidates": [
+   [
+    "c2",
+    0.14913831197525407
+   ],
+   [
+    "e6",
+    0.14738045738045738
+   ],
+   [
+    "e1",
+    0.14718614718614717
+   ],
+   [
+    "e3",
+    0.13462732919254658
+   ],
+   [
+    "c1",
+    0.13215093027299601
+   ],
+   [
+    "a1",
+    0.11969246031746031
+   ],
+   [
+    "a7",
+    0.1165807962529274
+   ],
+   [
+    "a2",
+    0.11429217548620534
+   ],
+   [
+    "a3",
+    0.11016806722689075
+   ],
+   [
+    "a6",
+    0.10379041248606465
+   ],
+   [
+    "a4",
+    0.10272146118721462
+   ],
+   [
+    "e2",
+    0.06144578313253012
+   ],
+   [
+    "c3",
+    0.060240963855421686
+   ],
+   [
+    "e4",
+    0.06
+   ],
+   [
+    "b3",
+    0.035651408450704226
+   ],
+   [
+    "b2",
+    0.03138461538461538
+   ],
+   [
+    "d1",
+    0.031099324975891997
+   ],
+   [
+    "b1",
+    0.03097934710193204
+   ],
+   [
+    "b6",
+    0.029814814814814815
+   ],
+   [
+    "d6",
+    0.029273504273504274
+   ],
+   [
+    "d7",
+    0.027346637102734665
+   ],
+   [
+    "b4",
+    0.016666666666666666
+   ],
+   [
+    "d3",
+    0.016129032258064516
+   ],
+   [
+    "b5",
+    0.015189873417721518
+   ],
+   [
+    "d2",
+    0.014925373134328358
+   ],
+   [
+    "d4",
+    0.012195121951219513
+   ],
+   [
+    "h1",
+    0.006842105263157895
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c2",
+    "content_length": 46,
+    "content_sha256": "21511782c2d2847a",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.14913831197525407,
+    "origin": "unselected_screened",
+    "sequence": 1,
+    "text_basis": "abstract_only",
+    "year": 2022
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e6",
+    "content_length": 30,
+    "content_sha256": "0ff7fffc3e44a5b7",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.14738045738045738,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e1",
+    "content_length": 42,
+    "content_sha256": "82b7d64fae3b2396",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.14718614718614717,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e3",
+    "content_length": 42,
+    "content_sha256": "39f7c87d6db84149",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.13462732919254658,
+    "origin": "selected",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c1",
+    "content_length": 46,
+    "content_sha256": "82e6e6a32fcf65ee",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.13215093027299601,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "abstract_only",
+    "year": 2022
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a1",
+    "content_length": 54,
+    "content_sha256": "f3a969f707a54b09",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11969246031746031,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a7",
+    "content_length": 862,
+    "content_sha256": "76a701275aefd607",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.1165807962529274,
+    "origin": "selected",
+    "sequence": 6,
+    "text_basis": "full_text",
+    "window_end": 2362,
+    "window_start": 1500,
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a2",
+    "content_length": 59,
+    "content_sha256": "acaa91a419180da9",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11429217548620534,
+    "origin": "selected",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2020
+   }
+  ]
+ },
+ "chunk_tie": {
+  "candidates": [
+   [
+    "f1",
+    0.05528820729772608
+   ],
+   [
+    "f2",
+    0.05528820729772608
+   ],
+   [
+    "f3",
+    0.026984126984126982
+   ],
+   [
+    "f4",
+    0.026984126984126982
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "1",
+    "appraised": true,
+    "chunk": "f1",
+    "content_length": 36,
+    "content_sha256": "ed32cc7c75a2934f",
+    "doc": "dF",
+    "document_title": "Education commentary (second scope only)",
+    "evidence_type": "Expert Opinion and Commentary",
+    "fused_score": 0.05528820729772608,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2025
+   },
+   {
+    "appraisal_label": "1",
+    "appraised": true,
+    "chunk": "f2",
+    "content_length": 20,
+    "content_sha256": "2918aa3dca646aef",
+    "doc": "dF",
+    "document_title": "Education commentary (second scope only)",
+    "evidence_type": "Expert Opinion and Commentary",
+    "fused_score": 0.05528820729772608,
+    "origin": "unselected_screened",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2025
+   },
+   {
+    "appraisal_label": "1",
+    "appraised": true,
+    "chunk": "f3",
+    "content_length": 20,
+    "content_sha256": "25936efb6f14c411",
+    "doc": "dF",
+    "document_title": "Education commentary (second scope only)",
+    "evidence_type": "Expert Opinion and Commentary",
+    "fused_score": 0.026984126984126982,
+    "origin": "unselected_screened",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2025
+   },
+   {
+    "appraisal_label": "1",
+    "appraised": true,
+    "chunk": "f4",
+    "content_length": 31,
+    "content_sha256": "3eb7166e5311dadc",
+    "doc": "dF",
+    "document_title": "Education commentary (second scope only)",
+    "evidence_type": "Expert Opinion and Commentary",
+    "fused_score": 0.026984126984126982,
+    "origin": "unselected_screened",
+    "sequence": 3,
+    "text_basis": "full_text",
+    "year": 2025
+   }
+  ]
+ },
+ "clamp_high": {
+  "candidates": [
+   [
+    "a1",
+    0.3149801587301587
+   ],
+   [
+    "a7",
+    0.30679156908665106
+   ],
+   [
+    "a2",
+    0.3007688828584351
+   ],
+   [
+    "c2",
+    0.29827662395050814
+   ],
+   [
+    "a3",
+    0.28991596638655465
+   ],
+   [
+    "e6",
+    0.288981288981289
+   ],
+   [
+    "e1",
+    0.2886002886002886
+   ],
+   [
+    "a6",
+    0.27313266443701223
+   ],
+   [
+    "a4",
+    0.27031963470319637
+   ],
+   [
+    "c1",
+    0.26430186054599203
+   ],
+   [
+    "e3",
+    0.2639751552795031
+   ],
+   [
+    "h1",
+    0.13157894736842105
+   ],
+   [
+    "c3",
+    0.12048192771084337
+   ],
+   [
+    "e2",
+    0.12048192771084337
+   ],
+   [
+    "e4",
+    0.11764705882352941
+   ],
+   [
+    "b3",
+    0.035651408450704226
+   ],
+   [
+    "b2",
+    0.03138461538461538
+   ],
+   [
+    "d1",
+    0.031099324975891997
+   ],
+   [
+    "b1",
+    0.03097934710193204
+   ],
+   [
+    "b6",
+    0.029814814814814815
+   ],
+   [
+    "d6",
+    0.029273504273504274
+   ],
+   [
+    "d7",
+    0.027346637102734665
+   ],
+   [
+    "b4",
+    0.016666666666666666
+   ],
+   [
+    "d3",
+    0.016129032258064516
+   ],
+   [
+    "b5",
+    0.015189873417721518
+   ],
+   [
+    "d2",
+    0.014925373134328358
+   ],
+   [
+    "d4",
+    0.012195121951219513
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a1",
+    "content_length": 54,
+    "content_sha256": "f3a969f707a54b09",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.3149801587301587,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a7",
+    "content_length": 862,
+    "content_sha256": "76a701275aefd607",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.30679156908665106,
+    "origin": "selected",
+    "sequence": 6,
+    "text_basis": "full_text",
+    "window_end": 2362,
+    "window_start": 1500,
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a2",
+    "content_length": 59,
+    "content_sha256": "acaa91a419180da9",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.3007688828584351,
+    "origin": "selected",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c2",
+    "content_length": 46,
+    "content_sha256": "21511782c2d2847a",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.29827662395050814,
+    "origin": "unselected_screened",
+    "sequence": 1,
+    "text_basis": "abstract_only",
+    "year": 2022
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a3",
+    "content_length": 47,
+    "content_sha256": "2c75c5d8f310ee86",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.28991596638655465,
+    "origin": "selected",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e6",
+    "content_length": 30,
+    "content_sha256": "0ff7fffc3e44a5b7",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.288981288981289,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e1",
+    "content_length": 42,
+    "content_sha256": "82b7d64fae3b2396",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.2886002886002886,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a6",
+    "content_length": 34,
+    "content_sha256": "03a88ff7382625fe",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.27313266443701223,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2020
+   }
+  ]
+ },
+ "clamp_low": {
+  "candidates": [
+   [
+    "a1",
+    0.11969246031746031
+   ],
+   [
+    "a7",
+    0.1165807962529274
+   ],
+   [
+    "a2",
+    0.11429217548620534
+   ],
+   [
+    "a3",
+    0.11016806722689075
+   ],
+   [
+    "a6",
+    0.10379041248606465
+   ],
+   [
+    "a4",
+    0.10272146118721462
+   ],
+   [
+    "e6",
+    0.0866943866943867
+   ],
+   [
+    "e1",
+    0.08658008658008658
+   ],
+   [
+    "e3",
+    0.07919254658385094
+   ],
+   [
+    "e2",
+    0.03614457831325302
+   ],
+   [
+    "e4",
+    0.03529411764705882
+   ],
+   [
+    "h1",
+    0.017105263157894738
+   ],
+   [
+    "d1",
+    0.0031099324975892
+   ],
+   [
+    "c2",
+    0.002982766239505082
+   ],
+   [
+    "b3",
+    0.0029709507042253525
+   ],
+   [
+    "d6",
+    0.0029273504273504276
+   ],
+   [
+    "d7",
+    0.002734663710273467
+   ],
+   [
+    "c1",
+    0.0026430186054599205
+   ],
+   [
+    "b2",
+    0.0026153846153846153
+   ],
+   [
+    "b1",
+    0.002581612258494337
+   ],
+   [
+    "b6",
+    0.002484567901234568
+   ],
+   [
+    "d3",
+    0.0016129032258064516
+   ],
+   [
+    "d2",
+    0.0014925373134328358
+   ],
+   [
+    "b4",
+    0.001388888888888889
+   ],
+   [
+    "b5",
+    0.0012658227848101266
+   ],
+   [
+    "d4",
+    0.0012195121951219514
+   ],
+   [
+    "c3",
+    0.0012048192771084338
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a1",
+    "content_length": 54,
+    "content_sha256": "f3a969f707a54b09",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11969246031746031,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a7",
+    "content_length": 862,
+    "content_sha256": "76a701275aefd607",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.1165807962529274,
+    "origin": "selected",
+    "sequence": 6,
+    "text_basis": "full_text",
+    "window_end": 2362,
+    "window_start": 1500,
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a2",
+    "content_length": 59,
+    "content_sha256": "acaa91a419180da9",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11429217548620534,
+    "origin": "selected",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a3",
+    "content_length": 47,
+    "content_sha256": "2c75c5d8f310ee86",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11016806722689075,
+    "origin": "selected",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a6",
+    "content_length": 34,
+    "content_sha256": "03a88ff7382625fe",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.10379041248606465,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a4",
+    "content_length": 49,
+    "content_sha256": "4e6a0d8b97768d67",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.10272146118721462,
+    "origin": "selected",
+    "sequence": 3,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e6",
+    "content_length": 30,
+    "content_sha256": "0ff7fffc3e44a5b7",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.0866943866943867,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e1",
+    "content_length": 42,
+    "content_sha256": "82b7d64fae3b2396",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.08658008658008658,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2024
+   }
+  ]
+ },
+ "confidence_suppressed": {
+  "candidates": [
+   [
+    "a1",
+    0.06299603174603174
+   ],
+   [
+    "a7",
+    0.061358313817330215
+   ],
+   [
+    "a2",
+    0.06015377657168702
+   ],
+   [
+    "a3",
+    0.05798319327731093
+   ],
+   [
+    "e6",
+    0.0577962577962578
+   ],
+   [
+    "e1",
+    0.05772005772005772
+   ],
+   [
+    "a6",
+    0.05462653288740245
+   ],
+   [
+    "a4",
+    0.05406392694063927
+   ],
+   [
+    "e3",
+    0.052795031055900624
+   ],
+   [
+    "d1",
+    0.031099324975891997
+   ],
+   [
+    "c2",
+    0.029827662395050816
+   ],
+   [
+    "b3",
+    0.029709507042253523
+   ],
+   [
+    "d6",
+    0.029273504273504274
+   ],
+   [
+    "d7",
+    0.027346637102734665
+   ],
+   [
+    "c1",
+    0.0264301860545992
+   ],
+   [
+    "b2",
+    0.026153846153846153
+   ],
+   [
+    "b1",
+    0.02581612258494337
+   ],
+   [
+    "b6",
+    0.02484567901234568
+   ],
+   [
+    "e2",
+    0.024096385542168676
+   ],
+   [
+    "e4",
+    0.023529411764705882
+   ],
+   [
+    "d3",
+    0.016129032258064516
+   ],
+   [
+    "d2",
+    0.014925373134328358
+   ],
+   [
+    "b4",
+    0.013888888888888888
+   ],
+   [
+    "h1",
+    0.013157894736842105
+   ],
+   [
+    "b5",
+    0.012658227848101266
+   ],
+   [
+    "d4",
+    0.012195121951219513
+   ],
+   [
+    "c3",
+    0.012048192771084338
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a1",
+    "content_length": 54,
+    "content_sha256": "f3a969f707a54b09",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.06299603174603174,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a7",
+    "content_length": 862,
+    "content_sha256": "76a701275aefd607",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.061358313817330215,
+    "origin": "selected",
+    "sequence": 6,
+    "text_basis": "full_text",
+    "window_end": 2362,
+    "window_start": 1500,
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a2",
+    "content_length": 59,
+    "content_sha256": "acaa91a419180da9",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.06015377657168702,
+    "origin": "selected",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a3",
+    "content_length": 47,
+    "content_sha256": "2c75c5d8f310ee86",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.05798319327731093,
+    "origin": "selected",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e6",
+    "content_length": 30,
+    "content_sha256": "0ff7fffc3e44a5b7",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.0577962577962578,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e1",
+    "content_length": 42,
+    "content_sha256": "82b7d64fae3b2396",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.05772005772005772,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a6",
+    "content_length": 34,
+    "content_sha256": "03a88ff7382625fe",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.05462653288740245,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a4",
+    "content_length": 49,
+    "content_sha256": "4e6a0d8b97768d67",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.05406392694063927,
+    "origin": "selected",
+    "sequence": 3,
+    "text_basis": "full_text",
+    "year": 2020
+   }
+  ]
+ },
+ "default_housing": {
+  "candidates": [
+   [
+    "a1",
+    0.11969246031746031
+   ],
+   [
+    "a7",
+    0.1165807962529274
+   ],
+   [
+    "a2",
+    0.11429217548620534
+   ],
+   [
+    "a3",
+    0.11016806722689075
+   ],
+   [
+    "a6",
+    0.10379041248606465
+   ],
+   [
+    "a4",
+    0.10272146118721462
+   ],
+   [
+    "e6",
+    0.0866943866943867
+   ],
+   [
+    "e1",
+    0.08658008658008658
+   ],
+   [
+    "e3",
+    0.07919254658385094
+   ],
+   [
+    "c2",
+    0.05965532479010163
+   ],
+   [
+    "c1",
+    0.0528603721091984
+   ],
+   [
+    "e2",
+    0.03614457831325302
+   ],
+   [
+    "b3",
+    0.035651408450704226
+   ],
+   [
+    "e4",
+    0.03529411764705882
+   ],
+   [
+    "b2",
+    0.03138461538461538
+   ],
+   [
+    "d1",
+    0.031099324975891997
+   ],
+   [
+    "b1",
+    0.03097934710193204
+   ],
+   [
+    "b6",
+    0.029814814814814815
+   ],
+   [
+    "d6",
+    0.029273504273504274
+   ],
+   [
+    "d7",
+    0.027346637102734665
+   ],
+   [
+    "c3",
+    0.024096385542168676
+   ],
+   [
+    "h1",
+    0.017105263157894738
+   ],
+   [
+    "b4",
+    0.016666666666666666
+   ],
+   [
+    "d3",
+    0.016129032258064516
+   ],
+   [
+    "b5",
+    0.015189873417721518
+   ],
+   [
+    "d2",
+    0.014925373134328358
+   ],
+   [
+    "d4",
+    0.012195121951219513
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a1",
+    "content_length": 54,
+    "content_sha256": "f3a969f707a54b09",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11969246031746031,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a7",
+    "content_length": 862,
+    "content_sha256": "76a701275aefd607",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.1165807962529274,
+    "origin": "selected",
+    "sequence": 6,
+    "text_basis": "full_text",
+    "window_end": 2362,
+    "window_start": 1500,
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a2",
+    "content_length": 59,
+    "content_sha256": "acaa91a419180da9",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11429217548620534,
+    "origin": "selected",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a3",
+    "content_length": 47,
+    "content_sha256": "2c75c5d8f310ee86",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11016806722689075,
+    "origin": "selected",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a6",
+    "content_length": 34,
+    "content_sha256": "03a88ff7382625fe",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.10379041248606465,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a4",
+    "content_length": 49,
+    "content_sha256": "4e6a0d8b97768d67",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.10272146118721462,
+    "origin": "selected",
+    "sequence": 3,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e6",
+    "content_length": 30,
+    "content_sha256": "0ff7fffc3e44a5b7",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.0866943866943867,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e1",
+    "content_length": 42,
+    "content_sha256": "82b7d64fae3b2396",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.08658008658008658,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2024
+   }
+  ]
+ },
+ "eviction_unfiltered": {
+  "candidates": [
+   [
+    "a2",
+    0.1198708395429707
+   ],
+   [
+    "a7",
+    0.06229508196721312
+   ],
+   [
+    "a1",
+    0.06031746031746031
+   ],
+   [
+    "a3",
+    0.054285714285714284
+   ],
+   [
+    "a4",
+    0.05205479452054794
+   ],
+   [
+    "a6",
+    0.04871794871794871
+   ],
+   [
+    "e6",
+    0.046153846153846156
+   ],
+   [
+    "e3",
+    0.043478260869565216
+   ],
+   [
+    "e1",
+    0.03896103896103896
+   ],
+   [
+    "c2",
+    0.03225806451612903
+   ],
+   [
+    "d2",
+    0.031054405392392875
+   ],
+   [
+    "c1",
+    0.028169014084507043
+   ],
+   [
+    "c3",
+    0.024096385542168676
+   ],
+   [
+    "h1",
+    0.020634920634920634
+   ],
+   [
+    "b3",
+    0.01875
+   ],
+   [
+    "b2",
+    0.016
+   ],
+   [
+    "b1",
+    0.015189873417721518
+   ],
+   [
+    "b6",
+    0.014814814814814814
+   ],
+   [
+    "d1",
+    0.014705882352941176
+   ],
+   [
+    "d6",
+    0.013888888888888888
+   ],
+   [
+    "d7",
+    0.012195121951219513
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a2",
+    "content_length": 59,
+    "content_sha256": "acaa91a419180da9",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.1198708395429707,
+    "origin": "selected",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a7",
+    "content_length": 862,
+    "content_sha256": "76a701275aefd607",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.06229508196721312,
+    "origin": "selected",
+    "sequence": 6,
+    "text_basis": "full_text",
+    "window_end": 2362,
+    "window_start": 1500,
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a1",
+    "content_length": 54,
+    "content_sha256": "f3a969f707a54b09",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.06031746031746031,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a3",
+    "content_length": 47,
+    "content_sha256": "2c75c5d8f310ee86",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.054285714285714284,
+    "origin": "selected",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a4",
+    "content_length": 49,
+    "content_sha256": "4e6a0d8b97768d67",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.05205479452054794,
+    "origin": "selected",
+    "sequence": 3,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a6",
+    "content_length": 34,
+    "content_sha256": "03a88ff7382625fe",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.04871794871794871,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e6",
+    "content_length": 30,
+    "content_sha256": "0ff7fffc3e44a5b7",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.046153846153846156,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e3",
+    "content_length": 42,
+    "content_sha256": "39f7c87d6db84149",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.043478260869565216,
+    "origin": "selected",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2024
+   }
+  ]
+ },
+ "filter_combined": {
+  "candidates": [
+   [
+    "a1",
+    0.12258064516129032
+   ],
+   [
+    "a7",
+    0.1198708395429707
+   ],
+   [
+    "a2",
+    0.11969246031746031
+   ],
+   [
+    "a3",
+    0.11695075757575757
+   ],
+   [
+    "a6",
+    0.11274725274725274
+   ],
+   [
+    "a4",
+    0.11259877085162422
+   ],
+   [
+    "e1",
+    0.09265858873841767
+   ],
+   [
+    "e6",
+    0.0923951670220327
+   ],
+   [
+    "e3",
+    0.089010989010989
+   ],
+   [
+    "e2",
+    0.043478260869565216
+   ],
+   [
+    "e4",
+    0.04225352112676056
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a1",
+    "content_length": 54,
+    "content_sha256": "f3a969f707a54b09",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.12258064516129032,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a7",
+    "content_length": 862,
+    "content_sha256": "76a701275aefd607",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.1198708395429707,
+    "origin": "selected",
+    "sequence": 6,
+    "text_basis": "full_text",
+    "window_end": 2362,
+    "window_start": 1500,
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a2",
+    "content_length": 59,
+    "content_sha256": "acaa91a419180da9",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11969246031746031,
+    "origin": "selected",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a3",
+    "content_length": 47,
+    "content_sha256": "2c75c5d8f310ee86",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11695075757575757,
+    "origin": "selected",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a6",
+    "content_length": 34,
+    "content_sha256": "03a88ff7382625fe",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11274725274725274,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a4",
+    "content_length": 49,
+    "content_sha256": "4e6a0d8b97768d67",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11259877085162422,
+    "origin": "selected",
+    "sequence": 3,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e1",
+    "content_length": 42,
+    "content_sha256": "82b7d64fae3b2396",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.09265858873841767,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e6",
+    "content_length": 30,
+    "content_sha256": "0ff7fffc3e44a5b7",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.0923951670220327,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2024
+   }
+  ]
+ },
+ "filter_doc_ids": {
+  "candidates": [
+   [
+    "c2",
+    0.06263763151455835
+   ],
+   [
+    "c1",
+    0.05816649104320337
+   ],
+   [
+    "b3",
+    0.03781637717121588
+   ],
+   [
+    "b1",
+    0.03529411764705882
+   ],
+   [
+    "b2",
+    0.03505330490405117
+   ],
+   [
+    "b6",
+    0.0338095238095238
+   ],
+   [
+    "d1",
+    0.032018442622950824
+   ],
+   [
+    "d6",
+    0.031024531024531024
+   ],
+   [
+    "d7",
+    0.029709507042253523
+   ],
+   [
+    "c3",
+    0.027777777777777776
+   ],
+   [
+    "b4",
+    0.01818181818181818
+   ],
+   [
+    "b5",
+    0.016901408450704224
+   ],
+   [
+    "d3",
+    0.016129032258064516
+   ],
+   [
+    "d2",
+    0.015873015873015872
+   ],
+   [
+    "d4",
+    0.013513513513513514
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c2",
+    "content_length": 46,
+    "content_sha256": "21511782c2d2847a",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.06263763151455835,
+    "origin": "unselected_screened",
+    "sequence": 1,
+    "text_basis": "abstract_only",
+    "year": 2022
+   },
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c1",
+    "content_length": 46,
+    "content_sha256": "82e6e6a32fcf65ee",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.05816649104320337,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "abstract_only",
+    "year": 2022
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b3",
+    "content_length": 57,
+    "content_sha256": "ae18efe68fbf5fbf",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.03781637717121588,
+    "origin": "unselected_screened",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b1",
+    "content_length": 107,
+    "content_sha256": "a6decf48363b0ca2",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.03529411764705882,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b2",
+    "content_length": 33,
+    "content_sha256": "72855b6e2fcda7dd",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.03505330490405117,
+    "origin": "unselected_screened",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b6",
+    "content_length": 34,
+    "content_sha256": "e0cafed6d90dfd6d",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.0338095238095238,
+    "origin": "unselected_screened",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraised": false,
+    "chunk": "d1",
+    "content_length": 41,
+    "content_sha256": "a2231d1318b2f082",
+    "doc": "dD",
+    "document_title": "Unappraised advice note",
+    "fused_score": 0.032018442622950824,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2023
+   },
+   {
+    "appraised": false,
+    "chunk": "d6",
+    "content_length": 34,
+    "content_sha256": "05f46a08aa9f79b6",
+    "doc": "dD",
+    "document_title": "Unappraised advice note",
+    "fused_score": 0.031024531024531024,
+    "origin": "unselected_screened",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2023
+   }
+  ]
+ },
+ "filter_evidence_types": {
+  "candidates": [
+   [
+    "c3",
+    0.062198649951783994
+   ],
+   [
+    "c1",
+    0.05970149253731343
+   ],
+   [
+    "b1",
+    0.03902696985721841
+   ],
+   [
+    "b2",
+    0.03750915750915751
+   ],
+   [
+    "b6",
+    0.036931818181818184
+   ],
+   [
+    "b4",
+    0.03664335664335664
+   ],
+   [
+    "b3",
+    0.036141304347826086
+   ],
+   [
+    "c4",
+    0.029411764705882353
+   ],
+   [
+    "c2",
+    0.028169014084507043
+   ],
+   [
+    "b5",
+    0.01714285714285714
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c3",
+    "content_length": 29,
+    "content_sha256": "a5001fa5969ba516",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.062198649951783994,
+    "origin": "unselected_screened",
+    "sequence": 2,
+    "text_basis": "abstract_only",
+    "year": 2022
+   },
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c1",
+    "content_length": 46,
+    "content_sha256": "82e6e6a32fcf65ee",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.05970149253731343,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "abstract_only",
+    "year": 2022
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b1",
+    "content_length": 107,
+    "content_sha256": "a6decf48363b0ca2",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.03902696985721841,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b2",
+    "content_length": 33,
+    "content_sha256": "72855b6e2fcda7dd",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.03750915750915751,
+    "origin": "unselected_screened",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b6",
+    "content_length": 34,
+    "content_sha256": "e0cafed6d90dfd6d",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.036931818181818184,
+    "origin": "unselected_screened",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b4",
+    "content_length": 39,
+    "content_sha256": "9c9dda8a77a0541e",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.03664335664335664,
+    "origin": "unselected_screened",
+    "sequence": 3,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b3",
+    "content_length": 57,
+    "content_sha256": "ae18efe68fbf5fbf",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.036141304347826086,
+    "origin": "unselected_screened",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c4",
+    "content_length": 30,
+    "content_sha256": "6ca1b6a145b36bee",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.029411764705882353,
+    "origin": "unselected_screened",
+    "sequence": 3,
+    "text_basis": "abstract_only",
+    "year": 2022
+   }
+  ]
+ },
+ "filter_group_and_doc_ids": {
+  "candidates": [
+   [
+    "a1",
+    0.12160778289810546
+   ],
+   [
+    "a2",
+    0.11789321789321788
+   ],
+   [
+    "a7",
+    0.11736754573532905
+   ],
+   [
+    "a3",
+    0.11429217548620534
+   ],
+   [
+    "a4",
+    0.11016806722689075
+   ],
+   [
+    "a6",
+    0.11016806722689075
+   ],
+   [
+    "d1",
+    0.03177805800756621
+   ],
+   [
+    "d6",
+    0.03055037313432836
+   ],
+   [
+    "d7",
+    0.02946912242686891
+   ],
+   [
+    "d3",
+    0.016129032258064516
+   ],
+   [
+    "d2",
+    0.015625
+   ],
+   [
+    "d4",
+    0.014084507042253521
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a1",
+    "content_length": 54,
+    "content_sha256": "f3a969f707a54b09",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.12160778289810546,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a2",
+    "content_length": 59,
+    "content_sha256": "acaa91a419180da9",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11789321789321788,
+    "origin": "selected",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a7",
+    "content_length": 862,
+    "content_sha256": "76a701275aefd607",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11736754573532905,
+    "origin": "selected",
+    "sequence": 6,
+    "text_basis": "full_text",
+    "window_end": 2362,
+    "window_start": 1500,
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a3",
+    "content_length": 47,
+    "content_sha256": "2c75c5d8f310ee86",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11429217548620534,
+    "origin": "selected",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a4",
+    "content_length": 49,
+    "content_sha256": "4e6a0d8b97768d67",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11016806722689075,
+    "origin": "selected",
+    "sequence": 3,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a6",
+    "content_length": 34,
+    "content_sha256": "03a88ff7382625fe",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11016806722689075,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraised": false,
+    "chunk": "d1",
+    "content_length": 41,
+    "content_sha256": "a2231d1318b2f082",
+    "doc": "dD",
+    "document_title": "Unappraised advice note",
+    "fused_score": 0.03177805800756621,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2023
+   },
+   {
+    "appraised": false,
+    "chunk": "d6",
+    "content_length": 34,
+    "content_sha256": "05f46a08aa9f79b6",
+    "doc": "dD",
+    "document_title": "Unappraised advice note",
+    "fused_score": 0.03055037313432836,
+    "origin": "unselected_screened",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2023
+   }
+  ]
+ },
+ "filter_tags": {
+  "candidates": [
+   [
+    "c3",
+    0.062198649951783994
+   ],
+   [
+    "c1",
+    0.05970149253731343
+   ],
+   [
+    "b1",
+    0.03902696985721841
+   ],
+   [
+    "b2",
+    0.03750915750915751
+   ],
+   [
+    "b6",
+    0.036931818181818184
+   ],
+   [
+    "b4",
+    0.03664335664335664
+   ],
+   [
+    "b3",
+    0.036141304347826086
+   ],
+   [
+    "c4",
+    0.029411764705882353
+   ],
+   [
+    "c2",
+    0.028169014084507043
+   ],
+   [
+    "b5",
+    0.01714285714285714
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c3",
+    "content_length": 29,
+    "content_sha256": "a5001fa5969ba516",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.062198649951783994,
+    "origin": "unselected_screened",
+    "sequence": 2,
+    "text_basis": "abstract_only",
+    "year": 2022
+   },
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c1",
+    "content_length": 46,
+    "content_sha256": "82e6e6a32fcf65ee",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.05970149253731343,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "abstract_only",
+    "year": 2022
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b1",
+    "content_length": 107,
+    "content_sha256": "a6decf48363b0ca2",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.03902696985721841,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b2",
+    "content_length": 33,
+    "content_sha256": "72855b6e2fcda7dd",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.03750915750915751,
+    "origin": "unselected_screened",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b6",
+    "content_length": 34,
+    "content_sha256": "e0cafed6d90dfd6d",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.036931818181818184,
+    "origin": "unselected_screened",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b4",
+    "content_length": 39,
+    "content_sha256": "9c9dda8a77a0541e",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.03664335664335664,
+    "origin": "unselected_screened",
+    "sequence": 3,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b3",
+    "content_length": 57,
+    "content_sha256": "ae18efe68fbf5fbf",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.036141304347826086,
+    "origin": "unselected_screened",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c4",
+    "content_length": 30,
+    "content_sha256": "6ca1b6a145b36bee",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.029411764705882353,
+    "origin": "unselected_screened",
+    "sequence": 3,
+    "text_basis": "abstract_only",
+    "year": 2022
+   }
+  ]
+ },
+ "health_both_scopes": {
+  "candidates": [
+   [
+    "c3",
+    0.06177239249227845
+   ],
+   [
+    "c1",
+    0.059262510974539065
+   ],
+   [
+    "a3",
+    0.05908871745419479
+   ],
+   [
+    "f4",
+    0.04788732394366197
+   ],
+   [
+    "b1",
+    0.038709677419354833
+   ],
+   [
+    "b2",
+    0.03721153846153846
+   ],
+   [
+    "b6",
+    0.03666044776119403
+   ],
+   [
+    "b4",
+    0.03636363636363636
+   ],
+   [
+    "b3",
+    0.03489989462592202
+   ],
+   [
+    "c4",
+    0.027777777777777776
+   ],
+   [
+    "a2",
+    0.02676056338028169
+   ],
+   [
+    "c2",
+    0.025974025974025976
+   ],
+   [
+    "a1",
+    0.025333333333333333
+   ],
+   [
+    "a7",
+    0.024358974358974356
+   ],
+   [
+    "e5",
+    0.02142857142857143
+   ],
+   [
+    "h2",
+    0.01756756756756757
+   ],
+   [
+    "b5",
+    0.015789473684210523
+   ],
+   [
+    "d1",
+    0.014492753623188406
+   ],
+   [
+    "d4",
+    0.014285714285714285
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c3",
+    "content_length": 29,
+    "content_sha256": "a5001fa5969ba516",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.06177239249227845,
+    "origin": "unselected_screened",
+    "sequence": 2,
+    "text_basis": "abstract_only",
+    "year": 2022
+   },
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c1",
+    "content_length": 46,
+    "content_sha256": "82e6e6a32fcf65ee",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.059262510974539065,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "abstract_only",
+    "year": 2022
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a3",
+    "content_length": 47,
+    "content_sha256": "2c75c5d8f310ee86",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.05908871745419479,
+    "origin": "unselected_screened",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "1",
+    "appraised": true,
+    "chunk": "f4",
+    "content_length": 31,
+    "content_sha256": "3eb7166e5311dadc",
+    "doc": "dF",
+    "document_title": "Education commentary (second scope only)",
+    "evidence_type": "Expert Opinion and Commentary",
+    "fused_score": 0.04788732394366197,
+    "origin": "selected",
+    "sequence": 3,
+    "text_basis": "full_text",
+    "year": 2025
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b1",
+    "content_length": 107,
+    "content_sha256": "a6decf48363b0ca2",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.038709677419354833,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b2",
+    "content_length": 33,
+    "content_sha256": "72855b6e2fcda7dd",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.03721153846153846,
+    "origin": "unselected_screened",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b6",
+    "content_length": 34,
+    "content_sha256": "e0cafed6d90dfd6d",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.03666044776119403,
+    "origin": "unselected_screened",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2021
+   },
+   {
+    "appraisal_label": "5",
+    "appraised": true,
+    "chunk": "b4",
+    "content_length": 39,
+    "content_sha256": "9c9dda8a77a0541e",
+    "doc": "dB",
+    "document_title": "Health review",
+    "evidence_type": "Systematic Review and Meta-Analysis",
+    "fused_score": 0.03636363636363636,
+    "origin": "unselected_screened",
+    "sequence": 3,
+    "text_basis": "full_text",
+    "year": 2021
+   }
+  ]
+ },
+ "multi_scope_filter_evidence_type": {
+  "candidates": [
+   [
+    "f1",
+    0.05573770491803279
+   ],
+   [
+    "f2",
+    0.027419354838709675
+   ],
+   [
+    "f4",
+    0.027419354838709675
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "1",
+    "appraised": true,
+    "chunk": "f1",
+    "content_length": 36,
+    "content_sha256": "ed32cc7c75a2934f",
+    "doc": "dF",
+    "document_title": "Education commentary (second scope only)",
+    "evidence_type": "Expert Opinion and Commentary",
+    "fused_score": 0.05573770491803279,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2025
+   },
+   {
+    "appraisal_label": "1",
+    "appraised": true,
+    "chunk": "f2",
+    "content_length": 20,
+    "content_sha256": "2918aa3dca646aef",
+    "doc": "dF",
+    "document_title": "Education commentary (second scope only)",
+    "evidence_type": "Expert Opinion and Commentary",
+    "fused_score": 0.027419354838709675,
+    "origin": "unselected_screened",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2025
+   },
+   {
+    "appraisal_label": "1",
+    "appraised": true,
+    "chunk": "f4",
+    "content_length": 31,
+    "content_sha256": "3eb7166e5311dadc",
+    "doc": "dF",
+    "document_title": "Education commentary (second scope only)",
+    "evidence_type": "Expert Opinion and Commentary",
+    "fused_score": 0.027419354838709675,
+    "origin": "unselected_screened",
+    "sequence": 3,
+    "text_basis": "full_text",
+    "year": 2025
+   }
+  ]
+ },
+ "multi_scope_primary_s1": {
+  "candidates": [
+   [
+    "e1",
+    0.2903981264637003
+   ],
+   [
+    "e3",
+    0.2549173878835563
+   ],
+   [
+    "e4",
+    0.24038461538461536
+   ],
+   [
+    "e6",
+    0.2370051635111876
+   ],
+   [
+    "e2",
+    0.2361111111111111
+   ],
+   [
+    "e5",
+    0.13043478260869565
+   ],
+   [
+    "a1",
+    0.11603729603729604
+   ],
+   [
+    "a7",
+    0.11525735294117646
+   ],
+   [
+    "a4",
+    0.11296174863387978
+   ],
+   [
+    "a2",
+    0.11109688433632096
+   ],
+   [
+    "a3",
+    0.10738308457711443
+   ],
+   [
+    "a6",
+    0.09634146341463413
+   ],
+   [
+    "c2",
+    0.05576923076923077
+   ],
+   [
+    "f1",
+    0.043055113093341826
+   ],
+   [
+    "b5",
+    0.03505330490405117
+   ],
+   [
+    "b3",
+    0.03283693224125093
+   ],
+   [
+    "b1",
+    0.03004224690971679
+   ],
+   [
+    "d1",
+    0.02964254577157803
+   ],
+   [
+    "d6",
+    0.028612012987012988
+   ],
+   [
+    "c1",
+    0.02631578947368421
+   ],
+   [
+    "d7",
+    0.02557875991581674
+   ],
+   [
+    "f4",
+    0.022972972972972974
+   ],
+   [
+    "c3",
+    0.022727272727272728
+   ],
+   [
+    "f2",
+    0.019101123595505618
+   ],
+   [
+    "b4",
+    0.017391304347826087
+   ],
+   [
+    "d3",
+    0.015873015873015872
+   ],
+   [
+    "b2",
+    0.015
+   ],
+   [
+    "b6",
+    0.014117647058823528
+   ],
+   [
+    "d2",
+    0.0136986301369863
+   ],
+   [
+    "h1",
+    0.008024691358024692
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e1",
+    "content_length": 42,
+    "content_sha256": "82b7d64fae3b2396",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.2903981264637003,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e3",
+    "content_length": 42,
+    "content_sha256": "39f7c87d6db84149",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.2549173878835563,
+    "origin": "selected",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e4",
+    "content_length": 45,
+    "content_sha256": "d2b87b3e12d63310",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.24038461538461536,
+    "origin": "selected",
+    "sequence": 3,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e6",
+    "content_length": 30,
+    "content_sha256": "0ff7fffc3e44a5b7",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.2370051635111876,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e2",
+    "content_length": 39,
+    "content_sha256": "577b9185a14fc0ff",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.2361111111111111,
+    "origin": "selected",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e5",
+    "content_length": 33,
+    "content_sha256": "c80d834994bb46bc",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.13043478260869565,
+    "origin": "selected",
+    "sequence": 4,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a1",
+    "content_length": 54,
+    "content_sha256": "f3a969f707a54b09",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11603729603729604,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a7",
+    "content_length": 862,
+    "content_sha256": "76a701275aefd607",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11525735294117646,
+    "origin": "selected",
+    "sequence": 6,
+    "text_basis": "full_text",
+    "window_end": 2362,
+    "window_start": 1500,
+    "year": 2020
+   }
+  ]
+ },
+ "multi_scope_primary_s2": {
+  "candidates": [
+   [
+    "a1",
+    0.11603729603729604
+   ],
+   [
+    "a7",
+    0.11525735294117646
+   ],
+   [
+    "a4",
+    0.11296174863387978
+   ],
+   [
+    "a2",
+    0.11109688433632096
+   ],
+   [
+    "a3",
+    0.10738308457711443
+   ],
+   [
+    "a6",
+    0.09634146341463413
+   ],
+   [
+    "e1",
+    0.05807962529274006
+   ],
+   [
+    "c2",
+    0.05576923076923077
+   ],
+   [
+    "e3",
+    0.050983477576711254
+   ],
+   [
+    "e4",
+    0.04807692307692307
+   ],
+   [
+    "e6",
+    0.04740103270223753
+   ],
+   [
+    "e2",
+    0.04722222222222222
+   ],
+   [
+    "f1",
+    0.043055113093341826
+   ],
+   [
+    "b5",
+    0.03505330490405117
+   ],
+   [
+    "b3",
+    0.03283693224125093
+   ],
+   [
+    "b1",
+    0.03004224690971679
+   ],
+   [
+    "d1",
+    0.02964254577157803
+   ],
+   [
+    "d6",
+    0.028612012987012988
+   ],
+   [
+    "c1",
+    0.02631578947368421
+   ],
+   [
+    "e5",
+    0.026086956521739132
+   ],
+   [
+    "d7",
+    0.02557875991581674
+   ],
+   [
+    "f4",
+    0.022972972972972974
+   ],
+   [
+    "c3",
+    0.022727272727272728
+   ],
+   [
+    "f2",
+    0.019101123595505618
+   ],
+   [
+    "b4",
+    0.017391304347826087
+   ],
+   [
+    "d3",
+    0.015873015873015872
+   ],
+   [
+    "b2",
+    0.015
+   ],
+   [
+    "b6",
+    0.014117647058823528
+   ],
+   [
+    "d2",
+    0.0136986301369863
+   ],
+   [
+    "h1",
+    0.008024691358024692
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a1",
+    "content_length": 54,
+    "content_sha256": "f3a969f707a54b09",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11603729603729604,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a7",
+    "content_length": 862,
+    "content_sha256": "76a701275aefd607",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11525735294117646,
+    "origin": "selected",
+    "sequence": 6,
+    "text_basis": "full_text",
+    "window_end": 2362,
+    "window_start": 1500,
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a4",
+    "content_length": 49,
+    "content_sha256": "4e6a0d8b97768d67",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11296174863387978,
+    "origin": "selected",
+    "sequence": 3,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a2",
+    "content_length": 59,
+    "content_sha256": "acaa91a419180da9",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.11109688433632096,
+    "origin": "selected",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a3",
+    "content_length": 47,
+    "content_sha256": "2c75c5d8f310ee86",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.10738308457711443,
+    "origin": "selected",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a6",
+    "content_length": 34,
+    "content_sha256": "03a88ff7382625fe",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.09634146341463413,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "3",
+    "appraised": true,
+    "chunk": "e1",
+    "content_length": 42,
+    "content_sha256": "82b7d64fae3b2396",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Modelling & Simulation",
+    "fused_score": 0.05807962529274006,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c2",
+    "content_length": 46,
+    "content_sha256": "21511782c2d2847a",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.05576923076923077,
+    "origin": "unselected_screened",
+    "sequence": 1,
+    "text_basis": "abstract_only",
+    "year": 2022
+   }
+  ]
+ },
+ "no_query_words": {
+  "candidates": [
+   [
+    "a3",
+    0.055882352941176466
+   ],
+   [
+    "a2",
+    0.05352112676056338
+   ],
+   [
+    "a1",
+    0.050666666666666665
+   ],
+   [
+    "a7",
+    0.04871794871794871
+   ],
+   [
+    "c3",
+    0.03278688524590164
+   ],
+   [
+    "c1",
+    0.029850746268656716
+   ],
+   [
+    "c4",
+    0.027777777777777776
+   ],
+   [
+    "c2",
+    0.025974025974025976
+   ],
+   [
+    "b1",
+    0.019354838709677417
+   ],
+   [
+    "b6",
+    0.01875
+   ],
+   [
+    "b2",
+    0.018461538461538463
+   ],
+   [
+    "b4",
+    0.01818181818181818
+   ],
+   [
+    "h2",
+    0.01756756756756757
+   ],
+   [
+    "b3",
+    0.01643835616438356
+   ],
+   [
+    "b5",
+    0.015789473684210523
+   ],
+   [
+    "d1",
+    0.014492753623188406
+   ],
+   [
+    "d4",
+    0.014285714285714285
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a3",
+    "content_length": 47,
+    "content_sha256": "2c75c5d8f310ee86",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.055882352941176466,
+    "origin": "selected",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a2",
+    "content_length": 59,
+    "content_sha256": "acaa91a419180da9",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.05352112676056338,
+    "origin": "selected",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a1",
+    "content_length": 54,
+    "content_sha256": "f3a969f707a54b09",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.050666666666666665,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a7",
+    "content_length": 862,
+    "content_sha256": "76a701275aefd607",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.04871794871794871,
+    "origin": "selected",
+    "sequence": 6,
+    "text_basis": "full_text",
+    "window_end": 2362,
+    "window_start": 1500,
+    "year": 2020
+   },
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c3",
+    "content_length": 29,
+    "content_sha256": "a5001fa5969ba516",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.03278688524590164,
+    "origin": "unselected_screened",
+    "sequence": 2,
+    "text_basis": "abstract_only",
+    "year": 2022
+   },
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c1",
+    "content_length": 46,
+    "content_sha256": "82e6e6a32fcf65ee",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.029850746268656716,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "abstract_only",
+    "year": 2022
+   },
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c4",
+    "content_length": 30,
+    "content_sha256": "6ca1b6a145b36bee",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.027777777777777776,
+    "origin": "unselected_screened",
+    "sequence": 3,
+    "text_basis": "abstract_only",
+    "year": 2022
+   },
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c2",
+    "content_length": 46,
+    "content_sha256": "21511782c2d2847a",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.025974025974025976,
+    "origin": "unselected_screened",
+    "sequence": 1,
+    "text_basis": "abstract_only",
+    "year": 2022
+   }
+  ]
+ },
+ "no_selection": {
+  "candidates": [
+   [
+    "a1",
+    0.059846230158730154
+   ],
+   [
+    "c2",
+    0.05965532479010163
+   ],
+   [
+    "a7",
+    0.0582903981264637
+   ],
+   [
+    "a2",
+    0.05714608774310267
+   ],
+   [
+    "a3",
+    0.055084033613445375
+   ],
+   [
+    "c1",
+    0.0528603721091984
+   ],
+   [
+    "a6",
+    0.05189520624303232
+   ],
+   [
+    "a4",
+    0.05136073059360731
+   ],
+   [
+    "e6",
+    0.04334719334719335
+   ],
+   [
+    "e1",
+    0.04329004329004329
+   ],
+   [
+    "e3",
+    0.03959627329192547
+   ],
+   [
+    "b3",
+    0.035651408450704226
+   ],
+   [
+    "b2",
+    0.03138461538461538
+   ],
+   [
+    "d1",
+    0.031099324975891997
+   ],
+   [
+    "b1",
+    0.03097934710193204
+   ],
+   [
+    "b6",
+    0.029814814814814815
+   ],
+   [
+    "d6",
+    0.029273504273504274
+   ],
+   [
+    "d7",
+    0.027346637102734665
+   ],
+   [
+    "c3",
+    0.024096385542168676
+   ],
+   [
+    "e2",
+    0.01807228915662651
+   ],
+   [
+    "e4",
+    0.01764705882352941
+   ],
+   [
+    "h1",
+    0.017105263157894738
+   ],
+   [
+    "b4",
+    0.016666666666666666
+   ],
+   [
+    "d3",
+    0.016129032258064516
+   ],
+   [
+    "b5",
+    0.015189873417721518
+   ],
+   [
+    "d2",
+    0.014925373134328358
+   ],
+   [
+    "d4",
+    0.012195121951219513
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a1",
+    "content_length": 54,
+    "content_sha256": "f3a969f707a54b09",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.059846230158730154,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c2",
+    "content_length": 46,
+    "content_sha256": "21511782c2d2847a",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.05965532479010163,
+    "origin": "unselected_screened",
+    "sequence": 1,
+    "text_basis": "abstract_only",
+    "year": 2022
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a7",
+    "content_length": 862,
+    "content_sha256": "76a701275aefd607",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.0582903981264637,
+    "origin": "unselected_screened",
+    "sequence": 6,
+    "text_basis": "full_text",
+    "window_end": 2362,
+    "window_start": 1500,
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a2",
+    "content_length": 59,
+    "content_sha256": "acaa91a419180da9",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.05714608774310267,
+    "origin": "unselected_screened",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a3",
+    "content_length": 47,
+    "content_sha256": "2c75c5d8f310ee86",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.055084033613445375,
+    "origin": "unselected_screened",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c1",
+    "content_length": 46,
+    "content_sha256": "82e6e6a32fcf65ee",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.0528603721091984,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "abstract_only",
+    "year": 2022
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a6",
+    "content_length": 34,
+    "content_sha256": "03a88ff7382625fe",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.05189520624303232,
+    "origin": "unselected_screened",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a4",
+    "content_length": 49,
+    "content_sha256": "4e6a0d8b97768d67",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.05136073059360731,
+    "origin": "unselected_screened",
+    "sequence": 3,
+    "text_basis": "full_text",
+    "year": 2020
+   }
+  ]
+ },
+ "no_word_overlap": {
+  "candidates": [
+   [
+    "a3",
+    0.06229508196721312
+   ],
+   [
+    "a2",
+    0.059375
+   ],
+   [
+    "a1",
+    0.05671641791044776
+   ],
+   [
+    "a7",
+    0.05205479452054794
+   ],
+   [
+    "a4",
+    0.04810126582278481
+   ],
+   [
+    "a6",
+    0.04470588235294117
+   ],
+   [
+    "e6",
+    0.04054054054054054
+   ],
+   [
+    "e3",
+    0.03896103896103896
+   ],
+   [
+    "e1",
+    0.03614457831325302
+   ],
+   [
+    "c1",
+    0.031746031746031744
+   ],
+   [
+    "c3",
+    0.028169014084507043
+   ],
+   [
+    "c2",
+    0.027777777777777776
+   ],
+   [
+    "c4",
+    0.024691358024691357
+   ],
+   [
+    "b2",
+    0.018461538461538463
+   ],
+   [
+    "b3",
+    0.01818181818181818
+   ],
+   [
+    "b1",
+    0.01764705882352941
+   ],
+   [
+    "b6",
+    0.01714285714285714
+   ],
+   [
+    "d1",
+    0.016129032258064516
+   ],
+   [
+    "b4",
+    0.016
+   ],
+   [
+    "h1",
+    0.015853658536585366
+   ],
+   [
+    "h2",
+    0.015476190476190477
+   ],
+   [
+    "b5",
+    0.013953488372093023
+   ],
+   [
+    "d2",
+    0.013157894736842105
+   ],
+   [
+    "d6",
+    0.01282051282051282
+   ],
+   [
+    "d7",
+    0.011494252873563218
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a3",
+    "content_length": 47,
+    "content_sha256": "2c75c5d8f310ee86",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.06229508196721312,
+    "origin": "selected",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a2",
+    "content_length": 59,
+    "content_sha256": "acaa91a419180da9",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.059375,
+    "origin": "selected",
+    "sequence": 1,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a1",
+    "content_length": 54,
+    "content_sha256": "f3a969f707a54b09",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.05671641791044776,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a7",
+    "content_length": 862,
+    "content_sha256": "76a701275aefd607",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.05205479452054794,
+    "origin": "selected",
+    "sequence": 6,
+    "text_basis": "full_text",
+    "window_end": 2362,
+    "window_start": 1500,
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a4",
+    "content_length": 49,
+    "content_sha256": "4e6a0d8b97768d67",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.04810126582278481,
+    "origin": "selected",
+    "sequence": 3,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a6",
+    "content_length": 34,
+    "content_sha256": "03a88ff7382625fe",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.04470588235294117,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e6",
+    "content_length": 30,
+    "content_sha256": "0ff7fffc3e44a5b7",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.04054054054054054,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e3",
+    "content_length": 42,
+    "content_sha256": "39f7c87d6db84149",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.03896103896103896,
+    "origin": "selected",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2024
+   }
+  ]
+ },
+ "pool_cut": {
+  "candidates": [
+   [
+    "d1",
+    0.1639344262295082
+   ],
+   [
+    "c2",
+    0.16129032258064516
+   ],
+   [
+    "d3",
+    0.16129032258064516
+   ],
+   [
+    "a7",
+    0.06229508196721312
+   ],
+   [
+    "a1",
+    0.06031746031746031
+   ],
+   [
+    "e1",
+    0.047619047619047616
+   ]
+  ],
+  "top8": [
+   {
+    "appraised": false,
+    "chunk": "d1",
+    "content_length": 41,
+    "content_sha256": "a2231d1318b2f082",
+    "doc": "dD",
+    "document_title": "Unappraised advice note",
+    "fused_score": 0.1639344262295082,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2023
+   },
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c2",
+    "content_length": 46,
+    "content_sha256": "21511782c2d2847a",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.16129032258064516,
+    "origin": "unselected_screened",
+    "sequence": 1,
+    "text_basis": "abstract_only",
+    "year": 2022
+   },
+   {
+    "appraised": false,
+    "chunk": "d3",
+    "content_length": 54,
+    "content_sha256": "d20440a2bb9d333b",
+    "doc": "dD",
+    "document_title": "Unappraised advice note",
+    "fused_score": 0.16129032258064516,
+    "origin": "unselected_screened",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2023
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a7",
+    "content_length": 862,
+    "content_sha256": "76a701275aefd607",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.06229508196721312,
+    "origin": "selected",
+    "sequence": 6,
+    "text_basis": "full_text",
+    "window_end": 2362,
+    "window_start": 1500,
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a1",
+    "content_length": 54,
+    "content_sha256": "f3a969f707a54b09",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.06031746031746031,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e1",
+    "content_length": 42,
+    "content_sha256": "82b7d64fae3b2396",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.047619047619047616,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2024
+   }
+  ]
+ },
+ "unit_tie_window": {
+  "candidates": [
+   [
+    "h1",
+    0.021311475409836068
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "3",
+    "appraised": true,
+    "chunk": "h1",
+    "content_length": 630,
+    "content_sha256": "46f82f381e27843c",
+    "doc": "dH",
+    "document_title": "Qualitative interviews",
+    "evidence_type": "Qualitative & Contextual Evidence",
+    "fused_score": 0.021311475409836068,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "window_end": 2230,
+    "window_start": 1600,
+    "year": 2027
+   }
+  ]
+ },
+ "zero_query_vector": {
+  "candidates": [
+   [
+    "a1",
+    0.06229508196721312
+   ],
+   [
+    "a6",
+    0.06129032258064516
+   ],
+   [
+    "a4",
+    0.055882352941176466
+   ],
+   [
+    "a7",
+    0.05507246376811594
+   ],
+   [
+    "e1",
+    0.04477611940298507
+   ],
+   [
+    "e3",
+    0.03896103896103896
+   ],
+   [
+    "e6",
+    0.038461538461538464
+   ],
+   [
+    "c1",
+    0.0273972602739726
+   ],
+   [
+    "c2",
+    0.02702702702702703
+   ],
+   [
+    "b3",
+    0.019047619047619046
+   ],
+   [
+    "b2",
+    0.01714285714285714
+   ],
+   [
+    "b4",
+    0.016901408450704224
+   ],
+   [
+    "b6",
+    0.016666666666666666
+   ],
+   [
+    "d1",
+    0.015625
+   ],
+   [
+    "d3",
+    0.015384615384615385
+   ],
+   [
+    "d7",
+    0.015151515151515152
+   ],
+   [
+    "d4",
+    0.013333333333333334
+   ],
+   [
+    "d6",
+    0.013157894736842105
+   ]
+  ],
+  "top8": [
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a1",
+    "content_length": 54,
+    "content_sha256": "f3a969f707a54b09",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.06229508196721312,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a6",
+    "content_length": 34,
+    "content_sha256": "03a88ff7382625fe",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.06129032258064516,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a4",
+    "content_length": 49,
+    "content_sha256": "4e6a0d8b97768d67",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.055882352941176466,
+    "origin": "selected",
+    "sequence": 3,
+    "text_basis": "full_text",
+    "year": 2020
+   },
+   {
+    "appraisal_label": "4",
+    "appraised": true,
+    "chunk": "a7",
+    "content_length": 862,
+    "content_sha256": "76a701275aefd607",
+    "doc": "dA",
+    "document_title": "Housing first trial",
+    "evidence_type": "RCTs and Quasi-Experimental Studies",
+    "fused_score": 0.05507246376811594,
+    "origin": "selected",
+    "sequence": 6,
+    "text_basis": "full_text",
+    "window_end": 2362,
+    "window_start": 1500,
+    "year": 2020
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e1",
+    "content_length": 42,
+    "content_sha256": "82b7d64fae3b2396",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.04477611940298507,
+    "origin": "selected",
+    "sequence": 0,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e3",
+    "content_length": 42,
+    "content_sha256": "39f7c87d6db84149",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.03896103896103896,
+    "origin": "selected",
+    "sequence": 2,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "2",
+    "appraised": true,
+    "chunk": "e6",
+    "content_length": 30,
+    "content_sha256": "0ff7fffc3e44a5b7",
+    "doc": "dE",
+    "document_title": "Employment guidance (both scopes)",
+    "evidence_type": "Policy Syntheses & Guidance Documents",
+    "fused_score": 0.038461538461538464,
+    "origin": "selected",
+    "sequence": 5,
+    "text_basis": "full_text",
+    "year": 2024
+   },
+   {
+    "appraisal_label": "Unrated",
+    "appraised": true,
+    "chunk": "c1",
+    "content_length": 46,
+    "content_sha256": "82e6e6a32fcf65ee",
+    "doc": "dC",
+    "document_title": "Neighbourhood study abstract",
+    "evidence_type": "Observational Research Studies",
+    "fused_score": 0.0273972602739726,
+    "origin": "unselected_screened",
+    "sequence": 0,
+    "text_basis": "abstract_only",
+    "year": 2022
+   }
+  ]
+ }
+}

@@ -24,6 +24,7 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.core.usage import UsageResult
 from policy_atlas.evidence_search.corpus import ranking
+from policy_atlas.evidence_search.corpus import select as select_module
 from policy_atlas.evidence_search.corpus.ranking import (
     RERANK_BATCH_SIZE,
     RERANK_RETRY_CAP,
@@ -34,6 +35,7 @@ from policy_atlas.evidence_search.corpus.ranking import (
 from policy_atlas.evidence_search.corpus.theme_grouping import GroupingDoc, records_json
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.run_spec import Plan, compile
+from tests import progress_recorder
 from tests.helpers import (
     now,
     run_select,
@@ -792,3 +794,48 @@ def test_priority_strata_flags_are_soft_and_match_names_or_tags(
     assert priority_row._mapping["selection_provenance"][
         "unmatched_priority_patterns"
     ] == ["missing-pattern"]
+
+
+# --- Live progress (task 058, N2) ---
+
+
+class _FailsOnceRanker:
+    """The deterministic stub ranker; the first call fails once."""
+
+    mode = "stub"
+
+    def __init__(self) -> None:
+        self._stub = StubRankingBackend()
+        self._failed = False
+        self._lock = Lock()
+
+    def rank(self, docs: Any, *, intent: str) -> Any:
+        with self._lock:
+            first = not self._failed
+            self._failed = True
+        if first:
+            raise RuntimeError("one transient failure")
+        return self._stub.rank(docs, intent=intent)
+
+
+def test_rerank_publishes_batches_done_of_total(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = progress_recorder.install(monkeypatch)
+    monkeypatch.setattr(
+        select_module,
+        "_doc_for_rerank",
+        lambda signal_doc: {"id": str(signal_doc), "title": "t", "abstract": None},
+    )
+    ids = [uuid.uuid4() for _ in range(2 * RERANK_BATCH_SIZE + 5)]
+    infos, stats, _ = select_module._rerank_infos(
+        contested_ids=ids,
+        signal_docs=cast("Any", {tss_id: tss_id for tss_id in ids}),
+        ranking_backend=cast("Any", _FailsOnceRanker()),
+        intent="Test",
+    )
+
+    assert stats.retry_count == 1
+    assert len(infos) == len(ids)
+    assert all(c["total"] == 3 and c["unit"] == "batches" for c in calls)
+    # One batch failed once and was retried serially: still 0, 1, 2, 3.
+    assert sorted(c["done"] for c in calls) == [0, 1, 2, 3]
+    assert max(calls, key=lambda c: c["done"])["activity"] == "Ranking sources · batch 3 of 3"

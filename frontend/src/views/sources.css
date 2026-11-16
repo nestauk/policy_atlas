@@ -1,0 +1,286 @@
+/* ---------------------------------------------------------------------------
+ * The sources table on All sources (task 058, round 10; the sources table
+ * review's entries 1 to 16 with the lead's rulings).
+ *
+ * - One frame, the queries table's: a Line hairline above and below, no side
+ *   borders, no shadow, no header band (a sheet on the Sources panel, not a
+ *   card on it).
+ * - Fixed columns: the source takes what the value columns leave, so a
+ *   filter or a page change never moves a column, and values never wrap (a
+ *   long one ends in an ellipsis; its hover and the dossier carry it whole).
+ * - Values are plain Meta text; no chips (round 12: "Cited" sits under the
+ *   Status with a green tick).
+ * - The widths follow the column, not the window (`@container/sources` on
+ *   the view's main, round 12): as the column narrows (the sidebar open) the
+ *   evidence type gives way first, wrapping to two lines, and below 54 rem
+ *   each source is a stacked row in the same markup: the title, its
+ *   "Venue · Year · Origin" line, then the values in column order joined by
+ *   " · ", each placeholder bar in its slot. The headers hide; sorting moves
+ *   to the filter row's Sort select.
+ * ------------------------------------------------------------------------- */
+
+@layer components {
+.sources-frame {
+  border-block: 1px solid var(--color-line);
+  background-color: var(--color-paper);
+}
+
+.sources-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+/* Widths hold every value of the classifier's vocabulary, and every header
+   with its sort arrow, on one line when the column is 72 rem or wider
+   (measured in Averta; the fallback face is wider). */
+.sources-col-year {
+  width: 4rem;
+}
+.sources-col-type {
+  width: 17.25rem;
+}
+.sources-col-strength {
+  width: 10.75rem;
+}
+.sources-col-relevant {
+  width: 6.25rem;
+}
+/* The tone square and "Abstract only" on one line (round 12). */
+.sources-col-status {
+  width: 8rem;
+}
+
+/* The evidence type takes the slack as the column narrows (round 12): it
+   wraps to two lines before the source gives way, and a value longer than
+   two lines ends in an ellipsis (its hover and the dossier carry it whole).
+   At 54 rem the source keeps 16 rem; below it the row stacks. */
+@container sources (max-width: 71.99rem) {
+  .sources-col-type {
+    width: 12.5rem;
+  }
+}
+@container sources (max-width: 61.99rem) {
+  .sources-col-type {
+    width: 9.75rem;
+  }
+}
+.sources-type,
+.sources-type > .sources-hint {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+.sources-th {
+  padding: 10px 8px 8px;
+  vertical-align: bottom;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.sources-cell {
+  padding: 12px 8px;
+  vertical-align: top;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  color: var(--color-ink);
+}
+
+/* The title's line box is the Body size's 22 px; the values sit 1 px lower
+   so their first line centres on it. */
+.sources-value,
+.sources-cell-year {
+  padding-top: 13px;
+}
+
+.sources-cell-source {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.sources-cell-year {
+  color: var(--color-navy);
+  font-variant-numeric: tabular-nums;
+}
+
+.sources-cell-relevant {
+  text-align: right;
+}
+
+.sources-row {
+  border-bottom: 1px solid var(--color-line);
+  transition: background-color 150ms ease;
+}
+.sources-row:last-child {
+  border-bottom: 0;
+}
+.sources-row:focus-within {
+  background-color: var(--color-paper-2);
+}
+@media (hover: hover) and (pointer: fine) {
+  .sources-row:hover {
+    background-color: var(--color-paper-2);
+  }
+}
+
+.sources-row-skeleton {
+  height: 88px;
+}
+.sources-row-skeleton .sources-cell {
+  vertical-align: middle;
+}
+
+/* The title's second line: Meta Grey. */
+.sources-meta {
+  margin-top: 2px;
+  font-size: var(--text-meta);
+  line-height: var(--text-meta--line-height);
+  color: var(--color-grey);
+}
+
+/* "Cited" under the Status (round 12): a 12 px Green tick and the word in
+   Ink, on the line under the depth, the tick in the tone square's slot. */
+.sources-cited {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: -3px;
+  white-space: nowrap;
+  color: var(--color-ink);
+}
+
+/* One line per value; a value too long for its column ends in an ellipsis. */
+.sources-nowrap,
+.sources-nowrap > .sources-hint {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A value with a reason behind it: hover only (the title is the keyboard's
+   way to the same words, in the dossier). */
+.sources-hint {
+  cursor: help;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+}
+.sources-cell-relevant .sources-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* A value with a reason behind it: the shared `reason-word` utility
+   (index.css) underlines the word; `.sources-hint` gives the help cursor. */
+
+/* The tone square's place in the table's running text (rounds 11 and 12):
+   its size and colour are the shared `ToneSquare`'s (ui/brand/evidence);
+   here only the gap to its word and its seat on the line. */
+.sources-tone {
+  margin-right: 7px;
+  vertical-align: 2px;
+}
+
+.sources-pulse {
+  display: flex;
+  align-items: center;
+  height: calc(var(--text-meta) * var(--text-meta--line-height));
+}
+.sources-cell-relevant .sources-pulse {
+  justify-content: flex-end;
+}
+
+/* Below 54 rem of column the six fixed columns would leave the title under
+   16 rem (with the sidebar open at 1280 they left it under 100 px), so the
+   stacked row the brief gives phones holds there (round 12: by the column,
+   not the window). */
+@container sources (max-width: 53.99rem) {
+  .sources-table,
+  .sources-table tbody {
+    display: block;
+  }
+  .sources-table colgroup,
+  .sources-head {
+    display: none;
+  }
+  /* The row wraps its cells: the title cell takes the whole first lines,
+     then the values follow in column order, each carrying the dot that
+     separates it from the next, so a wrapped line never starts with one. */
+  .sources-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 6px;
+    padding: 12px 16px;
+  }
+  .sources-row-skeleton {
+    height: auto;
+  }
+  .sources-cell {
+    display: block;
+    padding: 0;
+  }
+  .sources-cell-source {
+    flex-basis: 100%;
+    margin-bottom: 4px;
+  }
+  .sources-cell-year,
+  .sources-value:empty {
+    display: none;
+  }
+  .sources-value:not(:empty):has(~ .sources-value:not(:empty))::after {
+    content: "\00a0·";
+    color: var(--color-grey);
+  }
+  .sources-row-skeleton .sources-value::after {
+    content: none !important;
+  }
+  .sources-row-skeleton .sources-value .placeholder-bar {
+    display: inline-block;
+    margin-right: 12px;
+  }
+  .sources-cell-relevant {
+    text-align: left;
+  }
+  .sources-nowrap,
+  .sources-nowrap > .sources-hint,
+  .sources-type,
+  .sources-type > .sources-hint {
+    display: inline;
+    white-space: normal;
+  }
+  /* "Cited" follows the depth on the same line. */
+  .sources-cited {
+    display: inline-flex;
+    margin-left: 6px;
+    vertical-align: -1px;
+  }
+  .sources-pulse {
+    display: inline-flex;
+    vertical-align: middle;
+  }
+  /* The verdict flows as text on the phone row. */
+  .sources-cell-relevant .sources-hint {
+    display: inline;
+  }
+  .sources-cell-relevant .sources-hint > svg {
+    display: inline;
+    margin-right: 6px;
+    vertical-align: -1px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sources-row {
+    transition: none;
+  }
+}
+}

@@ -112,7 +112,7 @@ stays the one place screen copy is maintained.
 | Evidence search (capability) | `capability_run.capability = 'evidence_search'` | `/new?capability=evidence_search` | package `policy_atlas.evidence_search`; `lib/capabilities.ts` key | `evidence_base` |
 | Evidence base (the collection) | — | — | screen copy only (kept) | — |
 | Report (the Result tab's artefact) | `artefact` | `/tasks/:taskId/result` | `LIFECYCLE_LABELS.result` | "Evidence base" as the page name |
-| Agent | `plan` (the Task plan) | — | `runtime/agent.py`, `agent_backend.py`, `agent_prompt.py`, `task_plan.TaskPlan`; wire `decided_by`/`authored_by` = `agent`; env `POLICY_ATLAS_AGENT_MODEL`; spans `agent:*`, steer point `evidence_search_coverage` | `orchestrator`, `orchestration_plan` |
+| Agent | `plan` (the Task plan) | — | `runtime/agent.py`, `agent_backend.py`, `agent_prompt.py`, `task_plan.TaskPlan`; wire `decided_by`/`authored_by` = `agent`; model from `model_routes.toml` step `agent` (task 053); spans `agent:*`, steer point `evidence_search_coverage` | `orchestrator`, `orchestration_plan` |
 | Tabs | — | Agent (index) · Result · Sources · Share · History | `LIFECYCLE_LABELS` | Plan · Results |
 | Task Agent | conversation `kind = planning` (active, else newest closed) | — | screen label only; pinned first | "Planning" |
 | Chat | conversation `kind = chat` | — | unchanged | — |

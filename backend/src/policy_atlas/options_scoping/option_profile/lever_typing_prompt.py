@@ -33,7 +33,7 @@ import json
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel, ConfigDict, Field
 
-from policy_atlas.options_scoping.longlist.lever_types import lever_types_as_data
+from policy_atlas.options_scoping.option_profile.lever_types import lever_types_as_data
 from policy_atlas.options_scoping.suggest.suggest_prompt import render_baseline_blocks
 
 LEVER_TYPING_PROMPT_VERSION = "lever_typing_v4"

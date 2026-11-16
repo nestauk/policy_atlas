@@ -20,6 +20,7 @@ import structlog
 from sqlalchemy import select, update
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.lifecycle import touch_task
 from policy_atlas.api.locks import task_lock
 from policy_atlas.core import events
 from policy_atlas.core.schema import capability_run, characterisation_result, task_plan
@@ -264,6 +265,7 @@ def answer_check_in(
                 state=state,
                 intent=intent,
                 actor=actor,
+                option_id=_optional_str(option.get("id")),
                 decision_extra=(
                     _baseline_gate_decision(pause.payload, state)
                     if at_baseline_gate
@@ -821,12 +823,22 @@ def _persist_intent(
     state: Any,
     intent: tuple[str, Any],
     actor: str,
+    option_id: str | None = None,
     decision_extra: dict[str, Any] | None = None,
 ) -> AnswerResult:
-    """Persist one validated canonical-menu intent in the caller transaction."""
+    """Persist one validated canonical-menu intent in the caller transaction.
+
+    ``option_id`` is the card option the person chose; it rides on the
+    decision so History can name the choice in the card's words (task 058,
+    round 10).
+    """
     kind, value = intent
+    chosen = {"option_id": option_id} if option_id is not None else None
     if kind == "abort":
-        return _persist_abort(conn, task_id=task_id, pause=pause, state=state, actor=actor)
+        # Task 058 review: the abort chosen from a card option names it too.
+        return _persist_abort(
+            conn, task_id=task_id, pause=pause, state=state, actor=actor, extra=chosen
+        )
     if kind == "continue":
         decision_id = _append_decision(
             conn,
@@ -835,7 +847,7 @@ def _persist_intent(
             state=state,
             response="continue",
             action=None,
-            extra=decision_extra,
+            extra={**(chosen or {}), **(decision_extra or {})} or None,
         )
         return _request_continuation(
             conn, task_id=task_id, pause=pause, decision_event_id=decision_id, actor=actor
@@ -861,6 +873,7 @@ def _persist_intent(
             state=state,
             response=decision_response,
             action=runner_module._interpreted_action(adjustment),
+            extra=chosen,
         )
         return _request_continuation(
             conn, task_id=task_id, pause=pause, decision_event_id=decision_id, actor=actor
@@ -885,6 +898,7 @@ def _persist_intent(
             state=state,
             response="adjust",
             action=runner_module._interpreted_action(adjustment),
+            extra=chosen,
             rerun_mode="replacement",
         )
         return _request_continuation(
@@ -909,6 +923,7 @@ def _persist_intent(
             state=state,
             response="adjust",
             action=runner_module._reentry_interpreted_action(reentry, pause.payload["component"]),
+            extra=chosen,
             rerun_mode="additive",
         )
         return _request_continuation(
@@ -984,7 +999,11 @@ def _persist_change_plan(
         state=state,
         response="abort",
         action=None,
-        extra={"action": "change_plan", **_baseline_gate_decision(pause.payload, state)},
+        extra={
+            "action": "change_plan",
+            "option_id": "change_plan",
+            **_baseline_gate_decision(pause.payload, state),
+        },
     )
     conn.execute(
         update(capability_run)
@@ -1047,7 +1066,11 @@ def _persist_confirm_plan(
         state=state,
         response="continue",
         action=None,
-        extra={"action": "confirm_plan", **_baseline_gate_decision(pause.payload, state)},
+        extra={
+            "action": "confirm_plan",
+            "option_id": "confirm_plan",
+            **_baseline_gate_decision(pause.payload, state),
+        },
     )
     status = (
         "degraded"
@@ -1085,6 +1108,7 @@ def _persist_abort(
     pause: _Pause,
     state: Any,
     actor: str,
+    extra: dict[str, Any] | None = None,
 ) -> AnswerResult:
     """Record an abort and terminally mark the parked capability run.
 
@@ -1092,10 +1116,18 @@ def _persist_abort(
     finding, 2026-07-21): the plan flips to ``abandoned`` in the same
     transaction, and a ``run.finished`` event carries the terminal status so
     SSE replay and the live store see the walk end — without it the workspace
-    showed an aborted run as still paused forever.
+    showed an aborted run as still paused forever. ``extra`` is the
+    decision's extra record, as for the other decisions: the chosen card
+    option's id when the abort came from one.
     """
     decision_id = _append_decision(
-        conn, task_id=task_id, pause=pause, state=state, response="abort", action=None
+        conn,
+        task_id=task_id,
+        pause=pause,
+        state=state,
+        response="abort",
+        action=None,
+        extra=extra,
     )
     if state.plan_row_id is not None:
         conn.execute(
@@ -1440,8 +1472,10 @@ def _append_decision(
 
     ``extra`` carries the point-specific record a decision needs beyond the
     canonical attribution fields — at the baseline gate, the plan version and
-    the baseline artefact the user answered against.
+    the baseline artefact the user answered against. An answer is work on the
+    task, so it touches the task's modified time (task 058, round 10).
     """
+    touch_task(conn, task_id)
     base = steering_events.base_payload(
         capability_run_id=pause.capability_run_id,
         plan_id=state.plan_id,

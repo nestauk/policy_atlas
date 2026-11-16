@@ -27,7 +27,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.api.contract import ArtefactOut
-from policy_atlas.api.readmodels.repository import artefact_out, coverage_out, funnel_out
+from policy_atlas.api.read_models.repository import artefact_out, coverage_out, funnel_out
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.core.schema import (
     annotation,

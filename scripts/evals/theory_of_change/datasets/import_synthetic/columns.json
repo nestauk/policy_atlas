@@ -1,0 +1,121 @@
+{
+ "title": "Restricting less healthy food advertising to children",
+ "boxes": [
+  {
+   "id": "i1",
+   "text": "9pm TV watershed for less healthy food adverts",
+   "layer": "input"
+  },
+  {
+   "id": "i2",
+   "text": "Ban on paid online adverts for less healthy food",
+   "layer": "input"
+  },
+  {
+   "id": "i3",
+   "text": "Ofcom guidance and enforcement",
+   "layer": "input"
+  },
+  {
+   "id": "o1",
+   "text": "Fewer covered adverts shown before 9pm",
+   "layer": "output"
+  },
+  {
+   "id": "o2",
+   "text": "Fewer paid adverts online",
+   "layer": "output"
+  },
+  {
+   "id": "s1",
+   "text": "Children see fewer food adverts",
+   "layer": "outcome_short"
+  },
+  {
+   "id": "s2",
+   "text": "Fewer requests to parents for snacks",
+   "layer": "outcome_short"
+  },
+  {
+   "id": "s3",
+   "text": "Children eat fewer advert-prompted snacks",
+   "layer": "outcome_short"
+  },
+  {
+   "id": "l1",
+   "text": "Households buy fewer less healthy products",
+   "layer": "outcome_long"
+  },
+  {
+   "id": "l2",
+   "text": "Children consume less excess energy",
+   "layer": "outcome_long"
+  },
+  {
+   "id": "m1",
+   "text": "Fewer children living with obesity",
+   "layer": "impact"
+  },
+  {
+   "id": "f1",
+   "text": "Marketing moves to influencers",
+   "layer": "failure_outcome"
+  }
+ ],
+ "arrows": [
+  [
+   "i1",
+   "o1"
+  ],
+  [
+   "i2",
+   "o2"
+  ],
+  [
+   "i3",
+   "o1"
+  ],
+  [
+   "i3",
+   "o2"
+  ],
+  [
+   "o1",
+   "s1"
+  ],
+  [
+   "o2",
+   "s1"
+  ],
+  [
+   "s1",
+   "s2"
+  ],
+  [
+   "s1",
+   "s3"
+  ],
+  [
+   "s2",
+   "l1"
+  ],
+  [
+   "s3",
+   "l2"
+  ],
+  [
+   "l1",
+   "l2"
+  ],
+  [
+   "l2",
+   "m1"
+  ],
+  [
+   "o2",
+   "f1"
+  ]
+ ],
+ "assumptions": [],
+ "arrow_labels": []
+}

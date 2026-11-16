@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,16 +17,18 @@ vi.mock("../../api/queries", () => ({
   useTask: vi.fn(),
   useRuns: vi.fn(),
   useLonglist: vi.fn(),
+  useTocUploadFile: vi.fn(() => ({ data: undefined, isError: false })),
 }));
 
-const { patchMutate, confirmMutate } = vi.hoisted(() => ({
+const { patchMutate, confirmMutate, patchState } = vi.hoisted(() => ({
   patchMutate: vi.fn(),
   confirmMutate: vi.fn(),
+  patchState: { isPending: false },
 }));
 
 vi.mock("../../api/mutations", () => ({
   useStartRun: () => ({ mutate: vi.fn(), isPending: false }),
-  usePatchPlan: () => ({ mutate: patchMutate, isPending: false }),
+  usePatchPlan: () => ({ mutate: patchMutate, isPending: patchState.isPending }),
   useConfirmBaseline: () => ({ mutate: confirmMutate, isPending: false }),
 }));
 
@@ -77,7 +80,13 @@ function fullPlan(): PlanDraft {
     backend_scope: "both",
     steering_mode: "moderate",
     time_band: "2-3 days",
-    steps: [{ label: "Search the literature", blurb: "Cast a wide net", stage: "acquire" }],
+    // The server's steps (task 058, N17): the labels and the card rows are
+    // its words; search and screen share one row.
+    steps: [
+      { stage: "acquire", label: "Searching and screening", blurb: "Querying academic and policy databases.", row: "search_screen" },
+      { stage: "screen", label: "Searching and screening", blurb: "Checking each title and abstract against your question.", row: "search_screen" },
+      { stage: "synthesise", label: "Writing", blurb: "A cited report, checked claim by claim.", row: "synthesise" },
+    ],
   };
 }
 
@@ -181,11 +190,12 @@ function fullScopingPlan(overrides: Partial<ScopingPlanDraft> = {}): ScopingPlan
     steer_point_defaults: [],
     assumptions: [],
     steps: [
-      { stage: "acquire", label: "Searching sources", blurb: "Queries out to academic and policy databases." },
-      { stage: "synthesise", label: "Writing the baseline", blurb: "Setting out what happens if nothing changes." },
+      { stage: "acquire", label: "Searching and screening", blurb: "Queries out to academic and policy databases.", row: "search_screen" },
+      { stage: "synthesise", label: "Writing the baseline", blurb: "Setting out what happens if nothing changes.", row: "synthesise" },
     ],
     time_band: "10-15 minutes",
     baseline_confirmed: null,
+    risk_appetite: "mostly_tried",
     ready: true,
     ...overrides,
   };
@@ -212,13 +222,19 @@ function mockUseTask(
   );
 }
 
-function mockUseLonglist(longlist: { plan_version: number; options: number } | null) {
+function mockUseLonglist(
+  longlist: { plan_version: number; options: number; plan_inputs_changed?: boolean } | null,
+) {
   vi.mocked(queries.useLonglist).mockReturnValue(
     {
       data:
         longlist === null
           ? null
-          : { plan_version: longlist.plan_version, counts: { options: longlist.options } },
+          : {
+              plan_version: longlist.plan_version,
+              counts: { options: longlist.options },
+              plan_inputs_changed: longlist.plan_inputs_changed ?? false,
+            },
     } as unknown as ReturnType<typeof queries.useLonglist>,
   );
 }
@@ -263,9 +279,12 @@ describe("PlanDocument", () => {
     }
     expect(screen.queryByText("How findings are grouped")).toBeNull();
     expect(screen.getByText("Plan steps")).toBeInTheDocument();
-    expect(screen.getByText("Expected run time: ~10-20 min")).toBeInTheDocument();
-    expect(screen.getByText("Searching")).toBeInTheDocument();
+    // The band is the plan draft's own (task 058, N20: one table, on the server).
+    expect(screen.getByText("Expected run time: 2-3 days")).toBeInTheDocument();
+    // One line per card row, in the server's words.
+    expect(screen.getAllByText("Searching and screening")).toHaveLength(1);
     expect(screen.getByText("Querying academic and policy databases.")).toBeInTheDocument();
+    expect(screen.getByText("Writing")).toBeInTheDocument();
     expect(screen.getByText("2015–2024")).toBeInTheDocument();
     expect(screen.getByText("Source geography")).toBeInTheDocument();
     expect(screen.getByText("Academic + Policy (OpenAlex, Overton)")).toBeInTheDocument();
@@ -284,20 +303,117 @@ describe("PlanDocument", () => {
     expect(screen.getAllByText(COPY.notDecided).length).toBeGreaterThan(0);
   });
 
-  it("updates expected run time and agreed steps from local settings", () => {
+  it("keeps the plan draft's own band while local settings change (N20)", () => {
     mockUsePlan({ data: planOut(fullPlan()) });
     renderPlan(vi.fn(), { search_effort: "rapid", analysis_depth: "deep" });
-    expect(screen.getByText("Expected run time: ~75-90 min")).toBeInTheDocument();
-    expect(screen.getByText("Extracting findings")).toBeInTheDocument();
-    expect(screen.getByText("Grouping findings")).toBeInTheDocument();
+    expect(screen.getByText("Expected run time: 2-3 days")).toBeInTheDocument();
     expect(screen.getByText("Custom")).toBeInTheDocument();
   });
 
-  it("adapts the searching step to the selected sources filter", () => {
+  it("closes on Escape, and says so at the side panel's top right (task 058, N15)", async () => {
     mockUsePlan({ data: planOut(fullPlan()) });
-    renderPlan(vi.fn(), { backend_scope: "academic_only" });
-    expect(screen.getByText("Querying academic databases.")).toBeInTheDocument();
-    expect(screen.queryByText("Querying academic and policy databases.")).toBeNull();
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument taskId={TASK_ID} placement="side" onClose={onClose} overlay={{}} onOverlayChange={vi.fn()} />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByText("Esc closes")).toBeNull();
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // Owner, round 13: a press anywhere outside the plan closes it, as the
+  // shared Sheet's outside press does; focus goes back to "See plan".
+  it("closes on a press outside it, not on one inside it, in its menus or on a control that opens it", async () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <button type="button" data-plan-opener="">
+          See plan
+        </button>
+        <p>The page</p>
+        <PlanDocument taskId={TASK_ID} placement="side" onClose={onClose} overlay={{}} onOverlayChange={vi.fn()} />
+      </TooltipProvider>,
+    );
+    await user.click(screen.getByRole("heading", { name: "Search plan" }));
+    await user.click(screen.getByRole("button", { name: "See plan" }));
+    await user.click(screen.getAllByRole("button", { name: "Edit" })[1]);
+    await user.click(screen.getByRole("button", { name: "Search scope" }));
+    await user.click(screen.getByRole("option", { name: "Focused" }));
+    expect(onClose).not.toHaveBeenCalled();
+    await user.click(screen.getByText("The page"));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives focus back to the control that opened it when it closes", async () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    const user = userEvent.setup();
+    function Host() {
+      const [open, setOpen] = useState(false);
+      return (
+        <TooltipProvider delayDuration={0}>
+          <button type="button" data-plan-opener="" onClick={() => setOpen(true)}>
+            See plan
+          </button>
+          {open && (
+            <PlanDocument taskId={TASK_ID} placement="side" onClose={() => setOpen(false)} overlay={{}} onOverlayChange={vi.fn()} />
+          )}
+        </TooltipProvider>
+      );
+    }
+    render(<Host />);
+    await user.click(screen.getByRole("button", { name: "See plan" }));
+    await user.click(screen.getByRole("button", { name: "Close the search plan" }));
+    expect(screen.queryByRole("dialog", { name: "Search plan" })).toBeNull();
+    expect(screen.getByRole("button", { name: "See plan" })).toHaveFocus();
+  });
+
+  // Owner, round 14: every open starts at the plan's top, its title in view.
+  it("opens at its own top, and goes back there when its content first arrives", () => {
+    const set = vi.fn();
+    const original = Object.getOwnPropertyDescriptor(Element.prototype, "scrollTop");
+    Object.defineProperty(Element.prototype, "scrollTop", {
+      configurable: true,
+      get: () => 0,
+      set(value: number) {
+        if ((this as Element).getAttribute("data-testid") === "plan-pane") set(value);
+      },
+    });
+    mockUsePlan({ isPending: true, data: undefined });
+    const view = render(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument taskId={TASK_ID} placement="side" onClose={vi.fn()} overlay={{}} onOverlayChange={vi.fn()} />
+      </TooltipProvider>,
+    );
+    expect(set).toHaveBeenCalledWith(0);
+    set.mockClear();
+    mockUsePlan({ data: planOut(fullPlan()) });
+    view.rerender(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument taskId={TASK_ID} placement="side" onClose={vi.fn()} overlay={{}} onOverlayChange={vi.fn()} />
+      </TooltipProvider>,
+    );
+    expect(set).toHaveBeenCalledWith(0);
+    if (original !== undefined) Object.defineProperty(Element.prototype, "scrollTop", original);
+  });
+
+  it("leaves Escape to a field being edited", async () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument taskId={TASK_ID} placement="side" onClose={onClose} overlay={{}} onOverlayChange={vi.fn()} />
+      </TooltipProvider>,
+    );
+    await user.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    await user.click(screen.getByRole("textbox"));
+    await user.keyboard("{Escape}");
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("picks a settings option from the app-chrome menu, not a native select", async () => {
@@ -782,7 +898,7 @@ describe("PlanDocument — options scoping (task 044)", () => {
       mockUsePlan({ data: scopingPlanOut(confirmedV2, 3) });
       mockUseRuns([longlistWalk, baselineRun({ plan_version: 1 })]);
       mockUseTask([], { has_longlist: true });
-      mockUseLonglist({ plan_version: 2, options: 14 });
+      mockUseLonglist({ plan_version: 2, options: 14, plan_inputs_changed: true });
       renderPlan();
       expect(
         screen.getByText("Longlist built from plan version 2 · the plan has changed"),
@@ -808,11 +924,45 @@ describe("PlanDocument — options scoping (task 044)", () => {
       mockUsePlan({ data: scopingPlanOut(confirmedV2, 3) });
       mockUseRuns([runningChild, longlistWalk, baselineRun({ plan_version: 1 })]);
       mockUseTask([], { has_longlist: true, active_run: runningChild });
-      mockUseLonglist({ plan_version: 2, options: 14 });
+      mockUseLonglist({ plan_version: 2, options: 14, plan_inputs_changed: true });
       renderPlan();
       expect(screen.getByText("Building the longlist")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Rebuild longlist" })).toBeNull();
     });
+  });
+
+  it("a newer plan version that changed only the appetite leaves the longlist built, not rebuilt", () => {
+    mockUsePlan({ data: scopingPlanOut({ baseline_confirmed: { artefact_id: "artefact-1", plan_version: 2 } }, 3) });
+    mockUseRuns([baselineRun({ plan_version: 1 })]);
+    mockUseTask([], { has_longlist: true });
+    mockUseLonglist({ plan_version: 2, options: 14, plan_inputs_changed: false });
+    renderPlan();
+    expect(screen.getByText("Longlist built · 14 options")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Rebuild longlist" })).toBeNull();
+  });
+
+  it("shows the risk appetite and patches it directly, with no chat seeding", async () => {
+    patchMutate.mockReset();
+    mockUsePlan({ data: scopingPlanOut({ risk_appetite: "mostly_tried" }) });
+    renderPlan();
+    expect(screen.getByText("Risk appetite")).toBeInTheDocument();
+    const select = screen.getByRole("combobox", { name: "Risk appetite" });
+    expect(select).toHaveTextContent(/^Balanced:/);
+    // Round 12: the app's dropdown, not the browser's.
+    await userEvent.click(select);
+    await userEvent.click(screen.getByRole("option", { name: /^Ambitious:/ }));
+    expect(patchMutate).toHaveBeenCalledWith({ scoping: { risk_appetite: "open_to_untested" } });
+  });
+
+  it("disables the risk appetite select while its patch is in flight", () => {
+    patchState.isPending = true;
+    try {
+      mockUsePlan({ data: scopingPlanOut({ risk_appetite: "mostly_tried" }) });
+      renderPlan();
+      expect(screen.getByRole("combobox", { name: "Risk appetite" })).toBeDisabled();
+    } finally {
+      patchState.isPending = false;
+    }
   });
 
   it("hides Edit and the start area when the plan is a read-only record", () => {
@@ -982,5 +1132,81 @@ describe("PlanDocument — options scoping, task 045 slots", () => {
     const at = rows.findIndex((t) => t.includes("Transferable to United Kingdom"));
     expect(rows[at + 1]).toContain("Evidence should carry to a rural county");
     expect(rows[at + 1]).toContain("Kept for the assessment. It excludes nothing.");
+  });
+});
+
+describe("PlanDocument — theory of change (task 054)", () => {
+  type TocPlanDraft = components["schemas"]["TocPlanDraft"];
+
+  function tocPlanOut(overrides: Partial<TocPlanDraft> = {}): PlanOut {
+    return {
+      capability: "theory_of_change",
+      plan: null,
+      scoping: null,
+      toc: {
+        title: "Healthy weight",
+        question: "How would an advertising ban reduce childhood obesity?",
+        entry_point: "intervention_first",
+        upload_id: null,
+        intended_change: "Fewer children living with obesity",
+        target_population: "children aged 4 to 11",
+        intervention: "a junk-food advertising ban",
+        dosage: null,
+        existing_theory_text: null,
+        where: "London",
+        time_horizon: "within 5 years",
+        context: null,
+        published_after: "2000-01-01",
+        published_before: null,
+        assumptions: [],
+        ready: true,
+        ...overrides,
+      },
+      status: "approved",
+      version: 1,
+    };
+  }
+
+  it("renders the starting point, the change, the intervention and the context", () => {
+    mockUsePlan({ data: tocPlanOut() });
+    renderPlan();
+    for (const label of ["Starting point", "The change", "Intervention", "Context"]) {
+      expect(screen.getByText(label, { selector: "h3, h2, span, p, div" })).toBeInTheDocument();
+    }
+    expect(screen.getByText("From an intervention")).toBeInTheDocument();
+    expect(screen.getByText("Fewer children living with obesity")).toBeInTheDocument();
+    expect(screen.getByText("children aged 4 to 11")).toBeInTheDocument();
+    expect(screen.getByText("a junk-food advertising ban")).toBeInTheDocument();
+    expect(screen.getAllByText(COPY.notDecided).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Draft the theory" })).toBeEnabled();
+    // No Evidence search sections or start button.
+    expect(screen.queryByText("Research question")).not.toBeInTheDocument();
+  });
+
+  it("shows the evidence years and saves a changed range through the plan edit", () => {
+    mockUsePlan({ data: tocPlanOut() });
+    renderPlan();
+    // Evidence search's words for the same filter (task 054, § 8).
+    expect(screen.getByRole("heading", { name: "Search filters" })).toBeInTheDocument();
+    expect(screen.getByText("Publication years")).toBeInTheDocument();
+    expect(screen.getByText("From 2000")).toBeInTheDocument();
+    const section = screen.getByText("Publication years").closest("section") as HTMLElement;
+    fireEvent.click(within(section).getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Published from (year)"), { target: { value: "1995" } });
+    fireEvent.change(screen.getByLabelText("Published until (year)"), { target: { value: "2010" } });
+    fireEvent.click(within(section).getByRole("button", { name: "Save" }));
+    expect(patchMutate).toHaveBeenCalledWith(
+      { toc: { published_after: "1995-01-01", published_before: "2010-12-31" } },
+      expect.anything(),
+    );
+  });
+
+  it("shows a pasted theory under the starting point", () => {
+    mockUsePlan({
+      data: tocPlanOut({ entry_point: "existing_theory", existing_theory_text: "Inputs lead to outputs." }),
+    });
+    renderPlan();
+    expect(screen.getByText("From your own theory of change")).toBeInTheDocument();
+    expect(screen.getByText("Inputs lead to outputs.")).toBeInTheDocument();
   });
 });

@@ -1,3 +1,5 @@
+import { formatCount } from "./format";
+
 /**
  * Every user-visible word for the two entities, in one place.
  *
@@ -30,7 +32,7 @@ export const PROJECT = {
 
 /** A count with its noun: `countOf(1, "option", "options")` → "1 option". */
 export function countOf(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`;
+  return `${formatCount(n)} ${n === 1 ? one : many}`;
 }
 
 /** The five task-level lifecycle tabs, in their fixed order. */
@@ -58,9 +60,9 @@ export const COPY = {
   /** Capability-picker heading on /new. */
   newTaskPrompt: "What would you like to do?",
   findTask: `Find a ${TASK.lower}`,
+  findProject: `Find a ${PROJECT.lower}`,
   allTasks: `All ${TASK.lowerMany}`,
   noTasks: `No ${TASK.lowerMany} yet`,
-  noProject: `No ${PROJECT.lower}`,
   comingSoon: "Coming soon",
   /** `AppShell`'s header popover — the trigger's `aria-label` and `title`. */
   taskSettings: `${TASK.one} settings`,
@@ -84,24 +86,6 @@ export const COPY = {
   earlierPlan: "Earlier plan",
   /** `TaskAgentPane`'s composer label. */
   messageTaskAgent: `Message the ${TASK.one} Agent`,
-} as const;
-
-/**
- * Task 037 — the Share tab's public-link section (contract § R1, §
- * Public / private boundary). The warning states exactly what a public link
- * exposes, before the owner can turn it on.
- */
-export const PUBLIC_SHARE = {
-  heading: "Public link",
-  statusOn: "Shared publicly — anyone with the link can view.",
-  statusOff: "Not shared publicly.",
-  warning:
-    `Anyone on the internet with the public link can see this ${TASK.one}'s result and sources — including the source list and quoted excerpts from the underlying documents. They do not need to sign in.`,
-  turnOn: "Share publicly",
-  turnOff: "Stop sharing publicly",
-  copyLink: "Copy link",
-  copied: "Link copied",
-  toggleFailed: "Public sharing couldn't be changed. Try again.",
 } as const;
 
 /**

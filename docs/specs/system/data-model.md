@@ -129,10 +129,20 @@ tool-governance level instead (see [security/egress — not yet drafted]; arch �
   `docs/deferred.md`. Until then, options scoping's task 2 counts documents **by DOI where one
   exists** at the point of counting — denominators, membership, cap places — with no schema or
   ingestion change.)*
-- **Acquired snapshots are a shared, content-addressed, cross-task substrate** (key =
-  content hash × parse-profile × segmentation-policy × embedding-model version); derived
-  substrate computed **once per unique key**; reference-counted GC; reference edges
-  task-private (no cross-task enumeration). **Uploaded snapshots stay per-task, never
+- **Acquired snapshots are a shared, content-addressed, cross-task substrate.** *As built
+  (task 057, S1, 2026-11-03):* the store key is **body hash × parse profile × segmentation
+  policy**, where the body hash (`source_snapshot.body_hash`, SHA-256 of the fetched bytes)
+  is the pre-parse identity and the content hash stays the provenance identity of the parsed
+  text; embeddings sit on top per embedding profile. Reuse is on for acquired snapshots: a
+  document whose bytes are already in the store under the same parse profile and
+  segmentation policy is linked without a second parse, and only the units the current
+  embedding profile lacks are embedded. Snapshots parsed under an older profile are not
+  matched by key (their bytes are gone), so a document is parsed once more the first time
+  it is seen under a new profile. The shared row carries no task, user or run breadcrumb;
+  those live on the task's link row. Retention: a full-text snapshot no task links, no
+  citation quotes and no extraction record names is deleted after 90 days by an operator
+  script (`scripts/prune_unlinked_snapshots.py`), locked against a link racing in; no
+  scheduler yet. Reference edges stay task-private (no cross-task enumeration). **Uploaded snapshots stay per-task, never
   shared.** Sharpens a cross-tenant boundary flag → carry to security/egress (arch §11). ⚠️
 - **Inherited documents (owner ruling on decision-sheet row A7, 2026-09-09; closes the 🟡 in OS
   components § 0).** An inherited document is an acquired one; `origin` is untouched and no

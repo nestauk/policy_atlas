@@ -5,10 +5,13 @@ import { scrub } from "../../../lib/scrub";
 import { cn } from "../../../ui/brand/cn";
 import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
 import { Tooltip, TooltipProvider } from "../../../ui/radix/Tooltip";
-import { ChatIcon, PanelIcon, PlusIcon } from "./icons";
+import { ChatIcon, PanelIcon, PlusIcon, iconButtonClass } from "../../../ui/brand/icons";
 
-const RAIL_BUTTON =
-  "pressable flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
+const RAIL_BUTTON = iconButtonClass("chrome");
+
+/** The Task Agent's mark in the rail: the still fold mark, always (owner,
+ *  round 8). */
+const RAIL_MARK_SIZE = 11;
 
 /** How many recent chats the rail marks. */
 export const RAIL_RECENT = 4;
@@ -83,6 +86,9 @@ function RailButton({
  *     resolved; `onTaskAgent` marks the Task Agent as current; `recent` and
  *     `currentId` are the chat marks and the one on show; `className` sets
  *     the rail's geometry (a column, or a bar that becomes a column at `lg`).
+ *     The Task Agent's mark is the still fold mark named "Task Agent", with
+ *     no run status or timer (owner, round 8: the run status bar and the trace
+ *     carry the run).
  */
 export function ConversationRail({
   toggleLabel,
@@ -118,7 +124,7 @@ export function ConversationRail({
         className={cn("flex shrink-0 items-center gap-1 border-line bg-paper-2", className)}
       >
         <RailButton label={toggleLabel} tip="Open sidebar" aria-expanded={expanded} disabled={toggleDisabled} onClick={onToggle}>
-          <PanelIcon size={16} />
+          <PanelIcon />
         </RailButton>
         <RailButton
           label={COPY.newChat}
@@ -126,10 +132,10 @@ export function ConversationRail({
           disabled={!chatsEnabled}
           onClick={onNewChat}
         >
-          <PlusIcon size={16} />
+          <PlusIcon />
         </RailButton>
         <RailButton label={COPY.taskAgent} current={onTaskAgent} onClick={onSelectTaskAgent}>
-          <FoldMarkIcon size={11} />
+          <FoldMarkIcon size={RAIL_MARK_SIZE} />
         </RailButton>
         {recent.map((chat) => (
           <RailButton
@@ -138,7 +144,7 @@ export function ConversationRail({
             current={chat.id === currentId}
             onClick={() => onSelectChat?.(chat.id)}
           >
-            <ChatIcon size={15} />
+            <ChatIcon />
           </RailButton>
         ))}
       </aside>

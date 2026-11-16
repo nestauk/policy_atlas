@@ -513,30 +513,44 @@ def test_an_es_directive_cannot_name_the_intervention_profile() -> None:
     [
         (
             "stub", False,
-            "46bd743bd8f3c8db962ca535e2feadf93c096f6d0fd79228191919805eb30c68",
-            "1815928b64649d522a536bd9a824482877aae9e9d093bf478d491cca69773287",
+            "76120948e3e55768b8080d35bab178d85352c530b5a60739d90a6296ab27be75",
+            "642900d5796898e54dc290f977b5cec0f0d9a41876bc40ae0db9bb32cc968413",
         ),
         (
             "stub", True,
-            "d0d192c0d514895b980af063075e898759a86e233eab1a2976e470fffc5d9f43",
-            "535de28cc0c8c74932c1eced414a4c5d86384e439f81a0287a991a9f77d312f8",
+            "30c9e6eb91c3f435de10f6527ed2f5381da4f6fe6385abff256e35478908c654",
+            "eeb648d51d4937ea005f08df53fc38e30271d945c79dcf06dff982213e8c0e4c",
         ),
         (
             "live", False,
-            "e1a0b88e5b71b19a31e4761ee387d104acf2906cfe8d478e4f5fa6b4d00e8e8c",
-            "75cdc09cedb14a59af9730f9b645626bcc8dedcec83122636bcf3955c4f782af",
+            "9aa6ebd93a0339bebd66965878df44c79a43dd400a822073da44ae7c3965a762",
+            "851ef70b7d150d871418365125636636dd5d5677135d5bee23a8a38ec6938f18",
         ),
         (
             "live", True,
-            "4222751b9dda0c362e4db1a7a14e5559ddd4d73f9bc9e931dba82afe65d48b7a",
-            "995e4490f2ed050a45774d47c3fa3cc648998ff551d89138c5e82c453c1335ca",
+            "3ce82f51170d2e3d21749cc3ada159ade4a9b68ce92b595b357482b01ebc38c4",
+            "858b242ba304a316279b4b2a5e64f6e438100c97be00c42770130b8b97af8dff",
         ),
     ],
 )
 def test_the_iof_and_icf_fingerprints_are_pinned(
     mode: str, vetted: bool, iof: str, icf: str
 ) -> None:
-    """Pinned at 045 HEAD ``e093ce34``: the third profile moved no IOF/ICF memo key."""
+    """The IOF/ICF memo keys, re-pinned when the extraction model changed (task 053).
+
+    First pinned at 045 HEAD ``e093ce34`` to show the third profile moved no key.
+    Re-pinned on 2026-10-22 when the owner moved the ``extract`` and ``icf_extract``
+    steps (and their vetters) from gpt-5.4-mini to gpt-5.6-luna: re-digesting the
+    components with the old model reproduces the earlier hashes exactly, so the model
+    is the only moved component. A moved key means stored extractions are not reused
+    under the new model; the next run re-extracts. Re-pinned again on 2026-11-02 when
+    task 056 moved the fast tier to gpt-6-luna (the digest shows the model as the only
+    moved component; the vetter effort stays "high"); and once more in Phase 5 when the
+    two finding vetters moved from "high" to "medium" (the digest embeds the vetter effort).
+    Re-pinned on 2026-11-03 (task 057, N14) when the quote verifier moved from ``qv_v1``
+    to ``qv_v2`` (markup ignored on both sides): re-digesting with ``qv_v1`` reproduces
+    the earlier hashes exactly, so the verifier is the only moved component.
+    """
     assert extraction_fingerprint(mode, finding_vetter_active=vetted)[0] == iof
     assert icf_extraction_fingerprint(mode, finding_vetter_active=vetted)[0] == icf
 

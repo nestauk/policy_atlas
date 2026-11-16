@@ -28,6 +28,11 @@ export interface TaskActivity {
 
 const ACTIVE_STATUSES: ReadonlySet<RunStatus> = new Set<RunStatus>(["running", "paused"]);
 
+/** Whether this is a theory-of-change task (task 054). */
+export function isToc(task: TaskActivity | null | undefined): boolean {
+  return task?.capability === "theory_of_change";
+}
+
 /** Whether this is an options-scoping task. */
 export function isScoping(task: TaskActivity | null | undefined): boolean {
   return task?.capability === "options_scoping";
@@ -53,7 +58,7 @@ export function isRunActive(task: TaskActivity | null | undefined): boolean {
 }
 
 /**
- * The walk a status word describes (the task lists' "Analysing…",
+ * The walk a status word describes (`taskStatusWord`: the task lists' "Running",
  * "Complete", "Failed").
  *
  * An Evidence search: its `latest_run`, unchanged. A scoping task: the
@@ -100,8 +105,9 @@ export function hasLonglist(task: TaskActivity | null | undefined): boolean {
  */
 export function hasTaskResult(
   task: TaskActivity | null | undefined,
-  options?: { hasBaseline?: boolean },
+  options?: { hasBaseline?: boolean; hasToc?: boolean },
 ): boolean {
+  if (isToc(task)) return options?.hasToc === true;
   if (!isScoping(task)) return hasResult(task?.latest_run?.status);
   return hasLonglist(task) || options?.hasBaseline === true || hasResult(task?.latest_run?.status);
 }

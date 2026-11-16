@@ -37,7 +37,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
 
-from policy_atlas.api.routers._access import readable_task_leg
+from policy_atlas.api.routers.access import readable_task_leg
 from policy_atlas.core.schema import (
     artefact,
     block,
@@ -251,7 +251,7 @@ def _coverage_text(
     inherits no coverage sentence rather than the newest one. Within one walk
     the last record stands. The sentence
     formula is the backend's own coverage composition
-    (``api.readmodels.repository.coverage_out``), ported here scoped-by-walk
+    (``api.read_models.repository.coverage_out``), ported here scoped-by-walk
     rather than latest-for-task; no frontend equivalent exists to reuse.
     """
     row = conn.execute(
@@ -281,7 +281,7 @@ def _coverage_text(
 def _compose_coverage_sentence(stop_condition: str, adequacy_verdict: str) -> str:
     """Port of the stop-condition/adequacy sentence in ``coverage_out``.
 
-    ``api.readmodels.repository.coverage_out`` composes exactly this two
+    ``api.read_models.repository.coverage_out`` composes exactly this two
     -sentence shape for the latest coverage record of a whole task; this is
     the same formula, kept local because that function is task-latest and
     unscoped to one evidence scope, which is not what a pinned walk needs.

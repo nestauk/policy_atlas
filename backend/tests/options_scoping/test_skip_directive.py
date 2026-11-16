@@ -205,12 +205,17 @@ class _Pool:
         _appraise(conn, source, stale_source_tss, 4, rubric="an-old-rubric")
         non_evidence_tss = _share(conn, source, _snapshot(conn, source))
         _classify(conn, source, non_evidence_tss, NON_EVIDENCE)
+        # Task 056 (D7): a Non-evidence document the source appraised as Unrated.
+        unrated_tss = _share(conn, source, _snapshot(conn, source))
+        _classify(conn, source, unrated_tss, NON_EVIDENCE)
+        _appraise(conn, source, unrated_tss, None)
 
         self.target = _task(conn)
         _link(conn, source, self.target, pinned)
         self.resolved = _share(conn, self.target, resolved_snapshot)
         self.stale = _share(conn, self.target, _snapshot_of(conn, stale_source_tss))
         self.non_evidence = _share(conn, self.target, _snapshot_of(conn, non_evidence_tss))
+        self.unrated = _share(conn, self.target, _snapshot_of(conn, unrated_tss))
         # Own: labelled by this task (its baseline scope), not by the link.
         _own_snapshot, self.own = seed_source(conn, self.target.task_id)
         _classify(conn, self.target, self.own, RCT)
@@ -228,7 +233,9 @@ class _Pool:
                 purpose="longlist",
             )
         )
-        for tss_id in (self.resolved, self.stale, self.non_evidence, self.own, self.absent):
+        for tss_id in (
+            self.resolved, self.stale, self.non_evidence, self.unrated, self.own, self.absent
+        ):
             seed_screening_result(
                 conn, self.target.task_id, self.target.run_id, self.scope_id, tss_id
             )
@@ -264,8 +271,12 @@ def test_classify_skips_inherited_documents_with_nothing_left_to_appraise(
         conn, task_id=pool.target.task_id, scope_id=pool.scope_id, component="classify"
     )
     # The stale-rubric one is classified here so appraise can re-appraise it;
-    # own and unlabelled documents keep the per-scope discipline.
-    assert skip == {pool.resolved, pool.non_evidence}
+    # own and unlabelled documents keep the per-scope discipline. Since task 056
+    # (D7) a Non-evidence document is skipped only when its Unrated tier came
+    # through the link too; one with no tier is classified here so appraise can
+    # give it its Unrated row.
+    assert skip == {pool.resolved, pool.unrated}
+    assert pool.non_evidence not in skip
 
 
 def test_appraise_skips_resolved_tiers_but_not_a_stale_rubric(conn: Connection) -> None:
@@ -273,7 +284,7 @@ def test_appraise_skips_resolved_tiers_but_not_a_stale_rubric(conn: Connection) 
     skip = resolved_skip_ids(
         conn, task_id=pool.target.task_id, scope_id=pool.scope_id, component="appraise"
     )
-    assert skip == {pool.resolved}
+    assert skip == {pool.resolved, pool.unrated}
     assert pool.stale not in skip
 
 
@@ -379,11 +390,14 @@ def test_a_longlist_walk_gets_the_skip_keys_merged_over_the_scope_s_directive(
     )
 
     assert classify == {
-        "classify": {SKIP_TSS_KEY: sorted(str(i) for i in (pool.resolved, pool.non_evidence))}
+        "classify": {SKIP_TSS_KEY: sorted(str(i) for i in (pool.resolved, pool.unrated))}
     }
     # The scope's own appraisal directive survives the merge (the runner's
     # directive application is a shallow merge per key).
     assert appraise == {
-        "appraisal": {"rubric": {RCT: 4}, SKIP_TSS_KEY: [str(pool.resolved)]}
+        "appraisal": {
+            "rubric": {RCT: 4},
+            SKIP_TSS_KEY: sorted(str(i) for i in (pool.resolved, pool.unrated)),
+        }
     }
     assert _parse_appraisal_directive(appraise["appraisal"]) == {RCT: 4}

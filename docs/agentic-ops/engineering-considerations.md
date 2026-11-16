@@ -10,7 +10,7 @@ Anything here is superseded by a real spec, a task contract, or a human decision
 
 The backend stack direction is confirmed. The `001-walking-skeleton` slice implemented a **thin,
 stubbed** slice of it ([ADR 0001](../adr/0001-walking-skeleton-foundations.md); `make verify` green):
-Postgres via Docker Compose (plain `postgres:16`, no pgvector), the LangGraph harness in-process, the
+Postgres via Docker Compose (`pgvector/pgvector:pg17` since task 057), the LangGraph harness in-process, the
 inference **routing seam** behind a no-egress stub, the canonical `event_log` + a `runs` table, uv and
 structlog. Everything below beyond that thin slice is **direction or a deferred seam**
 ([docs/deferred.md](../deferred.md)) — not yet built:

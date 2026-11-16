@@ -7,6 +7,7 @@ import { AuthContext } from "../auth/AuthContext";
 import type { AuthApi } from "../auth/types";
 import {
   ChatStreamProtocolError,
+  applyConversationTitle,
   chatTranscriptRows,
   consumeChatStream,
   initialOptimisticChatTranscriptState,
@@ -344,5 +345,26 @@ describe("useComposerDraft", () => {
     expect(result.current[0]).toBe("");
     rerender({ id: conversationId });
     expect(result.current[0]).toBe("A session-local draft");
+  });
+});
+
+describe("applyConversationTitle (task 058, round 14)", () => {
+  it("puts the chat's new title into every cached chats list and its detail", () => {
+    const queryClient = new QueryClient();
+    const list = { data: [{ id: "c1", title: "Which trials measured attendance as well as weight" }, { id: "c2", title: "Other" }], pagination: { page: 1 } };
+    queryClient.setQueryData(["tasks", "t1", "conversations", "chat", "active"], list);
+    queryClient.setQueryData(["tasks", "t1", "conversations", undefined, undefined], list);
+    queryClient.setQueryData(["conversations", "c1", "detail"], { id: "c1", title: "Which trials measured attendance as well as weight" });
+    queryClient.setQueryData(["tasks", "t1", "detail"], { name: "Untouched" });
+    applyConversationTitle(queryClient, "c1", "Attendance and weight trials");
+    for (const key of [["tasks", "t1", "conversations", "chat", "active"], ["tasks", "t1", "conversations", undefined, undefined]]) {
+      const rows = (queryClient.getQueryData(key) as typeof list).data;
+      expect(rows.map((row) => row.title)).toEqual(["Attendance and weight trials", "Other"]);
+    }
+    expect((queryClient.getQueryData(["conversations", "c1", "detail"]) as { title: string }).title).toBe("Attendance and weight trials");
+    expect(queryClient.getQueryData(["tasks", "t1", "detail"])).toEqual({ name: "Untouched" });
+    // The chats lists are marked for a server read that confirms the title; nothing else is.
+    expect(queryClient.getQueryState(["tasks", "t1", "conversations", "chat", "active"])?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(["tasks", "t1", "detail"])?.isInvalidated).toBe(false);
   });
 });

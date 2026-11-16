@@ -17,7 +17,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import case, func, literal
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
@@ -33,7 +33,9 @@ from policy_atlas.core.schema import (
     source_snapshot,
     task_source_snapshot,
 )
+from policy_atlas.evidence_search.assess.appraise import appraisal_tier
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
+from policy_atlas.evidence_search.sourcing.ingest_full_text import NOT_READ_YET_REASONS
 from policy_atlas.evidence_search.synthesis.synthesis_backend import SynthesisBackend
 from policy_atlas.evidence_search.synthesis.synthesis_tools import priority_counts_by_group
 from policy_atlas.evidence_search.synthesis.synthesise import (
@@ -579,6 +581,7 @@ def _doc_metadata(
             source_snapshot.c.source_locator,
             source_classification_result.c.primary_evidence_type,
             source_appraisal_result.c.quality_score,
+            source_appraisal_result.c.unrated,
         )
         .select_from(
             task_source_snapshot.join(
@@ -615,7 +618,8 @@ def _doc_metadata(
         result[str(row.task_source_snapshot_id)] = {
             "title": title,
             "evidence_type": row.primary_evidence_type,
-            "quality_tier": (str(row.quality_score) if row.quality_score is not None else None),
+            # "4", or "Unrated" for an appraisal with no score (task 056).
+            "quality_tier": appraisal_tier(row.quality_score, unrated=bool(row.unrated)),
             "full_text_status": row.full_text_status,
         }
     return result
@@ -624,20 +628,30 @@ def _doc_metadata(
 def _full_text_status_counts(
     conn: Connection, *, task_id: uuid.UUID, tss_ids: list[str]
 ) -> dict[str, int]:
-    """Tally ``task_source_snapshot.full_text_status`` for the given tss ids."""
+    """Tally ``task_source_snapshot.full_text_status`` for the given tss ids.
+
+    A failure whose reason means "not read yet" (``NOT_READ_YET_REASONS``) is
+    counted under ``not_read_yet``, not under its ``fetch_failed`` status.
+    """
     if not tss_ids:
         return {}
     ids = [uuid.UUID(tss_id) for tss_id in tss_ids]
+    # task 057 review (Codex 9, deviation 10): not_ready / send_failed /
+    # worker_error rows are not access failures.
+    status = case(
+        (
+            task_source_snapshot.c.full_text_error.in_(sorted(NOT_READ_YET_REASONS)),
+            literal("not_read_yet"),
+        ),
+        else_=task_source_snapshot.c.full_text_status,
+    ).label("status")
     rows = conn.execute(
-        sa_select(
-            task_source_snapshot.c.full_text_status,
-            func.count().label("n"),
-        )
+        sa_select(status, func.count().label("n"))
         .where(task_source_snapshot.c.task_id == task_id)
         .where(task_source_snapshot.c.task_source_snapshot_id.in_(ids))
-        .group_by(task_source_snapshot.c.full_text_status)
+        .group_by(status)
     ).all()
-    return dict(sorted((row.full_text_status, row.n) for row in rows))
+    return dict(sorted((row.status, row.n) for row in rows))
 
 
 # --- P4: synthesis shape ----------------------------------------------------

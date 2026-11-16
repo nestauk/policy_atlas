@@ -11,11 +11,11 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.core.schema import artefact, block, synthesis_result
 from policy_atlas.evidence_search.synthesis import synthesise as synthesise_module
-from policy_atlas.evidence_search.synthesis.synthesis_backend import (
-    StubSynthesisBackend,
+from policy_atlas.evidence_search.synthesis.section_prompt import (
     SummaryJudgeWire,
     SummaryWire,
 )
+from policy_atlas.evidence_search.synthesis.synthesis_backend import StubSynthesisBackend
 from policy_atlas.evidence_search.synthesis.synthesise import (
     SUMMARY_REGENERATE_CAP,
     write_summaries_after_commit,
@@ -282,6 +282,91 @@ def test_format_violation_on_first_attempt_consumes_one_regenerate_and_then_veri
     assert result["judge_calls"] == 1
 
 
+def test_judge_fail_retry_carries_the_previous_summary_and_judge_reason() -> None:
+    """A retry after a judge fail sends the failed summary and the judge's reason."""
+    first_summary = "A first summary the judge rejects."
+    second_summary = "A second summary the judge accepts."
+
+    class _JudgedBackend(_ScriptedSummaryBackend):
+        def __init__(self) -> None:
+            super().__init__([first_summary, second_summary])
+            self._summary_judgements = [
+                SummaryJudgeWire(verdict="fail", reason="overstates the evidence"),
+                SummaryJudgeWire(verdict="pass", reason="faithful"),
+            ]
+
+    backend = _JudgedBackend()
+    seed = {"kind": "block", "prose": "Some prose."}
+    result = synthesise_module._write_and_judge_summary(
+        synthesis_backend=backend, seed=seed, detail={}
+    )
+    assert backend.summary_seeds[0] == seed
+    assert "previous_attempt" not in backend.summary_seeds[0]
+    assert backend.summary_seeds[1] == {
+        **seed,
+        "previous_attempt": {
+            "summary": first_summary,
+            "judge_reason": "overstates the evidence",
+        },
+    }
+    assert "previous_attempt" not in seed
+    assert result["status"] == "verified"
+    assert result["summary"] == second_summary
+    assert result["reason"] == "faithful"
+    assert result["writer_calls"] == 2
+    assert result["judge_calls"] == 2
+    assert set(result) == {
+        "status",
+        "summary",
+        "reason",
+        "provider_failure",
+        "writer_calls",
+        "judge_calls",
+        "usage_totals",
+    }
+
+
+def test_format_violation_retry_carries_the_mapped_plain_sentence() -> None:
+    """A retry after an over-length attempt carries a plain-sentence reason."""
+    long_summary = "x" * 400
+    clean_summary = "A concise clean summary."
+    backend = _ScriptedSummaryBackend([long_summary, clean_summary])
+    seed = {"kind": "block"}
+    result = synthesise_module._write_and_judge_summary(
+        synthesis_backend=backend, seed=seed, detail={}
+    )
+    assert backend.summary_seeds[0] == seed
+    assert backend.summary_seeds[1] == {
+        "kind": "block",
+        "previous_attempt": {
+            "summary": long_summary,
+            "judge_reason": (
+                "The summary was over the length limit; write one shorter sentence."
+            ),
+        },
+    }
+    assert result["status"] == "verified"
+    assert result["summary"] == clean_summary
+    assert result["writer_calls"] == 2
+    assert result["judge_calls"] == 1
+
+
+def test_retry_carries_only_the_latest_failed_attempt() -> None:
+    """The third attempt sees only the second attempt's failure, not a history."""
+    backend = _ScriptedSummaryBackend(["x" * 400, "See finding [3].", "Clean summary."])
+    result = synthesise_module._write_and_judge_summary(
+        synthesis_backend=backend, seed={"kind": "block"}, detail={}
+    )
+    assert backend.summary_seeds[2]["previous_attempt"] == {
+        "summary": "See finding [3].",
+        "judge_reason": (
+            "The summary carried citation markers like [3]; a summary carries no citations."
+        ),
+    }
+    assert result["status"] == "verified"
+    assert result["writer_calls"] == 3
+
+
 def test_artefact_summary_seed_is_anchored_on_key_findings_and_conclusions(engine: Engine) -> None:
     """The artefact writer receives conclusion-bearing prose, never ordinary prose."""
     task_id: uuid.UUID | None = None
@@ -297,6 +382,52 @@ def test_artefact_summary_seed_is_anchored_on_key_findings_and_conclusions(engin
         assert "Key findings prose" in rendered
         assert "Conclusions prose" in rendered
         assert "Ordinary prose" not in rendered
+    finally:
+        if task_id is not None:
+            with engine.begin() as conn:
+                delete_task_data(conn, task_id)
+
+
+
+def test_the_summaries_pass_moves_its_line_section_by_section(engine: Engine) -> None:
+    """Task 058, round 14: under a bound task, one line per section ("n of N"),
+    then "Checking the summaries" for each judge call."""
+    from policy_atlas.core import liveness
+
+    task_id: uuid.UUID | None = None
+    ticks: list[dict[str, Any]] = []
+    try:
+        task_id, run_id, block_ids = _seed_summary_source(engine)
+        original = liveness.tick_hub.publish_tick
+
+        def capture(task: uuid.UUID, **payload: Any) -> None:
+            ticks.append(payload)
+            original(task, **payload)
+
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(liveness.tick_hub, "publish_tick", capture)
+            walk = uuid.uuid4()
+            with liveness.task_liveness(task_id, stage="synthesise", run_id=walk):
+                write_summaries_after_commit(
+                    engine,
+                    task_id=task_id,
+                    run_id=run_id,
+                    synthesis_backend=StubSynthesisBackend(),
+                )
+        lines = [tick["activity"] for tick in ticks]
+        sections = [line for line in lines if line.startswith("Summarising the sections · ")]
+        total = len(block_ids)
+        # ``done`` is the count already summarised (task 058 review).
+        expected = [f"Summarising the sections · {n} of {total}" for n in range(total)]
+        assert sections == expected
+        assert "Checking the summaries" in lines
+        assert all(tick["stage"] == "synthesise" for tick in ticks)
+        counted = [tick for tick in ticks if tick["activity"] in sections]
+        assert [(t["done"], t["total"], t["unit"]) for t in counted][0] == (
+            0,
+            len(block_ids),
+            "sections",
+        )
     finally:
         if task_id is not None:
             with engine.begin() as conn:

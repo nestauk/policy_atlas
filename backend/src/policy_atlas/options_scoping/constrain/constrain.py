@@ -45,7 +45,8 @@ task 046 items 5, 7, 10, 11, 12, R4, R21, R38, AM6, AM7.
    still shows the *distinct* verdict. When the kept option leaves the list
    (excluded), the duplicate is the one kept (``passes``,
    :data:`DUPLICATE_KEPT_REASON`). A user-held duplicate is never merged
-   away. Merged options are not judged again on a rebuild. A batch that
+   away, nor is an option the user put on the shortlist (:func:`merge_protected`;
+   task 055, O1). Merged options are not judged again on a rebuild. A batch that
    stays malformed keeps every option's prior state and ``exclusion`` (and
    no merge); a ``breaks`` with a blank reason makes a batch malformed. On a
    rebuild every option is re-judged: one constrain excluded last time and
@@ -94,10 +95,11 @@ task 046 items 5, 7, 10, 11, 12, R4, R21, R38, AM6, AM7.
 
 from __future__ import annotations
 
+import threading
 import uuid
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from itertools import batched
@@ -108,7 +110,9 @@ from pydantic import ValidationError
 from sqlalchemy import exists, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core import tracing
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import liveness, tracing
+from policy_atlas.core.done_callbacks import add_done_callback_in_context
 from policy_atlas.core.schema import longlist_result, option, option_membership, option_relation
 from policy_atlas.core.usage import TokenUsage, UsageAccumulator
 from policy_atlas.options_scoping.constrain.constrain_prompt import (
@@ -131,13 +135,13 @@ from policy_atlas.options_scoping.longlist.longlist import (
     latest_longlist,
     read_membership,
 )
-from policy_atlas.options_scoping.longlist.longlist_backend import (
-    LONGLIST_JUDGMENT_MODEL,
-    LonglistBackend,
-)
 from policy_atlas.options_scoping.longlist.where_tried import resolve_country
 from policy_atlas.options_scoping.longlist_intent import who_decides_considerations
 from policy_atlas.options_scoping.model_calls import CallOutcome, call_with_retry
+from policy_atlas.options_scoping.scoping_backend import (
+    LONGLIST_JUDGMENT_MODEL,
+    LonglistBackend,
+)
 from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
 from policy_atlas.runtime.scoping_plan import TRANSFERABILITY_DEFAULT, ScopingPlan
 
@@ -200,6 +204,24 @@ def user_holds_state(exclusion: object) -> bool:
         ``True`` when ``exclusion.by == "user"``.
     """
     return isinstance(exclusion, Mapping) and exclusion.get("by") == "user"
+
+
+def merge_protected(row: Any) -> bool:
+    """Whether an option may never be merged away or folded (task 055, P11, O1).
+
+    True for an option whose state the user set (:func:`user_holds_state`)
+    and for one the user put on the shortlist (``shortlist_state =
+    "added_by_you"``). Used only where a duplicate is merged or a seed is
+    folded: exclusion verdicts still apply to a shortlisted option and are
+    stored, so the reader sees the breach on the place.
+
+    Args:
+        row: An option row carrying ``exclusion`` and ``shortlist_state``.
+
+    Returns:
+        ``True`` when the option must stay on the list as itself.
+    """
+    return user_holds_state(row.exclusion) or row.shortlist_state == "added_by_you"
 
 
 def _plan_data(plan: ScopingPlan) -> dict[str, object]:
@@ -451,9 +473,32 @@ def _judge(
     """
     requirement_ids = [r["id"] for r in requirements]
     batches = [list(batch) for batch in batched(options, CONSTRAIN_BATCH_SIZE)]
+
+    # Task 058, N2: one count per batch, on the pool's own future. A batch's
+    # retries happen inside ``_judge_batch``, so they never move the count.
+    done = 0
+    lock = threading.Lock()
+    total = len(batches)
+
+    def publish_done(finished: Future[Any] | None) -> None:
+        nonlocal done
+        with lock:
+            if finished is not None:
+                done += 1
+            n = done
+        liveness.publish_progress(
+            activity=activity("constrain.batches", done=n, total=total),
+            done=n,
+            total=total,
+            unit="batches",
+        )
+
+    publish_done(None)
+
     with ThreadPoolExecutor(max_workers=CONSTRAIN_MAX_CONCURRENT) as pool:
-        futures = [
-            tracing.submit_with_context(
+        futures = []
+        for batch in batches:
+            future = tracing.submit_with_context(
                 pool,
                 _judge_batch,
                 backend,
@@ -463,8 +508,8 @@ def _judge(
                 preferences=preferences,
                 batch=batch,
             )
-            for batch in batches
-        ]
+            add_done_callback_in_context(future, publish_done)
+            futures.append(future)
         outcomes = [future.result() for future in futures]
     judged: dict[str, _Judged] = {}
     failed: set[str] = set()
@@ -861,6 +906,12 @@ def constrain_scope(
             # away); a failed batch keeps the prior state.
             state = row.state
         else:
+            if kept is not None and merge_protected(row):
+                # A user's shortlist place is never the merged-away side: it
+                # stays as itself, and two protected options both stay (O1).
+                # Its other verdicts still apply.
+                kept = None
+                verdicts[_DISTINCT] = _Verdict("passes", DUPLICATE_KEPT_REASON)
             broken = next((r for r in checks if verdicts[r["id"]].verdict == "breaks"), None)
             if broken is None:
                 state = "included"

@@ -1,0 +1,299 @@
+<title>ToC editing wireframes</title>
+<style>
+:root {
+  --blue: #0000ff; --navy: #0f294a; --grey: #646363; --ink: #1c1c1e;
+  --line: #e4e4e7; --line-2: #d3d3d8; --box: #b7bcc6; --ground: #f4f4f5; --paper: #ffffff; --paper-2: #fafafa;
+  --v-conf: #18a48c; --v-mixed: #f0a823; --v-little: #b4b4bb; --v-against: #d93a12;
+  --t-conf: #0d7a67; --t-mixed: #8f6100; --t-little: #646363; --t-against: #b0300e;
+  --font: "Averta", "Manrope", system-ui, sans-serif;
+  color-scheme: light;
+}
+body { background: var(--ground); color: var(--navy); font-family: var(--font); font-size: 16px; line-height: 1.55; margin: 0; padding-block: 0 5rem; padding-inline: 16px; }
+.wrap { max-width: 1180px; margin: 0 auto; }
+h1 { font-size: 28px; font-weight: 800; text-transform: uppercase; margin: 32px 0 4px; }
+.intro { max-width: 46em; color: var(--grey); margin: 0 0 24px; }
+.frame { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 24px; margin: 0 0 28px; box-shadow: 0 1px 2px rgb(0 0 0 / .04); }
+.frame > .tag { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--grey); margin: 0 0 4px; }
+.frame > h2 { font-size: 24px; margin: 0 0 6px; }
+.frame > .note { color: var(--grey); max-width: 52em; margin: 0 0 18px; font-size: 14px; }
+.scroll { overflow-x: auto; }
+/* canvas */
+.cv { min-width: 980px; }
+.cv text { font-family: var(--font); }
+.legend { display: flex; flex-wrap: wrap; gap: 18px; font-size: 14px; color: var(--grey); margin-top: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+/* panels */
+.two { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 24px; }
+@media (max-width: 820px) { .two { grid-template-columns: 1fr; } }
+.panel { border: 1px solid var(--line); border-radius: 14px; padding: 20px; background: var(--paper); }
+.panel .lab { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--grey); margin: 16px 0 4px; }
+.panel .lab:first-child { margin-top: 0; }
+.panel p { margin: 4px 0; }
+.code { font-size: 12px; color: var(--grey); font-weight: 600; }
+.verdict { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.balance { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 0 2px; align-items: end; }
+.col { display: flex; flex-direction: column-reverse; gap: 3px; min-height: 64px; border-bottom: 2px solid var(--line-2); padding-bottom: 3px; }
+.blk { border-radius: 3px; }
+.cap { font-size: 13px; color: var(--grey); text-align: center; }
+.fig { border-left: 3px solid var(--line-2); padding: 2px 0 2px 12px; margin: 10px 0; }
+.fig b { font-weight: 700; }
+.fig q { display: block; color: var(--ink); font-style: italic; margin: 2px 0; }
+.cite { font-size: 14px; color: var(--grey); }
+.ev { border-top: 1px solid var(--line); padding: 10px 0; }
+.chips { font-size: 13px; color: var(--grey); }
+.tblwrap { overflow-x: auto; }
+.pv-toggle { display: inline-flex; border: 1px solid var(--line-2); border-radius: 999px; padding: 3px; margin: 0 0 14px; }
+.seg { border: 0; background: none; font: inherit; font-size: 14px; font-weight: 700; color: var(--grey); padding: 5px 14px; border-radius: 999px; }
+.seg.on { background: var(--navy); color: #fff; }
+.pv-row { border-top: 1px solid var(--line); padding: 14px 0; }
+.pv-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 8px; }
+.pv-title { font-size: 16px; }
+.pv-weak { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--grey); }
+.pv-btn { margin-left: auto; cursor: pointer; }
+.quiet { background: none; border: 0; color: var(--navy); font-weight: 700; font-size: 14px; padding: 5px 8px; font-family: inherit; }
+.pv-full { margin-top: 10px; }
+/* editing additions */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; }
+.toolbar .sp { flex: 1; }
+.btn { display: inline-flex; align-items: center; gap: 6px; font: 600 14px var(--font); color: var(--navy); background: var(--paper); border: 1px solid var(--line-2); border-radius: 6px; padding: 5px 12px; }
+.btn.on { border-color: var(--blue); color: var(--blue); background: #ececff; }
+.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+.btn.quiet { border-color: transparent; background: transparent; color: var(--blue); padding-inline: 4px; }
+.btn.danger { border-color: transparent; background: transparent; color: var(--t-against); padding-inline: 4px; }
+.sel { font: 600 14px var(--font); color: var(--navy); border: 1px solid var(--line-2); padding: 5px 10px; background: var(--paper); }
+.cvwrap { position: relative; border: 1px solid var(--line); background: var(--paper-2); }
+.toast { position: absolute; left: 14px; bottom: 14px; background: var(--navy); color: #fff; font-size: 14px; border-radius: 6px; padding: 8px 12px; display: flex; gap: 14px; }
+.toast b { color: #b8c2ff; }
+.edited { font-size: 14px; color: var(--grey); margin: 2px 0 0; }
+.field { display: grid; gap: 4px; margin: 10px 0; }
+.field label { font-size: 14px; font-weight: 700; color: var(--ink); }
+.input { border: 1px solid var(--line-2); border-radius: 6px; padding: 7px 10px; font: 16px var(--font); color: var(--ink); background: var(--paper); }
+.input.area { min-height: 64px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.block { border-left: 3px solid var(--blue); background: #f5f5ff; padding: 10px 12px; margin: 10px 0; }
+.block .t { font-weight: 700; color: var(--ink); margin: 0 0 2px; }
+.doc { border-top: 1px solid var(--line); padding: 10px 0; }
+.doc .ti { font-weight: 600; color: var(--navy); }
+.doc .src { color: var(--ink); font-size: 15px; }
+.doc q { display: block; font-style: italic; color: var(--ink); margin-top: 4px; font-size: 15px; }
+.doc.off { opacity: .5; }
+.menu { border: 1px solid var(--line-2); border-radius: 8px; background: var(--paper); box-shadow: 0 6px 18px rgb(15 41 74 / .12); padding: 10px 12px; margin-top: 8px; }
+.menu .opt { display: grid; grid-template-columns: 7.5rem 1fr; gap: 6px 10px; align-items: center; font-size: 15px; }
+.pill { display: inline-block; border: 1px solid var(--line-2); border-radius: 999px; padding: 1px 10px; font-size: 14px; color: var(--ink); margin: 2px 2px 0 0; }
+.pill.on { border-color: var(--blue); background: #ececff; color: var(--blue); font-weight: 700; }
+.lab { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--blue); margin: 16px 0 4px; }
+.sub { font-weight: 700; color: var(--ink); margin: 12px 0 2px; }
+.agent { max-width: 640px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); padding: 16px 18px; }
+.msg { margin: 10px 0; }
+.msg.user { margin-left: auto; max-width: 80%; background: var(--ground); border-radius: 12px; padding: 8px 12px; width: fit-content; }
+.progress { font-size: 15px; color: var(--ink); margin: 2px 0; }
+.progress .done { color: var(--t-conf); font-weight: 700; }
+.card { border: 1px solid var(--line-2); border-radius: 10px; padding: 12px 14px; margin: 8px 0; }
+.card h3 { font-size: 16px; margin: 0 0 6px; }
+.find { border-top: 1px solid var(--line); padding: 8px 0; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; }
+.find p { margin: 0; }
+.find .why { color: var(--grey); font-size: 15px; }
+table.h { border-collapse: collapse; width: 100%; font-size: 15px; }
+table.h th { text-align: left; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--grey); border-bottom: 1px solid var(--line-2); padding: 6px 8px; }
+table.h td { border-bottom: 1px solid var(--line); padding: 8px; vertical-align: top; }
+.open { border-left: 3px solid var(--line-2); padding-left: 12px; margin: 8px 0; color: var(--grey); font-size: 15px; }
+</style>
+
+<div class="wrap">
+<h1>Editing wireframes</h1>
+<p class="intro">Draft for the owner's design review of increment 2 (contract C40 to C51). Example: the food-advertising theory. Two rules run through every frame: <b>your own edits apply at once, with Undo</b>; <b>what Policy Atlas finds or proposes waits for your Accept</b>. The canvas keeps its current look: neutral boxes, right-angled routes, one line style per verdict, the warning triangle and the blue halo on the selected connection.</p>
+
+<!-- Frame 1 -->
+<section class="frame">
+  <p class="tag">Frame 1 · Canvas · slice A</p>
+  <h2>Add, connect, drag, reset</h2>
+  <p class="note">The toolbar gains <b>Add box</b>, <b>Connect</b> (shown active: pick the source, then the target), <b>Reset layout</b> and <b>Review the theory</b>. S3 has been dragged down: its connections become smooth curves between the facing sides, while untouched boxes keep their right-angled routes (C47). S5 is new: grey "Needs evidence" under it until Policy Atlas finds some. A blue dot on a connection means something waits for you there: new evidence, or an edit whose evidence is from the earlier wording. The toast offers Undo right after each edit.</p>
+  <div class="toolbar">
+    <span class="sel">All pathways ▾</span><span class="sp"></span>
+    <span class="btn">＋ Add box</span><span class="btn on">⤳ Connect</span><span class="btn">Reset layout</span><span class="btn">Review the theory</span><span class="btn">How to read this</span>
+  </div>
+  <div class="cvwrap scroll">
+  <svg class="cv" viewBox="0 0 1300 420" width="100%" role="img" aria-label="Canvas in edit mode">
+    <defs>
+      <marker id="mg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#18a48c"/></marker>
+      <marker id="mgrey" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#b4b4bb"/></marker>
+      <marker id="ma" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f0a823"/></marker>
+      <marker id="mb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0000ff"/></marker>
+    </defs>
+    <g font-size="12" font-weight="700" fill="#646363" letter-spacing=".06em">
+      <text x="20" y="30">INPUTS AND ACTIVITIES</text><text x="240" y="30">OUTPUTS</text><text x="460" y="30">SHORT-TERM OUTCOMES</text><text x="900" y="30">LONG-TERM OUTCOMES</text><text x="1110" y="30">IMPACT</text>
+    </g>
+    <line x1="435" y1="0" x2="435" y2="420" stroke="#646363" stroke-dasharray="5 5"/>
+    <text x="427" y="408" font-size="12" fill="#646363" text-anchor="end">Directly influenced</text>
+    <text x="443" y="408" font-size="12" fill="#646363">Contributes to</text>
+    <!-- selected connection halo -->
+    <path d="M410,192 L425,192 Q435,192 435,182 L435,152 Q435,142 445,142 L460,142" fill="none" stroke="#0000ff" stroke-opacity=".18" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+    <g fill="none" stroke-width="2">
+      <path d="M190,92 L240,92" stroke="#18a48c" marker-end="url(#mg)"/>
+      <path d="M190,192 L240,192" stroke="#18a48c" stroke-dasharray="12 5" marker-end="url(#mg)"/>
+      <path d="M410,92 L425,92 Q435,92 435,102 L435,132 Q435,142 445,142 L460,142" stroke="#18a48c" marker-end="url(#mg)"/>
+      <path d="M410,192 L425,192 Q435,192 435,182 L435,152 Q435,142 445,142 L460,142" stroke="#b4b4bb" stroke-dasharray="6 5" stroke-width="3" marker-end="url(#mgrey)"/>
+      <path d="M630,142 L645,142 Q655,142 655,132 L655,102 Q655,92 665,92 L680,92" stroke="#18a48c" marker-end="url(#mg)"/>
+      <path d="M630,142 C668,142 662,282 700,282" stroke="#18a48c" stroke-dasharray="12 5" marker-end="url(#mg)"/>
+      <path d="M850,92 L865,92 Q875,92 875,102 L875,132 Q875,142 885,142 L900,142" stroke="#f0a823" stroke-width="5"/>
+      <path d="M850,92 L865,92 Q875,92 875,102 L875,132 Q875,142 885,142 L900,142" stroke="#18a48c" stroke-dasharray="6 6" marker-end="url(#ma)"/>
+      <path d="M870,282 C890,282 880,142 900,142" stroke="#18a48c" marker-end="url(#mg)"/>
+      <path d="M1070,142 L1110,142" stroke="#18a48c" marker-end="url(#mg)"/>
+      <!-- connect in progress -->
+      <path d="M630,342 C700,342 760,338 805,334" stroke="#0000ff" stroke-dasharray="4 4" marker-end="url(#mb)"/>
+    </g>
+    <!-- critical mark -->
+    <g transform="translate(875,117)"><path d="M0,-9 L9,7 L-9,7 Z" fill="#fff" stroke="#d93a12" stroke-width="2" stroke-linejoin="round"/><path d="M0,-3 L0,2" stroke="#d93a12" stroke-width="2" stroke-linecap="round"/><circle cx="0" cy="4.6" r="1.1" fill="#d93a12"/></g>
+    <!-- pending dot on selected connection -->
+    <circle cx="435" cy="167" r="6" fill="#0000ff" stroke="#fff" stroke-width="2"/>
+    <g font-size="13" fill="#0f294a" font-weight="600">
+      <rect x="20" y="60" width="170" height="64" rx="8" fill="#fff" stroke="#b7bcc6" stroke-width="1.5"/><text x="34" y="76" font-size="11" fill="#646363" font-weight="400">A1</text><text x="34" y="96">TV restrictions before</text><text x="34" y="112">9pm</text>
+      <rect x="20" y="160" width="170" height="64" rx="8" fill="#fff" stroke="#b7bcc6" stroke-width="1.5"/><text x="34" y="176" font-size="11" fill="#646363" font-weight="400">A2</text><text x="34" y="196">Ban on paid online</text><text x="34" y="212">adverts</text>
+      <rect x="240" y="60" width="170" height="64" rx="8" fill="#fff" stroke="#b7bcc6" stroke-width="1.5"/><text x="254" y="76" font-size="11" fill="#646363" font-weight="400">P1</text><text x="254" y="96">Fewer adverts in</text><text x="254" y="112">restricted TV slots</text>
+      <rect x="240" y="160" width="170" height="64" rx="8" fill="#fff" stroke="#b7bcc6" stroke-width="1.5"/><text x="254" y="176" font-size="11" fill="#646363" font-weight="400">P2</text><text x="254" y="196">Fewer paid adverts</text><text x="254" y="212">on platforms</text>
+      <rect x="460" y="110" width="170" height="64" rx="8" fill="#fff" stroke="#b7bcc6" stroke-width="1.5"/><text x="474" y="126" font-size="11" fill="#646363" font-weight="400">S1</text><text x="474" y="146">Children see fewer</text><text x="474" y="162">adverts overall</text>
+      <rect x="680" y="60" width="170" height="64" rx="8" fill="#fff" stroke="#b7bcc6" stroke-width="1.5"/><text x="694" y="76" font-size="11" fill="#646363" font-weight="400">S2</text><text x="694" y="96">Fewer requests to</text><text x="694" y="112">parents</text>
+      <rect x="700" y="250" width="170" height="64" rx="8" fill="#fff" stroke="#b7bcc6" stroke-width="1.5"/><text x="714" y="266" font-size="11" fill="#646363" font-weight="400">S3</text><text x="714" y="286">Fewer advert-prompted</text><text x="714" y="302">snacks</text>
+      <rect x="682" y="162" width="170" height="64" rx="8" fill="none" stroke="#b7bcc6" stroke-dasharray="3 4"/>
+      <text x="767" y="198" font-size="12" fill="#9a9aa3" font-weight="400" text-anchor="middle">moved from here</text>
+      <rect x="460" y="310" width="170" height="64" rx="8" fill="#fff" stroke="#0000ff" stroke-width="1.5"/><rect x="460" y="310" width="170" height="64" rx="8" fill="none" stroke="#ececff" stroke-width="8" opacity=".9"/><text x="474" y="326" font-size="11" fill="#646363" font-weight="400">S5</text><text x="474" y="346">Parents set limits on</text><text x="474" y="362">screen time</text>
+      <text x="474" y="392" font-size="12" fill="#646363" font-weight="400" font-style="italic">Needs evidence</text>
+      <rect x="900" y="110" width="170" height="64" rx="8" fill="#fff" stroke="#b7bcc6" stroke-width="1.5"/><text x="914" y="126" font-size="11" fill="#646363" font-weight="400">L1</text><text x="914" y="146">Children eat less</text><text x="914" y="162">excess energy</text>
+      <rect x="1110" y="110" width="170" height="64" rx="8" fill="#fff" stroke="#b7bcc6" stroke-width="1.5"/><text x="1124" y="126" font-size="11" fill="#646363" font-weight="400">I1</text><text x="1124" y="146">Fewer children with</text><text x="1124" y="162">obesity</text>
+    </g>
+    <text x="812" y="348" font-size="13" fill="#0000ff" font-weight="600">Click the box it leads to · Esc to cancel</text>
+  </svg>
+  <div class="toast">Moved S3 <b>Undo</b></div>
+  </div>
+</section>
+
+<!-- Frame 2 -->
+<section class="frame">
+  <p class="tag">Frame 2 · Box sidebar · slice A</p>
+  <h2>Edit a box; find evidence for a new one</h2>
+  <p class="note">Left: an edited box as you read it. "Edited by" names who changed it and when (C41). <b>Find more evidence</b> sits at the bottom of every sidebar (C44). Right: the same sidebar after <b>Edit</b>: every field in place, Save or Cancel, and Delete box at the end. A new box shows "Needs evidence" with <b>Find evidence</b> instead.</p>
+  <div class="two">
+    <div class="panel">
+      <p class="code">Short-term outcome S1 · <span class="btn quiet">Edit</span></p>
+      <h3 style="margin:2px 0 0">Children see fewer less healthy food adverts overall</h3>
+      <p class="edited">Edited by Karlis · 30 Oct, 11:20 · <span class="btn quiet">History</span></p>
+      <p>This is the first change the restrictions must cause outside the programme's control: covered adverts can be removed while total exposure stays the same.</p>
+      <p class="lab">How we'd know it happened</p>
+      <p><b>Definition</b> Children's total impacts of HFSS adverts across TV and online</p>
+      <p><b>Indicator</b> Impacts per child per week (BARB, Nielsen)</p>
+      <p><b>Timing</b> 6 to 18 months after January 2026</p>
+      <p class="lab">Evidence</p>
+      <p class="open">Seen in, Size of change and Case studies, as today.</p>
+      <div class="row"><span class="btn">Find more evidence</span></div>
+    </div>
+    <div class="panel">
+      <p class="code">Editing S1</p>
+      <div class="field"><label>Text</label><div class="input area">Children see fewer less healthy food adverts overall</div></div>
+      <div class="field"><label>Layer</label><div class="input">Short-term outcome ▾</div></div>
+      <div class="field"><label>Description</label><div class="input area">This is the first change the restrictions must cause outside the programme's control…</div></div>
+      <div class="field"><label>Definition</label><div class="input">Children's total impacts of HFSS adverts across TV and online</div></div>
+      <div class="field"><label>Indicator</label><div class="input">Impacts per child per week (BARB, Nielsen)</div></div>
+      <div class="field"><label>Timing</label><div class="input">6 to 18 months after January 2026</div></div>
+      <p class="edited">Changing the text marks its 4 connections "evidence from the earlier wording".</p>
+      <div class="row"><span class="btn primary">Save</span><span class="btn">Cancel</span><span class="sp" style="flex:1"></span><span class="btn danger">Delete box</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Frame 3 -->
+<section class="frame">
+  <p class="tag">Frame 3 · Connection sidebar · slices B and C</p>
+  <h2>Pending evidence, your scores, removed and added studies</h2>
+  <p class="note">Left: what waits for you sits at the top. An edit's block offers <b>Keep the evidence</b> or <b>Check again</b> (C43). New evidence from Find more evidence shows the verdict now and if accepted, and nothing counts until you accept (C44). Right: the document list. Each document's <b>⋯</b> opens Remove from this link and Change scores; your score is shown next to the judge's (C42). Removed studies stay listed, greyed, with Restore. <b>Add a study</b> takes a DOI or a web address.</p>
+  <div class="two">
+    <div class="panel">
+      <p class="code">Connection #5 · P2 → S1 · <span class="btn quiet">Edit</span></p>
+      <h3 style="margin:2px 0 0">Fewer platform adverts reach children</h3>
+      <p class="verdict"><span class="dot" style="background:var(--v-little)"></span><span style="color:var(--t-little)">Not enough evidence</span></p>
+      <div class="block">
+        <p class="t">Edited by Karlis · evidence from the earlier wording</p>
+        <p style="margin:0">"Then" changed from "children see fewer adverts" to "children under 16 see fewer adverts". The 2 documents were judged for the earlier wording.</p>
+        <div class="row"><span class="btn">Keep the evidence</span><span class="btn primary">Check again</span></div>
+      </div>
+      <div class="block">
+        <p class="t">New evidence found: 3 documents</p>
+        <p style="margin:0">Verdict now: <b style="color:var(--t-little)">Not enough evidence</b> → if accepted: <b style="color:var(--t-conf)">Leaning supports</b></p>
+        <div class="doc"><p class="ti">Children's exposure to food adverts on YouTube after Chile's rules</p><p class="src">Correa et al. · 2024 · Weakly supports · quality 3 · relevance 1</p><div class="row"><span class="btn">Accept</span><span class="btn">Reject</span></div></div>
+        <div class="doc"><p class="ti">Online HFSS advertising seen by UK children aged 11 to 15</p><p class="src">Ofcom · 2025 · Weakly supports · quality 2 · relevance 3</p><div class="row"><span class="btn">Accept</span><span class="btn">Reject</span></div></div>
+        <div class="doc"><p class="ti">Influencer marketing and children's food preferences</p><p class="src">Coates et al. · 2019 · Not about this step</p><div class="row"><span class="btn">Accept</span><span class="btn">Reject</span></div></div>
+        <div class="row"><span class="btn primary">Accept all</span><span class="btn">Reject all</span></div>
+      </div>
+      <p class="lab">How this works</p>
+      <p class="open">As today.</p>
+    </div>
+    <div class="panel">
+      <p class="lab" style="margin-top:0">Evidence</p>
+      <p class="sub">Documents (2)</p>
+      <div class="doc"><p class="ti">[1] Effect of restrictions on television food advertising to children on exposure <span style="float:right" class="btn quiet">⋯</span></p><p class="src">Adams et al. · 2012 · Refutes · quality 2 · relevance 1 · <b>your scores</b>: Not about this step</p>
+        <div class="menu">
+          <p style="margin:0 0 6px;font-weight:700">Change scores</p>
+          <div class="opt"><span>Support</span><span><span class="pill">Strongly</span><span class="pill">Weakly</span><span class="pill">Mixed</span><span class="pill">Refutes</span><span class="pill on">Not about</span></span>
+          <span>Relevance</span><span><span class="pill on">0</span><span class="pill">1</span><span class="pill">2</span><span class="pill">3</span></span>
+          <span>Judge said</span><span>Refutes · relevance 1</span></div>
+          <div class="row"><span class="btn primary">Save</span><span class="btn">Use the judge's scores</span><span class="sp" style="flex:1"></span><span class="btn danger">Remove from this link</span></div>
+        </div>
+      </div>
+      <div class="doc"><p class="ti">[2] Prevalence of food brands in child-influencer YouTube videos</p><p class="src">Alruwaily et al. · 2023 · Refutes · quality 2 · relevance 1</p></div>
+      <p class="sub">Removed by you (1)</p>
+      <div class="doc off"><p class="ti">Advertising disclosure regulations on Instagram</p><p class="src">Ershov et al. · 2025 · removed by Karlis, 30 Oct · <span class="btn quiet" style="opacity:1">Restore</span></p></div>
+      <p class="sub">Add a study</p>
+      <div class="row" style="margin-top:4px"><div class="input" style="flex:1">DOI or web address</div><span class="btn">Add</span></div>
+      <p class="edited">Policy Atlas fetches it, judges it for this connection and adds it, marked "Added by you".</p>
+      <div class="row"><span class="btn">Find more evidence</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Frame 4 -->
+<section class="frame">
+  <p class="tag">Frame 4 · Task Agent · slices C and D</p>
+  <h2>Progress, review findings, the report, edits from the chat</h2>
+  <p class="note">The Task Agent is where Policy Atlas reports and asks. A running check shows one line per stage with counts and a <b>Stop</b> button (C48). The review card lists shape findings, each with a reason, a proposed edit, Accept and Reject, and which report sections are now out of date, with <b>Update the report</b> (C45). An edit asked for in the chat comes back as the same kind of card: nothing changes until you accept (C46).</p>
+  <div class="agent">
+    <div class="msg"><b>Finding evidence for 2 new items</b> <span class="btn quiet">Stop</span>
+      <p class="progress"><span class="done">✓</span> Searching for 2 connections: 41 records</p>
+      <p class="progress"><span class="done">✓</span> Picking: 18 documents</p>
+      <p class="progress">… Judging: 9 of 18 documents</p>
+    </div>
+    <div class="msg">You've made 6 changes since the last review. <span class="btn">Review the theory</span></div>
+    <div class="card">
+      <h3>Review of your changes: 3 suggestions</h3>
+      <div class="find"><div><p><b>Connect S5 to a long-term outcome.</b> Add "S5 → L1: if parents set limits on screen time, then children eat less excess energy".</p><p class="why">S5 is new and leads nowhere, so no pathway reaches the impact through it.</p></div><div class="row" style="margin:0"><span class="btn">Accept</span><span class="btn">Reject</span></div></div>
+      <div class="find"><div><p><b>Add your connection #24 (S3 → L1) to pathway 3, "Fewer food cues reduce snacking".</b></p><p class="why">A connection you add is on no pathway, so choosing a pathway hides it.</p></div><div class="row" style="margin:0"><span class="btn">Accept</span><span class="btn">Reject</span></div></div>
+      <div class="find"><div><p><b>Merge S2 and S4.</b> Both say children ask their parents for fewer advertised foods.</p><p class="why">Two boxes saying the same thing split the evidence between them.</p></div><div class="row" style="margin:0"><span class="btn">Accept</span><span class="btn">Reject</span></div></div>
+      <p style="margin:10px 0 4px"><b>The report:</b> "How change happens" and "What to test and measure" no longer match the theory.</p>
+      <div class="row"><span class="btn primary">Accept all</span><span class="btn">Update the report</span></div>
+    </div>
+    <div class="msg user">Can you add a failure pathway where adverts move to influencers?</div>
+    <div class="msg">I've proposed one: a new box and two connections. Nothing changes until you accept.</div>
+    <div class="card">
+      <h3>Proposed: 1 box, 2 connections</h3>
+      <div class="find"><div><p>Add box <b>F3: Brands pay influencers to promote less healthy food</b> (if it goes wrong)</p></div><div class="row" style="margin:0"><span class="btn">Accept</span><span class="btn">Reject</span></div></div>
+      <div class="find"><div><p>Connect <b>P2 → F3</b> and <b>F3 → S1</b>, as a failure pathway</p></div><div class="row" style="margin:0"><span class="btn">Accept</span><span class="btn">Reject</span></div></div>
+      <div class="row"><span class="btn primary">Accept all, then find evidence</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Frame 5 -->
+<section class="frame">
+  <p class="tag">Frame 5 · History · slice A</p>
+  <h2>Who changed what</h2>
+  <p class="note">At the bottom of the Result page, closed by default. One row per change: your own edits, accepted proposals and Policy Atlas's own steps (merge, choose). Undo applies the state before that change; a later edit to the same item is never overwritten without saying so (C10).</p>
+  <div class="scroll"><table class="h">
+    <tr><th>When</th><th>Who</th><th>What</th><th></th></tr>
+    <tr><td>30 Oct 11:42</td><td>Karlis</td><td>Accepted 2 new documents on #5 · verdict now Leaning supports</td><td><span class="btn quiet">Undo</span></td></tr>
+    <tr><td>30 Oct 11:31</td><td>Policy Atlas, accepted by Karlis</td><td>Added connection S5 → L1 (review)</td><td><span class="btn quiet">Undo</span></td></tr>
+    <tr><td>30 Oct 11:24</td><td>Karlis</td><td>Changed scores for Adams et al. 2012 on #5: Refutes → Not about this step</td><td><span class="btn quiet">Undo</span></td></tr>
+    <tr><td>30 Oct 11:20</td><td>Karlis</td><td>Edited S1: text</td><td><span class="btn quiet">Undo</span></td></tr>
+    <tr><td>30 Oct 11:18</td><td>Karlis</td><td>Moved S3</td><td><span class="btn quiet">Undo</span></td></tr>
+    <tr><td>30 Oct 10:52</td><td>Policy Atlas</td><td>Checked the evidence: 23 connections</td><td></td></tr>
+  </table></div>
+</section>
+</div>

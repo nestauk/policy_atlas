@@ -56,7 +56,7 @@ into the row's ``coverage``.
 **The place sentences (task 046, amendment 4, R80; S31).** A second wave,
 after the first pool has returned and before any write: per option on the
 stored coverage that has evaluating documents, one call on the mini model
-(:meth:`~policy_atlas.options_scoping.longlist.longlist_backend.LonglistBackend.place_sentences`),
+(:meth:`~policy_atlas.options_scoping.scoping_backend.LonglistBackend.place_sentences`),
 the calls in a pool of :data:`OPTION_PROFILE_MAX_CONCURRENT`, each tried once
 more. The input, the template and the trace check are code
 (:mod:`.place_sentences`). A failed call, a sentence over the ceiling or one
@@ -69,6 +69,7 @@ card's order) and counted in ``provenance.option_profile.place_sentences``.
 from __future__ import annotations
 
 import re
+import threading
 import time
 import uuid
 from collections import Counter
@@ -84,7 +85,9 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core import tracing
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import liveness, tracing
+from policy_atlas.core.done_callbacks import add_done_callback_in_context
 from policy_atlas.core.schema import (
     intervention_profile_record,
     longlist_result,
@@ -100,17 +103,11 @@ from policy_atlas.options_scoping.longlist.coverage import (
     distinct_words,
     fold_programme_names,
 )
-from policy_atlas.options_scoping.longlist.lever_types import LEVER_TYPE_KEYS, TAXONOMY_VERSION
 from policy_atlas.options_scoping.longlist.longlist import (
     MembershipRead,
     _seeds,
     latest_longlist,
     read_membership,
-)
-from policy_atlas.options_scoping.longlist.longlist_backend import (
-    LONGLIST_ASSIGNMENT_MODEL,
-    LONGLIST_JUDGMENT_MODEL,
-    LonglistBackend,
 )
 from policy_atlas.options_scoping.longlist.where_tried import resolve_country
 from policy_atlas.options_scoping.longlist_intent import (
@@ -123,6 +120,10 @@ from policy_atlas.options_scoping.option_profile.folding_prompt import (
     Facet,
     FoldingResponse,
 )
+from policy_atlas.options_scoping.option_profile.lever_types import (
+    LEVER_TYPE_KEYS,
+    TAXONOMY_VERSION,
+)
 from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
     LEVER_TYPING_BATCH_SIZE,
     LEVER_TYPING_PROMPT_VERSION,
@@ -130,9 +131,13 @@ from policy_atlas.options_scoping.option_profile.lever_typing_prompt import (
 )
 from policy_atlas.options_scoping.option_profile.option_profile_prompt import (
     OPTION_PROFILE_PROMPT_VERSION,
+    POTENTIAL_IMPACT_HARD_MAX_CHARS,
+    POTENTIAL_IMPACT_LINE,
+    POTENTIAL_IMPACT_MAX_CHARS,
     AmbitionResponse,
     MarkedLineResponse,
     PlainLineResponse,
+    PotentialImpactResponse,
     SettingResponse,
     line_is_marked,
 )
@@ -150,6 +155,11 @@ from policy_atlas.options_scoping.option_profile.place_sentences_prompt import (
     PLACE_SENTENCE_MAX_CHARS,
     PLACE_SENTENCES_PROMPT_VERSION,
     PlaceSentencesResponse,
+)
+from policy_atlas.options_scoping.scoping_backend import (
+    LONGLIST_ASSIGNMENT_MODEL,
+    LONGLIST_JUDGMENT_MODEL,
+    LonglistBackend,
 )
 from policy_atlas.options_scoping.suggest.suggest import baseline_sections, walk_plan
 from policy_atlas.options_scoping.text import clean_text, fold_text
@@ -297,9 +307,31 @@ def _type_options(
     typings: dict[uuid.UUID, _Typing] = {}
     answered: set[uuid.UUID] = set()
     failed_batches = 0
+
+    # Task 058, N2: one count per typing batch, on the pool's own future.
+    typing_done = 0
+    typing_lock = threading.Lock()
+    typing_total = len(batches)
+
+    def publish_typing(finished: Future[Any] | None) -> None:
+        nonlocal typing_done
+        with typing_lock:
+            if finished is not None:
+                typing_done += 1
+            n = typing_done
+        liveness.publish_progress(
+            activity=activity("option_profile.typing", done=n, total=typing_total),
+            done=n,
+            total=typing_total,
+            unit="batches",
+        )
+
+    publish_typing(None)
+
     with ThreadPoolExecutor(max_workers=TYPING_MAX_CONCURRENT) as pool:
-        futures = [
-            tracing.submit_with_context(
+        futures = []
+        for batch in batches:
+            future = tracing.submit_with_context(
                 pool,
                 backend.type_options,
                 options=[
@@ -314,8 +346,8 @@ def _type_options(
                 plan=plan,
                 baseline_sections=baseline,
             )
-            for batch in batches
-        ]
+            add_done_callback_in_context(future, publish_typing)
+            futures.append(future)
         results: list[UsageResult[LeverTypingResponse] | None] = []
         for future in futures:
             try:
@@ -442,6 +474,31 @@ class _Setting:
 
     main: str | None
     second: str | None
+    #: Whom the option acts on directly (task 058, round 12, owner): the
+    #: model's words, lower case, at most :data:`ACTS_ON_MAX`.
+    acts_on: tuple[str, ...] = ()
+
+
+#: The most "acts on" words one option may carry (the prompt's own limit).
+ACTS_ON_MAX = 4
+
+
+def _acts_on_words(values: Sequence[str]) -> tuple[str, ...] | None:
+    """The setting call's ``acts_on``, cleaned; ``None`` when malformed.
+
+    Each item is folded onto one line (whitespace runs become one space),
+    trimmed and lower-cased; a blank item, a repeat or more than
+    :data:`ACTS_ON_MAX` items makes the answer malformed.
+    """
+    if len(values) > ACTS_ON_MAX:
+        return None
+    words: list[str] = []
+    for value in values:
+        word = " ".join(value.split()).lower()
+        if word == "" or word in words:
+            return None
+        words.append(word)
+    return tuple(words)
 
 
 def _evidence_records(
@@ -506,7 +563,7 @@ def _evidence_records(
 def _profile_payload(
     options: Sequence[_ProfiledOption], records: Mapping[uuid.UUID, list[dict[str, object]]]
 ) -> tuple[list[dict[str, object]], dict[str, uuid.UUID]]:
-    """The one option list all ten profile calls read (S16).
+    """The one option list all the profile calls read (S16).
 
     Short ids ``o1 … oN`` in list order, mapped back to the option ids in
     code.
@@ -526,6 +583,43 @@ def _profile_payload(
         for short_id, o in zip(short_ids, options, strict=True)
     ]
     return payload, short_ids
+
+
+def _potential_impact_payload(
+    payload: Sequence[Mapping[str, object]],
+    short_ids: Mapping[str, uuid.UUID],
+    coverage: object,
+) -> list[dict[str, object]]:
+    """The Potential impact call's option list: the shared entries plus the reach (P13).
+
+    Per option, from its stored coverage entry: ``tried_on`` (the units its
+    records were tried on), ``evaluated_countries`` and ``role`` (documents
+    that describe, recommend or evaluate it). An option with no coverage entry
+    gets empty values.
+
+    Args:
+        payload: The shared per-option payload.
+        short_ids: Short id to option id.
+        coverage: ``longlist_result.coverage``.
+
+    Returns:
+        One dict per option, in the payload's order.
+    """
+    stored = coverage if isinstance(coverage, Mapping) else {}
+    out: list[dict[str, object]] = []
+    for entry in payload:
+        option_id = short_ids[str(entry["option_id"])]
+        held = stored.get(str(option_id))
+        held = held if isinstance(held, Mapping) else {}
+        out.append(
+            {
+                **entry,
+                "tried_on": list(held.get("tried_on") or []),
+                "evaluated_countries": list(held.get("evaluated_countries") or []),
+                "role": dict(held.get("role") or {}),
+            }
+        )
+    return out
 
 
 def _covers_the_list(answered: Sequence[str], short_ids: Mapping[str, uuid.UUID]) -> bool:
@@ -559,7 +653,9 @@ def _checked_line(
     On ``who_decides`` and ``dependencies`` the mark is ``None`` whatever
     the response holds (R36).
     """
-    pairs = _answered(response, (MarkedLineResponse, PlainLineResponse), short_ids)
+    pairs = _answered(
+        response, (MarkedLineResponse, PlainLineResponse, PotentialImpactResponse), short_ids
+    )
     if pairs is None:
         return None
     marked = line_is_marked(line_key)
@@ -568,6 +664,15 @@ def _checked_line(
         sentence = wire.answer.strip()
         if not sentence:
             return None
+        if line_key == POTENTIAL_IMPACT_LINE and len(sentence) > POTENTIAL_IMPACT_MAX_CHARS:
+            log.warning(
+                "option_profile.potential_impact_over_ceiling",
+                option_id=short_id,
+                chars=len(sentence),
+                hard_max=POTENTIAL_IMPACT_HARD_MAX_CHARS,
+            )
+            if len(sentence) > POTENTIAL_IMPACT_HARD_MAX_CHARS:
+                return None
         stands_out = getattr(wire, "stands_out", "no") if marked else "no"
         lines[short_id] = _Line(sentence=sentence, mark=_mark(stands_out))
     return lines
@@ -595,7 +700,8 @@ def _checked_setting(
     """The setting response, checked fail-closed; ``None`` when malformed (R41).
 
     A setting is null or a non-blank word, lower-cased; the second setting is
-    null when the main one is.
+    null when the main one is. ``acts_on`` is at most :data:`ACTS_ON_MAX`
+    distinct non-blank phrases, lower-cased (:func:`_acts_on_words`).
     """
     pairs = _answered(response, SettingResponse, short_ids)
     if pairs is None:
@@ -604,9 +710,15 @@ def _checked_setting(
     for short_id, wire in pairs:
         main = None if wire.main_setting is None else wire.main_setting.strip().lower()
         second = None if wire.second_setting is None else wire.second_setting.strip().lower()
-        if main == "" or second == "" or (main is None and second is not None):
+        acts_on = _acts_on_words(wire.acts_on)
+        if (
+            main == ""
+            or second == ""
+            or (main is None and second is not None)
+            or acts_on is None
+        ):
             return None
-        settings[short_id] = _Setting(main=main, second=second)
+        settings[short_id] = _Setting(main=main, second=second, acts_on=acts_on)
     return settings
 
 
@@ -619,11 +731,15 @@ def _profile_calls(
     payload: list[dict[str, object]],
     short_ids: Mapping[str, uuid.UUID],
     considerations: list[str] | None = None,
+    impact_payload: list[dict[str, object]] | None = None,
+    impact_plan: dict[str, object] | None = None,
 ) -> list[tuple[str, Callable[[], UsageResult[Any]], Callable[[Any], Mapping[str, Any] | None]]]:
-    """The ten profile calls: one per line, the ambition, the setting (R36, R40, R41).
+    """The eleven profile calls: one per line, the ambition, the setting (R36, R40, R41).
 
     Where and the plan's who-can-act constraint texts reach the ``who_decides``
-    call only (task 046, amendment 4: R89; S35).
+    call only (task 046, amendment 4: R89; S35). The ``potential_impact`` line
+    has its own call and payload (task 055, P13): ``impact_payload`` and
+    ``impact_plan`` (the shared ones when not given).
     """
 
     def _line(line_key: str) -> Callable[[], UsageResult[Any]]:
@@ -641,7 +757,22 @@ def _profile_calls(
 
     calls: list[
         tuple[str, Callable[[], UsageResult[Any]], Callable[[Any], Mapping[str, Any] | None]]
-    ] = [(line_key, _line(line_key), _line_check(line_key)) for line_key in PROFILE_LINE_KEYS]
+    ] = [
+        (line_key, _line(line_key), _line_check(line_key))
+        for line_key in PROFILE_LINE_KEYS
+        if line_key != POTENTIAL_IMPACT_LINE
+    ]
+    calls.append(
+        (
+            POTENTIAL_IMPACT_LINE,
+            lambda: backend.profile_potential_impact(
+                plan=impact_plan if impact_plan is not None else plan,
+                baseline_sections=baseline,
+                options=impact_payload if impact_payload is not None else payload,
+            ),
+            _line_check(POTENTIAL_IMPACT_LINE),
+        )
+    )
     calls.append(
         (
             _AMBITION_CALL,
@@ -869,6 +1000,8 @@ def option_profile_scope(
     options = _profiled_options(conn, task_id=task_id)
     records = _evidence_records(conn, task_id=task_id, option_ids=[o.option_id for o in options])
     payload, short_ids = _profile_payload(options, records)
+    impact_payload = _potential_impact_payload(payload, short_ids, result_row.coverage)
+    impact_plan = {**plan_data, "where": plan.where.text}
     # The folding calls read the distinct words of every member (S21).
     membership = read_membership(
         conn,
@@ -891,6 +1024,8 @@ def option_profile_scope(
             payload=payload,
             short_ids=short_ids,
             considerations=who_decides_considerations(plan) or None,
+            impact_payload=impact_payload,
+            impact_plan=impact_plan,
         )
         if options
         else []
@@ -1258,9 +1393,32 @@ def _place_sentence_wave(
     def _place_ids(o: _ProfiledOption) -> frozenset[str]:
         return frozenset(group.place_id for group in groups[str(o.option_id)])
 
+    # Task 058, N2: one count per option with documents, on the pool's own
+    # future. Retries happen inside ``call_with_retry`` and never move it.
+    places_done = 0
+    places_lock = threading.Lock()
+    places_total = len(called)
+
+    def publish_places(finished: Future[Any] | None) -> None:
+        nonlocal places_done
+        with places_lock:
+            if finished is not None:
+                places_done += 1
+            n = places_done
+        liveness.publish_progress(
+            activity=activity("option_profile.places", done=n, total=places_total),
+            done=n,
+            total=places_total,
+            unit="options",
+        )
+
+    if places_total:
+        publish_places(None)
+
     with ThreadPoolExecutor(max_workers=OPTION_PROFILE_MAX_CONCURRENT) as pool:
-        futures = {
-            str(o.option_id): tracing.submit_with_context(
+        futures = {}
+        for o in called:
+            future = tracing.submit_with_context(
                 pool,
                 call_with_retry,
                 f"place sentences {o.option_id}",
@@ -1269,8 +1427,8 @@ def _place_sentence_wave(
                 final_check=partial(_checked_places, known=_place_ids(o)),
                 event="option_profile",
             )
-            for o in called
-        }
+            add_done_callback_in_context(future, publish_places)
+            futures[str(o.option_id)] = future
         answers = {option_id: future.result() for option_id, future in futures.items()}
     stats: dict[str, Any] = {
         "calls": len(called),
@@ -1365,7 +1523,7 @@ def _profile_column(
     """The ``longlist_result.option_profile`` value (S17; final § 2.10).
 
     ``{option_id: {design_version: {"lines": {line key: {"sentence",
-    "mark"}}, "setting": {"main", "second"}}}}`` for every option of the list,
+    "mark"}}, "setting": {"main", "second", "acts_on"}}}}`` for every option of the list,
     the lines in :data:`~policy_atlas.runtime.scoping_plan.PROFILE_LINE_KEYS`
     order.
     """
@@ -1380,7 +1538,11 @@ def _profile_column(
         column[str(o.option_id)] = {
             str(o.design_version): {
                 "lines": lines,
-                "setting": {"main": setting.main, "second": setting.second},
+                "setting": {
+                    "main": setting.main,
+                    "second": setting.second,
+                    "acts_on": list(setting.acts_on),
+                },
             }
         }
     return column

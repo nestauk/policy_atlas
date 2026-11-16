@@ -2,12 +2,16 @@
 
 Pure functions only — no I/O, no DB. Three responsibilities:
 
-* ``qv_v1`` quote verification — normalise a candidate quote and the document's
+* ``qv_v2`` quote verification — normalise a candidate quote and the document's
   frozen basis text the same way, match on a normalised copy that carries an
   index map back to *raw* offsets, and record chunk-local raw intervals with a
   graded status (``exact`` | ``normalised`` | ``failed``). The offset substrate
   is never normalised (the LangExtract NFC lesson): recorded intervals are
-  always raw, half-open ``[start, end)``.
+  always raw, half-open ``[start, end)``. ``qv_v2`` (task 057, N14) is
+  ``qv_v1`` plus one step: markdown/HTML markup (``**bold**``,
+  ``[text](url)``, ``<br>`` ...) is ignored on both sides, using the shared
+  rule in :mod:`policy_atlas.core.markup`. Rows stored under ``qv_v1`` keep
+  their label; nothing rewrites them.
 * ``iof_rules_v3`` field validation — null-like coercion, numeric parsing,
   bounds/consistency checks, estimate-level coherence and field coverage, then
   the grain gate that builds the stored :class:`IOFRecord`.
@@ -23,10 +27,12 @@ finding.
 from __future__ import annotations
 
 import math
+from bisect import bisect_left
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
+from policy_atlas.core.markup import markup_deletions
 from policy_atlas.evidence_search.extract.icf_records import ICFRecord, ICFRecordWire
 from policy_atlas.evidence_search.extract.iof_records import (
     IOFAnchor,
@@ -37,7 +43,7 @@ from policy_atlas.evidence_search.extract.iof_records import (
     IOFStratumWire,
 )
 
-QUOTE_VERIFIER_VERSION = "qv_v1"
+QUOTE_VERIFIER_VERSION = "qv_v2"
 FIELD_RULES_VERSION = "iof_rules_v3"
 ICF_FIELD_RULES_VERSION = "icf_rules_v2"
 
@@ -89,7 +95,7 @@ _OTHER_NULLABLE_FIELDS = (
 )
 
 
-# --- qv_v1 quote verification ---------------------------------------------
+# --- qv_v2 quote verification ---------------------------------------------
 
 
 def _build_norm(raw_text: str) -> tuple[str, list[int], list[int]]:
@@ -97,9 +103,22 @@ def _build_norm(raw_text: str) -> tuple[str, list[int], list[int]]:
 
     The normalised copy is built character by character so that one normalised
     char can map back to a run of raw chars (whitespace collapse) or to a raw
-    span containing deleted chars (soft hyphens). ``casefold`` may expand a
-    single raw char into several normalised chars; each carries the same raw
-    span. The raw offset substrate is never mutated.
+    span containing deleted chars (soft hyphens, and from ``qv_v2`` markup).
+    ``casefold`` may expand a single raw char into several normalised chars;
+    each carries the same raw span. The raw offset substrate is never mutated.
+
+    Steps, in order (the same for the quote and the basis — this one function
+    serves both sides, which keeps the match symmetric):
+
+    1. Markup (``qv_v2``): the raw spans :func:`~policy_atlas.core.markup.markup_deletions`
+       reports are skipped, exactly like a soft hyphen — they produce no
+       normalised char, so a match running through them maps back to a raw
+       interval that still contains them. A ``<br>`` span instead counts as one
+       whitespace char covering the whole ``<br>``.
+    2. Soft hyphens are deleted.
+    3. Smart quotes, en/em dashes and the no-break space fold to plain ASCII.
+    4. Every whitespace run collapses to one space.
+    5. Everything is case-folded.
 
     Args:
         raw_text: The frozen basis (or quote) text.
@@ -110,23 +129,37 @@ def _build_norm(raw_text: str) -> tuple[str, list[int], list[int]]:
         the raw interval of a normalised match ``[i, j)`` is
         ``[raw_start[i], raw_end[j - 1])``.
     """
+    # Raw position -> end of the <br> span starting there; raw positions to skip.
+    br_end_at: dict[int, int] = {}
+    skipped: set[int] = set()
+    for start, end, replacement in markup_deletions(raw_text):
+        if replacement:
+            br_end_at[start] = end
+            skipped.update(range(start + 1, end))
+        else:
+            skipped.update(range(start, end))
+
     norm: list[str] = []
     raw_start: list[int] = []
     raw_end: list[int] = []
     prev_space = False
     for idx, ch in enumerate(raw_text):
-        if ch == _SOFT_HYPHEN:
+        if idx in skipped or ch == _SOFT_HYPHEN:
             continue
-        folded = _FOLD_MAP.get(ch, ch)
+        span_end = br_end_at.get(idx)
+        if span_end is not None:
+            folded, consumed_end = " ", span_end
+        else:
+            folded, consumed_end = _FOLD_MAP.get(ch, ch), idx + 1
         if folded.isspace():
             if prev_space:
                 # Extend the current normalised space over the whitespace run so
                 # a match ending on the space covers the whole raw run.
-                raw_end[-1] = idx + 1
+                raw_end[-1] = consumed_end
                 continue
             norm.append(" ")
             raw_start.append(idx)
-            raw_end.append(idx + 1)
+            raw_end.append(consumed_end)
             prev_space = True
             continue
         prev_space = False
@@ -138,7 +171,7 @@ def _build_norm(raw_text: str) -> tuple[str, list[int], list[int]]:
 
 
 def _normalise(text: str) -> str:
-    """Return the qv_v1 normalised form of ``text`` (no offset map)."""
+    """Return the qv_v2 normalised form of ``text`` (no offset map)."""
     return _build_norm(text)[0]
 
 
@@ -185,7 +218,7 @@ class BasisText:
 
     Attributes:
         raw_text: The concatenated raw basis text.
-        normalised: The qv_v1 normalised copy of ``raw_text``.
+        normalised: The qv_v2 normalised copy of ``raw_text``.
         raw_start: Per normalised-char raw start offsets.
         raw_end: Per normalised-char raw end offsets (just past consumed raw).
         segments: Ordered ``(chunk_id, doc_start, doc_end)`` spans.
@@ -358,7 +391,12 @@ def locate_unique_span(basis: BasisText, quote: str) -> tuple[int, int] | None:
        ``"concatenate"``) is rejected even though it is the only substring hit.
     3. A case-fold round-trip guard: the raw span the normalised match maps
        back to is itself re-normalised and must equal the normalised quote
-       exactly. This rejects a match that starts or ends mid-expansion of one
+       exactly. From ``qv_v2`` the raw span is re-normalised *in place* — the
+       normalised chars of the basis whose raw start lies inside the span —
+       not as a standalone string: a span that begins or ends inside markup
+       (``text](url) more`` cut from ``[text](url) more``) would not be
+       recognised as markup on its own. On markup-free text the two readings
+       are the same. This rejects a match that starts or ends mid-expansion of one
        raw char that casefolds to several normalised chars (e.g. the ``ﬃ``
        ligature folding to ``"ffi"`` — a normalised match landing on only part
        of its expansion recovers a raw span that re-normalises to a different
@@ -366,8 +404,8 @@ def locate_unique_span(basis: BasisText, quote: str) -> tuple[int, int] | None:
        ligature as if it were the plain letters).
 
     This function does not perform Unicode NFC composition/decomposition —
-    only the qv_v1 fold (casefold, punctuation/whitespace folding, soft-hyphen
-    deletion). A composed (``"é"``) vs. decomposed (``"e"`` + combining acute)
+    only the qv_v2 fold (casefold, punctuation/whitespace folding, soft-hyphen
+    and markup deletion). A composed (``"é"``) vs. decomposed (``"e"`` + combining acute)
     pair of an otherwise-identical quote is an honest absence, not a match:
     documented envelope, not a bug (task 029 delta-review).
 
@@ -397,7 +435,13 @@ def locate_unique_span(basis: BasisText, quote: str) -> tuple[int, int] | None:
         return None
     raw_s = basis.raw_start[start]
     raw_e = basis.raw_end[end - 1]
-    if _normalise(basis.raw_text[raw_s:raw_e]) != normalised_quote:
+    # Re-normalise the raw span in place: the normalised chars whose raw start
+    # falls inside [raw_s, raw_e). ``raw_start`` never decreases, so bisect finds
+    # them. A match cut mid-way through one raw char's case-fold expansion pulls
+    # in the rest of that expansion here and so no longer equals the quote.
+    lo = bisect_left(basis.raw_start, raw_s)
+    hi = bisect_left(basis.raw_start, raw_e)
+    if haystack[lo:hi] != normalised_quote:
         return None
     return raw_s, raw_e
 

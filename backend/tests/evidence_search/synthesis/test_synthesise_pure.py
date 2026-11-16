@@ -14,7 +14,7 @@ from policy_atlas.evidence_search.synthesis.grounding_judge import (
     build_envelope,
     build_judge_messages,
 )
-from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+from policy_atlas.evidence_search.synthesis.section_prompt import (
     KEY_FINDINGS_GAP_MAX,
     ClaimWire,
     GapPayloadWire,
@@ -25,9 +25,9 @@ from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     SectionRepairWire,
     SectionWire,
     SparsitySignalWire,
-    StubSynthesisBackend,
     ThemePayloadWire,
 )
+from policy_atlas.evidence_search.synthesis.synthesis_backend import StubSynthesisBackend
 from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     ARTEFACT_TITLE_MAX,
     REASONING_CLAIMS_MAX,
@@ -888,6 +888,52 @@ def test_finding_record_default_metadata_present_and_absent() -> None:
     assert bare["effect_basis"] is None
 
 
+def test_unrated_rows_carry_the_unrated_label_to_the_writer() -> None:
+    """Task 056, D7: an Unrated appraisal (no score) reads "Unrated", never absent."""
+    doc = _doc_record(
+        SimpleNamespace(
+            tss_id="33333333-3333-3333-3333-333333333333",
+            origin="acquired",
+            primary_evidence_type="Unknown / Insufficient information",
+            text_basis="full_text",
+            quality_score=None,
+            unrated=True,
+            screen_decision_confidence=0.8,
+            screen_stage=1,
+            metadata={"title": "Grey literature"},
+        ),
+        set(),
+    )
+    assert doc["appraisal_tier"] == "Unrated"
+    record = _finding_record(
+        SimpleNamespace(
+            finding_id="finding-3",
+            extraction_record_id="record-3",
+            task_source_snapshot_id="33333333-3333-3333-3333-333333333333",
+            intervention="A",
+            outcome="B",
+            unit=None,
+            setting=None,
+            comparator=None,
+            effect_direction="increase",
+            estimate_level=None,
+            study_design=None,
+            study_geography=None,
+            stratum_qualifiers=[],
+            statistics={},
+            causality_by_design=None,
+            effect_basis=None,
+            is_primary=None,
+            field_coverage={},
+            primary_evidence_type="Other (Non-evidence documents)",
+            quality_score=None,
+            unrated=True,
+            metadata={"title": "Grey literature"},
+        )
+    )
+    assert record["appraisal_label"] == "Unrated"
+
+
 # --- ADR 0015 §2 / B-B3: judge envelope v2 (intent + section_focus + finding
 # anchored chunk text) ---
 
@@ -1684,7 +1730,7 @@ def test_key_findings_gap_restatement_caps_at_two() -> None:
 
 def test_validate_case_study_cards_drops_bad_ordinal() -> None:
     """A card with result_ordinal out of range is dropped."""
-    from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+    from policy_atlas.evidence_search.synthesis.section_prompt import (
         CaseStudyCardWire,
         CaseStudyClaimWire,
         CaseStudyWire,
@@ -1717,3 +1763,124 @@ def test_validate_case_study_cards_drops_bad_ordinal() -> None:
     # the whole pass degrades.
     assert reason is not None
     assert len(survivors) == 0
+
+
+# --- Checking and revising frames (task 058, N3 and N7) -------------------------
+
+
+class _OrderRecordingRepairer:
+    """A writer whose one repair call is recorded, then reported unparseable."""
+
+    def __init__(self, events: list[tuple[Any, ...]]) -> None:
+        self._events = events
+
+    def repair_section(
+        self, seed: dict[str, Any], transcript: list[Any], *, failing: list[dict[str, Any]]
+    ) -> Any:
+        del seed, transcript
+        from policy_atlas.evidence_search.synthesis.synthesis_tools import (
+            MalformedEmissionError,
+        )
+
+        self._events.append(("repair", len(failing)))
+        raise MalformedEmissionError("unparseable repair")
+
+
+def _liveness_recorder(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Any, ...]]:
+    from policy_atlas.core import liveness
+
+    events: list[tuple[Any, ...]] = []
+
+    def _progress(*, activity: str, section: str | None = None, **_counts: Any) -> None:
+        events.append(("progress", activity, section))
+
+    def _revising(index: int, spans: Any) -> None:
+        events.append(("revising", index, list(spans)))
+
+    monkeypatch.setattr(liveness, "publish_progress", _progress)
+    monkeypatch.setattr(liveness, "publish_section_revising", _revising)
+    monkeypatch.setattr(liveness, "clear_section_draft", lambda: events.append(("clear",)))
+    return events
+
+
+_REVISING_PROSE = (
+    "Evidence here is thin (stub inference). " + "Further context on the section. " * 5
+)
+
+
+def _gap_wire() -> SectionProseWire:
+    return SectionProseWire(
+        prose=_REVISING_PROSE,
+        claims=[
+            _claim(
+                {
+                    "claim_type": "gap",
+                    "text": "Evidence here is thin (stub inference).",
+                    "gap": {"grade": "inferred", "coverage_base": "screened"},
+                }
+            )
+        ],
+    )
+
+
+def _call_section_claims(backend: Any, section_line: str) -> None:
+    _section_claims(
+        section_index=3,
+        raw_claims=_gap_wire(),
+        seed={},
+        transcript=[],
+        substrate=_substrate(),
+        section_group_ids={"intervention:g01"},
+        citable_finding_ids=set(),
+        citable_chunk_ids=set(),
+        synthesis_backend=backend,
+        grounding_judge_backend=StubGroundingJudgeBackend(),
+        available_claim_types={"gap", "reasoning"},
+        accounting=_accounting(),
+        section_line=section_line,
+    )
+
+
+def test_section_claims_publishes_revising_spans_before_the_repair(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from policy_atlas.evidence_search.synthesis import synthesise as synthesise_module
+
+    events = _liveness_recorder(monkeypatch)
+    failing = [
+        {
+            "claim_id": f"s3c{index}",
+            "claim_index": index,
+            "claim": {"claim_type": "reasoning", "text": f"Claim {index}."},
+            "reason": "unsupported",
+            "rationale": "unsupported",
+            "span": span,
+            "segment": "",
+        }
+        for index, span in enumerate([[10, 40], [80, 120]])
+    ]
+    monkeypatch.setattr(
+        synthesise_module, "_failing_records", lambda *_args, **_kwargs: failing
+    )
+    line = "Section 4 of 6 · Costs"
+
+    _call_section_claims(_OrderRecordingRepairer(events), line)
+
+    assert events == [
+        ("progress", "Checking claims", line),
+        ("progress", "Revising 2 claims", line),
+        ("revising", 3, [(10, 40), (80, 120)]),
+        ("repair", 2),
+        ("clear",),
+    ]
+
+
+def test_section_claims_with_no_failing_claims_only_checks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events = _liveness_recorder(monkeypatch)
+    line = "Section 1 of 2 · Outcomes"
+
+    _call_section_claims(_OrderRecordingRepairer(events), line)
+
+    assert events == [("progress", "Checking claims", line), ("clear",)]

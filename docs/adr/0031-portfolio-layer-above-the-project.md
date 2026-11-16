@@ -94,6 +94,8 @@ Two constraints bound the answer:
    nothing in this slice writes it, because the slice adds no archive route,
    and rubric 36 forbids lifecycle on the row. Adding soft-delete later is one
    nullable column in the same migration that adds the archive route.
+   (Built as foreseen by task 058, round 11, 2026-11-06: migration `c4e8a2f6d1b3`
+   adds `project.archived_at` beside `POST /projects/{id}/archive`.)
 
 4. **Assignment is a PATCH on the project, not a field on create.**
    `PATCH /api/v1/projects/{id}` additively accepts `portfolio_id`, including

@@ -1,11 +1,12 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
 import type { components } from "../../api/gen/types";
 import type { CheckInOut, StageEntry } from "../../store/types";
 import { ToastProvider } from "../../ui/radix/Toast";
-import { CheckInCard } from "./CheckInCard";
+import { CheckInCard, SettledGateCard, baselineGateFacts } from "./CheckInCard";
 import { presentCheckInRender } from "./checkInPresentation";
 
 type CheckInOption = components["schemas"]["CheckInOption"];
@@ -52,13 +53,113 @@ function option(overrides: Partial<CheckInOption> = {}): CheckInOption {
   };
 }
 
-function renderCard(checkIn: CheckInOut, stages: StageEntry[] = [], isOwner = true) {
+function renderCard(checkIn: CheckInOut, stages: StageEntry[] = [], isOwner = true, compact = false) {
   return render(
-    <ToastProvider>
-      <CheckInCard taskId={TASK_ID} checkIn={checkIn} stages={stages} isOwner={isOwner} />
-    </ToastProvider>,
+    <MemoryRouter>
+      <ToastProvider>
+        <CheckInCard taskId={TASK_ID} checkIn={checkIn} stages={stages} isOwner={isOwner} compact={compact} />
+      </ToastProvider>
+    </MemoryRouter>,
   );
 }
+
+/** The search review check-in after searching and screening (annex scene 12). */
+function searchReview(overrides: Partial<CheckInOut> = {}): CheckInOut {
+  return baseCheckIn({
+    kind: "steer_point",
+    stage: "acquire",
+    component: "acquire",
+    render: "Does this look right before I assess the sources?\n312 sources · 118 relevant",
+    options: [
+      option({ id: "deepen_search", label: "Search deeper", description: "One more search on the thin themes." }),
+      option({
+        id: "continue",
+        label: "Looks right, assess these",
+        description: "Screening starts on what came back.",
+        suggested: true,
+        why: "Coverage matches the plan.",
+      }),
+      option({ id: "rescope_filters", label: "Change the search scope", description: "Opens a line to say what to change.", requires_user_input: true }),
+      option({ id: "abort", label: "Stop the run", description: "Abort the remaining walk." }),
+    ],
+    ...overrides,
+  });
+}
+
+describe("CheckInCard — the card's shape (task 058, N19; annex scene 12)", () => {
+  it("titles the card with the question, then one facts line, and no eyebrow or chip", () => {
+    renderCard(searchReview(), [{ stage: "acquire", label: "Searching and screening", status: "completed" }] as StageEntry[]);
+    expect(screen.getByRole("heading", { name: "Does this look right before I assess the sources?" })).toBeInTheDocument();
+    expect(screen.getByTestId("check-in-facts")).toHaveTextContent("312 sources · 118 relevant · Sources →");
+    expect(screen.getByRole("link", { name: "Sources →" })).toHaveAttribute("href", `/tasks/${TASK_ID}/sources`);
+    expect(screen.queryByText("Waiting on your input")).toBeNull();
+    expect(screen.queryByText("Searching and screening")).toBeNull();
+  });
+
+  it("is a radio list with the suggested option first, its why under it, nothing chosen", () => {
+    renderCard(searchReview());
+    const radios = screen.getAllByRole("radio");
+    expect(radios.map((radio) => radio.getAttribute("data-option-id"))).toEqual([
+      "continue",
+      "deepen_search",
+      "rescope_filters",
+    ]);
+    expect(radios[0]).toHaveTextContent("Coverage matches the plan.");
+    expect(radios[1]).not.toHaveTextContent("Coverage matches the plan.");
+    expect(radios.every((radio) => radio.getAttribute("aria-checked") === "false")).toBe(true);
+    expect(screen.queryByText(/Recommended/)).toBeNull();
+  });
+
+  it("has one stop: the Stop the run link, not a duplicate option", async () => {
+    mutate.mockClear();
+    const user = userEvent.setup();
+    renderCard(searchReview());
+    expect(screen.getAllByText("Stop the run")).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "Stop the run" }));
+    expect(mutate.mock.calls[0][0]).toEqual({ checkInId: CHECK_IN_ID, body: { kind: "abort" } });
+  });
+
+  it("keeps Or steer in your own words as a closed disclosure", () => {
+    renderCard(searchReview());
+    const disclosure = screen.getByText("Or steer in your own words", { selector: "summary" }).closest("details");
+    expect(disclosure).not.toBeNull();
+    expect(disclosure).not.toHaveAttribute("open");
+  });
+
+  it("sends a choice at once", async () => {
+    mutate.mockClear();
+    const user = userEvent.setup();
+    renderCard(searchReview());
+    await user.click(screen.getByRole("radio", { name: /Looks right, assess these/ }));
+    expect(mutate.mock.calls[0][0]).toEqual({
+      checkInId: CHECK_IN_ID,
+      body: { kind: "option", option_id: "continue", params: null },
+    });
+  });
+
+  it("glows once, in orange, as it arrives (D15)", () => {
+    const { rerender } = renderCard(searchReview());
+    const card = screen.getByTestId("check-in-card");
+    expect(card.className).toContain("anim-glow");
+    expect(card.className).toContain("border-l-orange");
+    rerender(
+      <MemoryRouter>
+        <ToastProvider>
+          <CheckInCard taskId={TASK_ID} checkIn={searchReview()} stages={[]} isOwner />
+        </ToastProvider>
+      </MemoryRouter>,
+    );
+    // The same element: a re-render does not remount it, so the one-shot
+    // animation does not play again.
+    expect(screen.getByTestId("check-in-card")).toBe(card);
+  });
+
+  it("drops the facts line at the sidebar's compact width", () => {
+    renderCard(searchReview(), [], true, true);
+    expect(screen.queryByTestId("check-in-facts")).toBeNull();
+    expect(screen.getAllByRole("radio")).toHaveLength(3);
+  });
+});
 
 describe("CheckInCard — option parameters", () => {
   it("submits change_mode with new_mode from the mode select, not a made-up { value }", async () => {
@@ -77,8 +178,10 @@ describe("CheckInCard — option parameters", () => {
       }),
     );
 
-    await user.click(screen.getByRole("button", { name: "Change how often I check in" }));
-    await user.selectOptions(screen.getByLabelText("New steering mode"), "minimal");
+    await user.click(screen.getByRole("radio", { name: /Change how often I check in/ }));
+    // Round 12: the app's dropdown, not the browser's.
+    await user.click(screen.getByRole("combobox", { name: "New steering mode" }));
+    await user.click(screen.getByRole("option", { name: "Only if it can't proceed" }));
     await user.click(screen.getByRole("button", { name: "Send" }));
 
     expect(mutate).toHaveBeenCalledOnce();
@@ -88,7 +191,7 @@ describe("CheckInCard — option parameters", () => {
     });
   });
 
-  it("other requires_user_input options pre-seed and focus the free-text steer instead of a generic form", async () => {
+  it("an option that needs words opens a line inside the card that compiles like free text", async () => {
     mutate.mockClear();
     const user = userEvent.setup();
     renderCard(
@@ -104,58 +207,48 @@ describe("CheckInCard — option parameters", () => {
       }),
     );
 
-    await user.click(screen.getByRole("button", { name: "Add local context" }));
-
-    const freeText = screen.getByLabelText("Or steer in your own words") as HTMLInputElement;
-    expect(freeText).toHaveValue("Add local context: ");
-    expect(freeText).toHaveFocus();
-    // No server-shaped-params text form was invented for this option, and
-    // no premature submission happened.
-    expect(screen.queryByLabelText(/Details for/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: /Add local context/ }));
     expect(mutate).not.toHaveBeenCalled();
-  });
-});
-
-describe("CheckInCard — stage chip", () => {
-  it("renders the server-supplied stage label, not the raw stage key", () => {
-    renderCard(
-      baseCheckIn({ stage: "screen" }),
-      [{ stage: "screen", label: "Screening sources", status: "completed" }] as StageEntry[],
-    );
-
-    expect(screen.getByText("Screening sources")).toBeInTheDocument();
-    expect(screen.queryByText("screen")).not.toBeInTheDocument();
-  });
-
-  it("hides the chip entirely when no label is known for the check-in's stage", () => {
-    renderCard(baseCheckIn({ stage: "classify" }), []);
-
-    const header = screen.getByText("Waiting on your input").parentElement;
-    expect(header?.children).toHaveLength(1);
+    const line = screen.getByRole("textbox", { name: "Add local context" });
+    expect(line).toHaveFocus();
+    await user.type(line, "Tower Hamlets family hubs");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(mutate.mock.calls[0][0]).toEqual({
+      checkInId: CHECK_IN_ID,
+      body: { kind: "free_text", text: "Add local context: Tower Hamlets family hubs" },
+    });
   });
 });
 
 describe("CheckInCard — deterministic completion render", () => {
   it("presents a machine completion render with locked labels and keeps its raw record disclosed", () => {
     const render = "characterise: succeeded | wall_clock=12.7s | counts: appraised=12, skipped=2, internal=9";
-    const presented = presentCheckInRender(render, "characterise", []);
+    // The label is the stage frame's, in the server's words (task 058, N17).
+    const stages: StageEntry[] = [{ stage: "characterise", label: "Mapping", status: "completed", startedAt: "" }];
+    expect(presentCheckInRender(render, "characterise", [])).toBeNull();
+    const presented = presentCheckInRender(render, "characterise", stages);
 
     expect(presented).toEqual({
-      stageLabel: "Mapping the landscape",
+      stageLabel: "Mapping",
       status: "completed",
       seconds: "12.7",
       counts: [
         { label: "Sources quality-appraised", value: "12" },
         { label: "Skipped", value: "2" },
       ],
+      question: null,
     });
-    renderCard(baseCheckIn({ render, stage: "characterise" }));
-    expect(screen.getByText("Mapping the landscape")).toBeInTheDocument();
-    // No decimal completion time, no raw-render disclosure (owner, 2026-08-05).
+    // Task 058 (N19): a render whose first line is the question titles the card with it.
+    const asked = presentCheckInRender(`Does the map look right before I shortlist?\n${render}`, "characterise", stages);
+    expect(asked?.question).toBe("Does the map look right before I shortlist?");
+    expect(asked?.counts).toHaveLength(2);
+    renderCard(baseCheckIn({ render, stage: "characterise" }), stages);
+    // No question on a machine render: the stage label is the title and the
+    // counts are the facts line.
+    expect(screen.getByRole("heading", { name: "Mapping" })).toBeInTheDocument();
     expect(screen.queryByText(/Completed in/)).toBeNull();
-    expect(screen.getByText("Sources quality-appraised: 12")).toBeInTheDocument();
-    expect(screen.getByText("Skipped: 2")).toBeInTheDocument();
-    expect(screen.queryByText("Internal: 9")).toBeNull();
+    expect(screen.getByTestId("check-in-facts")).toHaveTextContent("Sources quality-appraised 12 · Skipped 2");
+    expect(screen.queryByText(/Internal/)).toBeNull();
     expect(screen.queryByText("Technical detail")).toBeNull();
   });
 
@@ -179,7 +272,7 @@ describe("CheckInCard — toast on failure (027 strand 14)", () => {
     const user = userEvent.setup();
     renderCard(baseCheckIn());
 
-    await user.click(screen.getByRole("button", { name: "Stop the analysis" }));
+    await user.click(screen.getByRole("button", { name: "Stop the run" }));
 
     // Toast complements the inline notice — both carry the same message,
     // rendered in two places (the toast surfaces even off-screen).
@@ -203,9 +296,8 @@ describe("CheckInCard — non-owner read-only (task 033 phase 10c, contract § 1
       [],
       false,
     );
-    expect(screen.queryByText("Waiting on your input")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Continue" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Stop the analysis" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /Continue/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop the run" })).not.toBeInTheDocument();
   });
 });
 
@@ -216,7 +308,7 @@ describe("CheckInCard — the baseline gate", () => {
       kind: "baseline_confirm",
       stage: "synthesise",
       component: "synthesise",
-      render: "Confirm the plan against the baseline",
+      render: "Does the plan still look right now you have the baseline?",
       bundle,
       options: [
         option({
@@ -240,33 +332,67 @@ describe("CheckInCard — the baseline gate", () => {
       where: "United Kingdom",
       outcomes: ["NEET rate at 6 months", "Sustained employment at 12 months"],
       depth: "standard",
+      risk_appetite: "Proven options only",
     },
   };
 
-  it("quotes the key assumption and the plan settings under the gate heading", () => {
+  // Round 10 (finding 8, C9): the gate reads as the other check-ins: the
+  // question as the title, one facts line with the way to the baseline, the
+  // key assumption as a plain sentence, no labels. Round 12 (owner): no key
+  // assumption at all.
+  it("asks its question, then one facts line with Baseline →, and shows no key assumption", () => {
     renderCard(gateCheckIn(bundle));
 
     expect(
-      screen.getByRole("heading", { name: "Confirm the plan against the baseline" }),
+      screen.getByRole("heading", { name: "Does the plan still look right now you have the baseline?" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(bundle.key_assumption)).toBeInTheDocument();
-    expect(screen.getByText("Who or what should change")).toBeInTheDocument();
-    expect(screen.getByText("16-24 year-olds at risk of becoming NEET")).toBeInTheDocument();
-    expect(screen.getByText("United Kingdom")).toBeInTheDocument();
-    expect(
-      screen.getByText("NEET rate at 6 months · Sustained employment at 12 months"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Standard scoping")).toBeInTheDocument();
+    const facts = screen.getByTestId("check-in-facts");
+    // The baseline gate's facts include the plan's risk appetite (N19).
+    // Each field carries a screen reader's comma in place of its middot.
+    expect(facts.textContent?.replace(/,/g, "").replace(/\s+/g, " ").trim()).toBe(
+      "16-24 year-olds at risk of becoming NEET · United Kingdom · 2 outcomes · Standard scoping · Proven options only · Baseline →",
+    );
+    expect(within(facts).getByRole("link", { name: "Baseline →" })).toHaveAttribute(
+      "href",
+      `/tasks/${TASK_ID}/result?view=baseline`,
+    );
+    expect(screen.queryByText(bundle.key_assumption)).not.toBeInTheDocument();
+    for (const label of ["Key assumption", "Settings", "Who or what should change", "Risk appetite"]) {
+      expect(screen.queryByText(label)).not.toBeInTheDocument();
+    }
+  });
+
+  it("drops the facts line in the sidebar's compact card", () => {
+    renderCard(gateCheckIn(bundle), [], true, true);
+    expect(screen.queryByTestId("check-in-facts")).not.toBeInTheDocument();
+    expect(screen.queryByText(bundle.key_assumption)).not.toBeInTheDocument();
+  });
+
+  it("counts one outcome in the singular and keeps settings the bundle lacks out", () => {
+    expect(baselineGateFacts({ settings: { where: "Wales", outcomes: ["NEET rate"] } })).toEqual(["Wales", "1 outcome"]);
+    expect(baselineGateFacts(null)).toEqual([]);
+  });
+
+  it("settles in the settled part card's language, the decision said once", () => {
+    render(<SettledGateCard label="Confirm plan and build longlist" />);
+    const card = screen.getByTestId("settled-gate");
+    expect(card).toHaveTextContent(/^BaselineConfirm plan and build longlist$/);
+    expect(card.className).toContain("bg-blue-tint-2");
+    expect(card.className).toContain("border-r-green");
+    expect(card).not.toHaveTextContent(/recorded|plan version/);
   });
 
   it("offers exactly the two server-supplied options and nothing else", () => {
     renderCard(gateCheckIn(bundle));
 
-    expect(screen.getByRole("button", { name: "Confirm plan and build longlist" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Change the plan" })).toBeInTheDocument();
+    expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("data-option-id"))).toEqual([
+      "confirm_plan",
+      "change_plan",
+    ]);
     // The gate is a decision, not a steer: no free-text compile, no abort.
     expect(screen.queryByRole("button", { name: "Compile" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Stop the analysis" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop the run" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("check-in-card").className).toContain("anim-glow");
   });
 
   it("posts Change the plan as an ordinary card option", async () => {
@@ -274,7 +400,7 @@ describe("CheckInCard — the baseline gate", () => {
     const user = userEvent.setup();
     renderCard(gateCheckIn(bundle));
 
-    await user.click(screen.getByRole("button", { name: "Change the plan" }));
+    await user.click(screen.getByRole("radio", { name: /Change the plan/ }));
 
     expect(mutate.mock.calls[0][0]).toEqual({
       checkInId: CHECK_IN_ID,
@@ -282,9 +408,43 @@ describe("CheckInCard — the baseline gate", () => {
     });
   });
 
-  it("states an absent key assumption rather than quoting nothing", () => {
+  it("says nothing about a key assumption when the baseline records none", () => {
     renderCard(gateCheckIn({ key_assumption: "   ", settings: {} }));
 
-    expect(screen.getByText("The baseline records no key assumption.")).toBeInTheDocument();
+    expect(screen.queryByText("The baseline records no key assumption.")).not.toBeInTheDocument();
+  });
+});
+
+// Task 058, round 9 (the animation sweep's entry 3, the lead's ruling on it):
+// the card settles the moment the user chooses, as the part cards do, and
+// comes back open with its notice if the answer fails.
+describe("CheckInCard — settles on the choice (round 9)", () => {
+  it("settles at once when an option is chosen: inert, its contents fading", async () => {
+    mutate.mockReset();
+    renderCard(searchReview());
+    await userEvent.click(screen.getByRole("radio", { name: /Looks right, assess these/ }));
+    const shell = screen.getByTestId("check-in-shell");
+    expect(shell).toHaveAttribute("data-leaving", "true");
+    expect(shell.firstElementChild?.firstElementChild).toHaveClass("anim-fade-out");
+    expect(shell.firstElementChild?.firstElementChild).toHaveAttribute("inert");
+  });
+
+  it("comes back open with the notice when the answer fails", async () => {
+    mutate.mockReset();
+    mutate.mockImplementation((_vars: unknown, options?: { onError?: (error: unknown) => void }) => {
+      options?.onError?.({ code: "already_answered" });
+    });
+    renderCard(searchReview());
+    await userEvent.click(screen.getByRole("radio", { name: /Looks right, assess these/ }));
+    expect(screen.getByTestId("check-in-shell")).not.toHaveAttribute("data-leaving");
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    mutate.mockReset();
+  });
+
+  it("blooms its ring after it lands, the ring only", () => {
+    renderCard(searchReview());
+    expect(screen.getByTestId("check-in-card")).toHaveClass("anim-glow");
+    // Outside a thread there is nothing to arrive into: it holds still.
+    expect(screen.getByTestId("check-in-shell")).not.toHaveClass("anim-rise");
   });
 });

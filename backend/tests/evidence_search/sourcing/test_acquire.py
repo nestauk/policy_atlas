@@ -26,18 +26,20 @@ from policy_atlas.core.schema import (
 from policy_atlas.evidence_search.assess.appraise import AppraiseContext, appraise_sources
 from policy_atlas.evidence_search.assess.classify import ClassifyContext, classify_sources
 from policy_atlas.evidence_search.assess.screen import ScreenContext, screen_sources
+from policy_atlas.evidence_search.sourcing import acquire as acquire_module
 from policy_atlas.evidence_search.sourcing.acquire import (
     AcquireContext,
     BackendCaps,
     SearchBackend,
     _map_openalex_work,
     _map_overton_document,
-    _normalize_doi,
     _reconstruct_abstract,
     acquire_sources,
+    normalize_doi,
 )
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.run_spec import Plan, compile
+from tests import progress_recorder
 from tests.helpers import (
     delete_task_data,
     executed_calls_for,
@@ -181,7 +183,7 @@ def test_acquire_table_count(conn: Connection) -> None:
     # Link between two tasks); 38 -> 43: task 045 adds `option`,
     # `option_membership`, `option_relation`, `longlist_result` and
     # `intervention_profile_record`; no evidence-search table changed.
-    assert len(metadata.tables) == 43
+    assert len(metadata.tables) == 52  # task 054 adds toc_figure, toc_proposal and task_upload
 
 
 def seed_coverage_row(
@@ -290,7 +292,7 @@ def test_reconstruct_abstract_from_committed_fixture() -> None:
     ],
 )
 def test_normalize_doi(raw: str | None, expected: str | None) -> None:
-    assert _normalize_doi(raw) == expected
+    assert normalize_doi(raw) == expected
 
 
 def test_map_openalex_envelope() -> None:
@@ -723,6 +725,21 @@ def test_search_executed_event_per_backend(conn: Connection) -> None:
         assert payload["result_count"] == 12
         assert payload["error"] is None
         assert payload["evidence_scope_id"] == str(scope_id)
+        # Round 12: the ids the call returned, the ones the rows carry.
+        assert len(payload["record_ids"]) == 12
+    stored = {
+        metadata["backend_record_id"]
+        for metadata in conn.execute(select(source_snapshot.c.metadata)).scalars()
+        if isinstance(metadata, dict) and metadata.get("backend") == "openalex"
+    }
+    assert set(by_backend["openalex"]["record_ids"]) <= stored
+
+
+def test_the_record_id_keys_cover_every_mapper() -> None:
+    assert set(acquire_module._RECORD_ID_KEYS) == set(acquire_module._MAPPERS)
+    assert acquire_module.returned_record_ids(
+        "overton", [{"policy_document_id": "a"}, {"policy_document_id": "a"}, {}, {"x": 1}]
+    ) == ["a"]
 
 
 def test_source_acquired_events(conn: Connection) -> None:
@@ -748,6 +765,37 @@ def test_source_acquired_events(conn: Connection) -> None:
         e for e in events.read(conn, pid) if e["event_type"] == "source.acquired"
     ]
     assert len(acquired_events_after) == 24
+    # ...and an evidence search says nothing about the documents it held already.
+    assert not [e for e in events.read(conn, pid) if e["event_type"] == "source.seen_again"]
+
+
+def test_a_theory_of_change_search_says_which_held_documents_it_found_again(
+    conn: Connection,
+) -> None:
+    """Only a theory-of-change search writes ``source.seen_again``, once per held document."""
+    pid, rid = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    acquire(conn, pid, rid, scope_id)
+    held = {
+        e["payload"]["task_source_snapshot_id"]
+        for e in events.read(conn, pid)
+        if e["event_type"] == "source.acquired"
+    }
+    backends = [OpenAlexFixtureBackend(), OvertonFixtureBackend()]
+    toc_context = AcquireContext(
+        scope_id=scope_id, intent="Test intent", context={"capability": "theory_of_change"}
+    )
+    acquire_sources(
+        conn,
+        task_id=pid,
+        run_id=seed_run(conn, pid),
+        context=toc_context,
+        backends=cast("list[SearchBackend]", backends),
+        executed_calls=executed_calls_for(backends, toc_context.intent),
+    )
+    seen_again = [e for e in events.read(conn, pid) if e["event_type"] == "source.seen_again"]
+    assert {e["payload"]["task_source_snapshot_id"] for e in seen_again} == held
+    assert len(seen_again) == len(held)
 
 
 # --- Coverage record + adequacy verdict ---
@@ -1001,7 +1049,9 @@ def test_full_chain_over_both_fixture_corpora(conn: Connection) -> None:
         context=AppraiseContext(scope_id=scope_id, intent="Test intent", context={}),
     )
     assert appraised["appraised"] == 0
-    assert appraised["skipped_unknown"] == classified["classified"]
+    # Task 056 (D7): Unknown documents are appraised as Unrated, not skipped.
+    assert appraised["appraised_unrated"] == classified["classified"]
+    assert appraised["skipped_unknown"] == 0
 
 
 # --- Cleanup helper ---
@@ -1126,10 +1176,17 @@ def test_acquire_module_has_no_http_client() -> None:
         re.MULTILINE,
     )
     api_http_homes = (src_dir / "api" / "auth.py", src_dir / "api" / "app.py")
+    # task 057 review (security 1): ingest_full_text.py names ``socket`` only to
+    # replace ``socket.socket`` with a refuser inside the parse worker; its own
+    # guard (test_ingest_module_has_no_http_client) forbids constructing one.
+    socket_denial_home = src_dir / "evidence_search" / "sourcing" / "ingest_full_text.py"
     for module in src_dir.rglob("*.py"):
         if module.name in ("search_live.py", "fetch_live.py") or module in api_http_homes:
             continue
-        assert not forbidden.search(module.read_text()), f"HTTP client import in {module}"
+        text = module.read_text()
+        if module == socket_denial_home:
+            text = text.replace("import socket\n", "", 1)
+        assert not forbidden.search(text), f"HTTP client import in {module}"
 
     live_import = re.compile(
         r"^\s*(import|from)\s+policy_atlas\.evidence_search\.sourcing\.search_live\b|"
@@ -1169,3 +1226,65 @@ def test_provider_tag_bounds() -> None:
     assert _normalize_tag("x" * (TAG_MAX_LENGTH + 1)) is None
     assert _normalize_tag("bad\x1b[31mtag") is None
     assert _normalize_tag(42) is None
+
+
+# --- Live progress (task 058, N2) ---
+
+
+def test_acquire_publishes_records_found_so_far(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = progress_recorder.install(monkeypatch)
+    pid, rid = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    counts = acquire(conn, pid, rid, scope_id)
+
+    assert counts["acquired"] == 24
+    assert [c["done"] for c in calls] == list(range(1, 25))
+    assert all(c["total"] is None and c["unit"] == "documents" for c in calls)
+    assert calls[-1]["activity"] == "searching · 24 found"
+
+
+def test_acquire_on_a_second_pass_names_the_pass(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = progress_recorder.install(monkeypatch)
+    pid, rid = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    context = make_context(scope_id)
+    backends = [OpenAlexFixtureBackend()]
+    acquire_sources(
+        conn,
+        task_id=pid,
+        run_id=rid,
+        context=context,
+        backends=cast("list[SearchBackend]", backends),
+        executed_calls=executed_calls_for(backends, context.intent),
+        round_index=2,
+    )
+
+    assert calls[-1]["activity"] == "Search 2 · 12 found"
+
+
+def test_acquire_counts_kept_records_against_the_search_candidates(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Lead ruling, round 9: "keeping {kept} of {found} candidates", done against total."""
+    calls = progress_recorder.install(monkeypatch)
+    pid, rid = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    context = make_context(scope_id)
+    backends = [OpenAlexFixtureBackend()]
+    acquire_sources(
+        conn,
+        task_id=pid,
+        run_id=rid,
+        context=context,
+        backends=cast("list[SearchBackend]", backends),
+        executed_calls=executed_calls_for(backends, context.intent),
+        search_found=40,
+    )
+
+    assert [c["done"] for c in calls] == list(range(1, 13))
+    assert all(c["total"] == 40 and c["unit"] == "documents" for c in calls)
+    assert calls[-1]["activity"] == "keeping 12 of 40 candidates"

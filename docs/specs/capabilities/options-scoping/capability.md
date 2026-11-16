@@ -487,7 +487,8 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   unit by its nature, otherwise it is context and the factor stays Unknown, ruling 34) ·
   Assumptions (load-bearing, strength, the key one) · What it would take (implementation
   requirements, reported costs, time to impact, distributional notes — provenance-carrying, no
-  analysis). Next steps: run a full evidence search · start a theory of change (⏸ consumer) ·
+  analysis). Next steps: run a full evidence search · ✅ start a theory of change ("How would this option work?",
+  with the theories already made from it; task 054, ADR 0042, owner 2026-10-23) ·
   remove from shortlist. No export from the profile.
 - ✅ **Case studies** come from three tiers typed by provenance: the academic corpus (especially
   observational and quasi-experimental implementation accounts), **Overton grey literature (the
@@ -528,6 +529,12 @@ Settled by the owner on the wireframes (rulings 1, 13; source
   working lists (the longlist) keep the typography but stay **clickable lists** — selectable
   rows with their actions as line icons (add to shortlist · remove · exclude · include again;
   words as tooltips) and no contents sidebar.
+- ✅ **The longlist exists from the first minute of its build** (task 058, S5): the Result tab
+  lists the suggested options as soon as the suggest stage ends, each row with the status of its
+  own search (queued · searching · searched with its count), then stage-level lines for the
+  abstract reading and the clustering (options may be folded together or added), then the
+  profiles, the constraint checks and the themes landing as waves, and the shortlist marks at the
+  end. No qualifier word: the stage line and the moving rows say it is being built.
 - ✅ Sample constraints and questions in design artefacts use plain words so the logic can be
   checked by eye (ruling 10). The design reference is the NEET question; nothing on it is a
   finding.

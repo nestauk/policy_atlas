@@ -1,32 +1,35 @@
-"""Pin: the AWS SDK stays out of the request path's import graph (task 033).
+"""Pin: operator-only distributions stay out of the request path's import graph.
 
-`boto3` and `boto3-stubs` are a **non-default** dependency group (`pyproject.toml`
-`[dependency-groups] ops`), and the Dockerfile installs without it, so the
-deployed image carries no AWS SDK at all. That is checked at the image — and the
-image check needs a Docker daemon with registry egress, which the build
-environment has not always had (`verification.md` § Known unverified).
+Task 033 put `boto3` and its type stubs in a **non-default** dependency group
+(`pyproject.toml` `[dependency-groups] ops`) that the Dockerfile installs without,
+and this file pinned that the API process never imports them.
 
-This is the same property asserted where it cannot go unchecked: at the import
-graph. A single `import boto3` anywhere under `api/` or `core/` makes the API
-process unable to start on an image built to spec, whatever the Dockerfile says
-— and it is the kind of import that arrives innocently, when a helper wants one
-small thing from the operator's world. The operator CLI (`ops/`) is where the
-SDK belongs and is not run from the image.
+Task 053 (approved dependency gate) moved `boto3` itself into the main dependencies:
+the Cohere embedding backend and the Claude search-generation backend under `core/`
+and `evidence_search/` call Amazon Bedrock through it, so the deployed image now
+ships the SDK. What the image still does not ship is the **type stubs**
+(`boto3-stubs[...]`, importable as `mypy_boto3_*`), which remain in `ops`. A
+runtime `from mypy_boto3_... import ...` anywhere outside `ops/` would make the API
+process unable to start on an image built to spec, whatever the Dockerfile says —
+and it is exactly the import a helper reaches for when it wants a typed client.
+Stubs belong under `TYPE_CHECKING` in request-path code; `ops/` may import them for
+real because it runs where they are installed.
 
 Structural on purpose: the behavioural version is "build the image and start the
-app", which is exactly the check that was unavailable.
+app", which is exactly the check that has not always been available (a Docker
+daemon with registry egress).
 """
 
 import ast
 from pathlib import Path
 from types import ModuleType
 
-import policy_atlas.api
-import policy_atlas.core
+import policy_atlas
 import policy_atlas.ops
 
-#: Distributions the request path must not reach, by top-level module name.
-_FORBIDDEN = ("boto3", "botocore")
+#: Distributions the request path must not reach at runtime, by top-level module
+#: name: the boto3 type stubs, which stay in the `ops` group (task 053).
+_FORBIDDEN = ("mypy_boto3_cognito_idp", "mypy_boto3_bedrock_runtime")
 
 
 def _imported_modules(package: ModuleType) -> dict[str, set[str]]:
@@ -51,25 +54,24 @@ def _imported_modules(package: ModuleType) -> dict[str, set[str]]:
     return imported
 
 
-def test_no_module_under_the_api_or_core_imports_the_aws_sdk() -> None:
-    """`api/` and `core/` must import nothing the deployed image does not ship."""
+def test_no_module_outside_ops_imports_the_aws_sdk_stubs() -> None:
+    """Every package but `ops/` must import nothing the deployed image does not ship."""
     offenders = {
-        f"{package.__name__}/{module}": sorted(roots & set(_FORBIDDEN))
-        for package in (policy_atlas.api, policy_atlas.core)
-        for module, roots in _imported_modules(package).items()
-        if roots & set(_FORBIDDEN)
+        module: sorted(roots & set(_FORBIDDEN))
+        for module, roots in _imported_modules(policy_atlas).items()
+        if not module.startswith("ops/") and roots & set(_FORBIDDEN)
     }
 
     assert offenders == {}
 
 
-def test_the_operator_cli_is_where_the_aws_sdk_lives() -> None:
+def test_the_operator_cli_is_where_the_aws_sdk_stubs_live() -> None:
     """The control that keeps the assertion above from passing vacuously.
 
-    If `boto3` left the codebase entirely — or moved behind a lazy import
+    If the stubs left the codebase entirely — or moved behind `TYPE_CHECKING`
     everywhere — the check above would keep passing while proving nothing about
-    the boundary. It is a real boundary: `ops/` imports the SDK, `api/` and
-    `core/` do not, and only `ops/` runs where the SDK is installed.
+    the boundary. It is a real boundary: `ops/` imports the stubs for real,
+    nothing else does, and only `ops/` runs where they are installed.
     """
     importers = {
         module

@@ -1,3 +1,3 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <text x="50" y="50" font-size="85" text-anchor="middle" dominant-baseline="central">🌐</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-85 -85 170 170">
+  <path d="M-75 0L0 -75L75 0L0 75Z" fill="#0000ff"/>
 </svg>

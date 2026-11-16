@@ -18,6 +18,7 @@ from policy_atlas.api.deps import (
     get_chat_backend,
     get_chat_embedding_backend,
     get_grounding_judge_backend,
+    get_title_backend,
 )
 from policy_atlas.api.routers import conversations as conversations_router
 from policy_atlas.core.embeddings import StubEmbeddingBackend
@@ -439,5 +440,69 @@ def test_capacity_failure_at_cancel_registration_rolls_back_the_reservation(
                     select(chat_turn.c.id).where(chat_turn.c.conversation_id == conversation_id)
                 ).all()
             assert remaining == []
+    finally:
+        _cleanup(engine, task_id)
+
+
+def test_the_first_turn_streams_the_chats_new_title(
+    engine: Engine, tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Task 058, round 14: when the chat_title line lands while the first
+    turn's stream is open, the stream sends ``conversation.titled``."""
+    from policy_atlas.core.schema import conversation
+    from policy_atlas.runtime.agent_backend import StubAgentBackend
+
+    task_id: uuid.UUID | None = None
+    holder: dict[str, uuid.UUID] = {}
+
+    class WaitsForTheTitle(StubChatBackend):
+        """Answers only once the chat is titled, so the title lands mid-stream."""
+
+        def chat_turn(self, *args: Any, **kwargs: Any) -> Any:
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                with engine.connect() as conn:
+                    title = conn.execute(
+                        select(conversation.c.title).where(
+                            conversation.c.id == holder["conversation_id"]
+                        )
+                    ).scalar_one()
+                if title == "Attendance trials":
+                    break
+                time.sleep(0.02)
+            time.sleep(0.2)
+            return super().chat_turn(*args, **kwargs)
+
+    try:
+        monkeypatch.setattr(answer_core, "build_section_tools", _citable_tools)
+        with api_client(
+            tmp_path,
+            {
+                get_chat_backend: WaitsForTheTitle,
+                get_chat_embedding_backend: StubEmbeddingBackend,
+                get_title_backend: lambda: StubAgentBackend(title_responses="Attendance trials"),
+            },
+        ) as (client, owner_headers, _):
+            task_id, scope_id, conversation_id = _chat(engine, owner=_owner_id(owner_headers))
+            holder["conversation_id"] = conversation_id
+            _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
+            response = client.post(
+                f"/api/v1/conversations/{conversation_id}/turns",
+                headers=owner_headers,
+                json={
+                    "message": "Which trials measured attendance?",
+                    "client_turn_id": str(uuid.uuid4()),
+                },
+            )
+        events = _events(response)
+        titled = [event for event in events if event["type"] == "conversation.titled"]
+        assert titled == [
+            {
+                "type": "conversation.titled",
+                "conversation_id": str(conversation_id),
+                "title": "Attendance trials",
+            }
+        ]
+        assert [event["type"] for event in events].count("completed") == 1
     finally:
         _cleanup(engine, task_id)

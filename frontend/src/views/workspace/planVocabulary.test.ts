@@ -6,27 +6,25 @@ import {
   ANALYSIS_QUESTION,
   ANALYSIS_SHORTLIST_CAP,
   ANALYSIS_TITLE,
-  acquireSearchBlurb,
   axesForResearchApproach,
-  COMPONENT_LABEL,
   CONSTRAINT_CHECKED_AT_LABEL,
   constraintEffectLines,
   constraintKindLines,
   PROFILE_LINE_LABELS,
+  RISK_APPETITE_LABELS,
   RESEARCH_APPROACH_CUSTOM,
   researchApproachId,
   researchApproachLabel,
   SCOPING_DEPTH_LABEL,
   SCOPING_STEERING_MODE_LABEL,
+  scopingPlanSummary,
   SEARCH_EFFORT_LABEL,
   SEARCH_SCOPE_HINT,
   SEARCH_SCOPE_RECORD_CAP,
   SOURCES_LABEL,
   STEERING_MODE_LABEL,
   scopeChips,
-  stepsForAnalysisDepth,
   TAG_ORIGIN_LABEL,
-  timeBandFor,
   vocabLabel,
   YOUR_CONTEXT_TYPE_LABEL,
 } from "./planVocabulary";
@@ -44,7 +42,6 @@ describe("vocabLabel", () => {
     expect(vocabLabel(ANALYSIS_DEPTH_LABEL, "deep")).toBe("Findings synthesis");
     expect(vocabLabel(SOURCES_LABEL, "both")).toBe("Academic + Policy (OpenAlex, Overton)");
     expect(vocabLabel(STEERING_MODE_LABEL, "unattended")).toBe("None");
-    expect(vocabLabel(COMPONENT_LABEL, "screen_full")).toBe("Screening for relevance");
     // The contract's ban: an unknown key must OMIT, not render key.replace(…).
     expect(vocabLabel(SEARCH_EFFORT_LABEL, "warp_speed")).toBeNull();
     expect(vocabLabel(SEARCH_EFFORT_LABEL, null)).toBeNull();
@@ -146,47 +143,6 @@ describe("researchApproach", () => {
   });
 });
 
-describe("timeBandFor", () => {
-  it("returns the measured band for a search-effort × analysis-depth pair", () => {
-    expect(timeBandFor("standard", "standard")).toBe("~10-20 min");
-    expect(timeBandFor("rapid", "deep")).toBe("~75-90 min");
-    expect(timeBandFor("unknown", "standard")).toBeNull();
-  });
-});
-
-describe("stepsForAnalysisDepth", () => {
-  it("adds shortlisting at standard and the findings chain at deep", () => {
-    const landscape = stepsForAnalysisDepth("landscape").map((step) => step.stage);
-    const standard = stepsForAnalysisDepth("standard").map((step) => step.stage);
-    const deep = stepsForAnalysisDepth("deep").map((step) => step.stage);
-    expect(landscape).toEqual(["acquire", "screen", "classify", "appraise", "characterise", "synthesise"]);
-    expect(standard).toContain("select");
-    expect(standard).not.toContain("extract");
-    expect(deep).toEqual([
-      "acquire",
-      "screen",
-      "classify",
-      "appraise",
-      "characterise",
-      "select",
-      "extract",
-      "group",
-      "synthesise",
-    ]);
-  });
-
-  it("adapts the searching blurb to the selected source libraries", () => {
-    expect(acquireSearchBlurb("academic_only")).toBe("Querying academic databases.");
-    expect(acquireSearchBlurb("grey_lit_only")).toBe("Querying policy databases.");
-    expect(acquireSearchBlurb("both")).toBe("Querying academic and policy databases.");
-    expect(stepsForAnalysisDepth("landscape", "academic_only")[0]).toMatchObject({
-      stage: "acquire",
-      label: "Searching",
-      blurb: "Querying academic databases.",
-    });
-  });
-});
-
 describe("options-scoping plan vocabulary (task 044)", () => {
   function constraint(overrides: Partial<ScopingConstraint> = {}): ScopingConstraint {
     return {
@@ -260,8 +216,8 @@ describe("options-scoping plan vocabulary (task 044)", () => {
     ]);
   });
 
-  it("names the nine profile lines and labels a consideration only", () => {
-    expect(Object.keys(PROFILE_LINE_LABELS)).toHaveLength(9);
+  it("names the ten profile labels and labels a consideration only", () => {
+    expect(Object.keys(PROFILE_LINE_LABELS)).toHaveLength(10);
     expect(PROFILE_LINE_LABELS.workforce).toBe("Workforce requirements");
     expect(constraintKindLines(constraint({ kind: "boundary" }))).toEqual([]);
     expect(constraintKindLines(constraint({ kind: "consideration", aspect: "cost", hard: true }))).toEqual([
@@ -279,5 +235,27 @@ describe("options-scoping plan vocabulary (task 044)", () => {
       "Language: not yet applied at retrieval",
     ]);
     expect(constraintEffectLines(constraint({ kind: "boundary", languages: [] }))).toHaveLength(1);
+  });
+});
+
+describe("RISK_APPETITE_LABELS", () => {
+  it("holds the three approved answers, one per generated enum value", () => {
+    expect(RISK_APPETITE_LABELS).toEqual({
+      tried_only: "Cautious: only options that have been evaluated somewhere",
+      mostly_tried: "Balanced: mostly evaluated, plus one or two not yet evaluated",
+      open_to_untested: "Ambitious: the biggest ideas, even those never implemented",
+    });
+    expect(Object.keys(RISK_APPETITE_LABELS).sort()).toEqual(["mostly_tried", "open_to_untested", "tried_only"]);
+  });
+});
+
+describe("scopingPlanSummary", () => {
+  it("names the scoping plan and its time band, as the annex's plan card line", () => {
+    expect(scopingPlanSummary({ time_band: "~20 to 40 min" })).toBe("Scoping plan · ~20 to 40 min");
+  });
+
+  it("leaves the band out while the draft has none", () => {
+    expect(scopingPlanSummary({ time_band: null })).toBe("Scoping plan");
+    expect(scopingPlanSummary(undefined)).toBe("Scoping plan");
   });
 });

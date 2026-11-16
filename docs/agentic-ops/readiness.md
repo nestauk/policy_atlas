@@ -21,10 +21,19 @@ are done (spec-prep 2026-06-22; refreshed 2026-07-03); `[ ]` items are open gate
 - [x] Open/provisional decisions marked 🟡 / ❓ throughout; none silently flattened.
 - [ ] Tool/component I/O contracts — draft when the first implementation task lands.
 - [x] Task-contract map for first implementation slices — superseded by the running task sequence
-  (`docs/tasks/001`–`043` and `047`–`051` merged to `dev` as of 2026-10-09, 051 the single-pass search of ADR 0038; 044, 045 and 046 — options scoping tasks 1 and 2 (the
-  longlist) and the longlist refinement with its four amendments — merge to the
-  `feat/options-scoping` feature branch (draft PR #69 → `dev`) as of 2026-10-12, so `dev` and
-  production carry one capability until that branch lands; system live at
+  (`docs/tasks/001`–`052` merged to `dev`, 044–046 the options scoping capability landing
+  with PR #69 on 2026-10-15, 051 the single-pass search of ADR 0038; 053 the local Bedrock
+  route of ADR 0041 landing with its PR on 2026-10-21; 055 (the shortlist) reviewed on
+  `task/055-scoping-shortlist` as of 2026-10-27; 056 (cost and latency: GPT-6 on both
+  routes, one route step per call site, prompt caching, Unrated appraisal) merged to `dev`
+  with PR #109 on 2026-11-02; 057 (queued ingest through SQS and a Lambda function, the
+  content-addressed document store, chunk retrieval in SQL over pgvector, a timeout per
+  model-call step; ADR 0043) merged to `dev` on 2026-11-04 (PR #111); 058 (perceived latency:
+  a live activity line from coalesced ticks, streamed report sections and planner reply, one
+  server source of progress copy, the longlist from the first minute, fifteen owner polish
+  rounds across the app; ADR 0044) merged to `dev` on 2026-11-09 (PR #115); 054 (theory of
+  change, the third capability, behind the `POLICY_ATLAS_THEORY_OF_CHANGE` setting; ADR 0042)
+  reviewed on `task/054-1-core` as of 2026-11-05 with PR #114 — system live at
   `v3.policyatlas.uk`; the next slice is the newest `docs/tasks/NNN-*/contract.md` and
   its `task/NNN-slug` branch).
 - [x] Verification plan for first implementation slices — per-task `verification.md` from

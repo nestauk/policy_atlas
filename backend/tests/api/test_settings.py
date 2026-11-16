@@ -55,6 +55,20 @@ def test_db_pool_settings_honor_environment_overrides(monkeypatch: pytest.Monkey
     assert settings.db_max_overflow == 10
 
 
+@pytest.mark.parametrize(("value", "enabled"), [(None, False), ("0", False), ("1", True)])
+def test_the_theory_of_change_setting_is_on_only_for_1(
+    monkeypatch: pytest.MonkeyPatch, value: str | None, enabled: bool
+) -> None:
+    """`POLICY_ATLAS_THEORY_OF_CHANGE` (task 054, C15): off unless exactly `1`."""
+    _set_required_env(monkeypatch)
+    if value is None:
+        monkeypatch.delenv("POLICY_ATLAS_THEORY_OF_CHANGE", raising=False)
+    else:
+        monkeypatch.setenv("POLICY_ATLAS_THEORY_OF_CHANGE", value)
+
+    assert load_settings().theory_of_change_enabled is enabled
+
+
 def test_db_pool_size_zero_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     """`DB_POOL_SIZE` must be a positive integer — a zero-sized pool is nonsensical."""
     _set_required_env(monkeypatch)

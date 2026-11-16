@@ -1145,6 +1145,18 @@ def test_apply_appraisal_labels_maps_score_to_label() -> None:
     assert "appraisal_label" not in citations[0]
 
 
+def test_apply_appraisal_labels_maps_the_unrated_flag_to_unrated() -> None:
+    """Task 056, D7: a citation to an Unrated document persists the flag, not a
+    score, and reads as "Unrated"."""
+    from policy_atlas.api.answer_core import apply_appraisal_labels
+
+    citations = [{"n": 1, "id": "chunk-1", "kind": "chunk", "appraisal_unrated": True}]
+    labelled = apply_appraisal_labels(citations)
+    assert labelled[0]["appraisal_label"] == "Unrated"
+    assert "appraisal_unrated" not in labelled[0]
+    assert citations[0]["appraisal_unrated"] is True
+
+
 def test_apply_appraisal_labels_absent_score_leaves_citation_untouched() -> None:
     """A citation carrying no score (id-only resolution failure) passes through."""
     from policy_atlas.api.answer_core import apply_appraisal_labels

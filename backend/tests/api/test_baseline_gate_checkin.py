@@ -354,7 +354,7 @@ def test_the_gate_check_in_reports_its_own_kind_on_the_wire() -> None:
     the generic kind, so the read model must say so)."""
     import uuid as _uuid
 
-    from policy_atlas.api.checkin_read import _check_in
+    from policy_atlas.api.check_ins_read import _check_in
 
     payload = {
         "kind": "steer_point",

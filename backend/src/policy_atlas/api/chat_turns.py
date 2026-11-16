@@ -19,7 +19,7 @@ from policy_atlas.api.answer_core import (
 )
 from policy_atlas.api.app import ApiCapacity, ApiConflict
 from policy_atlas.api.chat_scope import resolve_terminal_run_components
-from policy_atlas.api.routers._access import own_chat_leg
+from policy_atlas.api.routers.access import own_chat_leg
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import capability_run, chat_turn, conversation, task
 from policy_atlas.runtime.chat_backend import ChatBackend

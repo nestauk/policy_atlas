@@ -20,7 +20,9 @@ the application's own connections see it.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, cast
 
@@ -31,7 +33,8 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.contract import OptionDocumentOut
 from policy_atlas.api.deps import get_agent_backend, get_runner_backends
-from policy_atlas.api.readmodels import repository
+from policy_atlas.api.read_models import repository
+from policy_atlas.core import events
 from policy_atlas.core.schema import (
     capability_run,
     evidence_scope,
@@ -43,6 +46,7 @@ from policy_atlas.core.schema import (
     source_classification_result,
     task,
     task_link,
+    task_plan,
     task_source_snapshot,
 )
 from policy_atlas.options_scoping.constrain.constrain import (
@@ -50,8 +54,8 @@ from policy_atlas.options_scoping.constrain.constrain import (
 )
 from policy_atlas.options_scoping.constrain.constrain_prompt import ConstrainResponse
 from policy_atlas.options_scoping.context import ScopeContext
-from policy_atlas.options_scoping.longlist.lever_types import LEVER_TYPES, TAXONOMY_VERSION
-from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
+from policy_atlas.options_scoping.option_profile.lever_types import LEVER_TYPES, TAXONOMY_VERSION
+from policy_atlas.options_scoping.scoping_backend import StubLonglistBackend
 from policy_atlas.runtime.agent_backend import StubAgentBackend
 from policy_atlas.runtime.option_design_prompt import OptionDesignWire
 from policy_atlas.runtime.scoping_plan import (
@@ -63,6 +67,7 @@ from policy_atlas.runtime.scoping_plan import (
 from tests.api.org_support import (
     Principal,
     make_org,
+    make_task,
     ops_enrol,
     seeded,
     tenancy_client,
@@ -70,10 +75,11 @@ from tests.api.org_support import (
 from tests.api.resource_support import (  # noqa: F401 — autouse teardown
     api_client,
     create_task,
+    end_walks,
     remove_committed_tasks_after_walks,
 )
 from tests.api.resource_support import await_walks_ended as _await_walks_ended
-from tests.helpers import now, seed_run
+from tests.helpers import now, seed_run, seed_walk
 from tests.options_scoping.test_longlist import (
     RCT,
     _current_fingerprint,
@@ -367,9 +373,7 @@ def test_the_reads_are_org_scoped_and_public_like_the_artefact(
         for caller in (owner, colleague):
             assert _longlist(client, built.task_id, caller.headers).status_code == 200
             assert _card(client, built, "Mentoring", caller.headers).status_code == 200
-        absent = client.get(
-            f"/api/v1/tasks/{uuid.uuid4()}/longlist", headers=stranger.headers
-        )
+        absent = client.get(f"/api/v1/tasks/{uuid.uuid4()}/longlist", headers=stranger.headers)
         hidden = _longlist(client, built.task_id, stranger.headers)
         assert hidden.status_code == absent.status_code == 404
         assert hidden.content == absent.content
@@ -408,9 +412,7 @@ def test_a_link_grants_no_read_of_the_targets_options(engine: Engine, tmp_path: 
                 .where(task.c.task_id == built.source_task_id)
                 .values(owner_user_id=source_owner.user_id)
             )
-        source = client.get(
-            f"/api/v1/tasks/{built.source_task_id}", headers=source_owner.headers
-        )
+        source = client.get(f"/api/v1/tasks/{built.source_task_id}", headers=source_owner.headers)
         assert source.status_code == 200
         assert _longlist(client, built.task_id, source_owner.headers).status_code == 404
         assert _card(client, built, "Youth guarantee", source_owner.headers).status_code == 404
@@ -422,6 +424,184 @@ def test_no_longlist_is_a_404_and_an_unknown_option_too(engine: Engine, tmp_path
         assert client.get(f"/api/v1/tasks/{task_id}/longlist", headers=owner).status_code == 404
         unknown = client.get(f"/api/v1/tasks/{task_id}/options/{uuid.uuid4()}", headers=owner)
         assert unknown.status_code == 404
+
+
+# --- the options read (task 058, N22) ------------------------------------------------
+
+
+def _options(client: TestClient, task_id: uuid.UUID, headers: dict[str, str] | None) -> Any:
+    return client.get(f"/api/v1/tasks/{task_id}/options", headers=headers)
+
+
+def _statuses(client: TestClient, task_id: uuid.UUID, headers: dict[str, str]) -> list[Any]:
+    response = _options(client, task_id, headers)
+    assert response.status_code == 200, response.text
+    return [(row["name"], row["search_status"], row["found"]) for row in response.json()["options"]]
+
+
+def _suggested(conn: Connection, task_id: uuid.UUID, name: str, minutes: int) -> uuid.UUID:
+    """One suggested option row, as the suggest stage writes it, ``minutes`` apart."""
+    option_id = uuid.uuid4()
+    moment = now()
+    conn.execute(
+        option.insert().values(
+            option_id=option_id,
+            task_id=task_id,
+            name=name,
+            description=f"{name}, as suggested.",
+            design={"name": name, "description": f"{name}, as suggested."},
+            outcomes=["the NEET rate"],
+            origin="suggested",
+            state="included",
+            secondary_lever_types=[],
+            created_at=moment + timedelta(minutes=minutes),
+            updated_at=moment,
+        )
+    )
+    return option_id
+
+
+def _child(
+    engine: Engine, task_id: uuid.UUID, parent: uuid.UUID, option_id: uuid.UUID
+) -> tuple[uuid.UUID, uuid.UUID]:
+    """A running option search for ``option_id`` under ``parent``, with one component run."""
+    with engine.begin() as conn:
+        seeded_walk = seed_walk(
+            conn,
+            task_id,
+            purpose="targeted",
+            status="running",
+            parent=parent,
+            context={"option_id": str(option_id)},
+            with_run=True,
+        )
+    assert seeded_walk.run_id is not None
+    return seeded_walk.walk_id, seeded_walk.run_id
+
+
+def _acquired(engine: Engine, task_id: uuid.UUID, run_id: uuid.UUID, count: int) -> None:
+    with engine.begin() as conn:
+        events.append(
+            conn,
+            task_id=task_id,
+            run_id=run_id,
+            event_type="component.completed",
+            payload={"component": "acquire", "registry_component": "acquire", "acquired": count},
+        )
+
+
+def _end(engine: Engine, walk_id: uuid.UUID, status: str) -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            update(capability_run)
+            .where(capability_run.c.capability_run_id == walk_id)
+            .values(status=status, ended_at=now())
+        )
+
+
+def test_the_options_read_follows_each_option_search_before_the_longlist(
+    engine: Engine, tmp_path: Path
+) -> None:
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
+        with seeded(engine) as conn:
+            org_id = make_org(conn)
+            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
+            ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
+            task_id = make_task(
+                conn, owner_user_id=owner.user_id, org_id=org_id, capability="options_scoping"
+            )
+        # Before suggest: an empty list, not a 404.
+        assert _statuses(client, task_id, owner.headers) == []
+        with engine.begin() as conn:
+            parent = seed_walk(conn, task_id, purpose="longlist", status="running").walk_id
+            mentoring = _suggested(conn, task_id, "Mentoring", 1)
+            guarantee = _suggested(conn, task_id, "Youth guarantee", 2)
+            folded = _suggested(conn, task_id, "Mentors", 3)
+            conn.execute(
+                update(option)
+                .where(option.c.option_id == folded)
+                .values(merged_into_option_id=mentoring)
+            )
+        assert _statuses(client, task_id, owner.headers) == [
+            ("Mentoring", "queued", None),
+            ("Youth guarantee", "queued", None),
+            ("Mentors", "queued", None),
+        ]
+
+        child, run_id = _child(engine, task_id, parent, mentoring)
+        failed, _ = _child(engine, task_id, parent, guarantee)
+        assert _statuses(client, task_id, colleague.headers)[:2] == [
+            ("Mentoring", "searching", None),
+            ("Youth guarantee", "searching", None),
+        ]
+        _acquired(engine, task_id, run_id, 12)
+        assert _statuses(client, task_id, owner.headers)[0] == ("Mentoring", "searching", 12)
+        _end(engine, child, "succeeded")
+        _end(engine, failed, "interrupted")
+        body = _options(client, task_id, owner.headers).json()["options"]
+        assert [(row["name"], row["search_status"], row["found"]) for row in body] == [
+            ("Mentoring", "searched", 12),
+            ("Youth guarantee", "failed", None),
+            ("Mentors", "queued", None),
+        ]
+        assert body[0] == {
+            "option_id": str(mentoring),
+            "name": "Mentoring",
+            "description": "Mentoring, as suggested.",
+            "origin": "suggested",
+            "state": "included",
+            "merged_into_option_id": None,
+            "search_status": "searched",
+            "found": 12,
+        }
+        assert body[2]["merged_into_option_id"] == str(mentoring)
+
+        # The longlist read and the existence flag do not move until the result exists.
+        assert _longlist(client, task_id, owner.headers).status_code == 404
+        listed = client.get(f"/api/v1/tasks/{task_id}", headers=owner.headers).json()
+        assert listed["has_longlist"] is False
+        end_walks(engine, task_id)
+
+
+def test_the_options_read_is_graded_public_and_scoped_to_its_task(
+    engine: Engine, tmp_path: Path
+) -> None:
+    with tenancy_client(tmp_path) as (client, (owner, colleague, stranger)):
+        built = _org_build(engine, owner, colleague)
+        with engine.begin() as conn:
+            other = make_task(conn, owner_user_id=owner.user_id, capability="options_scoping")
+            _suggested(conn, other, "Another task's option", 1)
+        names = {row[0] for row in _statuses(client, built.task_id, owner.headers)}
+        assert set(built.options) <= names
+        assert "Another task's option" not in names
+        assert _statuses(client, built.task_id, colleague.headers)
+
+        absent = _options(client, uuid.uuid4(), stranger.headers)
+        hidden = _options(client, built.task_id, stranger.headers)
+        assert hidden.status_code == absent.status_code == 404
+        assert hidden.content == absent.content
+        assert _options(client, built.task_id, None).status_code == 404
+
+        # A link grants no read: the source's owner still gets the 404.
+        with engine.begin() as conn:
+            conn.execute(
+                update(task)
+                .where(task.c.task_id == built.source_task_id)
+                .values(owner_user_id=stranger.user_id)
+            )
+        assert (
+            client.get(f"/api/v1/tasks/{built.source_task_id}", headers=stranger.headers)
+        ).status_code == 200
+        assert _options(client, built.task_id, stranger.headers).status_code == 404
+
+        shared = client.patch(
+            f"/api/v1/tasks/{built.task_id}", headers=owner.headers, json={"is_public": True}
+        )
+        assert shared.status_code == 200, shared.text
+        for headers in (None, stranger.headers):
+            response = _options(client, built.task_id, headers)
+            assert response.status_code == 200
+            assert {row["name"] for row in response.json()["options"]} == names
 
 
 # --- the list ----------------------------------------------------------------------
@@ -460,7 +640,12 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
         assert counts["no_in_scope"] == 1  # Mentoring: its only document is from 2010
         assert counts["none_fits"] == 1
         assert set(counts) == {
-            "options", "themes", "included", "excluded", "no_in_scope", "none_fits"
+            "options",
+            "themes",
+            "included",
+            "excluded",
+            "no_in_scope",
+            "none_fits",
         }
 
         themed = [oid for theme in body["themes"] for oid in theme["option_ids"]]
@@ -492,8 +677,11 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
         # Ambition is the profile's own call (task 046, R40): the stub marks none.
         assert guarantee["ambition"] is None
         removed = {
-            "settings", "is_entrant_with_no_documents", "restriction_text",
-            "design_version", "abstract_only",
+            "settings",
+            "is_entrant_with_no_documents",
+            "restriction_text",
+            "design_version",
+            "abstract_only",
         }
         assert not removed & guarantee.keys()
 
@@ -524,9 +712,7 @@ def test_the_list_matches_the_stored_rows(engine: Engine, tmp_path: Path) -> Non
 # --- the card ----------------------------------------------------------------------
 
 
-def test_the_card_carries_every_section_and_never_how_sure(
-    engine: Engine, tmp_path: Path
-) -> None:
+def test_the_card_carries_every_section_and_never_how_sure(engine: Engine, tmp_path: Path) -> None:
     with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague)
         response = _card(client, built, "Youth guarantee", owner.headers)
@@ -594,9 +780,9 @@ def test_the_card_carries_every_section_and_never_how_sure(
             "in_scope_documents": 0,
             "documents": 1,
         }
-        assert {
-            j["constraint_id"]: j["verdict"] for j in mentoring["judgements"]
-        }["distinct"] == "passes"
+        assert {j["constraint_id"]: j["verdict"] for j in mentoring["judgements"]}[
+            "distinct"
+        ] == "passes"
         for body in (
             _longlist(client, built.task_id, owner.headers).text,
             *(_card(client, built, name, owner.headers).text for name in built.options),
@@ -829,7 +1015,9 @@ def test_the_signal_and_the_document_lines_carry_the_record_fields(conn: Connect
 
 
 def _stored_profile(
-    main: str | None = "Jobcentres", second: str | None = "Schools"
+    main: str | None = "Jobcentres",
+    second: str | None = "Schools",
+    acts_on: list[str] | None = None,
 ) -> dict[str, Any]:
     lines = {
         key: {"sentence": f"The {key} sentence.", "mark": "more" if key == "cost" else None}
@@ -837,7 +1025,10 @@ def _stored_profile(
     }
     # A mark on a fact line is never served.
     lines["who_decides"]["mark"] = "less"
-    return {"lines": lines, "setting": {"main": main, "second": second}}
+    setting: dict[str, Any] = {"main": main, "second": second}
+    if acts_on is not None:
+        setting["acts_on"] = acts_on
+    return {"lines": lines, "setting": setting}
 
 
 def _profiled(
@@ -885,6 +1076,21 @@ def test_a_stored_profile_is_served_with_its_marks_and_settings(conn: Connection
         assert out.profile.settings == ["Jobcentres", "Schools"]
 
 
+def test_the_profile_serves_whom_the_option_acts_on(conn: Connection) -> None:
+    """Task 058, round 12: the setting call's ``acts_on``, in its order; a
+    profile written before it serves none."""
+    walk, option_id = _profiled(
+        conn, profile=_stored_profile(acts_on=["outlets", "councils", "parents", " "])
+    )
+    for out in _summary_and_card(conn, walk, option_id):
+        assert out.profile is not None
+        assert out.profile.acts_on == ["outlets", "councils", "parents"]
+    walk, option_id = _profiled(conn, profile=_stored_profile())
+    summary, card = _summary_and_card(conn, walk, option_id)
+    assert summary.profile is not None and summary.profile.acts_on == []
+    assert card.profile is not None and card.profile.acts_on == []
+
+
 def test_the_settings_follow_what_the_profile_names(conn: Connection) -> None:
     walk, option_id = _profiled(conn, profile=_stored_profile(second=None))
     assert _summary_and_card(conn, walk, option_id)[0].profile.settings == ["Jobcentres"]
@@ -916,6 +1122,74 @@ def test_an_option_without_a_profile_entry_or_with_an_incomplete_one_has_none(
     blank["lines"]["cost"]["sentence"] = "  "
     walk, option_id = _profiled(conn, profile=blank)
     assert _summary_and_card(conn, walk, option_id)[1].profile is None
+
+
+def test_an_eight_line_row_serves_eight_lines_and_a_nine_line_row_nine(
+    conn: Connection,
+) -> None:
+    eight = _stored_profile()
+    del eight["lines"]["potential_impact"]
+    walk, option_id = _profiled(conn, profile=eight)
+    for out in _summary_and_card(conn, walk, option_id):
+        assert out.profile is not None
+        assert [line.key for line in out.profile.lines] == list(PROFILE_LINE_KEYS[:8])
+    blank = _stored_profile()
+    blank["lines"]["potential_impact"]["sentence"] = "  "
+    walk, option_id = _profiled(conn, profile=blank)
+    for out in _summary_and_card(conn, walk, option_id):
+        assert out.profile is not None
+        assert len(out.profile.lines) == 8
+    walk, option_id = _profiled(conn, profile=_stored_profile())
+    for out in _summary_and_card(conn, walk, option_id):
+        assert out.profile is not None
+        assert len(out.profile.lines) == 9
+        assert out.profile.lines[-1].key == "potential_impact"
+        assert out.profile.lines[-1].mark is None
+    # Owner, 2026-10-27 (055 review): the ninth line carries a mark like the six.
+    marked = _stored_profile()
+    marked["lines"]["potential_impact"]["mark"] = "more"
+    walk, option_id = _profiled(conn, profile=marked)
+    for out in _summary_and_card(conn, walk, option_id):
+        assert out.profile is not None
+        assert out.profile.lines[-1].mark == "more"
+
+
+def test_the_maturity_rung_is_served_from_the_stored_coverage(conn: Connection) -> None:
+    walk, option_id = _profiled(conn, profile=None)
+    latest = repository._latest_longlist_row(conn, walk.task_id)
+    assert latest is not None
+    stored = walk.result(latest.run_id)
+    coverage = {oid: dict(cov) for oid, cov in stored.coverage.items()}
+    # A list written before the rung existed: no key, no rung.
+    coverage[str(option_id)].pop("evaluating_evidence_type", None)
+    conn.execute(
+        update(longlist_result)
+        .where(longlist_result.c.run_id == latest.run_id)
+        .values(coverage=coverage)
+    )
+    assert all(out.maturity is None for out in _summary_and_card(conn, walk, option_id))
+    coverage[str(option_id)].update(
+        {
+            "role": {"evaluated": 2, "described": 0, "recommended": 0},
+            "evaluating_evidence_type": {"Observational Research Studies": 2},
+            "latest_evaluation_year": 2001,
+            "evaluated_countries": [],
+        }
+    )
+    conn.execute(
+        update(longlist_result)
+        .where(longlist_result.c.run_id == latest.run_id)
+        .values(coverage=coverage)
+    )
+    for out in _summary_and_card(conn, walk, option_id):
+        assert out.maturity is not None
+        assert out.maturity.model_dump() == {
+            "rung": "evaluated",
+            "design_mix": "2 Observational Research Studies",
+            "none_in_your_setting": out.maturity.none_in_your_setting,
+            "latest_evaluation_year": 2001,
+            "stale": True,
+        }
 
 
 def test_the_authority_label_is_served_and_is_not_a_judgement(conn: Connection) -> None:
@@ -1010,16 +1284,12 @@ def test_also_found_as_joins_a_merged_duplicate_and_a_folded_seed(conn: Connecti
 
 
 def _decisions(client: TestClient, built: _Built, headers: dict[str, str]) -> list[dict[str, Any]]:
-    response = client.get(
-        f"/api/v1/tasks/{built.task_id}/decisions?page_size=200", headers=headers
-    )
+    response = client.get(f"/api/v1/tasks/{built.task_id}/decisions?page_size=200", headers=headers)
     assert response.status_code == 200, response.text
     return [d for d in response.json()["data"] if d["kind"].startswith("option.")]
 
 
-def test_exclude_records_the_reason_and_include_reverses_it(
-    engine: Engine, tmp_path: Path
-) -> None:
+def test_exclude_records_the_reason_and_include_reverses_it(engine: Engine, tmp_path: Path) -> None:
     with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague)
         oid = built.options["Youth guarantee"]
@@ -1071,6 +1341,40 @@ def test_exclude_records_the_reason_and_include_reverses_it(
         )
         assert unknown.status_code == 404
         assert len(_decisions(client, built, owner.headers)) == 3
+
+
+def test_a_reason_after_a_one_click_exclusion_fills_it_in_and_says_so_once(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Task 058, round 13: excluding again with a reason, after the user's own
+    exclusion, keeps the exclusion and writes one reason line, not a second
+    exclusion."""
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
+        built = _org_build(engine, owner, colleague)
+        oid = built.options["Youth guarantee"]
+        url = f"/api/v1/tasks/{built.task_id}/options/{oid}/exclude"
+        assert client.post(url, headers=owner.headers).status_code == 200
+        reasoned = client.post(url, headers=owner.headers, json={"reason": " Too costly. "})
+        assert reasoned.status_code == 200, reasoned.text
+        assert reasoned.json()["state"] == "excluded"
+        assert reasoned.json()["exclusion"] == {
+            "constraint": "your decision",
+            "reason": "Too costly.",
+            "by": "user",
+        }
+        history = _decisions(client, built, owner.headers)
+        assert [h["kind"] for h in history] == [
+            "option.exclusion_reason_added",
+            "option.excluded",
+        ]
+        assert history[0]["summary"] == (
+            "You gave a reason for setting aside “Youth guarantee”: Too costly."
+        )
+        assert history[0]["decided_by"] == "user"
+        # Excluding again with no reason changes nothing: the reason stays.
+        again = client.post(url, headers=owner.headers, json={"reason": "  "})
+        assert again.json()["exclusion"]["reason"] == "Too costly."
+        assert len(_decisions(client, built, owner.headers)) == 2
 
 
 def test_user_state_survives_a_rebuilds_constrain(engine: Engine, tmp_path: Path) -> None:
@@ -1133,7 +1437,10 @@ def test_add_proposes_a_design_mints_it_and_opens_a_parentless_walk(
     engine: Engine, tmp_path: Path
 ) -> None:
     agent = _design_backend()
-    overrides = {get_agent_backend: lambda: agent, get_runner_backends: _runner_backends}
+    overrides: dict[Callable[..., object], Callable[..., object]] = {
+        get_agent_backend: lambda: agent,
+        get_runner_backends: _runner_backends,
+    }
     with tenancy_client(tmp_path, overrides=overrides) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague, linked=False)
         response = client.post(
@@ -1193,7 +1500,10 @@ def test_the_buttons_are_run_active_while_a_parentless_walk_runs(
     engine: Engine, tmp_path: Path
 ) -> None:
     agent = _design_backend()
-    overrides = {get_agent_backend: lambda: agent, get_runner_backends: _runner_backends}
+    overrides: dict[Callable[..., object], Callable[..., object]] = {
+        get_agent_backend: lambda: agent,
+        get_runner_backends: _runner_backends,
+    }
     with tenancy_client(tmp_path, overrides=overrides) as (client, (owner, colleague, _)):
         built = _org_build(engine, owner, colleague)
         oid = built.options["Mentoring"]
@@ -1261,11 +1571,15 @@ def test_the_buttons_are_run_active_while_a_parentless_walk_runs(
             json={"reason": "Not now."},
         )
         assert allowed.status_code == 200, allowed.text
+        end_walks(engine, built.task_id)
 
 
 def test_the_buttons_are_422_on_an_evidence_search_task(engine: Engine, tmp_path: Path) -> None:
     agent = _design_backend()
-    overrides = {get_agent_backend: lambda: agent, get_runner_backends: _runner_backends}
+    overrides: dict[Callable[..., object], Callable[..., object]] = {
+        get_agent_backend: lambda: agent,
+        get_runner_backends: _runner_backends,
+    }
     with api_client(tmp_path, overrides) as (client, owner, _other):
         task_id = create_task(client, owner)
         oid = uuid.uuid4()
@@ -1440,7 +1754,17 @@ def test_the_documents_are_one_per_document_best_first_with_a_year(conn: Connect
     walk, added, scope_id = _added_option_search(conn)
     first = walk.doc({"title": "Wage subsidy trial", "doi": "10.9/ws", "publication_year": 2021})
     twin = walk.doc({"title": "Wage subsidy trial (preprint)", "doi": "https://doi.org/10.9/WS"})
-    strong = walk.doc({"title": "Strong description", "publication_date": "2018-05-01"})
+    strong = walk.doc(
+        {
+            "title": "Strong description",
+            "publication_date": "2018-05-01",
+            # Round 12: the reference line's authors and venue.
+            "venue": "Journal of Youth Work",
+            "provider_fields": {
+                "authorships": [{"author_name": "A. Sample"}, {"author_name": "B. Mock"}]
+            },
+        }
+    )
     weak = walk.doc({"title": "Weak description", "publication_year": 2010})
     entity = walk.doc({"title": "R&amp;D credits", "publication_year": 2019})
     for doc, score in ((first, 3), (twin, 3), (strong, 5), (weak, 2), (entity, 5)):
@@ -1461,16 +1785,20 @@ def test_the_documents_are_one_per_document_best_first_with_a_year(conn: Connect
         ("Weak description", "described", 2010),
     ]
     assert card.documents[0].task_source_snapshot_id in {first, twin}
+    described = next(d for d in card.documents if d.title == "Strong description")
+    assert described.authors == ["A. Sample", "B. Mock"]
+    assert described.venue == "Journal of Youth Work"
+    assert (card.documents[1].authors, card.documents[1].venue) == ([], None)
     # An added option reads template sentences from its own search's lines
     # until the profile step runs (task 046, amendment 4, S31; PA4-15): its one
     # evaluating document states no country.
     assert [(s.place, s.sentence, s.generated, s.where) for s in card.place_sentences] == [
-        ("No single place", "1 moderate trial.", False, False)
+        ("Place not stated", "1 moderate trial.", False, False)
     ]
 
 
 def test_a_document_with_no_row_here_takes_its_twin_s_own_row() -> None:
-    from policy_atlas.api.readmodels.repository import _collapse_document_lines
+    from policy_atlas.api.read_models.repository import _collapse_document_lines
 
     def _collapse_documents(entries: list[Any]) -> list[OptionDocumentOut]:
         return [line.document for line in _collapse_document_lines(entries)]
@@ -1534,7 +1862,10 @@ def test_add_answers_with_the_option_when_its_search_is_still_queued(
     monkeypatch.setattr(longlist_actions, "run_option_search", run_option_search)
     monkeypatch.setattr(longlist_actions, "_await_new_run", never_opens)
     agent = _design_backend()
-    overrides = {get_agent_backend: lambda: agent, get_runner_backends: _runner_backends}
+    overrides: dict[Callable[..., object], Callable[..., object]] = {
+        get_agent_backend: lambda: agent,
+        get_runner_backends: _runner_backends,
+    }
     try:
         with tenancy_client(tmp_path, overrides=overrides) as (client, (owner, colleague, _)):
             built = _org_build(engine, owner, colleague, linked=False)
@@ -1655,3 +1986,207 @@ def test_an_option_from_the_evidence_search_names_its_report_section(
     assert card.from_section == "What works for employers"
 
 
+# --- task 055: the shortlist place, the proposal and the plan inputs -----------
+
+
+def _approve_version(conn: Connection, walk: _Walk, version: int, plan: ScopingPlan) -> None:
+    """Supersede the current plan version and approve ``plan`` as ``version``."""
+    conn.execute(
+        update(task_plan)
+        .where(task_plan.c.task_id == walk.task_id)
+        .where(task_plan.c.status == "approved")
+        .values(status="superseded")
+    )
+    conn.execute(
+        task_plan.insert().values(
+            plan_id=uuid.uuid4(),
+            task_id=walk.task_id,
+            version=version,
+            status="approved",
+            payload=plan.model_dump(mode="json"),
+            created_at=now(),
+            created_by="user",
+        )
+    )
+
+
+def test_null_shortlist_columns_read_as_no_place(conn: Connection) -> None:
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    picked = walk.option("Wage subsidy", origin="added_by_you")
+    walk.build(_Scripted())
+    unplaced = walk.options()["Youth guarantee"].option_id
+    conn.execute(
+        update(option)
+        .where(option.c.option_id == picked)
+        .values(shortlist_state="proposed", shortlist_reason="Tried at scale in Wales.")
+    )
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    by_id = {o.option_id: o for o in listed.options}
+    assert by_id[unplaced].shortlist is None
+    placed = by_id[picked].shortlist
+    assert placed is not None
+    assert (placed.state, placed.reason) == ("proposed", "Tried at scale in Wales.")
+    card = repository.option_out(conn, walk.task_id, unplaced)
+    assert card is not None and card.shortlist is None
+    picked_card = repository.option_out(conn, walk.task_id, picked)
+    assert picked_card is not None and picked_card.shortlist == placed
+
+
+def test_a_longlist_with_no_proposal_serves_an_empty_stale_shortlist(conn: Connection) -> None:
+    """A row written before the shortlist existed holds ``{}`` (PG1: stale)."""
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    walk.build(_Scripted())
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    assert listed.shortlist.note is None
+    assert listed.shortlist.provenance == {}
+    assert listed.shortlist.places_target == 5
+    assert listed.shortlist.stale is True
+    assert listed.plan_inputs_changed is False
+
+
+def test_the_proposal_is_stale_when_the_plan_s_appetite_moves(conn: Connection) -> None:
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    run_id, _ = walk.build(_Scripted())
+    conn.execute(
+        update(longlist_result)
+        .where(longlist_result.c.run_id == run_id)
+        .values(
+            shortlist={
+                "note": "Leaves out the untested ideas.",
+                "provenance": {"appetite": "mostly_tried", "plan_version": 2},
+            }
+        )
+    )
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    assert listed.shortlist.note == "Leaves out the untested ideas."
+    assert listed.shortlist.provenance["appetite"] == "mostly_tried"
+    assert listed.shortlist.stale is False
+
+    cautious = scoping_plan().model_copy(update={"risk_appetite": "tried_only"})
+    _approve_version(conn, walk, 3, cautious)
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    assert listed.shortlist.stale is True
+    # A6: the appetite is not a longlist input.
+    assert listed.plan_inputs_changed is False
+
+
+def test_the_longlist_carries_the_current_plan_s_heading_words(conn: Connection) -> None:
+    """A public link cannot read the plan, so the longlist repeats these three."""
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    walk.build(_Scripted())
+    cautious = scoping_plan().model_copy(update={"risk_appetite": "tried_only"})
+    _approve_version(conn, walk, 3, cautious)
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    assert listed.question == cautious.question
+    assert listed.where == cautious.where.text
+    assert listed.risk_appetite == "tried_only"
+
+
+def test_an_outcome_change_makes_the_plan_inputs_changed(conn: Connection) -> None:
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    walk.build(_Scripted())
+    base = scoping_plan()
+    earnings = base.outcomes[0].model_copy(update={"text": "earnings"})
+    moved = base.model_copy(update={"outcomes": [*base.outcomes, earnings]})
+    _approve_version(conn, walk, 3, moved)
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    assert listed.plan_inputs_changed is True
+
+
+def test_plan_inputs_changed_is_true_when_the_pinned_version_cannot_be_read(
+    conn: Connection,
+) -> None:
+    """It agrees with the shortlist opener, which refuses that case as ``plan_stale``."""
+    walk = _Walk(conn)
+    walk.option("Youth guarantee", origin="added_by_you")
+    walk.build(_Scripted())
+    conn.execute(
+        update(task_plan)
+        .where(task_plan.c.task_id == walk.task_id)
+        .where(task_plan.c.version == 2)
+        .values(payload={"not": "a scoping plan"}, status="superseded")
+    )
+    base = scoping_plan()
+    _approve_version(
+        conn,
+        walk,
+        3,
+        base.model_copy(update={"depth": "rapid" if base.depth == "standard" else "standard"}),
+    )
+    listed = repository.longlist_out(conn, walk.task_id)
+    assert listed is not None
+    assert listed.plan_inputs_changed is True
+
+
+def test_a_longlist_theme_lists_the_documents_of_its_options(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Task 058, round 14: on a scoping task ``evidence?theme=<longlist theme>``
+    lists the union of its options' documents; an unknown theme lists none."""
+    with tenancy_client(tmp_path) as (client, (owner, colleague, _)):
+        built = _org_build(engine, owner, colleague)
+        guarantee = built.options["Youth guarantee"]
+        mentoring = built.options["Mentoring"]
+        theme_id = uuid.uuid4()
+        with engine.begin() as conn:
+            conn.execute(
+                update(longlist_result)
+                .where(longlist_result.c.task_id == built.task_id)
+                .values(
+                    themes=[
+                        {
+                            "theme_id": str(theme_id),
+                            "name": "Guarantees",
+                            "description": "Offers made to every young person.",
+                            "option_ids": [str(guarantee), str(mentoring)],
+                        }
+                    ]
+                )
+            )
+        body = _longlist(client, built.task_id, owner.headers).json()
+        themes = [theme for theme in body["themes"] if theme["option_ids"]]
+        assert [theme["theme_id"] for theme in themes] == [str(theme_id)]
+        listed_count = None
+        with engine.connect() as conn:
+            for theme in themes:
+                expected = {
+                    str(tss)
+                    for tss in conn.execute(
+                        select(option_membership.c.task_source_snapshot_id).where(
+                            option_membership.c.task_id == built.task_id,
+                            option_membership.c.option_id.in_(
+                                [uuid.UUID(oid) for oid in theme["option_ids"]]
+                            ),
+                            option_membership.c.task_source_snapshot_id.is_not(None),
+                        )
+                    ).scalars()
+                }
+                listed = client.get(
+                    f"/api/v1/tasks/{built.task_id}/evidence",
+                    params={"theme": theme["theme_id"], "page_size": 200},
+                    headers=owner.headers,
+                )
+                assert listed.status_code == 200, listed.text
+                assert {row["source_id"] for row in listed.json()["data"]} == expected
+                assert expected
+                # Round 14: the theme's count is these documents, each once.
+                listed_count = theme["document_count"]
+                assert listed_count == len(expected)
+        assert listed_count is not None
+        unknown = client.get(
+            f"/api/v1/tasks/{built.task_id}/evidence",
+            params={"theme": str(uuid.uuid4())},
+            headers=owner.headers,
+        ).json()
+        assert unknown["data"] == []

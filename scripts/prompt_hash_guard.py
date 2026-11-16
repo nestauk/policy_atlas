@@ -41,6 +41,18 @@ EXTRA_FILES: tuple[str, ...] = (
     "backend/src/policy_atlas/evidence_search/extract/icf_records.py",
     "backend/src/policy_atlas/evidence_search/extract/finding_references.py",
     "backend/src/policy_atlas/evidence_search/synthesis/grounding_judge.py",
+    # Owner-approved pins (2026-11-01, task 056): these hold model-facing text outside the guard.
+    # The finding vetters' system and user prompts (IOF and ICF).
+    "backend/src/policy_atlas/evidence_search/extract/finding_vetter.py",
+    # The reranker's system and user prompts.
+    "backend/src/policy_atlas/evidence_search/corpus/ranking.py",
+    # The theme discovery and assignment prompts.
+    "backend/src/policy_atlas/evidence_search/corpus/theme_grouping.py",
+    # The facet-group clustering prompts.
+    "backend/src/policy_atlas/evidence_search/group/group_clustering.py",
+    # The planner prompt substitutes TIME_BANDS from here (task 058), so a band edit
+    # changes the prompt text.
+    "backend/src/policy_atlas/runtime/task_plan.py",
 )
 
 

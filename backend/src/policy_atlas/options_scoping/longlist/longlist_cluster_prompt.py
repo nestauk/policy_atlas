@@ -46,7 +46,9 @@ DISCOVERY_MAX_OUTPUT_TOKENS = 16_384
 ASSIGNMENT_MAX_OUTPUT_TOKENS = 16_384
 
 OPTION_LABEL_MAX = 80
-OPTION_DESCRIPTION_MAX = 240
+# The prompt asks the model for at most 240 characters; the check allows 400 so one
+# slightly long description does not fail the whole step.
+OPTION_DESCRIPTION_MAX = 400
 
 
 class DiscoveredOptionWire(BaseModel):

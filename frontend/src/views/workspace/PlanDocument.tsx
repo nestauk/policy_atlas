@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { components } from "../../api/gen/types";
-import { usePatchPlan } from "../../api/mutations";
-import { usePlan, useTask } from "../../api/queries";
+import { usePatchPlan, useStartRun } from "../../api/mutations";
+import { usePlan, useTask, useTocUploadFile } from "../../api/queries";
 import { seedComposer } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
 import { COPY } from "../../lib/vocabulary";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
+import { DisclosureChevron } from "../../ui/brand/Disclosure";
 import { Popover, PopoverContent, PopoverTrigger } from "../../ui/radix/Popover";
 import { Tooltip } from "../../ui/radix/Tooltip";
 import { READING_COLUMN_MAX_W } from "../listPageChrome";
@@ -23,7 +24,7 @@ import {
   screeningOverlayError,
   type PlanOverlay,
 } from "./planOverlay";
-import { START_SEARCH_CLASS, scopingStatusLine, usePlanStart, useScopingPlanStart } from "./planStart";
+import { scopingStatusLine, usePlanStart, useScopingPlanStart } from "./planStart";
 import {
   ANALYSIS_DEPTH_LABEL,
   ANALYSIS_QUESTION,
@@ -39,6 +40,7 @@ import {
   RESEARCH_APPROACH_TITLE,
   researchApproachId,
   researchApproachLabel,
+  RISK_APPETITE_LABELS,
   SCOPING_DEPTH_LABEL,
   SCOPING_STEERING_MODE_LABEL,
   SEARCH_EFFORT_LABEL,
@@ -46,9 +48,7 @@ import {
   SEARCH_SCOPE_TITLE,
   SOURCES_LABEL,
   STEERING_MODE_LABEL,
-  stepsForAnalysisDepth,
   TAG_ORIGIN_LABEL,
-  timeBandFor,
   vocabLabel,
   YOUR_CONTEXT_TYPE_LABEL,
   YOUR_OPTIONS_ASSUMED_TAG,
@@ -56,22 +56,27 @@ import {
   YOUR_OPTIONS_DESIGN_PENDING,
   YOUR_OPTIONS_NONE,
   YOUR_OPTIONS_TITLE,
+  type RiskAppetite,
 } from "./planVocabulary";
+import { RiskAppetiteSelect } from "../longlist/ShortlistView";
+import { UploadPreview } from "../toc/uploads";
 
 type ScopingPlanDraft = components["schemas"]["ScopingPlanDraft"];
+type PlanDraft = components["schemas"]["PlanDraft"];
 type TaggedOut = components["schemas"]["TaggedOut"];
 type ScopingConstraintOut = components["schemas"]["ScopingConstraintOut"];
 type YourContextOut = components["schemas"]["YourContextOut"];
 type YourOptionOut = components["schemas"]["YourOptionOut"];
 type TaskLinkOut = components["schemas"]["TaskLinkOut"];
+type TocPlanDraft = components["schemas"]["TocPlanDraft"];
 
 const panelLabelClass = "text-lead font-bold text-white";
 const panelEditButtonClass =
   "cursor-pointer border border-white/25 px-3 py-1.5 text-body font-semibold text-white hover:bg-white/10";
 const panelFieldClass =
-  "w-full border border-white/25 bg-[#0a1f38] px-3 py-2.5 text-lead text-white focus-visible:outline-2 focus-visible:outline-blue";
+  "w-full border border-white/25 bg-navy-deep px-3 py-2.5 text-lead text-white";
 const panelValueClass = "mt-0.5 text-lead text-white";
-const panelHintClass = "text-body text-[#c5d0dc]";
+const panelHintClass = "text-body text-on-navy-soft";
 
 function InfoHint({ label, hint }: { label: string; hint: string }) {
   return (
@@ -79,7 +84,7 @@ function InfoHint({ label, hint }: { label: string; hint: string }) {
       <button
         type="button"
         aria-label={`About ${label}`}
-        className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center text-[#97a8bc] hover:text-white focus-visible:outline-2 focus-visible:outline-blue"
+        className="inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center text-on-navy-muted hover:text-white"
       >
         <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4" fill="none">
           <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.25" />
@@ -145,7 +150,7 @@ function PanelSection({
             </button>
             <button
               type="button"
-              className={cn(panelEditButtonClass, "border-blue bg-blue text-white hover:bg-[#0000d6]")}
+              className={cn(panelEditButtonClass, "border-blue bg-blue text-white hover:bg-blue-pressed")}
               onClick={onSave}
             >
               Save
@@ -200,13 +205,13 @@ function PlanPicker({
             aria-haspopup="listbox"
             aria-expanded={open}
             aria-labelledby={`${id}-label`}
-            className="flex w-full cursor-pointer items-center justify-between gap-3 border border-white/25 bg-[#0a1f38] px-3 py-2.5 text-left text-lead font-normal text-white hover:border-white/50 focus-visible:outline-2 focus-visible:outline-blue"
+            className="flex w-full cursor-pointer items-center justify-between gap-3 border border-white/25 bg-navy-deep px-3 py-2.5 text-left text-lead font-normal text-white hover:border-white/50"
           >
             <span className="min-w-0 flex-1 text-pretty">{selected}</span>
             <svg
               aria-hidden="true"
               viewBox="0 0 24 24"
-              className="h-4 w-4 shrink-0 text-[#97a8bc]"
+              className="h-4 w-4 shrink-0 text-on-navy-muted"
               fill="none"
               stroke="currentColor"
               strokeWidth={2}
@@ -228,7 +233,7 @@ function PlanPicker({
                   onClick={() => pick(key)}
                   className={cn(
                     "block w-full cursor-pointer px-3 py-2.5 text-left text-lead font-normal text-pretty text-navy hover:bg-blue-tint-2 hover:text-blue",
-                    value === key && "bg-blue-tint-2 font-medium",
+                    value === key && "bg-blue-tint-2 font-semibold",
                   )}
                 >
                   {optionLabel}
@@ -286,7 +291,7 @@ function PlanChrome({
   className?: string;
 }) {
   const controlClass =
-    "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center p-0 text-[#97a8bc] hover:text-white focus-visible:outline-2 focus-visible:outline-blue";
+    "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center p-0 text-on-navy-muted hover:text-white";
   return (
     <div className={cn("flex h-8 items-center", className)}>
       {showDock && onDock !== undefined && (
@@ -348,7 +353,7 @@ function ScopingSection({
 
 /** The grey "Not decided yet" an unset field shows. */
 function NotDecided() {
-  return <span className="text-[#97a8bc] italic">{COPY.notDecided}</span>;
+  return <span className="text-on-navy-muted italic">{COPY.notDecided}</span>;
 }
 
 /** One provenance-tagged field, rendered with its origin words. */
@@ -447,11 +452,19 @@ function ScopingSettingsSection({
   scoping,
   onEdit,
   readOnly,
+  onChangeAppetite,
+  appetitePending = false,
 }: {
   scoping: ScopingPlanDraft;
   onEdit: () => void;
   readOnly: boolean;
+  /** True while a patch is in flight, so two quick changes cannot race. */
+  appetitePending?: boolean;
+  /** A direct plan patch (task 055, A25); omitted while the plan cannot be
+   *  edited directly, which leaves the label read-only. */
+  onChangeAppetite?: (value: RiskAppetite) => void;
 }) {
+  const appetite: RiskAppetite = scoping.risk_appetite ?? "mostly_tried";
   const depthLabel = scoping.depth != null ? (SCOPING_DEPTH_LABEL[scoping.depth] ?? null) : null;
   const checkInsLabel =
     scoping.steering_mode != null ? (SCOPING_STEERING_MODE_LABEL[scoping.steering_mode] ?? null) : null;
@@ -465,6 +478,16 @@ function ScopingSettingsSection({
           <dt className={panelHintClass}>Depth</dt>
           <dd className={panelValueClass}>
             {depthLabel ?? <NotDecided />}
+          </dd>
+        </div>
+        <div>
+          <dt className={panelHintClass}>Risk appetite</dt>
+          <dd className={panelValueClass}>
+            {onChangeAppetite === undefined ? (
+              RISK_APPETITE_LABELS[appetite]
+            ) : (
+              <RiskAppetiteSelect value={appetite} disabled={appetitePending} onChange={onChangeAppetite} />
+            )}
           </dd>
         </div>
         <div>
@@ -510,7 +533,7 @@ function ConstraintsSection({
   return (
     <ScopingSection label="Constraints and preferences" onEdit={onEdit} readOnly={readOnly}>
       {constraints.length === 0 ? (
-        <p className="text-lead text-[#97a8bc] italic">{COPY.notDecided}</p>
+        <p className="text-lead text-on-navy-muted italic">{COPY.notDecided}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-lead text-white">
@@ -549,7 +572,7 @@ function ConstraintsSection({
                       </button>
                     )}
                   </td>
-                  <td className="py-2 pr-3 text-[#e8edf2]">
+                  <td className="py-2 pr-3 text-on-navy">
                     {constraintEffectLines(constraint).map((line) => (
                       <span key={line} className="block">
                         {line}
@@ -586,7 +609,7 @@ function YourOptionsSection({
   return (
     <ScopingSection label={YOUR_OPTIONS_TITLE} onEdit={onEdit} readOnly={readOnly}>
       {options.length === 0 ? (
-        <p className="text-lead text-[#97a8bc] italic">{YOUR_OPTIONS_NONE}</p>
+        <p className="text-lead text-on-navy-muted italic">{YOUR_OPTIONS_NONE}</p>
       ) : (
         <ul className="space-y-4 text-lead text-white">
           {options.map((option, index) => (
@@ -597,7 +620,7 @@ function YourOptionsSection({
                   <p className={panelHintClass}>
                     {YOUR_OPTIONS_DESIGN_LABEL}: {scrub(option.design.name)}
                   </p>
-                  <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[#e8edf2]">
+                  <ul className="mt-1 list-disc space-y-0.5 pl-5 text-on-navy">
                     {option.design.design_features.map((feature, featureIndex) => (
                       <li key={`${feature}-${featureIndex}`}>
                         {scrub(feature)}
@@ -658,7 +681,7 @@ function ScopingStepsSection({ steps }: { steps: ScopingPlanDraft["steps"] }) {
   if (list.length === 0) return null;
   return (
     <ScopingSection label="Steps and check-ins">
-      <ol className="list-none space-y-2 pl-1 text-lead text-[#e8edf2]">
+      <ol className="list-none space-y-2 pl-1 text-lead text-on-navy">
         {list.map((step, index) => (
           <li key={step.stage} className="flex gap-1.5">
             <span aria-hidden="true" className="w-4 shrink-0 tabular-nums">
@@ -703,7 +726,7 @@ function ScopingStartActions({
     return (
       <div className="space-y-3">
         {lineElement}
-        <Button className={cn(START_SEARCH_CLASS)} disabled={state.action.disabled} onClick={state.action.onClick}>
+        <Button variant="start" size="entry" disabled={state.action.disabled} onClick={state.action.onClick}>
           {state.action.label}
         </Button>
         {state.notice != null && (
@@ -718,11 +741,11 @@ function ScopingStartActions({
   if (state.kind === "build") {
     return (
       <div>
-        <Button className={cn(START_SEARCH_CLASS)} disabled={state.action.disabled} onClick={state.action.onClick}>
+        <Button variant="start" size="entry" disabled={state.action.disabled} onClick={state.action.onClick}>
           {state.action.label}
         </Button>
         {state.timeBand != null && state.timeBand !== "" && (
-          <p className="mt-2 text-body text-[#97a8bc]">{scrub(state.timeBand)}</p>
+          <p className="mt-2 text-body text-on-navy-muted">{scrub(state.timeBand)}</p>
         )}
         {state.notice != null && (
           <p role="alert" className="mt-2 text-body text-red-tint">
@@ -735,7 +758,7 @@ function ScopingStartActions({
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <Button className={cn(START_SEARCH_CLASS)} disabled={state.rebuild.disabled} onClick={state.rebuild.onClick}>
+      <Button variant="start" size="entry" disabled={state.rebuild.disabled} onClick={state.rebuild.onClick}>
         {state.rebuild.label}
       </Button>
       <Button variant="secondary" disabled={state.confirm.disabled} onClick={state.confirm.onClick}>
@@ -792,6 +815,12 @@ function ScopingPlanSections({
           scoping={scoping}
           onEdit={() => seedComposer("Change a setting: ")}
           readOnly={readOnly}
+          onChangeAppetite={
+            approved && !runActive && !readOnly
+              ? (value) => patchPlan.mutate({ scoping: { risk_appetite: value } })
+              : undefined
+          }
+          appetitePending={patchPlan.isPending}
         />
         <ConstraintsSection
           constraints={constraints}
@@ -824,15 +853,358 @@ function ScopingPlanSections({
   );
 }
 
+// --- Theory-of-change plan sections (task 054, step 1.3) ------------------
+
+const TOC_ENTRY_POINT_LABEL: Record<NonNullable<TocPlanDraft["entry_point"]>, string> = {
+  outcome_first: "From the change you want",
+  intervention_first: "From an intervention",
+  existing_theory: "From your own theory of change",
+};
+
+/** One plain field: its value, or the grey "Not decided yet". */
+function PlainField({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div>
+      <dt className={panelHintClass}>{label}</dt>
+      <dd className={cn(panelValueClass, "whitespace-pre-line")}>
+        {value != null && value !== "" ? scrub(value) : <NotDecided />}
+      </dd>
+    </div>
+  );
+}
+
+type TocField =
+  | "intended_change"
+  | "target_population"
+  | "where"
+  | "time_horizon"
+  | "intervention"
+  | "dosage"
+  | "context"
+  | "published_after"
+  | "published_before";
+
+/** A field being edited: its label and text. */
+interface TocFieldInput {
+  label: string;
+  rows: number;
+  value: string;
+  onChange: (value: string) => void;
+}
+
+/**
+ * One theory-of-change plan section edited in place, as an Evidence search
+ * plan's sections are (task 054). Save writes the edits straight away: the
+ * plan has two Start buttons (here and in the chat), so nothing waits for one.
+ * By default each field shows and edits the plan's text as it is; `view`,
+ * `initial`, `toValue` and `input` change that (the years section).
+ */
+function TocEditSection({
+  taskId,
+  toc,
+  label,
+  fields,
+  readOnly,
+  view,
+  initial = (key) => toc[key] ?? "",
+  toValue = (_key, text) => text,
+  input = ({ label: name, rows, value, onChange }) => (
+    <label className="grid gap-1">
+      <span className={panelHintClass}>{name}</span>
+      <textarea rows={rows} value={value} onChange={(event) => onChange(event.target.value)} className={cn(panelFieldClass, "resize-y")} />
+    </label>
+  ),
+}: {
+  taskId: string;
+  toc: TocPlanDraft;
+  label: string;
+  fields: { key: TocField; label: string; rows?: number }[];
+  readOnly: boolean;
+  view?: React.ReactNode;
+  /** A field's text when editing starts, and the value its edited text saves as. */
+  initial?: (key: TocField) => string;
+  toValue?: (key: TocField, text: string) => string;
+  input?: (field: TocFieldInput) => React.ReactNode;
+}) {
+  const patchPlan = usePatchPlan(taskId);
+  const [editing, setEditing] = useState(false);
+  const [drafts, setDrafts] = useState<Partial<Record<TocField, string>>>({});
+  const [error, setError] = useState<string | null>(null);
+  const save = () => {
+    const changed = Object.fromEntries(
+      fields.flatMap(({ key }) => {
+        const text = (drafts[key] ?? "").trim();
+        return text !== initial(key) ? [[key, toValue(key, text)]] : [];
+      }),
+    );
+    if (Object.keys(changed).length === 0) {
+      setEditing(false);
+      return;
+    }
+    patchPlan.mutate(
+      { toc: changed },
+      {
+        onSuccess: () => setEditing(false),
+        onError: (err) => setError((err as Error | undefined)?.message ?? "The edit couldn't be saved. Try again."),
+      },
+    );
+  };
+  return (
+    <PanelSection
+      readOnly={readOnly}
+      label={label}
+      editing={editing}
+      onEdit={() => {
+        setDrafts(Object.fromEntries(fields.map(({ key }) => [key, initial(key)])));
+        setError(null);
+        setEditing(true);
+      }}
+      onCancel={() => setEditing(false)}
+      onSave={save}
+      view={
+        view ?? (
+          <dl className="space-y-3">
+            {fields.map(({ key, label: name }) => (
+              <PlainField key={key} label={name} value={toc[key]} />
+            ))}
+          </dl>
+        )
+      }
+    >
+      <div className="space-y-3">
+        {fields.map(({ key, label: name, rows = 2 }) => (
+          <Fragment key={key}>
+            {input({ label: name, rows, value: drafts[key] ?? "", onChange: (value) => setDrafts((current) => ({ ...current, [key]: value })) })}
+          </Fragment>
+        ))}
+        {error !== null && (
+          <p role="alert" className="text-body text-red-tint">
+            {error}
+          </p>
+        )}
+      </div>
+    </PanelSection>
+  );
+}
+
+/** "From 2000", "2000–2010", "Until 2010" or "No preference", from the plan's
+ *  ISO dates: Evidence search's words for its publication years (task 054, § 8). */
+function tocYearsLabel(after: string, before: string): string {
+  if (after !== "" && before !== "") return `${after}–${before}`;
+  if (after !== "") return `From ${after}`;
+  if (before !== "") return `Until ${before}`;
+  return "No preference";
+}
+
+/** The year of a plan date ("2000" from "2000-01-01"), or "" when none is set. */
+const yearOf = (date: string | null | undefined) => (date ?? "").slice(0, 4);
+
+/**
+ * The years of evidence the theory's checks search (task 054): the same
+ * from/until year boxes as Evidence search's filters, saved straight away
+ * like the other theory-of-change sections.
+ */
+function TocYearsSection({ taskId, toc, readOnly }: { taskId: string; toc: TocPlanDraft; readOnly: boolean }) {
+  return (
+    <TocEditSection
+      taskId={taskId}
+      toc={toc}
+      readOnly={readOnly}
+      label="Search filters"
+      fields={[
+        { key: "published_after", label: "Published from (year)" },
+        { key: "published_before", label: "Published until (year)" },
+      ]}
+      view={
+        <dl className="space-y-3">
+          <PlainField label="Publication years" value={tocYearsLabel(yearOf(toc.published_after), yearOf(toc.published_before))} />
+        </dl>
+      }
+      initial={(key) => yearOf(toc[key])}
+      toValue={(key, year) => (year === "" ? "" : `${year}-${key === "published_after" ? "01-01" : "12-31"}`)}
+      input={({ label: name, value, onChange }) => (
+        <label className="block">
+          <span className={`mb-1 block ${panelHintClass}`}>{name}</span>
+          <input type="number" min={1900} max={2100} placeholder="Any" value={value} onChange={(event) => onChange(event.target.value)} className={panelFieldClass} />
+        </label>
+      )}
+    />
+  );
+}
+
+/** The user's uploaded diagram, shown as they gave it (task 054, increment 5). */
+function YourOriginal({ taskId, uploadId }: { taskId: string; uploadId: string }) {
+  const file = useTocUploadFile(taskId, uploadId);
+  return (
+    <div>
+      <dt className={panelHintClass}>Your original</dt>
+      <dd className="mt-1">
+        {file.isError && <span className={panelHintClass}>Your original couldn't be loaded.</span>}
+        {file.data !== undefined && (
+          <UploadPreview
+            blob={file.data}
+            imageClassName="max-h-80 w-full border border-line object-contain"
+            pdf={(url) => (
+              <a href={url} target="_blank" rel="noreferrer" className={cn(panelValueClass, "font-semibold underline decoration-on-navy-muted underline-offset-[3px] transition-colors duration-150 hover:decoration-white")}>
+                Open your original (PDF)
+              </a>
+            )}
+          />
+        )}
+      </dd>
+    </div>
+  );
+}
+
+/** The theory-of-change plan's sections, each edited in place until the draft exists; Start drafts the theory. */
+function TocPlanSections({
+  taskId,
+  toc,
+  readOnly,
+  onStarted,
+}: {
+  taskId: string;
+  toc: TocPlanDraft;
+  readOnly: boolean;
+  onStarted?: () => void;
+}) {
+  const startRun = useStartRun(taskId);
+  const [notice, setNotice] = useState<string | null>(null);
+  return (
+    <>
+      <div className="space-y-6">
+        <PanelSection
+          label="Starting point"
+          editing={false}
+          readOnly={readOnly}
+          view={
+            <dl className="space-y-3">
+              <PlainField
+                label="Entry point"
+                value={toc.entry_point != null ? TOC_ENTRY_POINT_LABEL[toc.entry_point] : null}
+              />
+              {toc.upload_id != null && <YourOriginal taskId={taskId} uploadId={toc.upload_id} />}
+              {toc.existing_theory_text != null &&
+                (toc.upload_id != null ? (
+                  // The transcription is long: the picture is the user's view of it.
+                  <details className="group">
+                    <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 text-body font-semibold text-white [&::-webkit-details-marker]:hidden">
+                      <DisclosureChevron className="text-on-navy-muted group-open:rotate-90 group-hover:text-white" />
+                      How Policy Atlas read it
+                    </summary>
+                    <p className="mt-2 whitespace-pre-wrap text-body text-on-navy">{scrub(toc.existing_theory_text)}</p>
+                  </details>
+                ) : (
+                  <PlainField label="Your theory of change" value={toc.existing_theory_text} />
+                ))}
+            </dl>
+          }
+        />
+        <TocEditSection
+          taskId={taskId}
+          toc={toc}
+          readOnly={readOnly}
+          label="The change"
+          fields={[
+            { key: "intended_change", label: "Intended change", rows: 3 },
+            { key: "target_population", label: "Who it is for" },
+            { key: "where", label: "Where", rows: 1 },
+            { key: "time_horizon", label: "Time horizon", rows: 1 },
+          ]}
+        />
+        <TocEditSection
+          taskId={taskId}
+          toc={toc}
+          readOnly={readOnly}
+          label="Intervention"
+          fields={[
+            { key: "intervention", label: "Intervention", rows: 3 },
+            { key: "dosage", label: "Dosage" },
+          ]}
+        />
+        <TocEditSection
+          taskId={taskId}
+          toc={toc}
+          readOnly={readOnly}
+          label="Context"
+          fields={[{ key: "context", label: "What you told us about the setting", rows: 4 }]}
+        />
+        <TocYearsSection taskId={taskId} toc={toc} readOnly={readOnly} />
+      </div>
+      {!readOnly && (
+        <div className="pt-8">
+          <Button
+            variant="start"
+            size="entry"
+            disabled={!toc.ready || startRun.isPending}
+            onClick={() => {
+              setNotice(null);
+              startRun.mutate(undefined, {
+                onSuccess: () => onStarted?.(),
+                onError: () => setNotice("The draft couldn't start. Try again."),
+              });
+            }}
+          >
+            Draft the theory
+          </Button>
+          {notice != null && (
+            <p role="alert" className="mt-2 text-body text-red-tint">
+              {notice}
+            </p>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+/** The plan's steps as the run card shows them: one per card row, with the
+ *  server's label and its first step's blurb (task 058, N17). */
+function planStepRows(steps: PlanDraft["steps"]): { row: string; label: string; blurb: string }[] {
+  const rows: { row: string; label: string; blurb: string }[] = [];
+  for (const step of steps ?? []) {
+    if (!rows.some((row) => row.row === step.row)) rows.push({ row: step.row, label: step.label, blurb: step.blurb });
+  }
+  return rows;
+}
+
+/** Whether an Escape keypress belongs to something inside the plan (an open
+ *  menu, a field being edited) rather than to the plan itself. */
+function escapeTakenElsewhere(event: KeyboardEvent): boolean {
+  if (event.defaultPrevented) return true;
+  const target = event.target;
+  if (target instanceof HTMLElement && target.closest("input, textarea, select, [contenteditable='true']")) return true;
+  return document.querySelector("[data-radix-popper-content-wrapper]") !== null;
+}
+
+/** Marks a control that opens the plan ("See plan", "Review the plan"): a
+ *  press on it while the plan is open is not a press outside it. */
+export const PLAN_OPENER_ATTR = "data-plan-opener";
+
+/** Whether a press lands outside the plan: not in it, not in an overlay it
+ *  opened (a popover or menu portalled out of it), not on a control that
+ *  opens it. */
+function pressedOutside(target: EventTarget | null, plan: HTMLElement | null): boolean {
+  if (!(target instanceof Node) || plan === null) return false;
+  if (plan.contains(target)) return false;
+  const element = target instanceof Element ? target : target.parentElement;
+  if (element === null) return false;
+  return element.closest(`[data-radix-popper-content-wrapper], [${PLAN_OPENER_ATTR}]`) === null;
+}
+
 /**
  * The search plan, edited in place. Saves stay local until Start search —
  * a task_agent round-trip on every field would rewrite the whole plan.
+ * Escape closes it (task 058, N15), and so does a press anywhere outside it
+ * (owner, round 13; the shared Sheet's outside press). Closed, focus goes
+ * back to what opened it ("See plan") unless the reader moved it elsewhere.
  */
 export function PlanDocument({
   taskId,
   placement = "side",
   runActive = false,
   readOnly = false,
+  closing = false,
   onClose,
   onDock,
   onStarted,
@@ -843,6 +1215,9 @@ export function PlanDocument({
   /** Centre overlay vs docked side panel. */
   placement?: "center" | "side";
   runActive?: boolean;
+  /** True while the plan leaves (`usePlanPanel().closing`): it plays its
+   *  exit, the way it came, before the caller unmounts it. */
+  closing?: boolean;
   /** After Start search the plan is a record — visible, not editable. */
   readOnly?: boolean;
   onClose: () => void;
@@ -874,6 +1249,45 @@ export function PlanDocument({
     onOverlayApplied: () => onOverlayChange({}),
     onDiscardOverlay: () => onOverlayChange({}),
   });
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || escapeTakenElsewhere(event)) return;
+      onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  // A press anywhere outside the plan closes it (owner, round 13).
+  const planRef = useRef<HTMLElement>(null);
+  // Every open starts at the plan's top, its title in view (owner, round 14),
+  // and again when its content first arrives, so a late load never leaves
+  // the pane part-way down.
+  const paneRef = useRef<HTMLDivElement>(null);
+  const loaded = planQuery.data !== undefined;
+  useLayoutEffect(() => {
+    if (paneRef.current !== null) paneRef.current.scrollTop = 0;
+  }, [loaded]);
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      if (pressedOutside(event.target, planRef.current)) onClose();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [onClose]);
+
+  // Focus goes back to the control that opened the plan when it closes,
+  // unless the reader has put it somewhere else (pressed another control).
+  useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const plan = planRef.current;
+    return () => {
+      const focused = document.activeElement;
+      const lost = focused === null || focused === document.body || (plan !== null && plan.contains(focused));
+      if (lost && opener !== null && opener.isConnected) opener.focus();
+    };
+  }, []);
 
   const [editingQuestion, setEditingQuestion] = useState(false);
   const [editingSettings, setEditingSettings] = useState(false);
@@ -949,23 +1363,31 @@ export function PlanDocument({
     draft !== undefined ? displayedEnum(overlay.analysis_depth, draft.analysis_depth) : "";
   const sources = draft !== undefined ? displayedEnum(overlay.backend_scope, draft.backend_scope) : "";
   const checkIns = draft !== undefined ? displayedEnum(overlay.steering_mode, draft.steering_mode) : "";
-  const previewEffort = editingSettings ? settingsDraft.search_effort : searchEffort;
-  const previewDepth = editingSettings ? settingsDraft.analysis_depth : analysisDepth;
-  const previewSources = editingFilters ? filterDraft.backend_scope : sources;
-  const expectedRunTime = timeBandFor(previewEffort, previewDepth) ?? draft?.time_band ?? null;
-  const agreedSteps = stepsForAnalysisDepth(previewDepth, previewSources);
+  // The plan draft's own band (task 058, N20): one table, on the server.
+  const expectedRunTime = draft?.time_band ?? null;
+  const agreedSteps = planStepRows(draft?.steps);
   const closeLabel = scopingPlan ? "Close the scoping plan" : "Close the search plan";
 
   return (
     <aside
+      ref={planRef}
       role="dialog"
       aria-modal={placement === "center"}
       aria-label={scopingPlan ? "Scoping plan" : "Search plan"}
+      data-state={closing ? "closed" : "open"}
       className={cn(
         "relative flex h-full min-h-0 flex-col overflow-hidden bg-navy text-white",
+        // It arrives (task 058, round 9; the lead's ruling on the animation
+        // sweep's proposal 3): docked, from the edge it docks to; centred,
+        // rising in place. It leaves the way it came, faster, as a sheet
+        // does (owner, 2026-11-09). A cut under reduced motion.
         placement === "side"
-          ? cn("min-w-0 flex-1 border-l border-[#1a3a5c]", READING_COLUMN_MAX_W)
-          : "w-full",
+          ? cn(
+              "anim-dock-in min-w-0 flex-1 border-l border-navy-line",
+              "data-[state=closed]:animate-[dock-out_200ms_var(--ease-drawer)_forwards]",
+              READING_COLUMN_MAX_W,
+            )
+          : "anim-centre-in w-full data-[state=closed]:animate-[sink-out_200ms_var(--ease-out-strong)_forwards]",
       )}
     >
       {placement === "center" && (
@@ -982,7 +1404,7 @@ export function PlanDocument({
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={paneRef} data-testid="plan-pane" className="min-h-0 flex-1 overflow-y-auto">
         <div className={cn("mx-auto w-full px-5 py-8", READING_COLUMN_MAX_W)}>
           <div className="mb-6 flex items-start justify-between gap-3 border-b border-white/15 pb-6">
             <header className="min-w-0 flex-1">
@@ -990,7 +1412,7 @@ export function PlanDocument({
                 {scopingPlan ? "Scoping plan" : "Search plan"}
               </h2>
               {!scopingPlan && expectedRunTime != null && expectedRunTime !== "" && (
-                <p className="mt-1 text-body text-[#97a8bc]">
+                <p className="mt-1 text-body text-on-navy-muted">
                   Expected run time: {scrub(expectedRunTime)}
                 </p>
               )}
@@ -1005,7 +1427,7 @@ export function PlanDocument({
             )}
           </div>
 
-          {planQuery.isPending && <p className="text-body text-[#c5d0dc]">Loading the plan…</p>}
+          {planQuery.isPending && <p className="text-body text-on-navy-soft">Loading the plan…</p>}
           {planQuery.isError && (
             <p role="alert" className="text-body text-red-tint">
               The plan couldn't be loaded.
@@ -1019,6 +1441,15 @@ export function PlanDocument({
               readOnly={readOnly}
               runActive={runActive}
               approved={planQuery.data.status === "approved"}
+              onStarted={onStarted}
+            />
+          )}
+
+          {planQuery.data?.toc != null && (
+            <TocPlanSections
+              taskId={taskId}
+              toc={planQuery.data.toc}
+              readOnly={readOnly}
               onStarted={onStarted}
             />
           )}
@@ -1166,7 +1597,7 @@ export function PlanDocument({
                   </div>
                   <div>
                     <dt className={panelHintClass}>Publication years</dt>
-                    <dd className={`${panelValueClass} text-[#e8edf2]`}>
+                    <dd className={`${panelValueClass} text-on-navy`}>
                       {yearAfter === "" && yearBefore === ""
                         ? "No preference"
                         : yearAfter !== "" && yearBefore !== ""
@@ -1178,7 +1609,7 @@ export function PlanDocument({
                   </div>
                   <div>
                     <dt className={panelHintClass}>Source geography</dt>
-                    <dd className={`${panelValueClass} text-[#e8edf2]`}>
+                    <dd className={`${panelValueClass} text-on-navy`}>
                       {geography !== "" ? scrub(geography) : "None selected"}
                     </dd>
                   </div>
@@ -1261,13 +1692,13 @@ export function PlanDocument({
               }}
               view={
                 screening.length > 0 ? (
-                  <ul className="list-disc space-y-1.5 pl-5 text-lead text-[#e8edf2]">
+                  <ul className="list-disc space-y-1.5 pl-5 text-lead text-on-navy">
                     {screening.map((criterion) => (
                       <li key={criterion}>{scrub(criterion)}</li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-lead text-[#97a8bc] italic">{COPY.notDecided}</p>
+                  <p className="text-lead text-on-navy-muted italic">{COPY.notDecided}</p>
                 )
               }
             >
@@ -1305,9 +1736,9 @@ export function PlanDocument({
             {agreedSteps.length > 0 && (
               <section className="border-b border-white/15 pb-6 last:border-b-0">
                 <h3 className={panelLabelClass}>Plan steps</h3>
-                <ol className="mt-3 list-none space-y-2 pl-1 text-lead text-[#e8edf2]">
+                <ol className="mt-3 list-none space-y-2 pl-1 text-lead text-on-navy">
                   {agreedSteps.map((step, index) => (
-                    <li key={step.stage} className="flex gap-1.5">
+                    <li key={step.row} className="flex gap-1.5">
                       <span aria-hidden="true" className="w-4 shrink-0 tabular-nums">
                         {index + 1}.
                       </span>
@@ -1323,9 +1754,9 @@ export function PlanDocument({
           </div>
           )}
 
-          {!scopingPlan && !readOnly && (
+          {!scopingPlan && planQuery.data?.toc == null && !readOnly && (
           <div className="pt-8">
-            <Button className={cn(START_SEARCH_CLASS)} disabled={startDisabled} onClick={start}>
+            <Button variant="start" size="entry" disabled={startDisabled} onClick={start}>
               {startLabel}
             </Button>
             {startNotice != null && (

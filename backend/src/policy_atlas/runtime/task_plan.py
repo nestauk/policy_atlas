@@ -125,6 +125,21 @@ OPTIONS_SCOPING_STEPS: tuple[str, ...] = (
     "option_profile",
     "constrain",
     "theme",
+    "shortlist",
+)
+#: The steps only a theory-of-change chain composes (task 054, S3).
+TOC_STEPS: tuple[str, ...] = (
+    "toc_draft",
+    "toc_select",
+    "toc_search_new",
+    "toc_discover",
+    "toc_merge",
+    "toc_judge",
+    "toc_search_again",
+    "toc_figures",
+    "toc_choose",
+    "toc_summarise",
+    "toc_report",
 )
 DEEP_CHAIN_COMPONENTS: frozenset[DiscretionaryComponent] = frozenset(("select", "extract", "group"))
 DEEP_GROUPING_FACETS: tuple[GroupingFacet, ...] = (
@@ -226,7 +241,8 @@ NAMED_PAIRINGS: dict[str, tuple[SearchEffort, AnalysisDepth]] = {
 # standard ~15-30 min, deeper ~90 min); the standard target-vs-measured gap
 # (~40 min measured) is the recorded depth-seam calibration item for 018/eval.
 TIME_BANDS: dict[tuple[SearchEffort, AnalysisDepth], str] = {
-    ("rapid", "landscape"): "~10-15 min",
+    # The three presets read 5-10, 10-20 and 20-30 (owner, 2026-11-05).
+    ("rapid", "landscape"): "~5-10 min",
     ("standard", "landscape"): "~15-20 min",
     ("deep", "landscape"): "~20-25 min",
     ("rapid", "standard"): "~30-45 min",
@@ -241,7 +257,7 @@ TIME_BANDS: dict[tuple[SearchEffort, AnalysisDepth], str] = {
     ("deep", "standard"): "~35-50 min",
     ("rapid", "deep"): "~75-90 min",
     ("standard", "deep"): "~80-95 min",
-    ("deep", "deep"): "~90-100 min",
+    ("deep", "deep"): "~20-30 min",
 }
 
 
@@ -336,7 +352,10 @@ def _enabled_components(depth: AnalysisDepth) -> set[DiscretionaryComponent]:
 
 def _validate_registry() -> None:
     missing = sorted(
-        {registry_component_for(step) for step in (*ALL_STEPS, *OPTIONS_SCOPING_STEPS)}
+        {
+            registry_component_for(step)
+            for step in (*ALL_STEPS, *OPTIONS_SCOPING_STEPS, *TOC_STEPS)
+        }
         - set(COMPONENT_REGISTRY)
     )
     if missing:

@@ -11,6 +11,18 @@ import structlog
 from sqlalchemy import exists, func, select
 from sqlalchemy.engine import Connection
 
+from policy_atlas.core import liveness
+from policy_atlas.core.clustering_engine import (
+    AssignmentOutput,
+    ClusteringBackend,
+    ClusteringFailure,
+    ClusteringPolicy,
+    ClusteringResult,
+    ClusterLabel,
+    ClusterUnit,
+    call_budget_for_unit_count,
+    cluster_units,
+)
 from policy_atlas.core.embeddings import EMBEDDING_PROFILE, UNIT_POLICY
 from policy_atlas.core.prompt_fields import parse_guidance_channel
 from policy_atlas.core.schema import (
@@ -28,19 +40,9 @@ from policy_atlas.core.schema import (
     chunk as chunk_table,
 )
 from policy_atlas.core.tags import insert_source_tags
-from policy_atlas.core.usage import UsageResult
+from policy_atlas.core.usage import UsageAccumulator, UsageResult
+from policy_atlas.evidence_search.assess.appraise import UNRATED_LABEL
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
-from policy_atlas.evidence_search.clustering_engine import (
-    AssignmentOutput,
-    ClusteringBackend,
-    ClusteringFailure,
-    ClusteringPolicy,
-    ClusteringResult,
-    ClusterLabel,
-    ClusterUnit,
-    call_budget_for_unit_count,
-    cluster_units,
-)
 from policy_atlas.evidence_search.corpus import theme_grouping
 from policy_atlas.evidence_search.corpus.theme_grouping import (
     UNCLUSTERED,
@@ -175,6 +177,8 @@ class ScreenedSource:
     primary_evidence_type: str | None
     quality_score: int | None
     rubric_version: str | None
+    #: True for an Unrated appraisal: a row with no score (task 056, D7).
+    unrated: bool = False
 
 
 class _CharacteriseClusteringBackend(ClusteringBackend):
@@ -345,6 +349,7 @@ def screened_sources(
             source_classification_result.c.primary_evidence_type,
             source_appraisal_result.c.quality_score,
             source_appraisal_result.c.rubric_version,
+            source_appraisal_result.c.unrated,
         )
         .select_from(
             effective.join(
@@ -419,6 +424,7 @@ def screened_sources(
                 primary_evidence_type=row.primary_evidence_type,
                 quality_score=row.quality_score,
                 rubric_version=row.rubric_version,
+                unrated=bool(row.unrated),
             )
         )
     return sources
@@ -483,6 +489,9 @@ def _metadata_value(source: ScreenedSource, key: str) -> Any:
 
 
 def _quality_value(source: ScreenedSource) -> str:
+    if source.unrated:
+        # Its own bucket, never folded into "unappraised" (task 056, D7).
+        return f"{UNRATED_LABEL} ({source.rubric_version})"
     if source.quality_score is None:
         return "unappraised"
     return f"{source.quality_score} ({source.rubric_version})"
@@ -637,6 +646,15 @@ def _characterise_clustering_policy(*, min_themes: int, max_themes: int) -> Clus
         label_noun="theme",
         log_event_prefix="characterise",
         max_concurrent_batches=theme_grouping.MAX_CONCURRENT_BATCHES,
+        progress_key="characterise.batches",
+        on_labels=_publish_themes,
+    )
+
+
+def _publish_themes(labels: list[ClusterLabel]) -> None:
+    """Show the themes found while sources are assigned to them (task 058, round 9)."""
+    liveness.publish_themes(
+        [(label.label, label.description or None) for label in labels], stage="characterise"
     )
 
 
@@ -757,6 +775,8 @@ def _summary(
     unclustered_ids = theme_payload["unclustered_ids"]
     return {
         "coverage": coverage,
+        # Task 058, N2: the integer the done row shows.
+        "theme_count": len(theme_payload["themes"]),
         "themes": [
             {
                 "name": theme["name"],
@@ -818,7 +838,7 @@ def characterise_scope(
     discovery_retries_used = 0
     discovery_rejections: list[str] = []
     repair_calls_used = 0
-    usage_totals = {"prompt": 0, "completion": 0, "total": 0, "cached": 0}
+    usage_totals = UsageAccumulator().payload()
 
     if n == 0:
         flags.append("empty_scope")

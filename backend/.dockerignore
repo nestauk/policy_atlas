@@ -16,10 +16,14 @@ jwks/
 *.pem
 id_rsa
 
-# Python build and test artifacts
+# Python build and test artifacts. `**/` so the laptop's bytecode at any depth stays
+# out of the image; the Dockerfile compiles its own (task 057, N13).
 __pycache__/
 *.pyc
 *.pyo
+**/__pycache__/
+**/*.pyc
+**/*.pyo
 .venv/
 dist/
 *.egg-info/
@@ -42,3 +46,6 @@ cdk.context.json
 
 # Tests are not needed to install or run the production project.
 tests/
+
+# Uploaded files in development (task 054 increment 5): never in the image
+.uploads/

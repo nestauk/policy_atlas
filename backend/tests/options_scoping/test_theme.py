@@ -18,14 +18,14 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.api.contract.sse import STAGE_KEYS
+from policy_atlas.api.contract import STAGE_KEYS
 from policy_atlas.api.contract.task_agent import PlanStageKey
 from policy_atlas.api.routers import sse
 from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
 from policy_atlas.core import events
 from policy_atlas.core.schema import longlist_result, option
 from policy_atlas.options_scoping.context import ScopeContext
-from policy_atlas.options_scoping.longlist.longlist_backend import StubLonglistBackend
+from policy_atlas.options_scoping.scoping_backend import StubLonglistBackend
 from policy_atlas.options_scoping.theme.theme import (
     ThemeFailure,
     theme_ceiling,
@@ -162,12 +162,14 @@ def test_theme_needs_a_longlist(conn: Connection) -> None:
         (
             "option_profile",
             (
-                "Writing what each option would take",
-                "What each option would take, and what kind of action it is.",
+                "Estimating what each option would take",
+                "Cost, time, workforce and who decides, for each option.",
             ),
             True,
         ),
         ("theme", ("Grouping into themes", "Included options grouped into themes."), False),
+        # Task 055 (PG3): its own stage key and words, not the Evidence search's select.
+        ("shortlist", ("Shortlisting", "Proposing options for close reading."), False),
     ],
 )
 def test_the_registry_the_graph_the_plan_mapping_and_the_stream_know_the_step(
@@ -185,13 +187,14 @@ def test_the_registry_the_graph_the_plan_mapping_and_the_stream_know_the_step(
     assert STAGE_PRESENTATION[component] == presentation
     assert STAGE_PRESENTATION["longlist"] == (
         "Clustering into options",
-        "Records grouped into options.",
+        "Sources grouped into options. Options may be combined or added.",
     )
-    assert [c for c, _ in LONGLIST_CHAIN][-4:] == [
+    assert [c for c, _ in LONGLIST_CHAIN][-5:] == [
         "longlist",
         "option_profile",
         "constrain",
         "theme",
+        "shortlist",
     ]
     assert dict(LONGLIST_CHAIN)[component] is spine
 
@@ -226,8 +229,14 @@ def test_option_profile_then_constrain_then_theme_run_last_and_the_stream_carrie
         task_id, outcome = _longlist_walk(engine)
         assert outcome.status == "succeeded"
         components = [step.component for step in outcome.steps]
-        assert components[-4:] == ["longlist", "option_profile", "constrain", "theme"]
-        profile_step, theme_step = outcome.steps[-3], outcome.steps[-1]
+        assert components[-5:] == [
+            "longlist",
+            "option_profile",
+            "constrain",
+            "theme",
+            "shortlist",
+        ]
+        profile_step, theme_step = outcome.steps[-4], outcome.steps[-2]
         assert profile_step.status == theme_step.status == "succeeded"
         step_runs = {profile_step.run_id, theme_step.run_id}
         with engine.connect() as conn:

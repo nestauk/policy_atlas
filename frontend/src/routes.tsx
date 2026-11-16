@@ -5,15 +5,15 @@ import { AppShell } from "./views/AppShell";
 import { ArtefactView } from "./views/ArtefactView";
 import { FindingsView } from "./views/FindingsView";
 import { HistoryView } from "./views/HistoryView";
+import { LandscapeSkeleton } from "./views/LandscapeViewSkeleton";
 import { LifecycleRoute, RedirectToPath } from "./views/LifecycleRoute";
 import { OptionCard } from "./views/longlist/OptionCard";
 import { NewTaskView } from "./views/NewTaskView";
 import { ProjectDetailView, ProjectsView } from "./views/ProjectsView";
 import { ShareView } from "./views/ShareView";
-import { SourcesLayout } from "./views/SourcesLayout";
+import { SourcesIndex, SourcesLayout } from "./views/SourcesLayout";
 import { SourcesView } from "./views/SourcesView";
 import { TasksListView } from "./views/TasksListView";
-import { ThemesView } from "./views/ThemesView";
 import { WorkspaceView } from "./views/WorkspaceView";
 import { PrivacyView } from "./views/legal/PrivacyView";
 import { TermsView } from "./views/legal/TermsView";
@@ -27,10 +27,12 @@ const LandscapeView = lazy(() =>
   import("./views/LandscapeView").then((module) => ({ default: module.LandscapeView })),
 );
 
+/** While the Landscape chunk loads: the view's own skeleton in the view's
+ *  own frame, so the page does not change shape when the chunk lands. */
 function LandscapeFallback() {
   return (
-    <main aria-busy="true" aria-label="Loading landscape" className="mx-auto max-w-5xl px-6 py-10">
-      <div className="h-64 animate-pulse border border-line bg-paper-2" />
+    <main className="py-8">
+      <LandscapeSkeleton />
     </main>
   );
 }
@@ -38,7 +40,7 @@ function LandscapeFallback() {
 /** The Sources sub-tree, shared verbatim by the authenticated app and the
  *  public task view (task 037) — same paths, same components. */
 const sourcesChildren = [
-  { index: true, element: <ThemesView /> },
+  { index: true, element: <SourcesIndex /> },
   {
     path: "landscape",
     element: (
@@ -67,6 +69,8 @@ export const publicRouter = createBrowserRouter([
       { index: true, element: <RedirectToPath suffix="/result" /> },
       { path: "result", element: <ArtefactView /> },
       { path: "sources", element: <SourcesLayout />, children: sourcesChildren },
+      // A longlist option's card, read-only on the public link (round 12).
+      { path: "options/:optionId", element: <OptionCard /> },
       // `preserveOriginal` (task 037 review fix): this can fire on a
       // read that was public when it resolved but is unshared before a
       // stashed refetch settles — carry the original deep link so

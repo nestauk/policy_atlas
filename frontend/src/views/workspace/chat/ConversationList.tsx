@@ -7,7 +7,10 @@ import { COPY } from "../../../lib/vocabulary";
 import { cn } from "../../../ui/brand/cn";
 import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
 import { DRAFT_CHAT_ID, TASK_AGENT_TAB_ID, taskAgentConversationId, useConversationMutations } from "./conversationState";
-import { ArchiveIcon, ChevronIcon, PencilIcon, RestoreIcon } from "./icons";
+import { ChangingText } from "../ChangingText";
+import { ArchiveIcon, ICON_ROW, PencilIcon, RestoreIcon, iconButtonClass } from "../../../ui/brand/icons";
+import { CAPTION_LABEL_CLASS } from "../../../ui/brand/label";
+import { DisclosureChevron } from "../../../ui/brand/Disclosure";
 
 export type ConversationRow = components["schemas"]["ConversationListItemOut"];
 
@@ -95,10 +98,10 @@ export function ConversationList({
       <ListGroups rows={draft === null ? rest : [draft, ...rest]} {...rowProps} />
       {archivedRows.length > 0 && (
         <details className="group/archive mt-4">
-          <summary className="flex cursor-pointer select-none items-center gap-1.5 py-1 pl-1.5 pr-2 text-caption font-bold uppercase tracking-label text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue [&::-webkit-details-marker]:hidden">
-            <ChevronIcon size={12} className="transition-transform duration-150 ease-out group-open/archive:rotate-90" />
+          <summary className={cn(CAPTION_LABEL_CLASS, "group flex cursor-pointer select-none items-center gap-1.5 py-1 pl-1.5 pr-2 hover:text-navy [&::-webkit-details-marker]:hidden")}>
+            <DisclosureChevron className="group-open/archive:rotate-90" />
             <h3 className="font-bold">Archived</h3>
-            <span className="font-medium normal-case tracking-normal">{archivedRows.length}</span>
+            <span className="normal-case tracking-normal">{archivedRows.length}</span>
           </summary>
           <ListGroups rows={archivedRows} {...rowProps} onOpen={openArchivedRow} onArchive={(id) => void unarchive(id)} archived />
         </details>
@@ -132,7 +135,7 @@ function ListGroups({ rows, ...props }: RowProps & { rows: ConversationRow[] }) 
       {[...groups].map(([label, grouped]) => (
         <section key={label}>
           {!props.archived && (
-            <h3 className="mt-4 mb-1 pl-3 text-caption font-bold uppercase tracking-label text-grey">{label}</h3>
+            <h3 className={cn(CAPTION_LABEL_CLASS, "mt-4 mb-1 pl-3")}>{label}</h3>
           )}
           {grouped.map((row) => <ListRow key={row.id} row={row} {...props} />)}
         </section>
@@ -141,8 +144,7 @@ function ListGroups({ rows, ...props }: RowProps & { rows: ConversationRow[] }) 
   );
 }
 
-const ACTION_CLASS =
-  "pressable flex h-7 w-7 items-center justify-center text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue";
+const ACTION_CLASS = iconButtonClass("row");
 
 function ListRow({ row, taskAgentId, selectedId, onOpen, editing, title, setTitle, onRename, onCommit, onCancel, onArchive, archived = false }: RowProps & { row: ConversationRow }) {
   const isTaskAgent = row.kind === "task_agent";
@@ -198,13 +200,16 @@ function ListRow({ row, taskAgentId, selectedId, onOpen, editing, title, setTitl
         )}
       >
         {isTaskAgent && <FoldMarkIcon size={10} className="text-blue" />}
-        <span className="truncate">{label}</span>
+        {/* A chat's title, written by the backend from its first message
+            and put in the cached reads (round 14), is revealed as the task's
+            name is; the reader's own rename remounts the label and commits. */}
+        {isTaskAgent ? <span className="truncate">{label}</span> : <ChangingText text={row.title} testIdPrefix="chat-title" />}
       </button>
       {!isTaskAgent && row.id !== DRAFT_CHAT_ID && (
         <div className="flex shrink-0 items-center opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 group-focus-within/row:opacity-100">
           {!archived && (
             <button type="button" aria-label={`Rename ${row.title}`} title="Rename" onClick={() => onRename(row)} className={ACTION_CLASS}>
-              <PencilIcon size={13} />
+              <PencilIcon size={ICON_ROW} />
             </button>
           )}
           <button
@@ -214,7 +219,7 @@ function ListRow({ row, taskAgentId, selectedId, onOpen, editing, title, setTitl
             onClick={() => onArchive(row.id)}
             className={ACTION_CLASS}
           >
-            {archived ? <RestoreIcon size={13} /> : <ArchiveIcon size={13} />}
+            {archived ? <RestoreIcon size={ICON_ROW} /> : <ArchiveIcon size={ICON_ROW} />}
           </button>
         </div>
       )}

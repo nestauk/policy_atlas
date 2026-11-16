@@ -4,6 +4,8 @@
 # * Security groups: backend containers
 # * DB security group ingress rule so backend can reach RDS (port 5432)
 # * Listener rule on the shared ALB for host-header routing
+# * The queued document-ingest worker (task 057): queue, dead-letter queue,
+#   Lambda function and its dead-letter alarm (components/ingest_worker.py)
 #
 # Pre-requisites (deployed separately):
 # * NetworkStack (provides shared ALB, HTTPS listener, security group via SSM)
@@ -31,7 +33,13 @@ from aws_cdk import (
     aws_logs as logs,
 )
 from infra.cognito_auth import CognitoAuth
+from infra.components.ingest_worker import IngestWorker
 from infra.components.shared_alb import import_shared_alb
+
+# How the API reads documents' full text (task 057): "in_process" parses them
+# inside the API task as before; "queued" sends one message per document to
+# the ingest function. Set per environment in pa_config.json.
+INGEST_MODES = ("in_process", "queued")
 
 
 class PolicyAtlasStack(Stack):
@@ -80,6 +88,42 @@ class PolicyAtlasStack(Stack):
             self, "AppSecret", secret_name=be_config["secret_name"]
         )
 
+        # Which AI models the backend uses: a route name from the backend's
+        # committed file backend/src/policy_atlas/model_routes.toml (task 053).
+        # "openai-direct" calls OpenAI with OPENAI_API_KEY; a "bedrock-*" route
+        # calls Amazon Bedrock with AWS_BEARER_TOKEN_BEDROCK. The Bedrock key is
+        # only passed when a Bedrock route is chosen, because ECS refuses to start
+        # a task whose secret names a field the secret does not have: add the
+        # field to the app secret first, then switch the route in pa_config.json.
+        model_route = be_config.get("model_route", "openai-direct")
+        ingest_mode = be_config.get("ingest_mode")
+        # Task 054 (C15): the API creates theory-of-change tasks only where this
+        # is "1". On in staging for colleagues to try; off in production until
+        # the capability is complete.
+        theory_of_change = "1" if be_config.get("theory_of_change") else "0"
+        if ingest_mode not in INGEST_MODES:
+            raise ValueError(
+                f"backend.ingest_mode must be one of {INGEST_MODES} in pa_config.json, "
+                f"got {ingest_mode!r}."
+            )
+        app_secrets = {
+            "DATABASE_URL": ecs.Secret.from_secrets_manager(db_secret, field="db_connection_string"),
+            "OPENAI_API_KEY": ecs.Secret.from_secrets_manager(app_secret, field="OPENAI_API_KEY"),
+            "OPENALEX_EMAIL": ecs.Secret.from_secrets_manager(app_secret, field="OPENALEX_EMAIL"),
+            "OPENALEX_API_KEY": ecs.Secret.from_secrets_manager(app_secret, field="OPENALEX_API_KEY"),
+            "OVERTON_API_KEY": ecs.Secret.from_secrets_manager(app_secret, field="OVERTON_API_KEY"),
+            "LANGFUSE_PUBLIC_KEY": ecs.Secret.from_secrets_manager(app_secret, field="LANGFUSE_PUBLIC_KEY"),
+            "LANGFUSE_SECRET_KEY": ecs.Secret.from_secrets_manager(app_secret, field="LANGFUSE_SECRET_KEY"),
+            # LANGFUSE_HOST, not LANGFUSE_BASE_URL: tracing.py accepts both;
+            # the provisioned secret carries v2's key name (E.1 deviation,
+            # verification.md) — adapting here beats patching a live secret.
+            "LANGFUSE_HOST": ecs.Secret.from_secrets_manager(app_secret, field="LANGFUSE_HOST"),
+        }
+        if model_route.startswith("bedrock"):
+            app_secrets["AWS_BEARER_TOKEN_BEDROCK"] = ecs.Secret.from_secrets_manager(
+                app_secret, field="AWS_BEARER_TOKEN_BEDROCK"
+            )
+
         shared_log_group = logs.LogGroup(self, "PolicyAtlasLogGroup",
             log_group_name="/policy_atlas_v3/application",
             retention=logs.RetentionDays.ONE_MONTH,
@@ -114,8 +158,33 @@ class PolicyAtlasStack(Stack):
             domain_name=domain_name,
             domain_prefix=pa_app_config["cognito_domain_prefix"],
         )
-        backend_image = ecs.ContainerImage.from_asset("../backend",
+        # One image build for three consumers: the API task, the migration
+        # task and the ingest function (which starts it with another command).
+        backend_image_asset = ecr_assets.DockerImageAsset(self, "BackendImageAsset",
+            directory="../backend",
             platform=ecr_assets.Platform.LINUX_AMD64,
+        )
+        backend_image = ecs.ContainerImage.from_docker_image_asset(backend_image_asset)
+
+        ingest = IngestWorker(self, "Ingest",
+            vpc=vpc,
+            image_asset=backend_image_asset,
+            db_secret=db_secret,
+            db_security_group=db_security_group,
+            model_route=model_route,
+        )
+
+        # Files users give a task (task 054 increment 5; one bucket for every
+        # capability, owner 2026-11-03). Private, encrypted, HTTPS only, and kept
+        # if the stack is ever deleted: they are users' work. Only the backend
+        # reads it; the browser never does.
+        uploads_bucket = s3.Bucket(self, "UploadsBucket",
+            bucket_name=be_config["upload_bucket_name"],
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            encryption=s3.BucketEncryption.S3_MANAGED,
+            enforce_ssl=True,
+            versioned=False,
+            removal_policy=RemovalPolicy.RETAIN,
         )
 
         be_task_def = ecs.FargateTaskDefinition(self, "PolicyAtlasBackendTaskDef",
@@ -144,20 +213,13 @@ class PolicyAtlasStack(Stack):
                 # Tags deployed traces so they filter apart from local-dev
                 # runs inside the shared dev Langfuse project.
                 "LANGFUSE_TRACING_ENVIRONMENT": env_name,
+                "POLICY_ATLAS_MODEL_ROUTE": model_route,
+                "POLICY_ATLAS_UPLOAD_BUCKET": uploads_bucket.bucket_name,
+                "POLICY_ATLAS_THEORY_OF_CHANGE": theory_of_change,
+                "POLICY_ATLAS_INGEST_MODE": ingest_mode,
+                "POLICY_ATLAS_INGEST_QUEUE_URL": ingest.queue.queue_url,
             },
-            secrets={
-                "DATABASE_URL": ecs.Secret.from_secrets_manager(db_secret, field="db_connection_string"),
-                "OPENAI_API_KEY": ecs.Secret.from_secrets_manager(app_secret, field="OPENAI_API_KEY"),
-                "OPENALEX_EMAIL": ecs.Secret.from_secrets_manager(app_secret, field="OPENALEX_EMAIL"),
-                "OPENALEX_API_KEY": ecs.Secret.from_secrets_manager(app_secret, field="OPENALEX_API_KEY"),
-                "OVERTON_API_KEY": ecs.Secret.from_secrets_manager(app_secret, field="OVERTON_API_KEY"),
-                "LANGFUSE_PUBLIC_KEY": ecs.Secret.from_secrets_manager(app_secret, field="LANGFUSE_PUBLIC_KEY"),
-                "LANGFUSE_SECRET_KEY": ecs.Secret.from_secrets_manager(app_secret, field="LANGFUSE_SECRET_KEY"),
-                # LANGFUSE_HOST, not LANGFUSE_BASE_URL: tracing.py accepts both;
-                # the provisioned secret carries v2's key name (E.1 deviation,
-                # verification.md) — adapting here beats patching a live secret.
-                "LANGFUSE_HOST": ecs.Secret.from_secrets_manager(app_secret, field="LANGFUSE_HOST"),
-            },
+            secrets=app_secrets,
             port_mappings=[ecs.PortMapping(
                 container_port=be_config["internal_port"],
                 protocol=ecs.Protocol.TCP
@@ -165,10 +227,19 @@ class PolicyAtlasStack(Stack):
             stop_timeout=Duration.seconds(10),
         )
 
+        # The backend reads, writes and deletes uploads under tasks/ only, through
+        # its task role: AWS hands the container short-lived credentials, so no
+        # keys are stored anywhere.
+        uploads_bucket.grant_read_write(be_task_def.task_role, "tasks/*")
+
         # No task-role secret grants: ECS injects container secrets through the
         # EXECUTION role (CDK grants it via ecs.Secret.from_secrets_manager);
         # the app never calls Secrets Manager at runtime, so a task-role grant
         # would only widen what a compromised process could read.
+
+        # The API sends one message per document to the ingest queue
+        # (SendMessage, GetQueueAttributes, GetQueueUrl; nothing else).
+        ingest.queue.grant_send_messages(be_task_def.task_role)
 
         migration_task_def = ecs.FargateTaskDefinition(
             self, "PolicyAtlasMigrationTaskDef",

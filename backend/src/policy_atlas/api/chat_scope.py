@@ -39,6 +39,7 @@ from policy_atlas.core.schema import (
     runs,
     selection_result,
 )
+from policy_atlas.evidence_search.assess.appraise import appraisal_tier
 from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     ChunkRetriever,
     PassThroughChunkReranker,
@@ -349,6 +350,8 @@ def build_chat_readers(
             scope_id=scope.evidence_scope_id,
             selected_tss_ids=selected_tss_ids,
             extra_scope_ids=scope.extra_scope_ids,
+            # Each search opens its own short read and closes it (task 057 N8).
+            connect=engine.connect,
         )
         if scope.resolve_labels:
             _fill_resolved_labels(conn, task_id=task_id, docs=retrieval_scope.docs)
@@ -447,7 +450,8 @@ def _fill_resolved_labels(
         label = labels.get(tss_id)
         if label is None:
             continue
-        if doc.get("appraisal_tier") is None and label.quality_score is not None:
-            doc["appraisal_tier"] = str(label.quality_score)
+        if doc.get("appraisal_tier") is None:
+            # "4" for a scored document, "Unrated" for one with no score (task 056).
+            doc["appraisal_tier"] = appraisal_tier(label.quality_score, unrated=label.unrated)
         if doc.get("primary_evidence_type") is None and label.evidence_type is not None:
             doc["primary_evidence_type"] = label.evidence_type

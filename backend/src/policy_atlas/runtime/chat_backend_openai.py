@@ -6,9 +6,19 @@ import json
 from collections.abc import Callable
 from typing import Any
 
-from policy_atlas.core.openai_client import require_parsed, resolve_openai_client
-from policy_atlas.core.usage import UsageResult, token_usage_from_provider
-from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+from langfuse import Langfuse
+
+from policy_atlas.core import tracing
+from policy_atlas.core.model_routes import route
+from policy_atlas.core.openai_client import openai_kwargs, require_parsed, resolve_openai_client
+from policy_atlas.core.usage import (
+    UsageResult,
+    token_usage_from_provider,
+    usage_details,
+    usage_metadata,
+)
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
+from policy_atlas.evidence_search.synthesis.section_prompt import (
     LOOKUP_TOOL_SCHEMA,
     QUERY_FINDINGS_TOOL_SCHEMA,
     SEARCH_CHUNKS_TOOL_SCHEMA,
@@ -24,6 +34,16 @@ _CHAT_READ_TOOL_SCHEMAS = [
 ]
 
 
+def _chat_kwargs() -> dict[str, Any]:
+    """Model kwargs for every live chat call (the one shared ``chat`` step)."""
+    return openai_kwargs(
+        CHAT_MODEL,
+        reasoning_effort=route().effort_for("chat"),
+        prompt_cache=cache_mode_for("chat"),
+        timeout_s=route().timeout_for("chat"),
+    )
+
+
 class OpenAIChatBackend(ChatBackend):
     """Run chat read-tool turns and stream only final prose from OpenAI.
 
@@ -34,14 +54,44 @@ class OpenAIChatBackend(ChatBackend):
 
     mode = "live"
 
-    def __init__(self, api_key: str | None = None) -> None:
+    def __init__(
+        self, api_key: str | None = None, *, langfuse_client: Langfuse | None = None
+    ) -> None:
         """Create the live adapter using the repository's standard client seam.
 
         Args:
-            api_key: Optional key; absent uses ``OPENAI_API_KEY``.
+            api_key: Optional key; absent uses the route's key variable.
+            langfuse_client: Optional Langfuse client. The tool turn and the
+                final structured parse run under ``traced_attempts`` (one
+                traced retry, each attempt its own generation, nested under
+                the caller's ``chat:call`` span). The prose stream is not
+                wrapped: it sends text to the user as it arrives, so a retry
+                would repeat it. Without a client the same retries run untraced.
         """
-        self._client = resolve_openai_client(
-            api_key, backend_name="OpenAIChatBackend", timeout=120.0, max_retries=2
+        self._client = resolve_openai_client(api_key, backend_name="OpenAIChatBackend")
+        self._langfuse_client = langfuse_client
+
+    def _attempts(
+        self,
+        call: Callable[[], UsageResult[ChatTurn]],
+        *,
+        messages: list[dict[str, Any]],
+    ) -> UsageResult[ChatTurn]:
+        """Run one non-streamed chat call under the traced retry wrapper."""
+
+        def _update(span: Any, result: UsageResult[ChatTurn]) -> None:
+            turn, usage = result
+            answer = turn["answer"]
+            span.update(
+                usage_details=usage_details(usage),
+                input={"messages": messages},
+                output=answer.model_dump() if answer is not None else turn,
+                model=CHAT_MODEL,
+                metadata=usage_metadata(usage),
+            )
+
+        return tracing.traced_attempts(
+            self._langfuse_client, name="chat:call", step="chat", call=call, update=_update
         )
 
     def chat_turn(
@@ -75,18 +125,23 @@ class OpenAIChatBackend(ChatBackend):
     def _tool_turn(
         self, messages: list[dict[str, Any]], *, max_output_tokens: int | None
     ) -> UsageResult[ChatTurn]:
+        return self._attempts(
+            lambda: self._tool_turn_once(messages, max_output_tokens), messages=messages
+        )
+
+    def _tool_turn_once(
+        self, messages: list[dict[str, Any]], max_output_tokens: int | None
+    ) -> UsageResult[ChatTurn]:
         completions: Any = self._client.chat.completions
-        # gpt-5.6-terra rejects function tools unless reasoning_effort is
-        # 'none' on /v1/chat/completions (H3 live check, 2026-08-11) — which
-        # also matches the model's fast-conversational selection intent.
+        # The reasoning-effort pin the chat model needs (Terra refuses function
+        # tools without it, H3 live check 2026-08-11) comes from the route file.
         response = completions.create(
-            model=CHAT_MODEL,
+            **_chat_kwargs(),
             messages=messages,
             tools=_CHAT_READ_TOOL_SCHEMAS,
             parallel_tool_calls=True,
             tool_choice="required",
             max_completion_tokens=max_output_tokens,
-            reasoning_effort="none",
         )
         if not response.choices:
             raise RuntimeError("OpenAI chat tool turn returned no choices.")
@@ -137,8 +192,7 @@ class OpenAIChatBackend(ChatBackend):
             },
         ]
         stream = completions.create(
-            model=CHAT_MODEL,
-            reasoning_effort="none",
+            **_chat_kwargs(),
             messages=prose_messages,
             stream=True,
             max_completion_tokens=max_output_tokens,
@@ -162,25 +216,30 @@ class OpenAIChatBackend(ChatBackend):
                 ),
             },
         ]
-        response = completions.parse(
-            model=CHAT_MODEL,
-            reasoning_effort="none",
-            messages=structured_messages,
-            response_format=ChatAnswerWire,
-            max_completion_tokens=max_output_tokens,
-        )
-        answer = require_parsed(response, label="chat final answer")
-        if answer.prose != prose:
-            # The streamed prose is what the user saw. Keeping it as the
-            # durable prose avoids a silent post-stream rewrite; claims that
-            # no longer match are conservatively dropped by the citation floor.
-            answer = ChatAnswerWire(
-                prose=prose,
-                citations=answer.citations,
-                claims=[],
-                evidence_not_held=answer.evidence_not_held,
+
+        def _parse_once() -> UsageResult[ChatTurn]:
+            response = completions.parse(
+                **_chat_kwargs(),
+                messages=structured_messages,
+                response_format=ChatAnswerWire,
+                max_completion_tokens=max_output_tokens,
             )
-        return {"answer": answer, "tool_calls": []}, token_usage_from_provider(response.usage)
+            answer = require_parsed(response, label="chat final answer")
+            if answer.prose != prose:
+                # The streamed prose is what the user saw. Keeping it as the
+                # durable prose avoids a silent post-stream rewrite; claims that
+                # no longer match are conservatively dropped by the citation floor.
+                answer = ChatAnswerWire(
+                    prose=prose,
+                    citations=answer.citations,
+                    claims=[],
+                    evidence_not_held=answer.evidence_not_held,
+                )
+            return {"answer": answer, "tool_calls": []}, token_usage_from_provider(
+                response.usage
+            )
+
+        return self._attempts(_parse_once, messages=structured_messages)
 
 
 def _chat_messages(

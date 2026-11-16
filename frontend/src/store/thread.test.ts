@@ -108,7 +108,7 @@ function gateCheckIn(createdAt: string, status: "pending" | "decided"): TaskAgen
     boundary: "after_component",
     component: "synthesise",
     stage: "synthesise",
-    render: "Confirm the plan against the baseline",
+    render: "Does the plan still look right now you have the baseline?",
     options: [
       { id: "confirm_plan", label: "Confirm plan and build longlist", description: "", requires_user_input: false, suggested: false, why: null, endorsement: null },
       { id: "change_plan", label: "Change the plan", description: "", requires_user_input: false, suggested: false, why: null, endorsement: null },

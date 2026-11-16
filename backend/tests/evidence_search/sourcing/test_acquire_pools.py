@@ -8,7 +8,7 @@ what it keeps, and counts every returned record exactly once.
 from __future__ import annotations
 
 import uuid
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection
@@ -35,7 +35,9 @@ class CountingEmbedder(StubEmbeddingBackend):
         super().__init__()
         self.texts: list[str] = []
 
-    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+    def embed_texts(
+        self, texts: list[str], *, kind: Literal["document", "query"] = "document"
+    ) -> list[list[float]]:
         self.texts.extend(texts)
         return super().embed_texts(texts)
 

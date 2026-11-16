@@ -7,6 +7,14 @@ import * as queries from "../api/queries";
 import { AUTH_RETURN_TO_KEY } from "../auth/OidcAuthProvider";
 import { PublicTaskShell } from "./PublicTaskShell";
 
+// Round 12: the shell forgets a task's report expand state when the reader
+// leaves the task; the hook is watched here, its rule is ArtefactOutline's.
+const forgetOnLeave = vi.hoisted(() => vi.fn());
+vi.mock("./ArtefactOutline", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./ArtefactOutline")>()),
+  useForgetReportExpandOnLeave: forgetOnLeave,
+}));
+
 vi.mock("../api/queries", () => ({ useTask: vi.fn() }));
 
 vi.mock("../auth", () => ({
@@ -71,6 +79,15 @@ function renderShell(path: string) {
 beforeEach(() => {
   sessionStorage.clear();
   sseState.connect.mockClear();
+});
+
+describe("PublicTaskShell — the report's expand state (round 12)", () => {
+  it("hands the route's task to the hook that forgets it on leaving", () => {
+    forgetOnLeave.mockClear();
+    mockTask(undefined, { pending: true });
+    renderShell(`/tasks/${TASK_ID}/result`);
+    expect(forgetOnLeave).toHaveBeenCalledWith(TASK_ID);
+  });
 });
 
 describe("PublicTaskShell — the public task view (task 037)", () => {

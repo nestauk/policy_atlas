@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "../auth";
 import { buildAuthHeaders } from "../api/authMiddleware";
@@ -165,7 +165,37 @@ type ChatStreamEvent =
   | { type: "delta"; text: string }
   | { type: "completed"; turn: ChatTurn }
   | { type: "failed"; error: { code: string; message: string }; turn_id: string }
-  | { type: "cancelled"; turn: ChatTurn };
+  | { type: "cancelled"; turn: ChatTurn }
+  | { type: "conversation.titled"; conversation_id: string; title: string };
+
+/**
+ * The chat's title written from its first message (`conversation.titled`,
+ * task 058, round 14), put into every cached read that shows it: each chats
+ * list of a task and the chat's own detail. The list re-renders without a
+ * refetch.
+ */
+export function applyConversationTitle(
+  queryClient: QueryClient,
+  conversationId: string,
+  title: string,
+): void {
+  queryClient.setQueriesData<unknown>(
+    { predicate: (query) => query.queryKey[0] === "tasks" && query.queryKey[2] === "conversations" },
+    (data: unknown) => {
+      if (data === null || typeof data !== "object" || !Array.isArray((data as { data?: unknown }).data)) return data;
+      const page = data as { data: { id?: string; title?: string }[] };
+      if (!page.data.some((row) => row.id === conversationId)) return data;
+      return { ...page, data: page.data.map((row) => (row.id === conversationId ? { ...row, title } : row)) };
+    },
+  );
+  queryClient.setQueryData<unknown>(["conversations", conversationId, "detail"], (data: unknown) =>
+    data !== null && typeof data === "object" ? { ...(data as object), title } : data,
+  );
+  // The next server read confirms it.
+  void queryClient.invalidateQueries({
+    predicate: (query) => query.queryKey[0] === "tasks" && query.queryKey[2] === "conversations",
+  });
+}
 
 /** A malformed or otherwise invalid NDJSON chat-stream event, or a non-2xx
  *  response to the turn-creating POST before the stream ever opened. */
@@ -392,6 +422,12 @@ export function useChatConversation(conversationId: string) {
         }
         if (response.body === null) throw new ChatStreamInterruptedError("The chat stream had no body.");
         await consumeChatStream(response.body, (event) => {
+          // The title is the chat's, whichever chat is open now or whether
+          // the turn has ended: it goes into the caches either way.
+          if (event.type === "conversation.titled") {
+            applyConversationTitle(queryClient, event.conversation_id, event.title);
+            return;
+          }
           if (terminalSeen || !isCurrent()) return;
           switch (event.type) {
             case "progress":
@@ -450,7 +486,7 @@ export function useChatConversation(conversationId: string) {
         if (isCurrent()) setIsStreaming(controllers.current.size > 0);
       }
     },
-    [auth, conversationId, invalidateTurns, isCurrent, startEnrichmentPoll, turnsQuery],
+    [auth, conversationId, invalidateTurns, isCurrent, queryClient, startEnrichmentPoll, turnsQuery],
   );
 
   const retry = useCallback(
@@ -554,6 +590,9 @@ function narrowChatStreamEvent(value: unknown): ChatStreamEvent {
   const event = value as Record<string, unknown>;
   if (event.type === "progress" && typeof event.label === "string") return event as ChatStreamEvent;
   if (event.type === "delta" && typeof event.text === "string") return event as ChatStreamEvent;
+  if (event.type === "conversation.titled" && typeof event.conversation_id === "string" && typeof event.title === "string") {
+    return event as ChatStreamEvent;
+  }
   if ((event.type === "completed" || event.type === "cancelled") && isChatTurn(event.turn)) {
     return event as ChatStreamEvent;
   }

@@ -99,8 +99,11 @@ def tenancy_client(
     principals = []
     for index in range(count):
         user_id = f"tenancy-{index}-{uuid.uuid4()}"
+        # task 057 review: 600 s, not 60. The deterministic visibility walk took over a
+        # minute under a loaded `make verify` (laptop load average 110 to 195) and its
+        # tokens expired mid-walk (401 at step 67); alone it runs in 10 s.
         token = mint_token(
-            user_id, settings.oidc_issuer, settings.oidc_client_id, 60, key_dir
+            user_id, settings.oidc_issuer, settings.oidc_client_id, 600, key_dir
         )
         principals.append(Principal(user_id, {"Authorization": f"Bearer {token}"}))
     app = create_app(settings=settings)

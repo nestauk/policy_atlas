@@ -1,45 +1,66 @@
+import { lazy, Suspense, useState } from "react";
 import { useParams } from "react-router";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { useFunnel, useGroups, useLandscape, useTask } from "../api/queries";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
-import { Card, Divider, PaneHeading } from "../ui/brand/Card";
-import { Chip } from "../ui/brand/Chip";
-import {
-  CHART_TICK_FONT_SIZE,
-  DistributionChartTooltip,
-  EvidenceDistributionChart,
-  normaliseGeographies,
-  PublicationYearsChart,
-} from "../ui/charts/EvidenceDistributionChart";
+import { useRunStream } from "../store";
 import { ReauthRedirect } from "../ui/feedback";
+import {
+  evidenceTypeRows,
+  facetRows,
+  fewYearsSentence,
+  funnelRows,
+  geographyRows,
+  LandscapeSection,
+  onlyNotReported,
+  population,
+  PublicationYears,
+  RankedBars,
+  singleTypeSentence,
+} from "./LandscapeViewCharts";
+import { normaliseGeographies } from "../ui/charts/EvidenceDistributionChart";
 
-const FUNNEL_ORDER = [
-  ["found", "Found"],
-  ["relevant", "Relevant"],
-  ["quality_checked", "Quality-checked"],
-  ["read_in_full", "Read in full"],
-  ["selected", "Shortlisted"],
-  ["findings", "Findings"],
-  ["cited", "Cited"],
+/** The publisher map, loaded only when the reader asks for it (round 11),
+ *  so the Landscape page does not carry the atlas. */
+const PublisherMap = lazy(() => import("./LandscapeViewMap"));
+
+const GEOGRAPHY_VIEWS = [
+  { key: "list", label: "List" },
+  { key: "map", label: "Map" },
 ] as const;
+import { LandscapeSkeleton } from "./LandscapeViewSkeleton";
+import { feedsSources, liveStages, useLiveRefetch, NO_COUNTRY } from "./sourcesPresentation";
+import { CAPTION_LABEL_CLASS } from "../ui/brand/label";
+import { cn } from "../ui/brand/cn";
+import { RetryCard } from "../ui/feedback/RetryCard";
+import { OutlineSwitch } from "../ui/brand/OutlineSwitch";
+import { InfoHint } from "../ui/brand/InfoHint";
 
-const CHART_TOKENS = {
-  grid: "var(--color-line)",
-  text: "var(--color-grey)",
-  navy: "var(--color-navy)",
-  blueTint: "var(--color-blue-tint)",
+const TITLES = {
+  funnel: "From search to citation",
+  types: "Evidence types",
+  years: "Publication years",
+  geographies: "Where sources were published",
+  groups: "Finding groups",
 } as const;
 
-/** One centred plot per row so classification labels stay readable. */
-const LANDSCAPE_PLOT_CLASS = "mx-auto w-full max-w-3xl";
+const sum = (data: Record<string, number>) => Object.values(data).reduce((total, count) => total + count, 0);
+
+/** What "Where sources were published" counts (owner, round 13: on hover). */
+const GEOGRAPHY_NOTE = [
+  "The country of the publishing venue, when the database reports it. Sources without one are counted as “Not reported”.",
+  "This is not necessarily where the study took place.",
+] as const;
 
 /**
  * Landscape: distributions over the screened-in set ONLY (the funnel is the
  * one surface spanning the full flow). Surfaces without data are hidden,
- * never faked.
+ * never faked. Task 058 landscape polish (lead rulings 2026-11-05): the
+ * sections sit uncarded on the Sources panel, the bar charts are ranked-bar
+ * tables in Navy with their values at the bar ends, each heading carries the
+ * population it counts, and a one-value chart is a sentence instead.
  */
 export function LandscapeView() {
   const { taskId = "" } = useParams();
@@ -48,11 +69,79 @@ export function LandscapeView() {
   const landscape = useLandscape(taskId);
   const funnel = useFunnel(taskId);
   const groups = useGroups(taskId);
-
-  const funnelRows = FUNNEL_ORDER.flatMap(([key, label]) => {
-    const count = funnel.data?.[key];
-    return typeof count === "number" ? [{ label: label as string, count }] : [];
+  const [geographyView, setGeographyView] = useState<"list" | "map">("list");
+  // While a stage that feeds the landscape runs, its reads refetch every
+  // 5 s and the rows it will fill breathe a placeholder (owner, round 8).
+  const stream = useRunStream(taskId);
+  const live = liveStages(stream);
+  const runLive = stream.run?.status === "running" || stream.run?.status === "paused";
+  const classifying = live.has("classify") || live.has("appraise");
+  useLiveRefetch(feedsSources(live), () => {
+    void landscape.refetch();
+    void funnel.refetch();
   });
+
+  const evidenceTypes = landscape.data?.evidence_types ?? {};
+  const years = landscape.data?.years ?? {};
+  const geographies = landscape.data?.geographies ?? {};
+  const facets = groups.data?.facets ?? [];
+  const relevant = typeof funnel.data?.relevant === "number" ? funnel.data.relevant : null;
+  const findings = typeof funnel.data?.findings === "number" ? funnel.data.findings : null;
+
+  // Each funnel row leads to the table filtered to its set, when the table
+  // can filter to it (rounds 11 and 13): Found to every source, Relevant to
+  // the screened-in set, Appraised and Full text accessed to theirs (the
+  // evidence read's `appraised` and `depth` filters), Cited to the cited
+  // sources. Shortlisted has no filter on the table, so it leads nowhere.
+  const allSources = `/tasks/${taskId}/sources/all`;
+  const funnelHref = (key: string): string | undefined =>
+    key === "found"
+      ? `${allSources}?status=all`
+      : key === "relevant"
+        ? `${allSources}?status=Included`
+        : key === "quality_checked"
+          ? `${allSources}?appraised=true`
+          : key === "read_in_full"
+            ? `${allSources}?depth=full_text`
+            : key === "cited"
+              ? `${allSources}?cited=true`
+              : undefined;
+  const funnelTable = funnelRows(funnel.data, runLive, live).map((row) => {
+    const href = row.count ? funnelHref(row.key) : undefined;
+    return href !== undefined ? { ...row, href } : row;
+  });
+  const typeRows = evidenceTypeRows(evidenceTypes, classifying);
+  const showTypes = classifying || Object.values(evidenceTypes).some((count) => count > 0);
+  const typeSentence = classifying ? null : singleTypeSentence(typeRows);
+  const withYear = sum(years);
+  // The relevant count is not restated at the top (round 11: the funnel
+  // says it); a heading carries a count only when it differs from it.
+  const yearsFigure = relevant !== null && withYear < relevant ? population.withYear(withYear) : null;
+  const typeHref = (label: string) => `${allSources}?${new URLSearchParams({ type: label }).toString()}`;
+  const rangeHref = (from: string, to: string) =>
+    `${allSources}?${new URLSearchParams({ year_from: from, year_to: to }).toString()}`;
+  const countryHref = (country: string) => `${allSources}?${new URLSearchParams({ country }).toString()}`;
+  const groupHref = (facet: string, group: string) =>
+    `/tasks/${taskId}/sources/findings?${new URLSearchParams({ facet, group }).toString()}`;
+  // A row leads somewhere only when it has sources to show.
+  const linkTypes = typeRows.map((row) => (row.count ? { ...row, href: typeHref(row.key) } : row));
+  // A country leads to All sources filtered to it (`country=`, round 10);
+  // "Not reported" to the sources without one (`country=none`, the evidence
+  // read's sentinel, round 14); the folded tail leads nowhere.
+  const linkCountries = geographyRows(geographies).map((row) =>
+    !row.count
+      ? row
+      : row.key === "Not reported"
+        ? { ...row, href: countryHref(NO_COUNTRY) }
+        : row.tone !== "grey"
+          ? { ...row, href: countryHref(row.key) }
+          : row,
+  );
+
+  // The map draws every country (no folded tail); "Not reported" is no place.
+  const mapCountries = Object.entries(normaliseGeographies(geographies))
+    .filter(([country, count]) => country !== "Not reported" && count > 0)
+    .map(([country, count]) => ({ country, count }));
 
   // `not_found` is the server's honest shape for "no landscape/funnel yet"
   // (screening hasn't run) — that's the expected empty state below, not a
@@ -64,145 +153,114 @@ export function LandscapeView() {
   const isError =
     (landscape.isError && landscapeErrorCode !== "not_found") ||
     (funnel.isError && funnelErrorCode !== "not_found");
+  const isPending = landscape.isPending || funnel.isPending;
 
-  const noData =
-    !landscape.isPending &&
-    !funnel.isPending &&
-    !isError &&
-    funnelRows.length === 0 &&
-    Object.keys(landscape.data?.evidence_types ?? {}).length === 0;
+  const noData = !showTypes && !isPending && !isError && funnelTable.length === 0;
 
   return (
     <main className="py-8">
-      {(landscape.isPending || funnel.isPending) && (
-        <div aria-busy="true" aria-label="Loading the landscape" className="flex flex-col gap-4">
-          {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className={`${LANDSCAPE_PLOT_CLASS} h-72 animate-pulse border border-line bg-paper-2`} />
-          ))}
-        </div>
-      )}
+      {isPending && <LandscapeSkeleton />}
 
       {isError &&
         (isUnauthenticated ? (
           <ReauthRedirect />
         ) : (
-          <Card role="alert" className="p-8 text-center text-body text-navy">
-            The landscape couldn't be loaded.{" "}
-            <button
-              type="button"
-              className="cursor-pointer font-bold text-blue hover:underline"
-              onClick={() => {
+          <RetryCard className="mx-auto mt-8 max-w-3xl" copy="The landscape couldn't be loaded." onRetry={() => {
                 void landscape.refetch();
                 void funnel.refetch();
-              }}
-            >
-              Retry
-            </button>
-          </Card>
+              }} />
         ))}
 
       {noData && (
-        <Card role="status" className="p-8 text-center text-body text-grey">
+        <p role="status" className="mx-auto max-w-3xl py-8 text-center text-body text-grey">
           The landscape appears once screening has run.
-        </Card>
+        </p>
       )}
 
-      <div className="flex flex-col gap-4">
-        {funnelRows.length > 0 && (
-          <Card className={LANDSCAPE_PLOT_CLASS}>
-            <PaneHeading>From search to citation</PaneHeading>
-            <Divider />
-            <div className="h-64 p-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={funnelRows} layout="vertical" margin={{ left: 8, right: 24 }}>
-                  <CartesianGrid horizontal={false} stroke={CHART_TOKENS.grid} />
-                  <XAxis
-                    type="number"
-                    allowDecimals={false}
-                    tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_TOKENS.text }}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="label"
-                    width={140}
-                    tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_TOKENS.navy }}
-                  />
-                  <Tooltip cursor={{ fill: CHART_TOKENS.blueTint }} content={<DistributionChartTooltip />} />
-                  <Bar dataKey="count" fill={CHART_TOKENS.navy} isAnimationActive={false} barSize={14} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-        )}
-
-        {landscape.data !== undefined &&
-          Object.keys(landscape.data.evidence_types ?? {}).length > 0 && (
-            <Card className={`min-w-0 ${LANDSCAPE_PLOT_CLASS}`}>
-              <PaneHeading>Evidence types</PaneHeading>
-              <Divider />
-              <div className="min-w-0 p-4">
-                <EvidenceDistributionChart data={landscape.data.evidence_types ?? {}} />
-              </div>
-            </Card>
+      {!isPending && (
+        <div className="mx-auto w-full max-w-3xl">
+          {funnelTable.length > 0 && (
+            <LandscapeSection title={TITLES.funnel}>
+              <RankedBars caption={TITLES.funnel} rows={funnelTable} busy={funnelTable.some((row) => row.pending)} />
+            </LandscapeSection>
           )}
 
-        {landscape.data !== undefined && Object.keys(landscape.data.years ?? {}).length > 0 && (
-          <Card className={`min-w-0 ${LANDSCAPE_PLOT_CLASS}`}>
-            <PaneHeading>Publication years</PaneHeading>
-            <Divider />
-            <div className="min-w-0 p-4">
-              <PublicationYearsChart data={landscape.data.years ?? {}} />
-            </div>
-          </Card>
-        )}
-
-        {landscape.data?.geographies !== null &&
-          landscape.data?.geographies !== undefined &&
-          Object.keys(landscape.data.geographies).length > 0 && (
-            <Card className={`min-w-0 ${LANDSCAPE_PLOT_CLASS}`}>
-              <PaneHeading>Where sources were published</PaneHeading>
-              <Divider />
-              <div className="min-w-0 p-4">
-                {/* Task 031: publisher country only — never the authors'
-                    countries, which answer a different question. */}
-                <p className="mb-3 break-words text-body text-grey">
-                  The country of the publishing venue, when the database reports it. Sources
-                  without one are counted as “Not reported”.
+          {showTypes && (
+            <LandscapeSection title={TITLES.types}>
+              {classifying && relevant !== null && (
+                <p className="mb-3 text-meta text-grey" data-testid="classified-so-far">
+                  {population.classifiedSoFar(sum(evidenceTypes), relevant)}
                 </p>
-                <EvidenceDistributionChart data={normaliseGeographies(landscape.data.geographies ?? {})} />
-              </div>
-            </Card>
+              )}
+              {typeSentence !== null ? (
+                <p className="text-meta text-navy">{typeSentence}</p>
+              ) : (
+                <RankedBars caption={TITLES.types} rows={linkTypes} busy={classifying} />
+              )}
+            </LandscapeSection>
           )}
-      </div>
 
-      {groups.data !== undefined && (groups.data.facets ?? []).length > 0 && (
-        <Card className={`mt-4 ${LANDSCAPE_PLOT_CLASS}`}>
-          <PaneHeading>Finding groups</PaneHeading>
-          <Divider />
-          <div className="space-y-4 p-4">
-            {(groups.data.facets ?? []).map((facet) => (
-              <div key={facet.facet}>
-                <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">
-                  {scrub(facet.facet)}
-                </p>
-                <ul role="list" className="mt-1.5 flex flex-wrap gap-1.5">
-                  {(facet.groups ?? []).map((group) => (
-                    <li key={group.label}>
-                      <Chip tone="soft">
-                        {scrub(group.label)} · {group.size}
-                      </Chip>
-                    </li>
-                  ))}
-                  {facet.ungrouped > 0 && (
-                    <li>
-                      <Chip tone="default">Ungrouped · {facet.ungrouped}</Chip>
-                    </li>
+          {withYear > 0 && (
+            <LandscapeSection title={TITLES.years} figure={yearsFigure}>
+              {fewYearsSentence(years) ?? <PublicationYears data={years} caption={TITLES.years} rangeHref={rangeHref} />}
+            </LandscapeSection>
+          )}
+
+          {Object.keys(geographies).length > 0 && (
+            <LandscapeSection
+              title={TITLES.geographies}
+              // What the section counts, on hover (owner, round 13): it left
+              // the page. Task 031: publisher country only, never the
+              // authors' countries, which answer a different question.
+              hint={<InfoHint label="About where sources were published" note={GEOGRAPHY_NOTE} />}
+              control={
+                onlyNotReported(geographies) ? null : (
+                  <OutlineSwitch label="Show as" choices={GEOGRAPHY_VIEWS} value={geographyView} onChange={setGeographyView} height={32} />
+                )
+              }
+            >
+              {onlyNotReported(geographies) ? (
+                <p className="text-meta text-navy">No publisher country was reported for these sources.</p>
+              ) : (
+                <>
+                  {geographyView === "map" ? (
+                    // The list stays the keyboard's path (round 11): the map
+                    // is for the eye and its countries take no focus.
+                    <Suspense fallback={<div aria-hidden="true" className="publisher-map__placeholder" />}>
+                      <PublisherMap
+                        countries={mapCountries}
+                        caption={TITLES.geographies}
+                        hrefFor={(country) => countryHref(country)}
+                      />
+                    </Suspense>
+                  ) : (
+                    <RankedBars caption={TITLES.geographies} rows={linkCountries} />
                   )}
-                </ul>
+                </>
+              )}
+            </LandscapeSection>
+          )}
+
+          {facets.length > 0 && (
+            <LandscapeSection title={TITLES.groups} figure={findings !== null ? population.findings(findings) : null}>
+              <div className="flex flex-col gap-6">
+                {facets.map((facet) => (
+                  <div key={facet.facet}>
+                    <h3 className={cn(CAPTION_LABEL_CLASS, "mb-2")}>
+                      {scrub(facet.facet)}
+                    </h3>
+                    <RankedBars
+                      caption={scrub(facet.facet)}
+                      rows={facetRows(facet.groups ?? [], facet.ungrouped).map((row) =>
+                        row.key !== "ungrouped" && row.count ? { ...row, href: groupHref(facet.facet, row.key) } : row,
+                      )}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </Card>
+            </LandscapeSection>
+          )}
+        </div>
       )}
     </main>
   );

@@ -14,11 +14,11 @@ ONLY its own component's prompt payload —
 
 from __future__ import annotations
 
+from policy_atlas.core.clustering_engine import ClusterUnit
 from policy_atlas.evidence_search.assess.screen_prompt import (
     ScreenEnvelopePayload,
     build_screen_messages,
 )
-from policy_atlas.evidence_search.clustering_engine import ClusterUnit
 from policy_atlas.evidence_search.corpus.theme_grouping import (
     DISCOVERY_SYSTEM_PROMPT,
     _discovery_messages_with_guidance,

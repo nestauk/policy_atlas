@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast eval-check okf-validate audit audit-paths prompt-guard eval-search-recall frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test infra-setup deploy-check deploy-update deploy-bootstrap
+.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast eval-check okf-validate audit audit-paths prompt-guard eval-search-recall frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test deploy-migration-wait-test infra-setup deploy-check deploy-update deploy-bootstrap
 
 # Root Makefile (025 A.2 monorepo hoist): the Python project lives in
 # backend/; this Makefile owns the shared db service + the root-level gates
@@ -88,11 +88,11 @@ dev:
 	@test -d backend/.dev-issuer || \
 	  (cd backend && uv run python -m policy_atlas.api.dev_issuer init --dir .dev-issuer)
 	@(trap 'kill 0' INT TERM EXIT; \
-	  $(MAKE) -C backend dev & \
+	  POLICY_ATLAS_THEORY_OF_CHANGE=1 $(MAKE) -C backend dev & \
 	  token=$$(cd backend && uv run python -m policy_atlas.api.dev_issuer mint \
 	    --dir .dev-issuer --sub dev-user --client-id policy-atlas-dev \
 	    --ttl 14400 2>/dev/null | tail -1); \
-	  cd frontend && VITE_DEV_TOKEN="$$token" VITE_OPTIONS_SCOPING=1 pnpm dev & \
+	  cd frontend && VITE_DEV_TOKEN="$$token" VITE_OPTIONS_SCOPING=1 VITE_THEORY_OF_CHANGE=1 pnpm dev & \
 	  wait)
 
 # Seed the LOCAL dev DB with "Dev Org" + three enrolled identities so the 033
@@ -224,8 +224,14 @@ fe-api-smoke:
 
 # Verifies deploy.sh's production VITE_* refusal directly once D.1 lands.
 # It deliberately reports a clear skip while that documented interface is absent.
-deploy-build-guard-test:
+# CI runs this target, so it also runs the migration-waiter check below.
+deploy-build-guard-test: deploy-migration-wait-test
 	bash scripts/test_deploy_build_guard.sh
+
+# Checks deploy.sh's migration waiter (task 057) against a stubbed `aws`: polls
+# until STOPPED, fails loudly on a non-zero exit or after MIGRATION_WAIT_MAX_S.
+deploy-migration-wait-test:
+	bash scripts/test_deploy_migration_wait.sh
 
 # GitHub Actions and operators share these deployment entry points. DEPLOY_ENV
 # selects one committed environment across infra/*_config.json; deploy-check is

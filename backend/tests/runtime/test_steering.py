@@ -996,6 +996,8 @@ def test_render_check_in_and_collation_are_deterministic_and_contain_key_facts()
     collation = render_collation(flagged_events)
 
     assert check_in == render_check_in(payload)
+    # Task 058 (N19): the first line is the question the card shows as its title.
+    assert check_in.splitlines()[0] == "Does the shortlist look right before I write?"
     assert "select: succeeded" in check_in
     assert "wall_clock=1.235s" in check_in
     assert "base=10" in check_in

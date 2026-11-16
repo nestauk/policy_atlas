@@ -52,6 +52,14 @@ export function createAuthMiddleware(auth: AuthApi): Middleware {
         return response;
       }
 
+      // Sent without a token: a signed-out read (the public link). Its 401
+      // means "not yours to read", not "token expired" — a silent refresh
+      // here would start a sign-in and send the reader to the login page.
+      if (!request.headers.has("Authorization")) {
+        pristineRequests.delete(request);
+        return response;
+      }
+
       const refreshed = await auth.getAccessToken(true);
       if (!refreshed) {
         pristineRequests.delete(request);

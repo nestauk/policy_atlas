@@ -7,7 +7,8 @@ capability-runner with steering check-ins. Sub-agents never address the user;
 the agent relays deterministic runner check-ins and steering pauses
 through a small, injectable console seam.
 
-Live switch mirrors ``skeleton.py``: a configured ``OPENAI_API_KEY`` selects the
+Live switch mirrors ``skeleton.py``: a configured key (the variable the route
+names, see ``core.model_routes``) selects the
 live task_agent + live backend set (with Langfuse tracing); its absence selects the
 deterministic stubs and an egress-free fixture corpus, so the demo/dev path
 never leaves the machine.
@@ -16,7 +17,6 @@ never leaves the machine.
 from __future__ import annotations
 
 import json
-import os
 import sys
 import unicodedata
 import uuid
@@ -30,11 +30,13 @@ from sqlalchemy import func
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.settings import ingest_mode_from_env, ingest_queue_url_from_env
 from policy_atlas.core import events, tracing
 from policy_atlas.core.db import get_engine
-from policy_atlas.core.embeddings import EmbeddingBackend, OpenAIEmbeddingBackend
+from policy_atlas.core.embeddings import EmbeddingBackend, live_embedding_backend
 from policy_atlas.core.fixtures import get_source
 from policy_atlas.core.logging import configure_logging
+from policy_atlas.core.model_routes import live_api_key, route
 from policy_atlas.core.schema import artefact, evidence_scope, task, task_plan
 from policy_atlas.evidence_search.assess.classification_backend import OpenAIClassificationBackend
 from policy_atlas.evidence_search.assess.screening_backend import OpenAIScreeningBackend
@@ -60,7 +62,7 @@ from policy_atlas.evidence_search.sourcing.fetch_live import LiveDocumentFetcher
 from policy_atlas.evidence_search.sourcing.ingest_upload import ingest_upload
 from policy_atlas.evidence_search.synthesis.grounding_judge import OpenAIGroundingJudgeBackend
 from policy_atlas.evidence_search.synthesis.synthesis_backend import OpenAISynthesisBackend
-from policy_atlas.options_scoping.longlist.longlist_backend import OpenAILonglistBackend
+from policy_atlas.options_scoping.scoping_backend import OpenAILonglistBackend
 from policy_atlas.runtime.agent_backend import (
     AgentBackend,
     OpenAIAgentBackend,
@@ -68,10 +70,16 @@ from policy_atlas.runtime.agent_backend import (
 )
 from policy_atlas.runtime.capability_registry import (
     EVIDENCE_SEARCH,
+    THEORY_OF_CHANGE,
     expect_task_plan,
     validate_plan,
 )
-from policy_atlas.runtime.runner import RunnerBackends, RunPlanOutcome, run_plan
+from policy_atlas.runtime.runner import (
+    RunnerBackends,
+    RunPlanOutcome,
+    run_plan,
+    with_ingest_queue,
+)
 from policy_atlas.runtime.scoping_plan import ScopingPlan
 from policy_atlas.runtime.steering import (
     Abort,
@@ -89,6 +97,14 @@ from policy_atlas.runtime.task_agent import (
 )
 from policy_atlas.runtime.task_agent_prompt import PLANNER_HISTORY_TURNS_MAX, PlanDraftWire
 from policy_atlas.runtime.task_plan import CountryGroupAuthorship, TaskPlan
+from policy_atlas.runtime.toc_plan import (
+    TOC_PURPOSE,
+    TOC_REVIEW_FIRST_KEY,
+    TOC_WALK_DRAFT,
+    TOC_WALK_KEY,
+    TocPlan,
+)
+from policy_atlas.theory_of_change.backend import OpenAITocBackend
 
 log = structlog.get_logger()
 
@@ -805,7 +821,7 @@ def live_task_agent_and_backends(
     Returns:
         The live task_agent backend and the live runner backend bundle.
     """
-    embedding: EmbeddingBackend = OpenAIEmbeddingBackend()
+    embedding: EmbeddingBackend = live_embedding_backend()
     theme_grouping: ThemeGroupingBackend = OpenAIThemeGroupingBackend()
     if langfuse_client is not None:
         embedding = tracing.TracedEmbeddingBackend(embedding, langfuse_client)
@@ -831,8 +847,10 @@ def live_task_agent_and_backends(
         synthesis=OpenAISynthesisBackend(langfuse_client=langfuse_client),
         grounding_judge=OpenAIGroundingJudgeBackend(langfuse_client=langfuse_client),
         search_backends=cast(list[SearchBackend], search_live.live_search_backends()),
-        search_generation=search_generation.OpenAISearchGenerationBackend(
-            langfuse_client=langfuse_client
+        search_generation=(
+            search_generation.ClaudeSearchGenerationBackend(langfuse_client=langfuse_client)
+            if route().search_queries.backend == "claude"
+            else search_generation.OpenAISearchGenerationBackend(langfuse_client=langfuse_client)
         ),
         document_fetcher=fetcher,
         langfuse_client=langfuse_client,
@@ -840,6 +858,8 @@ def live_task_agent_and_backends(
         suggest=OpenAIAgentBackend(langfuse_client=langfuse_client),
         # The options-scoping longlist step's calls (task 045, S8).
         longlist=OpenAILonglistBackend(langfuse_client=langfuse_client),
+        # Every theory-of-change step's calls (task 054).
+        toc=OpenAITocBackend(langfuse_client=langfuse_client),
     )
     task_agent = OpenAITaskAgentBackend(langfuse_client=langfuse_client)
     return task_agent, backends
@@ -917,13 +937,15 @@ def persist_approved_plan(
 ) -> tuple[uuid.UUID, uuid.UUID]:
     """Persist an approved plan and its execution scope for an existing task.
 
-    Both plan shapes take this one path (task 044, X7). A scoping plan differs
+    Every plan shape takes this one path (task 044, X7). A scoping plan differs
     in what its intent record says and in two columns the Evidence search
     leaves null: ``purpose='baseline'`` and ``plan_id``, pointing back at the
     plan row minted in this very call. Because ``evidence_scope.plan_id``
     carries a composite FK to ``(plan.plan_id, plan.task_id)``, the scope is
     inserted first without it and updated once the plan row exists — one
     transaction, so no reader ever sees a scope whose ``plan_id`` is missing.
+    A theory-of-change plan does the same with ``purpose='toc'`` and
+    ``context.toc_walk='draft'`` (task 054).
 
     A **new scope row per plan version** is deliberate (C3): the plan row's
     ``evidence_scope_id`` is one-to-one, so an amended plan or a rebuild must
@@ -933,7 +955,8 @@ def persist_approved_plan(
     Args:
         conn: Open transaction that owns the task and plan writes.
         task_id: Existing task receiving the approved plan.
-        plan: Validated ``TaskPlan`` or ``ScopingPlan`` approved by the caller.
+        plan: Validated ``TaskPlan``, ``ScopingPlan`` or ``TocPlan`` approved
+            by the caller.
         conversation_id: Task Agent conversation that owns this plan lineage.
 
     Returns:
@@ -953,12 +976,23 @@ def persist_approved_plan(
         .where(task_plan.c.status == "approved")
         .values(status="superseded")
     )
-    is_scoping = isinstance(plan, ScopingPlan)
-    scope_fields: dict[str, Any] = (
-        _scoping_scope_fields(plan)
-        if is_scoping
-        else {"intent": plan.question, "context": {}, "purpose": None}
-    )
+    scope_fields: dict[str, Any]
+    if isinstance(plan, ScopingPlan):
+        scope_fields = _scoping_scope_fields(plan)
+    elif isinstance(plan, TocPlan):
+        # A theory of change starts with its draft walk (task 054, S3).
+        scope_fields = {
+            "intent": plan.question,
+            "context": {
+                "capability": THEORY_OF_CHANGE,
+                TOC_WALK_KEY: TOC_WALK_DRAFT,
+                # An uploaded theory pauses after the draft for the user's review.
+                **({TOC_REVIEW_FIRST_KEY: True} if plan.upload_id is not None else {}),
+            },
+            "purpose": TOC_PURPOSE,
+        }
+    else:
+        scope_fields = {"intent": plan.question, "context": {}, "purpose": None}
     conn.execute(
         evidence_scope.insert().values(
             evidence_scope_id=scope_id,
@@ -981,7 +1015,7 @@ def persist_approved_plan(
             approved_at=now,
         )
     )
-    if is_scoping:
+    if scope_fields["purpose"] is not None:
         # The composite FK holds only now that the plan row exists.
         conn.execute(
             evidence_scope.update()
@@ -1140,7 +1174,7 @@ def main(
     console = console if console is not None else StdConsole()
     engine = engine if engine is not None else get_engine()
 
-    live = bool(os.environ.get("OPENAI_API_KEY"))
+    live = bool(live_api_key())
     langfuse_client = tracing.get_langfuse() if live else None
     default_agent: AgentBackend
     if live:
@@ -1151,7 +1185,16 @@ def main(
         default_backends = RunnerBackends()
         default_agent = StubAgentBackend()
     task_agent = task_agent if task_agent is not None else default_task_agent
-    backends = backends if backends is not None else default_backends
+    if backends is None:
+        # The full-text ingest queue for POLICY_ATLAS_INGEST_MODE (task 057);
+        # a caller's own bundle without one gets the in-process queue from run_plan.
+        ingest_mode = ingest_mode_from_env()
+        backends = with_ingest_queue(
+            default_backends,
+            engine,
+            ingest_mode=ingest_mode,
+            queue_url=ingest_queue_url_from_env(ingest_mode),
+        )
     agent = agent if agent is not None else default_agent
     log.info(
         "agent.start",

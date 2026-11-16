@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
+import { LABEL_CLASS } from "../../ui/brand/label";
 import {
   backendLabel,
   CHECK_IN_SEARCH_HEADING,
@@ -10,6 +11,10 @@ import {
   checkInReadingListHeading,
   checkInThemesHeading,
 } from "./checkInPresentation";
+import { LINK_CLASS } from "../../ui/brand/inlineActions";
+import { cn } from "../../ui/brand/cn";
+import { DisclosureChevron } from "../../ui/brand/Disclosure";
+import { formatCount } from "../../lib/format";
 
 /** One staged P2 theme rename (batched into the single check-in response). */
 export interface ThemeRename {
@@ -79,7 +84,7 @@ function ListBlock({
 }) {
   return (
     <div className="mt-3 border border-line bg-paper-2 px-3 py-2.5">
-      <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">{heading}</p>
+      <p className={LABEL_CLASS}>{heading}</p>
       {children}
     </div>
   );
@@ -160,7 +165,7 @@ export function CheckInBundle({
             {backends
               .map(({ backend, count }) => `${scrub(backendLabel(backend) ?? backend)} ${count}`)
               .join(" · ")}
-            {queries.length > 0 ? ` · from ${queries.length === 1 ? "1 query" : `${queries.length} queries`}` : ""}
+            {queries.length > 0 ? ` · from ${queries.length === 1 ? "1 query" : `${formatCount(queries.length)} queries`}` : ""}
           </p>
           {sampleTitles.length > 0 && (
             <ul className="mt-1.5 space-y-0.5">
@@ -172,8 +177,11 @@ export function CheckInBundle({
             </ul>
           )}
           {queries.length > 0 && (
-            <details className="mt-1.5 text-caption text-grey">
-              <summary className="cursor-pointer">The queries used</summary>
+            <details className="group/queries mt-1.5 text-caption text-grey">
+              <summary className="group flex cursor-pointer list-none items-center gap-1.5 hover:text-navy [&::-webkit-details-marker]:hidden">
+                <DisclosureChevron className="group-open/queries:rotate-90" />
+                The queries used
+              </summary>
               <ul className="mt-1 space-y-0.5">
                 {queries.map((query) => (
                   <li key={query} className="text-ink">
@@ -270,7 +278,7 @@ export function CheckInBundle({
                 <span className="min-w-0 flex-1 truncate">{scrub(group.name)}</span>
                 {group.size !== null && (
                   <span className="shrink-0 text-grey">
-                    · {group.size === 1 ? "1 finding" : `${group.size} findings`}
+                    · {group.size === 1 ? "1 finding" : `${formatCount(group.size)} findings`}
                   </span>
                 )}
               </li>
@@ -398,7 +406,7 @@ export function CheckInBundle({
           ) : (
             <button
               type="button"
-              className="mt-1.5 cursor-pointer text-meta font-semibold text-blue hover:text-navy"
+              className={cn(LINK_CLASS, "mt-1.5 text-meta")}
               onClick={() => {
                 setRowTitle("");
                 setRowFocus("");

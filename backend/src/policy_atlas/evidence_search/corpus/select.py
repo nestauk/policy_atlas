@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import threading
 import uuid
 from collections.abc import Collection, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, wait
@@ -14,7 +15,9 @@ import structlog
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core import tracing
+from policy_atlas.api.stage_vocabulary import activity
+from policy_atlas.core import liveness, tracing
+from policy_atlas.core.done_callbacks import add_done_callback_in_context
 from policy_atlas.core.openai_client import CallBudget
 from policy_atlas.core.schema import (
     DIRECTIVE_STRING_MAX,
@@ -889,18 +892,38 @@ def _rerank_infos(
     submitted: list[tuple[list[uuid.UUID], Future[Any]]] = []
     usage_totals = UsageAccumulator()
 
+    # Task 058, N2: one count per batch, on the pool's own future; the serial
+    # retry below never publishes.
+    done = 0
+    lock = threading.Lock()
+
+    def publish_done(finished: Future[Any] | None) -> None:
+        nonlocal done
+        with lock:
+            if finished is not None:
+                done += 1
+            n = done
+        liveness.publish_progress(
+            activity=activity("select.batches", done=n, total=baseline),
+            done=n,
+            total=baseline,
+            unit="batches",
+        )
+
+    if baseline:
+        publish_done(None)
+
     with ThreadPoolExecutor(max_workers=MAX_CONCURRENT_RERANK_BATCHES) as executor:
         for batch in batches:
             if not budget.reserve():
                 fallback_count += _fallback_batch(batch, rank_infos)
                 continue
             docs = [_doc_for_rerank(signal_docs[tss_id]) for tss_id in batch]
-            submitted.append((
-                batch,
-                tracing.submit_with_context(
-                    executor, ranking_backend.rank, docs, intent=intent
-                ),
-            ))
+            future = tracing.submit_with_context(
+                executor, ranking_backend.rank, docs, intent=intent
+            )
+            add_done_callback_in_context(future, publish_done)
+            submitted.append((batch, future))
         wait([future for _, future in submitted])
 
     for batch, future in submitted:
@@ -1586,6 +1609,8 @@ def _summary(
 ) -> dict[str, Any]:
     return {
         "strata": outcome.strata,
+        # Task 058, N2: the integer the done row shows.
+        "selected_count": len(outcome.selected),
         "selected": {
             "count": len(outcome.selected),
             "by_reason": outcome.selected_by_reason,
@@ -1642,6 +1667,7 @@ def _empty_summary(
         })
     return {
         "strata": [],
+        "selected_count": 0,
         "selected": {"count": 0, "by_reason": {}},
         "excluded": {
             "by_stratum_reason_counts": {},

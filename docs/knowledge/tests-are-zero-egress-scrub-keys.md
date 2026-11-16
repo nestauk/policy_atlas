@@ -3,7 +3,7 @@ type: Testing rule
 title: The suite is zero-egress by policy — scrub product-egress keys after loading .env
 description: Every live/stub backend switch keys off environment variables, so a developer's keyed backend/.env must never reach the pytest process unscrubbed. conftest scrubs after load_dotenv(); alembic/env.py reads DATABASE_URL side-effect-free via dotenv_values() so its own load_dotenv() doesn't re-poison every migration fixture; API settings stay pure os.environ.
 tags: [testing, zero-egress, dotenv, socket-deny, review-lesson]
-timestamp: 2026-07-21
+timestamp: 2026-10-22
 ---
 
 # Rule
@@ -27,7 +27,16 @@ process unscrubbed. Three coordinated pieces enforce this:
   with no dotenv call of their own; `make -C backend dev` owns real `.env`
   loading via `uv run --env-file` for the actual server process. Backend mode
   is explicit via `PA_BACKEND_MODE` (`stub` / `live` / `auto`), and `live` fails
-  loud (`RuntimeError`) without `OPENAI_API_KEY`.
+  loud (`RuntimeError`) without the selected route's key variable (`OPENAI_API_KEY` on
+  the default route, `AWS_BEARER_TOKEN_BEDROCK` on a Bedrock route, task 053).
+- `tests/conftest.py` also sets `AWS_EC2_METADATA_DISABLED=true` (053, CI
+  failure of 2026-10-22). `boto3.client(...)` resolves credentials when the client
+  is **built**, not when it sends; with none configured the chain ends by asking
+  the EC2 instance-metadata address, which socket-deny turns into an
+  `HTTPClientError` at construction. A keyed developer machine never sees this
+  (its `~/.aws` answers first), so a test that builds a Cohere or Claude backend
+  without a stub client passes locally and fails on CI. With the probe disabled
+  the client is built with no credentials, which matters only at request time.
 
 # Why
 

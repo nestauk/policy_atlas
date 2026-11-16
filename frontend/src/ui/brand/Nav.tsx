@@ -4,7 +4,6 @@ import { Link, NavLink, useLocation } from "react-router";
 import { Tooltip } from "../radix/Tooltip";
 import { Chip } from "./Chip";
 import { cn } from "./cn";
-import { FoldMarkAnimated } from "./FoldMarkAnimated";
 import { FoldMarkIcon } from "./FoldMarkIcon";
 
 /** Hover copy for the BETA chip beside the wordmark. */
@@ -23,14 +22,14 @@ export function NavBar({ className, children, ...props }: HTMLAttributes<HTMLEle
 }
 
 /**
- * Wordmark: fold-mark diamond + "Policy" navy + "Atlas" electric blue.
- *
- * @param running - When true the mark animates, signalling an active run.
+ * Wordmark: fold-mark diamond + "Policy" navy + "Atlas" electric blue. The
+ * mark stays still during a run: the run's own live mark is the one turning
+ * logo on the screen (task 058, owner 2026-11-05).
  */
-export function NavLogo({ running = false }: { running?: boolean }) {
+export function NavLogo() {
   return (
     <span className="inline-flex items-center gap-1.25 whitespace-nowrap font-display text-heading font-extrabold tracking-[-0.02em] text-navy">
-      {running ? <FoldMarkAnimated onDark={false} /> : <FoldMarkIcon />}
+      <FoldMarkIcon />
       <span>
         Policy <b className="font-extrabold text-blue">Atlas</b>
       </span>
@@ -41,17 +40,15 @@ export function NavLogo({ running = false }: { running?: boolean }) {
 /**
  * Brand wordmark, always home. It is not a nav item — the active underline
  * is reserved for New / Tasks / Projects, so the logo never looks selected.
- *
- * @param running - When true the fold-mark animates (active run in progress).
  */
-export function NavHomeLink({ running = false }: { running?: boolean }) {
+export function NavHomeLink() {
   return (
     <div className="flex min-w-0 items-center gap-3">
       <Link to="/" className="min-w-0 no-underline">
-        <NavLogo running={running} />
+        <NavLogo />
       </Link>
       <Tooltip
-        content={<p className="text-body leading-relaxed text-navy">{BETA_CHIP_HINT}</p>}
+        content={<p className="text-body text-navy">{BETA_CHIP_HINT}</p>}
       >
         <span tabIndex={0} className="inline-flex">
           <Chip tone="blue">BETA</Chip>
@@ -60,6 +57,26 @@ export function NavHomeLink({ running = false }: { running?: boolean }) {
     </div>
   );
 }
+
+/**
+ * The growing underline (task 058; owner round 9, reshaped in the
+ * consistency pass): one 3 px Electric Blue rule under the item, anchored at
+ * its left edge. On hover (fine pointers, Tailwind's `hover:`) and keyboard
+ * focus it grows from the left edge to the item's centre (half width, 200 ms,
+ * the strong ease-out) and shrinks back on leave. The active item's rule is
+ * the same rule at full width, so a click carries the half rule on from the
+ * centre to the right edge instead of restarting it. Under reduced motion the
+ * half and the full rule appear without growing. Shared by the top nav and
+ * the lifecycle tabs; the item keeps a transparent 3 px bottom border so the
+ * rule never moves the text.
+ */
+export const GROWING_RULE_CLASS =
+  "relative after:pointer-events-none after:absolute after:inset-x-0 after:-bottom-[3px] after:h-[3px] after:origin-left after:scale-x-0 after:bg-blue after:transition-transform after:duration-200 after:ease-[var(--ease-out-strong)] hover:after:scale-x-50 focus-visible:after:scale-x-50 motion-reduce:after:transition-none";
+
+/** The active item: the growing rule at full width, held there on hover and
+ *  focus. Pair with `GROWING_RULE_CLASS` through `cn`. */
+export const GROWING_RULE_ACTIVE_CLASS =
+  "after:scale-x-100 hover:after:scale-x-100 focus-visible:after:scale-x-100";
 
 /** Growing-underline nav link: active item gets a 3px Nesta-blue rule. */
 export function NavItem({
@@ -83,7 +100,8 @@ export function NavItem({
         const active = match ? match(pathname) : isActive;
         return cn(
           "inline-block border-b-[3px] border-transparent pb-1 text-lead font-semibold text-navy no-underline",
-          active && "border-blue font-extrabold",
+          GROWING_RULE_CLASS,
+          active && cn(GROWING_RULE_ACTIVE_CLASS, "font-extrabold"),
         );
       }}
     >

@@ -17,6 +17,7 @@ alone:
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
@@ -463,3 +464,30 @@ def test_the_default_create_is_still_an_evidence_search_with_nothing_attached(
         assert body["capability"] == "evidence_search"
         assert body["project_ids"] == []
         assert body["links"] == []
+
+
+def test_a_theory_of_change_is_created_only_while_the_server_setting_is_on(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Task 054, C15: 422 ``capability_not_enabled`` while off, nothing written."""
+    with tenancy_client(tmp_path, count=1) as (client, [owner]):
+        refused = _create(
+            client, owner.headers, name="Refused theory", capability="theory_of_change"
+        )
+        assert refused.status_code == 422
+        assert refused.json()["error"]["code"] == "capability_not_enabled"
+        assert _task_count(engine, "Refused theory") == 0
+        # The other two kinds are untouched by the setting.
+        for capability in ("evidence_search", "options_scoping"):
+            created = _create(client, owner.headers, capability=capability)
+            assert created.status_code == 201, created.text
+
+        client.app.state.settings = replace(  # type: ignore[attr-defined]
+            client.app.state.settings,  # type: ignore[attr-defined]
+            theory_of_change_enabled=True,
+        )
+        accepted = _create(
+            client, owner.headers, name="Accepted theory", capability="theory_of_change"
+        )
+        assert accepted.status_code == 201, accepted.text
+        assert accepted.json()["capability"] == "theory_of_change"

@@ -38,7 +38,7 @@ describe("App", () => {
     expect(queryClient.getQueryData(["test-cache-probe"])).toBe("sensitive-cached-value");
 
     await user.click(await screen.findByRole("button", { name: "Account" }));
-    await user.click(await screen.findByRole("button", { name: "Sign out" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Sign out" }));
 
     expect(queryClient.getQueryData(["test-cache-probe"])).toBeUndefined();
   });

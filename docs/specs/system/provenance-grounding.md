@@ -45,6 +45,11 @@ Ordered by epistemic strength (inference distance from evidence):
   Tier 2/3), not a sixth lane. Remedy: *the claim stands but is under-evidenced — seek
   corroboration.* Both are **soft-flagged, never dropped** (flag-don't-drop). Where the
   clean/weak line falls is a judge-rubric question owned by the eval workstream. ❓
+- **Unrated source** (task 056 D7) — an appraisal state, not a grounding outcome: the cited
+  document has an appraisal row with no score (classified Unknown or Non-evidence). It is
+  citable; it sits below the citable bar for pattern and coverage counting and is listed as its
+  own bucket wherever appraisal tiers are listed; the claim's grounding tier comes from the
+  judge alone.
 
 ⏸ **Support-direction relations** (supports/caveats/contradicts) and user counter-evidence
 search are a deferred seam; the free-form grounding rationale carries the per-citation *how*

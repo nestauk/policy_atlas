@@ -281,6 +281,8 @@ def test_migration_roundtrip_project_layer(engine: Engine) -> None:
             "created_at",
             "org_id",
             "visibility",
+            # Task 058, round 11: a project can be archived.
+            "archived_at",
         }
         assert {c["name"] for c in inspector.get_columns("project_membership")} == {
             "project_id",

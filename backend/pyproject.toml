@@ -58,6 +58,18 @@ dependencies = [
     # 2026-08-05, task 028 PR #41 audit gate)
     "cryptography>=50,<51",
     "pandas>=3.0.5",
+    # Task 053 (approved dependency gate, contract § Constraints): the Bedrock
+    # client for Cohere embeddings and the Claude search-generation backend.
+    # Moved here from the `ops` group so the runtime image carries it; the
+    # `<2` ceiling is the same rule as openai/langfuse above. Its type stubs
+    # stay in `ops` (type-check only, never shipped).
+    "boto3>=1.43,<2",
+    # Task 057 (approved dependency gate G3): the AWS Lambda Runtime Interface
+    # Client, which runs the queued ingest handler inside the backend image
+    # (`python -m awslambdaric policy_atlas.ops.ingest_worker.handler`). In the MAIN
+    # group because the image leaves the `ops` group out (review finding 2); Linux
+    # only, the platform the image is built for (it has no macOS build to install).
+    "awslambdaric>=3,<4; sys_platform == 'linux'",
 ]
 
 [build-system]
@@ -106,6 +118,7 @@ dev = [
     "google-auth-httplib2",  # lets google-api-python-client use google-auth credentials
     "google-api-python-client>=2",  # Sheets API (google_utils.py)
     "requests",  # determine_which_refs_are_in_overton.py; already a transitive of langsmith
+    "pytest-xdist>=3.6",
 ]
 
 # Task 033 (approved dependency gate, contract rev 3.0 § 10): the operator CLI's
@@ -122,8 +135,10 @@ dev = [
 # calls AdminCreateUser against the real identity provider) must not cross a major
 # on a lock regen — the same rule applied to openai/langfuse above.
 ops = [
-    "boto3>=1.43,<2",
-    "boto3-stubs[cognito-idp]>=1.43,<2",
+    # boto3 itself moved to the main dependencies in task 053 (Bedrock); the
+    # stubs stay here because they are type-check only. `bedrock-runtime` added
+    # for the Cohere and Claude backends (task 053, approved dependency gate).
+    "boto3-stubs[cognito-idp,bedrock-runtime]>=1.43,<2",
 ]
 
 [tool.uv]

@@ -4,10 +4,15 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
 from sqlalchemy import select, update
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.api.chat_scope import build_chat_readers, resolve_terminal_run_components
+from policy_atlas.api.chat_scope import (
+    ResolvedRunScope,
+    build_chat_readers,
+    resolve_terminal_run_components,
+)
 from policy_atlas.core import events
 from policy_atlas.core.schema import (
     EVIDENCE_TYPES,
@@ -21,7 +26,13 @@ from policy_atlas.core.schema import (
     source_tag,
     task_source_snapshot,
 )
-from tests.helpers import now
+from tests.helpers import (
+    now,
+    seed_ingested_full_text,
+    seed_scope,
+    seed_select_doc,
+    seed_task_and_run,
+)
 from tests.runtime.test_runner import _cleanup, _seed_task
 
 
@@ -388,3 +399,49 @@ def _seed_scope_rows(
             created_at=now(),
         )
     )
+
+
+def test_chat_retriever_searches_on_its_own_short_connection(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Task 057 N8: the chat builds its scope on one connection and closes it;
+    every search then opens one short read of its own and closes it too."""
+    task_id: uuid.UUID | None = None
+    opened: list[Connection] = []
+    real_connect = engine.connect
+
+    def counting_connect() -> Connection:
+        connection = real_connect()
+        opened.append(connection)
+        return connection
+
+    try:
+        with engine.begin() as conn:
+            task_id, run_id = seed_task_and_run(conn)
+            scope_id = seed_scope(conn, task_id)
+            tss_id = seed_select_doc(conn, task_id, run_id, scope_id, title="Chat doc")
+            seed_ingested_full_text(
+                conn, tss_id=tss_id, chunks=["Mentoring cut the NEET rate by a third."]
+            )
+        resolved = ResolvedRunScope(
+            capability_run_id=uuid.uuid4(),
+            evidence_scope_id=scope_id,
+            characterisation_run_id=None,
+            selection_run_id=None,
+            extraction_run_id=None,
+            grouping_run_id=None,
+        )
+        monkeypatch.setattr(engine, "connect", counting_connect)
+        retriever, _findings, _lookup = build_chat_readers(engine, resolved, task_id)
+        built_with = len(opened)
+        assert built_with >= 1
+        assert all(connection.closed for connection in opened)
+
+        results = retriever.search("mentoring NEET rate")
+
+        assert [result["tss_id"] for result in results] == [str(tss_id)]
+        assert len(opened) == built_with + 1
+        assert all(connection.closed for connection in opened)
+    finally:
+        monkeypatch.undo()
+        _cleanup(engine, task_id)

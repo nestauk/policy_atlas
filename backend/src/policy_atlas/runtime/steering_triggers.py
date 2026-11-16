@@ -283,7 +283,9 @@ def appraisal_collapse_trigger(
 
     One reader, two call sites, shared with the pre-select picture (class 3)
     and the after-appraise boundary (class 7). Reads `source_appraisal_result`
-    grouped by `quality_score` for the scope — never recomputed.
+    grouped by `quality_score` for the scope — never recomputed. Unrated rows
+    (no score, task 056 D7) are left out of both the weak count and the total,
+    so the trigger reads exactly as it did before they had rows.
 
     Args:
         conn: Open read connection.
@@ -298,6 +300,7 @@ def appraisal_collapse_trigger(
         sa_select(source_appraisal_result.c.quality_score, func.count().label("n"))
         .where(source_appraisal_result.c.task_id == task_id)
         .where(source_appraisal_result.c.evidence_scope_id == evidence_scope_id)
+        .where(source_appraisal_result.c.quality_score.is_not(None))
         .group_by(source_appraisal_result.c.quality_score)
     ).all()
     total = sum(row.n for row in rows)

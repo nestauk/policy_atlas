@@ -78,3 +78,9 @@ The same discipline applies to *patterns*, not only gaps. Each grade carries dif
 - At synthesise, the source/evidence policy is **flag-not-block**: below-bar support is **flagged
   weakly-grounded / below-policy**, never hidden or silently dropped (task-wide
   flag-don't-drop).
+- **Unrated** sources (task 056 D7, S2): a document the classifier typed Unknown or
+  Non-evidence carries an appraisal row with no score and the label **"Unrated"** — the
+  reader-facing word wherever appraisal labels are shown (the internal term "below policy" is
+  never surfaced). Unrated counts **below the citable bar** for pattern and coverage counting
+  and is its own coverage bucket; it is citable, and a claim's grounding is the judge's verdict
+  alone.

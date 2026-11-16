@@ -200,6 +200,8 @@ export interface paths {
          *             `tasks.list_tasks`.
          *         page: 1-indexed page number.
          *         page_size: Rows per page, server-capped.
+         *         status_filter: `active` (default: not archived), `archived` or `all`
+         *             (task 058, round 11), as `GET /tasks` takes it.
          *
          *     Returns:
          *         One page of projects.
@@ -310,6 +312,47 @@ export interface paths {
         patch: operations["update_project_api_v1_projects__project_id__patch"];
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Project
+         * @description Archive a project (task 058, round 11), and the tasks only it holds (round 14).
+         *
+         *     Owner only. The project leaves the default list (`status=active`) and is
+         *     listed under `status=archived`; it stays readable by id. In the same
+         *     transaction, each of the caller's own active tasks in this project that
+         *     is in no other active project is archived too (owner, 2026-11-07), each
+         *     task's History saying so; a task also in another project, or a
+         *     colleague's, or one whose latest run is still running, paused or about to
+         *     start, is left as it is. Archiving an archived project changes
+         *     nothing and keeps its first time.
+         *
+         *     Args:
+         *         project_id: The project to archive.
+         *         user: The authenticated caller.
+         *         conn: Open database connection.
+         *
+         *     Returns:
+         *         The project with its `archived_at` and `archived_task_count`.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the project is unreadable, 403 when it is
+         *             readable but not owned.
+         */
+        post: operations["archive_project_api_v1_projects__project_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks": {
         parameters: {
             query?: never;
@@ -366,9 +409,14 @@ export interface paths {
          *     the thing it was created for. So any refusal below rolls the task row back
          *     with it.
          *
+         *     A theory of change is refused unless the server setting is on (task 054,
+         *     C15), before anything is written.
+         *
          *     Raises:
          *         HTTPException: 404 when a named source task is not readable by the
          *             caller.
+         *         ApiUnprocessable: 422 ``capability_not_enabled`` for a theory of
+         *             change while ``POLICY_ATLAS_THEORY_OF_CHANGE`` is off.
          *         ApiConflict: 409 ``visibility_conflict``, ``link_source_capability``,
          *             ``link_project_mismatch`` or ``link_source_unfinished``.
          */
@@ -816,7 +864,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Get Options
+         * @description Return the task's option rows with each option's search (task 058, N22).
+         *
+         *     Readable from the end of the suggest stage, before the longlist exists,
+         *     under the same graded-or-public check as the longlist read. Empty before
+         *     any option exists; never a 404 for a readable task.
+         */
+        get: operations["get_options_api_v1_tasks__task_id__options_get"];
         put?: never;
         /**
          * Post Option
@@ -895,6 +951,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{task_id}/options/{option_id}/shortlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Shortlist
+         * @description Put an included option on the shortlist as the user's own place (task 055).
+         *
+         *     Repeating it on a place the user already holds is a no-op. Refused with
+         *     409 ``not_included`` for an excluded or merged option and 409
+         *     ``run_active`` while a walk runs.
+         */
+        post: operations["post_shortlist_api_v1_tasks__task_id__options__option_id__shortlist_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/options/{option_id}/unshortlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Unshortlist
+         * @description Take an option off the shortlist (task 055).
+         *
+         *     A Policy Atlas pick becomes set aside; the user's own place clears. No
+         *     walk opens and nothing refills the place. An option with no place is a
+         *     no-op. Refused with 409 ``run_active`` while a walk runs.
+         */
+        post: operations["post_unshortlist_api_v1_tasks__task_id__options__option_id__unshortlist_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{task_id}/plan": {
         parameters: {
             query?: never;
@@ -918,6 +1022,11 @@ export interface paths {
         /**
          * Patch Plan
          * @description Apply typed edits to the current plan and persist a new approved version.
+         *
+         *     On an options-scoping task whose risk appetite changed, once the new
+         *     version has committed the route opens a shortlist walk that proposes the
+         *     places again (task 055, P10; :func:`_open_shortlist_after_patch`) and
+         *     names it in ``opened_run``.
          */
         patch: operations["patch_plan_api_v1_tasks__task_id__plan_patch"];
         trace?: never;
@@ -984,6 +1093,12 @@ export interface paths {
         /**
          * Create Run
          * @description Dispatch an approved plan off the request path and return its walk row.
+         *
+         *     Starting a theory of change also names the task from the plan's question,
+         *     unless the user has named it (task 058, round 14, as Evidence search and
+         *     options scoping name theirs when the question part is confirmed). Its
+         *     Task Agent has no question part: Start is where the user confirms the
+         *     question, and the plan is fixed once the draft exists (S7).
          */
         post: operations["create_run_api_v1_tasks__task_id__runs_post"];
         delete?: never;
@@ -1006,6 +1121,62 @@ export interface paths {
         get: operations["get_run_api_v1_tasks__task_id__runs__run_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/shortlist/note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Shortlist Note
+         * @description Rewrite the shortlist's not-covered note for the places as they stand (round 14).
+         *
+         *     Owner only. Only when the note is stale (written against other places,
+         *     or missing beside a proposal); otherwise the shortlist comes back as it
+         *     is. The note's one writer (:func:`write_shortlist_note`) runs with no
+         *     changes: it reads the plan's outcomes, the option list and the places,
+         *     never a document line. History says "Policy Atlas updated the shortlist
+         *     note".
+         *
+         *     Raises:
+         *         HTTPException: 404 with no longlist, 409 while a walk runs, 503 when
+         *             the call fails (nothing is written).
+         */
+        post: operations["post_shortlist_note_api_v1_tasks__task_id__shortlist_note_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/shortlist/suggest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Suggest More
+         * @description Open a shortlist walk that fills the open places (Suggest more; task 055).
+         *
+         *     The access check runs in its own short transaction, then the opener takes
+         *     the dispatch lock and the task row itself (the order ``create_run``
+         *     uses). Refused with 409 ``run_active``, ``capacity``, ``plan_stale`` or
+         *     ``nothing_to_propose``, and 404 when the task has no longlist.
+         */
+        post: operations["post_suggest_more_api_v1_tasks__task_id__shortlist_suggest_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1095,8 +1266,540 @@ export interface paths {
          *     any planner call (task 044, S5). One shape crosses back into the ordinary
          *     path: "change the plan" carrying an instruction commits the decision and
          *     then continues, on the *same* reserved row, as an ordinary planning turn.
+         *
+         *     The response is a stream of NDJSON lines with the chat route's rules
+         *     (task 058, N9). Everything up to the planner call happens before the
+         *     response headers are sent, so a refusal (an unknown task, a turn already
+         *     running, a run in progress) is the usual JSON error. A turn settled there
+         *     (a replay, a gate answer or decision, a longlist action) is one
+         *     ``completed`` line. A planner turn runs in its own thread: one
+         *     ``progress`` line, the reply as ``delta`` lines while it is written, then
+         *     exactly one ``completed`` or ``failed`` line. The thread finishes and
+         *     stores the turn even if the caller stops reading, and it holds the task's
+         *     turn lock until it ends.
          */
         post: operations["create_task_agent_turn_api_v1_tasks__task_id__task_agent_turns_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Toc
+         * @description Return the theory: boxes, links with their verdicts and states, pathways, summary.
+         */
+        get: operations["get_toc_api_v1_tasks__task_id__toc_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/boxes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Toc Box
+         * @description Add a box the user wrote (C41).
+         */
+        post: operations["create_toc_box_api_v1_tasks__task_id__toc_boxes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/boxes/{box_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Toc Box
+         * @description Delete a box and its links; Undo restores them with their evidence (C41).
+         */
+        delete: operations["delete_toc_box_api_v1_tasks__task_id__toc_boxes__box_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Patch Toc Box
+         * @description Edit a box's text, layer, description or how we'd know it happened (C41).
+         */
+        patch: operations["patch_toc_box_api_v1_tasks__task_id__toc_boxes__box_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/boxes/{box_id}/position": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Move Toc Box
+         * @description Save where the user dropped a box (C47).
+         */
+        patch: operations["move_toc_box_api_v1_tasks__task_id__toc_boxes__box_id__position_patch"];
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Toc Link Check
+         * @description Check named links only (C40): search, pick, judge, figures, summarise.
+         */
+        post: operations["start_toc_link_check_api_v1_tasks__task_id__toc_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/check/full": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Full Toc Check
+         * @description Check the whole theory: after the user reviewed an uploaded theory's draft (increment 5).
+         */
+        post: operations["start_full_toc_check_api_v1_tasks__task_id__toc_check_full_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/check/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stop Toc Check
+         * @description Stop the running check before its next step; what it finished stays (C48).
+         */
+        post: operations["stop_toc_check_api_v1_tasks__task_id__toc_check_stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/events/{event_id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo Toc Edit
+         * @description Put back the state before one edit; rows changed since are skipped and named (C10).
+         */
+        post: operations["undo_toc_edit_api_v1_tasks__task_id__toc_events__event_id__undo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Toc Evidence
+         * @description Return every judged document per link and every case study per box.
+         */
+        get: operations["get_toc_evidence_api_v1_tasks__task_id__toc_evidence_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Toc Evidence
+         * @description Remove a document from its link, restore it, or set or clear the user's scores (C42).
+         */
+        patch: operations["patch_toc_evidence_api_v1_tasks__task_id__toc_evidence__evidence_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/evidence/{evidence_id}/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Toc Evidence Context
+         * @description Return one judgement's quote, or another passage of its document, in its passage.
+         */
+        get: operations["get_toc_evidence_context_api_v1_tasks__task_id__toc_evidence__evidence_id__context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Toc History
+         * @description Who changed what, newest first (C41). Editors only: it names people.
+         */
+        get: operations["get_toc_history_api_v1_tasks__task_id__toc_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/layout/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Toc Layout
+         * @description Return every moved box to the computed layout (C47).
+         */
+        post: operations["reset_toc_layout_api_v1_tasks__task_id__toc_layout_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Toc Link
+         * @description Connect two boxes (C41). The sentence starts from the box texts.
+         */
+        post: operations["create_toc_link_api_v1_tasks__task_id__toc_links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/links/keep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Keep Toc Evidence
+         * @description Keep the evidence of edited links for their new wording (C43).
+         */
+        post: operations["keep_toc_evidence_api_v1_tasks__task_id__toc_links_keep_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/links/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Toc Link
+         * @description Delete a link; Undo restores it with its evidence (C41).
+         */
+        delete: operations["delete_toc_link_api_v1_tasks__task_id__toc_links__link_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Patch Toc Link
+         * @description Edit a link's title, parts or conditions, or mark it critical (C41).
+         */
+        patch: operations["patch_toc_link_api_v1_tasks__task_id__toc_links__link_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/links/{link_id}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Toc Pending
+         * @description Accept or reject all the new evidence Find more evidence found on one link (C44).
+         */
+        post: operations["decide_toc_pending_api_v1_tasks__task_id__toc_links__link_id__decide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/links/{link_id}/studies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Toc Study
+         * @description Add a study to a link by its DOI (C42): Policy Atlas fetches, judges and adds it.
+         *
+         *     A check named on the link runs with the DOI as its only search; the judge,
+         *     figures, classify and appraise read it as any other document, and its
+         *     judgement is marked as added by the user.
+         */
+        post: operations["add_toc_study_api_v1_tasks__task_id__toc_links__link_id__studies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Toc Proposals
+         * @description The open suggestions, newest first (C45, C46).
+         */
+        get: operations["get_toc_proposals_api_v1_tasks__task_id__toc_proposals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/proposals/{proposal_id}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Toc Proposal
+         * @description Accept or reject one suggested edit, or all; accepted edits apply as the user's (C45).
+         */
+        post: operations["decide_toc_proposal_api_v1_tasks__task_id__toc_proposals__proposal_id__decide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/proposals/{proposal_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dismiss Toc Proposal
+         * @description Close a suggestion without acting on what is left of it.
+         */
+        post: operations["dismiss_toc_proposal_api_v1_tasks__task_id__toc_proposals__proposal_id__dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/report/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update Toc Report
+         * @description Rewrite the titles, sentences and the report for the theory as it is now (C45).
+         */
+        post: operations["update_toc_report_api_v1_tasks__task_id__toc_report_update_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Toc Review
+         * @description Review the theory after edits, off the request path; the Task Agent reports (C45).
+         */
+        post: operations["start_toc_review_api_v1_tasks__task_id__toc_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Toc Uploads
+         * @description The task's uploaded diagrams that were read, oldest first, for the chat's pictures.
+         */
+        get: operations["list_toc_uploads_api_v1_tasks__task_id__toc_uploads_get"];
+        put?: never;
+        /**
+         * Upload Toc Theory
+         * @description Store a user's own theory diagram and read it (increment 5, C8).
+         *
+         *     The file is checked and stored first; the slow vision call runs outside any
+         *     transaction. Before the draft, the transcription is stored for the Task
+         *     Agent's next plan. Once the theory is drafted, what the diagram adds waits
+         *     as a suggestion, and the chat gets the message and its reply here.
+         */
+        post: operations["upload_toc_theory_api_v1_tasks__task_id__toc_uploads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/toc/uploads/{upload_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Toc Upload
+         * @description The uploaded original, to people who can read the task; never on the public leg (C8).
+         */
+        get: operations["get_toc_upload_api_v1_tasks__task_id__toc_uploads__upload_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1286,10 +1989,89 @@ export interface components {
             title: string;
         };
         /**
+         * ArtefactSectionCardFrame
+         * @description Ephemeral: one case-study card as it closes in the streamed reply (task 058).
+         *
+         *     Cards arrive in order and add to the ones before; a `replace`
+         *     `artefact.section_delta` for the same section clears them (the reply is
+         *     being written again). `artefact.section_completed` brings the checked
+         *     section. Display-only: never persisted, no `id:` line, no `sequence`.
+         */
+        ArtefactSectionCardFrame: {
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Index */
+            index: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Prose */
+            prose: string;
+            /** Title */
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.section_card";
+        };
+        /**
+         * ArtefactSectionClaimFrame
+         * @description Ephemeral: one of the writer's citations, bound to the draft (task 058).
+         *
+         *     The span `[start, end)` counts code points of the section draft, as
+         *     `artefact.section_revising` does. The citation is still to be checked;
+         *     `artefact.section_completed` brings the checked section. Display-only:
+         *     never persisted, no `id:` line, no `sequence`.
+         */
+        ArtefactSectionClaimFrame: {
+            /** End */
+            end: number;
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Index */
+            index: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Sources */
+            sources: components["schemas"]["SectionSourceRef"][];
+            /** Start */
+            start: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.section_claim";
+        };
+        /**
          * ArtefactSectionCompletedFrame
          * @description A live-artefact section's whole prose is available.
+         *
+         *     Args:
+         *         citations: The section's checked citations over `prose` (task 058,
+         *             round 7); empty when it has none, and on frames recorded before
+         *             the field existed.
+         *         claims: The section's checked claims with their verdicts (task 058,
+         *             round 13); empty on frames recorded before the field existed.
          */
         ArtefactSectionCompletedFrame: {
+            /** Citations */
+            citations?: components["schemas"]["SectionCitation"][];
+            /** Claims */
+            claims?: components["schemas"]["SectionClaim"][];
             /** Index */
             index: number;
             /**
@@ -1310,16 +2092,133 @@ export interface components {
             type: "artefact.section_completed";
         };
         /**
+         * ArtefactSectionDeltaFrame
+         * @description Ephemeral: prose appended to the section being written (task 058, N7).
+         *
+         *     Display-only. `artefact.section_completed` stays the record; a replay
+         *     carries no deltas. Never persisted, no `id:` line, no `sequence`.
+         *
+         *     Args:
+         *         index: The skeleton display index of the section.
+         *         text: The prose delta.
+         *         mode: `append` adds `text` to the client's draft; `replace` resets
+         *             the draft to `text` (a reconnect mid-section, or the streamed
+         *             turn's fallback resetting an abandoned draft with empty text).
+         */
+        ArtefactSectionDeltaFrame: {
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Index */
+            index: number;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "append" | "replace";
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Text */
+            text: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.section_delta";
+        };
+        /**
+         * ArtefactSectionRevisingFrame
+         * @description Ephemeral: the sentences the judge failed, sent before the repair (N7).
+         *
+         *     Display-only: the client blurs these spans of its draft until
+         *     `artefact.section_completed` brings the repaired prose. Never persisted,
+         *     no `id:` line, no `sequence`.
+         */
+        ArtefactSectionRevisingFrame: {
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Index */
+            index: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Spans */
+            spans: components["schemas"]["SectionSpan"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.section_revising";
+        };
+        /**
          * ArtefactSectionSkeleton
-         * @description One planned live-artefact section in presentation order.
+         * @description One planned live-artefact section.
+         *
+         *     Args:
+         *         index: The section's display identity (the key findings at 0 when the
+         *             report has them, the body sections next, then the case studies,
+         *             then the introduction). The index is identity, not reading
+         *             order: the page orders by `role`.
+         *         title: The section's title.
+         *         focus: What the section covers.
+         *         role: `key_findings`, `case_studies`, `body` or `intro`; skeletons
+         *             recorded before the field existed read as `body`.
          */
         ArtefactSectionSkeleton: {
             /** Focus */
             focus: string;
             /** Index */
             index: number;
+            /**
+             * Role
+             * @default body
+             * @enum {string}
+             */
+            role: "key_findings" | "case_studies" | "body" | "intro";
             /** Title */
             title: string;
+        };
+        /**
+         * ArtefactSectionSourcesFrame
+         * @description Ephemeral: the sources the writer has read so far for a section (task 058).
+         *
+         *     Each frame carries the whole set, in the order the sources were first
+         *     read; it replaces the one before. Display-only: never persisted, no
+         *     `id:` line, no `sequence`. A reconnect mid-section gets the current set.
+         */
+        ArtefactSectionSourcesFrame: {
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Index */
+            index: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Sources */
+            sources: components["schemas"]["SectionSourceRef"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.section_sources";
         };
         /**
          * ArtefactSectionStartedFrame
@@ -1360,6 +2259,43 @@ export interface components {
              * @enum {string}
              */
             type: "artefact.skeleton";
+        };
+        /**
+         * ArtefactSourceNoteFrame
+         * @description Ephemeral: one most-relevant-source note as it is written (task 058, round 8).
+         *
+         *     The notes arrive one at a time, in the order the saved report lists
+         *     them; each adds to the ones before. A reconnect gets the run's notes so
+         *     far. Display-only: never persisted, no `id:` line, no `sequence`.
+         *
+         *     Args:
+         *         source_id: The source's id in this task.
+         *         title: The source's title as the committed report's references name it.
+         *         note: The note's text.
+         */
+        ArtefactSourceNoteFrame: {
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Note */
+            note: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Source Id */
+            source_id: string;
+            /** Title */
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.source_note";
         };
         /**
          * AuthorityOut
@@ -1496,6 +2432,43 @@ export interface components {
             strength?: string | null;
             /** Title */
             title: string;
+        };
+        /**
+         * CharacteriseThemesFrame
+         * @description Ephemeral: the names a clustering found, before units are assigned (rounds 9, 11).
+         *
+         *     Sent once a clustering stage has found its names, in the order found:
+         *     `characterise` its themes (sources into themes), `longlist` its options
+         *     (sources into options; the residual pass sends the whole list again) and
+         *     `theme` its themes (options into themes). The saved result brings them
+         *     with their counts when the stage ends. A reconnect gets each stage's
+         *     latest again. Display-only: never persisted, no `id:` line, no
+         *     `sequence`.
+         */
+        CharacteriseThemesFrame: {
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "characterise" | "longlist" | "theme";
+            /** Themes */
+            themes: components["schemas"]["LiveTheme"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "characterise.themes";
         };
         /**
          * ChatTurnCreate
@@ -1813,9 +2786,6 @@ export interface components {
          *             citation resolves to one (joins to the sources/dossier surface).
          *         source_title: Cited source's title (envelope metadata).
          *         quote: The quoted span from the source.
-         *         grounding_tier: Optional grounding-judge tier label.
-         *         grounding_rationale: The grounding judge's recorded reason for the
-         *             tier, when one was persisted with the verdict.
          *         appraisal_label: Optional appraisal label.
          *         evidence_type: The cited document's classified evidence type — the
          *             input the appraisal rubric scores from.
@@ -1832,10 +2802,6 @@ export interface components {
             citation_id: string;
             /** Evidence Type */
             evidence_type?: string | null;
-            /** Grounding Rationale */
-            grounding_rationale?: string | null;
-            /** Grounding Tier */
-            grounding_tier?: string | null;
             /** N */
             n: number;
             /** Quote */
@@ -1860,6 +2826,29 @@ export interface components {
             section_title: string;
         };
         /**
+         * CitedSourceOut
+         * @description One source a Task Agent line cites with ``[n]`` (task 054: the sense check).
+         *
+         *     Args:
+         *         n: The marker's number.
+         *         title: The document's title.
+         *         url: Where to read it, when known.
+         *         year: Its publication year, when known.
+         *         quote: The passage that supports the line, checked against the document.
+         */
+        CitedSourceOut: {
+            /** N */
+            n: number;
+            /** Quote */
+            quote: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url?: string | null;
+            /** Year */
+            year?: string | null;
+        };
+        /**
          * ClaimOut
          * @description One span-anchored claim annotation within a block.
          *
@@ -1870,6 +2859,9 @@ export interface components {
          *         span: Character offsets `[start, end]` into the block's `prose`, or
          *             `None`.
          *         citations: Citations attached to this claim (citation-type only).
+         *         grounding_tier: The grounding judge's verdict on the claim, when it
+         *             was checked (task 058, round 13: the claim's, not each citation's).
+         *         grounding_rationale: The judge's recorded reason for the verdict.
          *         theme: Named themes or groups referenced by a theme claim.
          */
         ClaimOut: {
@@ -1886,6 +2878,10 @@ export interface components {
              */
             claim_type: "citation" | "gap" | "reasoning" | "pattern" | "theme" | "unspanned_assertion";
             gap?: components["schemas"]["GapOut"] | null;
+            /** Grounding Rationale */
+            grounding_rationale?: string | null;
+            /** Grounding Tier */
+            grounding_tier?: string | null;
             /** Span */
             span?: [
                 number,
@@ -2032,6 +3028,32 @@ export interface components {
             title: string;
         };
         /**
+         * ConversationTitledEvent
+         * @description The chat's title written from its first message (task 058, round 14).
+         *
+         *     Sent once, while the first turn's stream is open, when the ``chat_title``
+         *     step's line replaces the message's cut; never terminal.
+         *
+         *     Args:
+         *         conversation_id: The chat.
+         *         title: Its new title.
+         */
+        ConversationTitledEvent: {
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /** Title */
+            title: string;
+            /**
+             * Type
+             * @default conversation.titled
+             * @constant
+             */
+            type: "conversation.titled";
+        };
+        /**
          * ConversationUpdate
          * @description Partial update for an existing chat conversation.
          *
@@ -2080,11 +3102,15 @@ export interface components {
          * @description Post-run source counts for one public backend.
          *
          *     ``relevant`` is deliberately task-wide in C.1; per-query relevance
-         *     was not recorded and is therefore absent.
+         *     was not recorded and is therefore absent. ``queries`` are the written
+         *     searches (topic and semantic); ``passes`` the citations and lookup passes
+         *     in the order they ran (round 11). ``results`` counts both.
          */
         CoverageBackendDetailOut: {
             /** Backend */
             backend: string;
+            /** Passes */
+            passes?: components["schemas"]["CoveragePassOut"][];
             /** Queries */
             queries?: components["schemas"]["CoverageQueryOut"][];
             /** Relevant */
@@ -2113,12 +3139,49 @@ export interface components {
             sentence: string;
         };
         /**
+         * CoveragePassOut
+         * @description One citations or lookup pass of a finished search (task 058, round 11).
+         *
+         *     Args:
+         *         pass_: `citations` (the works citing the best-connected sources) or
+         *             `lookup` (cited works or documents fetched by id). Serialised as
+         *             `pass`.
+         *         query: The pass in words, as a finished search names it: "Followed
+         *             citations from 40 sources", "Looked up 120 cited works",
+         *             "Looked up 30 cited documents". Never its ids.
+         *         results: The records the pass's calls returned.
+         *         query_id: The pass's key for the sources filter
+         *             (`GET /tasks/{id}/evidence?query=`; task 058, round 12): the
+         *             records every call of the pass returned.
+         */
+        CoveragePassOut: {
+            /**
+             * Pass
+             * @enum {string}
+             */
+            pass: "citations" | "lookup";
+            /** Query */
+            query: string;
+            /** Query Id */
+            query_id: number;
+            /** Results */
+            results: number;
+        };
+        /**
          * CoverageQueryOut
          * @description One completed query and its result count for a public backend.
+         *
+         *     Args:
+         *         query: The query as written.
+         *         results: The records the call returned.
+         *         query_id: The query's key for the sources filter
+         *             (`GET /tasks/{id}/evidence?query=`; task 058, round 12).
          */
         CoverageQueryOut: {
             /** Query */
             query: string;
+            /** Query Id */
+            query_id: number;
             /** Results */
             results: number;
         };
@@ -2164,8 +3227,17 @@ export interface components {
          *         capability_run_id: The walk the underlying event belongs to, when
          *             the event carries a run (task 045) — lets the thread tell a
          *             hidden child walk's lines from its parent's. Null otherwise.
+         *         actor_display: The display name of the person who acted (task 058,
+         *             round 10), never an email; null for Policy Atlas's own acts. The
+         *             summary already names them ("You" for the reader).
+         *         actor_is_viewer: Whether the person who acted is the reader; null
+         *             when no person acted (Policy Atlas's acts, a step's line).
          */
         DecisionOut: {
+            /** Actor Display */
+            actor_display?: string | null;
+            /** Actor Is Viewer */
+            actor_is_viewer?: boolean | null;
             /** Capability Run Id */
             capability_run_id?: string | null;
             /** Decided By */
@@ -2235,6 +3307,11 @@ export interface components {
          *         appraisal_tier: Optional appraisal tier label.
          *         cited: Whether this source is cited in the artefact.
          *         url: Optional source URL.
+         *         full_text_url: The address the full text was collected from (an
+         *             http(s) link a reader can open), or `None` when no full text was
+         *             collected.
+         *         full_text_status: Where the full text's fetch stands: `queued`
+         *             while the ingest is pending (task 058, round 14).
          */
         EvidenceItemOut: {
             /** Abstract */
@@ -2247,8 +3324,18 @@ export interface components {
             cited: boolean;
             /** Classification Reason */
             classification_reason?: string | null;
+            /** Country */
+            country?: string | null;
             /** Evidence Type */
             evidence_type?: string | null;
+            /**
+             * Full Text Status
+             * @default not_attempted
+             * @enum {string}
+             */
+            full_text_status: "not_attempted" | "queued" | "ingested" | "fetch_failed" | "parse_failed";
+            /** Full Text Url */
+            full_text_url?: string | null;
             /**
              * Origin
              * @enum {string}
@@ -2771,6 +3858,14 @@ export interface components {
          *         started_at: When that run started executing.
          *         ended_at: When that run reached a terminal status, or `None` while
          *             still running or paused.
+         *         paused_seconds: On `TaskOut.active_run` only: seconds that run spent
+         *             in finished pauses at check-ins; its timer leaves them out.
+         *         stage: On `TaskOut.active_run` only: the public stage the task's
+         *             parentless active walk last started, so a scoping task shows the
+         *             parent's stage rather than a child's (task 058, N15). `None` before
+         *             the walk starts a stage, and on every other use of this shape.
+         *         stage_label: The server's label for `stage` (the stage vocabulary),
+         *             or `None` with it.
          */
         LatestRun: {
             /**
@@ -2780,6 +3875,12 @@ export interface components {
             capability_run_id: string;
             /** Ended At */
             ended_at?: string | null;
+            /** Paused Seconds */
+            paused_seconds?: number;
+            /** Stage */
+            stage?: ("acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist" | "toc_draft" | "toc_read" | "toc_item_searches" | "toc_select" | "toc_discover" | "toc_merge" | "toc_search_new" | "toc_new_link_searches" | "toc_judge" | "toc_search_again" | "toc_retry_searches" | "toc_figures" | "toc_choose" | "toc_summarise" | "toc_report") | null;
+            /** Stage Label */
+            stage_label?: string | null;
             /**
              * Started At
              * Format: date-time
@@ -2821,6 +3922,20 @@ export interface components {
             definition: string;
             /** Key */
             key: string;
+        };
+        /**
+         * LiveTheme
+         * @description One theme as the characterise stage found it (task 058, round 9).
+         *
+         *     Args:
+         *         label: The theme's name.
+         *         description: Its one-line description, or null.
+         */
+        LiveTheme: {
+            /** Description */
+            description: string | null;
+            /** Label */
+            label: string;
         };
         /**
          * LonglistCountsOut
@@ -2873,6 +3988,17 @@ export interface components {
          *             earlier version can show that version's wording (task 046).
          *         taxonomy_version: The lever-type list version.
          *         depth_label: The depth label every longlist surface carries.
+         *         shortlist: The latest shortlist proposal (task 055).
+         *         plan_inputs_changed: The current approved plan differs from the plan
+         *             the longlist was built from in a field the longlist reads, so a
+         *             rebuild would give a different longlist. A change to the risk
+         *             appetite alone leaves it false (task 055, A6).
+         *         question: The current approved plan's question (the page heading).
+         *         where: The current approved plan's setting, e.g. "England".
+         *         risk_appetite: The current approved plan's risk appetite.
+         *
+         *     The last three repeat plan fields so a public link, which cannot read
+         *     the owner-only plan, shows the same heading and words as the owner.
          */
         LonglistOut: {
             /** Capability Run Id */
@@ -2894,19 +4020,31 @@ export interface components {
             lever_types?: string[];
             /** Options */
             options?: components["schemas"]["OptionSummaryOut"][];
+            /**
+             * Plan Inputs Changed
+             * @default false
+             */
+            plan_inputs_changed: boolean;
             /** Plan Version */
             plan_version: number;
+            /** Question */
+            question?: string | null;
+            /** Risk Appetite */
+            risk_appetite?: ("tried_only" | "mostly_tried" | "open_to_untested") | null;
             /**
              * Run Id
              * Format: uuid
              */
             run_id: string;
+            shortlist: components["schemas"]["ShortlistOut"];
             /** Taxonomy Version */
             taxonomy_version?: string | null;
             /** Themes */
             themes?: components["schemas"]["LonglistThemeOut"][];
             /** Unthemed Option Ids */
             unthemed_option_ids?: string[];
+            /** Where */
+            where?: string | null;
         };
         /**
          * LonglistThemeOut
@@ -2917,10 +4055,18 @@ export interface components {
          *         name: Theme name.
          *         description: One-line description.
          *         option_ids: The theme's options, in display order.
+         *         document_count: The theme's distinct documents across its options,
+         *             each counted once (task 058, round 14): the rows
+         *             `GET /tasks/{id}/evidence?theme=` lists.
          */
         LonglistThemeOut: {
             /** Description */
             description: string;
+            /**
+             * Document Count
+             * @default 0
+             */
+            document_count: number;
             /** Name */
             name: string;
             /** Option Ids */
@@ -2930,6 +4076,45 @@ export interface components {
              * Format: uuid
              */
             theme_id: string;
+        };
+        /**
+         * MaturityOut
+         * @description How well tried an option is, read from its coverage (task 055, item 7).
+         *
+         *     Args:
+         *         rung: `proposal_only` (no document names it) · `described` (documents
+         *             describe or recommend it) · `evaluated` (a document measured an
+         *             effect) · `reviewed` (a systematic review or meta-analysis did).
+         *         design_mix: The evaluating documents' evidence types as text, most
+         *             frequent first; empty when none evaluated it.
+         *         none_in_your_setting: It was evaluated, but not in the plan's Where
+         *             country.
+         *         latest_evaluation_year: The newest evaluating document's year.
+         *         stale: The newest evaluation is more than five years old.
+         */
+        MaturityOut: {
+            /**
+             * Design Mix
+             * @default
+             */
+            design_mix: string;
+            /** Latest Evaluation Year */
+            latest_evaluation_year?: number | null;
+            /**
+             * None In Your Setting
+             * @default false
+             */
+            none_in_your_setting: boolean;
+            /**
+             * Rung
+             * @enum {string}
+             */
+            rung: "proposal_only" | "described" | "evaluated" | "reviewed";
+            /**
+             * Stale
+             * @default false
+             */
+            stale: boolean;
         };
         /**
          * MeOut
@@ -3043,6 +4228,10 @@ export interface components {
          *         evidence_type: Its evidence type, when classified.
          *         tier: Its quality tier label, when appraised.
          *         year: Its publication year, when the metadata has one.
+         *         authors: Its authors' names, in order, as the reference line names
+         *             them (task 058, round 12); empty when unknown.
+         *         venue: Where it was published, as the evidence row's `venue`
+         *             (task 058, round 12), or `None`.
          *         place: Where it was studied: its where-tried top level.
          *         programme_name: The programme name of its first member record under
          *             the option (by role order); `null` when none is given or the
@@ -3057,6 +4246,8 @@ export interface components {
          *             a linked finding).
          */
         OptionDocumentOut: {
+            /** Authors */
+            authors?: string[];
             /** Evidence Type */
             evidence_type?: string | null;
             /** Measured */
@@ -3085,6 +4276,8 @@ export interface components {
             title: string;
             /** Tried On Kind */
             tried_on_kind?: string | null;
+            /** Venue */
+            venue?: string | null;
             /** Year */
             year?: number | null;
         };
@@ -3172,6 +4365,7 @@ export interface components {
             lever_none_fits_reason?: string | null;
             /** Lever Reason */
             lever_reason?: string | null;
+            maturity?: components["schemas"]["MaturityOut"] | null;
             /** Name */
             name: string;
             /**
@@ -3219,6 +4413,7 @@ export interface components {
             search_pending: boolean;
             /** Secondary Lever Types */
             secondary_lever_types?: string[];
+            shortlist?: components["schemas"]["ShortlistStateOut"] | null;
             /**
              * State
              * @enum {string}
@@ -3237,12 +4432,63 @@ export interface components {
          *         lines: The eight lines, in display order.
          *         settings: The delivery setting, main first, then the second; empty
          *             when none is named (R41).
+         *         acts_on: Whom the option acts on directly, the model's words in its
+         *             order (task 058, round 12); empty for a whole-system instrument and
+         *             for a profile written before round 12.
          */
         OptionProfileOut: {
+            /** Acts On */
+            acts_on?: string[];
             /** Lines */
             lines: components["schemas"]["ProfileLineOut"][];
             /** Settings */
             settings: string[];
+        };
+        /**
+         * OptionProgressOut
+         * @description One option row while the longlist is being built (task 058, N22).
+         *
+         *     Args:
+         *         option_id: The option's identity.
+         *         name: Its name.
+         *         description: Its one-line description.
+         *         origin: Where it came from.
+         *         state: Included or excluded.
+         *         merged_into_option_id: The kept option a duplicate was folded into,
+         *             or `None`.
+         *         search_status: Where the option's own search stands.
+         *         found: How many sources that search found (its acquire count), or
+         *             `None` until the search has finished acquiring.
+         */
+        OptionProgressOut: {
+            /** Description */
+            description: string;
+            /** Found */
+            found?: number | null;
+            /** Merged Into Option Id */
+            merged_into_option_id?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Option Id
+             * Format: uuid
+             */
+            option_id: string;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "clustered" | "suggested" | "from_evidence_search" | "added_by_you";
+            /**
+             * Search Status
+             * @enum {string}
+             */
+            search_status: "queued" | "searching" | "searched" | "failed";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "included" | "excluded";
         };
         /**
          * OptionRecordOut
@@ -3366,6 +4612,10 @@ export interface components {
          *             document measured (R76).
          *         outcomes_total: The outcome count of the plan the longlist was built
          *             from (R76).
+         *         shortlist: Its place on the shortlist (task 055); `null` when it
+         *             holds none.
+         *         maturity: Its maturity rung (task 055); `null` for a longlist
+         *             written before the rung existed.
          */
         OptionSummaryOut: {
             /** Also Found As */
@@ -3396,6 +4646,7 @@ export interface components {
             lever_none_fits_reason?: string | null;
             /** Lever Reason */
             lever_reason?: string | null;
+            maturity?: components["schemas"]["MaturityOut"] | null;
             /** Name */
             name: string;
             /**
@@ -3437,6 +4688,7 @@ export interface components {
             search_pending: boolean;
             /** Secondary Lever Types */
             secondary_lever_types?: string[];
+            shortlist?: components["schemas"]["ShortlistStateOut"] | null;
             /**
              * State
              * @enum {string}
@@ -3444,6 +4696,20 @@ export interface components {
             state: "included" | "excluded";
             /** Taxonomy Version */
             taxonomy_version?: string | null;
+        };
+        /**
+         * OptionsOut
+         * @description The `options` read: every option row of the task, with its search (N22).
+         *
+         *     Served from the end of the suggest stage, before the longlist exists; an
+         *     empty list before suggest has written any option.
+         *
+         *     Args:
+         *         options: The task's options, oldest first.
+         */
+        OptionsOut: {
+            /** Options */
+            options?: components["schemas"]["OptionProgressOut"][];
         };
         /**
          * OrganisationRef
@@ -3508,8 +4774,16 @@ export interface components {
          *         page_size: Number of items requested per page (server-capped at
          *             `PAGE_SIZE_MAX`).
          *         total_items: Total number of items across all pages.
+         *         has_more: Whether a later page holds more items (task 058, round 10):
+         *             ``page * page_size < total_items``. Derived, never set by a route,
+         *             so a "Show more" control needs no arithmetic of its own.
          */
         PageMeta: {
+            /**
+             * Has More
+             * @default false
+             */
+            has_more: boolean;
             /** Page */
             page: number;
             /** Page Size */
@@ -3651,7 +4925,8 @@ export interface components {
          * @description One place of an option's evaluating documents and its sentence (task 046, amendment 4, R80).
          *
          *     Args:
-         *         place: The place: a country's short English name, or "No single place".
+         *         place: The place: a country's short English name, or after the
+         *             countries "Several countries", "Place not stated" or "Other".
          *         sentence: What the evaluations in that place are.
          *         generated: The sentence was generated and passed the trace check;
          *             ``false`` for the code-built template.
@@ -3800,12 +5075,15 @@ export interface components {
          *         plan: The current Evidence search plan, or null on a scoping task.
          *         scoping: The current options-scoping plan, or null on an Evidence
          *             search task.
+         *         toc: The current theory-of-change plan (task 054), or null.
          *         capability: Which of the two the task is, so a reader never has to
          *             infer it from which field is null.
          *         version: Plan row version.
          *         status: Plan status (e.g. `draft`, `approved`).
-         *         opened_run: The longlist walk `POST .../plan/confirm-baseline` opened,
-         *             on that route's response. Absent on every other plan read.
+         *         opened_run: The walk a plan write opened: the longlist walk
+         *             `POST .../plan/confirm-baseline` opened, or the shortlist walk a
+         *             `PATCH .../plan` that changed the risk appetite opened (task 055).
+         *             Null on every other plan read, and when the opener was refused.
          */
         PlanOut: {
             /**
@@ -3818,6 +5096,7 @@ export interface components {
             scoping?: components["schemas"]["ScopingPlanDraft"] | null;
             /** Status */
             status: string;
+            toc?: components["schemas"]["TocPlanDraft"] | null;
             /** Version */
             version: number;
         };
@@ -3845,6 +5124,8 @@ export interface components {
          *         scoping: Options-scoping edits. Mutually exclusive with every field
          *             above: an Evidence search field on a scoping task, or `scoping` on
          *             an Evidence search task, is a 422.
+         *         toc: Theory-of-change edits (task 054), the same way: only on a
+         *             theory-of-change task, and alone.
          */
         PlanPatchIn: {
             /** Analysis Depth */
@@ -3866,6 +5147,7 @@ export interface components {
             search_effort?: ("rapid" | "standard" | "deep") | null;
             /** Steering Mode */
             steering_mode?: ("frequent" | "moderate" | "minimal" | "unattended") | null;
+            toc?: components["schemas"]["TocPlanPatch"] | null;
         };
         /**
          * PlanStep
@@ -3876,17 +5158,22 @@ export interface components {
          *         blurb: Longer user-visible step description (presentation; may
          *             change).
          *         stage: Composed-chain stage name the step corresponds to.
+         *         row: The card row the step belongs to (task 058, N17). Steps that
+         *             share a row key render as one row, with the row's label; the
+         *             client groups by this key and decides nothing about rows.
          */
         PlanStep: {
             /** Blurb */
             blurb: string;
             /** Label */
             label: string;
+            /** Row */
+            row: string;
             /**
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist" | "toc_draft" | "toc_read" | "toc_item_searches" | "toc_select" | "toc_discover" | "toc_merge" | "toc_search_new" | "toc_new_link_searches" | "toc_judge" | "toc_search_again" | "toc_retry_searches" | "toc_figures" | "toc_choose" | "toc_summarise" | "toc_report";
         };
         /**
          * PlanUpdatedFrame
@@ -3904,6 +5191,8 @@ export interface components {
             scoping: components["schemas"]["ScopingPlanDraft"] | null;
             /** Sequence */
             sequence: number;
+            /** @default null */
+            toc: components["schemas"]["TocPlanDraft"] | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -3929,7 +5218,7 @@ export interface components {
              * Key
              * @enum {string}
              */
-            key: "cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "who_decides" | "dependencies" | "coordination" | "delivery_complexity";
+            key: "cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "who_decides" | "dependencies" | "coordination" | "delivery_complexity" | "potential_impact";
             /** Mark */
             mark?: ("less" | "more") | null;
             /** Sentence */
@@ -3948,6 +5237,58 @@ export interface components {
              * @constant
              */
             type: "progress";
+        };
+        /**
+         * ProjectArchiveOut
+         * @description A project just archived (task 058, round 14).
+         *
+         *     Args:
+         *         archived_task_count: How many of its tasks this archive archived: the
+         *             caller's own active tasks that are in no other active project.
+         */
+        ProjectArchiveOut: {
+            /** Archived At */
+            archived_at?: string | null;
+            /**
+             * Archived Task Count
+             * @default 0
+             */
+            archived_task_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description?: string | null;
+            /** Is Owner */
+            is_owner: boolean;
+            /**
+             * Last Activity At
+             * Format: date-time
+             */
+            last_activity_at: string;
+            /** Name */
+            name: string;
+            /** Owner Display */
+            owner_display: string | null;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /**
+             * Solo Task Count
+             * @default 0
+             */
+            solo_task_count: number;
+            /** Task Count */
+            task_count: number;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "org" | "private";
         };
         /**
          * ProjectCreate
@@ -3995,8 +5336,19 @@ export interface components {
          *             name, or a rendering derived from their subject when they have no
          *             identity row yet. **Never an email** (contract § 3b). `None` when
          *             the row has no owner at all.
+         *         archived_at: When the owner archived the project, or `None` while it
+         *             is in use (task 058, round 11). Archiving leaves its tasks as
+         *             they are.
+         *         solo_task_count: The caller's own active tasks here that are in no
+         *             other active project: what archiving the project archives with it
+         *             (task 058, round 14).
+         *         last_activity_at: The newest of `created_at` and the `updated_at` of
+         *             the members `task_count` counts (task 058, round 12). `GET
+         *             /projects` lists newest activity first by it.
          */
         ProjectOut: {
+            /** Archived At */
+            archived_at?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -4006,6 +5358,11 @@ export interface components {
             description?: string | null;
             /** Is Owner */
             is_owner: boolean;
+            /**
+             * Last Activity At
+             * Format: date-time
+             */
+            last_activity_at: string;
             /** Name */
             name: string;
             /** Owner Display */
@@ -4015,6 +5372,11 @@ export interface components {
              * Format: uuid
              */
             project_id: string;
+            /**
+             * Solo Task Count
+             * @default 0
+             */
+            solo_task_count: number;
             /** Task Count */
             task_count: number;
             /**
@@ -4135,6 +5497,9 @@ export interface components {
          *         started_at: When the run started executing.
          *         ended_at: When the run reached a terminal status, or `None` while
          *             still running or paused.
+         *         paused_seconds: Seconds the run spent in finished pauses at
+         *             check-ins, on the list and the one-run reads. The run's working
+         *             time is its span from start to end less this.
          *         artefact_id: The artefact this walk wrote, or `None` when it wrote
          *             none (it has not reached synthesise, or ended before it). A
          *             scoping walk that carries one produced a baseline, whatever its
@@ -4143,6 +5508,13 @@ export interface components {
          *             walk's option search), or `None` for a parentless walk (task 045).
          *         purpose: The walk's intent-record purpose (`baseline`, `longlist`,
          *             `targeted`, ...), or `None` for an Evidence search walk.
+         *         stages: The walk's own steps in the order started (task 058, round
+         *             11), on the list and the one-run reads; empty elsewhere.
+         *         toc_walk: A theory-of-change walk's kind, or `None` for any other
+         *             walk (task 054, S3).
+         *         follows_capability_run_id: For a check the server started by itself
+         *             after a draft, that draft walk's id; `None` otherwise (task 054,
+         *             S3).
          */
         RunOut: {
             /** Artefact Id */
@@ -4154,8 +5526,12 @@ export interface components {
             capability_run_id: string;
             /** Ended At */
             ended_at?: string | null;
+            /** Follows Capability Run Id */
+            follows_capability_run_id?: string | null;
             /** Parent Capability Run Id */
             parent_capability_run_id?: string | null;
+            /** Paused Seconds */
+            paused_seconds?: number;
             /**
              * Plan Id
              * Format: uuid
@@ -4165,6 +5541,8 @@ export interface components {
             plan_version: number;
             /** Purpose */
             purpose?: string | null;
+            /** Stages */
+            stages?: components["schemas"]["RunStageOut"][];
             /**
              * Started At
              * Format: date-time
@@ -4180,6 +5558,56 @@ export interface components {
              * Format: uuid
              */
             task_id: string;
+            /** Toc Walk */
+            toc_walk?: ("draft" | "read" | "check" | "report_update") | null;
+        };
+        /**
+         * RunStageOut
+         * @description One step of a walk, as its stage frames told it (task 058, round 11).
+         *
+         *     The walk's own steps only: an option search's steps belong to that child
+         *     walk, not to the longlist walk that dispatched it. The same words the
+         *     `stage.started` and `stage.completed` frames carry, so a walk that has
+         *     ended renders its rows as the live one did.
+         *
+         *     Args:
+         *         stage: The public stage key.
+         *         label: The row's label.
+         *         status: `started` (no end recorded), `completed`, `failed` or
+         *             `skipped`.
+         *         started_at: When the step started, or `None` when only its end is
+         *             recorded.
+         *         ended_at: When it ended, or `None` while started.
+         *         summary: The done row's scalar counts (`stage.completed.summary`),
+         *             or `{"reason": ...}` for a failed or skipped step.
+         *         counts: The counts the done row shows, each with its noun.
+         *         seconds: The step's wall time, when recorded.
+         */
+        RunStageOut: {
+            /** Counts */
+            counts?: components["schemas"]["StageCount"][];
+            /** Ended At */
+            ended_at?: string | null;
+            /** Label */
+            label: string;
+            /** Seconds */
+            seconds?: number | null;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist" | "toc_draft" | "toc_read" | "toc_item_searches" | "toc_select" | "toc_discover" | "toc_merge" | "toc_search_new" | "toc_new_link_searches" | "toc_judge" | "toc_search_again" | "toc_retry_searches" | "toc_figures" | "toc_choose" | "toc_summarise" | "toc_report";
+            /** Started At */
+            started_at?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "started" | "completed" | "failed" | "skipped";
+            /** Summary */
+            summary?: {
+                [key: string]: number | string;
+            };
         };
         /**
          * RunStatusFrame
@@ -4282,7 +5710,7 @@ export interface components {
              * Aspect
              * @default null
              */
-            aspect: ("cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "who_decides" | "dependencies" | "coordination" | "delivery_complexity" | "transferability") | null;
+            aspect: ("cost" | "time_to_set_up" | "time_to_effect" | "workforce" | "who_decides" | "dependencies" | "coordination" | "delivery_complexity" | "potential_impact" | "transferability") | null;
             /**
              * Checked At
              * @enum {string}
@@ -4361,6 +5789,8 @@ export interface components {
          *         steps: The three display steps, in order.
          *         time_band: The coarse compute band for the baseline.
          *         baseline_confirmed: The confirm-baseline record, once written.
+         *         risk_appetite: How far the shortlist may reach beyond options tried
+         *             elsewhere (task 055); set on every approved plan.
          *         ready: Whether the draft has validated into an executable plan.
          */
         ScopingPlanDraft: {
@@ -4408,6 +5838,11 @@ export interface components {
              * @default false
              */
             ready: boolean;
+            /**
+             * Risk Appetite
+             * @default null
+             */
+            risk_appetite: ("tried_only" | "mostly_tried" | "open_to_untested") | null;
             /**
              * Steer Point Defaults
              * @default null
@@ -4465,6 +5900,9 @@ export interface components {
          *         steering_mode: Replacement check-in cadence.
          *         steer_point_defaults: Replacement standing instructions.
          *         assumptions: Replacement assumptions.
+         *         risk_appetite: Replacement risk appetite (task 055). The longlist
+         *             does not read it, so a patch carrying only this field never makes
+         *             the longlist out of date.
          */
         ScopingPlanPatch: {
             /** Assumptions */
@@ -4476,6 +5914,8 @@ export interface components {
             intended_change?: components["schemas"]["TaggedOut"] | null;
             /** Outcomes */
             outcomes?: components["schemas"]["TaggedOut"][] | null;
+            /** Risk Appetite */
+            risk_appetite?: ("tried_only" | "mostly_tried" | "open_to_untested") | null;
             /** Steer Point Defaults */
             steer_point_defaults?: components["schemas"]["ScopingSteerPointDefaultOut"][] | null;
             /** Steering Mode */
@@ -4503,6 +5943,152 @@ export interface components {
             action: "proceed_flag";
             /** Steer Point */
             steer_point: string;
+        };
+        /**
+         * SearchQueryFrame
+         * @description Ephemeral: one search query as it goes out, and again when it comes back (round 9).
+         *
+         *     A query is identified by `(backend, query, kind)`: the frame sent when it
+         *     comes back (with `results`) replaces the one sent when it went out
+         *     (`results` null). A reconnect gets the run's queries so far, each in its
+         *     latest state. Display-only: never persisted, no `id:` line, no
+         *     `sequence`; the saved search record lists the queries after the stage.
+         *
+         *     Args:
+         *         backend: The database searched, `openalex` or `overton`.
+         *         query: The query text for a `topic` or `semantic` query; for a
+         *             `citations` or `lookup` pass a short description ("Following
+         *             citations from 50 sources"), never the ids.
+         *         kind: `topic`, `semantic`, `citations` or `lookup`.
+         *         results: Null while the query is out; the number of records it
+         *             returned once it is back.
+         */
+        SearchQueryFrame: {
+            /** Backend */
+            backend: string;
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "topic" | "semantic" | "citations" | "lookup";
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Query */
+            query: string;
+            /** Results */
+            results: number | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "search.query";
+        };
+        /**
+         * SectionCitation
+         * @description One checked citation on a completed live section (task 058, round 7).
+         *
+         *     One entry per citation row of the section's judged claims, so a claim
+         *     citing two sources gives two entries over the same span.
+         *
+         *     Args:
+         *         start: First code point of the cited claim's text in `prose`.
+         *         end: One past its last code point.
+         *         n: The report-wide reference number, numbered as the committed
+         *             report numbers its references (by source, in order of first
+         *             citation).
+         *         source_id: The source's id in this task, or `null` when the cited
+         *             text is not one of the task's sources.
+         *         title: The source's title as the committed report's references name it.
+         *         citation_id: The saved citation's id, the one the committed report's
+         *             citation carries, so the page can ask for its chunk context while
+         *             the run is live (round 8); `null` on frames recorded before the
+         *             field existed.
+         *         claim_id: The saved claim's id, the one the committed report's claim
+         *             carries; `null` on older frames.
+         *         chunk_id: The cited chunk. The citation rows commit with the whole
+         *             report, so `citation_id` cannot be read until then; the chunks
+         *             are committed long before, so the page reads the passage by chunk
+         *             and quote (`GET .../chunks/{chunk_id}/context?quote=`) while the
+         *             report is still being written (owner, 2026-11-09). `null` on
+         *             frames recorded before the field existed.
+         *         quote: The checked quote the citation rests on; empty on older frames.
+         */
+        SectionCitation: {
+            /**
+             * Chunk Id
+             * @default null
+             */
+            chunk_id: string | null;
+            /**
+             * Citation Id
+             * @default null
+             */
+            citation_id: string | null;
+            /**
+             * Claim Id
+             * @default null
+             */
+            claim_id: string | null;
+            /** End */
+            end: number;
+            /** N */
+            n: number;
+            /**
+             * Quote
+             * @default
+             */
+            quote: string;
+            /** Source Id */
+            source_id: string | null;
+            /** Start */
+            start: number;
+            /** Title */
+            title: string;
+        };
+        /**
+         * SectionClaim
+         * @description One checked claim on a completed live section (task 058, round 13).
+         *
+         *     The checker's verdict belongs to the claim, not to each of its citations.
+         *
+         *     Args:
+         *         claim_id: The saved claim's id, the one the committed report's claim
+         *             carries; `null` without a saved row to match.
+         *         start: First code point of the claim's text in `prose`.
+         *         end: One past its last code point.
+         *         tier: The checker's verdict (`tier_1` ... `tier_4`,
+         *             `unsupported_mis_cited`), or `null` when it was not checked.
+         *         rationale: The checker's reason for the verdict, when recorded.
+         */
+        SectionClaim: {
+            /**
+             * Claim Id
+             * @default null
+             */
+            claim_id: string | null;
+            /** End */
+            end: number;
+            /**
+             * Rationale
+             * @default null
+             */
+            rationale: string | null;
+            /** Start */
+            start: number;
+            /**
+             * Tier
+             * @default null
+             */
+            tier: string | null;
         };
         /**
          * SectionOut
@@ -4541,6 +6127,124 @@ export interface components {
             title: string;
         };
         /**
+         * SectionSourceRef
+         * @description One source as the page names it while a section is written.
+         *
+         *     Args:
+         *         source_id: The source's id in this task (display identity only).
+         *         title: The source's short name: first author or publisher and year
+         *             when both are known, else its title, else where it came from.
+         */
+        SectionSourceRef: {
+            /** Source Id */
+            source_id: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * SectionSpan
+         * @description A code-point span `[start, end)` of the section draft.
+         */
+        SectionSpan: {
+            /** End */
+            end: number;
+            /** Start */
+            start: number;
+        };
+        /**
+         * ShortlistOut
+         * @description The latest shortlist proposal on a longlist (task 055).
+         *
+         *     Args:
+         *         note: The proposal's short "what this leaves out" note; `null` before
+         *             the first proposal.
+         *         provenance: How the proposal was made (prompt version, model,
+         *             appetite, plan version, …); empty before the first proposal.
+         *         places_target: How many places a proposal fills to.
+         *         stale: The proposal does not match the plan's current risk appetite,
+         *             or a built longlist has no proposal yet. The view then asks the
+         *             user to press Suggest more to re-propose.
+         *         note_stale: The note was written against other places than the
+         *             shortlist now holds (task 058, round 14): `POST
+         *             /tasks/{id}/shortlist/note` rewrites it. `false` with no note.
+         */
+        ShortlistOut: {
+            /** Note */
+            note?: string | null;
+            /**
+             * Note Stale
+             * @default false
+             */
+            note_stale: boolean;
+            /**
+             * Places Target
+             * @default 5
+             */
+            places_target: number;
+            /** Provenance */
+            provenance?: {
+                [key: string]: unknown;
+            };
+            /** Stale */
+            stale: boolean;
+        };
+        /**
+         * ShortlistStateOut
+         * @description An option's place on the shortlist (task 055).
+         *
+         *     Args:
+         *         state: `proposed` (Policy Atlas's pick), `added_by_you`, or
+         *             `set_aside` (a pick the user removed).
+         *         reason: The one-line reason for a Policy Atlas pick; `null` otherwise.
+         */
+        ShortlistStateOut: {
+            /** Reason */
+            reason?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "proposed" | "added_by_you" | "set_aside";
+        };
+        /**
+         * SketchBox
+         * @description One box of the theory of change draft as the model wrote it (task 054, S12).
+         *
+         *     Args:
+         *         key: The model's key for the box in this draft ("b1", "b2", ...), not a
+         *             stored id; connections name their ends by it.
+         *         layer: The box's column on the canvas.
+         *         text: The box's words.
+         */
+        SketchBox: {
+            /** Key */
+            key: string;
+            /**
+             * Layer
+             * @enum {string}
+             */
+            layer: "input" | "output" | "outcome_short" | "outcome_long" | "impact" | "failure_outcome";
+            /** Text */
+            text: string;
+        };
+        /**
+         * SketchLink
+         * @description One connection of the draft as the model wrote it (task 054, S12).
+         *
+         *     Args:
+         *         key: The model's key for the connection ("l1", ...).
+         *         source: The draft key of the box it starts from.
+         *         target: The draft key of the box it leads to.
+         */
+        SketchLink: {
+            /** Key */
+            key: string;
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
+        };
+        /**
          * SourceDossierOut
          * @description The optional source dossier, including provenance and latest citations.
          */
@@ -4561,10 +6265,20 @@ export interface components {
             cited_in?: components["schemas"]["CitedInOut"][];
             /** Classification Reason */
             classification_reason?: string | null;
+            /** Country */
+            country?: string | null;
             /** Doi */
             doi?: string | null;
             /** Evidence Type */
             evidence_type?: string | null;
+            /**
+             * Full Text Status
+             * @default not_attempted
+             * @enum {string}
+             */
+            full_text_status: "not_attempted" | "queued" | "ingested" | "fetch_failed" | "parse_failed";
+            /** Full Text Url */
+            full_text_url?: string | null;
             /** Fwci */
             fwci?: number | null;
             /** Language */
@@ -4649,10 +6363,15 @@ export interface components {
             /** Tag Type */
             tag_type: string;
         };
-        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["TaskUpdatedFrame"] | components["schemas"]["TickFrame"];
+        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["TaskUpdatedFrame"] | components["schemas"]["TickFrame"] | components["schemas"]["ArtefactSectionDeltaFrame"] | components["schemas"]["ArtefactSectionRevisingFrame"] | components["schemas"]["ArtefactSectionSourcesFrame"] | components["schemas"]["ArtefactSectionClaimFrame"] | components["schemas"]["ArtefactSectionCardFrame"] | components["schemas"]["ArtefactSourceNoteFrame"] | components["schemas"]["SearchQueryFrame"] | components["schemas"]["CharacteriseThemesFrame"] | components["schemas"]["TocSketchFrame"];
         /**
          * StageCompletedFrame
          * @description A component reached its terminal (successful) outcome.
+         *
+         *     Args:
+         *         counts: The counts the done row shows, in order, each with the
+         *             server's noun (task 058, N17: the client keeps no copy of which
+         *             summary keys a stage shows). Empty when the stage names none.
          */
         StageCompletedFrame: {
             /**
@@ -4660,6 +6379,8 @@ export interface components {
              * @default null
              */
             capability_run_id: string | null;
+            /** Counts */
+            counts?: components["schemas"]["StageCount"][];
             /** Label */
             label: string;
             /**
@@ -4678,7 +6399,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist" | "toc_draft" | "toc_read" | "toc_item_searches" | "toc_select" | "toc_discover" | "toc_merge" | "toc_search_new" | "toc_new_link_searches" | "toc_judge" | "toc_search_again" | "toc_retry_searches" | "toc_figures" | "toc_choose" | "toc_summarise" | "toc_report";
             /** Summary */
             summary?: {
                 [key: string]: number | string;
@@ -4688,6 +6409,16 @@ export interface components {
              * @enum {string}
              */
             type: "stage.completed";
+        };
+        /**
+         * StageCount
+         * @description One count a done row shows, with its noun: `312 found` (task 058, N17).
+         */
+        StageCount: {
+            /** Noun */
+            noun: string;
+            /** Value */
+            value: number;
         };
         /**
          * StageFailedFrame
@@ -4716,7 +6447,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist" | "toc_draft" | "toc_read" | "toc_item_searches" | "toc_select" | "toc_discover" | "toc_merge" | "toc_search_new" | "toc_new_link_searches" | "toc_judge" | "toc_search_again" | "toc_retry_searches" | "toc_figures" | "toc_choose" | "toc_summarise" | "toc_report";
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4748,7 +6479,7 @@ export interface components {
              * Stage
              * @enum {string}
              */
-            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme";
+            stage: "acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist" | "toc_draft" | "toc_read" | "toc_item_searches" | "toc_select" | "toc_discover" | "toc_merge" | "toc_search_new" | "toc_new_link_searches" | "toc_judge" | "toc_search_again" | "toc_retry_searches" | "toc_figures" | "toc_choose" | "toc_summarise" | "toc_report";
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
@@ -4773,6 +6504,91 @@ export interface components {
             text: string;
         };
         /**
+         * TaskAgentCompletedEvent
+         * @description The one successful last event: the finished, stored turn.
+         *
+         *     Args:
+         *         turn: The turn exactly as a read of it returns it.
+         */
+        TaskAgentCompletedEvent: {
+            turn: components["schemas"]["TaskAgentTurnOut"];
+            /**
+             * Type
+             * @default completed
+             * @constant
+             */
+            type: "completed";
+        };
+        /**
+         * TaskAgentDeltaEvent
+         * @description One new piece of the planner's reply; the pieces joined are the reply.
+         *
+         *     Args:
+         *         text: The next piece of reply text.
+         */
+        TaskAgentDeltaEvent: {
+            /** Text */
+            text: string;
+            /**
+             * Type
+             * @default delta
+             * @constant
+             */
+            type: "delta";
+        };
+        /**
+         * TaskAgentFailedEvent
+         * @description The one failed last event, sent after the response has started.
+         *
+         *     Args:
+         *         error: What went wrong, in public-safe terms.
+         *         turn_index: The failed turn's place in the conversation; the stored
+         *             row is marked failed and may be retried with the same client turn id.
+         */
+        TaskAgentFailedEvent: {
+            error: components["schemas"]["TaskAgentFailedEventError"];
+            /** Turn Index */
+            turn_index: number;
+            /**
+             * Type
+             * @default failed
+             * @constant
+             */
+            type: "failed";
+        };
+        /**
+         * TaskAgentFailedEventError
+         * @description Failure details that are safe to show the caller.
+         *
+         *     Args:
+         *         code: A stable error code (``task_agent_turn_failed``, or a conflict
+         *             or capacity code such as ``run_active``).
+         *         message: A short plain explanation.
+         */
+        TaskAgentFailedEventError: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * TaskAgentProgressEvent
+         * @description What the planner is doing now, sent before its reply starts (task 058, N9).
+         *
+         *     Args:
+         *         label: The user-facing activity line, such as "Drafting the plan".
+         */
+        TaskAgentProgressEvent: {
+            /** Label */
+            label: string;
+            /**
+             * Type
+             * @default progress
+             * @constant
+             */
+            type: "progress";
+        };
+        /**
          * TaskAgentTranscriptTurnOut
          * @description One durable task_agent-transcript turn shown in chronological order.
          *
@@ -4783,6 +6599,8 @@ export interface components {
          *             so a reloaded client can retry its own incomplete latest turn.
          *         user_message: Submitted user message.
          *         reply: Task Agent reply, absent until a pending turn completes.
+         *         question: The planner's clarifying question, read back off the stored
+         *             turn (task 058, N10). Null when the turn asked none.
          *         suggestions: Task Agent quick-reply suggestions, if the turn completed.
          *         part: Structured sequential-task_agent proposal, absent for legacy turns.
          *         capability: The owning task's capability, absent on legacy turns.
@@ -4794,6 +6612,8 @@ export interface components {
          *         answer: The cited answer, on an `answer` turn.
          *         decision: The recorded gate decision, on a `decision` turn.
          *         action: The applied longlist verb, on an `action` turn.
+         *         sources: The sources the reply's `[n]` markers cite, on a theory-of-change
+         *             turn whose sense check found evaluations (task 054).
          */
         TaskAgentTranscriptTurnOut: {
             action?: components["schemas"]["TurnActionOut"] | null;
@@ -4818,8 +6638,12 @@ export interface components {
             /** Kind */
             kind?: ("reply" | "answer" | "decision" | "action") | null;
             part?: components["schemas"]["PartProposalOut"] | null;
+            /** Question */
+            question?: string | null;
             /** Reply */
             reply: string | null;
+            /** Sources */
+            sources?: components["schemas"]["CitedSourceOut"][];
             /**
              * Status
              * @enum {string}
@@ -4865,6 +6689,8 @@ export interface components {
          *     Args:
          *         reply: The task_agent's conversational reply for this turn.
          *         plan: The full current draft plan.
+         *         question: The planner's clarifying question, when this turn asks one
+         *             (task 058, N10); the ``suggestions`` answer it. Null otherwise.
          *         suggestions: The task_agent's suggested answers to its clarifying
          *             question, rendered as tappable quick replies. Empty when none.
          *         part: Structured sequential-task_agent proposal, when this turn carries one.
@@ -4874,11 +6700,15 @@ export interface components {
          *         scoping_plan: The full current scoping draft, on an options-scoping
          *             turn. `plan` is null for those turns, and this is null for
          *             Evidence search turns.
+         *         toc_plan: The full current theory-of-change draft, on a theory-of-change
+         *             turn (task 054).
          *         kind: What this turn is. Absent on turns stored before task 044,
          *             which are all replies.
          *         answer: The cited answer, on an `answer` turn.
          *         decision: The recorded gate decision, on a `decision` turn.
          *         action: The applied longlist verb, on an `action` turn.
+         *         sources: The sources the reply's `[n]` markers cite, on a theory-of-change
+         *             turn whose sense check found evaluations (task 054).
          */
         TaskAgentTurnOut: {
             action?: components["schemas"]["TurnActionOut"] | null;
@@ -4892,11 +6722,16 @@ export interface components {
             kind?: ("reply" | "answer" | "decision" | "action") | null;
             part?: components["schemas"]["PartProposalOut"] | null;
             plan?: components["schemas"]["PlanDraft"] | null;
+            /** Question */
+            question?: string | null;
             /** Reply */
             reply: string;
             scoping_plan?: components["schemas"]["ScopingPlanDraft"] | null;
+            /** Sources */
+            sources?: components["schemas"]["CitedSourceOut"][];
             /** Suggestions */
             suggestions?: string[];
+            toc_plan?: components["schemas"]["TocPlanDraft"] | null;
         };
         /**
          * TaskCreate
@@ -4934,7 +6769,7 @@ export interface components {
              * @default evidence_search
              * @enum {string}
              */
-            capability: "evidence_search" | "options_scoping";
+            capability: "evidence_search" | "options_scoping" | "theory_of_change";
             /** From Task Ids */
             from_task_ids?: string[];
             /** Name */
@@ -5053,7 +6888,7 @@ export interface components {
              * @default evidence_search
              * @enum {string}
              */
-            capability: "evidence_search" | "options_scoping";
+            capability: "evidence_search" | "options_scoping" | "theory_of_change";
             /**
              * Created At
              * Format: date-time
@@ -5255,35 +7090,1301 @@ export interface components {
         };
         /**
          * TickFrame
-         * @description Ephemeral heartbeat/progress-note frame.
+         * @description Ephemeral activity frame (task 058, D2): what the model is doing now.
          *
          *     Never persisted, never state-bearing, carries no `id:` line — so it has
-         *     no `sequence` field at all (unlike every other frame type).
+         *     no `sequence` field at all (unlike every other frame type). One set of
+         *     fields for every stage.
+         *
+         *     Args:
+         *         stage: The stage the activity belongs to.
+         *         activity: The activity line, in the server's plain voice; the client
+         *             shows it as it is.
+         *         done: Items finished so far, or null when the stage has no honest
+         *             count (no total known before its loop started).
+         *         total: The total known before the loop started, or null.
+         *         unit: What `done` and `total` count (`documents`, `batches`,
+         *             `searches`, `sections`), or null with no count.
+         *         section: The writer's section line ("Section 3 of 7 · Costs"), or
+         *             null outside writing.
+         *         heartbeat: True when the hub repeated the current tick because a
+         *             model call is still in flight (every 10 s), not because anything
+         *             changed.
+         *         dropped: The hub's dropped-tick counter for this task (slow
+         *             subscriber evictions), for the silent-gap measure (N25).
+         *         capability_run_id: The walk the line belongs to (round 11): a
+         *             longlist walk's option searches are walks of their own and run
+         *             the same stages, so the page keeps the tracked walk's lines only.
+         *             Null when the server could not tell.
          */
         TickFrame: {
+            /** Activity */
+            activity: string;
+            /**
+             * Capability Run Id
+             * @default null
+             */
+            capability_run_id: string | null;
+            /**
+             * Done
+             * @default null
+             */
+            done: number | null;
+            /**
+             * Dropped
+             * @default 0
+             */
+            dropped: number;
             /**
              * Ephemeral
              * @default true
              * @constant
              */
             ephemeral: true;
-            /** Note */
-            note: string;
+            /**
+             * Heartbeat
+             * @default false
+             */
+            heartbeat: boolean;
             /**
              * Occurred At
              * Format: date-time
              */
             occurred_at: string;
             /**
+             * Section
+             * @default null
+             */
+            section: string | null;
+            /**
              * Stage
              * @default null
              */
-            stage: ("acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme") | null;
+            stage: ("acquire" | "screen" | "classify" | "appraise" | "ingest" | "characterise" | "select" | "extract" | "group" | "synthesise" | "inherit" | "suggest" | "option_searches" | "extract_interventions" | "longlist" | "option_profile" | "constrain" | "theme" | "shortlist" | "toc_draft" | "toc_read" | "toc_item_searches" | "toc_select" | "toc_discover" | "toc_merge" | "toc_search_new" | "toc_new_link_searches" | "toc_judge" | "toc_search_again" | "toc_retry_searches" | "toc_figures" | "toc_choose" | "toc_summarise" | "toc_report") | null;
+            /**
+             * Total
+             * @default null
+             */
+            total: number | null;
             /**
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
             type: "tick";
+            /**
+             * Unit
+             * @default null
+             */
+            unit: string | null;
+        };
+        /**
+         * TocBoxCreate
+         * @description A box the user adds.
+         */
+        TocBoxCreate: {
+            /**
+             * Layer
+             * @enum {string}
+             */
+            layer: "input" | "output" | "outcome_short" | "outcome_long" | "impact" | "failure_outcome";
+            position?: components["schemas"]["TocPositionOut"] | null;
+            /** Text */
+            text: string;
+        };
+        /**
+         * TocBoxEvidenceOut
+         * @description A box's case studies, the indicators its documents used, and its figures.
+         */
+        TocBoxEvidenceOut: {
+            /**
+             * Box Id
+             * Format: uuid
+             */
+            box_id: string;
+            /** Case Studies */
+            case_studies: components["schemas"]["TocCaseStudyOut"][];
+            /** Figures */
+            figures: components["schemas"]["TocFigureOut"][];
+            /** Indicators */
+            indicators: string[];
+        };
+        /**
+         * TocBoxOut
+         * @description One element in a layer. Boxes are described, not graded (W4).
+         */
+        TocBoxOut: {
+            /**
+             * Box Id
+             * Format: uuid
+             */
+            box_id: string;
+            /** Code */
+            code: string | null;
+            /** Description */
+            description: string | null;
+            /** Dosage */
+            dosage: string | null;
+            /** Edited At */
+            edited_at?: string | null;
+            /** Edited By */
+            edited_by?: string | null;
+            /**
+             * Layer
+             * @enum {string}
+             */
+            layer: "input" | "output" | "outcome_short" | "outcome_long" | "impact" | "failure_outcome";
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "drafted" | "found_in_evidence" | "imported" | "user" | "options_scoping";
+            position?: components["schemas"]["TocPositionOut"] | null;
+            result_criteria: components["schemas"]["TocResultCriteriaOut"];
+            /** Revision */
+            revision: number;
+            /** Seen In */
+            seen_in: string | null;
+            /** Seen In Cites */
+            seen_in_cites: string[];
+            /** Text */
+            text: string;
+        };
+        /**
+         * TocBoxPatch
+         * @description A change to one box, with the revision the client saw (C10).
+         */
+        TocBoxPatch: {
+            criteria?: components["schemas"]["TocCriteriaIn"] | null;
+            /** Description */
+            description?: string | null;
+            /** Expected Revision */
+            expected_revision: number;
+            /** Layer */
+            layer?: ("input" | "output" | "outcome_short" | "outcome_long" | "impact" | "failure_outcome") | null;
+            /** Text */
+            text?: string | null;
+        };
+        /**
+         * TocCaseStudyOut
+         * @description Where one box was seen (or, for an input, put in place).
+         */
+        TocCaseStudyOut: {
+            /** Authors */
+            authors: string[];
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
+            /** Note */
+            note: string;
+            /** Place */
+            place: string | null;
+            /** Programme */
+            programme: string;
+            /** Quote */
+            quote: string;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "academic" | "policy" | "web";
+            /**
+             * Task Source Snapshot Id
+             * Format: uuid
+             */
+            task_source_snapshot_id: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string | null;
+            /** Year */
+            year: number | null;
+        };
+        /**
+         * TocCheckIn
+         * @description Check named links (C40): new items, or the ones the user picked.
+         */
+        TocCheckIn: {
+            /** Link Ids */
+            link_ids: string[];
+            /**
+             * Mode
+             * @default new_items
+             * @enum {string}
+             */
+            mode: "new_items" | "check_again" | "find_more";
+        };
+        /**
+         * TocCheckOut
+         * @description The check walk that started, or null when it waits for the running walk.
+         */
+        TocCheckOut: {
+            /** Capability Run Id */
+            capability_run_id: string | null;
+            /**
+             * Queued
+             * @default false
+             */
+            queued: boolean;
+        };
+        /**
+         * TocCountOut
+         * @description How many items an action changed.
+         */
+        TocCountOut: {
+            /** Count */
+            count: number;
+        };
+        /**
+         * TocCreatedOut
+         * @description The id of what was added.
+         */
+        TocCreatedOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+        };
+        /**
+         * TocCriteriaIn
+         * @description How we'd know a box's change happened.
+         */
+        TocCriteriaIn: {
+            /** Definition */
+            definition?: string | null;
+            /** Indicator */
+            indicator?: string | null;
+            /** Timing */
+            timing?: string | null;
+        };
+        /**
+         * TocDecideIn
+         * @description Accept or reject every pending document on one link (C44).
+         */
+        TocDecideIn: {
+            /** Accept */
+            accept: boolean;
+        };
+        /**
+         * TocDocumentOut
+         * @description One judged document of one link, with what it adds to the verdict (C36).
+         */
+        TocDocumentOut: {
+            /** Added By */
+            added_by?: string | null;
+            /** Appraisal Score */
+            appraisal_score: number | null;
+            /** Authors */
+            authors: string[];
+            /** Condition */
+            condition: string | null;
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
+            /** Evidence Type */
+            evidence_type: string | null;
+            /** Judge Relevance */
+            judge_relevance?: number | null;
+            /** Judge Support */
+            judge_support?: ("strong" | "weak" | "mixed" | "refutes" | "not_about") | null;
+            /** Previous Wording */
+            previous_wording: boolean;
+            /** Quality */
+            quality: number;
+            /** Quote */
+            quote: string | null;
+            /** Relevance */
+            relevance: number;
+            /** Relevance Reason */
+            relevance_reason: string | null;
+            /** Removed By */
+            removed_by?: string | null;
+            /**
+             * Revision
+             * @default 1
+             */
+            revision: number;
+            /** Scored By */
+            scored_by?: string | null;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "academic" | "policy" | "web";
+            /**
+             * Status
+             * @default counted
+             * @enum {string}
+             */
+            status: "counted" | "pending" | "rejected";
+            /**
+             * Support
+             * @enum {string}
+             */
+            support: "strong" | "weak" | "mixed" | "refutes" | "not_about";
+            /**
+             * Task Source Snapshot Id
+             * Format: uuid
+             */
+            task_source_snapshot_id: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string | null;
+            /** Weight */
+            weight: number;
+            /** Year */
+            year: number | null;
+        };
+        /**
+         * TocEvidenceOut
+         * @description Every judged document and case study of the theory.
+         */
+        TocEvidenceOut: {
+            /** Boxes */
+            boxes: components["schemas"]["TocBoxEvidenceOut"][];
+            /** Links */
+            links: components["schemas"]["TocLinkEvidenceOut"][];
+        };
+        /**
+         * TocEvidencePatch
+         * @description Change how one judged document counts for its link (C42), with its revision (C10).
+         */
+        TocEvidencePatch: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "remove" | "restore" | "score" | "unscore" | "accept" | "reject";
+            /** Expected Revision */
+            expected_revision: number;
+            /** Relevance */
+            relevance?: number | null;
+            /** Support */
+            support?: ("strong" | "weak" | "mixed" | "refutes" | "not_about") | null;
+        };
+        /**
+         * TocFigureOut
+         * @description One number a document reports about a link's cause or effect (C37), with its source.
+         */
+        TocFigureOut: {
+            /**
+             * Box
+             * @enum {string}
+             */
+            box: "source" | "target" | "link";
+            /** Ci Lower */
+            ci_lower: number | null;
+            /** Ci Lower Text */
+            ci_lower_text: string | null;
+            /** Ci Upper */
+            ci_upper: number | null;
+            /** Ci Upper Text */
+            ci_upper_text: string | null;
+            /**
+             * Effect Size Type
+             * @enum {string}
+             */
+            effect_size_type: "absolute_change" | "relative_change" | "standardised" | "ratio" | "level";
+            /**
+             * Evidence Id
+             * Format: uuid
+             */
+            evidence_id: string;
+            /** Evidence Type */
+            evidence_type: string | null;
+            /**
+             * Figure Id
+             * Format: uuid
+             */
+            figure_id: string;
+            /** K */
+            k: number | null;
+            /** Measure */
+            measure: string;
+            /** N */
+            n: number | null;
+            /** Place */
+            place: string | null;
+            /** Population */
+            population: string | null;
+            /** Quote */
+            quote: string;
+            /** Source Authors */
+            source_authors: string[];
+            /** Source Title */
+            source_title: string;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "academic" | "policy" | "web";
+            /** Source Venue */
+            source_venue: string | null;
+            /** Source Year */
+            source_year: number | null;
+            /** Statement */
+            statement: string | null;
+            /**
+             * Task Source Snapshot Id
+             * Format: uuid
+             */
+            task_source_snapshot_id: string;
+            /** Unit */
+            unit: string | null;
+            /** Url */
+            url: string | null;
+            /** Value */
+            value: number | null;
+            /** Value Text */
+            value_text: string;
+            /** Year */
+            year: string | null;
+        };
+        /**
+         * TocGradeRuleOut
+         * @description One row of the verdict rule, generated from the verdict constants (C36).
+         */
+        TocGradeRuleOut: {
+            /** Label */
+            label: string;
+            /** Rule */
+            rule: string;
+        };
+        /**
+         * TocGraphOut
+         * @description The whole theory as the Result page reads it.
+         */
+        TocGraphOut: {
+            /** Boxes */
+            boxes: components["schemas"]["TocBoxOut"][];
+            /**
+             * Can Edit
+             * @default false
+             */
+            can_edit: boolean;
+            /**
+             * Check Status
+             * @enum {string}
+             */
+            check_status: "none" | "drafting" | "drafted" | "checking" | "checked" | "stopped" | "failed";
+            /** Context */
+            context: string[];
+            /**
+             * Edits Since Review
+             * @default 0
+             */
+            edits_since_review: number;
+            /** Grade Rules */
+            grade_rules: components["schemas"]["TocGradeRuleOut"][];
+            /** Links */
+            links: components["schemas"]["TocLinkOut"][];
+            /** Links Left Out */
+            links_left_out: number;
+            /** Pathways */
+            pathways: components["schemas"]["TocPathwayOut"][];
+            /** Queued Link Ids */
+            queued_link_ids?: string[];
+            report: components["schemas"]["TocReportOut"] | null;
+            /**
+             * Reviewing
+             * @default false
+             */
+            reviewing: boolean;
+            /** Supporting Activities */
+            supporting_activities: string[];
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+        };
+        /**
+         * TocHistoryEntryOut
+         * @description One change in History (C41).
+         */
+        TocHistoryEntryOut: {
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /**
+             * Event Id
+             * Format: uuid
+             */
+            event_id: string;
+            /** Undoable */
+            undoable: boolean;
+            /** What */
+            what: string;
+            /** Who */
+            who: string;
+        };
+        /**
+         * TocLinkCreate
+         * @description Two boxes the user connects.
+         */
+        TocLinkCreate: {
+            /**
+             * Source Box Id
+             * Format: uuid
+             */
+            source_box_id: string;
+            /**
+             * Target Box Id
+             * Format: uuid
+             */
+            target_box_id: string;
+        };
+        /**
+         * TocLinkEvidenceOut
+         * @description Every document judged for one link, and the figures they give.
+         */
+        TocLinkEvidenceOut: {
+            /** Documents */
+            documents: components["schemas"]["TocDocumentOut"][];
+            /** Figures */
+            figures: components["schemas"]["TocFigureOut"][];
+            /**
+             * Link Id
+             * Format: uuid
+             */
+            link_id: string;
+        };
+        /**
+         * TocLinkOut
+         * @description One causal step, with its evidence verdict and its state.
+         */
+        TocLinkOut: {
+            /** Assumption Type */
+            assumption_type: string;
+            /** Because Text */
+            because_text: string;
+            /** Code */
+            code: string | null;
+            /** Conditions */
+            conditions: string[];
+            /** Critical */
+            critical: boolean;
+            /** Edited At */
+            edited_at?: string | null;
+            /** Edited By */
+            edited_by?: string | null;
+            /** Evidence Cites */
+            evidence_cites: string[];
+            /** Evidence Sentence */
+            evidence_sentence: string | null;
+            /** For Text */
+            for_text: string;
+            /** If Text */
+            if_text: string;
+            /**
+             * Link Id
+             * Format: uuid
+             */
+            link_id: string;
+            /** Near Threshold */
+            near_threshold: boolean;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "drafted" | "found_in_evidence" | "imported" | "user" | "options_scoping";
+            /**
+             * Pending Count
+             * @default 0
+             */
+            pending_count: number;
+            /** Revision */
+            revision: number;
+            /** Sentence */
+            sentence: string;
+            /**
+             * Source Box Id
+             * Format: uuid
+             */
+            source_box_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "unchecked" | "checking" | "checked" | "pending" | "kept" | "no_change";
+            /**
+             * Target Box Id
+             * Format: uuid
+             */
+            target_box_id: string;
+            /** Then Text */
+            then_text: string;
+            /** Title */
+            title: string | null;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "supported" | "leaning_supports" | "not_sure_mixed" | "leaning_against" | "not_sure_insufficient" | "against";
+            /** Verdict If Accepted */
+            verdict_if_accepted?: ("supported" | "leaning_supports" | "not_sure_mixed" | "leaning_against" | "not_sure_insufficient" | "against") | null;
+            weights: components["schemas"]["TocWeightsOut"];
+        };
+        /**
+         * TocLinkPatch
+         * @description A change to one link, with the revision the client saw (C10).
+         */
+        TocLinkPatch: {
+            /** Because Text */
+            because_text?: string | null;
+            /** Conditions */
+            conditions?: string[] | null;
+            /** Critical */
+            critical?: true | null;
+            /** Expected Revision */
+            expected_revision: number;
+            /** For Text */
+            for_text?: string | null;
+            /** If Text */
+            if_text?: string | null;
+            /** Then Text */
+            then_text?: string | null;
+            /** Title */
+            title?: string | null;
+        };
+        /**
+         * TocLinksIn
+         * @description Links to act on (Keep the evidence, C43).
+         */
+        TocLinksIn: {
+            /** Link Ids */
+            link_ids: string[];
+        };
+        /**
+         * TocMoveIn
+         * @description Where the user dropped a box.
+         */
+        TocMoveIn: {
+            /** Expected Revision */
+            expected_revision: number;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /**
+         * TocPathwayOut
+         * @description One ordered route of links.
+         */
+        TocPathwayOut: {
+            /** Broken */
+            broken: boolean;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "success" | "failure";
+            /** Label */
+            label: string;
+            /** Link Ids */
+            link_ids: string[];
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "drafted" | "found_in_evidence" | "imported" | "user" | "options_scoping";
+            /**
+             * Pathway Id
+             * Format: uuid
+             */
+            pathway_id: string;
+            /** Reason */
+            reason: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "kept" | "set_aside";
+        };
+        /**
+         * TocPlanDraft
+         * @description Draft or approved theory-of-change plan, as surfaced to the client (task 054).
+         *
+         *     Mirrors the runtime `TocPlan`. Every field except `ready` may be absent
+         *     while drafting.
+         *
+         *     Args:
+         *         title: Short user-visible name for the task.
+         *         question: The user's ask.
+         *         entry_point: `outcome_first`, `intervention_first` or `existing_theory`.
+         *         intended_change: The impact, in measurable words.
+         *         target_population: Who the change is for.
+         *         intervention: What would be done.
+         *         dosage: How much of the intervention each beneficiary gets.
+         *         existing_theory_text: The user's own theory, verbatim.
+         *         where: The place the theory is for.
+         *         time_horizon: When the impact is expected.
+         *         context: What the user said about the setting.
+         *         published_after: The evidence searched starts at this date (`YYYY-MM-DD`);
+         *             `None` means any year.
+         *         published_before: The evidence searched ends at this date, or `None`.
+         *         assumptions: Every guess the plan is making.
+         *         ready: Whether the draft has validated into an executable plan.
+         */
+        TocPlanDraft: {
+            /** Assumptions */
+            assumptions?: string[];
+            /**
+             * Context
+             * @default null
+             */
+            context: string | null;
+            /**
+             * Dosage
+             * @default null
+             */
+            dosage: string | null;
+            /**
+             * Entry Point
+             * @default null
+             */
+            entry_point: ("outcome_first" | "intervention_first" | "existing_theory") | null;
+            /**
+             * Existing Theory Text
+             * @default null
+             */
+            existing_theory_text: string | null;
+            /**
+             * Intended Change
+             * @default null
+             */
+            intended_change: string | null;
+            /**
+             * Intervention
+             * @default null
+             */
+            intervention: string | null;
+            /**
+             * Published After
+             * @default null
+             */
+            published_after: string | null;
+            /**
+             * Published Before
+             * @default null
+             */
+            published_before: string | null;
+            /**
+             * Question
+             * @default null
+             */
+            question: string | null;
+            /**
+             * Ready
+             * @default false
+             */
+            ready: boolean;
+            /**
+             * Target Population
+             * @default null
+             */
+            target_population: string | null;
+            /**
+             * Time Horizon
+             * @default null
+             */
+            time_horizon: string | null;
+            /**
+             * Title
+             * @default null
+             */
+            title: string | null;
+            /**
+             * Upload Id
+             * @default null
+             */
+            upload_id: string | null;
+            /**
+             * Where
+             * @default null
+             */
+            where: string | null;
+        };
+        /**
+         * TocPlanPatch
+         * @description Typed replace-field edits for a theory-of-change plan (task 054).
+         *
+         *     Omitted fields stay as they are; an empty string clears an optional field.
+         *     Allowed only until the draft is on the canvas (S7). `published_after` and
+         *     `published_before` (`YYYY-MM-DD`) set the years of evidence searched; an
+         *     empty `published_after` means any year.
+         */
+        TocPlanPatch: {
+            /** Context */
+            context?: string | null;
+            /** Dosage */
+            dosage?: string | null;
+            /** Intended Change */
+            intended_change?: string | null;
+            /** Intervention */
+            intervention?: string | null;
+            /** Published After */
+            published_after?: string | null;
+            /** Published Before */
+            published_before?: string | null;
+            /** Target Population */
+            target_population?: string | null;
+            /** Time Horizon */
+            time_horizon?: string | null;
+            /** Where */
+            where?: string | null;
+        };
+        /**
+         * TocPositionOut
+         * @description Where the user dropped a box on the canvas (C47).
+         */
+        TocPositionOut: {
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /**
+         * TocProblemsOut
+         * @description Suggested edits that could not apply, with why.
+         */
+        TocProblemsOut: {
+            /** New Link Ids */
+            new_link_ids?: string[];
+            /** Problems */
+            problems: string[];
+        };
+        /**
+         * TocProposalDecideIn
+         * @description Accept or reject one suggested edit, or all pending ones (``index`` null).
+         */
+        TocProposalDecideIn: {
+            /** Accept */
+            accept: boolean;
+            /** Group */
+            group?: string | null;
+            /** Index */
+            index?: number | null;
+        };
+        /**
+         * TocProposalEditOut
+         * @description One suggested edit and what the user decided (C45, C46).
+         */
+        TocProposalEditOut: {
+            /** Dest */
+            dest?: string | null;
+            /** Group */
+            group?: string | null;
+            /** Index */
+            index: number;
+            /** Key */
+            key?: string | null;
+            /** Kind */
+            kind?: string | null;
+            /** Label */
+            label?: string | null;
+            /** Layer */
+            layer?: string | null;
+            /** Line */
+            line: string;
+            /** Links */
+            links?: string[] | null;
+            /** Op */
+            op: string;
+            /** Reason */
+            reason: string;
+            /** Source */
+            source?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "accepted" | "rejected";
+            /** Text */
+            text?: string | null;
+        };
+        /**
+         * TocProposalOut
+         * @description A suggestion from the review or the chat, waiting for the user (C45, C46).
+         */
+        TocProposalOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Edits */
+            edits: components["schemas"]["TocProposalEditOut"][];
+            /**
+             * Proposal Id
+             * Format: uuid
+             */
+            proposal_id: string;
+            /** Report Findings */
+            report_findings: components["schemas"]["TocReportFindingOut"][];
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "review" | "chat" | "discover" | "draft";
+            /** Summary */
+            summary: string;
+        };
+        /**
+         * TocReportAssumptionOut
+         * @description One row of Assumptions and evidence.
+         */
+        TocReportAssumptionOut: {
+            /** Code */
+            code: string;
+            /**
+             * Conditions
+             * @default []
+             */
+            conditions: string[];
+            /**
+             * Flag
+             * @default false
+             */
+            flag: boolean;
+            /** Importance */
+            importance?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "assumption" | "risk";
+            /** Share */
+            share?: number | null;
+            /** Sources */
+            sources: number[];
+            /** Statement */
+            statement: string;
+            /** Verdict */
+            verdict: string;
+            /** Verdict Rank */
+            verdict_rank?: number | null;
+            /** Why */
+            why: string;
+        };
+        /**
+         * TocReportExpansionOut
+         * @description A route found in the evidence that the user's diagram does not show.
+         */
+        TocReportExpansionOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "success" | "failure";
+            /** Label */
+            label: string;
+            /** Sentence */
+            sentence: string;
+        };
+        /**
+         * TocReportFindingOut
+         * @description A report section that no longer matches the theory (C45).
+         */
+        TocReportFindingOut: {
+            /** Section */
+            section: string;
+            /** Why */
+            why: string;
+        };
+        /**
+         * TocReportOut
+         * @description Detailed information as a short narrative report (C38), written on each check.
+         */
+        TocReportOut: {
+            /** Assumptions */
+            assumptions: components["schemas"]["TocReportAssumptionOut"][];
+            /**
+             * Expansions
+             * @default []
+             */
+            expansions: components["schemas"]["TocReportExpansionOut"][];
+            /** How It Could Fail */
+            how_it_could_fail?: string | null;
+            /** Method */
+            method: string;
+            /** Pathways */
+            pathways: components["schemas"]["TocReportPathwayOut"][];
+            /** Sources */
+            sources: components["schemas"]["TocReportSourceOut"][];
+            /**
+             * Stale
+             * @default false
+             */
+            stale: boolean;
+            summary: components["schemas"]["TocReportSummaryOut"];
+            /** Summary Text */
+            summary_text?: string | null;
+            /**
+             * Supporting Activities
+             * @default []
+             */
+            supporting_activities: string[];
+            /** Tests */
+            tests: components["schemas"]["TocReportTestOut"][];
+            /** Title */
+            title?: string | null;
+            verdict?: components["schemas"]["TocTheoryVerdictOut"] | null;
+            /** Verdict Reason */
+            verdict_reason?: string | null;
+            /** Whole Programme */
+            whole_programme?: string | null;
+        };
+        /**
+         * TocReportPathwayOut
+         * @description One success pathway in the Overview: a lead-in title and a line or two.
+         */
+        TocReportPathwayOut: {
+            /** Paragraph */
+            paragraph: string;
+            /** Pathway Id */
+            pathway_id?: string | null;
+            /** Strength */
+            strength?: string | null;
+            /** Title */
+            title: string;
+        };
+        /**
+         * TocReportSourceOut
+         * @description One numbered source, in order of first citation.
+         */
+        TocReportSourceOut: {
+            /**
+             * Authors
+             * @default []
+             */
+            authors: string[];
+            /** Citation */
+            citation: string;
+            /** Evidence Id */
+            evidence_id?: string | null;
+            /** N */
+            n: number;
+            /** Quote */
+            quote?: string | null;
+            /** Title */
+            title?: string | null;
+            /** Url */
+            url: string | null;
+            /** Venue */
+            venue?: string | null;
+            /** Year */
+            year?: number | null;
+        };
+        /**
+         * TocReportSummaryOut
+         * @description The report's Summary (C38).
+         */
+        TocReportSummaryOut: {
+            /** Context */
+            context: string;
+            /** Directly Influenced */
+            directly_influenced: string;
+            /** Goal */
+            goal: string;
+            /** If Then Because */
+            if_then_because: string;
+            /** Population */
+            population: string;
+            /** Question */
+            question?: string | null;
+            /** Time Horizon */
+            time_horizon: string | null;
+            /**
+             * Weakest Links
+             * @default
+             */
+            weakest_links: string;
+        };
+        /**
+         * TocReportTestOut
+         * @description One thing to test first.
+         */
+        TocReportTestOut: {
+            /** Indicator */
+            indicator?: string | null;
+            /** Link */
+            link: string;
+            /** Question */
+            question?: string | null;
+            /** Sentence */
+            sentence?: string | null;
+            /** Test And Learn */
+            test_and_learn?: string | null;
+        };
+        /**
+         * TocResultCriteriaOut
+         * @description Mayne's checks on one box.
+         */
+        TocResultCriteriaOut: {
+            /** Definition */
+            definition?: string | null;
+            /** Indicator */
+            indicator?: string | null;
+            /** Timing */
+            timing?: string | null;
+        };
+        /**
+         * TocRevisionOut
+         * @description The row's revision after a write.
+         */
+        TocRevisionOut: {
+            /** Revision */
+            revision: number;
+        };
+        /**
+         * TocSketchFrame
+         * @description Ephemeral: the theory of change's first draft while it is written (task 054, S12).
+         *
+         *     Sent whole each time a box or connection closes in the model's answer:
+         *     each frame replaces the one before. The boxes come first, then the
+         *     connections; a connection names its ends by the boxes' draft keys, and
+         *     only after both boxes were sent. An empty frame (no boxes, no
+         *     connections) means the draft is being written again: the page drops
+         *     its sketch. The stored graph (`GET /toc`, read when the `toc_draft`
+         *     stage completes) replaces the sketch; its ids are not the draft keys. A
+         *     reconnect gets the sketch so far. Display-only: never persisted, no
+         *     `id:` line, no `sequence`.
+         */
+        TocSketchFrame: {
+            /** Boxes */
+            boxes: components["schemas"]["SketchBox"][];
+            /**
+             * Ephemeral
+             * @default true
+             * @constant
+             */
+            ephemeral: true;
+            /** Links */
+            links: components["schemas"]["SketchLink"][];
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "toc.sketch";
+        };
+        /**
+         * TocStudyIn
+         * @description A study the user adds to a link: a DOI or a web address (C42).
+         */
+        TocStudyIn: {
+            /** Identifier */
+            identifier: string;
+        };
+        /**
+         * TocTheoryVerdictOut
+         * @description Can the theory work, and what does the evidence say? (``toc_verdict_v2``).
+         */
+        TocTheoryVerdictOut: {
+            /** Carrying Step */
+            carrying_step: string;
+            /**
+             * Evidence
+             * @enum {string}
+             */
+            evidence: "supports" | "mixed" | "too_little" | "against";
+            /** Headline */
+            headline: string;
+            /** Label */
+            label: string;
+            /**
+             * Mechanism
+             * @enum {string}
+             */
+            mechanism: "plausible" | "implausible";
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * TocUndoOut
+         * @description What Undo could not put back because it changed since (C10).
+         */
+        TocUndoOut: {
+            /** Skipped */
+            skipped: string[];
+        };
+        /**
+         * TocUploadIn
+         * @description A user's own theory of change as an image or PDF (increment 5, C8): base64 in JSON.
+         */
+        TocUploadIn: {
+            /**
+             * Content Type
+             * @enum {string}
+             */
+            content_type: "image/png" | "image/jpeg" | "application/pdf";
+            /** Data Base64 */
+            data_base64: string;
+            /** File Name */
+            file_name: string;
+            /** Message */
+            message?: string | null;
+        };
+        /**
+         * TocUploadItemOut
+         * @description One uploaded diagram that was read.
+         */
+        TocUploadItemOut: {
+            /** File Name */
+            file_name: string;
+            /**
+             * Upload Id
+             * Format: uuid
+             */
+            upload_id: string;
+        };
+        /**
+         * TocUploadOut
+         * @description What was read from an uploaded diagram, before the plan uses it.
+         */
+        TocUploadOut: {
+            /**
+             * Answered
+             * @default false
+             */
+            answered: boolean;
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** File Name */
+            file_name: string;
+            /**
+             * Upload Id
+             * Format: uuid
+             */
+            upload_id: string;
+        };
+        /**
+         * TocWeightsOut
+         * @description The numbers behind a link's verdict (C36).
+         */
+        TocWeightsOut: {
+            /** Mean Support */
+            mean_support: number;
+            /** N Documents */
+            n_documents: number;
+            /** Refute Share */
+            refute_share: number;
+            /** Total Weight */
+            total_weight: number;
         };
         /**
          * TurnActionOut
@@ -5732,6 +8833,7 @@ export interface operations {
                 owner_email?: string | null;
                 page?: number;
                 page_size?: number;
+                status?: "active" | "archived" | "all";
             };
             header?: never;
             path?: never;
@@ -5845,6 +8947,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_project_api_v1_projects__project_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectArchiveOut"];
                 };
             };
             /** @description Validation Error */
@@ -6370,12 +9503,21 @@ export interface operations {
                 cited?: boolean | null;
                 sort?: ("title" | "year" | "type" | "strength" | "status" | "relevance") | null;
                 order?: ("asc" | "desc") | null;
+                /** @description A theme's id: a characterisation theme's sources, or on an options-scoping task a longlist theme's, the documents of its options (task 058, round 14). */
                 theme?: string | null;
                 origin?: ("OpenAlex" | "Overton" | "Uploaded") | null;
                 evidence_type?: string | null;
-                strength?: ("Very strong" | "Strong" | "Moderate" | "Limited" | "Weak") | null;
+                strength?: ("Very strong" | "Strong" | "Moderate" | "Limited" | "Weak" | "Unrated") | null;
                 year_from?: number | null;
                 year_to?: number | null;
+                /** @description A publisher country, by any spelling; `none` for the sources with no country (Landscape's Not reported row; task 058, round 14). */
+                country?: string | null;
+                /** @description A coverage row's `query_id`: only the sources that search returned (task 058, round 12). Empty for a search run before the ids were kept. */
+                query?: number | null;
+                /** @description The read depth the Status column shows: the full text, the abstract only, or the title only (task 058, round 13). */
+                depth?: ("full_text" | "abstract" | "title") | null;
+                /** @description `true`: the documents the appraise stage scored, the funnel's quality-checked row; `false`: the rest (task 058, round 13). */
+                appraised?: boolean | null;
             };
             header?: never;
             path: {
@@ -6570,6 +9712,37 @@ export interface operations {
             };
         };
     };
+    get_options_api_v1_tasks__task_id__options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptionsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_option_api_v1_tasks__task_id__options_post: {
         parameters: {
             query?: never;
@@ -6688,6 +9861,70 @@ export interface operations {
                 "application/json": components["schemas"]["OptionIncludeIn"] | null;
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_shortlist_api_v1_tasks__task_id__options__option_id__shortlist_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                option_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_unshortlist_api_v1_tasks__task_id__options__option_id__unshortlist_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                option_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -6912,6 +10149,68 @@ export interface operations {
             };
         };
     };
+    post_shortlist_note_api_v1_tasks__task_id__shortlist_note_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShortlistOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_suggest_more_api_v1_tasks__task_id__shortlist_suggest_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LatestRun"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     source_dossier_api_v1_tasks__task_id__sources__source_id__get: {
         parameters: {
             query?: never;
@@ -7027,14 +10326,945 @@ export interface operations {
             };
         };
         responses: {
+            /** @description `application/x-ndjson`: progress/delta events followed by exactly one completed or failed terminal event. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toc_api_v1_tasks__task_id__toc_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
             /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TaskAgentTurnOut"];
+                    "application/json": components["schemas"]["TocGraphOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_toc_box_api_v1_tasks__task_id__toc_boxes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocBoxCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCreatedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_toc_box_api_v1_tasks__task_id__toc_boxes__box_id__delete: {
+        parameters: {
+            query: {
+                expected_revision: number;
+            };
+            header?: never;
+            path: {
+                task_id: string;
+                box_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_toc_box_api_v1_tasks__task_id__toc_boxes__box_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                box_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocBoxPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocRevisionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    move_toc_box_api_v1_tasks__task_id__toc_boxes__box_id__position_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                box_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocMoveIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocRevisionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_toc_link_check_api_v1_tasks__task_id__toc_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocCheckIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCheckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_full_toc_check_api_v1_tasks__task_id__toc_check_full_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCheckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_toc_check_api_v1_tasks__task_id__toc_check_stop_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    undo_toc_edit_api_v1_tasks__task_id__toc_events__event_id__undo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocUndoOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toc_evidence_api_v1_tasks__task_id__toc_evidence_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocEvidenceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_toc_evidence_api_v1_tasks__task_id__toc_evidence__evidence_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                evidence_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocEvidencePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocRevisionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toc_evidence_context_api_v1_tasks__task_id__toc_evidence__evidence_id__context_get: {
+        parameters: {
+            query?: {
+                quote?: string | null;
+            };
+            header?: never;
+            path: {
+                task_id: string;
+                evidence_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChunkContextOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toc_history_api_v1_tasks__task_id__toc_history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocHistoryEntryOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_toc_layout_api_v1_tasks__task_id__toc_layout_reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_toc_link_api_v1_tasks__task_id__toc_links_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocLinkCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCreatedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    keep_toc_evidence_api_v1_tasks__task_id__toc_links_keep_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocLinksIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_toc_link_api_v1_tasks__task_id__toc_links__link_id__delete: {
+        parameters: {
+            query: {
+                expected_revision: number;
+            };
+            header?: never;
+            path: {
+                task_id: string;
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_toc_link_api_v1_tasks__task_id__toc_links__link_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocLinkPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocRevisionOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_toc_pending_api_v1_tasks__task_id__toc_links__link_id__decide_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocDecideIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCountOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_toc_study_api_v1_tasks__task_id__toc_links__link_id__studies_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocStudyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCheckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toc_proposals_api_v1_tasks__task_id__toc_proposals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocProposalOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_toc_proposal_api_v1_tasks__task_id__toc_proposals__proposal_id__decide_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocProposalDecideIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocProblemsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dismiss_toc_proposal_api_v1_tasks__task_id__toc_proposals__proposal_id__dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                proposal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_toc_report_api_v1_tasks__task_id__toc_report_update_post: {
+        parameters: {
+            query?: {
+                proposal_id?: string | null;
+            };
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocCheckOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_toc_review_api_v1_tasks__task_id__toc_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_toc_uploads_api_v1_tasks__task_id__toc_uploads_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocUploadItemOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_toc_theory_api_v1_tasks__task_id__toc_uploads_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TocUploadIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TocUploadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_toc_upload_api_v1_tasks__task_id__toc_uploads__upload_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

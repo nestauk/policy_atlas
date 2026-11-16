@@ -672,6 +672,20 @@ def test_a_colleague_cannot_write_a_row_they_can_read(engine: Engine, tmp_path: 
         assert response.status_code == 403
         assert response.json()["error"]["code"] == "forbidden"
 
+        # Task 058, round 10: a refused project change says why, in words the
+        # Share page shows as they are; the code is unchanged.
+        for project_ids in ([], [str(uuid.uuid4())]):
+            refused = client.patch(
+                f"/api/v1/tasks/{row}",
+                headers=colleague.headers,
+                json={"project_ids": project_ids},
+            )
+            assert refused.status_code == 403
+            assert refused.json()["error"] == {
+                "code": "forbidden",
+                "message": "Only the task's owner can change its projects.",
+            }
+
 
 def test_an_outsider_still_gets_404_on_patch(engine: Engine, tmp_path: Path) -> None:
     """The BOLA rule is untouched for a caller with no read leg at all."""

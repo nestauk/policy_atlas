@@ -25,10 +25,15 @@ from policy_atlas.evidence_search.assess.classification_backend import (
     OpenAIClassificationBackend,
     StubClassificationBackend,
 )
-from policy_atlas.evidence_search.assess.classify import ClassifyContext, classify_sources
+from policy_atlas.evidence_search.assess.classify import (
+    ClassifyContext,
+    _ClassifyDoc,
+    _run_classification_calls,
+    classify_sources,
+)
 from policy_atlas.evidence_search.assess.classify_prompt import (
+    CLASSIFY_EFFORT,
     CLASSIFY_MODEL,
-    CLASSIFY_REASONING_EFFORT,
     TAG_MAX_CHARS,
     TAGS_MAX_PER_DOC,
     ClassifyEnvelopePayload,
@@ -36,6 +41,7 @@ from policy_atlas.evidence_search.assess.classify_prompt import (
 )
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.run_spec import Plan, compile
+from tests import progress_recorder
 from tests.helpers import (
     fake_parse_client,
     now,
@@ -55,7 +61,7 @@ def test_table_count(conn: Connection) -> None:
     # Link between two tasks); 38 -> 43: task 045 adds `option`,
     # `option_membership`, `option_relation`, `longlist_result` and
     # `intervention_profile_record`; no evidence-search table changed.
-    assert len(metadata.tables) == 43
+    assert len(metadata.tables) == 52  # task 054 adds toc_figure, toc_proposal and task_upload
 
 
 # --- Stub logic (pure Python, no DB) ---
@@ -538,7 +544,14 @@ def test_harness_classify_component(conn: Connection) -> None:
     assert {"classified", "by_type", "skipped"} <= set(summary.keys())
     assert summary["classified"] == 1
     assert summary["skipped"] == 1
-    assert summary["usage_totals"] == {"prompt": 11, "completion": 7, "total": 18, "cached": 0}
+    assert summary["usage_totals"] == {
+        "prompt": 11,
+        "completion": 7,
+        "total": 18,
+        "cached": 0,
+        "cache_write": 0,
+        "reasoning": 0,
+    }
 
     # Run ended as succeeded
     run_row = conn.execute(select(runs).where(runs.c.run_id == rid_classify)).one()
@@ -665,18 +678,63 @@ def test_classify_backend_passes_model_and_reasoning_effort() -> None:
     assert result.primary_evidence_type == "RCTs and Quasi-Experimental Studies"
     assert usage is None
     [kwargs] = fake_client.chat.completions.calls
-    assert kwargs["model"] == "gpt-5.4-mini"
     assert kwargs["model"] == CLASSIFY_MODEL
-    assert kwargs["reasoning_effort"] == "high"
-    assert kwargs["reasoning_effort"] == CLASSIFY_REASONING_EFFORT
+    assert kwargs["reasoning_effort"] == "medium"  # task 056 P5: medium
+    assert kwargs["reasoning_effort"] == CLASSIFY_EFFORT
 
 
-def test_openai_kwargs_omits_reasoning_effort_when_none() -> None:
-    kwargs = openai_kwargs("gpt-5.4-mini")
-    assert kwargs == {"model": "gpt-5.4-mini"}
-    assert "reasoning_effort" not in kwargs
+def test_openai_kwargs_always_sends_reasoning_effort() -> None:
+    kwargs = openai_kwargs(
+        "gpt-5.4-mini", reasoning_effort="medium", prompt_cache="auto", timeout_s=60
+    )
+    assert kwargs == {"model": "gpt-5.4-mini", "reasoning_effort": "medium", "timeout": 60}
 
 
 def test_openai_kwargs_includes_reasoning_effort_when_set() -> None:
-    kwargs = openai_kwargs("gpt-5.4-mini", reasoning_effort="xhigh")
-    assert kwargs == {"model": "gpt-5.4-mini", "reasoning_effort": "xhigh"}
+    kwargs = openai_kwargs(
+        "gpt-5.4-mini", reasoning_effort="xhigh", prompt_cache="auto", timeout_s=60
+    )
+    assert kwargs == {"model": "gpt-5.4-mini", "reasoning_effort": "xhigh", "timeout": 60}
+
+
+# --- Live progress (task 058, N2) ---
+
+
+class _FailsOnceClassifier:
+    """Answers every call; the call for one title fails the first time."""
+
+    mode = "stub"
+
+    def __init__(self, fail_once: str | None) -> None:
+        self._fail_once = fail_once
+
+    def classify(self, payload: ClassifyEnvelopePayload) -> Any:
+        if payload.title == self._fail_once:
+            self._fail_once = None
+            raise RuntimeError("one transient failure")
+        return object(), None
+
+
+def test_classify_publishes_documents_done_of_total(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = progress_recorder.install(monkeypatch)
+    docs = [
+        _ClassifyDoc(
+            tss_id=uuid.uuid4(),
+            source_snapshot_id=uuid.uuid4(),
+            metadata={},
+            payload=ClassifyEnvelopePayload(
+                tss_id=f"t{i}", title=f"t{i}", abstract=None, priors={}
+            ),
+        )
+        for i in range(4)
+    ]
+    _, errors, retries, _ = _run_classification_calls(
+        docs, classification_backend=cast("Any", _FailsOnceClassifier("t2"))
+    )
+
+    assert retries == 1
+    assert errors == {}
+    assert all(c["total"] == 4 and c["unit"] == "documents" for c in calls)
+    # The retried call counts its document once: 0, then 1..4, nothing more.
+    assert sorted(c["done"] for c in calls) == [0, 1, 2, 3, 4]
+    assert max(calls, key=lambda c: c["done"])["activity"] == "4 of 4 classified"

@@ -44,15 +44,17 @@ import os
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 import structlog
 from langfuse import Langfuse
 from openai.types.chat import ChatCompletionMessageParam
 from pydantic import BaseModel
 
+from policy_atlas.core.model_routes import route
 from policy_atlas.core.openai_client import resolve_openai_client, traced_parse
 from policy_atlas.core.prompt_fields import scrub_nul
+from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 from policy_atlas.options_scoping.suggest.suggest_prompt import (
     SUGGEST_BOUND,
     SUGGEST_MAX_OUTPUT_TOKENS,
@@ -95,26 +97,33 @@ from policy_atlas.runtime.option_design_prompt import (
     OptionDesignWire,
     build_option_design_messages,
 )
+from policy_atlas.runtime.title_prompt import (
+    CHAT_TITLE_PROMPT_VERSION,
+    TASK_TITLE_PROMPT_VERSION,
+    TITLE_MAX_OUTPUT_TOKENS,
+    TitleWire,
+    build_chat_title_messages,
+    build_task_title_messages,
+)
 
 if TYPE_CHECKING:
     from policy_atlas.runtime.runner import _DiscretionContext, _DiscretionOutcome
 
 log = structlog.get_logger()
 
-# Model routing by moment (contract decision 3 — cost tiering, not agent identity).
-# route/decide are judgment-class (the task_agent's default judgment model); triage is
-# mini-class. Both env-overridable so ops can pin a different model without a code
-# change (the SYNTHESIS_MODEL/TASK_AGENT_MODEL pattern). Triage used to borrow the
-# stage-1 screening model; task 051 moved screening to gpt-5.6-luna and left triage
-# where it was, so the default is a literal here.
-AGENT_MODEL = os.environ.get("POLICY_ATLAS_AGENT_MODEL", "gpt-5.5")
-AGENT_TRIAGE_MODEL = os.environ.get("POLICY_ATLAS_AGENT_TRIAGE_MODEL", "gpt-5.4-mini")
+# Model from the route file (task 053); see core/model_routes.py. route/decide are
+# judgment-class, triage is mini-class (contract decision 3 of task 024).
+# ``AGENT_MODEL`` is the decide step's model (the one the discretion profile
+# stamps); each call site below is its own step with its own model and effort.
+AGENT_MODEL = route().model_for("agent_decide")
+AGENT_TRIAGE_MODEL = route().model_for("agent_triage")
 
 
 def _warn_stale_agent_env(environ: Mapping[str, str]) -> list[str]:
     """Name any pre-038 ``POLICY_ATLAS_ORCHESTRATOR_*`` override still set.
 
-    Task 038 renamed the overrides to ``POLICY_ATLAS_AGENT_*``; an old name is
+    Task 038 renamed the overrides to ``POLICY_ATLAS_AGENT_*`` and task 053 retired
+    those too: the route file is the only way to choose a model. An old name is
     ignored, so it is logged rather than silently falling back to the default.
 
     Args:
@@ -125,7 +134,7 @@ def _warn_stale_agent_env(environ: Mapping[str, str]) -> list[str]:
     """
     stale = sorted(key for key in environ if key.startswith("POLICY_ATLAS_ORCHESTRATOR_"))
     if stale:
-        log.warning("agent_env_override_stale", keys=stale, renamed_to="POLICY_ATLAS_AGENT_*")
+        log.warning("agent_env_override_stale", keys=stale, use_instead="model_routes.toml")
     return stale
 
 
@@ -382,7 +391,7 @@ class OpenAIAgentBackend:
     """Live OpenAI implementation of the agent seam.
 
     Args:
-        api_key: Optional OpenAI API key. If omitted, ``OPENAI_API_KEY`` is read
+        api_key: Optional OpenAI API key. If omitted, the route's key variable is read
             from the environment; keys are never read from persistent config.
         langfuse_client: Optional Langfuse client. When omitted, tracing is a
             no-op and no Langfuse object is created.
@@ -396,12 +405,7 @@ class OpenAIAgentBackend:
         api_key: str | None = None,
         langfuse_client: Langfuse | None = None,
     ) -> None:
-        self._client = resolve_openai_client(
-            api_key,
-            backend_name="OpenAIAgentBackend",
-            timeout=180.0,
-            max_retries=2,
-        )
+        self._client = resolve_openai_client(api_key, backend_name="OpenAIAgentBackend")
         self._langfuse_client = langfuse_client
 
     def route(
@@ -416,7 +420,7 @@ class OpenAIAgentBackend:
         parsed = self._parse(
             messages,
             response_format=RouterCompileTransport,
-            model=AGENT_MODEL,
+            step="agent_route",
             max_output_tokens=ROUTER_MAX_OUTPUT_TOKENS,
             usage_event="agent.route.usage",
             label="agent-route",
@@ -442,7 +446,7 @@ class OpenAIAgentBackend:
         parsed = self._parse(
             messages,
             response_format=WatchTriageWire,
-            model=AGENT_TRIAGE_MODEL,
+            step="agent_triage",
             max_output_tokens=WATCH_TRIAGE_MAX_OUTPUT_TOKENS,
             usage_event="agent.triage.usage",
             label="agent-triage",
@@ -469,7 +473,7 @@ class OpenAIAgentBackend:
         parsed = self._parse(
             messages,
             response_format=WatchDecisionTransport,
-            model=AGENT_MODEL,
+            step="agent_decide",
             max_output_tokens=WATCH_DECISION_MAX_OUTPUT_TOKENS,
             usage_event="agent.decide.usage",
             label="agent-decide",
@@ -479,6 +483,33 @@ class OpenAIAgentBackend:
             metadata={"framing": framing},
         )
         return _scrub_decision(parsed.to_wire())
+
+    def write_title(
+        self,
+        kind: Literal["task", "chat"],
+        text: str,
+        *,
+        session_id: uuid.UUID | None = None,
+    ) -> str | None:
+        """Write a short task or chat title through structured OpenAI output."""
+        task = kind == "task"
+        messages = (
+            build_task_title_messages(question=text)
+            if task
+            else build_chat_title_messages(first_message=text)
+        )
+        parsed = self._parse(
+            messages,
+            response_format=TitleWire,
+            step="task_title" if task else "chat_title",
+            max_output_tokens=TITLE_MAX_OUTPUT_TOKENS,
+            usage_event="task_agent.title.usage" if task else "chat.title.usage",
+            label="task-agent-title" if task else "chat-title",
+            prompt_version=TASK_TITLE_PROMPT_VERSION if task else CHAT_TITLE_PROMPT_VERSION,
+            name="task_agent:title" if task else "chat:title",
+            session_id=session_id,
+        )
+        return parsed.title
 
     def sort_gate_turn(
         self,
@@ -492,7 +523,7 @@ class OpenAIAgentBackend:
         parsed = self._parse(
             messages,
             response_format=GateSortWire,
-            model=AGENT_TRIAGE_MODEL,
+            step="agent_gate_sort",
             max_output_tokens=GATE_SORT_MAX_OUTPUT_TOKENS,
             usage_event="agent.gate_sort.usage",
             label="agent-gate-sort",
@@ -515,7 +546,7 @@ class OpenAIAgentBackend:
         parsed = self._parse(
             messages,
             response_format=LonglistVerbWire,
-            model=AGENT_TRIAGE_MODEL,
+            step="agent_longlist_sort",
             max_output_tokens=LONGLIST_VERBS_MAX_OUTPUT_TOKENS,
             usage_event="agent.longlist_sort.usage",
             label="agent-longlist-sort",
@@ -541,7 +572,7 @@ class OpenAIAgentBackend:
         return self._parse(
             messages,
             response_format=OptionDesignWire,
-            model=AGENT_MODEL,
+            step="agent_option_design",
             max_output_tokens=OPTION_DESIGN_MAX_OUTPUT_TOKENS,
             usage_event="agent.option_design.usage",
             label="agent-option-design",
@@ -569,7 +600,7 @@ class OpenAIAgentBackend:
         return self._parse(
             messages,
             response_format=SuggestResponse,
-            model=AGENT_MODEL,
+            step="agent_suggest",
             max_output_tokens=SUGGEST_MAX_OUTPUT_TOKENS,
             usage_event="agent.suggest.usage",
             label="agent-suggest",
@@ -583,7 +614,7 @@ class OpenAIAgentBackend:
         messages: list[ChatCompletionMessageParam],
         *,
         response_format: type[T],
-        model: str,
+        step: str,
         max_output_tokens: int,
         usage_event: str,
         label: str,
@@ -597,7 +628,11 @@ class OpenAIAgentBackend:
             self._langfuse_client,
             messages=messages,
             response_format=response_format,
-            model=model,
+            model=route().model_for(step),
+            step=step,
+            reasoning_effort=route().effort_for(step),
+            timeout_s=route().timeout_for(step),
+            prompt_cache=cache_mode_for(step),
             max_output_tokens=max_output_tokens,
             usage_event=usage_event,
             label=label,
@@ -732,6 +767,8 @@ class StubAgentBackend:
         suggest_responses: Canned :class:`SuggestResponse` value(s), or
             ``None`` (the default suggests one option from the plan and one
             per linked report).
+        title_responses: Canned title line(s), or ``None`` (the default
+            writes none, so the caller falls back to a cut of the text).
     """
 
     def __init__(
@@ -744,6 +781,7 @@ class StubAgentBackend:
         longlist_sort_responses: LonglistVerbWire | list[LonglistVerbWire] | None = None,
         option_design_responses: OptionDesignWire | list[OptionDesignWire] | None = None,
         suggest_responses: SuggestResponse | list[SuggestResponse] | None = None,
+        title_responses: str | list[str] | None = None,
     ) -> None:
         self._route_queue = _as_queue(route_responses)
         self._triage_queue = _as_queue(triage_responses)
@@ -752,6 +790,9 @@ class StubAgentBackend:
         self._longlist_sort_queue = _as_queue(longlist_sort_responses)
         self._option_design_queue = _as_queue(option_design_responses)
         self._suggest_queue = _as_queue(suggest_responses)
+        self._title_queue: list[str] = _as_queue(title_responses)
+        #: ``(kind, text)`` per title call (round 14).
+        self.title_calls: list[tuple[str, str]] = []
         self.route_calls = 0
         self.triage_calls = 0
         self.decide_calls = 0
@@ -800,6 +841,19 @@ class StubAgentBackend:
         del request, header, payload, digest, framing, session_id
         self.decide_calls += 1
         return _next(self._decide_queue, _proceed)
+
+    def write_title(
+        self,
+        kind: Literal["task", "chat"],
+        text: str,
+        *,
+        session_id: uuid.UUID | None = None,
+    ) -> str | None:
+        del session_id
+        self.title_calls.append((kind, text))
+        if not self._title_queue:
+            return None
+        return _next(self._title_queue, str)
 
     def sort_gate_turn(
         self,

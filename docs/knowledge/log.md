@@ -1,5 +1,89 @@
 # Knowledge update log
 
+## 2026-11-09 (task 058, review stack)
+* **New**: [route-step-needs-three-rows](route-step-needs-three-rows.md) — the streamed
+  section turn's missing cache-mode row made every streamed turn fall back silently; the
+  fallback count was in memory and a log line only (one real fallback found in the trace).
+* **New**: [model-step-routes-carry-the-task-session](model-step-routes-carry-the-task-session.md)
+  — the note refresh route's `trace_scope` carried the user only; seven session-less traces
+  on the instance; the title generations are sibling root traces, not nested.
+* **Update**: [executor-fanout-context-and-usage](executor-fanout-context-and-usage.md) — a
+  `Future` done-callback runs in an empty context on the pool thread; carry the submitting
+  thread's context (`core/done_callbacks.py`).
+* **Update**: [bedrock-route-facts](bedrock-route-facts.md) — what streams on the
+  OpenAI-compatible endpoint: a strict `json_schema` string field streams, a forced tool call
+  bursts; the ready-tool-then-write-turn shape streams and keeps the cache prefix.
+* **Update**: [parallel-agent-test-databases](parallel-agent-test-databases.md) — tests
+  without the `engine` fixture depended on an earlier test's migration; conftest migrates
+  once per worker.
+  Folded from the build's seven candidates: the done-callback, the streaming shapes, the
+  three rows and the conftest migration (above); the hub's whole-queue drain into the
+  three-rows concept's neighbour in `docs/deferred.md` § Perceived latency (the resync on a
+  full queue replaced the drain lesson at the review). To the failure log, not knowledge: the
+  Codex spend cap ending a job mid-apply, and the frontend-designer's turn limit on
+  screenshot rounds (agentic-ops facts, not system facts).
+
+
+## 2026-10-22 (task 053, CI fix and tier change)
+* **Update**: [model-route-constants-read-at-import](model-route-constants-read-at-import.md)
+  — three tiers on every route from 2026-10-22; the default route carries the owner's
+  choice, not the pre-053 literals, and the tests pin the file's own values.
+* **Update**: [tests-are-zero-egress-scrub-keys](tests-are-zero-egress-scrub-keys.md) —
+  `boto3` resolves credentials at client construction and probes the EC2 metadata
+  address when none are configured; conftest sets `AWS_EC2_METADATA_DISABLED` so a
+  test that builds a Bedrock client passes on a credential-less CI runner as it does
+  on a keyed laptop.
+
+## 2026-10-21 (task 053, delta review)
+* **Update**: [live-check-drive-runbook](live-check-drive-runbook.md) — an
+  options-scoping walk's first pause is a steering check-in, the confirm decision opens
+  the longlist walk (053 live check 4); reading traces on a Langfuse v3 host goes through
+  the REST API, filtered by session.
+* **Update**: [two-step-rename-needs-ledger-and-anchored-exemptions](two-step-rename-needs-ledger-and-anchored-exemptions.md)
+  — a renumber after a numbering clash sweeps only the branch's own lines and re-reads
+  hand-merged lines (053 sent two dev citations to the wrong ADR).
+* **Update**: [model-route-constants-read-at-import](model-route-constants-read-at-import.md)
+  — 27 steps, five tiers, twelve retired variables (one silent); the step-exception
+  model-id pass-through named as deliberate.
+* **Update**: [bedrock-route-facts](bedrock-route-facts.md) — planner → task_agent after
+  the merge; index description now states the per-route key variable.
+* **Update**: [tests-are-zero-egress-scrub-keys](tests-are-zero-egress-scrub-keys.md),
+  [orchestrate-stub-smoke](orchestrate-stub-smoke.md) — "live iff `OPENAI_API_KEY`" is now
+  "the route's key variable".
+
+## 2026-10-21 (task 053, dev merge)
+* **Creation**: Added
+  [merge-take-theirs-drops-unconflicted-hunks](merge-take-theirs-drops-unconflicted-hunks.md)
+  — accepting dev's file wholesale lost three non-conflicting 053 hunks; found by the
+  full gate, re-applied from a diff against the pre-merge tip.
+* **Update**: [model-route-constants-read-at-import](model-route-constants-read-at-import.md)
+  — the pin is 29 constants in 19 modules after options scoping (Sol as the `judgment`
+  tier) joined the route file.
+* **Update**: [bedrock-route-facts](bedrock-route-facts.md) — each route names its key
+  variable; a 401 from api.openai.com quoting a `bedrock-…` key means the selector is unset.
+
+## 2026-10-14 (task 053 step 8)
+* **Creation**: Added [bedrock-route-facts](bedrock-route-facts.md) — which models answer
+  from London through which API, the two key variables and the AccessDenied look-alike,
+  Terra's knob being about function tools only (053 probes and live checks; review-stack
+  probe closed the planner-on-Terra question).
+* **Creation**: Added
+  [model-route-constants-read-at-import](model-route-constants-read-at-import.md) — the
+  committed route file, import-time constants and the subprocess rule for other-route
+  tests, the 25-constant pin, what the loader can and cannot check (053 build; the
+  backend-name and overlay-shape fallbacks were convergent Codex and Claude findings).
+* **Creation**: Added
+  [interface-change-sweeps-fakes-and-premise-pins](interface-change-sweeps-fakes-and-premise-pins.md)
+  — sweep every fake of a changed Protocol method before a targeted run; repoint, never
+  delete, a structural pin an approved gate invalidates (053 Phase B gate failure and
+  the image-hygiene repoint, widened at review).
+* **Update**: [live-check-drive-runbook](live-check-drive-runbook.md) gains the
+  `if __name__ == "__main__"` rule for drivers that call `run_plan` (014's lesson,
+  re-learned by 053's live check 3).
+* **Update**: [delegated-executor-practices](delegated-executor-practices.md) — briefs
+  allow `ruff format --check` and `ruff check --fix` only; a bare `ruff format` on
+  existing files is churn (053 Phase B).
+
 ## 2026-10-12 (task 046 step 8, all four amendments)
 * **Creation**: Added [mini-model-limits-live-in-the-schema-and-code](mini-model-limits-live-in-the-schema-and-code.md)
   (build candidates a3 "a ceiling in words does not bind", a4 "will not count characters",
@@ -582,3 +666,75 @@
   [event-log sequence](event-log-sequence.md), [block content_hash](block-content-hash.md)).
 * **Update**: Added the [plan→config compile fails-closed](plan-compile-fails-closed.md) invariant —
   also verified by task 001, missed in the initial seed.
+* **Update** (2026-10-27, task 055 review): four concepts — [wire max_length truncates](wire-max-length-truncates-not-fails.md),
+  [plan-field additions carry from previous](plan-field-additions-carry-from-previous.md),
+  [recovery copy names a route that recovers](recovery-copy-names-a-route-that-recovers.md),
+  [short ids leak into free text](short-ids-leak-into-free-text.md); folds into
+  [docker wedge](macos-swap-presents-as-docker-wedge.md) (engine stops answering; `docker desktop restart`),
+  [live-check runbook](live-check-drive-runbook.md) (`--reload` waits on the event stream),
+  [executor fan-out](executor-fanout-context-and-usage.md) (thread-order assertions),
+  [gate snapshots](gate-snapshots-commit-from-tree-ids.md) (splitting a gated tree),
+  [evidence readbacks](evidence-readbacks-name-the-task-they-read.md) (hand marks written back).
+  Declined as knowledge: the stub `to_ready` helper adds a turn per plan part and
+  `_folded_coverage` copies only `outcome_counts` (both code-local, recorded in 055 verification.md).
+
+## 2026-11-03
+* **Update** (task 057 review): seven concepts —
+  [queued-row writes guard on the owning run](queued-row-writes-guard-on-the-owning-run.md),
+  [Lambda runs the image as its own user](lambda-runs-the-image-as-its-own-user.md),
+  [scoped SQL retrieval: planner and parity](scoped-sql-retrieval-planner-and-parity.md),
+  [measure a commit from a second worktree](measure-a-commit-from-a-second-worktree.md),
+  [parallel-agent test databases](parallel-agent-test-databases.md),
+  [judge effort needs a content read](judge-effort-needs-a-content-read.md),
+  [the markup rule must not delete content](markup-rule-must-not-delete-content.md);
+  one concept extended, [client timeout sized to the healthy tail](client-timeout-sized-to-healthy-tail.md)
+  (three attempts, derive at the width, the 15 s floor, failed attempts carry no input).
+  Extended again after the owner's probes 2 and 4 and the Bedrock research: the stalls are
+  the provider's (do not engineer the client for them) and `max_completion_tokens` is a
+  quota reservation on Bedrock (screen and classify caps trimmed, F22).
+  Authored from both sources: the build's 22 knowledge candidates (verification.md § Review
+  handoff) and the stack's findings. Folded: the zsh word-split, the two-walk cap, the
+  cherry-pick abort, the `--theirs` rule, the store's like-for-like effect, the pool's probe
+  cost, the overhead timer's noise and the envelope-embedding over-count into the worktree
+  runbook; the `127.0.0.1` refusal, the extension precondition and the contended backfill
+  timing into the agent-database rule; the tokens rule, the `EXPLAIN (ANALYZE, BUFFERS)`
+  reading, the float32 order and the buffer-pool reading into the retrieval concept; the
+  CLI import, the two sync lines and the emulator into the Lambda concept. Declined as
+  knowledge: none of the 22 (each is in a concept above). The review's own lessons
+  (the status-only guard, the unknown send, the test-only socket deny, the 60 s token) are
+  in the first and fifth concepts.
+
+## 2026-11-02
+* **Update** (task 056 review): ten concepts —
+  [Langfuse usage buckets](langfuse-usage-buckets-are-exclusive.md),
+  [pydantic docstrings are prompt text](pydantic-docstrings-in-tool-schemas-are-prompt-text.md),
+  [cost basis before target](cost-per-run-basis-before-target.md),
+  [omitted effort is medium, GPT-6 shapes](reasoning-effort-omitted-is-medium-gpt6-shapes.md),
+  [client timeout sized to the healthy tail](client-timeout-sized-to-healthy-tail.md),
+  [cache measurement needs isolated prefixes](cache-measurement-needs-isolated-prefixes.md),
+  [executor capacity counts database rows](run-executor-capacity-counts-database-rows.md),
+  [poll-deadline tests under parallel load](poll-deadline-tests-under-parallel-load.md) (two of the build's widened deadlines were races; made deterministic at review),
+  [frontend label lists mirror the backend vocabulary](frontend-label-lists-mirror-backend-vocabulary.md),
+  [parallel-agent briefs forbid git stash](parallel-agent-briefs-forbid-git-stash.md).
+  Folded: the SDK's missing `cache_write_tokens` and the v1-only observations API into the
+  Langfuse concept; embedding dominating ingest on bedrock into the cost basis; the 409 on two
+  servers, the kept plan after 409 and the worktree migration step into the executor concept;
+  the xdist name collision into the poll-deadline concept. The build's "re-run alone" and
+  "the fix is the deadline" candidates were ordered, not contradicted. Declined as knowledge:
+  the walk's `extract:interventions` stall figures (task-specific, in verification.md).
+
+## 2026-11-05 — task 054 (theory of change), the review stack before PR #114
+
+Added: [lossy-downgrades-refuse-on-their-own-data](lossy-downgrades-refuse-on-their-own-data.md),
+[public-leg-reads-carry-no-names](public-leg-reads-carry-no-names.md),
+[dead-surface-cuts-sweep-scripts-too](dead-surface-cuts-sweep-scripts-too.md) (from the stack's
+findings); [retry-layers-multiply](retry-layers-multiply.md),
+[xyflow-in-this-codebase](xyflow-in-this-codebase.md),
+[agent-line-without-a-model-call](agent-line-without-a-model-call.md),
+[lower-grade-colours-the-canvas](lower-grade-colours-the-canvas.md) and
+[missing-source-key-fails-open](missing-source-key-fails-open.md) (from the build's knowledge
+candidates in verification.md § Review handoff). Folded: the `global.openai.` model-id prefix
+into [bedrock-route-facts](bedrock-route-facts.md). Declined: "two checkouts share one test
+database" (superseded by task 056's per-worker copies and
+[parallel-agent-test-databases](parallel-agent-test-databases.md)); "vitest setup takes 15
+minutes under load" (a machine condition, not a system fact; kept in verification.md).

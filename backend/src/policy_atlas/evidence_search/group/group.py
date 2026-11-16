@@ -21,16 +21,7 @@ import structlog
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core.schema import (
-    extraction_result,
-    finding_reference_union,
-    grouping_result,
-    implementation_context_finding,
-    intervention_outcome_finding,
-)
-from policy_atlas.core.tags import has_control_character
-from policy_atlas.core.usage import UsageAccumulator, UsageResult
-from policy_atlas.evidence_search.clustering_engine import (
+from policy_atlas.core.clustering_engine import (
     AssignmentOutput,
     ClusteringBackend,
     ClusteringFailure,
@@ -41,6 +32,15 @@ from policy_atlas.evidence_search.clustering_engine import (
     call_budget_for_unit_count,
     cluster_units,
 )
+from policy_atlas.core.schema import (
+    extraction_result,
+    finding_reference_union,
+    grouping_result,
+    implementation_context_finding,
+    intervention_outcome_finding,
+)
+from policy_atlas.core.tags import has_control_character
+from policy_atlas.core.usage import UsageAccumulator, UsageResult
 from policy_atlas.evidence_search.extract.extract import record_ids_by_profile
 from policy_atlas.evidence_search.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
@@ -830,6 +830,7 @@ def _group_policy(*, unit_count: int, granularity: str = "standard") -> Clusteri
         log_event_prefix="group.clustering",
         rejection_reason_cap=REJECTION_REASON_CAP,
         rejection_detail_max_len=REJECTION_REASON_MAX,
+        progress_key="group.batches",
     )
 
 
@@ -1542,6 +1543,8 @@ def _build_summary(
         "facet": facets[0] if len(facets) == 1 else None,
         "facets": list(facets),
         "facet_source": facet_source,
+        # Task 058, N2: the integer the done row shows.
+        "group_count": sum(len(groups[facet]) for facet in facets),
         "groups": {facet: groups[facet] for facet in facets},
         "residuals": {facet: residuals[facet] for facet in facets},
         "counts": {facet: counts[facet] for facet in facets},

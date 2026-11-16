@@ -7,14 +7,14 @@ from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 import structlog
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import Connection
 
-from policy_atlas.api.app import ApiConflict
+from policy_atlas.api.app import ApiConflict, ApiUnprocessable
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import (
-    PAGE_SIZE_DEFAULT,
+    LIST_PAGE_SIZE_DEFAULT,
     PAGE_SIZE_MAX,
     Page,
     PageMeta,
@@ -22,10 +22,10 @@ from policy_atlas.api.contract import (
     TaskOut,
     TaskUpdate,
 )
-from policy_atlas.api.deps import get_conn, get_current_user, get_optional_user
+from policy_atlas.api.deps import get_conn, get_current_user, get_optional_user, get_settings
 from policy_atlas.api.identity import owner_display_for
 from policy_atlas.api.lifecycle import archive_task, rename_task
-from policy_atlas.api.routers._access import (
+from policy_atlas.api.routers.access import (
     OWNER_EMAIL_MAX,
     accessible_task,
     assignable_project,
@@ -35,11 +35,12 @@ from policy_atlas.api.routers._access import (
     readable_or_public_task,
     trace_admin_listing,
 )
-from policy_atlas.api.routers._common import (
+from policy_atlas.api.routers.common import (
     links_for_tasks,
     memberships_for_tasks,
     task_out,
 )
+from policy_atlas.api.settings import Settings
 from policy_atlas.core import events
 from policy_atlas.core.schema import (
     app_user,
@@ -49,7 +50,7 @@ from policy_atlas.core.schema import (
     task,
     task_link,
 )
-from policy_atlas.runtime.capability_registry import EVIDENCE_SEARCH
+from policy_atlas.runtime.capability_registry import EVIDENCE_SEARCH, THEORY_OF_CHANGE
 
 log = structlog.get_logger()
 
@@ -60,6 +61,11 @@ router = APIRouter(
 )
 
 public_read_router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
+
+#: The 403 message when someone other than the owner adds the task to a
+#: project or takes it out of one (task 058, round 10). Plain words: the
+#: Share page shows it as it is.
+PROJECTS_OWNER_ONLY = "Only the task's owner can change its projects."
 
 
 @router.get("", response_model=Page[TaskOut])
@@ -73,7 +79,7 @@ def list_tasks(
     project_id: Annotated[uuid.UUID | None, Query()] = None,
     owner_email: Annotated[str | None, Query(max_length=OWNER_EMAIL_MAX)] = None,
     page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
+    page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = LIST_PAGE_SIZE_DEFAULT,
 ) -> Page[TaskOut]:
     """List the tasks the caller may see, with derived latest-run state.
 
@@ -315,7 +321,7 @@ def _write_task_links(
     3.  **Same project.** The source must share at least one project with the
         new task *as just assigned*. This is the create-time invariant; a pair
         that later stops sharing one is flagged on read, never broken
-        (:func:`_common.links_for_tasks`).
+        (:func:`common.links_for_tasks`).
     4.  **Finished walk.** The source's latest walk must be ``succeeded`` or
         ``degraded``, and its id is pinned onto the row. A running, paused or
         failed source has nothing stable to inherit.
@@ -391,6 +397,7 @@ def create_task(
     payload: TaskCreate,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> TaskOut:
     """Create one active task owned by the authenticated subject.
 
@@ -406,12 +413,21 @@ def create_task(
     the thing it was created for. So any refusal below rolls the task row back
     with it.
 
+    A theory of change is refused unless the server setting is on (task 054,
+    C15), before anything is written.
+
     Raises:
         HTTPException: 404 when a named source task is not readable by the
             caller.
+        ApiUnprocessable: 422 ``capability_not_enabled`` for a theory of
+            change while ``POLICY_ATLAS_THEORY_OF_CHANGE`` is off.
         ApiConflict: 409 ``visibility_conflict``, ``link_source_capability``,
             ``link_project_mismatch`` or ``link_source_unfinished``.
     """
+    if payload.capability == THEORY_OF_CHANGE and not settings.theory_of_change_enabled:
+        raise ApiUnprocessable(
+            "capability_not_enabled", "theory of change is not enabled on this server"
+        )
     now = datetime.now(UTC)
     task_id = uuid.uuid4()
     conn.execute(
@@ -506,9 +522,17 @@ def update_task(
         ApiConflict: 409 `visibility_conflict` when setting `visibility` on a
             task that belongs to a project.
     """
-    access = accessible_task(
-        conn, task_id=task_id, user_id=user.user_id, write=True, for_update=True
-    )
+    try:
+        access = accessible_task(
+            conn, task_id=task_id, user_id=user.user_id, write=True, for_update=True
+        )
+    except HTTPException as exc:
+        # A colleague who can see the row and tries to move it between
+        # projects is told why in words the Share page can show (task 058,
+        # round 10); the code stays `forbidden`.
+        if exc.status_code == 403 and "project_ids" in payload.model_fields_set:
+            raise HTTPException(status_code=403, detail=PROJECTS_OWNER_ONLY) from None
+        raise
     changes = payload.model_dump(exclude_unset=True)
     if "visibility" in changes:
         # i.5, enforced against the row already loaded. A task in a

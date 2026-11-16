@@ -30,6 +30,38 @@ runs this phase; Tier 0/1 skip it). Templates: `docs/tasks/_templates/`.
   agent (see § Codex plumbing below). `agent-skills:doubt-driven-development` applies the
   same fresh-context skepticism to key decisions.
 
+## Frontend-heavy slices — design pass before the contract (owner, 2026-11-04)
+
+A slice whose value is what the user sees runs a **design pass before step 1**, because
+looks only settle once they are seen, and a contract that names looks turns every taste
+change into a deviation. The pass, inside conversation A:
+
+1. **Ground**: explorers over the surfaces the slice touches (states, copy, tests, the
+   mock API) and the relevant research; conclusions saved under `docs/tasks/NNN/research/`
+   (gitignored).
+2. **Script**: the lead writes `docs/tasks/NNN/design-annex.md` from
+   `docs/tasks/_templates/design-annex.md` — every state, transition and line of copy, in
+   the product voice. The lead owns copy and direction; agents gather facts.
+3. **Mock**: a throwaway page built by a `builder` from the script, published as a private
+   artifact; rounds with the owner until structure, states and copy freeze. The stop rule
+   is the owner's "direction settled", never pixel satisfaction — details change on the
+   real app. Each round edits the script first, then the mock.
+4. **Contract** (step 1) then **pins behaviours, states, interfaces, invariants and measured
+   outcomes, and cites the annex by version. It never names a colour, weight or spacing.**
+   Rubric rows are testable (vitest, the mock journey). Visual decisions live only in the
+   annex, so a later change is an annex edit, not a contract deviation.
+
+Every agent that touches the frontend in any phase — grounding, build, polish, review —
+is the pinned **`frontend-designer`** agent (`.claude/agents/frontend-designer.md`), which
+loads all the frontend design skills, `PRODUCT.md` (committed; its § Product Principles
+are the team's six), `DESIGN.md` (committed; the visual system) and the slice's research
+before it starts. Unskilled workers ship correct but
+unpolished surfaces (2026-09-05); a brief to any other agent for frontend work needs a
+reason in the plan.
+
+Polish is first-class and multi-pass — see task-cycle-build § Step 5b and
+task-cycle-review § Frontend-heavy slices. First slice under this rule: 058.
+
 ## Step 1 — Contract
 
 The slice's identity lives in two places and nowhere else: the branch name
@@ -81,7 +113,10 @@ precedent). Targets: unstated assumptions, missed requirements, contradictions w
 specs, simpler alternatives. Decisions the human settled in review are *context, not
 targets* (challenge only on contradiction). The lead adjudicates findings into the
 contract; a material change reopens the 🛑 for re-approval, minor ones are folded in and
-noted. Rationale: in this repo the contract fixes the design (schema, interfaces, tests) —
+noted. **Do not commit the review record** (owner, 2026-11-04): the findings and their
+adjudication live in the contract's status line and items; the raw review stays under the
+task's gitignored `research/` folder. (Tasks 026 to 057 committed `adversarial-review-*.md`
+files by copying the previous slice's folder; that was never a rule.) Rationale: in this repo the contract fixes the design (schema, interfaces, tests) —
 attack it at its own gate, not after a plan is built on it.
 
 ## Step 2 — Rubric
@@ -141,6 +176,7 @@ names the reading list (contract, plan, the specs they cite, AGENTS.md, `docs/de
 and scopes the targets: plan↔contract/spec fit, sequencing risks, 🟡/❓ items, missed
 requirements, simpler alternatives. If it can't critique from the files alone, the
 artifacts aren't the self-sufficient handoff conversation B needs — fix that first.
+The same rule as step 1: fold the findings into the plan, keep the review record local.
 (Distinct from the high-stakes two-independent-takes rule, which generates alternatives
 *before* the design call; this attacks the chosen plan *after* drafting.)
 

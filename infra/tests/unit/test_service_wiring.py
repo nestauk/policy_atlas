@@ -1,7 +1,11 @@
 """Assertions for the Policy Atlas API and migration task wiring."""
 import json
+import tomllib
+from pathlib import Path
 
-from tests.unit.test_synth import TEMPLATES, _resources
+from tests.unit.test_synth import BEDROCK_APP_TEMPLATE, OPENAI_APP_TEMPLATE, TEMPLATES, _resources
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 API_ENVIRONMENT_NAMES = {
@@ -16,6 +20,11 @@ API_ENVIRONMENT_NAMES = {
     "LOG_LEVEL",
     "LOG_FORMAT",
     "LANGFUSE_TRACING_ENVIRONMENT",
+    "POLICY_ATLAS_MODEL_ROUTE",
+    "POLICY_ATLAS_UPLOAD_BUCKET",
+    "POLICY_ATLAS_THEORY_OF_CHANGE",
+    "POLICY_ATLAS_INGEST_MODE",
+    "POLICY_ATLAS_INGEST_QUEUE_URL",
 }
 APP_SECRET_NAMES = {
     "OPENAI_API_KEY",
@@ -28,11 +37,11 @@ APP_SECRET_NAMES = {
 }
 
 
-def _task_definition(family: str) -> dict:
+def _task_definition(family: str, template: dict | None = None) -> dict:
     """Return the synthesized ECS task definition having ``family``."""
     return next(
         resource["Properties"]
-        for _, resource in _resources(TEMPLATES["app"], "AWS::ECS::TaskDefinition")
+        for _, resource in _resources(template or TEMPLATES["app"], "AWS::ECS::TaskDefinition")
         if resource["Properties"]["Family"] == family
     )
 
@@ -50,7 +59,7 @@ def _secret_map(container: dict) -> dict[str, object]:
 
 
 def test_api_container_has_the_complete_deployed_plain_environment_map():
-    api_container = _container(_task_definition("policy-atlas-v3-api"))
+    api_container = _container(_task_definition("policy-atlas-v3-api", OPENAI_APP_TEMPLATE))
     environment = {
         item["Name"]: item["Value"] for item in api_container["Environment"]
     }
@@ -63,10 +72,80 @@ def test_api_container_has_the_complete_deployed_plain_environment_map():
     assert environment["LOG_LEVEL"] == "INFO"
     assert environment["LOG_FORMAT"] == "json"
     assert environment["LANGFUSE_TRACING_ENVIRONMENT"] == "staging"
+    assert environment["POLICY_ATLAS_MODEL_ROUTE"] == "openai-direct"
+    assert environment["POLICY_ATLAS_INGEST_MODE"] == "queued"
+    assert "IngestQueue" in json.dumps(environment["POLICY_ATLAS_INGEST_QUEUE_URL"])
+    assert environment["POLICY_ATLAS_UPLOAD_BUCKET"] == {"Ref": _uploads_bucket_id()}
+    assert environment["POLICY_ATLAS_THEORY_OF_CHANGE"] == "1"
+
+
+def test_theory_of_change_is_on_in_staging_only():
+    """Task 054 (C15): colleagues try it on staging; production stays off."""
+    config = json.loads((REPO_ROOT / "infra/pa_config.json").read_text())
+    backends = {env: config[env]["policy_atlas_config"]["backend"] for env in config}
+    assert {env: backend.get("theory_of_change") for env, backend in backends.items()} == {
+        "staging": True,
+        "prod": False,
+    }
+
+
+def _uploads_bucket_id(template: dict | None = None) -> str:
+    """The logical id of the uploads bucket (task 054 increment 5)."""
+    return next(
+        name
+        for name, resource in _resources(template or TEMPLATES["app"], "AWS::S3::Bucket")
+        if resource["Properties"].get("BucketName") == "policy-atlas-v3-staging-uploads"
+    )
+
+
+def test_the_uploads_bucket_is_private_encrypted_https_only_and_retained():
+    template = TEMPLATES["app"]
+    bucket_id = _uploads_bucket_id()
+    bucket = template["Resources"][bucket_id]
+    assert bucket["DeletionPolicy"] == "Retain" and bucket["UpdateReplacePolicy"] == "Retain"
+    properties = bucket["Properties"]
+    assert properties["PublicAccessBlockConfiguration"] == {
+        "BlockPublicAcls": True,
+        "BlockPublicPolicy": True,
+        "IgnorePublicAcls": True,
+        "RestrictPublicBuckets": True,
+    }
+    rules = properties["BucketEncryption"]["ServerSideEncryptionConfiguration"]
+    assert rules[0]["ServerSideEncryptionByDefault"]["SSEAlgorithm"] == "AES256"
+    assert "VersioningConfiguration" not in properties
+    # A bucket policy refuses any request that is not over HTTPS.
+    policy = next(
+        resource["Properties"]["PolicyDocument"]["Statement"]
+        for _, resource in _resources(template, "AWS::S3::BucketPolicy")
+        if resource["Properties"]["Bucket"] == {"Ref": bucket_id}
+    )
+    assert any(
+        statement["Effect"] == "Deny"
+        and statement["Condition"] == {"Bool": {"aws:SecureTransport": "false"}}
+        for statement in policy
+    )
+
+
+def test_only_the_api_task_role_may_use_the_uploads_bucket_under_tasks():
+    template = TEMPLATES["app"]
+    bucket_id = _uploads_bucket_id()
+    granted = [
+        resource
+        for _, resource in _resources(template, "AWS::IAM::Policy")
+        if bucket_id in str(resource["Properties"]["PolicyDocument"])
+    ]
+    assert len(granted) == 1
+    roles = granted[0]["Properties"]["Roles"]
+    api = _task_definition("policy-atlas-v3-api")
+    role_id = api["TaskRoleArn"]["Fn::GetAtt"][0]
+    assert roles == [{"Ref": role_id}]
+    statements = granted[0]["Properties"]["PolicyDocument"]["Statement"]
+    objects = [s for s in statements if "s3:PutObject" in s["Action"]]
+    assert objects and all("/tasks/*" in str(s["Resource"]) for s in objects)
 
 
 def test_api_container_references_database_and_app_secrets_without_values():
-    secrets = _secret_map(_container(_task_definition("policy-atlas-v3-api")))
+    secrets = _secret_map(_container(_task_definition("policy-atlas-v3-api", OPENAI_APP_TEMPLATE)))
     assert set(secrets) == {"DATABASE_URL", *APP_SECRET_NAMES}
 
     database_reference = json.dumps(secrets["DATABASE_URL"])
@@ -82,6 +161,29 @@ def test_api_container_references_database_and_app_secrets_without_values():
     for reference in secrets.values():
         rendered = json.dumps(reference)
         assert "secretsmanager" in rendered or "Fn::" in rendered or "Ref" in rendered
+
+
+def test_bedrock_route_adds_only_the_bedrock_key_from_the_app_secret():
+    """Task 053: a Bedrock route passes AWS_BEARER_TOKEN_BEDROCK; OpenAI direct does not."""
+    container = _container(_task_definition("policy-atlas-v3-api", BEDROCK_APP_TEMPLATE))
+    environment = {item["Name"]: item["Value"] for item in container["Environment"]}
+    assert environment["POLICY_ATLAS_MODEL_ROUTE"] == "bedrock"
+    secrets = _secret_map(container)
+    assert set(secrets) == {"DATABASE_URL", *APP_SECRET_NAMES, "AWS_BEARER_TOKEN_BEDROCK"}
+    reference = json.dumps(secrets["AWS_BEARER_TOKEN_BEDROCK"])
+    assert "AWS_BEARER_TOKEN_BEDROCK" in reference
+    assert "policy_atlas_v3/app" in reference
+
+
+def test_every_configured_model_route_exists_in_the_backend_route_file():
+    """A typo in pa_config.json fails here, not as a backend crash after deploy."""
+    routes = tomllib.loads(
+        (REPO_ROOT / "backend/src/policy_atlas/model_routes.toml").read_text()
+    )["routes"]
+    config = json.loads((REPO_ROOT / "infra/pa_config.json").read_text())
+    for env_name, env_config in config.items():
+        route = env_config["policy_atlas_config"]["backend"]["model_route"]
+        assert route in routes, f"{env_name}: unknown model route {route!r}"
 
 
 def test_migration_task_is_one_shot_and_has_only_the_database_secret():

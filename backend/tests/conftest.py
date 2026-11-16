@@ -25,6 +25,10 @@ load_dotenv()
 # product-egress keys the .env may carry; DATABASE_URL and friends survive.
 for _egress_key in (
     "OPENAI_API_KEY",
+    "OPENAI_BASE_URL",
+    "AWS_BEARER_TOKEN_BEDROCK",
+    "POLICY_ATLAS_MODEL_ROUTE",
+    "POLICY_ATLAS_MODEL_ROUTE_FILE",
     "LANGFUSE_PUBLIC_KEY",
     "LANGFUSE_SECRET_KEY",
     "LANGFUSE_HOST",
@@ -34,9 +38,63 @@ for _egress_key in (
 ):
     os.environ.pop(_egress_key, None)
 
+# boto3 resolves credentials when a client is built. With none configured (CI), the
+# chain ends by asking the EC2 instance-metadata address, which socket-deny turns
+# into an HTTPClientError at construction (task 053 CI failure). A developer's
+# machine has ~/.aws credentials, so the probe never ran locally. Disable it: the
+# Cohere and Claude clients are then built with no credentials, which only matters
+# at request time, and the suite never sends one.
+os.environ["AWS_EC2_METADATA_DISABLED"] = "true"
+
 # Fixture corpus moved out of the package (contract decision 12, task 016) — point
 # FixtureFetcher's default resolution at the repo test-data home for the suite.
 os.environ.setdefault("POLICY_ATLAS_FIXTURE_CORPUS", str(Path(__file__).parent / "data"))
+
+# One test database per pytest-xdist worker (task 056, owner 2026-11-02). `make test`
+# runs the suite on every core; the workers would otherwise share one Postgres
+# database and trip over each other's rows. Each worker takes the database named in
+# DATABASE_URL, appends its worker id and process id (``policy_atlas_test_gw3_8123``),
+# creates that database fresh, and rewrites DATABASE_URL for its own process, so every later
+# reader of the variable (the engine fixture, the migration and API tests) sees the
+# worker's copy. The engine fixture then runs the migrations on it as before. The
+# copies are dropped when the worker finishes. A run without xdist (``-p no:xdist``,
+# or ``-n 0``) has no worker id and keeps the plain database.
+_WORKER = os.environ.get("PYTEST_XDIST_WORKER")
+if _WORKER and os.environ.get("DATABASE_URL"):
+    import psycopg
+
+    _base_url = os.environ["DATABASE_URL"]
+    _head, _name = _base_url.rstrip("/").rsplit("/", 1)
+    _name, _, _query = _name.partition("?")
+    if not _name.lower().endswith("_test"):
+        raise RuntimeError(f"refusing to copy a test database not named *_test: {_name!r}")
+    # The process id keeps two suites running at once on one Postgres apart (their
+    # workers share the names gw0, gw1, ...).
+    _worker_name = f"{_name}_{_WORKER}_{os.getpid()}"
+    # psycopg wants the plain scheme, not SQLAlchemy's "postgresql+psycopg".
+    _base_dsn = _base_url.replace("postgresql+psycopg://", "postgresql://", 1)
+    # The base database already exists (make reset-test-db); connect to it in
+    # autocommit mode, because CREATE DATABASE cannot run inside a transaction.
+    with psycopg.connect(_base_dsn, autocommit=True) as _c:
+        _c.execute(f'DROP DATABASE IF EXISTS "{_worker_name}" WITH (FORCE)')
+        _c.execute(f'CREATE DATABASE "{_worker_name}"')
+    # Task 057: the chunk-retrieval query needs the pgvector extension in every database
+    # the tests use. The compose user is a superuser; harmless where it already exists.
+    _plain_head = _head.replace("postgresql+psycopg://", "postgresql://", 1)
+    with psycopg.connect(f"{_plain_head}/{_worker_name}", autocommit=True) as _c:
+        _c.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    os.environ["DATABASE_URL"] = f"{_head}/{_worker_name}" + (f"?{_query}" if _query else "")
+
+    import atexit
+
+    def _drop_worker_db() -> None:
+        try:
+            with psycopg.connect(_base_dsn, autocommit=True) as c:
+                c.execute(f'DROP DATABASE IF EXISTS "{_worker_name}" WITH (FORCE)')
+        except Exception:  # noqa: BLE001 - best effort at interpreter exit
+            pass
+
+    atexit.register(_drop_worker_db)
 
 
 def _alembic_cfg() -> AlembicConfig:
@@ -67,11 +125,23 @@ def _db_url() -> str:
     return url
 
 
-@pytest.fixture(scope="session")
-def engine() -> Generator[Engine, None, None]:
-    e = create_engine(_db_url())
-    # Apply migration (idempotent — alembic checks current head)
+@pytest.fixture(scope="session", autouse=True)
+def _migrated_database() -> None:
+    """Bring the worker's database to the current schema before any test.
+
+    Tests that build their own client (``api_client``) never ask for the
+    ``engine`` fixture, so they used to depend on an earlier test in the same
+    worker having run the migrations: whichever test landed first on a fresh
+    worker failed with a missing table. Task 058 added enough tests to change
+    the order and expose it; the migration now runs once per worker, first.
+    """
+    # Idempotent: alembic checks the current head.
     command.upgrade(_alembic_cfg(), "head")
+
+
+@pytest.fixture(scope="session")
+def engine(_migrated_database: None) -> Generator[Engine, None, None]:
+    e = create_engine(_db_url())
     yield e
     e.dispose()
 

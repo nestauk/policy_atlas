@@ -1,7 +1,20 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–040 on `dev`; 044 on `feat/options-scoping` adds two reversible migrations (`a7d3f1c8e2b5` Task Agent rename, `b5e1d7a4c026` options-scoping records) 045 a third (`c7e2a9f4b1d8` the longlist records) and 046 three more (`d8f3b6a2c4e1` profile tags, `e9a4c1f7b3d2` the option profile column, `f1b6d3a8c2e5` the `population` → `unit` rename with a reversible data migration of the grouping facet key — the first of this branch that rewrites production rows; ADR 0040 § Rollback) — run `alembic upgrade head` against the dev DB after pulling that branch; the backend must run as one worker process (the start and add reservations are per process, ADR 0039 decision 13); rename any local `POLICY_ATLAS_PLANNER_MODEL` to `POLICY_ATLAS_TASK_AGENT_MODEL` (the code default is unchanged, so an old-only setting still works), and note the slice downgrade refuses while any `options_scoping` task or walk exists (`scripts/ops_remove_scoping_tasks.py --task-id <id> --apply` is the remedy — it deletes each named task whole, ADR 0037 § Rollback, ADR 0039 § Rollback); 040 is frontend-only and changes no env; 051 changes no env and no schema (the single-pass search and the Luna model ids are code constants; nothing new to set); 039 adds the APO test-mod (`publisher_source`,
+stands (058 (`task/058-perceived-latency`, perceived latency) adds one migration, `c4e8a2f6d1b3`
+(`project.archived_at`, nullable, no table rewrite; its downgrade drops the column and loses the
+archive times) — `alembic upgrade head` after pulling it — and three frontend packages for the
+Landscape map (`d3-geo`, `topojson-client`, `world-atlas`) — `pnpm install` in `frontend/`; it adds
+no env var; 054 (`task/054-1-core`, theory of change, the third capability; PR #114) adds ten migrations after 058's head, `9127f849697f` through `f5a1c8e93b27` (each downgrade refuses while its own data exists; `python scripts/ops_remove_toc_tasks.py --apply` deletes the named tasks and their uploaded files first, ADR 0042 § Rollback) — `alembic upgrade head` against the dev DB after pulling it; the server setting `POLICY_ATLAS_THEORY_OF_CHANGE=1` lets the API create the task kind (on in staging and off in production through `theory_of_change` in `infra/pa_config.json`; the staging build sets `VITE_THEORY_OF_CHANGE=1` in `scripts/deploy.sh`; `make dev` sets both locally); uploaded diagrams go to `POLICY_ATLAS_UPLOAD_BUCKET` in the cloud or `POLICY_ATLAS_UPLOAD_DIR` locally (default `backend/.uploads`, gitignored) and are sent to the model route's provider for reading; two frontend dependencies, `@xyflow/react` and `html-to-image`; no other new runtime egress (web search is not built); 057 (`task/057-queued-ingest`, queued ingest, the document store, SQL retrieval and
+step timeouts) adds three migrations, `a3d8f6c1e2b4` (expand: the store key and vector columns),
+`b7e2c4a9d1f3` (a resumable backfill of the binary vectors and token arrays; about 20 minutes on
+a dev database with 270,000 chunk embeddings, and it commits per batch so it can be stopped and
+resumed) and `0914321f8de4` (drops the JSON vector column once no row lacks a vector; ADR 0043
+§ Consequences and `infra/DEPLOYMENT.md` § 8 for the rollback) — `alembic upgrade head` against
+the dev DB after pulling it; the dev and CI Postgres image is `pgvector/pgvector:pg17`
+(`docker compose pull db` then `make setup`); two optional env vars, `POLICY_ATLAS_INGEST_MODE`
+(`in_process`, the default, or `queued`) and `POLICY_ATLAS_INGEST_QUEUE_URL` (required by
+`queued`; staging only), see `backend/.env.example`; 056 (`task/056-cost-latency`, cost and latency) adds one migration, `152a234e2391` (the appraisal score becomes nullable with an `unrated` flag; its downgrade deletes Unrated rows, ADR 0042 § Rollback) — `alembic upgrade head` against the dev DB after pulling it; `make test` now runs the backend suite on every core with one copy of the test database per worker (`tests/conftest.py`), so a second suite on the same Postgres needs its own `TEST_DATABASE_URL` name; runtime egress gains `www.ebi.ac.uk` (Europe PMC full-text XML; only a PubMed Central id is sent); models and per-step effort and cache mode come from `backend/src/policy_atlas/model_routes.toml` and `synthesis/cache_modes.py`; no new env vars; tasks 001–040 on `dev`; 044 on `feat/options-scoping` adds two reversible migrations (`a7d3f1c8e2b5` Task Agent rename, `b5e1d7a4c026` options-scoping records) 045 a third (`c7e2a9f4b1d8` the longlist records) and 046 three more (`d8f3b6a2c4e1` profile tags, `e9a4c1f7b3d2` the option profile column, `f1b6d3a8c2e5` the `population` → `unit` rename with a reversible data migration of the grouping facet key — the first of this branch that rewrites production rows; ADR 0040 § Rollback) — run `alembic upgrade head` against the dev DB after pulling that branch; 055 (the shortlist, `task/055-scoping-shortlist`) adds one more, `b33ffb8c3a16` (three columns, the scope purpose check widened to `shortlist`; its downgrade strips `risk_appetite` from every plan payload, ADR 0041 shortlist § Rollback) — `alembic upgrade head` again after pulling it; the backend must run as one worker process (the start and add reservations are per process, ADR 0039 decision 13); note that since 053 every `POLICY_ATLAS_*_MODEL` variable (including `POLICY_ATLAS_TASK_AGENT_MODEL`) is ignored with one warning, and `POLICY_ATLAS_PLANNER_MODEL`, which 044 had already stopped reading, is ignored silently, models come from `backend/src/policy_atlas/model_routes.toml`; and note the slice downgrade refuses while any `options_scoping` task or walk exists (`scripts/ops_remove_scoping_tasks.py --task-id <id> --apply` is the remedy — it deletes each named task whole, ADR 0037 § Rollback, ADR 0039 § Rollback); 040 is frontend-only and changes no env; 051 changes no env and no schema (the single-pass search; model ids were code constants until 053); 053 adds one optional selector, `POLICY_ATLAS_MODEL_ROUTE` (unset = OpenAI direct, as before), and each route names its key variable (`OPENAI_API_KEY` for OpenAI direct, `AWS_BEARER_TOKEN_BEDROCK` for the Bedrock routes), no schema change, see `backend/.env.example`; 039 adds the APO test-mod (`publisher_source`,
 Overton `source=apo`) plus planning/artefact bug fixes — no migration; when
 another checkout of this repo may be running tests, isolate the gate with a
 per-checkout `TEST_DATABASE_URL` `*_test` override; 038 renames the catalog (`project`→`task`,
@@ -19,8 +32,8 @@ from the image — plus the organisation schema, so run `alembic upgrade head`
 against the dev DB after pulling it; the ops CLI (`python -m policy_atlas.ops`)
 is tunnel-only and needs no local setup, but `make dev-seed` puts the tenancy
 UI on screen locally — it enrols dev-user/dev-colleague/dev-admin into
-"Dev Org" on the dev DB via the real enrol logic with a faked Cognito; 029 adds the chat surface: no new env vars required locally,
-`POLICY_ATLAS_CHAT_MODEL` optional with an application default; a live chat turn needs the
+"Dev Org" on the dev DB via the real enrol logic with a faked Cognito; 029 adds the chat surface: no new env vars required locally
+(the chat model is read from the committed route file since task 053); a live chat turn needs the
 funded OpenAI key `make dev` already loads; 025 hoists the Python project to `backend/` and adds the `frontend/`
 web app; 026 adds `infra/` (CDK, own venv from `infra/requirements*.txt`; `make -C infra test`
 joined `make verify` — no AWS/Docker needed) plus `make fe-api-smoke` (real-HTTP Playwright
@@ -106,7 +119,7 @@ upgrade gotcha below applies), the dev-issuer CLI for local JWTs (README quickst
 keys land gitignored), API env vars in `backend/.env` (`OIDC_*`, `APP_ORIGIN`,
 `DATABASE_URL`; loaded by `make -C backend dev` via `uv run --env-file`, deliberately
 NOT by the test suite), and `PA_BACKEND_MODE=live|stub|auto` (auto = key presence;
-live fails loud without `OPENAI_API_KEY`, warns on missing search keys).
+live fails loud without the route's key variable, warns on missing search keys; since 053 that variable is `OPENAI_API_KEY` on `openai-direct` and `AWS_BEARER_TOKEN_BEDROCK` on a Bedrock route, and every earlier "`OPENAI_API_KEY` makes it live" line above reads as "the route's key").
 `make verify` and the test suite need none of them — stub backends + socket-deny keep
 the suite egress-free (conftest scrubs product-egress keys a keyed `.env` may carry). One suite runner at a time: concurrent `make verify` runs
 contend on the shared test DB and flake (018 note).
@@ -138,7 +151,7 @@ make verify              # test (against policy_atlas_test) -> typecheck -> lint
 
 ## Required services
 
-- **Postgres 16** via Docker Compose (service `db`, plain `postgres:16` — **no pgvector** this slice).
+- **Postgres 17 with pgvector** via Docker Compose (service `db`, image `pgvector/pgvector:pg17` since task 057; it matches the Aurora engine and the chunk-retrieval query uses the `vector` type).
 - Published on **127.0.0.1:5432** only (not exposed beyond localhost).
 - User / password are `policy_atlas` (local dev only — not secrets). **Two databases** on the one
   container: `policy_atlas` (dev / smoke) and `policy_atlas_test` (tests; created by `make setup`).

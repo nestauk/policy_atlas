@@ -19,6 +19,12 @@ workers *return* their usage payloads; the submitting thread accumulates them in
 order (see the finding-vetter parallelization in `extract.py` — workers judge, the
 parent applies verdicts and adds usage).
 
+A `Future` **done-callback is not covered by the submit copy**: the pool thread runs it in
+an empty context, so a callback that reads a contextvar (the bound task, stage or walk for a
+live tick) publishes nothing in production and everything in a test that runs inline. Wrap
+the callback with the submitting thread's context (`core/done_callbacks.py`, task 058) or
+have the worker return what the callback needs.
+
 # Why
 
 019 items 4 + 7a composed for free once the submit seam owned context propagation —
@@ -41,3 +47,11 @@ the ordering question; returning usage keeps accumulation deterministic.
   `extract.py`, `classify.py`, `characterise.py`
 - [019 verification.md § Review findings](../tasks/019-folding-pass/verification.md)
   (live-trace lane: nesting verified on the D1 traces)
+
+# Watch out (055)
+
+Fake backends record calls in **thread** order; a test that asserts plan order over calls made
+by an eight-thread pool is green on CI and red on an Apple laptop
+(`test_every_depth_runs_the_same_pass_and_cuts_at_its_caps`, fixed in the 055 build by
+running that test with one worker). An order-sensitive assertion over a pool needs one worker
+in the test, or a sort before the assert.

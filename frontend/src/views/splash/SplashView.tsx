@@ -49,11 +49,11 @@ export function SplashView() {
         </div>
       </header>
 
-      <section className="relative flex min-h-[calc(100vh-64px)] items-center justify-center overflow-hidden px-6 py-20">
+      <section className="relative flex min-h-[calc(100vh-64px)] items-center justify-center overflow-hidden px-6 py-20 [&_:focus-visible]:outline-aqua">
         <SplashField />
         <div className="relative z-10 w-full max-w-[1180px]">
           <div id="splash-copy" className="max-w-[20em]">
-            <h1 className="m-0 font-display text-[clamp(40px,5.4vw,68px)] font-extrabold leading-[1.02] tracking-[-0.025em] text-pretty text-white">
+            <h1 className="m-0 font-display text-hero font-extrabold tracking-[-0.025em] text-pretty text-white">
               Create policy plans you can trust
             </h1>
             <p className={`mt-6 max-w-[26em] ${SPLASH_PROSE} text-navy-muted text-pretty`}>
@@ -62,7 +62,7 @@ export function SplashView() {
             <div className="mt-9 flex flex-wrap gap-3.5">
               <a
                 href="#access"
-                className="cutout inline-flex min-h-12 items-center bg-white px-[22px] text-lead font-extrabold text-navy no-underline hover:bg-aqua"
+                className="cutout inline-flex min-h-12 items-center bg-white px-[22px] text-lead font-extrabold text-navy no-underline hover:bg-aqua focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-navy!"
               >
                 Request access
               </a>

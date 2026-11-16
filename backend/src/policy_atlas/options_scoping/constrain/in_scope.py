@@ -12,7 +12,7 @@ filter, so nothing was narrowed by language either).
 Which fields are read, and why:
 
 - **country** — the publication country through
-  :func:`~policy_atlas.api.readmodels.repository.publication_country` (the
+  :func:`~policy_atlas.api.read_models.repository.publication_country` (the
   read the source-geography chart makes; an ISO code from OpenAlex, an
   Overton display name mapped back to its ISO code), **and** the OpenAlex
   authorship countries (``provider_fields.authorships[].countries``): the
@@ -41,7 +41,7 @@ from typing import Any
 from sqlalchemy import and_, select
 from sqlalchemy.engine import Connection
 
-from policy_atlas.api.readmodels.repository import publication_country
+from policy_atlas.api.read_models.repository import publication_country
 from policy_atlas.core.schema import (
     finding_reference_union,
     option_membership,

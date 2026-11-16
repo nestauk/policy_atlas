@@ -1049,7 +1049,7 @@ def assign_rows(
     ``visibility`` is the one way an operator command can expose a row: the
     default visibility is ``org``, and a row whose ``org_id`` is NULL is
     reachable by its owner alone however it is marked — the org leg reads
-    ``org_id IS NOT NULL AND visibility = 'org'`` (``routers/_access.py``). So
+    ``org_id IS NOT NULL AND visibility = 'org'`` (``routers/access.py``). So
     an unenrolled owner's estate is full of rows carrying ``visibility = 'org'``
     that nobody can see, and an assignment that kept the column would hand every
     one of them to every member of the destination organisation, instantly and

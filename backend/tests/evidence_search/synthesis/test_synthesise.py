@@ -46,7 +46,7 @@ from policy_atlas.evidence_search.synthesis.grounding_judge import (
     StubGroundingJudgeBackend,
     UnspannedAssertionWire,
 )
-from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+from policy_atlas.evidence_search.synthesis.section_prompt import (
     NAV_LABEL_MAX,
     SECTION_TITLE_PROPOSAL_MAX,
     CaseStudyWire,
@@ -60,11 +60,13 @@ from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     SectionProposalWire,
     SectionProseWire,
     SectionRepairWire,
-    SectionTurn,
     SectionWire,
+    ThemePayloadWire,
+)
+from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+    SectionTurn,
     StubSynthesisBackend,
     SynthesisBackend,
-    ThemePayloadWire,
 )
 from policy_atlas.evidence_search.synthesis.synthesis_tools import SECTION_CAP, ToolExchange
 from policy_atlas.evidence_search.synthesis.synthesise import (
@@ -94,6 +96,7 @@ from policy_atlas.evidence_search.synthesis.synthesise import (
 )
 from policy_atlas.runtime.agent import persist_approved_plan
 from policy_atlas.runtime.task_plan import TaskPlan
+from tests import progress_recorder
 from tests.evidence_search.group.test_group import (
     _group_row,
     seed_extraction,
@@ -1549,7 +1552,6 @@ def test_provenance_required_keys(conn: Connection) -> None:
         "SECTION_TURN_CAP",
         "SYNTH_CHUNK_TOP_K",
         "SYNTH_CHUNK_CHAR_BUDGET",
-        "RETRIEVAL_UNIT_CAP",
         "REPAIR_ROUND_CAP",
     }
 
@@ -1766,6 +1768,90 @@ def test_screened_chunks_excludes_demoted_doc(conn: Connection) -> None:
     )
     assert str(confirmed_tss) in chunks_by_tss
     assert str(demoted_tss) not in chunks_by_tss
+
+
+def test_a_citation_to_an_unrated_document_is_accepted(conn: Connection) -> None:
+    """Task 056, D7: a document with an Unrated appraisal row is citable; a
+    document with no appraisal row still trips ``unappraised_doc_citation``."""
+    from policy_atlas.evidence_search.synthesis.section_prompt import ClaimWire
+    from policy_atlas.evidence_search.synthesis.synthesise import (
+        SubstrateView,
+        _load_corpus_profile,
+        _load_screened_chunks,
+        validate_claims,
+    )
+
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    unknown = "Unknown / Insufficient information"
+    texts = {
+        "unrated": "Unrated grey literature says the pilot reached most schools.",
+        "no row": "An unappraised note says the pilot reached most schools.",
+    }
+    tss = {
+        "unrated": seed_select_doc(
+            conn, task_id, run_id, scope_id, title="unrated", evidence_type=unknown,
+            unrated=True,
+        ),
+        "no row": seed_select_doc(
+            conn, task_id, run_id, scope_id, title="no row", evidence_type=unknown,
+            quality=None,
+        ),
+    }
+    for key, tss_id in tss.items():
+        seed_ingested_full_text(conn, tss_id=tss_id, chunks=[texts[key]])
+
+    corpus = _load_corpus_profile(conn, task_id=task_id, scope_id=scope_id)
+    assert corpus.appraised_tss_ids == {str(tss["unrated"])}
+    chunk_by_id, chunks_by_tss, basis_by_snapshot = _load_screened_chunks(
+        conn,
+        task_id=task_id,
+        scope_id=scope_id,
+        selected_tss_ids=set(),
+        appraised_tss_ids=corpus.appraised_tss_ids,
+    )
+    substrate = SubstrateView(
+        characterisation=None,
+        selection=None,
+        extraction=None,
+        grouping=None,
+        corpus=corpus,
+        coverage_records={},
+        chunk_by_id=chunk_by_id,
+        chunks_by_tss_id=chunks_by_tss,
+        finding_by_id={},
+        icf_finding_by_id={},
+        icf_profile_available=False,
+        basis_by_snapshot_id=basis_by_snapshot,
+        selected_tss_ids=set(),
+    )
+
+    def _validate(key: str) -> Any:
+        chunk = chunks_by_tss[str(tss[key])][0]
+        claim = ClaimWire.model_validate(
+            {
+                "claim_type": "chunk",
+                "text": "The pilot reached most schools.",
+                "citations": [
+                    {"chunk_record_id": chunk.chunk_id, "quote": "the pilot reached most schools"}
+                ],
+            }
+        )
+        return validate_claims(
+            [claim],
+            substrate=substrate,
+            section_index=0,
+            section_group_ids=set(),
+            citable_finding_ids=set(),
+            citable_chunk_ids={chunk.chunk_id},
+            spans=[(0, 1)],
+        )
+
+    accepted = _validate("unrated")
+    assert accepted.rejected == []
+    assert len(accepted.drafts) == 1
+    rejected = _validate("no row")
+    assert [r.reason for r in rejected.rejected] == ["unappraised_doc_citation"]
 
 
 def test_groups_unsectioned_counted(conn: Connection) -> None:
@@ -3733,3 +3819,26 @@ def test_mrs_notes_present_in_rollup(conn: Connection) -> None:
     # or findings). With chunk claims, the substrate maps chunk→tss, so notes
     # appear when the stub has at least one cited source.
     assert isinstance(notes, list)
+
+
+def test_each_section_start_publishes_its_number_title_and_sections_done(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    recorded = progress_recorder.install(monkeypatch)
+    task_id, run_id = seed_task_and_run(conn)
+    scope_id = seed_scope(conn, task_id)
+    seed_select_doc(conn, task_id, run_id, scope_id, title="Progress source")
+
+    summary = _run_synthesise(conn, task_id=task_id, run_id=run_id, scope_id=scope_id)
+
+    # The section starts are the lines that count sections; the writer's other
+    # lines (task 058, N3) carry no count.
+    calls = [call for call in recorded if call.get("unit") == "sections"]
+    total = summary["section_count"]
+    assert total >= 1
+    assert [c["done"] for c in calls] == list(range(total))
+    for number, call in enumerate(calls, start=1):
+        assert call["total"] == total
+        assert call["unit"] == "sections"
+        assert call["activity"] == "Writing"
+        assert call["section"].startswith(f"Section {number} of {total} · ")

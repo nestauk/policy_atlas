@@ -7,10 +7,6 @@ import { countOf } from "../../lib/vocabulary";
 import { activeRun, hasLonglist } from "../scopingActivity";
 import { overlayIsDirty, overlayToPlanPatch, type PlanOverlay } from "./planOverlay";
 
-/** Green Start search — Nesta green, not the blue primary. */
-export const START_SEARCH_CLASS =
-  "bg-green px-6 py-3.5 text-body font-bold text-white hover:bg-[#147a6c]";
-
 const APPLY_FAILED_FALLBACK = "The plan edits couldn't be applied. Try again.";
 
 /**
@@ -132,7 +128,8 @@ export function usePlanStart({
  *     it disables the start actions — but it never opens or locks a tab.
  *   - no walk yet → `build`: one primary action, with the time band.
  *   - a longlist exists for the plan version on screen → `longlist_built`.
- *   - a longlist exists but the plan has moved on since it was built →
+ *   - a longlist exists but the plan has changed in a field it reads
+ *     (`longlist.plan_inputs_changed`, task 055; an appetite change alone does not) →
  *     `rebuild_longlist`, whose **Rebuild longlist** posts to
  *     `confirm-baseline` on the new version; the server opens the walk (D14,
  *     P12).
@@ -202,7 +199,7 @@ export function scopingStatusLine(state: ScopingStartState): string | null {
 /** The server page-size cap (`contract/common.py`). The list is read with
  *  `parentless` (task 045, A13): only the baseline and longlist walks, never
  *  the option searches, so the baseline walk cannot be paged out. */
-const SCOPING_RUNS_PAGE_SIZE = 200;
+export const SCOPING_RUNS_PAGE_SIZE = 200;
 
 /** The start area's words when the longlist exists but could not be read. */
 const LONGLIST_UNREAD_NOTICE = "The longlist couldn't be loaded.";
@@ -371,7 +368,7 @@ export function useScopingPlanStart({
     const longlist = longlistQuery.data;
     if (longlist == null && longlistQuery.isError) return rebuildLonglist(null);
     if (longlist == null || currentVersion === null) return { kind: "none", buildingLonglist: false };
-    if (currentVersion > longlist.plan_version) return rebuildLonglist(longlist.plan_version);
+    if (longlist.plan_inputs_changed) return rebuildLonglist(longlist.plan_version);
     return { kind: "longlist_built", options: longlist.counts.options };
   }
   if (confirmed) return { kind: "confirmed", action: confirmAction("Build longlist"), notice };
