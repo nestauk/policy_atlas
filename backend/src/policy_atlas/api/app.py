@@ -264,6 +264,10 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         """Defense-in-depth response headers on the JSON API (review finding)."""
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        if app_settings.service_role == "ops":
+            # The ops pages are never embedded; refuse framing (clickjacking).
+            response.headers.setdefault("X-Frame-Options", "DENY")
+            response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
         # Ignored by browsers over plain HTTP (dev); load-bearing behind TLS.
         response.headers.setdefault(
             "Strict-Transport-Security", "max-age=63072000; includeSubDomains"
@@ -360,7 +364,9 @@ def _mount_ops_ui(app: FastAPI, ops_ui_dir: Path | None) -> None:
         if path.startswith("api/"):
             raise HTTPException(404)
         candidate = (ui_root / path).resolve()
-        if candidate.parent == ui_root and candidate.is_file():
+        # Any file inside the bundle (fonts/, brand/, favicon.svg); never a
+        # path that resolves outside it.
+        if candidate.is_relative_to(ui_root) and candidate.is_file():
             return FileResponse(candidate)
         return FileResponse(index)
 
@@ -483,6 +489,9 @@ def _ops_lifespan(
             pool_pre_ping=True,
             pool_size=settings.db_pool_size,
             max_overflow=settings.db_max_overflow,
+            # A database error's traceback must not carry bound parameters:
+            # on this host they can be email addresses.
+            hide_parameters=True,
         )
         http_client = httpx.Client(timeout=httpx.Timeout(5.0), follow_redirects=False)
         app.state.engine = engine

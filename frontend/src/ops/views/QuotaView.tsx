@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { Navigate, useParams } from "react-router";
 
 import { Button } from "../../ui/brand/Button";
-import { PageBackLink, PageHeader } from "../../ui/brand/PageHeader";
+import { PageBackLink } from "../../ui/brand/PageHeader";
 import {
   inferDefaults,
   OpsApiError,
@@ -15,8 +15,17 @@ import {
   type QuotaValues,
 } from "../api";
 import { facts, limitWord, plural } from "../format";
-import { FailedLine, Loading, Panel, useRecordedToast } from "../ui";
-import { draftOf, QuotaFields, valuesOf, type QuotaDraft } from "./QuotaFields";
+import { FailedLine, FormHeader, Loading, Panel, useRecordedToast } from "../ui";
+import {
+  draftErrors,
+  draftIsValid,
+  draftOf,
+  QuotaFields,
+  valuesOf,
+  WARNING_WHO,
+  type QuotaDraft,
+  type QuotaErrors,
+} from "./QuotaFields";
 
 /** A placeholder naming where an empty field's value comes from. */
 function inherits(from: string, value: number | null | undefined): string {
@@ -36,6 +45,7 @@ function QuotaPage({
   placeholders,
   save,
   aside,
+  who,
 }: {
   back: ReactNode;
   title: string;
@@ -44,6 +54,7 @@ function QuotaPage({
   placeholders: { tasks: string; runs: string };
   save: (values: QuotaValues, done: { onSaved: () => void; onRefused: (message: string) => void; onFailed: () => void }) => void;
   aside?: ReactNode;
+  who?: string;
 }) {
   const toast = useRecordedToast();
   const [draft, setDraft] = useState(initial);
@@ -51,7 +62,12 @@ function QuotaPage({
   const [failed, setFailed] = useState<(() => void) | null>(null);
   const [pending, setPending] = useState(false);
 
+  const [errors, setErrors] = useState<QuotaErrors>({});
+
   const send = (next: QuotaDraft) => {
+    // A value that is not a whole number is refused here: nothing is sent.
+    setErrors(draftErrors(next));
+    if (!draftIsValid(next)) return;
     setRefused(null);
     setFailed(null);
     setPending(true);
@@ -74,7 +90,7 @@ function QuotaPage({
 
   return (
     <>
-      <PageHeader context={back} title={title} actions={null} filters={<p className="text-body text-grey">{line}</p>} />
+      <FormHeader back={back} title={title} line={line} />
       <div className="mt-6 grid gap-8 md:grid-cols-[minmax(0,34rem)_minmax(0,22rem)]">
         <form
           onSubmit={(event: FormEvent) => {
@@ -88,6 +104,8 @@ function QuotaPage({
             onChange={setDraft}
             tasksPlaceholder={placeholders.tasks}
             runsPlaceholder={placeholders.runs}
+            who={who}
+            errors={errors}
           />
           {refused !== null && (
             <p role="alert" className="text-body text-red">
@@ -216,6 +234,7 @@ export function OrganisationQuotaView() {
       line={`Applies to everyone in ${org.name} who has no number of their own.`}
       initial={draftOf(org)}
       placeholders={{ tasks: inherits("the default", defaults.tasks), runs: inherits("the default", defaults.runs) }}
+      who={WARNING_WHO.organisation(org.name)}
       save={(values, done) =>
         quota.mutate(values, {
           onSuccess: done.onSaved,

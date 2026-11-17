@@ -250,7 +250,7 @@ order_output="$work_dir/order.out"
 PATH="$stub_dir:$PATH" PA_DEPLOY_ORDER_ONLY=1 \
   bash "$deploy_script" update >"$order_output"
 
-expected_order=$'check ops allowlist\nbuild ops pages\ncdk deploy\ncheck ops secret\ncheck ops service\nstop api\nstop ops\nmigrate\nstart api\nstart ops\npublish frontend'
+expected_order=$'check ops allowlist\nbuild ops pages\ncdk deploy\ncheck ops secret\ncheck ops service\nstop api\nstop ops\nmigrate\nstart api\npublish frontend\nstart ops'
 actual_order="$(grep -E '^(check ops allowlist|build ops pages|cdk deploy|check ops secret|check ops service|stop api|stop ops|migrate|start api|start ops|publish frontend)$' "$order_output")"
 if [[ "$actual_order" != "$expected_order" ]]; then
   echo "ERROR: deploy sequence differs from its required order" >&2

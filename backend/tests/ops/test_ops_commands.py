@@ -1383,7 +1383,12 @@ def test_ensure_account_enrols_an_existing_unenrolled_account_without_a_send(
     assert enrolment.created is (not stored)
     assert enrolment.tasks_moved == 1
     row = _row(conn, sub)
-    assert (row["org_id"], row["display_name"], row["invited_at"]) == (org.org_id, "Ensured", None)
+    # A stored row keeps its name: the name offered may come from the public
+    # form, and a stranger must never rename a colleague (review stack).
+    expected_name = "Old Name" if stored else "Ensured"
+    assert (row["org_id"], row["display_name"], row["invited_at"]) == (
+        org.org_id, expected_name, None,
+    )
     assert _task_row(conn, task_id)[:2] == (org.org_id, "private")
 
 

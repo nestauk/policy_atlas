@@ -291,7 +291,11 @@ class PolicyAtlasStack(Stack):
         )
         migration_task_def.add_container("policy-atlas-migration-container",
             image=backend_image,
-            command=["sh", "-c", "alembic upgrade head && python -m policy_atlas.ops.db_role sync"],
+            # The login sync is idempotent and re-asserts the previous state on
+            # failure, so it never fails the task after a committed migration:
+            # a public outage must not follow an ops-only step (review stack,
+            # 2026-11-17). deploy.sh checks the secret before starting ops.
+            command=["sh", "-c", "alembic upgrade head && (python -m policy_atlas.ops.db_role sync || echo 'WARN: ops login sync failed; the ops service keeps its previous login')"],
             logging=ecs.LogDrivers.aws_logs(stream_prefix="Migrate",
                                             log_group=shared_log_group),
             environment={"OPS_DB_SECRET_ARN": ops_db_secret.secret_arn},
@@ -381,6 +385,12 @@ class PolicyAtlasStack(Stack):
                 "POLICY_ATLAS_SELF_SIGNUP": "1" if self_signup_config["enabled"] else "0",
                 "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR": str(self_signup_config["max_per_hour"]),
                 "OPS_UI_DIR": "/app/ops-ui",
+                # The same limits as the API, so the ops pages' resolved
+                # limits agree with /me (review stack, 2026-11-17).
+                "RUNS_PER_USER": str(be_config["runs_per_user"]),
+                "TASK_QUOTA_PER_YEAR": str(be_config["task_quota_per_year"]),
+                "DB_POOL_SIZE": "5",
+                "DB_MAX_OVERFLOW": "5",
                 "FORWARDED_ALLOW_IPS": vpc.vpc_cidr_block,
                 "LOG_LEVEL": "INFO",
                 "LOG_FORMAT": "json",
@@ -408,7 +418,10 @@ class PolicyAtlasStack(Stack):
             cluster=cluster,
             task_definition=ops_task_def,
             service_name="policy-atlas-v3-ops-service",
-            desired_count=ops_config["desired_count"],
+            # Template-pinned at zero like the API's: deploy.sh scales it to
+            # ops.desired_count only after the migration, the login sync and
+            # the public service are done (review stack, 2026-11-17).
+            desired_count=0,
             min_healthy_percent=0,
             max_healthy_percent=100,
             circuit_breaker=ecs.DeploymentCircuitBreaker(rollback=True),

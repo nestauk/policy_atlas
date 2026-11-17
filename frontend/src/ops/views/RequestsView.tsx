@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { Button } from "../../ui/brand/Button";
@@ -10,7 +10,10 @@ import { PageHeader } from "../../ui/brand/PageHeader";
 import { OpsApiError, unwrap, useOpsAction, useOrganisations, useRequests, type AccessRequest } from "../api";
 import { ago, facts, orgInRefusal } from "../format";
 import {
+  ACTIONS_TD_CLASS,
+  ACTIONS_TH_CLASS,
   Dialog,
+  EmptyRows,
   FailedLine,
   Field,
   Loading,
@@ -41,7 +44,11 @@ function StatusChip({ request, refusal }: { request: AccessRequest; refusal: Ref
     );
   }
   if (request.status === "invited") {
-    return <Chip tone="green">Invited {request.account_created_at != null ? ago(request.account_created_at) : ""}</Chip>;
+    return (
+      <Chip tone="green">
+        {request.account_created_at != null ? `Invited ${ago(request.account_created_at)}` : "Invited"}
+      </Chip>
+    );
   }
   return <Chip tone="yellow">Waiting</Chip>;
 }
@@ -56,6 +63,9 @@ export function RequestsView() {
   const [orgId, setOrgId] = useState("");
   const [refusals, setRefusals] = useState<Record<string, Refusal>>({});
   const [retry, setRetry] = useState<(() => void) | null>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+  /** Whether the open dialog's approval came back: its row's button is then on its way out. */
+  const answered = useRef(false);
   const approve = useOpsAction((client, { entryId, org }: { entryId: string; org: string }) =>
     unwrap(
       client.POST("/api/v1/ops/requests/{entry_id}/approve", {
@@ -71,12 +81,14 @@ export function RequestsView() {
       { entryId: request.entry_id, org },
       {
         onSuccess: () => {
+          answered.current = true;
           setApproving(null);
           toast(`${request.name} approved`);
         },
         onError: (error) => {
           setApproving(null);
           if (error instanceof OpsApiError && error.code === "enrolled_elsewhere") {
+            answered.current = true;
             setRefusals((current) => ({
               ...current,
               [request.entry_id]: { org: orgInRefusal(error.message) ?? "another organisation", message: error.message },
@@ -118,14 +130,14 @@ export function RequestsView() {
           <FailedLine onRetry={() => void requests.refetch()} />
         ) : (
           <div className={TABLE_WRAP_CLASS}>
-            <table className={TABLE_CLASS}>
+            <table ref={tableRef} tabIndex={-1} aria-label="Access requests" className={TABLE_CLASS}>
               <thead>
                 <tr>
-                  <th className={cn(TH_CLASS, "pl-4")}>Name</th>
+                  <th className={cn(TH_CLASS, "w-48 pl-4")}>Name</th>
                   <th className={TH_CLASS}>Email</th>
-                  <th className={TH_CLASS}>Requested</th>
-                  <th className={TH_CLASS}>Status</th>
-                  <th className={TH_CLASS}>
+                  <th className={cn(TH_CLASS, "w-32")}>Requested</th>
+                  <th className={cn(TH_CLASS, "w-72")}>Status</th>
+                  <th className={cn(TH_CLASS, ACTIONS_TH_CLASS, "w-40")}>
                     <span className="sr-only">Actions</span>
                   </th>
                 </tr>
@@ -135,22 +147,29 @@ export function RequestsView() {
                   const refusal = refusals[request.entry_id];
                   const check = refusal !== undefined || request.status === "check";
                   return (
-                    <tr key={request.entry_id}>
+                    <tr key={request.entry_id} className="bg-paper">
                       <td className={cn(TD_CLASS, "pl-4")}>
-                        <span className="font-semibold text-navy">{request.name}</span>
+                        <span className="block truncate font-semibold text-navy" title={request.name}>
+                          {request.name}
+                        </span>
                         {refusal !== undefined && <span className="block text-meta text-grey">{refusal.message}</span>}
                       </td>
-                      <td className={TD_CLASS}>{request.email}</td>
+                      <td className={cn(TD_CLASS, "truncate")} title={request.email}>
+                        {request.email}
+                      </td>
                       <td className={cn(TD_CLASS, "whitespace-nowrap")}>
                         <Figures text={ago(request.created_at)} />
                       </td>
                       <td className={cn(TD_CLASS, "py-2.5")}>
                         <StatusChip request={request} refusal={refusal} />
                       </td>
-                      <td className={cn(TD_CLASS, "whitespace-nowrap py-2 pr-4 text-right")}>
+                      <td className={cn(TD_CLASS, ACTIONS_TD_CLASS, "whitespace-nowrap py-2 pr-4 text-right")}>
                         {check ? (
+                          // The address rides in router state, not the URL, so it
+                          // never reaches the server's access log.
                           <Link
-                            to={`/people?q=${encodeURIComponent(request.email)}`}
+                            to="/people"
+                            state={{ q: request.email }}
                             className={cn(LINK_CLASS, "inline-flex h-8 items-center text-meta")}
                           >
                             Open person
@@ -160,6 +179,7 @@ export function RequestsView() {
                             variant="outline"
                             size="sm"
                             onClick={() => {
+                              answered.current = false;
                               setOrgId("");
                               setApproving(request);
                             }}
@@ -173,6 +193,7 @@ export function RequestsView() {
                 })}
               </tbody>
             </table>
+            {rows.length === 0 && <EmptyRows label="No requests yet." />}
           </div>
         )}
         {retry !== null && <FailedLine onRetry={retry} />}
@@ -183,6 +204,9 @@ export function RequestsView() {
           open
           onOpenChange={(open) => !open && setApproving(null)}
           title={`Approve ${approving.name}`}
+          describedBy="approve-org-help"
+          // Approved or turned to Check, the row's button is gone: focus goes to the table.
+          returnFocus={() => (answered.current ? tableRef.current : null)}
           footer={
             <>
               <Button variant="ghost" onClick={() => setApproving(null)}>
@@ -199,13 +223,16 @@ export function RequestsView() {
             label="Organisation"
             help="Cognito emails them a temporary password. If the address already has an account, it is enrolled without an email."
           >
-            <OrganisationSelect
-              id="approve-org"
-              label="Organisation"
-              organisations={organisations.data ?? []}
-              value={orgId}
-              onChange={setOrgId}
-            />
+            {(describedBy) => (
+              <OrganisationSelect
+                id="approve-org"
+                label="Organisation"
+                organisations={organisations.data ?? []}
+                value={orgId}
+                onChange={setOrgId}
+                describedBy={describedBy}
+              />
+            )}
           </Field>
         </Dialog>
       )}

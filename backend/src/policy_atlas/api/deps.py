@@ -6,10 +6,10 @@ import os
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Annotated, Any, cast
+from typing import Any, cast
 
 import structlog
-from fastapi import Depends, HTTPException, Request
+from fastapi import Request
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.auth import get_current_user, get_optional_user
@@ -124,24 +124,6 @@ def get_identity(request: Request) -> Identity:
     """
     return cast(Identity, request.app.state.identity)
 
-
-def require_cognito(
-    identity: Annotated[Identity, Depends(get_identity)],
-) -> Any:
-    """Return Cognito or refuse a route that requires a configured provider.
-
-    Args:
-        identity: The operations service identity seam.
-
-    Returns:
-        The configured Cognito client.
-
-    Raises:
-        HTTPException: If this issuer does not name a Cognito user pool.
-    """
-    if identity.cognito is None:
-        raise HTTPException(503, "identity provider is not configured")
-    return identity.cognito
 
 
 def get_engine(request: Request) -> Engine:

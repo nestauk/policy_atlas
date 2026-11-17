@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
@@ -16,6 +16,12 @@ async function openPeople() {
 function row(name: string): HTMLElement {
   const cell = screen.getByText(name, { selector: "span" });
   return cell.closest("tr") as HTMLElement;
+}
+
+function selectionBar(): HTMLElement {
+  const bar = document.querySelector<HTMLElement>("[data-selection-bar]");
+  if (bar === null) throw new Error("no selection bar");
+  return bar;
 }
 
 async function rowMenu(user: ReturnType<typeof userEvent.setup>, name: string) {
@@ -57,19 +63,23 @@ describe("People", () => {
     const user = await openPeople();
     const menu = await rowMenu(user, "Tom Ellis");
     const resend = within(menu).getByRole("menuitem", { name: /Resend invitation/ });
-    expect(resend).toBeDisabled();
+    // aria-disabled, not disabled: still reachable by the arrow keys, so the hint is read.
+    expect(resend).toHaveAttribute("aria-disabled", "true");
+    expect(resend).not.toHaveAttribute("disabled");
+    await user.click(resend);
+    expect(opsMock.writes).toEqual([]);
     expect(resend).toHaveTextContent(/sent 25 min ago, try again after \d\d:\d\d/);
     await user.keyboard("{Escape}");
     const samMenu = await rowMenu(user, "Sam Holt");
-    expect(within(samMenu).getByRole("menuitem", { name: "De-enrol" })).toBeDisabled();
-    expect(within(samMenu).getByRole("menuitem", { name: /Resend invitation/ })).toBeEnabled();
+    expect(within(samMenu).getByRole("menuitem", { name: "De-enrol" })).toHaveAttribute("aria-disabled", "true");
+    expect(within(samMenu).getByRole("menuitem", { name: /Resend invitation/ })).not.toHaveAttribute("aria-disabled");
   });
 
   it("shows the selection bar, and a bulk confirmation names every person", async () => {
     const user = await openPeople();
     await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
     await user.click(screen.getByRole("checkbox", { name: "Select Jon Reyes" }));
-    const bar = screen.getByRole("toolbar", { name: "Selected people" });
+    const bar = selectionBar();
     expect(bar).toHaveTextContent("2 selected");
     for (const name of ["Set quota…", "Move to…", "Resend invitation", "De-enrol", "Offboard…", "Clear selection"]) {
       expect(within(bar).getByRole("button", { name })).toBeInTheDocument();
@@ -89,9 +99,9 @@ describe("People", () => {
   it("ticks everyone shown from the header and clears the selection", async () => {
     const user = await openPeople();
     await user.click(screen.getByRole("checkbox", { name: "Select everyone shown" }));
-    expect(screen.getByRole("toolbar", { name: "Selected people" })).toHaveTextContent("6 selected");
+    expect(selectionBar()).toHaveTextContent("6 selected");
     await user.click(screen.getByRole("button", { name: "Clear selection" }));
-    expect(screen.queryByRole("toolbar", { name: "Selected people" })).toBeNull();
+    expect(document.querySelector("[data-selection-bar]")).toBeNull();
   });
 
   it("shows a failed row's message under the name, and the counts in the toast", async () => {
@@ -173,7 +183,7 @@ describe("People", () => {
     await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
     await user.click(screen.getByRole("checkbox", { name: "Select Sam Holt" }));
     await user.click(screen.getByRole("button", { name: "Resend invitation" }));
-    expect(await screen.findByText("1 done, 0 failed · recorded")).toBeInTheDocument();
+    expect(await screen.findByText("1 done, 1 too soon · recorded")).toBeInTheDocument();
     expect(within(row("Tom Ellis")).getByText("Sent less than an hour ago")).toBeInTheDocument();
   });
 
@@ -186,5 +196,107 @@ describe("People", () => {
     opsMock.override = undefined;
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Tom Ellis")).toBeInTheDocument();
+  });
+});
+
+describe("People, after the review", () => {
+  it("still opens on a plain ?q= search word", async () => {
+    renderOps("/people?q=okafor");
+    expect(await screen.findByText("Mara Okafor")).toBeInTheDocument();
+    expect(screen.queryByText("Tom Ellis")).toBeNull();
+  });
+
+  it("clears the selection when the search changes, so a bulk action names only rows in sight", async () => {
+    const user = await openPeople();
+    await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select Jon Reyes" }));
+    await user.type(screen.getByRole("searchbox", { name: "Find by name, email or organisation" }), "policy lab");
+    expect(document.querySelector("[data-selection-bar]")).toBeNull();
+    await user.click(screen.getByRole("checkbox", { name: "Select everyone shown" }));
+    await user.click(within(selectionBar()).getByRole("button", { name: "De-enrol" }));
+    const dialog = await screen.findByRole("dialog", { name: "De-enrol Jon Reyes?" });
+    expect(dialog).not.toHaveTextContent("Tom Ellis");
+    await user.click(within(dialog).getByRole("button", { name: "De-enrol" }));
+    await screen.findByText(/· recorded$/);
+    expect(opsMock.writes.at(-1)?.body).toEqual({ user_ids: ["sub-jon"] });
+  });
+
+  it("refuses a bulk quota that is not a whole number", async () => {
+    const user = await openPeople();
+    await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select Jon Reyes" }));
+    await user.click(within(selectionBar()).getByRole("button", { name: "Set quota…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Quota for 2 people" });
+    await user.type(within(dialog).getByLabelText("Tasks per year"), "ten");
+    await user.click(within(dialog).getByRole("button", { name: "Save quota" }));
+    expect(within(dialog).getByText("Enter a whole number, or leave it empty.")).toBeInTheDocument();
+    expect(opsMock.writes).toEqual([]);
+  });
+
+  it("says when nothing matches, inside the table's frame", async () => {
+    const user = await openPeople();
+    await user.type(screen.getByRole("searchbox", { name: "Find by name, email or organisation" }), "zzz");
+    expect(screen.getByRole("status")).toHaveTextContent("No people match.");
+    expect(screen.getAllByRole("columnheader")).toHaveLength(8);
+  });
+
+  it("keeps the selection bar's room, so ticking a box does not move the table", async () => {
+    const user = await openPeople();
+    const slot = screen.getByRole("table", { name: "People" }).parentElement?.previousElementSibling as HTMLElement;
+    expect(slot).toHaveClass("min-h-12");
+    expect(slot).toBeEmptyDOMElement();
+    await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
+    expect(slot).toContainElement(selectionBar());
+  });
+
+  it("returns focus to the row's menu button when its dialog closes", async () => {
+    const user = await openPeople();
+    const menu = await rowMenu(user, "Jon Reyes");
+    await user.click(within(menu).getByRole("menuitem", { name: "Offboard…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Offboard Jon Reyes?" });
+    await user.click(within(dialog).getByRole("button", { name: "Keep the account" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Actions for Jon Reyes" })).toHaveFocus());
+  });
+
+  it("returns focus to the table when a bulk action cleared the selection", async () => {
+    const user = await openPeople();
+    await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select Jon Reyes" }));
+    await user.click(within(selectionBar()).getByRole("button", { name: "De-enrol" }));
+    const dialog = await screen.findByRole("dialog", { name: "De-enrol 2 people?" });
+    await user.click(within(dialog).getByRole("button", { name: "De-enrol" }));
+    await screen.findByText("2 done, 0 failed · recorded");
+    await waitFor(() => expect(screen.getByRole("table", { name: "People" })).toHaveFocus());
+  });
+
+  it("reads each dialog's consequence sentence as its description, before the confirm field", async () => {
+    const user = await openPeople();
+    await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select Jon Reyes" }));
+    await user.click(within(selectionBar()).getByRole("button", { name: "Offboard…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Offboard 2 people?" });
+    expect(dialog).toHaveAccessibleDescription(/^This stops them signing in/);
+    const sentence = within(dialog).getByText(/^This stops them signing in/);
+    const field = within(dialog).getByLabelText("Type the number of people to confirm");
+    expect(sentence.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Keep the accounts" })).toBeInTheDocument();
+  });
+
+  it("the bulk quota dialog has Cancel first, then Clear and inherit beside Save quota, and the plural warning", async () => {
+    const user = await openPeople();
+    await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select Jon Reyes" }));
+    await user.click(within(selectionBar()).getByRole("button", { name: "Set quota…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Quota for 2 people" });
+    const buttons = within(dialog)
+      .getAllByRole("button")
+      .map((button) => button.textContent);
+    expect(buttons.slice(-3)).toEqual(["Cancel", "Clear and inherit", "Save quota"]);
+    expect(within(dialog).getByLabelText("Simultaneous tasks")).toHaveAccessibleDescription(
+      "Warning: this limit protects the shared run capacity. A higher number lets these people take more of it at the same time, which can slow other people's runs.",
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(opsMock.writes).toEqual([]);
   });
 });

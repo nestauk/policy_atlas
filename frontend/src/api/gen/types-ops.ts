@@ -362,9 +362,9 @@ export interface components {
          */
         BulkQuota: {
             /** Runs Per User */
-            runs_per_user?: number | null;
+            runs_per_user: number | null;
             /** Task Quota Per Year */
-            task_quota_per_year?: number | null;
+            task_quota_per_year: number | null;
             /** User Ids */
             user_ids: string[];
         };
@@ -548,9 +548,9 @@ export interface components {
          */
         QuotaSet: {
             /** Runs Per User */
-            runs_per_user?: number | null;
+            runs_per_user: number | null;
             /** Task Quota Per Year */
-            task_quota_per_year?: number | null;
+            task_quota_per_year: number | null;
         };
         /**
          * RequestOut

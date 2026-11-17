@@ -105,6 +105,11 @@ def _assert_refused(statement: str, pa_ops_engine: Engine) -> None:
         "UPDATE task SET name = name",
         "CREATE TABLE pa_ops_probe (x int)",
         "INSERT INTO capability_run DEFAULT VALUES",
+        # The ops service reads these two tables and stamps one; it inserts neither.
+        "INSERT INTO organisation_domain (domain, org_id, created_at) "
+        "VALUES ('probe.test', gen_random_uuid(), now())",
+        "INSERT INTO waitlist_entry (entry_id, email, name, role_or_reason, created_at) "
+        "VALUES (gen_random_uuid(), 'probe@example.test', 'Probe', 'probe', now())",
     ],
 )
 def test_pa_ops_refuses_ungranted_statements(pa_ops_engine: Engine, statement: str) -> None:
@@ -113,7 +118,11 @@ def test_pa_ops_refuses_ungranted_statements(pa_ops_engine: Engine, statement: s
 
 
 def test_pa_ops_cannot_grant_admin_or_ops(pa_ops_engine: Engine, seeded_user: str) -> None:
-    """The trigger rejects each privilege escalation with SQLSTATE 42501."""
+    """The trigger rejects each privilege escalation with SQLSTATE 42501.
+
+    By an UPDATE, and by an INSERT of a row that already carries the flag
+    (review stack, 2026-11-17): the role may insert rows, never privileged ones.
+    """
     for column in ("is_admin", "is_ops"):
         with pa_ops_engine.connect() as conn, pytest.raises(ProgrammingError) as error:
             conn.execute(
@@ -123,6 +132,15 @@ def test_pa_ops_cannot_grant_admin_or_ops(pa_ops_engine: Engine, seeded_user: st
         original = error.value.orig
         assert isinstance(original, InsufficientPrivilege)
         assert original.sqlstate == "42501"
+        with pa_ops_engine.connect() as conn, pytest.raises(ProgrammingError) as error:
+            conn.execute(
+                text(
+                    f"INSERT INTO app_user (user_id, display_name, created_at, {column}) "
+                    "VALUES (:user_id, 'Probe', now(), true)"
+                ),
+                {"user_id": f"pa-ops-insert-{uuid.uuid4()}"},
+            )
+        assert error.value.orig.sqlstate == "42501"  # type: ignore[union-attr]
 
 
 def test_pa_ops_allows_the_current_positive_smoke(
@@ -278,3 +296,81 @@ def test_pa_ops_cannot_grant_a_role_through_the_command_functions(
         original = error.value.orig
         assert isinstance(original, InsufficientPrivilege)
         assert original.sqlstate == "42501"
+
+
+#: Contract B13 (revision 3.1) as the review stack narrowed it: the ops login's
+#: whole grant surface, read back from the catalogue. An extra grant on any
+#: table, or a wider column list, fails here.
+_EXPECTED_TABLE_GRANTS: dict[str, set[str]] = {
+    "app_user": {"SELECT", "INSERT"},
+    "organisation": {"SELECT", "INSERT"},
+    "organisation_domain": {"SELECT"},
+    "waitlist_entry": {"SELECT"},
+    "ops_action": {"SELECT", "INSERT"},
+    "task": {"SELECT"},
+    "project": {"SELECT"},
+    "project_membership": {"SELECT", "DELETE"},
+}
+_EXPECTED_COLUMN_UPDATES: dict[str, set[str]] = {
+    "app_user": {
+        "org_id", "email", "display_name", "is_admin", "is_ops", "invited_at",
+        "task_quota_per_year", "runs_per_user",
+    },
+    "organisation": {"name", "task_quota_per_year", "runs_per_user"},
+    "waitlist_entry": {"account_user_id", "account_created_at"},
+    "task": {"org_id", "visibility", "is_public", "updated_at"},
+    "project": {"org_id", "visibility"},
+}
+
+
+def test_pa_ops_grants_are_exactly_the_contract_list(engine: Engine) -> None:
+    """The catalogue agrees with B13: every table-level and column-level grant, no more."""
+    with engine.connect() as conn:
+        table_grants: dict[str, set[str]] = {}
+        for table_name, privilege in conn.execute(
+            text(
+                "SELECT table_name, privilege_type FROM information_schema.role_table_grants "
+                "WHERE grantee = 'pa_ops' AND table_schema = 'public'"
+            )
+        ):
+            table_grants.setdefault(table_name, set()).add(privilege)
+        column_updates: dict[str, set[str]] = {}
+        for table_name, column_name in conn.execute(
+            text(
+                "SELECT table_name, column_name FROM information_schema.column_privileges "
+                "WHERE grantee = 'pa_ops' AND table_schema = 'public' "
+                "AND privilege_type = 'UPDATE'"
+            )
+        ):
+            column_updates.setdefault(table_name, set()).add(column_name)
+    # A column-level UPDATE grant shows in role_table_grants as UPDATE on the
+    # table too; strip it so the table map states the table-wide grants only.
+    table_only = {
+        table: {p for p in privileges if p != "UPDATE" or table not in column_updates}
+        for table, privileges in table_grants.items()
+    }
+    assert table_only == _EXPECTED_TABLE_GRANTS
+    assert column_updates == _EXPECTED_COLUMN_UPDATES
+
+
+def test_pa_ops_can_resend_an_invitation(pa_ops_engine: Engine, engine: Engine) -> None:
+    """The resend path (a lock, a Cognito call, an invited_at write) runs as the ops login."""
+    from datetime import timedelta
+
+    from policy_atlas.ops import commands
+    from tests.ops.support import POOL_ID, cognito, expect_resend, expect_sub_lookup
+
+    sub = _seed_user(engine, is_admin=False)
+    with engine.begin() as conn:
+        conn.execute(
+            text("UPDATE app_user SET invited_at = :at WHERE user_id = :sub"),
+            {"at": datetime.now(UTC) - timedelta(hours=2), "sub": sub},
+        )
+    with cognito() as (client, stubber), pa_ops_engine.begin() as conn:
+        expect_sub_lookup(stubber, sub=sub, status="FORCE_CHANGE_PASSWORD")
+        expect_resend(stubber, username=sub)
+        sent = commands.resend_invitation(
+            conn, client, pool_id=POOL_ID, sub=sub, now=datetime.now(UTC)
+        )
+        assert sent.user_id == sub
+        conn.rollback()

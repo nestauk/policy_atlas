@@ -31,7 +31,7 @@ describe("Set a quota", () => {
     const user = userEvent.setup();
     renderOps("/people/sub-mara/quota");
     const runs = await screen.findByLabelText("Simultaneous tasks");
-    expect(runs).toHaveValue(6);
+    expect(runs).toHaveValue("6");
     expect(within(screen.getByRole("region", { name: "Limits that apply" })).getByText(/Tasks per year · no limit · from this person/)).toBeInTheDocument();
     await user.clear(runs);
     await user.type(runs, "8");
@@ -44,7 +44,29 @@ describe("Set a quota", () => {
     await user.click(screen.getByRole("button", { name: "Clear and inherit" }));
     await screen.findAllByText("Quota saved · recorded");
     expect(opsMock.writes.at(-1)?.body).toEqual({ user_ids: ["sub-mara"], task_quota_per_year: null, runs_per_user: null });
-    expect(screen.getByLabelText("Simultaneous tasks")).toHaveValue(null);
+    expect(screen.getByLabelText("Simultaneous tasks")).toHaveValue("");
+  });
+
+  it("refuses a value that is not a whole number, and sends nothing", async () => {
+    const user = userEvent.setup();
+    renderOps("/people/sub-mara/quota");
+    const runs = await screen.findByLabelText("Simultaneous tasks");
+    await user.clear(runs);
+    await user.type(runs, "1e");
+    const tasks = screen.getByLabelText("Tasks per year");
+    await user.type(tasks, "2.5");
+    await user.click(screen.getByRole("button", { name: "Save quota" }));
+    expect(screen.getAllByText("Enter a whole number, or leave it empty.")).toHaveLength(2);
+    expect(runs).toHaveAttribute("aria-invalid", "true");
+    expect(runs).toHaveAccessibleDescription(/Enter a whole number, or leave it empty\.$/);
+    expect(opsMock.writes).toEqual([]);
+    await user.clear(runs);
+    await user.type(runs, "4");
+    await user.clear(tasks);
+    await user.click(screen.getByRole("button", { name: "Save quota" }));
+    expect(await screen.findByText("Quota saved · recorded")).toBeInTheDocument();
+    expect(screen.queryByText("Enter a whole number, or leave it empty.")).toBeNull();
+    expect(opsMock.writes.at(-1)?.body).toEqual({ user_ids: ["sub-mara"], task_quota_per_year: null, runs_per_user: 4 });
   });
 
   it("an organisation's form says who it applies to and inherits the defaults", async () => {
@@ -54,7 +76,11 @@ describe("Set a quota", () => {
     expect(within(screen.getByRole("main")).getByRole("link", { name: "Organisations" })).toBeInTheDocument();
     expect(screen.getByText("Applies to everyone in Policy Lab who has no number of their own.")).toBeInTheDocument();
     expect(screen.getByLabelText("Tasks per year")).toHaveAttribute("placeholder", "Inherits the default · 50");
-    expect(screen.getByLabelText("Simultaneous tasks")).toHaveValue(5);
+    expect(screen.getByLabelText("Simultaneous tasks")).toHaveValue("5");
+    expect(screen.getByLabelText("Simultaneous tasks")).toHaveAccessibleDescription(
+      "Warning: this limit protects the shared run capacity. A higher number lets each person in Policy Lab take more of it at the same time, which can slow other people's runs.",
+    );
+    expect(screen.getByLabelText("Tasks per year")).toHaveAccessibleDescription("Leave empty to inherit. Enter 0 for no limit.");
     await user.click(screen.getByRole("button", { name: "Clear and inherit" }));
     expect(await screen.findByText("Quota saved · recorded")).toBeInTheDocument();
     expect(opsMock.writes.at(-1)).toEqual({

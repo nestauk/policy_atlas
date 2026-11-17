@@ -9,7 +9,8 @@ columns record the account created from a request.
 The ``pa_ops`` role is NOLOGIN here because deployment, not a schema migration,
 sets its LOGIN attribute and password. Its grants cover exactly the ops command
 queries. The app-user trigger has one job: this role may clear either privilege
-flag during de-enrolment, but may never grant ``is_admin`` or ``is_ops``.
+flag during de-enrolment, but may never grant ``is_admin`` or ``is_ops``, by an
+UPDATE or by inserting a row that already carries the flag.
 
 Revision ID: c6d4e2f1a9b8
 Revises: b1e7c3a9d5f2
@@ -88,8 +89,12 @@ def upgrade() -> None:
     )
     op.execute("GRANT SELECT, INSERT ON organisation TO pa_ops")
     op.execute("GRANT UPDATE (name, task_quota_per_year, runs_per_user) ON organisation TO pa_ops")
-    op.execute("GRANT SELECT, INSERT ON organisation_domain TO pa_ops")
-    op.execute("GRANT SELECT, INSERT ON waitlist_entry TO pa_ops")
+    # The ops service reads domains (the sweep) and stamps waitlist rows; it
+    # inserts neither (the CLI adds domains, the public API adds requests), so
+    # neither table gets INSERT (review stack, 2026-11-17; narrower than B13's
+    # wording, never wider).
+    op.execute("GRANT SELECT ON organisation_domain TO pa_ops")
+    op.execute("GRANT SELECT ON waitlist_entry TO pa_ops")
     op.execute("GRANT UPDATE (account_user_id, account_created_at) ON waitlist_entry TO pa_ops")
     op.execute("GRANT SELECT, INSERT ON ops_action TO pa_ops")
     op.execute("GRANT SELECT ON task TO pa_ops")
@@ -101,15 +106,17 @@ def upgrade() -> None:
         "CREATE FUNCTION app_user_refuse_privilege_grant() RETURNS trigger "
         "LANGUAGE plpgsql AS $$ "
         "BEGIN "
-        "IF current_user = 'pa_ops' AND ((NEW.is_admin AND NOT OLD.is_admin) "
-        "OR (NEW.is_ops AND NOT OLD.is_ops)) THEN "
+        # On INSERT there is no OLD row: a new row with a flag set is a grant.
+        "IF current_user = 'pa_ops' AND ("
+        "(NEW.is_admin AND (TG_OP = 'INSERT' OR NOT OLD.is_admin)) "
+        "OR (NEW.is_ops AND (TG_OP = 'INSERT' OR NOT OLD.is_ops))) THEN "
         "RAISE EXCEPTION 'the ops login cannot grant is_admin or is_ops' USING ERRCODE = '42501'; "
         "END IF; "
         "RETURN NEW; "
         "END $$"
     )
     op.execute(
-        "CREATE TRIGGER trg_app_user_refuse_privilege_grant BEFORE UPDATE ON app_user "
+        "CREATE TRIGGER trg_app_user_refuse_privilege_grant BEFORE INSERT OR UPDATE ON app_user "
         "FOR EACH ROW EXECUTE FUNCTION app_user_refuse_privilege_grant()"
     )
 
@@ -120,8 +127,10 @@ def downgrade() -> None:
     op.execute("DROP FUNCTION app_user_refuse_privilege_grant()")
     op.execute("REVOKE ALL ON ALL TABLES IN SCHEMA public FROM pa_ops")
     op.execute("REVOKE ALL ON SCHEMA public FROM pa_ops")
+    # NOLOGIN first: when the role survives (another database in the cluster
+    # still holds grants) it must not keep a working login.
     op.execute(
-        "DO $$ BEGIN DROP ROLE pa_ops; "
+        "DO $$ BEGIN ALTER ROLE pa_ops NOLOGIN; DROP ROLE pa_ops; "
         "EXCEPTION WHEN dependent_objects_still_exist OR undefined_object THEN NULL; END $$;"
     )
 

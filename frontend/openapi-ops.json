@@ -196,6 +196,8 @@
           }
         },
         "required": [
+          "task_quota_per_year",
+          "runs_per_user",
           "user_ids"
         ],
         "title": "BulkQuota",
@@ -541,6 +543,10 @@
             "title": "Task Quota Per Year"
           }
         },
+        "required": [
+          "task_quota_per_year",
+          "runs_per_user"
+        ],
         "title": "QuotaSet",
         "type": "object"
       },

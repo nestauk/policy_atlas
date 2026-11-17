@@ -64,7 +64,8 @@ export function peopleFixtures(): Person[] {
       task_quota_per_year: null,
       runs_per_user: null,
       tasks_this_year: 31,
-      limits: { task_quota_per_year: null, runs_per_user: 3 },
+      // An administrator is exempt from both limits.
+      limits: { task_quota_per_year: null, runs_per_user: null },
     },
     {
       user_id: "sub-tom",

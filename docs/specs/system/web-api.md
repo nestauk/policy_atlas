@@ -169,18 +169,19 @@ Splash-page **Request access** intake. Public — no bearer token.
   endpoint cannot reveal who is registered). Organisation is optional;
   blank becomes null. Response omits organisation and role/reason. `website`
   is a honeypot (hidden on the form): any non-empty value gets a fake 201
-  and stores nothing. No admin list/export in v1 — ops query the
-  `waitlist_entry` table directly. Enrolment into Cognito remains the ops
-  CLI path (task 033), not an auto-promote from this table. Behind the
-  firewall (task 064b) the form sends a CAPTCHA token in the `x-aws-waf-token`
-  request header, which CORS allows; the firewall checks it and the API never
-  reads it.
+  and stores nothing. The ops host lists the rows and approves one into an
+  organisation (task 065, `GET /api/v1/ops/requests`, `POST
+  /api/v1/ops/requests/{entry_id}/approve`); the public API still has no list
+  or export. Enrolment into Cognito is the ops CLI, the ops pages, or the
+  self-signup sweep below for listed domains only. Behind the firewall (task
+  064b) the form sends a CAPTCHA token in the `x-aws-waf-token` request header,
+  which CORS allows; the firewall checks it and the API never reads it.
 
 With the self-signup flag on (task 065), the ops service's sweep turns rows
 whose address domain is in `organisation_domain` into accounts within about a
 minute, and stamps `account_user_id` and `account_created_at` on the row. The
 public route and its response are unchanged, and the honeypot stays. The abuse
-ceiling: one invitation per address, `max_per_hour` accounts per hour, listed
+ceiling: one invitation per address, `max_per_hour` invitations (sent or failed attempts) per hour, listed
 domains only, and a one-hour resend cooldown. Production turns the flag on only
 after the WAF (web application firewall) rate rule from task 064b is live.
 

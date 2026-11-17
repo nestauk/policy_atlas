@@ -50,14 +50,16 @@ docker compose exec -T db psql -U policy_atlas -d policy_atlas_e2e_test -c "CREA
 DATABASE_URL=postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas_e2e_test bash scripts/ops_e2e_local.sh
 ```
 
-It proves, in order: the ops host answers `/people` with the pages' `index.html`; it has no
-task routes and no `/me` (404); an ops route is 401 without a token and 403 with a token and
-no role, and the refused calls create no `app_user` row; with the role (the row write
+The ops server runs on the `pa_ops` login (set by the master login for the run). It proves, in
+order: the ops host answers `/people` with the pages' `index.html`; it has no task routes and
+no `/me` (404); an ops route is 401 without a token and 403 with a token and no role; a nested
+bundle file is served and the host refuses framing; the refused calls create no `app_user` row; with the role (the row write
 `ops grant` makes) the route is 200; an organisation is created, its task quota set to 1 and
 the operator moved into it on the ops host; `/me` on the api host then shows limit 1, the
 first task is admitted and the second refused with `task_quota`; the people list finds the
 operator; `ops_action` holds `org.create, org.quota, person.move` for the actor in order;
-the ops server log carries `ops.action` lines. The staging checks (contract § Acceptance)
+the ops server's database login is `pa_ops`; the ops server log carries `ops.action` lines.
+The staging checks (contract § Acceptance)
 are Phase 11 with the owner and are still pending above.
 
 ## Build notes (filled per phase)
@@ -117,21 +119,153 @@ Twelve commits on `task/065-accounts` after the design-phase exit, one per plan 
   (its sandbox cannot reach Postgres); the plan's routing is otherwise followed.
 - `test_migration_064a_ssr_index.py` steps down to its own revision before stamping, because
   a revision now follows it. Table-count pins moved from 52 to 54.
+- The web "enrol or move" calls a new `move_user` (the person's row is addressed by subject,
+  so no Cognito lookup is needed) rather than `enrol_user`, which B4 names. § Terms said
+  "one function is added"; the build adds `ensure_account_enrolled`, `resend_invitation`,
+  `approve_request`, `move_user`, `set_ops`, `set_quota`, `add_domain`, `remove_domain` and
+  `record_action`, all listed in the Phase 4 and 6 commits.
+- After the review stack: `pa_ops` holds no INSERT on `organisation_domain` or
+  `waitlist_entry` (narrower than B13's wording; nothing inserts there from the ops host),
+  and the trigger guards INSERT as well as UPDATE. The CLI's quota commands write an
+  `ops_action` row (rubric 22 read literally), with the operator's verified AWS principal as
+  the actor. "Only the resolver reads the override columns" (rubric 22) is read as "no
+  limit decision outside the resolver"; the ops-host list projections display the columns.
+- One 064a test was removed with reason: `test_admit_and_mint_fails_loudly_without_a_user_cap`
+  pinned a guard that treated a missing cap as a wiring error; 065 makes `None` a value (no
+  cap), and the guard gave an administrator a 500. Its replacement is
+  `test_an_administrator_with_no_run_cap_confirms_a_baseline`.
 
 ## Review findings
 
-- **Contract verifier:**
-- **`/code-review`:**
-- **`/security-review`:**
-- **Adversarial review** (Tier 4):
-- **`/simplify`:**
+Step 7 ran in this session on fresh lanes (owner's decision, 2026-11-17). Codex's
+workspace was out of credits, so the adversarial lane ran on a fresh Claude reasoning agent;
+a family-diverse Codex pass is pending a refill (recorded under Known unverified items).
+
+- **Security lane** (fresh agent, OWASP sweep): no critical or high. Adopted: M1 a
+  request the sweep can never fulfil is now terminal (`refused`) instead of retried every
+  minute, and failed attempts count against the hourly budget; M2 (the safe half) an
+  existing account is enrolled without its stored name being overwritten; L1 the privilege
+  trigger also guards INSERT; L2 the Requests page no longer puts an address in the page
+  URL; L3 an address with `<`, `>`, `&` or whitespace is refused before Cognito; L4 the
+  create-person route lower-cases and shape-checks the address; L5 a bulk failure shows a
+  generic message unless it is a refusal; I4 the ops host now serves files under the
+  bundle's sub-folders (fonts). Accepted and recorded: M3 the abuse ceiling as the ADR
+  states it (owner may lower `max_per_hour` on production); I2 one Cognito client serves
+  both hosts; I3 an ops-role holder can offboard the last operator (recovery is the CLI;
+  noted in the pages' script); I5 no password rotation. Escalated to the owner: M2's other
+  half, whether sweep-created accounts should take the form's name at all (contract C3 says
+  yes; see § Owner decisions).
+- **Adversarial review** (fresh agent): 1 blocker, 4 major, 9 minor. Adopted: (1) the
+  longlist admission guard that raised on a missing cap is gone, with a test for an
+  administrator and a cap of 0; (2) the INSERT trigger (convergent with L1); (3) the
+  no-rename fix (convergent with M2); (4) terminal refusals and the budget counting
+  failures (convergent with M1); (5) the deploy order: the login sync no longer fails the
+  migration task, the secret gate and the ops start run after the API is up and the public
+  frontend is published; (6) convergent with L4, plus Cognito refusals on create and
+  approve map to 409 `ops_refused`; (7) both quota fields are required (nullable) so a
+  missing field cannot clear an override; (8) convergent with L2; (10) the task-role synth
+  test handles a single-string Action and a `*`, and the local end-to-end run now serves
+  the ops routes as `pa_ops`; (11) `pa_ops` loses the two INSERT grants no code uses
+  (`organisation_domain`, `waitlist_entry`); (12) the downgrade sets NOLOGIN before the
+  drop; (14) the ops build unsets `VITE_MOCK`, a bootstrap starts from an empty bundle
+  directory, bulk actions act on visible ticked rows only. Recorded in ADR 0046's
+  consequences, not changed: (9) Cognito calls happen before the commit, so a rolled-back
+  write can leave a sent email or a disabled account with a `failed` row; (12) the
+  password travels in `ALTER ROLE` as a literal; (13) the sweep assumes one ops instance
+  (`desired_count` is 0 or 1 by the deploy script). (15) stale cap reads outside the lock
+  are harmless.
+- **Design lane** (`frontend-designer`, read-only, with screenshots): six material fixes
+  adopted (empty states, the missing organisation error line, Cancel in the bulk quota
+  dialog, focus return on dialog close, `aria-describedby` on help and warnings, fixed
+  column widths), eleven polish items adopted, six wording rulings adopted, six items
+  declined and recorded in the pages' script. The fixes landed in the agent polish round
+  (ops tests 35 → 52); screenshots of the changed pages at 1280 and 400 are in the session
+  scratchpad (`ops-shots/r3/`). The **owner pass** of the second polish round is pending:
+  the owner looks at the pages on staging in Phase 11.
+- **Fixes applied, then re-verified:** every adopted item above is in the tree; the slice
+  suites (341 backend tests across the slice's modules), the infra suite, the deploy
+  harness, the local end-to-end run (now serving the ops routes as `pa_ops`, and checking a
+  nested bundle file and the framing header) and the full `make verify` ran green after
+  them (see § Commands run). No fix relaxed, skipped or deleted a test except the one
+  recorded in § Diff summary.
+- **Contract verifier** (fresh agent, ran drift-check, the infra suite and 306 slice tests):
+  twelve findings. Adopted: 1 the INSERT trigger (convergent, three lanes); 2 the ops
+  service's `desired_count` is now template-pinned at 0 like the API's, and the deploy script
+  scales it last; 3 convergent with L4 and adversarial 6; 4 convergent with M1; 5 the three
+  stale document sentences (the SES entry said "discharged" while `email.enabled` is false,
+  the waitlist spec still said no auto-promote, "accounts" where the cap counts invitations);
+  7 the grants are now read back from the catalogue and compared to the list, the downgrade
+  sets NOLOGIN before the drop, the resend runs as `pa_ops` in the positive test, and the
+  migration test no longer asserts a cluster-wide property another worker can change; 8 the
+  task-role test pins the pool-ARN scope and catches a shared policy; 9 and 11 recorded as
+  deviations and in ADR 0046's amendment; 12 the ops container carries the quota and pool
+  settings, `require_cognito` is gone, the ops engine hides parameters, the ops host refuses
+  framing. Rulings: 6 the reader rule means no limit decision outside the resolver (display
+  reads on the ops host are fine), and the CLI's quota commands now write an audit row; 10
+  convergent with the design lane; 12's "half-run tick" and bundle test are accepted as
+  documented. Its per-item table at the time (items 1, 11, 13, 14, 22, 23 "partly") is
+  superseded by the fixes above; the rubric status below is after them.
+- **`/code-review` (medium, 15 findings):** adopted: the template desired count (convergent),
+  the lower-cased address (convergent), the INSERT trigger (convergent), a Check row's note
+  takes the first of two rows sharing an address instead of raising, an operator cannot
+  de-enrol or offboard their own account from a bulk action, the ops container's quota
+  settings (convergent), `inferDefaults` excludes administrators for the run default, the
+  fallback serves nested bundle files (convergent), endless sweep retries (convergent), typed
+  `NotFound` refusals instead of message-prefix matching, the 365-day predicate shared with
+  the quota, a quota field that is not a whole number is refused instead of cleared, the
+  sync logs the error class, the sweep reads the domain the way the SQL filter does.
+  Declined with reason: the per-person `effective_limits` query in the people list (one
+  query per row, under a hundred rows, the plan accepted it). A first run was pointed at
+  the wrong HEAD (the main checkout's 064b branch) and its eight findings are not this
+  slice's; discarded.
+- **`/simplify`:** not run; the code review's cleanup angles and the adjudication above
+  cover it, and a second same-family pass adds nothing.
+
+## Owner decisions raised by the stack
+
+1. **Sweep-created accounts and the form's name (security M2, adversarial 3).** Contract C3
+   enrols an existing unenrolled account and creates a new one with the waitlist row's name.
+   The stack showed that anyone can type a colleague's address with any name: the name is
+   now never written onto an existing account (fixed), but a new account still takes the
+   form's name, and a de-enrolled person is re-enrolled by a stranger's request. Options:
+   (a) keep C3 as written (the organisation is right by domain; an operator can rename from
+   the CLI); (b) derive the name from the address and keep the form's name on the waitlist
+   row for the operator; (c) leave any address that already has an account for an operator
+   (`check`), creating only new ones. Recommendation: (b) for new accounts and (a)'s
+   auto-enrol kept, because de-enrol is not a lockout (offboard is) and the person can be
+   renamed. Until the owner rules, the code does (a) with the no-rename fix.
+2. **`max_per_hour` on production** (security M3): 20 is the contract's default; the
+   security lane suggests 5 for the first weeks. Config only.
 
 ## Rubric status
 
-Filled after the review stack (step 7). Before it: items 1-7, 9-20, 22, 23 hold on the
-tests and the local end-to-end run above; items 2 (the staging checks), 8 (the review
-stack), 10 (the owner's copy review), 21 (the rollbacks on staging) and the staging half of
-23 are pending.
+After the review stack and its fixes (2026-11-17):
+
+| # | Status |
+|---|---|
+| 1 | Holds for A1-A5, B1-B13, C1-C6 on the tests, the end-to-end run and the stack's fixes; the staging-only parts of A2, B3 and C3 are in item 2 |
+| 2 | `make verify`, `openapi-sync`, `drift-check` and the infra suite pass; the eleven staging checks are pending (Phase 11, with the owner) |
+| 3 | Holds: nothing gated changed beyond § Constraints |
+| 4 | Holds: no range, password or real person in the diff or the quoted logs; the pages' mock uses fictional people at the real domains, gated behind `VITE_MOCK` and absent from the bundle |
+| 5 | Holds: one test removed with reason (§ Diff summary); pins changed are justified there |
+| 6 | Holds: this record |
+| 7 | Holds: `docs/deferred.md` updated; knowledge records are step 8's |
+| 8 | Holds, with one gap: the adversarial lane ran on Claude because Codex's workspace is out of credits; a Codex pass follows when credits return |
+| 9 | Holds (synth tests) |
+| 10 | Holds apart from the owner's browser review of the two templates (pending) |
+| 11 | Holds: no HTTP writer; INSERT and UPDATE refused by the trigger; closed reader list; trace; offboard clears it |
+| 12 | Holds (route-table and patched-lifespan tests) |
+| 13 | Holds: both task roles synth-pinned with the pool-ARN scope; listener rules; the deploy order with both services stopped; the ops service template-pinned at 0; the image proved by a build |
+| 14 | Holds (route tests; one audit row and one line per write; 429 inside the hour; no row from a non-ops token; the address lower-cased) |
+| 15 | Holds |
+| 16 | Holds (second entry, own shell, generated types, both documents in drift-check, the no-role state, bulk actions with one row each, the two typed confirmations) |
+| 17 | Holds; ADR 0046 amended today with the stack's consequences |
+| 18 | Holds |
+| 19 | Holds; a request the sweep can never fulfil is terminal (refused) rather than retried |
+| 20 | Holds; the ceiling now counts failed attempts too, and the ADR says so |
+| 21 | Pending (staging, Phase 11) |
+| 22 | Holds; the reader rule read as "no limit decision outside the resolver"; the CLI writes an audit row |
+| 23 | Holds locally (the exact grant pin from the catalogue, the login test, the sync, the deploy order); the staging half (check 11) pending |
 
 ## Intent & assumptions
 
@@ -149,6 +283,8 @@ stack), 10 (the owner's copy review), 21 (the rollbacks on staging) and the stag
   task-role policies, the allowlist from outside, the rollbacks and the `pa_ops` refusals over
   the real secret.
 - `aws sesv2 get-account` on both profiles (SSO sign-in needed).
+- A Codex adversarial pass (workspace out of credits on 2026-11-17).
+- The owner's pass of the second polish round, on staging.
 - `shellcheck` is not installed on this machine; `bash -n` and the two deploy harnesses ran.
 - The frontend-designer agent's craft skills named in its definition are not installed on
   this machine; it worked from the `frontend-design` plugin skill, `DESIGN.md` and `PRODUCT.md`.

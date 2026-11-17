@@ -126,11 +126,19 @@ def tasks_created_since(conn: Connection, user_id: str, *, days: int) -> int:
             select(func.count())
             .select_from(task)
             .where(task.c.owner_user_id == user_id)
-            # make_interval(years, months, weeks, days): the length is a bound
-            # parameter, not text spliced into the statement.
-            .where(task.c.created_at >= func.now() - func.make_interval(0, 0, 0, days))
+            .where(created_in_last_days(days))
         ).scalar_one()
     )
+
+
+def created_in_last_days(days: int) -> ColumnElement[bool]:
+    """The predicate "this task was created in the last ``days`` days", by the database clock.
+
+    Shared by the quota check and the ops people list (task 065), so the two
+    counts never drift. ``make_interval(years, months, weeks, days)``: the
+    length is a bound parameter, not text spliced into the statement.
+    """
+    return task.c.created_at >= func.now() - func.make_interval(0, 0, 0, days)
 
 
 def effective_limits(conn: Connection, user_id: str, *, settings: Settings) -> Limits:

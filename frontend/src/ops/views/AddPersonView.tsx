@@ -2,10 +2,10 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 
 import { Button } from "../../ui/brand/Button";
-import { PageBackLink, PageHeader } from "../../ui/brand/PageHeader";
+import { PageBackLink } from "../../ui/brand/PageHeader";
 import { OpsApiError, unwrap, useOpsAction, useOrganisations } from "../api";
 import { orgInRefusal, productDomain } from "../format";
-import { Field, INPUT_CLASS, OrganisationSelect, Panel, useRecordedToast } from "../ui";
+import { CHOOSE_ORGANISATION, Field, FormHeader, INPUT_CLASS, OrganisationSelect, Panel, useRecordedToast } from "../ui";
 
 /** Add a person (ops-pages-copy.md § Add a person): create in an organisation. */
 export function AddPersonView() {
@@ -15,6 +15,7 @@ export function AddPersonView() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [orgId, setOrgId] = useState("");
+  const [orgMissing, setOrgMissing] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const create = useOpsAction((client, body: { email: string; display_name: string; org_id: string }) =>
@@ -25,6 +26,7 @@ export function AddPersonView() {
     event.preventDefault();
     if (orgId === "") {
       // Required: the browser checks the two text fields; this one is ours.
+      setOrgMissing(true);
       document.getElementById("person-org")?.focus();
       return;
     }
@@ -60,44 +62,49 @@ export function AddPersonView() {
 
   return (
     <>
-      <PageHeader
-        context={<PageBackLink to="/people">People</PageBackLink>}
-        title="Add a person"
-        actions={null}
-      />
+      <FormHeader back={<PageBackLink to="/people">People</PageBackLink>} title="Add a person" />
       <div className="mt-6 grid gap-8 md:grid-cols-[minmax(0,34rem)_minmax(0,22rem)]">
         <form onSubmit={submit} className="flex flex-col gap-6 border border-line-2 bg-paper p-6 shadow-paper max-md:p-4">
           <Field id="person-email" label="Email" error={emailError}>
-            <input
-              id="person-email"
-              type="email"
-              required
-              autoComplete="off"
-              value={email}
-              aria-invalid={emailError !== null}
-              aria-describedby={emailError !== null ? "person-email-error" : undefined}
-              onChange={(event) => setEmail(event.target.value)}
-              className={INPUT_CLASS}
-            />
+            {(describedBy) => (
+              <input
+                id="person-email"
+                type="email"
+                required
+                autoComplete="off"
+                value={email}
+                aria-invalid={emailError !== null}
+                aria-describedby={describedBy}
+                onChange={(event) => setEmail(event.target.value)}
+                className={INPUT_CLASS}
+              />
+            )}
           </Field>
           <Field id="person-name" label="Display name" help="Shown to colleagues. Not the email.">
-            <input
-              id="person-name"
-              required
-              autoComplete="off"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              className={INPUT_CLASS}
-            />
+            {(describedBy) => (
+              <input
+                id="person-name"
+                aria-describedby={describedBy}
+                required
+                autoComplete="off"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                className={INPUT_CLASS}
+              />
+            )}
           </Field>
-          <Field id="person-org" label="Organisation">
-            <OrganisationSelect
-              id="person-org"
-              label="Organisation"
-              organisations={organisations.data ?? []}
-              value={orgId}
-              onChange={setOrgId}
-            />
+          <Field id="person-org" label="Organisation" error={orgMissing && orgId === "" ? CHOOSE_ORGANISATION : null}>
+            {(describedBy) => (
+              <OrganisationSelect
+                id="person-org"
+                label="Organisation"
+                organisations={organisations.data ?? []}
+                value={orgId}
+                onChange={setOrgId}
+                describedBy={describedBy}
+                invalid={orgMissing && orgId === ""}
+              />
+            )}
           </Field>
           {formError !== null && (
             <p role="alert" className="text-body text-red">
@@ -116,7 +123,8 @@ export function AddPersonView() {
         <Panel title="What happens" className="self-start">
           <div className="flex flex-col gap-3 text-body text-ink">
             <p>
-              Cognito creates the account and emails a temporary password from no-reply@{productDomain()}. It is valid
+              Cognito creates the account and emails a temporary password from{" "}
+              <span className="whitespace-nowrap">no-reply@{productDomain()}</span>. It is valid
               for 30 days.
             </p>
             <p>If the address already has an account with no organisation, it is added to this one and no email is sent.</p>

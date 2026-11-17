@@ -504,7 +504,7 @@ database role.
 4. Set `ops.desired_count` to 1 and deploy again.
 
 **Self-signup.** `self_signup.enabled` in `pa_config.json` is false by default
-(`max_per_hour` caps accounts per hour). Before switching it on, make sure the
+(`max_per_hour` caps the invitations the sweep sends, and its failed attempts, per hour; an enrolment of an existing account sends nothing and is not capped). Before switching it on, make sure the
 Nesta organisation exists and has its domain:
 
 ```bash

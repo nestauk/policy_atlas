@@ -42,6 +42,7 @@ OPS_ENVIRONMENT_NAMES = {
     "OIDC_ISSUER", "OIDC_JWKS_URL", "OIDC_CLIENT_ID", "APP_ORIGIN",
     "POLICY_ATLAS_SERVICE_ROLE", "POLICY_ATLAS_SELF_SIGNUP",
     "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR", "OPS_UI_DIR",
+    "RUNS_PER_USER", "TASK_QUOTA_PER_YEAR", "DB_POOL_SIZE", "DB_MAX_OVERFLOW",
     "FORWARDED_ALLOW_IPS", "LOG_LEVEL", "LOG_FORMAT", "PA_BACKEND_MODE",
 }
 
@@ -188,6 +189,10 @@ def test_ops_container_has_the_complete_least_privilege_environment_and_secret_m
         "POLICY_ATLAS_SELF_SIGNUP": "0",
         "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR": "20",
         "OPS_UI_DIR": "/app/ops-ui",
+        "RUNS_PER_USER": "3",
+        "TASK_QUOTA_PER_YEAR": "50",
+        "DB_POOL_SIZE": "5",
+        "DB_MAX_OVERFLOW": "5",
         "FORWARDED_ALLOW_IPS": "1.2.3.4/5",
         "LOG_LEVEL": "INFO",
         "LOG_FORMAT": "json",
@@ -207,16 +212,27 @@ def test_ops_and_api_task_roles_hold_only_their_expected_cognito_permissions():
     ops_actions = []
     for _, policy in policies:
         roles = policy["Properties"]["Roles"]
-        actions = [
+        # CloudFormation writes one action as a plain string, several as a list.
+        all_actions = [
             action
             for statement in policy["Properties"]["PolicyDocument"]["Statement"]
-            for action in statement["Action"]
-            if action.startswith("cognito-idp:")
+            for action in (
+                [statement["Action"]] if isinstance(statement["Action"], str) else statement["Action"]
+            )
         ]
-        if roles == [{"Ref": api_role}]:
+        assert "*" not in all_actions and "cognito-idp:*" not in all_actions
+        actions = [action for action in all_actions if action.startswith("cognito-idp:")]
+        if {"Ref": api_role} in roles:
             api_actions.extend(actions)
-        if roles == [{"Ref": ops_role}]:
+        if {"Ref": ops_role} in roles:
             ops_actions.extend(actions)
+            for statement in policy["Properties"]["PolicyDocument"]["Statement"]:
+                if any(str(a).startswith("cognito-idp:") for a in (
+                    [statement["Action"]] if isinstance(statement["Action"], str) else statement["Action"]
+                )):
+                    # Scoped to the pool, never a wildcard resource.
+                    assert "Arn" in json.dumps(statement["Resource"]) and "UserPool" in json.dumps(statement["Resource"])
+                    assert statement["Resource"] != "*"
     assert not api_actions
     assert sorted(ops_actions) == sorted([
         "cognito-idp:AdminCreateUser", "cognito-idp:AdminGetUser",
@@ -254,7 +270,8 @@ def test_migration_task_is_one_shot_and_has_only_the_database_secret():
     assert migration["Memory"] == "1024"
 
     container = _container(migration)
-    assert container["Command"] == ["sh", "-c", "alembic upgrade head && python -m policy_atlas.ops.db_role sync"]
+    assert container["Command"][:2] == ["sh", "-c"]
+    assert container["Command"][2].startswith("alembic upgrade head && (python -m policy_atlas.ops.db_role sync || echo")
     assert [item["Name"] for item in container["Environment"]] == ["OPS_DB_SECRET_ARN"]
     assert "OpsDbSecret" in json.dumps(container["Environment"])
     secrets = _secret_map(container)

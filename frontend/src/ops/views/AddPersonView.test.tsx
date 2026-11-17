@@ -29,6 +29,22 @@ describe("Add a person", () => {
     );
   });
 
+  it("asks for an organisation when none is chosen, and links the help and the error to their fields", async () => {
+    const user = userEvent.setup();
+    renderOps("/people/new");
+    await screen.findByRole("heading", { name: "Add a person" });
+    const select = screen.getByRole("combobox", { name: "Organisation" });
+    expect(select).toHaveTextContent("Choose an organisation.");
+    expect(screen.getByLabelText("Display name")).toHaveAccessibleDescription("Shown to colleagues. Not the email.");
+    await user.type(screen.getByLabelText("Email"), "ana@x.org");
+    await user.type(screen.getByLabelText("Display name"), "Ana Lopez");
+    await user.click(screen.getByRole("button", { name: "Create and send invitation" }));
+    expect(select).toHaveFocus();
+    expect(select).toHaveAttribute("aria-invalid", "true");
+    expect(select).toHaveAccessibleDescription("Choose an organisation.");
+    expect(opsMock.writes).toEqual([]);
+  });
+
   it("sends the invitation, toasts it as recorded and goes back to People", async () => {
     const router = await fill("ana.lopez@westbury.gov.uk");
     expect(await screen.findByText("Invitation sent to ana.lopez@westbury.gov.uk · recorded")).toBeInTheDocument();

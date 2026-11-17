@@ -313,7 +313,12 @@ def test_organisations_list_counts_people_and_lists_domains(ops: Harness) -> Non
     response = ops.client.get("/api/v1/ops/organisations", headers=ops.actor.headers)
     assert response.status_code == 200
     rows = response.json()
-    assert [row["name"] for row in rows] == sorted(row["name"] for row in rows)
+    # Ordered by the database's collation, which is not Python's sort.
+    with ops.engine.connect() as conn:
+        expected = conn.execute(
+            select(organisation.c.name).order_by(organisation.c.name)
+        ).scalars().all()
+    assert [row["name"] for row in rows] == expected
     mine = next(row for row in rows if row["org_id"] == str(org_id))
     assert mine["people"] == 2
     assert mine["domains"] == sorted(mine["domains"])
@@ -541,7 +546,9 @@ def test_bulk_enrol_continues_past_a_real_sql_failure_and_audits_every_subject(
         (middle, "failed"),
         (last, "ok"),
     ]
-    assert "refused by test trigger" in results[1]["message"]
+    # A database error never reaches the browser verbatim: the row names its audit record.
+    assert "refused by test trigger" not in results[1]["message"]
+    assert results[1]["message"] == f"failed; see action {results[1]['action_id']}"
     assert all(r["action_id"] for r in results)
     for user_id, org in ((first, dest), (middle, None), (last, dest)):
         row = _user(ops, user_id)
@@ -822,3 +829,115 @@ def test_rows_assign_moves_a_task_or_a_project_and_validates_the_selector(
     )
     assert response.status_code == 404 and lines == []
     assert len(_audit(ops)) == 2
+
+
+def test_an_operator_cannot_offboard_or_de_enrol_themselves(ops: Harness) -> None:
+    """"Select everyone shown" includes the caller; the row fails and the others proceed."""
+    org_id = _seed_org(ops)
+    other = _seed_person(ops, org_id=org_id, label="other")
+    response, lines = _post(
+        ops, "/api/v1/ops/people/de-enrol", {"user_ids": [ops.actor.user_id, other]}
+    )
+    assert response.status_code == 200, response.text
+    results = response.json()["results"]
+    assert [r["outcome"] for r in results] == ["failed", "ok"]
+    assert "your own account" in results[0]["message"]
+    me = _user(ops, ops.actor.user_id)
+    assert me is not None and me["is_ops"] is True
+    assert [row["outcome"] for row in _audit(ops)] == ["failed", "ok"]
+    assert len(lines) == 2
+
+
+def test_requests_page_survives_two_rows_sharing_an_address(ops: Harness) -> None:
+    """``app_user.email`` is not unique; a Check row's note takes the first match, never a 500."""
+    org_id = _seed_org(ops)
+    email = unique_email("twice")
+    _seed_person(ops, org_id=org_id, label="first", email=email)
+    _seed_person(ops, org_id=org_id, label="second", email=email)
+    entry_id = uuid.uuid4()
+    with seeded(ops.engine) as conn:
+        conn.execute(
+            insert(waitlist_entry).values(
+                entry_id=entry_id, email=email, name="Twice", role_or_reason="r",
+                created_at=datetime.now(UTC),
+            )
+        )
+        conn.execute(
+            insert(ops_action).values(
+                action_id=uuid.uuid4(), at=datetime.now(UTC), actor_user_id="sweep",
+                action="invite", target=str(entry_id), outcome="enrolled_elsewhere",
+            )
+        )
+    response = ops.client.get("/api/v1/ops/requests", headers=ops.actor.headers)
+    assert response.status_code == 200, response.text
+    item = next(i for i in response.json()["items"] if i["entry_id"] == str(entry_id))
+    assert item["status"] == "check" and item["note"]
+
+
+def test_a_refused_sweep_row_shows_as_check(ops: Harness) -> None:
+    """The sweep's terminal ``refused`` outcome is a Check for an operator, like elsewhere."""
+    entry_id = uuid.uuid4()
+    with seeded(ops.engine) as conn:
+        conn.execute(
+            insert(waitlist_entry).values(
+                entry_id=entry_id, email=unique_email("refused"), name="R", role_or_reason="r",
+                created_at=datetime.now(UTC),
+            )
+        )
+        conn.execute(
+            insert(ops_action).values(
+                action_id=uuid.uuid4(), at=datetime.now(UTC), actor_user_id="sweep",
+                action="invite", target=str(entry_id), outcome="refused",
+            )
+        )
+    response = ops.client.get("/api/v1/ops/requests", headers=ops.actor.headers)
+    item = next(i for i in response.json()["items"] if i["entry_id"] == str(entry_id))
+    assert item["status"] == "check" and item["note"] is None
+
+
+def test_create_person_lower_cases_the_address_and_maps_a_cognito_refusal(ops: Harness) -> None:
+    """Mixed case reaches Cognito lower-cased; a Cognito error is a 409, not a 500."""
+    from botocore.stub import ANY
+
+    org_id = _seed_org(ops)
+    email = unique_email("Mixed").replace("mixed", "Mixed")
+    assert email != email.lower()
+    expect_lookup(ops.stubber, email=email.lower(), sub=None)
+    ops.stubber.add_client_error(
+        "admin_create_user",
+        service_error_code="InvalidParameterException",
+        expected_params={
+            "UserPoolId": POOL_ID,
+            "Username": email.lower(),
+            "UserAttributes": ANY,
+            "DesiredDeliveryMediums": ["EMAIL"],
+        },
+    )
+    response, lines = _post(
+        ops,
+        "/api/v1/ops/people",
+        {"email": email, "display_name": "Mixed Case", "org_id": str(org_id)},
+    )
+    assert response.status_code == 409, response.text
+    assert response.json()["error"]["code"] == "ops_refused"
+    assert "InvalidParameterException" in response.json()["error"]["message"]
+    assert email.lower() not in response.json()["error"]["message"]
+    assert lines == [] and _audit(ops) == []
+
+
+def test_quota_bodies_must_name_both_fields(ops: Harness) -> None:
+    """Leaving a field out is a validation error, never a silent clear (review stack)."""
+    org_id = _seed_org(ops)
+    response = ops.client.post(
+        f"/api/v1/ops/organisations/{org_id}/quota",
+        json={"task_quota_per_year": 5},
+        headers=ops.actor.headers,
+    )
+    assert response.status_code == 422, response.text
+    person = _seed_person(ops, org_id=org_id, label="q")
+    response = ops.client.post(
+        "/api/v1/ops/people/quota",
+        json={"user_ids": [person], "runs_per_user": 2},
+        headers=ops.actor.headers,
+    )
+    assert response.status_code == 422, response.text

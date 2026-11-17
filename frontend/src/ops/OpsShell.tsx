@@ -89,7 +89,13 @@ function AccountMenu({ me }: { me: Person | undefined }) {
             "text-caption font-bold tabular-nums text-navy hover:bg-blue-tint-2 data-[state=open]:bg-blue-tint-2",
           )}
         >
-          {initials(me?.display_name ?? "") || "?"}
+          {initials(me?.display_name ?? "") || (
+            // Who they are is unknown (the people read was refused): the account glyph.
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -130,8 +136,9 @@ function SignedInShell() {
   const status = errorStatus(people.error);
 
   if (status === 403) {
+    // Still a way out: the account menu with Sign out. No sections, no retry.
     return (
-      <Frame>
+      <Frame account={<AccountMenu me={undefined} />}>
         <NoOpsRole />
       </Frame>
     );
@@ -154,8 +161,10 @@ function SignedInShell() {
         Requests
         {waiting > 0 && (
           <>
-            {" "}
-            <span className="ml-0.5 font-semibold tabular-nums text-blue">{waiting}</span>
+            <span aria-hidden="true" className="ml-1.5 font-semibold tabular-nums text-blue">
+              {waiting}
+            </span>
+            <span className="sr-only">, {waiting} waiting</span>
           </>
         )}
       </NavItem>

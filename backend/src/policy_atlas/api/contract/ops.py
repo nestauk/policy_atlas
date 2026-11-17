@@ -20,9 +20,10 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .tenancy import OrganisationRef
+from .waitlist import WaitlistSignup
 
 #: Upper bounds on free text the ops pages send; the command functions
 #: validate meaning, these only bound size.
@@ -56,8 +57,10 @@ class QuotaSet(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    task_quota_per_year: int | None = Field(default=None, ge=0)
-    runs_per_user: int | None = Field(default=None, ge=0)
+    # Required, nullable: a body that leaves one out must not clear it by
+    # accident (review stack, 2026-11-17).
+    task_quota_per_year: int | None = Field(ge=0)
+    runs_per_user: int | None = Field(ge=0)
 
 
 class OrganisationOut(BaseModel):
@@ -139,6 +142,16 @@ class PersonCreate(BaseModel):
     email: str = Field(min_length=3, max_length=OPS_EMAIL_MAX)
     display_name: str = Field(min_length=1, max_length=OPS_NAME_MAX)
     org_id: uuid.UUID
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        """Lower-case and shape-check the address, as the waitlist form and the CLI do.
+
+        Cognito's lookup is an exact, case-sensitive match, so one spelling per
+        mailbox is what keeps a second identity from being minted.
+        """
+        return WaitlistSignup.validate_email(value)
 
 
 class PersonCreatedOut(BaseModel):

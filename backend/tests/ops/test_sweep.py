@@ -289,3 +289,53 @@ def test_sweep_without_identity_does_nothing(engine: Engine) -> None:
             ).scalar_one()
             is None
         )
+
+
+def test_sweep_refuses_for_good_a_request_the_command_rejects(engine: Engine) -> None:
+    """A deterministic refusal is terminal: no retry, no Cognito call, shown as Check."""
+    _domain(engine)
+    # A quote cannot be a Cognito filter literal, so the command refuses it every time.
+    entry_id = _entry(engine, email=f'a"b@{_DOMAIN}')
+    with cognito() as (client, stubber):
+        assert sweep_once(engine, _identity(client), _settings(), now=_NOW) == SweepReport(
+            refused=1
+        )
+        # The second tick skips it without a Cognito call (nothing queued on the stub).
+        assert sweep_once(engine, _identity(client), _settings(), now=_NOW) == SweepReport()
+        stubber.assert_no_pending_responses()
+    with engine.connect() as conn:
+        outcomes = (
+            conn.execute(select(ops_action.c.outcome).where(ops_action.c.target == str(entry_id)))
+            .scalars()
+            .all()
+        )
+        stamped = conn.execute(
+            select(waitlist_entry.c.account_created_at).where(waitlist_entry.c.entry_id == entry_id)
+        ).scalar_one()
+    assert outcomes == ["refused"]
+    assert stamped is None
+
+
+def test_failed_attempts_spend_the_hourly_budget(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A row that keeps failing cannot drive unbounded Cognito calls: it counts against the cap."""
+    _domain(engine)
+    _entry(engine, email=f"flaky@{_DOMAIN}", created_at=_NOW)
+    _entry(engine, email=f"next@{_DOMAIN}", created_at=_NOW + timedelta(seconds=1))
+    monkeypatch.setattr(commands, "_now", lambda: _NOW)
+
+    def always_fail(*args: object, **kwargs: object) -> object:
+        raise RuntimeError("transient")
+
+    monkeypatch.setattr(commands, "approve_request", always_fail)
+    settings = replace(_settings(), self_signup_max_per_hour=1)
+    with cognito() as (client, _stubber):
+        # One failure spends the hour's single allowance; the next row waits.
+        assert sweep_once(engine, _identity(client), settings, now=_NOW) == SweepReport(
+            failed=1, skipped_for_cap=1
+        )
+        # The hour has not passed: nothing is attempted.
+        assert sweep_once(engine, _identity(client), settings, now=_NOW) == SweepReport(
+            skipped_for_cap=2
+        )

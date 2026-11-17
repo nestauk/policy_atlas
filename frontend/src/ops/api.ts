@@ -148,7 +148,7 @@ export function useOrganisationQuota(orgId: string) {
 /**
  * The settings defaults, which no route reports directly: the limits of a
  * person with no override of their own and none from their organisation
- * (for the yearly quota, one who is not an administrator, who is exempt).
+ * and who is not an administrator (exempt from both).
  * `undefined` when no such person is listed.
  */
 export function inferDefaults(
@@ -165,8 +165,10 @@ export function inferDefaults(
       orgOf(person)?.task_quota_per_year == null &&
       (person.organisation == null || orgOf(person) !== undefined),
   );
+  // Administrators are exempt from both limits, so neither shows the default.
   const runs = people.find(
     (person) =>
+      !person.is_admin &&
       person.runs_per_user == null &&
       orgOf(person)?.runs_per_user == null &&
       (person.organisation == null || orgOf(person) !== undefined),

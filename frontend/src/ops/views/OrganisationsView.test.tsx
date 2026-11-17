@@ -56,7 +56,7 @@ describe("Organisations", () => {
     expect(await screen.findByText("Harbour Trust")).toBeInTheDocument();
   });
 
-  it("moves a project from its pasted web address and shows the response's message", async () => {
+  it("moves a project from its pasted web address, with the toast alone", async () => {
     const user = userEvent.setup();
     renderOps("/organisations");
     const panel = await screen.findByRole("region", { name: "Move a task or project to another organisation" });
@@ -65,8 +65,29 @@ describe("Organisations", () => {
     await pick(user, "Move to", "Nesta");
     await user.click(within(panel).getByRole("button", { name: "Move" }));
     expect(await screen.findByText("Moved 1 project and 4 tasks into Nesta · recorded")).toBeInTheDocument();
-    expect(within(panel).getByText("moved 1 project(s) and 4 task(s) into 'Nesta'")).toBeInTheDocument();
+    expect(within(panel).queryByText(/project\(s\)/)).toBeNull();
     expect(opsMock.writes.at(-1)?.body).toMatchObject({ project_id: PROJECT });
+  });
+
+  it("says when no task or project has the id", async () => {
+    const user = userEvent.setup();
+    renderOps("/organisations");
+    const panel = await screen.findByRole("region", { name: "Move a task or project to another organisation" });
+    const field = within(panel).getByLabelText("Task or project id");
+    await user.type(field, "not-an-id");
+    await pick(user, "Move to", "Nesta");
+    await user.click(within(panel).getByRole("button", { name: "Move" }));
+    expect(await within(panel).findByText("No task or project has that id.")).toBeInTheDocument();
+    expect(field).toHaveAttribute("aria-invalid", "true");
+    expect(field).toHaveAccessibleDescription(/No task or project has that id\./);
+  });
+
+  it("says when nothing matches the search, inside the table's frame", async () => {
+    const user = userEvent.setup();
+    renderOps("/organisations");
+    await user.type(await screen.findByRole("searchbox", { name: "Find an organisation" }), "zzz");
+    expect(screen.getByRole("status")).toHaveTextContent("No organisations match.");
+    expect(screen.getAllByRole("columnheader")).toHaveLength(7);
   });
 
   it("tries a bare id as a task, then as a project", async () => {

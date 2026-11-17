@@ -1,4 +1,5 @@
 import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { apiError, mockOpsAuth, opsMock } from "./mock";
@@ -22,7 +23,7 @@ describe("the ops shell", () => {
     expect(within(nav).getByRole("link", { name: "People" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Organisations" })).toBeInTheDocument();
     // One request is waiting in the fixtures.
-    expect(await within(nav).findByRole("link", { name: "Requests 1" })).toBeInTheDocument();
+    expect(await within(nav).findByRole("link", { name: "Requests, 1 waiting" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Back to Policy Atlas" })).toBeInTheDocument();
     expect(within(nav).queryByText(/New|Tasks|Projects/)).toBeNull();
     // The signed-in person's initials (Priya Shah).
@@ -40,6 +41,9 @@ describe("the ops shell", () => {
     );
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
     expect(screen.queryByRole("link", { name: "People" })).toBeNull();
+    // A way out all the same: the account menu with Sign out.
+    await userEvent.setup().click(screen.getByRole("button", { name: "Account" }));
+    expect(await screen.findByRole("menuitem", { name: "Sign out" })).toBeInTheDocument();
   });
 
   it("signed out, shows one Sign in button", async () => {

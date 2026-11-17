@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
@@ -24,10 +24,28 @@ describe("Access requests", () => {
     expect(within(row("Ben Cole")).getByText("Invited 1 d ago")).toBeInTheDocument();
     expect(within(row("Ben Cole")).queryByRole("button")).toBeNull();
     expect(within(row("Jon Reyes")).getByText("Check: already in Policy Lab")).toBeInTheDocument();
-    expect(within(row("Jon Reyes")).getByRole("link", { name: "Open person" })).toHaveAttribute(
-      "href",
-      "/people?q=jon.reyes%40policylab.example",
+    // The address goes in router state, never the URL (it would reach the access log).
+    expect(within(row("Jon Reyes")).getByRole("link", { name: "Open person" })).toHaveAttribute("href", "/people");
+  });
+
+  it("says when there are no requests, inside the table's frame", async () => {
+    opsMock.requests.items = [];
+    renderOps("/requests");
+    expect(await screen.findByText("No requests yet.")).toHaveAttribute("role", "status");
+    expect(screen.getAllByRole("columnheader")).toHaveLength(5);
+  });
+
+  it("Open person lands on People searching for the address, with the address kept out of the URL", async () => {
+    const user = userEvent.setup();
+    const router = renderOps("/requests");
+    await screen.findByRole("heading", { name: "Access requests" });
+    await user.click(within(row("Jon Reyes")).getByRole("link", { name: "Open person" }));
+    expect(await screen.findByRole("searchbox", { name: "Find by name, email or organisation" })).toHaveValue(
+      "jon.reyes@policylab.example",
     );
+    expect(router.state.location.pathname).toBe("/people");
+    expect(router.state.location.search).toBe("");
+    expect(screen.getAllByRole("row")).toHaveLength(2);
   });
 
   it("says Self-signup off when it is", async () => {
@@ -41,9 +59,10 @@ describe("Access requests", () => {
     renderOps("/requests");
     await user.click(await screen.findByRole("button", { name: "Approve into…" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve Ana Lopez" });
-    expect(dialog).toHaveTextContent(
+    expect(dialog).toHaveAccessibleDescription(
       "Cognito emails them a temporary password. If the address already has an account, it is enrolled without an email.",
     );
+    expect(within(dialog).getByRole("combobox", { name: "Organisation" })).toHaveTextContent("Choose an organisation.");
     expect(within(dialog).getByRole("button", { name: "Approve" })).toBeDisabled();
     await user.click(within(dialog).getByRole("combobox", { name: "Organisation" }));
     await user.click(await screen.findByRole("option", { name: "Westbury Council" }));
@@ -51,6 +70,8 @@ describe("Access requests", () => {
     expect(await screen.findByText("Ana Lopez approved · recorded")).toBeInTheDocument();
     expect(opsMock.writes.at(-1)?.body).toEqual({ org_id: WESTBURY_FOR_TEST });
     expect(await within(row("Ana Lopez")).findByText(/^Invited /)).toBeInTheDocument();
+    // The row's button is gone: focus goes to the table.
+    await waitFor(() => expect(screen.getByRole("table", { name: "Access requests" })).toHaveFocus());
   });
 
   it("turns the row to Check when the address is enrolled elsewhere", async () => {

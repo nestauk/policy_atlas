@@ -118,8 +118,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         else:
             check(secret_arn=secret_arn, secrets=secrets)
-    except Exception:  # noqa: BLE001 - the command must return a safe failure status
-        log.error("ops.db_role_failed", secret_name=_secret_name(secret_arn), role=_ROLE_NAME)
+    except Exception as error:  # noqa: BLE001 - the command must return a safe failure status
+        # The class names the cause; the message could carry the URL, so it stays out.
+        log.error(
+            "ops.db_role_failed",
+            secret_name=_secret_name(secret_arn),
+            role=_ROLE_NAME,
+            error_class=type(error).__name__,
+        )
         return 1
     return 0
 

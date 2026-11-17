@@ -18,7 +18,10 @@ import {
 } from "../api";
 import { facts, limitWord, plural } from "../format";
 import {
+  ACTIONS_TD_CLASS,
+  ACTIONS_TH_CLASS,
   Dialog,
+  EmptyRows,
   FailedLine,
   Field,
   FIGURE_CLASS,
@@ -84,7 +87,7 @@ export function OrganisationsView() {
   const [nameError, setNameError] = useState<string | null>(null);
   const [rowId, setRowId] = useState("");
   const [moveTo, setMoveTo] = useState("");
-  const [moveMessage, setMoveMessage] = useState<string | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
   const [moveFailed, setMoveFailed] = useState(false);
   const create = useOpsAction((client, body: { name: string }) =>
     unwrap(client.POST("/api/v1/ops/organisations", { body })),
@@ -118,7 +121,7 @@ export function OrganisationsView() {
   };
 
   const sendMove = () => {
-    setMoveMessage(null);
+    setMoveError(null);
     setMoveFailed(false);
     move.mutate(
       { id: rowId, orgId: moveTo },
@@ -127,11 +130,12 @@ export function OrganisationsView() {
           toast(
             `Moved ${plural(moved.projects_moved, "project")} and ${plural(moved.tasks_moved, "task")} into ${moved.org.name}`,
           );
-          setMoveMessage(moved.message);
         },
         onError: (error) => {
-          if (error instanceof OpsApiError && error.status > 0 && error.status < 500 && error.message !== "") {
-            setMoveMessage(error.message);
+          if (errorStatus(error) === 404) {
+            setMoveError("No task or project has that id.");
+          } else if (error instanceof OpsApiError && error.status > 0 && error.status < 500 && error.message !== "") {
+            setMoveError(error.message);
           } else {
             setMoveFailed(true);
           }
@@ -166,20 +170,22 @@ export function OrganisationsView() {
               <thead>
                 <tr>
                   <th className={cn(TH_CLASS, "pl-4")}>Name</th>
-                  <th className={cn(TH_CLASS, "text-right")}>People</th>
-                  <th className={cn(TH_CLASS, "text-right")}>Tasks per year</th>
-                  <th className={cn(TH_CLASS, "text-right")}>Simultaneous tasks</th>
-                  <th className={TH_CLASS}>Self-signup domain</th>
-                  <th className={TH_CLASS}>Created</th>
-                  <th className={cn(TH_CLASS, "w-10")}>
+                  <th className={cn(TH_CLASS, "w-24 text-right")}>People</th>
+                  <th className={cn(TH_CLASS, "w-36 text-right")}>Tasks per year</th>
+                  <th className={cn(TH_CLASS, "w-44 text-right")}>Simultaneous tasks</th>
+                  <th className={cn(TH_CLASS, "w-60")}>Self-signup domain</th>
+                  <th className={cn(TH_CLASS, "w-28")}>Created</th>
+                  <th className={cn(TH_CLASS, ACTIONS_TH_CLASS)}>
                     <span className="sr-only">Actions</span>
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((org) => (
-                  <tr key={org.org_id}>
-                    <td className={cn(TD_CLASS, "pl-4 font-semibold text-navy")}>{org.name}</td>
+                  <tr key={org.org_id} className="bg-paper">
+                    <td className={cn(TD_CLASS, "truncate pl-4 font-semibold text-navy")} title={org.name}>
+                      {org.name}
+                    </td>
                     <td className={cn(TD_CLASS, FIGURE_CLASS, "tabular-nums")}>{org.people}</td>
                     <td className={cn(TD_CLASS, FIGURE_CLASS)}>
                       <Override value={org.task_quota_per_year} fallback={defaults.tasks} />
@@ -187,11 +193,11 @@ export function OrganisationsView() {
                     <td className={cn(TD_CLASS, FIGURE_CLASS)}>
                       <Override value={org.runs_per_user} fallback={defaults.runs} />
                     </td>
-                    <td className={TD_CLASS}>{org.domains.length > 0 ? org.domains.join(", ") : "—"}</td>
+                    <td className={cn(TD_CLASS, "break-words")}>{org.domains.length > 0 ? org.domains.join(", ") : "—"}</td>
                     <td className={cn(TD_CLASS, "whitespace-nowrap")}>
                       <Figures text={formatDate(org.created_at, "short")} />
                     </td>
-                    <td className={cn(TD_CLASS, "py-2 pr-2")}>
+                    <td className={cn(TD_CLASS, ACTIONS_TD_CLASS, "py-2 pr-2")}>
                       <RowMenu
                         label={`Actions for ${org.name}`}
                         items={[
@@ -203,6 +209,7 @@ export function OrganisationsView() {
                 ))}
               </tbody>
             </table>
+            {rows.length === 0 && <EmptyRows label="No organisations match." />}
           </div>
         )}
       </div>
@@ -215,16 +222,20 @@ export function OrganisationsView() {
           }}
           className="flex flex-col gap-5 pt-1">
           <div className="grid gap-5 md:grid-cols-2">
-            <Field id="move-row" label="Task or project id" help="Paste the id from its web address">
-              <input
-                id="move-row"
-                required
-                autoComplete="off"
-                spellCheck={false}
-                value={rowId}
-                onChange={(event) => setRowId(event.target.value)}
-                className={cn(INPUT_CLASS, "font-mono text-meta")}
-              />
+            <Field id="move-row" label="Task or project id" help="Paste the id from its web address" error={moveError}>
+              {(describedBy) => (
+                <input
+                  id="move-row"
+                  aria-describedby={describedBy}
+                  aria-invalid={moveError !== null}
+                  required
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={rowId}
+                  onChange={(event) => setRowId(event.target.value)}
+                  className={cn(INPUT_CLASS, "font-mono text-meta")}
+                />
+              )}
             </Field>
             <Field id="move-to" label="Move to">
               <OrganisationSelect id="move-to" label="Move to" organisations={all} value={moveTo} onChange={setMoveTo} />
@@ -235,11 +246,6 @@ export function OrganisationsView() {
               Move
             </Button>
           </div>
-          {moveMessage !== null && (
-            <p role="status" className="text-body text-ink">
-              {moveMessage}
-            </p>
-          )}
           {moveFailed && <FailedLine onRetry={sendMove} />}
         </form>
       </Panel>
@@ -261,15 +267,18 @@ export function OrganisationsView() {
       >
         <form id="add-organisation" onSubmit={submitCreate}>
           <Field id="org-name" label="Name" error={nameError}>
-            <input
-              id="org-name"
-              required
-              autoComplete="off"
-              value={name}
-              aria-invalid={nameError !== null}
-              onChange={(event) => setName(event.target.value)}
-              className={INPUT_CLASS}
-            />
+            {(describedBy) => (
+              <input
+                id="org-name"
+                required
+                autoComplete="off"
+                value={name}
+                aria-invalid={nameError !== null}
+                aria-describedby={describedBy}
+                onChange={(event) => setName(event.target.value)}
+                className={INPUT_CLASS}
+              />
+            )}
           </Field>
         </form>
       </Dialog>

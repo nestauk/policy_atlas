@@ -76,7 +76,7 @@ from policy_atlas.core.schema import (
     task,
     waitlist_entry,
 )
-from policy_atlas.ops.errors import EnrolledElsewhere, OpsError, ResendTooSoon
+from policy_atlas.ops.errors import EnrolledElsewhere, NotFound, OpsError, ResendTooSoon
 
 if TYPE_CHECKING:
     from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
@@ -538,7 +538,7 @@ def resolve_organisation(conn: Connection, token: str) -> Organisation:
         select(organisation.c.name).where(organisation.c.org_id == org_id)
     ).scalar_one_or_none()
     if name is None:
-        raise OpsError(f"no organisation with id {token}")
+        raise NotFound(f"no organisation with id {token}")
     return Organisation(org_id=org_id, name=name)
 
 
@@ -749,6 +749,7 @@ def ensure_account_enrolled(
         OpsError: If Cognito cannot create the account or does not return a subject.
     """
     _require_filter_safe(email)
+    _require_mailable(email)
     sub = _find_sub_by_email(cognito, pool_id=pool_id, email=email)
     if sub is None:
         response = cognito.admin_create_user(
@@ -772,8 +773,15 @@ def ensure_account_enrolled(
         )
         return replace(enrolment, invitation_sent=True)
     existing = _lock_user(conn, sub)
-    if existing is None or existing["org_id"] is None:
+    if existing is None:
         return _enrol(conn, sub=sub, email=email, display_name=display_name, org=org)
+    if existing["org_id"] is None:
+        # An account that exists keeps its stored name: the name offered here
+        # may come from the public form (the sweep), and a stranger must not be
+        # able to rename a colleague (review stack, 2026-11-17).
+        return _enrol(
+            conn, sub=sub, email=email, display_name=existing["display_name"], org=org
+        )
     if existing["org_id"] == org.org_id:
         return Enrolment(
             user_id=sub,
@@ -1518,7 +1526,7 @@ def set_quota(
         .one_or_none()
     )
     if row is None:
-        raise OpsError(f"no {'user' if user_id is not None else 'organisation'} {identifier}")
+        raise NotFound(f"no {'user' if user_id is not None else 'organisation'} {identifier}")
     conn.execute(
         update(table)
         .where(key == identifier)
@@ -1709,7 +1717,7 @@ def assign_rows(
             select(task.c.task_id, task.c.org_id).where(task.c.task_id == task_id).with_for_update()
         ).one_or_none()
         if row is None:
-            raise OpsError(f"no task {task_id}")
+            raise NotFound(f"no task {task_id}")
         member_of = [
             membership_row[0]
             for membership_row in conn.execute(
@@ -1751,7 +1759,7 @@ def assign_rows(
         .with_for_update()
     ).one_or_none()
     if current is None:
-        raise OpsError(f"no project {target}")
+        raise NotFound(f"no project {target}")
     # Membership is many-to-many (ADR 0032), so "a membership moves whole"
     # means the **connected component**: every project reachable through
     # shared members moves too, or the shared member would be left matching
@@ -2046,6 +2054,18 @@ def _require_filter_safe(email: str) -> None:
     """
     if '"' in email or "\\" in email:
         raise OpsError(f"refusing a value containing a quote or backslash: {email!r}")
+
+
+def _require_mailable(email: str) -> None:
+    """Refuse an address that could carry markup into the invitation email.
+
+    Cognito substitutes ``{username}`` (the address) into the HTML invitation
+    without escaping, and the public form's pattern admits ``<``, ``>`` and
+    ``&``. Such an address is not deliverable anyway, so refusing costs nothing
+    (review stack, 2026-11-17).
+    """
+    if any(character in email for character in "<>&") or any(c.isspace() for c in email):
+        raise OpsError(f"refusing an address containing markup or whitespace: {email!r}")
 
 
 def _now() -> datetime:

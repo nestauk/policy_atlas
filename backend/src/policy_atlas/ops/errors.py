@@ -38,3 +38,11 @@ class ResendTooSoon(OpsError):
     def __init__(self, *, retry_after: datetime) -> None:
         self.retry_after = retry_after
         super().__init__(f"an invitation was sent recently; retry after {retry_after.isoformat()}")
+
+
+class NotFound(OpsError):
+    """Refusal raised when the row a command was asked to act on does not exist.
+
+    The ops routes answer it with 404; every other refusal is a 409. A typed
+    class, so the routes never classify by message text (review stack, 2026-11-17).
+    """

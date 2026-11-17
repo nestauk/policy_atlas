@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import structlog
+from botocore.exceptions import ClientError
 from sqlalchemy import bindparam, func, select
 from sqlalchemy.engine import Engine
 
@@ -13,9 +14,25 @@ from policy_atlas.api.deps import Identity
 from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import ops_action, organisation, organisation_domain, waitlist_entry
 from policy_atlas.ops import commands
-from policy_atlas.ops.errors import EnrolledElsewhere
+from policy_atlas.ops.errors import EnrolledElsewhere, OpsError
 
 log = structlog.get_logger()
+
+
+#: Outcomes that end a row's life on the sweep: the row stays unstamped and the
+#: Requests page shows it as "Check" for an operator. ``refused`` is a
+#: deterministic refusal (an address Cognito or the command rejects); retrying it
+#: every minute would only fill ``ops_action`` (review stack, 2026-11-17).
+TERMINAL_OUTCOMES: tuple[str, ...] = ("enrolled_elsewhere", "refused")
+
+#: Cognito errors worth retrying next tick; any other ``ClientError`` is terminal.
+_TRANSIENT_COGNITO_CODES = frozenset(
+    {"TooManyRequestsException", "ThrottlingException", "InternalErrorException",
+     "ServiceUnavailable", "LimitExceededException"}
+)
+
+#: The most rows one tick looks at, so a backlog never makes a tick run for minutes.
+_CANDIDATES_PER_TICK = 200
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +43,7 @@ class SweepReport:
         invited: Accounts created and sent an invitation.
         enrolled: Existing unenrolled accounts added without an invitation.
         elsewhere: Accounts already enrolled in another organisation.
+        refused: Rows refused for good (terminal; an operator decides).
         failed: Rows whose processing failed and remain eligible for retry.
         skipped_for_cap: Eligible rows not attempted because the hourly cap was reached.
     """
@@ -35,6 +53,7 @@ class SweepReport:
     elsewhere: int = 0
     failed: int = 0
     skipped_for_cap: int = 0
+    refused: int = 0
 
 
 def sweep_once(
@@ -80,12 +99,15 @@ def sweep_once(
                         bindparam("domains", expanding=True)
                     ),
                 )
-                .order_by(waitlist_entry.c.created_at, waitlist_entry.c.entry_id),
+                .order_by(waitlist_entry.c.created_at, waitlist_entry.c.entry_id)
+                .limit(_CANDIDATES_PER_TICK),
                 {"domains": list(domains)},
             )
             .mappings()
             .all()
         )
+        # Sends and failed attempts both spend the hour's allowance, so a row
+        # that keeps failing cannot drive unbounded Cognito calls.
         sent = int(
             conn.execute(
                 select(func.count())
@@ -93,23 +115,25 @@ def sweep_once(
                 .where(
                     ops_action.c.actor_user_id == "sweep",
                     ops_action.c.action == "invite",
-                    ops_action.c.outcome == "invited",
+                    ops_action.c.outcome.in_(("invited", "failed")),
                     ops_action.c.at >= tick_now - timedelta(hours=1),
                 )
             ).scalar_one()
         )
 
     budget = max(0, settings.self_signup_max_per_hour - sent)
-    invited = enrolled = elsewhere = failed = skipped_for_cap = 0
+    invited = enrolled = elsewhere = failed = skipped_for_cap = refused = 0
     for index, row in enumerate(candidates):
         entry_id = row["entry_id"]
         target = str(entry_id)
-        domain = str(row["email"]).rsplit("@", 1)[-1].lower()
+        # The same reading as the SQL filter (split_part(email, '@', 2)): the
+        # part after the first @, lower-cased.
+        domain = str(row["email"]).split("@", 2)[1].lower() if "@" in str(row["email"]) else ""
 
         # Once the budget has been spent every later candidate could send an
         # invitation. The next tick can safely reconsider them after old audit
         # rows age out of the hourly window.
-        if invited >= budget:
+        if invited + failed >= budget:
             skipped_for_cap = len(candidates) - index
             break
 
@@ -120,7 +144,7 @@ def sweep_once(
                         ops_action.c.actor_user_id == "sweep",
                         ops_action.c.action == "invite",
                         ops_action.c.target == target,
-                        ops_action.c.outcome == "enrolled_elsewhere",
+                        ops_action.c.outcome.in_(TERMINAL_OUTCOMES),
                     )
                 ).first()
                 if terminal is not None:
@@ -154,21 +178,46 @@ def sweep_once(
             elsewhere += 1
             log.info("ops.sweep_enrolled_elsewhere", entry_id=target, org=domains[domain].name)
         except Exception as error:
+            outcome = "failed" if _is_transient(error) else "refused"
             with engine.begin() as conn:
                 commands.record_action(
-                    conn, actor="sweep", action="invite", target=target, outcome="failed"
+                    conn, actor="sweep", action="invite", target=target, outcome=outcome
                 )
-            failed += 1
-            log.info("ops.sweep_failed", entry_id=target, error_class=type(error).__name__)
+            if outcome == "failed":
+                failed += 1
+            else:
+                refused += 1
+            log.info(
+                "ops.sweep_failed",
+                entry_id=target,
+                error_class=type(error).__name__,
+                outcome=outcome,
+            )
 
-    report = SweepReport(invited, enrolled, elsewhere, failed, skipped_for_cap)
-    if any((invited, enrolled, elsewhere, failed, skipped_for_cap)):
+    report = SweepReport(invited, enrolled, elsewhere, failed, skipped_for_cap, refused)
+    if any((invited, enrolled, elsewhere, failed, skipped_for_cap, refused)):
         log.info(
             "ops.sweep_tick",
             invited=invited,
             enrolled=enrolled,
             elsewhere=elsewhere,
             failed=failed,
+            refused=refused,
             skipped_for_cap=skipped_for_cap,
         )
     return report
+
+
+def _is_transient(error: Exception) -> bool:
+    """Whether a failure is worth another try next tick.
+
+    A refusal by a command (``OpsError``: an address the lookup cannot take, a
+    row already handled) or by Cognito for a reason that will not change is
+    terminal. A throttle, an outage or a database error is not.
+    """
+    if isinstance(error, OpsError):
+        return False
+    if isinstance(error, ClientError):
+        code = error.response.get("Error", {}).get("Code", "")
+        return code in _TRANSIENT_COGNITO_CODES
+    return True

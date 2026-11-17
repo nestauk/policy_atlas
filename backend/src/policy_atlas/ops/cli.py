@@ -385,6 +385,16 @@ def _run(
             target, conn=conn, cognito=identity, sts=tokens, confirm=ask
         )
         outcome = _dispatch(args, conn=conn, cognito=identity, target=target)
+        if isinstance(outcome, commands.QuotaChange):
+            # A quota change is recorded wherever it is made (task 065, B12):
+            # the operator's verified AWS principal is the actor.
+            commands.record_action(
+                conn,
+                actor=verification.caller_arn,
+                action="org.quota" if args.group == "org" else "person.quota",
+                target=outcome.who,
+                outcome="ok",
+            )
     # Both of these are after the commit, and for the same reason: neither a
     # printed line nor a logged one may claim a write the transaction discarded.
     _trace(outcome, verification=verification, target=target, note=args.operator)

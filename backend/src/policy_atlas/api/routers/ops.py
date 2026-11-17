@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 
 import structlog
+from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.engine import Connection, RowMapping
@@ -36,7 +37,7 @@ from policy_atlas.api.contract.ops import (
 )
 from policy_atlas.api.contract.tenancy import OrganisationRef
 from policy_atlas.api.deps import Identity, get_conn, get_identity, get_settings
-from policy_atlas.api.routers.common import effective_limits
+from policy_atlas.api.routers.common import created_in_last_days, effective_limits
 from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import (
     app_user,
@@ -47,7 +48,7 @@ from policy_atlas.core.schema import (
     waitlist_entry,
 )
 from policy_atlas.ops import commands
-from policy_atlas.ops.errors import EnrolledElsewhere, OpsError, ResendTooSoon
+from policy_atlas.ops.errors import EnrolledElsewhere, NotFound, OpsError, ResendTooSoon
 
 log = structlog.get_logger()
 
@@ -104,6 +105,23 @@ def _queue_log(
         {"actor": actor, "action": action, "target": target, "outcome": outcome,
          "action_id": str(action_id)}
     )
+
+
+def _cognito_refusal(error: ClientError) -> str:
+    """Name a Cognito refusal by its code only (no address, no request detail)."""
+    code = error.response.get("Error", {}).get("Code", "") or "ClientError"
+    return f"Cognito refused the request ({code}). Nothing was written."
+
+
+def _not_self(actor: AuthenticatedUser, user_id: str) -> str:
+    """Refuse the caller as a subject of de-enrol or offboard.
+
+    "Select everyone shown" includes the operator; locking yourself out is
+    never what a bulk action meant (review stack, 2026-11-17). The CLI can.
+    """
+    if user_id == actor.user_id:
+        raise OpsError("you cannot de-enrol or offboard your own account from here")
+    return user_id
 
 
 def _org(conn: Connection, org_id: uuid.UUID) -> commands.Organisation:
@@ -197,9 +215,9 @@ def set_organisation_quota(
     """Set or clear an organisation's quota overrides."""
     try:
         commands.set_quota(conn, org_id=org_id, **body.model_dump())
+    except NotFound as exc:
+        raise HTTPException(404, str(exc)) from None
     except OpsError as exc:
-        if str(exc).startswith("no organisation"):
-            raise HTTPException(404, str(exc)) from None
         raise ApiConflict("ops_refused", str(exc)) from None
     action_id = commands.record_action(conn, actor=actor.user_id, action="org.quota",
                                        target=str(org_id), outcome="ok")
@@ -238,7 +256,7 @@ def list_people(
         for row in conn.execute(
             select(task.c.owner_user_id, func.count().label("count"))
             .where(task.c.owner_user_id.in_(subjects))
-            .where(task.c.created_at >= func.now() - func.make_interval(0, 0, 0, 365))
+            .where(created_in_last_days(365))
             .group_by(task.c.owner_user_id)
         ).mappings()
     } if subjects else {}
@@ -265,6 +283,8 @@ def create_person(
         raise ApiConflict("enrolled_elsewhere", str(exc)) from None
     except OpsError as exc:
         raise ApiConflict("ops_refused", str(exc)) from None
+    except ClientError as exc:
+        raise ApiConflict("ops_refused", _cognito_refusal(exc)) from None
     outcome = "invited" if enrolled.invitation_sent else "enrolled"
     action_id = commands.record_action(conn, actor=actor.user_id, action="person.create",
                                        target=enrolled.user_id, outcome=outcome)
@@ -310,7 +330,10 @@ def _bulk(
             )
             _queue_log(request, actor=actor, action=action, target=user_id, outcome="failed",
                        action_id=action_id)
-            results.append(ActionResult(user_id=user_id, outcome="failed", message=str(exc),
+            # A refusal is written for the operator; anything else (a database
+            # or Cognito error) stays out of the browser.
+            message = str(exc) if isinstance(exc, OpsError) else f"failed; see action {action_id}"
+            results.append(ActionResult(user_id=user_id, outcome="failed", message=message,
                                         action_id=action_id))
     return BulkOut(results=results)
 
@@ -335,7 +358,9 @@ def de_enrol_people(
     """De-enrol every selected person independently."""
     return _bulk(request=request, actor=actor.user_id, conn=conn, user_ids=body.user_ids,
                  action="person.de_enrol",
-                 run=lambda user_id: commands.de_enrol_user(conn, sub=user_id).summary())
+                 run=lambda user_id: commands.de_enrol_user(
+                     conn, sub=_not_self(actor, user_id)
+                 ).summary())
 
 
 @router.post("/people/offboard", response_model=BulkOut)
@@ -348,7 +373,7 @@ def offboard_people(
     cognito, pool_id = _identity(identity)
     return _bulk(request=request, actor=actor.user_id, conn=conn, user_ids=body.user_ids,
                  action="person.offboard", run=lambda user_id: commands.offboard_user(
-                     conn, cognito, pool_id=pool_id, sub=user_id
+                     conn, cognito, pool_id=pool_id, sub=_not_self(actor, user_id)
                  ).summary())
 
 
@@ -407,7 +432,8 @@ def list_requests(
     terminal = set(conn.execute(
         select(ops_action.c.target).where(
             ops_action.c.actor_user_id == "sweep", ops_action.c.action == "invite",
-            ops_action.c.outcome == "enrolled_elsewhere", ops_action.c.target.in_(ids),
+            ops_action.c.outcome.in_(("enrolled_elsewhere", "refused")),
+            ops_action.c.target.in_(ids),
         )
     ).scalars()) if ids else set()
     domains = list(conn.execute(
@@ -423,10 +449,11 @@ def list_requests(
         check = str(row["entry_id"]) in terminal
         note = None
         if check:
+            # app_user.email carries no unique constraint: take the first match.
             note = conn.execute(
                 select(organisation.c.name).select_from(
                     app_user.join(organisation, organisation.c.org_id == app_user.c.org_id)
-                ).where(app_user.c.email == row["email"])
+                ).where(app_user.c.email == row["email"]).limit(1)
             ).scalar_one_or_none()
         items.append(RequestOut(
             **row,
@@ -460,6 +487,8 @@ def approve_request(
         raise ApiConflict("enrolled_elsewhere", str(exc)) from None
     except OpsError as exc:
         raise ApiConflict("ops_refused", str(exc)) from None
+    except ClientError as exc:
+        raise ApiConflict("ops_refused", _cognito_refusal(exc)) from None
     outcome = "invited" if approved.enrolment.invitation_sent else "enrolled"
     action_id = commands.record_action(
         conn, actor=actor.user_id, action="request.approve", target=str(entry_id), outcome=outcome
@@ -485,9 +514,9 @@ def assign_rows(
         assignment = commands.assign_rows(
             conn, org=org, task_id=body.task_id, project_id=body.project_id
         )
+    except NotFound as exc:
+        raise HTTPException(404, str(exc)) from None
     except OpsError as exc:
-        if str(exc).startswith(("no task", "no project")):
-            raise HTTPException(404, str(exc)) from None
         raise HTTPException(422, str(exc)) from None
     target = str(body.task_id or body.project_id)
     action_id = commands.record_action(

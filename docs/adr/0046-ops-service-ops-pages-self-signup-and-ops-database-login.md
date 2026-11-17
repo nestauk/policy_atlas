@@ -75,7 +75,10 @@ surface, so decision 4 and the deferred list are amended below rather than left 
    cannot widen anyone's access.
 
    **Amendment to ADR 0033 decision 4.** Its sentence "no HTTP route writes it and no request
-   body can reach it" stays true for `is_admin` and now also for `is_ops`. Its wider implication,
+   body can reach it" stays true for `is_admin` and now also for `is_ops`. Its closed reader
+   list gains two entries: `routers/common.py::effective_limits` (the quota exemption moved
+   there from the task-create route) and `contract/ops.py::PersonOut` (the ops-host people
+   list projects both flags); the closed-list test records both. Its wider implication,
    that no HTTP route writes `app_user` or `organisation` at all, no longer holds: the ops
    routes, on the ops service only, create and change both through the same command functions
    the CLI calls. Email addresses are visible to ops-role holders on the ops host; the public
@@ -103,14 +106,16 @@ surface, so decision 4 and the deferred list are amended below rather than left 
    audit row records every change with who and when.
 
 6. **The ops service connects with its own least-privilege database login.** A Postgres role
-   `pa_ops`, granted exactly what the command functions and the sweep do (contract B13):
-   `USAGE` on the schema with no `CREATE`; `SELECT, INSERT` and column-level `UPDATE` on
-   `app_user`, `organisation`, `organisation_domain` and `waitlist_entry`; `SELECT, INSERT` on
-   `ops_action`; `SELECT` and column-level `UPDATE` on `task` and `project`; `SELECT, DELETE` on
-   `project_membership` (the one delete: moving a person severs their cross-owner
-   memberships); nothing on `capability_run`, `alembic_version` or any other table. A
-   `BEFORE UPDATE` trigger on `app_user` refuses this login setting `is_admin` or `is_ops` to
-   true. The grants live in a migration so a reviewer can read them, a later migration that
+   `pa_ops`, granted exactly what the command functions and the sweep do (contract B13, as
+   the review stack narrowed it on 2026-11-17): `USAGE` on the schema with no `CREATE`;
+   `SELECT, INSERT` and column-level `UPDATE` on `app_user` and `organisation`; `SELECT` on
+   `organisation_domain`; `SELECT` and column-level `UPDATE` on `waitlist_entry` (the two stamp
+   columns); `SELECT, INSERT` on `ops_action`; `SELECT` and column-level `UPDATE` on `task` and
+   `project`; `SELECT, DELETE` on `project_membership` (the one delete: moving a person severs
+   their cross-owner memberships); nothing on `capability_run`, `alembic_version` or any other
+   table. A `BEFORE INSERT OR UPDATE` trigger on `app_user` refuses this login setting
+   `is_admin` or `is_ops` to true, by an update or by inserting a row that already carries the
+   flag. A test reads the grants back from the catalogue and compares them to this list. The grants live in a migration so a reviewer can read them, a later migration that
    gives the ops service a new table extends them in the same migration, and a test logs in as
    `pa_ops` with a password and checks both what succeeds and what is refused. The password
    is a generated secret in Secrets Manager; the deploy script sets it after migrations and
@@ -177,3 +182,19 @@ surface, so decision 4 and the deferred list are amended below rather than left 
 - **`docs/deferred.md`:** the SES entry is discharged, the admin-surface entry is reopened as
   done, and three seams are added: domains beyond `nesta.org.uk`, the domain table on the ops
   page, application-sent email.
+- **Accepted limits recorded by the review stack (2026-11-17).** Cognito calls happen before
+  the database commit, so a write that rolls back after Cognito answered can leave a sent
+  invitation with no `invited_at` stamp, or a disabled account with a `failed` audit row;
+  the next attempt lands on the idempotent branch. The `pa_ops` password travels to Postgres
+  as a quoted literal in `ALTER ROLE`, which the server would log only if that statement
+  failed under a verbose log setting. The sweep assumes one ops instance: the deploy script
+  holds `desired_count` at 0 or 1 and the service rolls with no overlap. A request the sweep
+  can never fulfil (an address the command or Cognito rejects) is terminal (`refused`) and
+  shown as "Check" for an operator; failed attempts count against the hourly allowance, so
+  a bad row cannot drive unbounded Cognito calls. The ops host sets `X-Frame-Options: DENY`.
+  The ops service's engine hides bound parameters from error tracebacks.
+- **Open for the owner (2026-11-17):** whether a sweep-created account should take the
+  waitlist row's name at all (anyone can type a colleague's address with any name; the name
+  is never written onto an existing account) and whether an address that already has an
+  account should be left for an operator instead of enrolled; and `max_per_hour` on
+  production (20 today; 5 was suggested for the first weeks).

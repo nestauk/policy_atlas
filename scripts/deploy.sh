@@ -877,7 +877,9 @@ build_ops_pages() {
         pnpm install --frozen-lockfile
         # The ops client always calls the page's own origin (plan P2), so no
         # API base is set here: the generated paths already carry /api/v1.
-        VITE_OIDC_AUTHORITY="$VITE_OIDC_AUTHORITY" \
+        # VITE_MOCK is unset so a developer's shell can never ship the mock.
+        env -u VITE_MOCK \
+            VITE_OIDC_AUTHORITY="$VITE_OIDC_AUTHORITY" \
             VITE_OIDC_CLIENT_ID="$VITE_OIDC_CLIENT_ID" \
             pnpm build:ops
     )
@@ -895,7 +897,10 @@ prepare_ops_deploy() {
     if [[ "$mode" == "bootstrap" ]]; then
         # The bundle embeds the Cognito issuer and client id, which the first
         # deploy is about to create. The image ships an empty ops-ui directory
-        # and the ops service stays at zero; the next update builds the pages.
+        # (never a stale one left on disk) and the ops service stays at zero;
+        # the next update builds the pages.
+        rm -rf "$REPO_ROOT/backend/ops-ui"
+        mkdir -p "$REPO_ROOT/backend/ops-ui"
         echo "NOTE: ops pages are built on the next update deploy (no OIDC exports yet)"
         return 0
     fi
@@ -939,13 +944,16 @@ common_tail() {
     wait_for_service_to_stop "$OPS_SERVICE_NAME" "ops"
     deploy_step "migrate"
     run_migrations
-    gate_check "ops database secret carries db_connection_string" check_ops_db_connection_string
     deploy_step "start api"
     scale_up_service
-    deploy_step "start ops"
-    scale_up_ops_service
     deploy_step "publish frontend"
     publish_frontend
+    # The ops service starts last, after the public service and its pages are
+    # back, so an ops-only failure (a login sync, an unhealthy ops task) never
+    # stops the public deploy (review stack, 2026-11-17).
+    gate_check "ops database secret carries db_connection_string" check_ops_db_connection_string
+    deploy_step "start ops"
+    scale_up_ops_service
 }
 
 if (( $# != 1 )); then
