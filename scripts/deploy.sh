@@ -875,8 +875,9 @@ build_ops_pages() {
     (
         cd "$REPO_ROOT/frontend"
         pnpm install --frozen-lockfile
-        VITE_API_BASE_URL=/api \
-            VITE_OIDC_AUTHORITY="$VITE_OIDC_AUTHORITY" \
+        # The ops client always calls the page's own origin (plan P2), so no
+        # API base is set here: the generated paths already carry /api/v1.
+        VITE_OIDC_AUTHORITY="$VITE_OIDC_AUTHORITY" \
             VITE_OIDC_CLIENT_ID="$VITE_OIDC_CLIENT_ID" \
             pnpm build:ops
     )

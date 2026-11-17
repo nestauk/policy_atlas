@@ -40,7 +40,25 @@ address ranges, passwords, email addresses or account ids.
 
 ## End-to-end command
 
-Pending (step 6).
+Local, against real servers (an ops-mode server serving the built pages on port 8002, an
+api-mode server on port 8003, one `*_test` database), run 2026-11-17 and green:
+
+```
+docker compose exec -T db createdb -U policy_atlas policy_atlas_e2e_test
+docker compose exec -T db psql -U policy_atlas -d policy_atlas_e2e_test -c "CREATE EXTENSION IF NOT EXISTS vector"
+(cd frontend && pnpm build:ops)
+DATABASE_URL=postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas_e2e_test bash scripts/ops_e2e_local.sh
+```
+
+It proves, in order: the ops host answers `/people` with the pages' `index.html`; it has no
+task routes and no `/me` (404); an ops route is 401 without a token and 403 with a token and
+no role, and the refused calls create no `app_user` row; with the role (the row write
+`ops grant` makes) the route is 200; an organisation is created, its task quota set to 1 and
+the operator moved into it on the ops host; `/me` on the api host then shows limit 1, the
+first task is admitted and the second refused with `task_quota`; the people list finds the
+operator; `ops_action` holds `org.create, org.quota, person.move` for the actor in order;
+the ops server log carries `ops.action` lines. The staging checks (contract § Acceptance)
+are Phase 11 with the owner and are still pending above.
 
 ## Build notes (filled per phase)
 
@@ -52,7 +70,53 @@ Pending (step 6).
 
 ## Diff summary
 
-Pending; filled at step 6.
+Twelve commits on `task/065-accounts` after the design-phase exit, one per plan phase
+(Phases 5 and 6 together). What changed and why:
+
+- **A. Email (Phases 1-2).** `infra/infra/cognito_auth.py` takes the `email` block from
+  `pa_config.json`; with `enabled` true the pool sends through the environment's own SES
+  identity (ARN built in the pool's account and region; nothing creates an identity) and
+  carries the invitation and verification templates from `infra/email/` with the sign-in
+  and logo URLs substituted at synth. `enabled` is false in both environments today.
+  The logo PNG is the fold mark under `frontend/public/brand/`.
+- **B. Schema (Phase 3).** Migration `c6d4e2f1a9b8`: `app_user.is_ops`, `invited_at`, the
+  four quota overrides with `CHECK (>= 0)`, `ops_action`, `organisation_domain`, the two
+  waitlist stamp columns, the `pa_ops` role with exactly the B13 grants, and the trigger
+  that refuses the ops login setting `is_admin` or `is_ops` to true.
+- **B. Commands and resolver (Phase 4).** `ensure_account_enrolled`, `resend_invitation`,
+  `move_user`, `set_ops`, `set_quota`, `add_domain`, `remove_domain`, `record_action`,
+  `approve_request`; de-enrol and offboard clear `is_ops`; new CLI commands. `effective_limits`
+  is the one reader of the override columns; task create, every run-cap site and `/me` call
+  it. The Cognito type stubs moved under `TYPE_CHECKING` (B5).
+- **B. Ops mode and routes (Phases 5-6).** `POLICY_ATLAS_SERVICE_ROLE=ops` selects a lifespan
+  with no executor, sweep, drainer or ingest consumer; the ops router (thin routes, one
+  command, one audit row in the transaction, one log line after commit; savepoint per bulk
+  subject); the pages' static fallback; the ops OpenAPI document and its generated types.
+- **B. Infrastructure and image (Phase 7).** The ops service, its secret, the allowlisted
+  listener rules, the A record, the five Cognito actions on the ops task role only, the
+  migration task's sync step, SSM exports; the Dockerfile copies `backend/ops-ui/`.
+- **B. Pages (Phase 8).** `frontend/ops.html`, `vite.ops.config.ts`, `src/ops/` (shell, five
+  views, mock, tests), `pnpm build:ops` into `backend/ops-ui/`; the public bundle has no ops
+  code (a test pins it).
+- **B. Deploy (Phase 9).** `ops/db_role.py` and the `deploy.sh` order (plan § Deploy order).
+- **C. Sweep (Phase 10).** `ops/sweep.py`.
+- **Docs (Phase 12).** `docs/deferred.md`, `web-api.md`, `infra/DEPLOYMENT.md`.
+
+**Deviations, all minor and flagged:**
+
+- Administrators are exempt from the run cap as well as the task quota in the resolver
+  (the 064a ruling; contract § Terms names only the task quota).
+- The plan's `tests/scripts` image test is a text pin on the Dockerfile plus the recorded
+  manual build (Phase 7 note above), not a Docker build inside the suite.
+- Plan P2's `VITE_API_BASE_URL=/api` for the ops build is not used: the ops client always
+  calls the page's own origin, and the generated paths already carry `/api/v1`, so the deploy
+  script sets no base for that build.
+- The ops bundle is built by `scripts/deploy.sh` (plan P1), not a Node stage in the
+  Dockerfile (contract B3's wording); the outcome is the same and the plan recorded it.
+- The database-backed tests of Phases 4 and 6 were written by Claude agents, not Codex
+  (its sandbox cannot reach Postgres); the plan's routing is otherwise followed.
+- `test_migration_064a_ssr_index.py` steps down to its own revision before stamping, because
+  a revision now follows it. Table-count pins moved from 52 to 54.
 
 ## Review findings
 
@@ -64,18 +128,71 @@ Pending; filled at step 6.
 
 ## Rubric status
 
-Pending.
+Filled after the review stack (step 7). Before it: items 1-7, 9-20, 22, 23 hold on the
+tests and the local end-to-end run above; items 2 (the staging checks), 8 (the review
+stack), 10 (the owner's copy review), 21 (the rollbacks on staging) and the staging half of
+23 are pending.
 
 ## Intent & assumptions
 
+- The ops pages' copy is the lead's script (`ops-pages-copy.md`) with the build rulings
+  appended; the owner has not yet reviewed the email templates in a browser (A2) or the
+  pages on staging.
+- `email.enabled`, `ops.desired_count` and `self_signup.enabled` are off in both
+  environments until the owner switches them on staging (Phase 11).
+- The ops allowlist parameter `/policy_atlas_v3/ops/allowed_cidrs` must exist before the
+  first deploy of this branch; the deploy guide says how.
+
 ## Known unverified items
+
+- Everything in the staging table above, including DKIM on a real message, the deployed
+  task-role policies, the allowlist from outside, the rollbacks and the `pa_ops` refusals over
+  the real secret.
+- `aws sesv2 get-account` on both profiles (SSO sign-in needed).
+- `shellcheck` is not installed on this machine; `bash -n` and the two deploy harnesses ran.
+- The frontend-designer agent's craft skills named in its definition are not installed on
+  this machine; it worked from the `frontend-design` plugin skill, `DESIGN.md` and `PRODUCT.md`.
 
 ## Public safety
 
+No address range, password, email address or account id is in the committed diff or in
+the logs quoted here. The test addresses are `example.test` or UUID-suffixed. The deploy
+script and the sync log names and counts, never values. Screenshots of the mock live only in
+the session scratchpad.
+
 ## Review handoff (step-7/8 inputs)
 
+- **Executor provenance (family flip):** Codex wrote Phases 1-2, 3, 5, 6, 7, 9, 10 and the
+  Phase 4 product code; Claude agents wrote the Phase 4 and 6 database tests, the Phase 8
+  pages and the Phase 12 docs; the lead wrote the contract models, the email copy, the pages
+  script, the e2e script and the fixes named in the build notes.
+- **Adjudication items:** the five deviations in the diff summary; the agent's note that
+  `DESIGN.md` has no red button, orange chip tone or relative dates and the ops pages use
+  all three on the script's authority.
+- **Diff scoping:** `frontend/openapi-ops.json` and `src/api/gen/types-ops.ts` are generated.
 - **Knowledge candidates:**
+  - A test that stamps Alembic back without downgrading breaks every later migration test
+    on that worker once a newer revision exists; step down to the revision first.
+  - Codex's sandbox cannot reach Postgres or Docker: brief it for code and typecheck/lint,
+    and give database-backed tests to an agent that can run them.
+  - Tests that commit fixed subjects or addresses collide on a kept database and on a
+    shared worker; UUID-suffix them, and give a module that reads a whole table (the
+    sweep) its own listed domain and an autouse cleanup.
+  - The Cognito `UserInvitationConfig` and `UserVerificationConfig` render only with the
+    SES sender in CDK; the default sender keeps CDK's built-in verification template.
+  - A FastAPI yield dependency declared before `get_conn` tears down after it, which is
+    how a log line can be emitted only after the commit.
+  - `str(engine.url)` hides the password; use `render_as_string(hide_password=False)`.
+  - The worktree has no `backend/.env`; run make targets with
+    `COMPOSE_PROJECT_NAME=policy_atlas` so docker compose finds the shared database.
+  - Postgres collation ignores spaces at the first level, so an `ORDER BY display_name`
+    is not Python's `sorted`.
 
 ## Deferred work
 
-Seams left open → [docs/deferred.md](../../deferred.md).
+Seams left open → [docs/deferred.md](../../deferred.md): self-signup domains beyond
+`nesta.org.uk`, the domain table on the ops pages, application-sent email, the ops action
+log on the pages. Not in this slice, noted by the build: a single-person read route, the
+settings defaults reported by a route (the pages infer "default · n" from a person with no
+override), an assign route that accepts either kind of id, `action_id` on the single-object
+responses, and the revision-2 explainer's cohorts and feature control (a later task).
