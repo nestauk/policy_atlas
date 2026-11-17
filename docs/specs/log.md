@@ -1,5 +1,10 @@
 # Spec update log
 
+## 2026-11-17 (task 064b, firewall and CAPTCHA)
+* **Update**: [Web API § Waitlist](system/web-api.md) — one sentence: behind the firewall the
+  form sends a CAPTCHA token in `x-aws-waf-token`, which CORS allows; the API never reads it.
+  No route, status or body change. ADR 0047.
+
 ## 2026-11-16 (task 064a, security quick wins)
 * **Update**: [Web API § error codes](system/web-api.md) — the 409 list gains `user_capacity`
   (one person's run cap, Q7), `task_quota` (50 tasks per rolling year, administrators exempt,

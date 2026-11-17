@@ -1,0 +1,294 @@
+# Verification: 064b-waf-captcha
+
+Evidence for the second slice of the 064 security hardening programme. Contract
+[contract.md](contract.md) (revision 2), plan [plan.md](plan.md) (draft 2), rubric
+[rubric.md](rubric.md), ADR [0047](../../adr/0047-waf-on-the-load-balancer-and-waitlist-captcha.md).
+Built 2026-11-17 on `task/064b-waf-captcha`. Public-safe: no addresses, keys or account ids.
+
+## Commands run
+
+| Command | Result | Notes |
+|---|---:|---|
+| `make verify` (build-open baseline, before any change) | pass | backend 4,830 passed · 1 skipped; infra 119 passed; frontend 1,992 tests in 138 files; build green. Docker had to be started first (the compose database was down). |
+| `make deploy-build-guard-test` (baseline) | pass | migration-wait and guard PASS. |
+| `make -C infra test` (Phase 1 gate) | pass | 125 passed (6 new in `tests/unit/test_waf.py`). Negative check: `GENERAL_RATE_LIMIT = 2999` makes `test_w3_…` fail; restored to 3,000. |
+| `make deploy-build-guard-test` (Phase 2 gate) | pass | three PASS lines: migration wait, `test-waf-report`, deploy guard. `deploy.sh check` passes for `staging` and `prod`; with staging's `waf.mode` set to `"audit"` it fails naming `backend.waf.mode` (Codex's negative check; config restored). |
+| `make verify-fast` + `pnpm typecheck && pnpm lint && pnpm test` (Phase 3 gate) | pass | backend 4,793 passed (fast suite); mypy 562 files clean; ruff clean; frontend 1,997 tests (5 new); one pre-existing eslint warning in `SplashField.tsx`. |
+| `make audit` (exit) | pass | |
+| `make deploy-build-guard-test` (exit) | pass | |
+| `make verify` (step-6 exit) | pass | see § Exit gate below |
+
+## Checks beyond the build
+
+- **Deterministic tests, one per problem** (rubric item 6):
+  - W1 `test_w1_web_acl_association_config_pin_and_validation`: the shipped staging
+    template has one `AWS::WAFv2::WebACL` (REGIONAL, `policy-atlas-v3-api`, default allow)
+    and one association whose `ResourceArn` is the shared load balancer's SSM parameter;
+    the prod config synthesises both; `enabled: false` synthesises no `AWS::WAFv2::*`
+    resource and no log group; a missing key, `mode: "audit"`, a string `enabled`,
+    `captcha` without `enabled`, and `None` each raise `ValueError`; both environments'
+    `waf` blocks in `pa_config.json` are pinned (`staging` count + captcha on, `prod` count
+    + captcha off).
+  - W2 `test_w2_…`: limit 50, window 300, aggregate `IP`, `Block` in both modes, scope-down
+    = `POST` and the path with `URL_DECODE` (0) then `LOWERCASE` (1).
+  - W3 `test_w3_…`: limit = `GENERAL_RATE_LIMIT` ≥ 3,000, scope-down on the lower-cased
+    `host` header equal to the API host, `Count` in count mode and `Block` in block mode.
+  - W4 `test_w4_…`: the three groups at priorities 40/50/60, `OverrideAction` `Count` or
+    `None` per mode, no `Action`, scope-down = host AND NOT(`/healthz` OR `/readyz`
+    prefix), `SizeRestrictions_BODY` overridden to count on the common group in both modes
+    and no override on the other two.
+  - W5 `test_w5_…`: the CAPTCHA rule absent with `captcha: false` (prod config and a staging
+    variant), present with `true`, priority below `waitlist-rate`, the same statement as the
+    rate rule's scope-down, `Captcha` action, immunity 1,800, `TokenDomains` equal to
+    `[domain_name]` for both `v3.policyatlas.uk` and `policyatlas.uk`, and absent when off.
+  - W6 vitest (`WaitlistForm CAPTCHA`): no script URL → no box, no script tag, headers
+    exactly `{Content-Type}`; configured + solved → `x-aws-waf-token: tok-1` and one render
+    into the box; `405` + `x-amzn-waf-action: captcha` → "Please solve the puzzle again" and
+    a second render; plain `405` → the generic message and one render; script never loads →
+    one `<script data-waf-captcha>` with `src` ending `/jsapi.js` (no double slash), the
+    reload message after 10 s with submit disabled and no fetch, then a late `load` clears
+    the message, renders, and re-enables submit. Backend
+    `test_cors_preflight_allows_the_waf_captcha_token_header_with_content_type`: an
+    `OPTIONS` preflight asking for `content-type,x-aws-waf-token` is allowed for both.
+  - W7 `scripts/test_deploy_build_guard.sh`: with `PA_DEPLOY_GUARD_WAF_CAPTCHA=1` each of
+    the two values missing fails naming it; with `0` both missing passes; the key lookup
+    through `PA_DEPLOY_WAF_KEYS_ONLY=1` against a stubbed `aws` takes the key whose token
+    domains equal `[v3.policyatlas.uk]` and not the other key, and with only a
+    `policyatlas.uk` key fails naming `create-api-key --scope REGIONAL --token-domains
+    v3.policyatlas.uk`.
+  - W8 `test_w8_…`: log group `aws-waf-logs-policy-atlas-v3`, retention 30 days, delete on
+    removal; the logging configuration's `ResourceArn` is the ACL, its one destination
+    contains the group name and not `:*`, the filter is `DROP` by default with one
+    `KEEP`/`MEETS_ANY` filter on exactly `{COUNT, BLOCK, CAPTCHA, EXCLUDED_AS_COUNT}`, and
+    it depends on the log group; every rule's metric name is its rule name.
+    `scripts/test_waf_report.sh`: against recorded output the report prints the
+    `managed-common` metric row (`3 0 0`) and the `SizeRestrictions_BODY` row from the log
+    query (a counted rule inside a group), and `--addresses` adds `httpRequest.clientIp` to
+    the query.
+- **Manual / browser:** the frontend-designer ran Vite alone with the two values set and a
+  Playwright stub answering `jsapi.js` with a placeholder widget, at 1280 and 400 px, light
+  and dark, before and after the first focus, and in the unavailable state. Screenshots in
+  `evidence/` (`placement-stub-1280.png`, `placement-stub-400-unavailable.png`), which the
+  repo's `.gitignore` keeps out of git by rule (`docs/tasks/*/evidence/`); they are kept
+  locally and can be attached to the PR. They show placement only; the real AWS widget needs the real key over HTTPS and is the
+  staging check's job.
+- **The CDK property names** were right as planned (`scope`, not `scope_`, is accepted by
+  the installed `aws_cdk` 2.261 for `CfnWebACL`).
+
+## End-to-end command
+
+Local end to end (the exact commands run, from the repo root, Docker up):
+
+```
+make verify
+make deploy-build-guard-test
+make audit
+cd frontend && pnpm typecheck && pnpm lint && pnpm test && pnpm build
+```
+
+The contracted live end to end runs on staging after the deploy (§ Staging live check
+below) and could not run in this conversation: it needs the owner's two hand steps per
+account and a push to `dev`.
+
+## Phase 0 measurement (W3, owner ruling)
+
+**Not run yet.** The staging SSO session had expired and the login is interactive. The
+component ships with `GENERAL_RATE_LIMIT = 3000`, the contract's floor. To pin it, with
+`aws sso login --profile pa_staging` done:
+
+```
+AWS_PROFILE=pa_staging aws logs start-query --region eu-west-2 \
+  --log-group-name /policy_atlas_v3/application \
+  --start-time $(( $(date +%s) - 14*86400 )) --end-time $(date +%s) \
+  --query-string 'fields @message | parse @message /(?<ip>\d+\.\d+\.\d+\.\d+):\d+ - "(?<method>[A-Z]+) (?<path>\S+)/ | filter ispresent(ip) | stats count(*) as requests by ip, bin(5m) as window | sort requests desc | limit 20'
+# then: aws logs get-query-results --query-id <id>
+```
+
+Record the top rows here (requests and window only, no addresses), pin the constant at
+ten times the top row rounded up to a thousand (never below 3,000), and update the
+contract's W3 row and ADR 0047. If the measurement lands after the merge, it is a one-line
+config-like change to the component and a normal deploy.
+
+## Staging live check (contract § Acceptance checks)
+
+**Pending** the owner's two hand steps in the staging account (`wafv2:ListAPIKeys` on the
+deploy role; `aws wafv2 create-api-key --scope REGIONAL --token-domains v3.policyatlas.uk`),
+then the push to `dev`. To record afterwards, in this order:
+
+1. W1: `aws wafv2 get-web-acl` lists the six rule names; the association points at the
+   load balancer.
+2. W5, W6: the puzzle on first focus (one screenshot into `evidence/`); a submission after
+   solving gets the thanks message; `curl -i -X POST https://api.v3.policyatlas.uk/api/v1/waitlist -H 'content-type: application/json' -d '{}'`
+   gets `405`, `x-amzn-waf-action: captcha` and the CORS headers; the same with
+   `/api/v1/waitlis%74` gets the same refusal.
+3. W2: with a token from the browser, a loop of posts from one address gets `403` after
+   about fifty.
+4. W3, W4: zero blocked requests in the first hour; metrics per rule; one request to the
+   Metabase host matches no rule.
+5. The deliberate pass (sign in, task list, one chat message over 8 KB, a plan edit, a
+   theory-of-change image import, a public task view) then
+   `AWS_PROFILE=pa_staging scripts/waf_report.sh staging 1`: only the body-size rule
+   counted, named as `SizeRestrictions_BODY`, not just its group. Paste the output here
+   with addresses removed, and one real log record (addresses removed) showing the field
+   that names the rule inside a group, so the report's query is confirmed against the real
+   field names (plan P8; the query assumes `ruleGroupList.N.terminatingRule.ruleId` and
+   `ruleGroupList.N.nonTerminatingMatchingRules.0.ruleId`).
+6. W8: the log group has entries for the pass and none for ordinary requests.
+7. The count week: recorded as **pending** (a follow-on config change switches `waf.mode`).
+
+## Diff summary
+
+Four commits on the branch, one per build phase, plus the docs:
+
+- **Phase 1 (infra)** — `infra/infra/components/waf.py` (new, 270 lines): `ApiFirewall`
+  validates `backend.waf`, and when enabled creates the web ACL (six rules, or five without
+  the CAPTCHA), the association on the imported load balancer's ARN, the log group and the
+  filtered logging configuration. `policy_atlas_stack.py` instantiates it after the shared
+  ALB import; nothing new reaches the container. `pa_config.json` gains the three keys for
+  both environments. `tests/unit/test_waf.py` (new) and one namespacing case.
+- **Phase 2 (scripts)** — `deploy.sh`: config validation of `backend.waf` in the Python
+  reader (a seventh exported value, `WAF_CAPTCHA`); `resolve_waf_captcha_values` called
+  before any stack deploy when the CAPTCHA is on; the production build guard requires the
+  two values then; two harness lines. `test_deploy_build_guard.sh` gains the on/off and
+  key-lookup cases. `waf_report.sh` and `test_waf_report.sh` (new); the Makefile makes the
+  report test a prerequisite of `deploy-build-guard-test`.
+- **Phase 3 (frontend + CORS)** — `wafCaptcha.ts` (new hook), `WaitlistForm.tsx`,
+  `WaitlistForm.test.tsx`, `vite-env.d.ts`; `app.py` one header; one preflight test.
+- **Docs** — `infra/DEPLOYMENT.md` (§ 1 permission, § 2 precondition 7, § 4 step 0 and
+  "The firewall", § 8 rollback), `docs/specs/system/web-api.md` § Waitlist (one sentence),
+  `docs/deferred.md` (the 2026-09-03 line, the H-02 line, a 064b seams section),
+  `docs/specs/log.md`, ADR 0047 status line, this file (the `evidence/` screenshots are gitignored by repo rule).
+
+**Flagged deviations (minor, within the contract's vocabulary):**
+
+1. **Tests live in a new `infra/tests/unit/test_waf.py`**, not inside `test_synth.py` as
+   the contract's scope list names. The ingest worker (`test_ingest_worker.py`) set the
+   precedent; the file reuses `test_synth`'s shipped staging template and synthesises the
+   component alone for the variants. `test_synth.py` gains one namespacing row.
+2. **The CAPTCHA values are resolved before both `update` and `bootstrap`**, not only at
+   the top of `update` (contract W7). Both modes publish the frontend, and the guard
+   would refuse a bootstrap build without the values; the step still runs before any
+   AWS state changes in either mode.
+3. **A second deploy-script harness** (`PA_DEPLOY_WAF_KEYS_ONLY=1`) exists so the key
+   lookup can be tested against a stubbed `aws` (contract § Acceptance checks asks for
+   that case). The plan said the guard harness "gains one line"; the lookup needed its own
+   entry point, three lines, in the style of the migration-wait harness.
+4. **`WAF_CAPTCHA` is not in the deploy script's `readonly` list**, because the guard
+   harness's override reassigns it. Nothing else writes it.
+5. **The form has a `data-testid="waf-captcha"`** on the puzzle box and an early return in
+   `onSubmit` while the puzzle is unsolved (belt and braces next to the disabled button,
+   in case AWS's widget submits the form).
+6. **The never-loads vitest uses `vi.useFakeTimers({ shouldAdvanceTime: true })`**: plain
+   fake timers hang `userEvent`, which waits on a real `setTimeout(0)`.
+
+**Proposals from the build, not applied (owner pass):**
+
+- "Please solve the puzzle again" has no full stop, unlike the form's other messages; the
+  contract pins the string as is.
+- After a refusal the solve-again message stays until the next submit, even once the new
+  puzzle is solved; clearing it when a fresh token arrives is a small change the contract
+  neither asks for nor forbids.
+
+## Review findings
+
+Added after the review stack (step 7).
+
+- **Contract verifier:**
+- **`/code-review`:**
+- **`/security-review`:**
+- **Adversarial review** (Tier 4):
+- **`/simplify`:**
+- **`/okf validate`:** runs inside `make verify` (green).
+
+## Rubric status
+
+1. Contract rows W1 to W8: in the code (tests above); W1's "synth tests pin both
+   environments' values" holds; W3's number is the floor pending Phase 0.
+2. `make verify`, `make -C infra test`, `make deploy-build-guard-test`: pass. Staging live
+   checks: **pending** the hand steps and the deploy. Count week: **pending**.
+3. No approval-gated change beyond the contract's list.
+4. No generated files or secrets edited; the two CAPTCHA values are public and never stored
+   as secrets.
+5. No test deleted, skipped or weakened; the container environment test's closed set is
+   unchanged.
+6. One test per problem, listed above; each was watched to fail or was checked negatively
+   (W3's constant; the guard's missing-value cases fail by construction on the old
+   script, which had no CAPTCHA branch).
+7. This file; the placement screenshots are stubs, the real-widget screenshot, the report
+   output and the real log record are **pending** the staging check.
+8. `docs/deferred.md` updated as listed.
+9. ADR 0047 accepted and marked built; `infra/DEPLOYMENT.md` § 1, § 2 and § 4 "The
+   firewall" cover every item in the rubric.
+10. Review stack: **to run**. Owner ruling 2026-11-17 (this conversation): build and review
+    may run in the same session; recorded here as the written justification for the
+    fresh-conversation rule being waived.
+
+## Intent & assumptions
+
+- The web ACL can be associated from the app stack with the SSM-resolved ARN (plan risk 1):
+  synth accepts it; the first staging deploy is the proof.
+- The log destination ARN without `:*` is what WAF wants (plan P6): unverified by any AWS
+  document; the first staging deploy is the proof.
+- The report's Logs Insights field names (`ruleGroupList.N.…`) follow AWS's logging-fields
+  page and its examples; one real record confirms them before the owner relies on the
+  report.
+- The CAPTCHA token issued on the page's domain is accepted on the API's host through the
+  token domain list (plan risk 3): the live check W5/W6 is the proof.
+
+## Known unverified items
+
+- Phase 0 measurement (W3 number), the staging live check, the real-widget screenshot, the
+  report against real data, the count week.
+- `aws wafv2 check-capacity` has not been run; the arithmetic (925 + a few) is under
+  1,500.
+
+## Public safety
+
+Everything here and in `evidence/` is safe to publish: no addresses, no keys, no account
+ids. The staging check's additions must stay that way (remove client addresses from the
+report output and the log record before pasting).
+
+## Review handoff (step-7/8 inputs)
+
+- **Executor provenance (family flip):** Phase 1 and Phase 2 were built by Codex
+  (GPT family) from the lead's briefs in the task's gitignored `research/`; Phase 3 by the
+  `frontend-designer` (Opus) and a `fast-worker` (Sonnet); the docs by the lead (Fable).
+  The lead reviewed every delegated diff and made the small fixes noted in the commit
+  messages. Claude's reviewer lanes are the other family for Phases 1 and 2.
+- **Adjudication items:** the six flagged deviations above; the two copy/behaviour
+  proposals; the deploy-script placement of the CAPTCHA resolve (before the mode branch).
+- **Diff scoping:** no binaries in the diff (the `evidence/` screenshots are gitignored).
+- **Knowledge candidates:**
+  - The background shell runner in this harness ran nothing when the command was a
+    parenthesised compound with a redirect; the plain form worked. Prefer foreground runs
+    with a long timeout for long gates (they move to the background on their own).
+  - `make verify` depends on Docker Desktop being up; a build-open baseline on a laptop
+    starts with `open -a Docker` and a wait loop. Worth a line in the build skill or
+    `make verify`'s error text.
+  - For `aws_cdk.aws_wafv2.CfnWebACL`, the WAF scope is the keyword `scope` in the installed
+    2.261 package (the plan expected `scope_`); the constructor's parent is positional.
+  - The frontend-designer agent definition names eleven design skills that do not exist on
+    this machine (only the `frontend-design` plugin skill, at a different path). The agent
+    worked without them; the definition should list what is really installed.
+  - `vi.useFakeTimers()` plus `userEvent` hangs; `{ shouldAdvanceTime: true }` is the
+    working combination for a "nothing arrives for 10 s" test.
+  - macOS bash is 3.2: no `mapfile`, no `${var,,}`. A script test that passes locally may
+    be passing on Homebrew bash; write the scripts for 3.2 when operators run them on
+    laptops.
+  - A whole-group count override hides the inner rule from metrics; the log's
+    `ruleGroupList` is the only place it shows. Design the report around the log first.
+  - Playwright can stub a third-party script (`jsapi.js`) to screenshot placement without
+    the real widget; the real look still needs the live account.
+
+## Deferred work
+
+Seams left open → [docs/deferred.md](../../deferred.md) § Firewall and CAPTCHA (task 064b
+seams).
+
+## Exit gate
+
+`make verify` at the step-6 exit (2026-11-17, after all four commits): exit 0. Backend suite
+green (4,830 passed, 1 skipped, the same as the baseline plus the one new preflight test
+moved inside the count), infra 125 passed, frontend 1,997 tests in 138 files, build green,
+OKF validate, eval check, path audit, prompt guard, font guard and drift check all pass.
+`make audit` exit 0. `make deploy-build-guard-test` three PASS lines.

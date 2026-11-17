@@ -137,7 +137,9 @@ instead. Do not replace the exact match with a repository-wide wildcard.
 The role needs the permissions already required by this runbook: use the CDK
 bootstrap deploy/file/image roles; read the named deploy SSM parameters and app
 secret metadata; run/inspect the migration task; update/inspect the ECS service;
-sync the two deployment buckets; create/wait for the CloudFront invalidation; and
+sync the two deployment buckets; create/wait for the CloudFront invalidation;
+list the account's WAF API keys (`wafv2:ListAPIKeys`, read-only; task 064b, so the
+deploy can give the frontend its CAPTCHA settings, see § 4 "The firewall"); and
 the tightly conditioned `iam:PassRole` grant below. Scope these permissions to the
 environment's account and v3 resources. Do not add static AWS access-key secrets.
 
@@ -265,6 +267,25 @@ session. Once gate B passes, GitHub Actions owns steady-state `deploy-update` ru
    by the deploy role). To confirm the effect by hand, look at the analytics
    stack's **Parameters** tab in CloudFormation: it shows the resolved value the
    rule was last deployed with.
+
+7. **WAF CAPTCHA API key created (task 064b; only where `backend.waf.captcha` is
+   `true` in `pa_config.json`).** The firewall's CAPTCHA puzzle needs a public
+   key that belongs to the AWS account and region, not to the stack, and that
+   is created once by hand:
+
+   ```bash
+   aws wafv2 create-api-key --scope REGIONAL --region eu-west-2 \
+     --token-domains <domain_name>
+   ```
+
+   `<domain_name>` is the environment's `domain_name` in `pa_config.json`
+   (`v3.policyatlas.uk` on staging, `policyatlas.uk` in production). A key
+   cannot be changed afterwards; a new domain needs a new key. The deploy
+   script only *lists* keys and takes the one whose token domains equal
+   `[<domain_name>]`; with none it stops before touching AWS state and prints
+   this command. The key and the script URL it comes with are public by
+   design (they ship in the browser bundle), so they are not secrets. See § 4
+   "The firewall".
 
 ## 3. First deploy (staged bootstrap)
 
@@ -442,9 +463,14 @@ deploy — a no-op deploy leaves the scaled-up service running, so the script
 also scales to 0 explicitly before its stop-wait. The steady-state order
 (`deploy.sh update`):
 
+0. when the environment's `backend.waf.captcha` is on: look up the CAPTCHA
+   script URL and API key in the account (`aws wafv2 list-api-keys`) and fail
+   if the key is missing — *before* `cdk deploy`, so a missing key or
+   permission changes nothing (task 064b; see "The firewall" below)
 1. `cdk deploy` (new task definition registered; service → 0 if the stack changed)
 2. resolve + validate the frontend publish config (SSM exports, production
-   build guard) — fail-fast, *before* any outage-inducing step
+   build guard, which also requires the two CAPTCHA values when the CAPTCHA is
+   on) — fail-fast, *before* any outage-inducing step
 3. explicit scale to 0, then wait for tasks stopped
 4. migration task + fail-loud wait on exit code (`describe-tasks`, polled every
    15 s up to `MIGRATION_WAIT_MAX_S`; see "Waiting for the migration task" below)
@@ -740,6 +766,118 @@ database schema, may fail twice and land in the dead-letter queue (the alarm
 fires). This is expected around a deploy: the run records the document as not
 read and carries on. Deploy in quiet windows, as for the API.
 
+### The firewall (task 064b)
+
+**What it is.** A firewall (AWS WAF, Web Application Firewall) sits on the
+shared load balancer and looks at every request before the API sees it. Its
+rules live in one object, the **web ACL** (`policy-atlas-v3-api`, built by
+`infra/infra/components/waf.py` in the app stack and attached to the load
+balancer). Each rule can **count** a request (note that it matched and let it
+through), **block** it (answer 403), or ask for a **CAPTCHA** (answer 405 until
+the browser presents a solved-puzzle token). Every rule is scoped to the API
+host or to the waitlist path, so Metabase traffic on the same load balancer
+matches nothing. ADR 0047 has the reasoning.
+
+**The rules, in order.** `waitlist-captcha` (only when the CAPTCHA is on: a
+`POST` to `/api/v1/waitlist` without a valid token is refused with 405 and the
+header `x-amzn-waf-action: captcha`); `waitlist-rate` (more than 50 waitlist
+posts in 5 minutes from one address are blocked, always); `general-rate` (more
+than 3,000 requests in 5 minutes from one address to the API host);
+`managed-common`, `managed-known-bad-inputs`, `managed-ip-reputation` (AWS's
+own rule groups for common web attacks, known bad inputs and bad-reputation
+addresses, applied to the API host except `/healthz` and `/readyz`, so the
+load balancer's health check and the deploy's readiness call can never be
+refused by them). The common group's `SizeRestrictions_BODY` rule (a body over
+8 KB) is always counted and never blocks, because chat messages, plan edits
+and theory-of-change imports are often larger. The exclusion list is
+hard-coded in the component (`COMMON_RULES_ALWAYS_COUNTED`); a second name goes
+there too, and becomes a config key only if the list keeps growing.
+
+**The three keys** under `backend.waf` in `pa_config.json`, per environment:
+
+| Key | Values | Effect |
+| --- | --- | --- |
+| `enabled` | `true` / `false` | `false` synthesises no firewall at all (the rollback). |
+| `mode` | `"count"` / `"block"` | Whether `general-rate` and the three managed groups block or only count. The waitlist rules are not governed by it. |
+| `captcha` | `true` / `false` | Adds the CAPTCHA rule and makes the deploy give the frontend its CAPTCHA settings. `true` needs `enabled: true`. |
+
+A missing key, a wrong value or `captcha` without `enabled` fails both `cdk
+synth` and `deploy.sh check`.
+
+**The count week.** A new environment, and any environment after a rule change,
+runs with `mode: count` for a week so the rules show what they *would* block
+without blocking anyone. Right after the deploy, do the deliberate pass: sign
+in, open the task list, send one chat message over 8 KB, edit a plan, import a
+theory-of-change image, open a public task view, and submit the waitlist form.
+Then run the report:
+
+```bash
+AWS_PROFILE=<profile> scripts/waf_report.sh <staging|prod> [days] [--addresses]
+```
+
+It prints, per rule, the counted, blocked and CAPTCHA totals for the last
+`days` days (default 7) from CloudWatch metrics, then one query over the
+firewall log giving the request count per **rule inside a group** (the metrics
+only name the group) and the paths it matched. Client addresses are printed
+only with `--addresses`; do not paste them into a public record. The script
+reads and never writes. After the week, decide per rule: a rule that matched
+only normal use is excluded (below); everything else is ready to block.
+
+**Switching to block.** Set `mode` to `"block"` in `pa_config.json` for that
+environment, merge and deploy the normal way. **Repeat the deliberate pass at
+once**, because a managed group in count mode stops at its first matching rule,
+so a second rule can only surface after the first is excluded. If anything is
+refused, set `mode` back to `"count"` (or use the emergency switch below),
+exclude the rule, and try again. Staging leads by one release: staging blocks
+before production does.
+
+**Excluding one rule.** Add its name to `COMMON_RULES_ALWAYS_COUNTED` in
+`infra/infra/components/waf.py` (for a rule in another group, give that group
+its own `rule_action_overrides` the same way) and deploy. The rule then reports
+`EXCLUDED_AS_COUNT` in the log, which the report shows.
+
+**Turning the firewall off.** `enabled: false` and a deploy removes the web
+ACL, its association, the log group and the logging configuration; the deploy
+then resolves no CAPTCHA values and the form shows no puzzle. Nothing has to
+be restored. `captcha: false` alone removes the CAPTCHA rule and the puzzle at
+the next deploy.
+
+**Emergency off switch (production, a false positive that cannot wait for a
+release).** Detach the web ACL from the load balancer in seconds, no deploy:
+
+```bash
+aws wafv2 disassociate-web-acl --region eu-west-2 \
+  --resource-arn "$(aws ssm get-parameter --region eu-west-2 \
+    --name /policy_atlas_v3/shared_alb/arn --query Parameter.Value --output text)"
+```
+
+The next deploy re-attaches it. Follow up with a config change (`mode: count`
+or an exclusion) before that deploy, or it comes back as it was.
+
+**The token domain and where the CAPTCHA values come from.** The CAPTCHA
+puzzle runs on the splash page (`<domain_name>`) and its token is spent on the
+API (`api.<domain_name>`). The web ACL's token domain list therefore holds the
+environment's `domain_name`, which covers both as subdomains. The page needs
+two public values to show the puzzle: the account's CAPTCHA script URL and its
+API key (§ 2, precondition 7). `deploy.sh` reads them with `aws wafv2
+list-api-keys` before `cdk deploy` and passes them to the frontend build as
+`VITE_WAF_CAPTCHA_SCRIPT_URL` and `VITE_WAF_CAPTCHA_API_KEY`; the production
+build guard refuses a build without them while the CAPTCHA is on. They are
+not secrets and may appear in the deploy log. When the CAPTCHA is off neither
+is set and the form behaves as before.
+
+**The log.** Matched requests only (counted, blocked, CAPTCHA'd or
+counted-by-override) go to the CloudWatch log group
+`aws-waf-logs-policy-atlas-v3` (the `aws-waf-logs-` prefix is AWS's rule),
+kept for one month. Ordinary traffic is never logged. The records hold client
+addresses; the log group is private to the account.
+
+**Capacity.** A web ACL may use 1,500 capacity units; these rules use about
+935. Adding a fourth managed group needs `aws wafv2 check-capacity` first.
+
+**Cost.** About $11 a month per environment (the web ACL, six rules), plus
+$0.60 per million requests and $0.40 per thousand CAPTCHA puzzles.
+
 ## 5. Env & secret map
 
 Generated from `settings.py`'s required/optional calls plus the direct
@@ -955,6 +1093,13 @@ in committable form — CI's font-guard stays green.
   the point. Lowering `backup_retention_days` again discards the backups older
   than the new value. The 12-character password minimum cannot be undone for
   people who already set a longer password, which is harmless.
+- **Task 064b (firewall and CAPTCHA):** three levels, no data to restore.
+  `waf.mode: count` undoes a block without removing anything; `waf.captcha:
+  false` removes the CAPTCHA rule and the puzzle; `waf.enabled: false` removes
+  the whole firewall, its log group included. Each is a config change and a
+  normal deploy. The emergency switch in § 4 "The firewall" detaches the
+  firewall in seconds without a deploy. The WAF API key is harmless to leave
+  behind.
 - **Automation:** disable the GitHub Environment or revoke its OIDC role trust to
   stop new deploys, then revert the workflow change. This does not repair an
   already interrupted stop→migrate→scale sequence; use the recovery procedure in

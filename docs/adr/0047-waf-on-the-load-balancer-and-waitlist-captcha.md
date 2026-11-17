@@ -1,6 +1,8 @@
 # ADR 0047 — A web application firewall on the shared load balancer, counted before it blocks, and a CAPTCHA on the waitlist form
 
-- **Status:** Accepted — 2026-11-17 (Karlis Kanders, owner, task 064b plan gate).
+- **Status:** Accepted — 2026-11-17 (Karlis Kanders, owner, task 064b plan gate). Built
+  2026-11-17 as decided; the one open number, the general rate limit, stays at the 3,000
+  floor until the Phase 0 measurement runs (recorded in the task's `verification.md`).
 - **Date:** 2026-11-17
 - **Task:** [064b-waf-captcha](../tasks/064b-waf-captcha/contract.md), second slice of the
   [064 security hardening programme](../tasks/064-security-hardening/programme.md).
