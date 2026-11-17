@@ -1,8 +1,8 @@
 """Keep the eval datasets and run results in step with S3, with the AWS command-line tool.
 
-Two areas, ``search`` and ``screening``. Each has a datasets prefix (the ground
-truth the scripts read, kept out of git) and a results prefix (one folder per
-run). The bucket is the one the earlier prototype used.
+Three areas, ``search``, ``screening`` and ``theory_of_change``. Each has a datasets
+prefix (the ground truth the scripts read, kept out of git) and a results prefix (one
+folder per run). The bucket is the one the earlier prototype used.
 
 Uses the default AWS profile. Log in the way you usually do before running this:
 ``aws sts get-caller-identity`` should print your account.
@@ -96,6 +96,16 @@ AREAS: dict[str, _Area] = {
             ),
         ),
         results_prefix="eval/results/search/",
+    ),
+    "theory_of_change": _Area(
+        datasets=(
+            # The source PDFs and figure pages the cases point to (by checksum).
+            _Folder(
+                ROOT / "theory_of_change" / "downloads",
+                "eval/datasets/theory_of_change/downloads/",
+            ),
+        ),
+        results_prefix="eval/results/theory_of_change/",
     ),
 }
 

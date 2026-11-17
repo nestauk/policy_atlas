@@ -16,12 +16,14 @@ Policy Atlas's theory-of-change capability. The plan is in
 | `prepare.py` | Writes `source.json` for every kept candidate from its longlist row |
 | `candidates/merge.py` | Joins the fact tables (`verified_*.csv`) and the decisions (`decisions.csv`) into `longlist.csv` |
 | `review.py` | The review website: `python3 scripts/evals/theory_of_change/review.py`, then open http://127.0.0.1:8765 |
-| `downloads/` | Source PDFs and rendered figure pages (local only, not in git) |
+| `downloads/` | Source PDFs and rendered figure pages (not in git; on S3 at `s3://discovery-policy-atlas/eval/datasets/theory_of_change/downloads/`, fetch with `uv run --project backend python scripts/evals/sync_s3.py theory_of_change download`) |
 | `archive_v1/` | The first pack (4 ToCs) and its scripts, kept for reuse |
 
 ## Add a case
 
 1. Put the PDF in `downloads/` and write `cases/<id>/source.json` (see `extract.py`).
+   After adding cases, push the new files to S3:
+   `uv run --project backend python scripts/evals/sync_s3.py theory_of_change upload-datasets`.
 2. `uv run --project backend --env-file backend/.env python -I scripts/evals/theory_of_change/extract.py <id>`
    (from the repo root; about 0.10 USD a case).
 3. Check every box, link and verdict against the figure. Fix the draft, note what you
