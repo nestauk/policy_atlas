@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
-from policy_atlas.core.schema import waitlist_entry
+from policy_atlas.core.schema import organisation_domain, waitlist_entry
+from tests.api.org_support import make_org, seeded
 from tests.api.resource_support import api_client
 
 
@@ -35,6 +37,38 @@ def test_waitlist_signup_creates_entry_without_auth(tmp_path: Path, engine: Engi
         assert body["email"].startswith("ada-")
         assert "organisation" not in body
         assert "role_or_reason" not in body
+
+
+def test_waitlist_response_is_identical_for_listed_and_unlisted_domains(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """The public acknowledgement reveals no self-signup domain decision."""
+    with seeded(engine) as conn:
+        existing = conn.execute(
+            select(organisation_domain.c.domain).where(
+                organisation_domain.c.domain == "nesta.org.uk"
+            )
+        ).scalar_one_or_none()
+        if existing is None:
+            org_id = make_org(conn, name="Listed domain")
+            conn.execute(
+                organisation_domain.insert().values(
+                    domain="nesta.org.uk", org_id=org_id, created_at=datetime.now(UTC)
+                )
+            )
+    listed_email = f"listed-{uuid.uuid4().hex[:12]}@nesta.org.uk"
+    unlisted_email = f"unlisted-{uuid.uuid4().hex[:12]}@example.test"
+    payload = {"name": "Public Person", "role_or_reason": "Testing acknowledgement"}
+    with api_client(tmp_path) as (client, _owner, _other):
+        listed = client.post("/api/v1/waitlist", json={**payload, "email": listed_email})
+        unlisted = client.post("/api/v1/waitlist", json={**payload, "email": unlisted_email})
+    assert listed.status_code == unlisted.status_code == 201
+    assert set(listed.json()) == set(unlisted.json()) == {"entry_id", "email", "created_at"}
+    assert listed.json()["email"] == listed_email
+    assert unlisted.json()["email"] == unlisted_email
+    assert {key: value for key, value in listed.headers.items() if key != "content-length"} == {
+        key: value for key, value in unlisted.headers.items() if key != "content-length"
+    }
 
 
 def test_waitlist_duplicate_email_gets_same_201_and_one_row(tmp_path: Path, engine: Engine) -> None:
