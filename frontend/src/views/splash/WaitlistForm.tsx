@@ -1,9 +1,10 @@
-import { useId, useState, type FormEvent, type ReactNode } from "react";
+import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { apiBaseUrl } from "../../api/client";
 import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { SPLASH_PROSE } from "./splashTypography";
+import { useWafCaptcha } from "./wafCaptcha";
 
 /** Keep in sync with `policy_atlas.api.contract.waitlist`. */
 export const WAITLIST_LIMITS = {
@@ -39,6 +40,9 @@ export function WaitlistForm() {
   const [status, setStatus] = useState<FormStatus>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
+  const captchaBox = useRef<HTMLDivElement>(null);
+  const captcha = useWafCaptcha(captchaBox);
+  const captchaPending = captcha.configured && captcha.token === null;
 
   const emailTrim = email.trim();
   const nameTrim = name.trim();
@@ -67,12 +71,16 @@ export function WaitlistForm() {
       setMessage(null);
       return;
     }
+    // The button is disabled too; this also covers any other path to submit.
+    if (captchaPending) return;
     setStatus("submitting");
     setMessage(null);
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (captcha.token !== null) headers["x-aws-waf-token"] = captcha.token;
     try {
       const response = await fetch(`${apiBaseUrl()}/api/v1/waitlist`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           email: emailTrim,
           name: nameTrim,
@@ -84,6 +92,13 @@ export function WaitlistForm() {
       if (response.status === 201) {
         setStatus("success");
         setMessage("Thanks — you're on the list. We'll be in touch.");
+        return;
+      }
+      // The firewall refused the token (expired): a 405 alone is the generic error.
+      if (response.headers.get("x-amzn-waf-action") === "captcha") {
+        setStatus("error");
+        setMessage("Please solve the puzzle again");
+        captcha.reset();
         return;
       }
       const body = (await response.json().catch(() => null)) as {
@@ -106,7 +121,12 @@ export function WaitlistForm() {
   const roleOverMsg = overLimitMessage(roleOrReason.length, WAITLIST_LIMITS.roleOrReason);
 
   return (
-    <form onSubmit={onSubmit} className="flex w-full flex-col gap-5" noValidate>
+    <form
+      onSubmit={onSubmit}
+      onFocus={captcha.arm}
+      className="flex w-full flex-col gap-5"
+      noValidate
+    >
       <Field
         id="waitlist-email"
         label="Email"
@@ -213,6 +233,17 @@ export function WaitlistForm() {
         />
       </div>
 
+      {/* The firewall's puzzle, drawn by AWS. Empty until the first focus, when the
+          negative margin cancels its flex gap so the form keeps its rhythm. */}
+      {captcha.configured && !done && (
+        <div ref={captchaBox} data-testid="waf-captcha" className="empty:-mt-5" />
+      )}
+      {captcha.status === "unavailable" && (
+        <p role="status" className={cn(SPLASH_PROSE, "text-red")}>
+          The sign-up check did not load. Reload the page to try again.
+        </p>
+      )}
+
       {message !== null && (
         <p
           role="status"
@@ -225,7 +256,7 @@ export function WaitlistForm() {
         <div>
           <Button
             type="submit"
-            disabled={status === "submitting" || lengthBlocked}
+            disabled={status === "submitting" || lengthBlocked || captchaPending}
             className="min-h-12 px-[22px] py-0 text-lead font-extrabold"
           >
             {status === "submitting" ? "Submitting…" : "Submit"}

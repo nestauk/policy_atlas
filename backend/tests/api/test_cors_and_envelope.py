@@ -74,6 +74,38 @@ def test_cors_health_validation_and_opaque_errors(engine: Engine, tmp_path: Path
         assert "intentional test error" not in failure.text
 
 
+def test_cors_preflight_allows_the_waf_captcha_token_header_with_content_type(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """The waitlist form sends the firewall's CAPTCHA token in this header.
+
+    The browser's preflight (the permission check it sends first) must see the header
+    allowed next to Content-Type, or the form cannot submit.
+    """
+    del engine
+    settings = Settings(
+        "http://dev-issuer.local",
+        "cors-test",
+        None,
+        init(tmp_path / "issuer"),
+        "http://app.example.test",
+        os.environ["DATABASE_URL"],
+    )
+    with _client(settings) as client:
+        preflight = client.options(
+            "/api/v1/waitlist",
+            headers={
+                "Origin": settings.app_origin,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type,x-aws-waf-token",
+            },
+        )
+    assert preflight.status_code == 200
+    reply = preflight.headers["access-control-allow-headers"]
+    allowed = {h.strip() for h in reply.lower().split(",")}
+    assert {"content-type", "x-aws-waf-token"} <= allowed
+
+
 @contextmanager
 def _client(settings: Settings) -> Iterator[TestClient]:
     """Run a small D.3-like protected surface with the real application lifespan."""
