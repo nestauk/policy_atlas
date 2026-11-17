@@ -1,6 +1,6 @@
 # ADR 0047 — A web application firewall on the shared load balancer, counted before it blocks, and a CAPTCHA on the waitlist form
 
-- **Status:** Drafted — 2026-11-17, for the owner's task 064b plan gate.
+- **Status:** Accepted — 2026-11-17 (Karlis Kanders, owner, task 064b plan gate).
 - **Date:** 2026-11-17
 - **Task:** [064b-waf-captcha](../tasks/064b-waf-captcha/contract.md), second slice of the
   [064 security hardening programme](../tasks/064-security-hardening/programme.md).
@@ -53,16 +53,21 @@ The AWS documentation pages these decisions rest on (gathered 2026-11-17):
    5 minutes), the immunity time (1,800 s), the host scoping and the body-size exclusion
    have one right value everywhere and are hard-coded. Production ships with the CAPTCHA
    off and turns it on by a later config change, so staging leads by one release.
-3. **Every rule is scoped to the API.** The general rate rule and the managed groups match
-   the API host only; the waitlist rules match the waitlist path only, decoded and
-   lower-cased before comparison so an encoded path cannot skip them. Metabase shares the
-   load balancer and matches nothing; it keeps its own IP allowlist.
+3. **Every rule is scoped to the API, and the managed groups skip the health paths.** The
+   general rate rule and the managed groups match the API host only; the managed groups
+   also skip `/healthz` and `/readyz`, so the load balancer's health check and the deploy
+   script's readiness call can never be refused by them (owner: do not block by default).
+   The waitlist rules match the waitlist path only, decoded and lower-cased before
+   comparison so an encoded path cannot skip them. Metabase shares the load balancer and
+   matches nothing; it keeps its own IP allowlist.
 4. **Count first, block later, per environment.** Every rule that could refuse a real
    person starts in count mode. After a week and a deliberate pass, the owner reads the
    report and switches `waf.mode` to block by a config change, then repeats the pass at
    once. The waitlist rate rule blocks from the start at 50 per 5 minutes per address: the
    CAPTCHA already stops scripts, so the number only bounds a script with a stolen token,
-   and fifty leaves room for an office or an event behind one address.
+   and fifty leaves room for an office or an event behind one address. The general rate
+   limit is not guessed: the build measures the busiest address's 5-minute peak in the
+   staging API log and sets the limit at ten times that, never below 3,000.
 5. **The common group's body-size rule is always counted.** `SizeRestrictions_BODY` matches
    bodies over 8 KB, which this API sees in normal use. It is overridden to count in both
    modes. This also settles review finding H-02 (a request size limit at the edge): it

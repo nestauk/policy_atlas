@@ -23,9 +23,10 @@ defined in [contract.md](contract.md).
        WAF-shaped synthesises when it is false, an unknown `waf.mode` value raises, and
        `captcha: true` with `enabled: false` raises; W2 the waitlist rate rule has limit 50,
        block action in both modes, and a scope-down of `POST` and the path with the
-       `URL_DECODE` then `LOWERCASE` transformations; W3 the general rate rule has limit
-       3,000, a scope-down to the API host, and an action that follows `waf.mode`; W4 the
-       three groups are present and host-scoped, their override follows `waf.mode`, and
+       `URL_DECODE` then `LOWERCASE` transformations; W3 the general rate rule has the limit
+       pinned in Phase 0 (at least 3,000), a scope-down to the API host, and an action that
+       follows `waf.mode`; W4 the three groups are present, scoped to the API host with
+       `/healthz` and `/readyz` excluded, their override follows `waf.mode`, and
        `SizeRestrictions_BODY` is counted in both modes; W5 the CAPTCHA rule is present only
        with `waf.captcha`, has a lower priority number than W2, its statement is `POST` and
        the transformed path, immunity 1,800, and the token domain list equals
