@@ -60,6 +60,7 @@ from policy_atlas.api.longlist_start import (
 )
 from policy_atlas.api.read_models import repository
 from policy_atlas.api.routers.access import NOT_FOUND_DETAIL, accessible_task
+from policy_atlas.api.routers.common import effective_limits
 from policy_atlas.api.routers.read_models import _readable
 from policy_atlas.api.settings import Settings
 from policy_atlas.core import events, tracing
@@ -316,7 +317,8 @@ def post_suggest_more(
     ``nothing_to_propose``, and 404 when the task has no longlist.
     """
     with engine.begin() as conn:
-        accessible_task(conn, task_id=task_id, user_id=user.user_id, write=True)
+        access = accessible_task(conn, task_id=task_id, user_id=user.user_id, write=True)
+        cap = effective_limits(conn, access.row["owner_user_id"], settings=settings).runs
     try:
         run_id = open_shortlist_walk(
             engine,
@@ -324,7 +326,7 @@ def post_suggest_more(
             backends=backends,
             executor=executor,
             user_id=user.user_id,
-            user_cap=settings.runs_per_user,
+            user_cap=cap,
             suggest=True,
         )
     except LonglistRefused as exc:

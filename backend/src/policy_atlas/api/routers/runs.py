@@ -26,9 +26,10 @@ from policy_atlas.api.deps import (
     get_settings,
     get_title_backend,
 )
-from policy_atlas.api.routers.access import _is_admin, accessible_task
+from policy_atlas.api.routers.access import accessible_task
 from policy_atlas.api.routers.common import (
     active_parentless_walk,
+    effective_limits,
     executor_walk,
     parentless_walk,
     run_artefact_id_column,
@@ -95,7 +96,7 @@ def executor_full(conn: Connection, capacity: int | None) -> bool:
     return capacity is None or int(running) + executor_reservations() >= capacity
 
 
-def user_at_run_cap(conn: Connection, *, user_id: str | None, cap: int) -> bool:
+def user_at_run_cap(conn: Connection, *, user_id: str | None, cap: int | None) -> bool:
     """Whether one person's tasks already hold ``cap`` executor walks (task 064a, Q7).
 
     Call under ``_dispatch_lock``, right after :func:`executor_full`. Counts
@@ -105,21 +106,21 @@ def user_at_run_cap(conn: Connection, *, user_id: str | None, cap: int) -> bool:
     would admit any number of simultaneous starts. Call it before the
     caller's own task joins the reservation set, so that task is not counted.
     The cap is on the owner's tasks, so the sites pass the task's owner and a
-    collaborator with write access cannot lift it. An administrator owner is
-    exempt (owner ruling 2026-11-16, like the task quota): reader **(vi)** of
-    ``is_admin`` in the closed list of ADR 0033, through :func:`_is_admin`.
+    collaborator with write access cannot lift it. An administrator owner's
+    task-quota exemption and an unlimited run override are resolved by
+    :func:`policy_atlas.api.routers.common.effective_limits` before this call.
 
     Args:
         conn: Open database connection.
         user_id: The task's owner, matched on ``task.owner_user_id``;
             ``None`` (an ownerless task, never reachable from the product)
             is never capped.
-        cap: The per-person limit (``settings.runs_per_user``).
+        cap: The resolved per-person limit; ``None`` means unlimited.
 
     Returns:
         ``True`` when the person is at or over the limit.
     """
-    if user_id is None or _is_admin(conn, user_id):
+    if user_id is None or cap is None:
         return False
     running = conn.execute(
         select(func.count())
@@ -435,11 +436,12 @@ def create_run(
                 raise ApiConflict("run_active", "the task already has an active run")
             if executor_full(conn, settings.run_executor_max):
                 raise ApiConflict("capacity", "the walk executor is at capacity")
-            if user_at_run_cap(
-                conn, user_id=access.row["owner_user_id"], cap=settings.runs_per_user
-            ):
+            cap = effective_limits(
+                conn, access.row["owner_user_id"], settings=settings
+            ).runs
+            if user_at_run_cap(conn, user_id=access.row["owner_user_id"], cap=cap):
                 raise ApiConflict(
-                    "user_capacity", f"you already have {settings.runs_per_user} runs in progress"
+                    "user_capacity", f"you already have {cap} runs in progress"
                 )
             plan_row = latest_approved_plan_row(conn, task_id)
             if plan_row is None:
@@ -648,9 +650,10 @@ def start_toc_check(
             owner = conn.execute(
                 select(task.c.owner_user_id).where(task.c.task_id == task_id)
             ).scalar_one()
-            if user_at_run_cap(conn, user_id=owner, cap=settings.runs_per_user):
+            cap = effective_limits(conn, owner, settings=settings).runs
+            if user_at_run_cap(conn, user_id=owner, cap=cap):
                 raise ApiConflict(
-                    "user_capacity", f"you already have {settings.runs_per_user} runs in progress"
+                    "user_capacity", f"you already have {cap} runs in progress"
                 )
             scope_id = mint_scope(
                 conn,

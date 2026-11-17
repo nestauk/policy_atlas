@@ -33,10 +33,11 @@ from policy_atlas.api.longlist_start import (
     plan_row_of_walk,
 )
 from policy_atlas.api.routers.access import accessible_task
+from policy_atlas.api.routers.common import effective_limits
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
 from policy_atlas.core import events, tracing
-from policy_atlas.core.schema import capability_run
+from policy_atlas.core.schema import capability_run, task
 from policy_atlas.runtime.agent_backend import AgentBackend
 from policy_atlas.runtime.runner import RunnerBackends
 from policy_atlas.runtime.scoping_plan import LONGLIST_PURPOSE
@@ -251,6 +252,11 @@ def respond_to_check_in(
         # opens the walk later. It opens on the version the gate's walk ran —
         # the one this decision confirmed — or not at all (A10).
         try:
+            with engine.connect() as conn:
+                owner = conn.execute(
+                    select(task.c.owner_user_id).where(task.c.task_id == task_id)
+                ).scalar_one()
+                cap = effective_limits(conn, owner, settings=settings).runs
             open_longlist_walk(
                 engine,
                 task_id=task_id,
@@ -260,7 +266,7 @@ def respond_to_check_in(
                 backends=backends,
                 executor=executor,
                 user_id=user.user_id,
-                user_cap=settings.runs_per_user,
+                user_cap=cap,
                 await_run=False,
             )
         except LonglistRefused as exc:

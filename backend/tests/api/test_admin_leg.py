@@ -844,21 +844,19 @@ def test_no_write_under_the_api_can_set_is_admin() -> None:
 #:   `get_me` fills in. Named here because an honest closed list enumerates
 #:   what the code *contains*, and pretending a field declaration is invisible
 #:   would make the assertion weaker, not cleaner.
-#: - `routers/tasks.py::create_task` — reader **(v)**, task creation's quota
-#:   exemption (task 064a, ADR 0045), asked through `_is_admin`. The first
-#:   write path to consult the flag; it still sets nothing.
-#: - `routers/runs.py::user_at_run_cap` — reader **(vi)**, the per-user run
-#:   cap's exemption (task 064a, owner ruling 2026-11-16), asked through
-#:   `_is_admin` for the task's owner. One function serves all three start
-#:   sites.
+#: - `routers/common.py::effective_limits` — readers **(v)** and **(vi)**:
+#:   the task-quota exemption and the per-user run-cap exemption. One resolver
+#:   serves every quota and run-start caller.
 #:
 #: Any further entry is a defect and needs its own amendment.
 _IS_ADMIN_READERS = {
     "routers/access.py": {"admin_read_leg", "_is_admin"},
     "routers/me.py": {"get_me"},
     "contract/tenancy.py": {"MeOut"},
-    "routers/tasks.py": {"create_task"},
-    "routers/runs.py": {"user_at_run_cap"},
+    "routers/common.py": {"effective_limits"},
+    # Task 065: the ops pages list people with both flags; the shape is served
+    # only on the ops host (contract B4).
+    "contract/ops.py": {"PersonOut"},
 }
 
 
@@ -1036,4 +1034,8 @@ def test_no_raw_sql_string_reaches_the_is_admin_flag_behind_the_walk() -> None:
         if (scopes := _scopes_with_a_string_containing(path, "is_admin"))
     }
 
-    assert actual == {"routers/me.py": {"get_me"}}
+    assert actual == {
+        "routers/me.py": {"get_me"},
+        # Task 065 (B12): the resolver reads the flag for the quota exemption.
+        "routers/common.py": {"effective_limits"},
+    }

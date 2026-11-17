@@ -28,7 +28,7 @@ from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import MeOut, OrganisationRef, TaskQuotaOut
 from policy_atlas.api.deps import get_conn, get_current_user, get_settings
 from policy_atlas.api.identity import sub_display
-from policy_atlas.api.routers.common import tasks_created_since
+from policy_atlas.api.routers.common import effective_limits, tasks_created_since
 from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import app_user, organisation
 
@@ -94,6 +94,9 @@ def get_me(
         if row["org_id"] is not None
         else None
     )
+    # Task 065 (B12): the limit is the resolved one (own override, else the
+    # organisation's, else the setting); ``None`` hides the quota band.
+    limits = effective_limits(conn, user.user_id, settings=settings)
     return MeOut(
         user_id=row["user_id"],
         display_name=row["display_name"],
@@ -102,10 +105,10 @@ def get_me(
         is_admin=row["is_admin"],
         task_quota=(
             None
-            if row["is_admin"]
+            if limits.task_quota is None
             else TaskQuotaOut(
                 used=tasks_created_since(conn, user.user_id, days=365),
-                limit=settings.task_quota_per_year,
+                limit=limits.task_quota,
             )
         ),
     )

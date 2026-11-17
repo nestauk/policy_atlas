@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Collection
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, cast
 
@@ -21,6 +22,7 @@ from policy_atlas.api.contract import LatestRun, RunOut, StageKey, TaskLinkOut, 
 from policy_atlas.api.contract.runs import TocWalkKind
 from policy_atlas.api.identity import owner_display_for
 from policy_atlas.api.routers.access import readable_task_leg
+from policy_atlas.api.settings import Settings
 from policy_atlas.api.stage_vocabulary import presentation, stage_for_payload
 from policy_atlas.core.schema import (
     app_user,
@@ -29,6 +31,7 @@ from policy_atlas.core.schema import (
     event_log,
     evidence_scope,
     longlist_result,
+    organisation,
     project_membership,
     runs,
     task,
@@ -53,6 +56,14 @@ _RESOLVE = object()
 
 #: A walk that is still going: the admission fences and ``active_run`` read these.
 ACTIVE_WALK_STATUSES: tuple[str, ...] = ("running", "paused")
+
+
+@dataclass(frozen=True)
+class Limits:
+    """Effective task and simultaneous-run limits for one person."""
+
+    task_quota: int | None
+    runs: int | None
 
 
 def parentless_walk() -> ColumnElement[bool]:
@@ -119,6 +130,64 @@ def tasks_created_since(conn: Connection, user_id: str, *, days: int) -> int:
             # parameter, not text spliced into the statement.
             .where(task.c.created_at >= func.now() - func.make_interval(0, 0, 0, days))
         ).scalar_one()
+    )
+
+
+def effective_limits(conn: Connection, user_id: str, *, settings: Settings) -> Limits:
+    """Resolve one person's limits: their own override, else their organisation's, else settings.
+
+    Task 065 (B12, plan P7). A stored ``0`` means no limit and comes back as
+    ``None``. An administrator's limits are both ``None`` (the exemptions of
+    task 064a, ADR 0045, moved here from the task-create route and from
+    ``user_at_run_cap``). The task-create check, the run-cap sites and
+    ``/me`` call this and nothing else reads the four override columns.
+
+    Args:
+        conn: Open database connection.
+        user_id: The person's Cognito subject.
+        settings: Application settings providing the default limits.
+
+    Returns:
+        Effective task and run limits, with ``None`` meaning unlimited.
+    """
+    row = conn.execute(
+        select(
+            app_user.c.is_admin,
+            app_user.c.task_quota_per_year.label("user_task_quota"),
+            app_user.c.runs_per_user.label("user_runs"),
+            organisation.c.task_quota_per_year.label("org_task_quota"),
+            organisation.c.runs_per_user.label("org_runs"),
+        )
+        .select_from(app_user.outerjoin(organisation, organisation.c.org_id == app_user.c.org_id))
+        .where(app_user.c.user_id == user_id)
+    ).mappings().one_or_none()
+    if row is None:
+        task_quota = settings.task_quota_per_year
+        runs = settings.runs_per_user
+    else:
+        task_quota = (
+            row["user_task_quota"]
+            if row["user_task_quota"] is not None
+            else row["org_task_quota"]
+            if row["org_task_quota"] is not None
+            else settings.task_quota_per_year
+        )
+        runs = (
+            row["user_runs"]
+            if row["user_runs"] is not None
+            else row["org_runs"]
+            if row["org_runs"] is not None
+            else settings.runs_per_user
+        )
+        if row["is_admin"]:
+            # Administrators are exempt from both limits (owner rulings
+            # 2026-11-16: the task quota in 064a Q8, the run cap in 064a's
+            # review); an override on their row does not pull them back under.
+            task_quota = 0
+            runs = 0
+    return Limits(
+        task_quota=None if task_quota == 0 else task_quota,
+        runs=None if runs == 0 else runs,
     )
 
 

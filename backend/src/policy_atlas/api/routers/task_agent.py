@@ -85,6 +85,7 @@ from policy_atlas.api.routers.access import accessible_task
 from policy_atlas.api.routers.check_ins import execute_claimed
 from policy_atlas.api.routers.common import (
     active_parentless_walk,
+    effective_limits,
 )
 from policy_atlas.api.settings import Settings
 from policy_atlas.api.stage_vocabulary import STAGE_PRESENTATION, STAGE_ROW, STEP_VERBS
@@ -96,6 +97,7 @@ from policy_atlas.core.schema import (
     artefact,
     capability_run,
     conversation,
+    task,
     task_agent_transcript,
     task_plan,
 )
@@ -149,6 +151,15 @@ from policy_atlas.runtime.task_plan import TaskPlan, _enabled_components
 from policy_atlas.runtime.toc_plan import DEFAULT_PUBLISHED_AFTER, TOC_WALK_CHECK
 
 log = structlog.get_logger()
+
+
+def _task_owner_run_limit(engine: Engine, *, task_id: uuid.UUID, settings: Settings) -> int | None:
+    """Resolve the run limit for a task's owner."""
+    with engine.connect() as conn:
+        owner = conn.execute(
+            select(task.c.owner_user_id).where(task.c.task_id == task_id)
+        ).scalar_one()
+        return effective_limits(conn, owner, settings=settings).runs
 
 # The client's confirm-marker regex (`option=([a-z0-9_]+)`) — enforced
 # server-side so a card never ships an id the marker grammar can't round-trip.
@@ -798,7 +809,7 @@ def _dispatch_gate_turn(
     embedding_backend: EmbeddingBackend,
     executor: ThreadPoolExecutor,
     runner_backends: RunnerBackends,
-    user_cap: int,
+    user_cap: int | None,
 ) -> TaskAgentTurnOut | _ContinuedTurn:
     """Sort one turn taken at the gate and carry out what it turned out to be.
 
@@ -979,7 +990,7 @@ def _open_follow_on_longlist(
     executor: ThreadPoolExecutor,
     runner_backends: RunnerBackends,
     user_id: str,
-    user_cap: int,
+    user_cap: int | None,
 ) -> LatestRun | None:
     """Open the longlist walk a gate decision asked for (task 045, S3; P7).
 
@@ -1160,7 +1171,7 @@ def create_task_agent_turn(
                     embedding_backend=embedding_backend,
                     executor=executor,
                     runner_backends=runner_backends,
-                    user_cap=settings.runs_per_user,
+                    user_cap=_task_owner_run_limit(engine, task_id=task_id, settings=settings),
                 )
             if isinstance(sorted_turn, TaskAgentTurnOut):
                 return _one_line_stream(sorted_turn)
@@ -1889,7 +1900,7 @@ def patch_plan(
         user=user,
         executor=executor,
         backends=backends,
-        user_cap=settings.runs_per_user,
+        user_cap=_task_owner_run_limit(engine, task_id=task_id, settings=settings),
         previous=scoped[0],
         current=scoped[1],
         out=out,
@@ -1903,7 +1914,7 @@ def _open_shortlist_after_patch(
     user: AuthenticatedUser,
     executor: ThreadPoolExecutor,
     backends: RunnerBackends,
-    user_cap: int,
+    user_cap: int | None,
     previous: ScopingPlan,
     current: ScopingPlan,
     out: PlanOut,
@@ -1928,7 +1939,7 @@ def _open_shortlist_after_patch(
         user: The user traces are attributed to.
         executor: The walk executor.
         backends: The runner backend bundle.
-        user_cap: The per-person run limit (``settings.runs_per_user``).
+        user_cap: The resolved per-person run limit.
         previous: The approved plan before the patch.
         current: The plan the patch saved.
         out: The patch's response.
@@ -2226,7 +2237,7 @@ def confirm_baseline(
         executor=executor,
         backends=backends,
         user=user,
-        user_cap=settings.runs_per_user,
+        user_cap=_task_owner_run_limit(engine, task_id=task_id, settings=settings),
     )
 
 
@@ -2238,7 +2249,7 @@ def _open_confirmed_longlist(
     executor: ThreadPoolExecutor,
     backends: RunnerBackends,
     user: AuthenticatedUser,
-    user_cap: int,
+    user_cap: int | None,
 ) -> PlanOut:
     """Open the longlist walk on the committed confirmed version (P6).
 
