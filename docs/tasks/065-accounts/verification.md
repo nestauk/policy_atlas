@@ -12,8 +12,8 @@ address ranges, passwords, email addresses or account ids.
 | `make verify` (build-open baseline) | pass | 2026-11-17, after rebasing onto 064a head `1182bb11` (the first run failed on `test_healthz_is_async_so_it_needs_no_pool_thread`, which 064a fixed in `2cd648e5`; the worktree has no `backend/.env`). 4829 passed, 1 skipped; infra, drift-check and frontend-verify green. |
 | `make verify` (step-6 exit) | pending | |
 | `make openapi-sync && make drift-check` | pending | |
-| `make -C infra test` | pending | |
-| `make deploy-build-guard-test` | pending | |
+| `make -C infra test` | pass | 2026-11-17 (Phase 7): 133 passed. |
+| `make deploy-build-guard-test` | pass | 2026-11-17 (Phase 9): the build guard, the migration waiter and the new deploy-order harness. |
 | `aws sesv2 get-account` (both profiles) | blocked | SSO tokens expired on 2026-11-17; the owner signs in and the build re-runs it. Both accounts had production access on 2026-11-16 (contract fact 1). |
 
 ## Checks beyond the build
@@ -40,7 +40,15 @@ address ranges, passwords, email addresses or account ids.
 
 ## End-to-end command
 
-Pending.
+Pending (step 6).
+
+## Build notes (filled per phase)
+
+- **Executor routing.** Codex ran Phases 1-2, 3, 4, 5, 6, 7, 9 and 10 from the plan's briefs; its sandbox cannot reach Postgres or Docker, so every database-backed test was run by the lead, and the database-backed tests of Phases 4 and 6 were written by Claude agents with database access (a deviation from the plan's `codex` marks, justified by the sandbox). The frontend (Phase 8) went to the `frontend-designer` agent as planned.
+- **Phase 3 gate.** The first full run failed on 26 tests, all cascading from one cause: the 064a index test stamps the version back without downgrading the new revision, so a worker's database kept 065's objects under an older stamp. The test now steps down to its own revision first. Table counts moved from 52 to 54.
+- **Phase 4 deviation (minor, flagged).** The resolver keeps the owner's 064a ruling that administrators are exempt from the run cap as well as the task quota (contract § Terms names only the task quota; the 064a review of 2026-11-16 added the run cap). `tests/api/test_runs_router.py::test_an_administrator_has_no_run_cap` still holds.
+- **Phase 7.** `docker build backend/` succeeded without `backend/ops-ui/` and, with a stub bundle present, the image listed `/app/ops-ui/index.html` and `/app/ops-ui/assets/app-abc.js` (2026-11-17). The plan's image test is a text pin on the Dockerfile; the live build is this record.
+- **Phase 9.** The deploy script skips the ops bundle build on a bootstrap (no OIDC exports exist before the first deploy) and builds it on every update.
 
 ## Diff summary
 
