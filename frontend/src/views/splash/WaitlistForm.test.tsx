@@ -145,6 +145,23 @@ describe("WaitlistForm CAPTCHA", () => {
     expect(renderCaptcha).toHaveBeenCalledTimes(1);
   });
 
+  it("shows the reload message when the SDK throws instead of rendering", async () => {
+    window.AwsWafCaptcha = {
+      renderCaptcha: () => {
+        throw new Error("bad api key");
+      },
+    };
+    const user = userEvent.setup();
+    render(<WaitlistForm />);
+
+    await user.click(screen.getByLabelText(/^email$/i));
+
+    expect(
+      screen.getByText("The sign-up check did not load. Reload the page to try again."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^submit$/i })).toBeDisabled();
+  });
+
   it("says so when the script does not load, and recovers when it does", async () => {
     // Real time still trickles through (testing-library drains with a real `setTimeout(0)`
     // that Vitest's fake clock would never fire); the 10-second wait is advanced by hand.

@@ -99,8 +99,30 @@ The AWS documentation pages these decisions rest on (gathered 2026-11-17):
    inside a group, so the count-week decision is made from evidence, by a person, in
    minutes.
 9. **An emergency off switch.** `aws wafv2 disassociate-web-acl` detaches the firewall in
-   seconds without a release; the next deploy re-attaches it. For a false positive in
-   production that cannot wait for the release cycle.
+   seconds without a release. For a false positive in production that cannot wait for
+   the release cycle. **As built (review correction):** a deploy does *not* re-attach it,
+   because CloudFormation updates only changed template resources and does not detect a
+   detached association; `aws wafv2 associate-web-acl` puts it back by hand
+   (`infra/DEPLOYMENT.md` § 4 "The firewall"). The contract's W8 row says "undone by the
+   next deploy"; this record corrects it.
+
+## As built (064b review stack, 2026-11-17)
+
+- **The log redacts three headers.** A counted request is logged with every request
+  header, so without redaction a signed-in person's bearer token would sit in the log
+  group for a month. `authorization`, `cookie` and `x-aws-waf-token` are redacted.
+- **The host scope-down matches by prefix.** The load balancer routes on the host name and
+  ignores a `:443` suffix or a trailing dot; an exact match would let such a request skip
+  the general rate rule and the managed groups. The waitlist rules stay path-only on
+  purpose: a host condition there would be a CAPTCHA bypass by the same trick.
+- **The health-path exclusion is exact** (`/healthz`, `/readyz`), as the decision says.
+- **The logging filter is written as a plain CloudFormation dict.** CDK 2.261 types the
+  property `Any`, and a typed value serialises with camelCase keys CloudFormation rejects.
+- **The web ACL's metric name is its name**, so the report's `WebACL` dimension is one
+  constant.
+- **The report groups in Python over raw log records**, reading every place a rule name
+  appears (inside groups and at the ACL level), because a Logs Insights `stats` over array
+  fields sees only the first element.
 
 ## Consequences
 
@@ -121,8 +143,8 @@ The AWS documentation pages these decisions rest on (gathered 2026-11-17):
 ## Alternatives considered
 
 - **The silent challenge instead of a puzzle.** Cheaper and invisible, but a script driving
-  a real browser passes it. The owner ruled CAPTCHA; the contract's owner item 1 keeps the
-  choice open until the plan gate.
+  a real browser passes it. The owner ruled CAPTCHA and confirmed it at the plan gate
+  (contract owner item 1, settled).
 - **A WAF on CloudFront as well.** The frontend is static files; CloudFront's own protections
   cover it, and a second web ACL doubles the cost for no API coverage.
 - **An in-app rate limiter.** Would run inside the API process, after the request has been

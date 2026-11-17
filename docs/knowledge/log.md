@@ -1,5 +1,23 @@
 # Knowledge update log
 
+## 2026-11-17 (task 064b, review stack)
+* **New**: [cdk-any-typed-property-takes-cloudformation-dict](cdk-any-typed-property-takes-cloudformation-dict.md)
+  — the logging filter rendered camelCase through an `Any`-typed L1 property; synth and the
+  synth test both passed; CloudFormation would have rejected the stack (contract verifier).
+* **New**: [waf-log-keeps-headers-and-hides-inner-rules](waf-log-keeps-headers-and-hides-inner-rules.md)
+  — bearer tokens in the WAF log without redaction (security lane); the `WebACL` metric
+  dimension is the metric name; inner-group matches live only in the log and must be grouped
+  client-side; a deploy does not re-attach a detached web ACL.
+* **New**: [fake-timers-with-user-event-need-should-advance-time](fake-timers-with-user-event-need-should-advance-time.md)
+  — the working fake-timer combination for a "nothing arrives for 10 s" form test.
+* **New**: [operator-scripts-target-bash-3-2](operator-scripts-target-bash-3-2.md) — `mapfile`
+  and `${var,,}` passed every gate and would have failed on an operator's macOS bash.
+  Folded or declined from the build's eight candidates: the CDK `scope` keyword (one-line
+  fact, lives in the plan's P6 note and the component), the Docker-must-be-up and the
+  background-runner incidents (harness, not product; `make verify` already names the fix),
+  the agent definition that lists skills not installed (an agentic-ops fix, noted in the PR),
+  the Playwright script stub for placement screenshots (a trick, not an invariant).
+
 ## 2026-11-09 (task 058, review stack)
 * **New**: [route-step-needs-three-rows](route-step-needs-three-rows.md) — the streamed
   section turn's missing cache-mode row made every streamed turn fall back silently; the

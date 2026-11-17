@@ -3764,6 +3764,14 @@ Left open by the 064b build (2026-11-17; contract and ADR 0047 for the rulings):
   account; the report prints them only with `--addresses`. A redaction of
   `httpRequest.clientIp` in the logging configuration would lose the one field the
   count week needs to tell one scraper from an office; left as is.
+- **No deploy-time check that the firewall is attached.** After the emergency
+  `disassociate-web-acl`, a deploy does not re-attach the web ACL (CloudFormation
+  updates only changed template resources and does not detect the drift), so the
+  firewall stays off until `associate-web-acl` is run by hand. A postcondition in
+  `deploy.sh` (`aws wafv2 get-web-acl-for-resource` on the load balancer when
+  `waf.enabled`) would fail the deploy loudly instead; a few lines plus a stubbed test.
+- **The report reads at most 10,000 matched requests per run.** Logs Insights' ceiling per
+  query; the count week on this traffic is far below it. Page by day if it is ever hit.
 - **The general rate limit is a floor, not a measurement, until Phase 0's query runs.**
   The staging SSO login was not available during the build; `GENERAL_RATE_LIMIT` is 3,000
   (the contract's minimum). The query in plan Phase 0 pins it from the staging API log;

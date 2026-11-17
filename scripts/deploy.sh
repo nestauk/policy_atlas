@@ -81,12 +81,8 @@ backend = app.get("backend", {})
 waf = backend.get("waf")
 if not isinstance(waf, dict):
     raise SystemExit("FAIL: backend.waf must be an object")
-for key in ("enabled", "mode", "captcha"):
-    if key not in waf:
-        raise SystemExit(f"FAIL: backend.waf.{key} is required")
-for key in waf:
-    if key not in {"enabled", "mode", "captcha"}:
-        raise SystemExit(f"FAIL: backend.waf.{key} is not permitted")
+if set(waf) != {"enabled", "mode", "captcha"}:
+    raise SystemExit("FAIL: backend.waf must have exactly the keys enabled, mode, captcha")
 if type(waf["enabled"]) is not bool:
     raise SystemExit("FAIL: backend.waf.enabled must be a JSON boolean")
 if type(waf["captcha"]) is not bool:
@@ -644,7 +640,9 @@ document = json.load(sys.stdin)
 domain = sys.argv[1]
 url = document.get("ApplicationIntegrationURL")
 for summary in document.get("APIKeySummaries", []):
-    if summary.get("TokenDomains") == [domain] and summary.get("APIKey"):
+    # A key whose domain list includes ours works for the page; the hand step
+    # creates it with one domain, but an operator may add more.
+    if domain in (summary.get("TokenDomains") or []) and summary.get("APIKey"):
         if not isinstance(url, str) or not url:
             raise SystemExit(1)
         print("{}\t{}".format(url, summary["APIKey"]))
@@ -657,6 +655,17 @@ raise SystemExit(1)
     export VITE_WAF_CAPTCHA_SCRIPT_URL="$script_url"
     export VITE_WAF_CAPTCHA_API_KEY="$api_key"
     echo "PASS: resolved WAF CAPTCHA API key for ${PUBLIC_DOMAIN}"
+}
+
+# Give the frontend build its CAPTCHA values, or none. The unset matters: Vite
+# bundles any VITE_* value in the environment, so a stale value inherited from
+# the caller's shell would show a puzzle the firewall is not asking for.
+apply_waf_captcha_values() {
+    if [[ "$WAF_CAPTCHA" == "1" ]]; then
+        resolve_waf_captcha_values
+    else
+        unset VITE_WAF_CAPTCHA_SCRIPT_URL VITE_WAF_CAPTCHA_API_KEY
+    fi
 }
 
 # Resolve and validate everything publish_frontend needs. Called from
@@ -772,18 +781,22 @@ export AWS_DEFAULT_REGION="$DEPLOY_REGION"
 # A side-effect-free harness for the direct build-guard contract test. It
 # invokes the exact production guard before CDK/AWS commands, with no parsing
 # or extracted copy of its logic in the test itself.
-if [[ "${PA_DEPLOY_GUARD_ONLY:-}" == "1" ]]; then
-    # This override is honoured by the direct guard harness and nowhere else.
+# The two harnesses below may override the CAPTCHA flag so the tests cover both
+# cases whatever the committed config says; a real deploy never reads the override.
+if [[ "${PA_DEPLOY_GUARD_ONLY:-}" == "1" || "${PA_DEPLOY_WAF_KEYS_ONLY:-}" == "1" ]]; then
     WAF_CAPTCHA="${PA_DEPLOY_GUARD_WAF_CAPTCHA:-$WAF_CAPTCHA}"
+fi
+if [[ "${PA_DEPLOY_GUARD_ONLY:-}" == "1" ]]; then
     require_production_build_environment
     exit 0
 fi
 
-# This harness runs the production lookup with the caller's (usually stubbed) aws.
+# This harness runs the production lookup with the caller's (usually stubbed) aws,
+# or the unset path, and prints what the frontend build would see.
 if [[ "${PA_DEPLOY_WAF_KEYS_ONLY:-}" == "1" ]]; then
-    resolve_waf_captcha_values
-    echo "VITE_WAF_CAPTCHA_SCRIPT_URL=${VITE_WAF_CAPTCHA_SCRIPT_URL}"
-    echo "VITE_WAF_CAPTCHA_API_KEY=${VITE_WAF_CAPTCHA_API_KEY}"
+    apply_waf_captcha_values
+    echo "VITE_WAF_CAPTCHA_SCRIPT_URL=${VITE_WAF_CAPTCHA_SCRIPT_URL:-}"
+    echo "VITE_WAF_CAPTCHA_API_KEY=${VITE_WAF_CAPTCHA_API_KEY:-}"
     exit 0
 fi
 
@@ -807,9 +820,7 @@ fi
 # Contract W7: the CAPTCHA values are resolved before anything touches AWS
 # state, so a missing key or permission fails with nothing changed. Both
 # bootstrap and update publish the frontend, so both need them.
-if [[ "$WAF_CAPTCHA" == "1" ]]; then
-    resolve_waf_captcha_values
-fi
+apply_waf_captcha_values
 
 if [[ "$mode" == "bootstrap" ]]; then
     bootstrap

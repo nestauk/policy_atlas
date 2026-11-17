@@ -38,7 +38,12 @@ are done (spec-prep 2026-06-22; refreshed 2026-07-03); `[ ]` items are open gate
   quota with an administrator exemption, a bounded JWKS refresh, `user offboard`, a
   task-first screening index, health check on `/healthz`, HTTPS redirect, 12-character
   passwords, TLS pins, pool deletion protection, 35-day production backups; ADR 0045)
-  reviewed on `task/064a-security-quick-wins` as of 2026-11-16, PR to follow — system live
+  reviewed on `task/064a-security-quick-wins` as of 2026-11-16, PR #120 open; 064b (the
+  firewall: a WAF web ACL on the shared load balancer with a waitlist rate rule, a general
+  rate rule and AWS's three managed groups in count mode, a CAPTCHA on the waitlist form
+  with its token in `x-aws-waf-token`, a filtered and header-redacted firewall log, a
+  read-only count-week report; ADR 0047) reviewed on `task/064b-waf-captcha` as of
+  2026-11-17, PR to follow — system live
   at `v3.policyatlas.uk`; the next slice is the newest `docs/tasks/NNN-*/contract.md` and
   its `task/NNN-slug` branch).
 - [x] Verification plan for first implementation slices — per-task `verification.md` from

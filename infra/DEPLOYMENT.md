@@ -851,8 +851,21 @@ aws wafv2 disassociate-web-acl --region eu-west-2 \
     --name /policy_atlas_v3/shared_alb/arn --query Parameter.Value --output text)"
 ```
 
-The next deploy re-attaches it. Follow up with a config change (`mode: count`
-or an exclusion) before that deploy, or it comes back as it was.
+**A deploy does not re-attach it**: CloudFormation updates only what changed in
+the template and does not see a detached association, so the firewall stays
+off until someone puts it back. Make the config change (`mode: count` or an
+exclusion), deploy, and then re-attach by hand:
+
+```bash
+aws wafv2 associate-web-acl --region eu-west-2 \
+  --web-acl-arn "$(aws wafv2 list-web-acls --scope REGIONAL --region eu-west-2 \
+    --query "WebACLs[?Name=='policy-atlas-v3-api'].ARN" --output text)" \
+  --resource-arn "$(aws ssm get-parameter --region eu-west-2 \
+    --name /policy_atlas_v3/shared_alb/arn --query Parameter.Value --output text)"
+```
+
+`scripts/waf_report.sh` is the quick check that the firewall is attached and
+counting again. A deploy-time check of the association is a deferred seam.
 
 **The token domain and where the CAPTCHA values come from.** The CAPTCHA
 puzzle runs on the splash page (`<domain_name>`) and its token is spent on the
@@ -870,7 +883,10 @@ is set and the form behaves as before.
 counted-by-override) go to the CloudWatch log group
 `aws-waf-logs-policy-atlas-v3` (the `aws-waf-logs-` prefix is AWS's rule),
 kept for one month. Ordinary traffic is never logged. The records hold client
-addresses; the log group is private to the account.
+addresses and request headers; the `authorization`, `cookie` and
+`x-aws-waf-token` headers are redacted before writing, so a signed-in
+person's bearer token never reaches the log. The log group is private to the
+account.
 
 **Capacity.** A web ACL may use 1,500 capacity units; these rules use about
 935. Adding a fourth managed group needs `aws wafv2 check-capacity` first.

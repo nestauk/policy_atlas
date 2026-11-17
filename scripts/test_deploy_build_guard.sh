@@ -104,7 +104,8 @@ aws() {
 }
 export -f aws
 
-matching_keys_json='{"ApplicationIntegrationURL":"https://captcha.example.aws/","APIKeySummaries":[{"TokenDomains":["other.example"],"APIKey":"other-key"},{"TokenDomains":["v3.policyatlas.uk"],"APIKey":"staging-key"}]}'
+# The staging key lists a second domain too: a key that includes ours is taken.
+matching_keys_json='{"ApplicationIntegrationURL":"https://captcha.example.aws/","APIKeySummaries":[{"TokenDomains":["other.example"],"APIKey":"other-key"},{"TokenDomains":["api.v3.policyatlas.uk","v3.policyatlas.uk"],"APIKey":"staging-key"}]}'
 matching_output="$(env -u AWS_REGION -u AWS_DEFAULT_REGION \
   STUB_KEYS_JSON="$matching_keys_json" PA_DEPLOY_WAF_KEYS_ONLY=1 \
   bash "$deploy_script" update)"
@@ -131,5 +132,16 @@ if [[ $status -eq 0 ]] || ! grep -Fq \
   exit 1
 fi
 rm -f "$stderr_file"
+
+# CAPTCHA off: values inherited from the caller's shell must not reach the build.
+off_output="$(env -u AWS_REGION -u AWS_DEFAULT_REGION \
+  VITE_WAF_CAPTCHA_SCRIPT_URL=https://stale.invalid/ VITE_WAF_CAPTCHA_API_KEY=stale-key \
+  PA_DEPLOY_WAF_KEYS_ONLY=1 PA_DEPLOY_GUARD_WAF_CAPTCHA=0 \
+  bash "$deploy_script" update)"
+if [[ "$off_output" != *"VITE_WAF_CAPTCHA_SCRIPT_URL="$'\n'* || "$off_output" == *"stale"* ]]; then
+  echo "ERROR: CAPTCHA off did not unset inherited CAPTCHA values" >&2
+  printf '%s\n' "$off_output" >&2
+  exit 1
+fi
 
 echo "deploy-build-guard-test: PASS"

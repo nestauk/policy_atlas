@@ -45,7 +45,9 @@ IFS=$'\t' read -r region domain_name <<<"$(python3 -c '
 import json
 import sys
 
-config = json.load(open(sys.argv[1], encoding="utf-8"))[sys.argv[2]]
+config = json.load(open(sys.argv[1], encoding="utf-8")).get(sys.argv[2])
+if config is None:
+    raise SystemExit(f"FAIL: environment {sys.argv[2]!r} is missing from infra/pa_config.json")
 app = config["policy_atlas_config"]
 print("{}\t{}".format(config["aws_region"], app["domain_name"]))
 ' "$config_file" "$env_name")"
@@ -116,11 +118,12 @@ for rule_name in "${rules[@]}" "ALL"; do
     printf '%-32s %8s %8s %8s\n' "$rule_name" "$counted" "$blocked" "$captcha"
 done
 
-# The live staging check confirms these WAF log field names before operators rely on it.
-logs_query='fields httpRequest.uri as path, terminatingRuleId, ruleGroupList.0.terminatingRule.ruleId as g0t, ruleGroupList.0.nonTerminatingMatchingRules.0.ruleId as g0n, ruleGroupList.1.terminatingRule.ruleId as g1t, ruleGroupList.1.nonTerminatingMatchingRules.0.ruleId as g1n, ruleGroupList.2.terminatingRule.ruleId as g2t, ruleGroupList.2.nonTerminatingMatchingRules.0.ruleId as g2n | stats count(*) as requests by coalesce(g0t, g0n, g1t, g1n, g2t, g2n, terminatingRuleId) as rule, path | sort requests desc | limit 100'
-if (( addresses )); then
-    logs_query='fields httpRequest.uri as path, httpRequest.clientIp as address, terminatingRuleId, ruleGroupList.0.terminatingRule.ruleId as g0t, ruleGroupList.0.nonTerminatingMatchingRules.0.ruleId as g0n, ruleGroupList.1.terminatingRule.ruleId as g1t, ruleGroupList.1.nonTerminatingMatchingRules.0.ruleId as g1n, ruleGroupList.2.terminatingRule.ruleId as g2t, ruleGroupList.2.nonTerminatingMatchingRules.0.ruleId as g2n | stats count(*) as requests by coalesce(g0t, g0n, g1t, g1n, g2t, g2n, terminatingRuleId) as rule, path, address | sort requests desc | limit 100'
-fi
+# The log holds matched requests only (the logging filter drops the rest), so the
+# records are few: fetch them raw and group in Python, reading every place a rule
+# name can appear (a request can match several rules, inside and outside groups).
+# ponytail: Logs Insights returns at most 10,000 records per query; a count week
+# with more matched requests than that needs a shorter period or paging by day.
+logs_query='fields @message | sort @timestamp desc | limit 10000'
 
 echo "Matched requests"
 query_start="$(aws logs start-query --log-group-name "$log_group" --start-time "$start_time" --end-time "$end_time" --query-string "$logs_query" --region "$region" --output json)"
@@ -143,19 +146,51 @@ while true; do
     sleep 2
 done
 
+# One row per (rule, path[, address]); a request that matched several rules is
+# counted under each, because the question is per rule. The rule names come from: the
+# rules inside each managed group (terminatingRule, nonTerminatingMatchingRules,
+# excludedRules of every ruleGroupList entry), the web ACL's own non-terminating
+# matches (a count-mode rule such as general-rate), and the terminating rule when
+# it is the ACL's own (not Default_Action, not a group whose inner rule is listed).
+# Field names per the AWS "log fields" page; the staging live check confirms them.
 if ! rendered="$(python3 -c '
 import json
 import sys
+from collections import Counter
 
 include_address = sys.argv[1] == "1"
 rows = json.load(sys.stdin).get("results", [])
-if not rows:
-    raise SystemExit(1)
-print("{:<32} {:>8} {:<40}{}".format("rule", "requests", "path", " address" if include_address else ""))
+counts = Counter()
 for row in rows:
-    values = {entry["field"]: entry.get("value", "") for entry in row}
-    suffix = " " + values.get("address", "") if include_address else ""
-    print("{:<32} {:>8} {:<40}{}".format(values.get("rule", ""), values.get("requests", "0"), values.get("path", ""), suffix))
+    message = next((e.get("value") for e in row if e.get("field") == "@message"), None)
+    if not message:
+        continue
+    record = json.loads(message)
+    request = record.get("httpRequest", {})
+    path = request.get("uri", "")
+    address = request.get("clientIp", "") if include_address else None
+    names = []
+    for group in record.get("ruleGroupList") or []:
+        terminating = group.get("terminatingRule") or {}
+        if terminating.get("ruleId"):
+            names.append(terminating["ruleId"])
+        for match in (group.get("nonTerminatingMatchingRules") or []) + (group.get("excludedRules") or []):
+            if match.get("ruleId"):
+                names.append(match["ruleId"])
+    for match in record.get("nonTerminatingMatchingRules") or []:
+        if match.get("ruleId"):
+            names.append(match["ruleId"])
+    terminating_id = record.get("terminatingRuleId")
+    if terminating_id and terminating_id != "Default_Action" and record.get("terminatingRuleType") != "MANAGED_RULE_GROUP":
+        names.append(terminating_id)
+    for name in names:
+        counts[(name, path, address)] += 1
+if not counts:
+    raise SystemExit(1)
+header = "{:<32} {:>8} {:<40}".format("rule", "requests", "path") + (" address" if include_address else "")
+print(header)
+for (name, path, address), n in sorted(counts.items(), key=lambda item: (-item[1], item[0][0], item[0][1])):
+    print("{:<32} {:>8} {:<40}".format(name, n, path) + (" " + address if include_address else ""))
 ' "$addresses" <<<"$query_results")"; then
     echo "no matched requests in the period"
 else

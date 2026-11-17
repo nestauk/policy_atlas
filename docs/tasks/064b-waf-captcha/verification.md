@@ -17,6 +17,7 @@ Built 2026-11-17 on `task/064b-waf-captcha`. Public-safe: no addresses, keys or 
 | `make audit` (exit) | pass | |
 | `make deploy-build-guard-test` (exit) | pass | |
 | `make verify` (step-6 exit) | pass | see § Exit gate below |
+| `make verify` (after the review fixes) | pass | second run; the first hit the known ToC fan-out flake, § Exit gate |
 
 ## Checks beyond the build
 
@@ -124,7 +125,8 @@ then the push to `dev`. To record afterwards, in this order:
 3. W2: with a token from the browser, a loop of posts from one address gets `403` after
    about fifty.
 4. W3, W4: zero blocked requests in the first hour; metrics per rule; one request to the
-   Metabase host matches no rule.
+   Metabase host matches no rule; `curl -H 'Host: api.v3.policyatlas.uk:443' https://api.v3.policyatlas.uk/api/v1/tasks`
+   (the host-header edge case) is counted by `general-rate` like any other request.
 5. The deliberate pass (sign in, task list, one chat message over 8 KB, a plan edit, a
    theory-of-change image import, a public task view) then
    `AWS_PROFILE=pa_staging scripts/waf_report.sh staging 1`: only the body-size rule
@@ -135,6 +137,9 @@ then the push to `dev`. To record afterwards, in this order:
    `ruleGroupList.N.nonTerminatingMatchingRules.0.ruleId`).
 6. W8: the log group has entries for the pass and none for ordinary requests.
 7. The count week: recorded as **pending** (a follow-on config change switches `waf.mode`).
+8. The emergency switch, once: `disassociate-web-acl`, confirm the report says the ACL is
+   absent from the load balancer or counts nothing, then `associate-web-acl` as
+   DEPLOYMENT.md shows, and confirm it counts again.
 
 ## Diff summary
 
@@ -191,14 +196,105 @@ Four commits on the branch, one per build phase, plus the docs:
 
 ## Review findings
 
-Added after the review stack (step 7).
+Review stack run 2026-11-17 in the build conversation (owner waiver, rubric item 10). Lanes:
+`contract-verifier` (Opus, read-only), Codex adversarial pass (read-only rescue brief),
+`/code-review medium` (the Claude half of the heterogeneous pair), one security lane (a
+scoped finder on the 064b diff only, since `/security-review` diffed the whole branch
+including 064a), `/simplify` last. Family flip held: Claude lanes read the Codex-built
+infra and scripts; Codex read the Claude-built frontend, CORS and docs.
 
-- **Contract verifier:**
-- **`/code-review`:**
-- **`/security-review`:**
-- **Adversarial review** (Tier 4):
-- **`/simplify`:**
+- **Contract verifier** (8 findings; 3 adopted, 2 doc fixes, 3 declined):
+  - **F1 High, adopted (convergent with nothing else: unique to this lane, and the most
+    valuable finding of the stack).** The logging filter rendered camelCase keys
+    (`defaultBehavior`, `filters`, …) because CDK 2.261 types `logging_filter` as `Any`,
+    so the typed property serialises with the library's names and CloudFormation would
+    reject the stack on first deploy. The synth test had pinned the wrong keys. Fix: a
+    plain dict with CloudFormation's PascalCase keys; the test now asserts them and that
+    no key starts lower-case. The plan's assumption "a wrong property name fails at
+    synth" does not hold for `Any`-typed properties (knowledge candidate).
+  - **F2 Medium, adopted.** The report queried the `WebACL` metric dimension by the ACL's
+    name while its metric name was `pa-v3-waf`, so every total would have read 0. Fix:
+    the ACL's metric name is now its name (`policy-atlas-v3-api`); the report test asserts
+    the dimension value.
+  - **F3 Medium, adopted as a documentation correction, flagged to the owner.** "The next
+    deploy re-attaches" the emergency-detached firewall is false: CloudFormation updates
+    only changed template resources and does not detect the drift. DEPLOYMENT.md now gives
+    the `associate-web-acl` command; ADR 0047 decision 9 carries the correction; the
+    contract's W8 row still says "undone by the next deploy" (the contract is the owner's
+    approved record; the owner may amend it). A deploy postcondition is a deferred seam.
+  - **F4 Low, adopted.** The health-path exclusion is now `EXACTLY`, matching the
+    contract's "the two health paths".
+  - **F5 Low, adopted (converges with the security lane's sub-bar note and with
+    `/code-review`'s finding 2).** The host scope-down matches by `STARTS_WITH`, so a
+    request with `Host: api.<domain>:443` or a trailing dot cannot skip W3/W4.
+  - **F6 Low, fixed.** The exit test count is 4,831.
+  - **F7 Low, declined.** The deploy script's config validation has no automated test
+    beyond the manual `"audit"` check; the reader takes its config directory from the
+    repo root, and an override for the test would add surface for one case the synth
+    tests already cover with the same rules.
+  - **F8 Trivial, fixed.** The ADR's stale "open until the plan gate" sentence.
+- **`/code-review medium`** (7 findings; 3 adopted, 4 declined):
+  - **Adopted:** a synchronous throw from `renderCaptcha` left submit disabled with no
+    message (now caught and treated as unavailable, with a sixth vitest case); the key
+    lookup now takes a key whose token domains *include* the environment's domain (an
+    operator may add more; minor deviation from the contract's "equal to", flagged
+    below); `ApiFirewall` has its Args/Raises docstring.
+  - **Declined: host-scoping the waitlist rules.** A host condition on the CAPTCHA rule
+    would be a CAPTCHA bypass through a `Host: …:443` header (the same trick F5 closes
+    for W3/W4). The contract scopes W2 and W5 to the path on purpose; a `POST
+    /api/v1/waitlist` to the Metabase host answered 405 by the firewall is harmless.
+  - **Declined: pagination of `list-api-keys`.** One or two keys per account.
+  - **Declined: reading the ACL and log group names from `waf.py`.** The report runs
+    outside the infra virtualenv; three literal copies are pinned by the synth test, the
+    report test and DEPLOYMENT.md.
+  - **Declined: dropping the deploy script's config validation as a duplicate of
+    synth.** The contract requires `deploy.sh check` to fail on a bad key before any AWS
+    call; CI runs it before requesting credentials.
+  - **Declined: one `get-metric-data` call instead of 21 `get-metric-statistics`
+    calls.** A weekly operator script; tens of seconds are fine.
+- **Security lane** (1 finding, adopted): the WAF log stored every request header, so a
+  counted signed-in request (any body over 8 KB, any managed-rule false positive) wrote
+  the bearer token into the log group for a month. Fix: `RedactedFields` for
+  `authorization`, `cookie` and `x-aws-waf-token`, asserted by the synth test. Checked
+  sound: the CAPTCHA rule's path match against encoding tricks, the health exclusion,
+  the token domain list, Metabase, CORS, the frontend, both scripts' input handling.
+- **Codex adversarial** (3 findings, all adopted):
+  - The report's Logs Insights `stats` read only the first inner match of each group and
+    missed the ACL's own non-terminating matches (a count-mode `general-rate` would show
+    as `Default_Action`). Fix: the query fetches raw records and Python groups them,
+    reading every place a rule name appears; ceiling 10,000 records per run (deferred).
+  - The report test proved nothing about the query. Fix: a fixture of two WAF-shaped
+    records (two inner matches plus an ACL-level count in one; a CAPTCHA refusal in the
+    other); the test asserts each rule's row, that `Default_Action` is never a rule, and
+    that addresses appear only with `--addresses`.
+  - A CAPTCHA-off deploy left inherited `VITE_WAF_CAPTCHA_*` values in the environment,
+    and Vite bundles any `VITE_*` value. Fix: the deploy unsets both when the CAPTCHA is
+    off; the key-lookup harness honours the guard override, and a guard-test case starts
+    with stale values and asserts they are gone.
+- **`/simplify`** (four cleanup lanes; reuse: one minor, efficiency: none, simplification:
+  seven, altitude: four). Applied: the managed-group override as a fourth column of the
+  group table (two lanes); a `_rate_rule` helper for the two rate rules; `_byte_match` takes
+  transformation names and numbers them itself; one override line serves both deploy-script
+  harnesses; the key-set check in the deploy script's reader is one comparison; the hook's
+  four-value status is a boolean `unavailable` (nothing read the other values); the report
+  names a missing environment instead of a traceback; one comment trimmed. Declined: JMESPath
+  `--query` in place of the report's small Python picks (the test stub would then have to
+  honour `--query`); a single `PA_DEPLOY_HARNESS` switch for the harness blocks (the repo's
+  pattern is one block per harness, as the migration waiter); removing the deploy script's
+  config validation as a duplicate of synth (the contract requires `deploy.sh check` to fail
+  first); the report's parse of five match sources "simplified" to two (the two it would
+  drop are where the count week's answers live); a shared config reader between the two
+  scripts (one lives inside the other's heredoc).
+
 - **`/okf validate`:** runs inside `make verify` (green).
+
+**Deviation verdicts (the six flagged above):** all six adopted as is by the contract
+verifier. One more minor deviation from the review fixes: the key lookup accepts a key
+whose token domains include `domain_name` rather than equal `[domain_name]` (contract W7).
+
+**Fake-done check on the review fixes:** no test relaxed or removed; the camelCase
+assertions were replaced by the correct PascalCase ones plus a stricter no-lower-case
+check; the report test grew from one weak substring assertion to five row assertions.
 
 ## Rubric status
 
@@ -219,8 +315,9 @@ Added after the review stack (step 7).
 8. `docs/deferred.md` updated as listed.
 9. ADR 0047 accepted and marked built; `infra/DEPLOYMENT.md` § 1, § 2 and § 4 "The
    firewall" cover every item in the rubric.
-10. Review stack: **to run**. Owner ruling 2026-11-17 (this conversation): build and review
-    may run in the same session; recorded here as the written justification for the
+10. Review stack: **ran** (five lanes, § Review findings), fixes applied, `make verify`
+    green after them. Owner ruling 2026-11-17 (this conversation): build and review may
+    run in the same session; recorded here as the written justification for the
     fresh-conversation rule being waived.
 
 ## Intent & assumptions
@@ -288,7 +385,15 @@ seams).
 ## Exit gate
 
 `make verify` at the step-6 exit (2026-11-17, after all four commits): exit 0. Backend suite
-green (4,830 passed, 1 skipped, the same as the baseline plus the one new preflight test
-moved inside the count), infra 125 passed, frontend 1,997 tests in 138 files, build green,
+green (4,831 passed, 1 skipped: the baseline's 4,830 plus the new preflight test), infra 125 passed, frontend 1,997 tests in 138 files, build green,
 OKF validate, eval check, path audit, prompt guard, font guard and drift check all pass.
 `make audit` exit 0. `make deploy-build-guard-test` three PASS lines.
+
+**After the review stack's fixes (2026-11-17):** `make verify` ran twice. The first run had
+one failure, `tests/theory_of_change/test_light_check.py::test_a_link_can_pick_and_judge_a_study_another_link_found`,
+a `uq_event_log_task_sequence` collision in the theory-of-change fan-out under parallel
+workers, the pre-existing ceiling 064a recorded (`docs/deferred.md` § Security quick wins,
+event-log retry ceiling); the test passes alone, and this slice touches no backend code
+beyond one CORS header. The second run: exit 0, backend 4,831 passed, infra 125, frontend
+1,998, build green. `make deploy-build-guard-test` three PASS lines; `make okf-validate`
+221 concepts, no violations.

@@ -16,8 +16,6 @@ declare global {
   }
 }
 
-export type WafCaptchaStatus = "idle" | "loading" | "ready" | "unavailable";
-
 /** How long the script may take after the first interaction before the form says so. */
 const LOAD_TIMEOUT_MS = 10_000;
 
@@ -35,7 +33,8 @@ export function useWafCaptcha(container: RefObject<HTMLElement | null>) {
   const configured = scriptUrl !== "" && apiKey !== "";
 
   const [token, setToken] = useState<string | null>(null);
-  const [status, setStatus] = useState<WafCaptchaStatus>("idle");
+  // True once the script has failed to arrive or render; a late load clears it.
+  const [unavailable, setUnavailable] = useState(false);
   const armed = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -47,13 +46,19 @@ export function useWafCaptcha(container: RefObject<HTMLElement | null>) {
     if (!box || !sdk) return;
     clearTimeout(timer.current);
     box.replaceChildren();
-    // Before the call: the SDK may report success or an error synchronously.
-    setStatus("ready");
-    sdk.renderCaptcha(box, {
-      apiKey,
-      onSuccess: (solved) => setToken(solved),
-      onError: () => setStatus("unavailable"),
-    });
+    // Before the call: the SDK may report an error synchronously.
+    setUnavailable(false);
+    try {
+      sdk.renderCaptcha(box, {
+        apiKey,
+        onSuccess: (solved) => setToken(solved),
+        onError: () => setUnavailable(true),
+      });
+    } catch {
+      // A throw (bad key, unsupported container) would otherwise leave submit
+      // disabled with no message; treat it like the SDK's own error callback.
+      setUnavailable(true);
+    }
   };
 
   const arm = () => {
@@ -63,7 +68,6 @@ export function useWafCaptcha(container: RefObject<HTMLElement | null>) {
       render();
       return;
     }
-    setStatus("loading");
     let script = document.head.querySelector<HTMLScriptElement>("script[data-waf-captcha]");
     if (!script) {
       script = document.createElement("script");
@@ -75,8 +79,8 @@ export function useWafCaptcha(container: RefObject<HTMLElement | null>) {
     }
     // A load after the timeout still renders, which clears the message.
     script.addEventListener("load", render, { once: true });
-    script.addEventListener("error", () => setStatus("unavailable"), { once: true });
-    timer.current = setTimeout(() => setStatus("unavailable"), LOAD_TIMEOUT_MS);
+    script.addEventListener("error", () => setUnavailable(true), { once: true });
+    timer.current = setTimeout(() => setUnavailable(true), LOAD_TIMEOUT_MS);
   };
 
   const reset = () => {
@@ -84,5 +88,5 @@ export function useWafCaptcha(container: RefObject<HTMLElement | null>) {
     render();
   };
 
-  return { configured, token, status, arm, reset };
+  return { configured, token, unavailable, arm, reset };
 }

@@ -71,8 +71,7 @@ export function WaitlistForm() {
       setMessage(null);
       return;
     }
-    // The button is disabled too; this also covers any other path to submit.
-    if (captchaPending) return;
+    if (captchaPending) return; // also covers a submit the widget might trigger
     setStatus("submitting");
     setMessage(null);
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -238,7 +237,7 @@ export function WaitlistForm() {
       {captcha.configured && !done && (
         <div ref={captchaBox} data-testid="waf-captcha" className="empty:-mt-5" />
       )}
-      {captcha.status === "unavailable" && (
+      {captcha.unavailable && (
         <p role="status" className={cn(SPLASH_PROSE, "text-red")}>
           The sign-up check did not load. Reload the page to try again.
         </p>

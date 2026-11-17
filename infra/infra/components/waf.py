@@ -25,32 +25,35 @@ HEALTH_PATHS = ("/healthz", "/readyz")
 WAITLIST_PATH = "/api/v1/waitlist"
 
 
-def _transform(priority: int, kind: str) -> wafv2.CfnWebACL.TextTransformationProperty:
-    return wafv2.CfnWebACL.TextTransformationProperty(priority=priority, type=kind)
-
-
 def _byte_match(
     *, field: wafv2.CfnWebACL.FieldToMatchProperty, constraint: str,
-    search: str, transformations: list[wafv2.CfnWebACL.TextTransformationProperty],
+    search: str, transforms: tuple[str, ...] = ("NONE",),
 ) -> wafv2.CfnWebACL.StatementProperty:
+    """One byte-match statement; ``transforms`` are applied in the order given."""
     return wafv2.CfnWebACL.StatementProperty(
         byte_match_statement=wafv2.CfnWebACL.ByteMatchStatementProperty(
             field_to_match=field,
             positional_constraint=constraint,
             search_string=search,
-            text_transformations=transformations,
+            text_transformations=[
+                wafv2.CfnWebACL.TextTransformationProperty(priority=i, type=kind)
+                for i, kind in enumerate(transforms)
+            ],
         )
     )
 
 
 def _api_host(api_host: str) -> wafv2.CfnWebACL.StatementProperty:
+    # STARTS_WITH, not EXACTLY: the load balancer routes on the host name and
+    # ignores a ":443" suffix or a trailing dot, so a request that reaches the
+    # API may carry either; an exact match would let it skip these rules.
     return _byte_match(
         field=wafv2.CfnWebACL.FieldToMatchProperty(
             single_header=wafv2.CfnWebACL.SingleHeaderProperty(name="host")
         ),
-        constraint="EXACTLY",
+        constraint="STARTS_WITH",
         search=api_host,
-        transformations=[_transform(0, "LOWERCASE")],
+        transforms=("LOWERCASE",),
     )
 
 
@@ -58,9 +61,8 @@ def _not_health() -> wafv2.CfnWebACL.StatementProperty:
     paths = [
         _byte_match(
             field=wafv2.CfnWebACL.FieldToMatchProperty(uri_path={}),
-            constraint="STARTS_WITH",
+            constraint="EXACTLY",
             search=path,
-            transformations=[_transform(0, "NONE")],
         )
         for path in HEALTH_PATHS
     ]
@@ -78,13 +80,12 @@ def _waitlist_post() -> wafv2.CfnWebACL.StatementProperty:
         field=wafv2.CfnWebACL.FieldToMatchProperty(uri_path={}),
         constraint="EXACTLY",
         search=WAITLIST_PATH,
-        transformations=[_transform(0, "URL_DECODE"), _transform(1, "LOWERCASE")],
+        transforms=("URL_DECODE", "LOWERCASE"),
     )
     method = _byte_match(
         field=wafv2.CfnWebACL.FieldToMatchProperty(method={}),
         constraint="EXACTLY",
         search="POST",
-        transformations=[_transform(0, "NONE")],
     )
     return wafv2.CfnWebACL.StatementProperty(
         and_statement=wafv2.CfnWebACL.AndStatementProperty(statements=[path, method])
@@ -99,8 +100,59 @@ def _visibility(name: str) -> wafv2.CfnWebACL.VisibilityConfigProperty:
     )
 
 
+def _rate_rule(
+    name: str, priority: int, limit: int,
+    scope_down: wafv2.CfnWebACL.StatementProperty, *, action: dict,
+) -> wafv2.CfnWebACL.RuleProperty:
+    """A rate-based rule: ``limit`` requests per address per window over ``scope_down``."""
+    return wafv2.CfnWebACL.RuleProperty(
+        name=name,
+        priority=priority,
+        statement=wafv2.CfnWebACL.StatementProperty(
+            rate_based_statement=wafv2.CfnWebACL.RateBasedStatementProperty(
+                aggregate_key_type="IP",
+                limit=limit,
+                evaluation_window_sec=RATE_WINDOW_SECONDS,
+                scope_down_statement=scope_down,
+            )
+        ),
+        action=action,
+        visibility_config=_visibility(name),
+    )
+
+
+# Request headers the firewall log never stores. A counted request is logged
+# with every header, so without this a signed-in person's bearer token would
+# sit in the log group for a month (064b security review).
+REDACTED_HEADERS = ("authorization", "cookie", "x-aws-waf-token")
+
+
 class ApiFirewall(Construct):
-    """A regional WAF web ACL, its load-balancer association and matched-request log."""
+    """A regional WAF web ACL, its load-balancer association and matched-request log.
+
+    Args:
+        scope: The parent construct (the app stack).
+        id: The construct id.
+        load_balancer_arn: The shared load balancer's ARN (an SSM-resolved token).
+        api_host: The API's host name, ``api.<domain_name>``; the general rate rule
+            and the managed groups match only requests whose Host header starts
+            with it.
+        domain_name: The environment's domain; the one entry in the token domain
+            list when the CAPTCHA is on, so a token issued on the splash page is
+            accepted on the API's host.
+        waf_config: The ``backend.waf`` object from ``pa_config.json``, exactly the
+            keys ``enabled`` (bool), ``mode`` (``"count"`` or ``"block"``) and
+            ``captcha`` (bool). ``enabled: false`` creates nothing.
+
+    Raises:
+        ValueError: A key is missing or unknown, a value has the wrong type or is
+            not one of the allowed values, or ``captcha`` is true with ``enabled``
+            false. Raised even when ``enabled`` is false, so every environment's
+            config is checked at synth.
+
+    Attributes:
+        web_acl: The ``CfnWebACL``, or ``None`` when the firewall is off.
+    """
 
     def __init__(
         self,
@@ -147,7 +199,9 @@ class ApiFirewall(Construct):
             scope="REGIONAL",
             name=WEB_ACL_NAME,
             default_action={"allow": {}},
-            visibility_config=_visibility("pa-v3-waf"),
+            # The metric name is the ACL name: CloudWatch's WebACL dimension takes
+            # the metric name, and the report script queries by the ACL name.
+            visibility_config=_visibility(WEB_ACL_NAME),
             token_domains=[domain_name] if captcha else None,
             rules=rules,
         )
@@ -177,16 +231,24 @@ class ApiFirewall(Construct):
                     arn_format=ArnFormat.COLON_RESOURCE_NAME,
                 )
             ],
-            logging_filter=wafv2.CfnLoggingConfiguration.LoggingFilterProperty(
-                default_behavior="DROP",
-                filters=[wafv2.CfnLoggingConfiguration.FilterProperty(
-                    behavior="KEEP",
-                    requirement="MEETS_ANY",
-                    conditions=[wafv2.CfnLoggingConfiguration.ConditionProperty(
-                        action_condition=wafv2.CfnLoggingConfiguration.ActionConditionProperty(action=action)
-                    ) for action in ("COUNT", "BLOCK", "CAPTCHA", "EXCLUDED_AS_COUNT")],
-                )],
-            ),
+            redacted_fields=[
+                wafv2.CfnLoggingConfiguration.FieldToMatchProperty(single_header={"Name": name})
+                for name in REDACTED_HEADERS
+            ],
+            # A plain dict with CloudFormation's own key names: this property is
+            # typed `Any` in CDK 2.261, so a typed LoggingFilterProperty is
+            # serialised camelCase and CloudFormation rejects it (064b review).
+            logging_filter={
+                "DefaultBehavior": "DROP",
+                "Filters": [{
+                    "Behavior": "KEEP",
+                    "Requirement": "MEETS_ANY",
+                    "Conditions": [
+                        {"ActionCondition": {"Action": action}}
+                        for action in ("COUNT", "BLOCK", "CAPTCHA", "EXCLUDED_AS_COUNT")
+                    ],
+                }],
+            },
         )
         logging.node.add_dependency(group)
 
@@ -205,50 +267,20 @@ class ApiFirewall(Construct):
                 ),
                 visibility_config=_visibility("waitlist-captcha"),
             ))
-        rules.extend([
-            wafv2.CfnWebACL.RuleProperty(
-                name="waitlist-rate",
-                priority=20,
-                statement=wafv2.CfnWebACL.StatementProperty(
-                    rate_based_statement=wafv2.CfnWebACL.RateBasedStatementProperty(
-                        aggregate_key_type="IP",
-                        limit=WAITLIST_RATE_LIMIT,
-                        evaluation_window_sec=RATE_WINDOW_SECONDS,
-                        scope_down_statement=_waitlist_post(),
-                    )
-                ),
-                action={"block": {}},
-                visibility_config=_visibility("waitlist-rate"),
-            ),
-            wafv2.CfnWebACL.RuleProperty(
-                name="general-rate",
-                priority=30,
-                statement=wafv2.CfnWebACL.StatementProperty(
-                    rate_based_statement=wafv2.CfnWebACL.RateBasedStatementProperty(
-                        aggregate_key_type="IP",
-                        limit=GENERAL_RATE_LIMIT,
-                        evaluation_window_sec=RATE_WINDOW_SECONDS,
-                        scope_down_statement=_api_host(api_host),
-                    )
-                ),
-                action={"block": {}} if mode == "block" else {"count": {}},
-                visibility_config=_visibility("general-rate"),
-            ),
-        ])
+        rules.append(_rate_rule(
+            "waitlist-rate", 20, WAITLIST_RATE_LIMIT, _waitlist_post(), action={"block": {}}
+        ))
+        rules.append(_rate_rule(
+            "general-rate", 30, GENERAL_RATE_LIMIT, _api_host(api_host),
+            action={"block": {}} if mode == "block" else {"count": {}},
+        ))
+        # (rule name, priority, AWS group name, rules inside it always counted)
         managed_groups = (
-            ("managed-common", 40, "AWSManagedRulesCommonRuleSet"),
-            ("managed-known-bad-inputs", 50, "AWSManagedRulesKnownBadInputsRuleSet"),
-            ("managed-ip-reputation", 60, "AWSManagedRulesAmazonIpReputationList"),
+            ("managed-common", 40, "AWSManagedRulesCommonRuleSet", COMMON_RULES_ALWAYS_COUNTED),
+            ("managed-known-bad-inputs", 50, "AWSManagedRulesKnownBadInputsRuleSet", ()),
+            ("managed-ip-reputation", 60, "AWSManagedRulesAmazonIpReputationList", ()),
         )
-        for rule_name, priority, group_name in managed_groups:
-            kwargs = {}
-            if rule_name == "managed-common":
-                kwargs["rule_action_overrides"] = [
-                    wafv2.CfnWebACL.RuleActionOverrideProperty(
-                        name=name, action_to_use={"count": {}}
-                    )
-                    for name in COMMON_RULES_ALWAYS_COUNTED
-                ]
+        for rule_name, priority, group_name, always_counted in managed_groups:
             rules.append(wafv2.CfnWebACL.RuleProperty(
                 name=rule_name,
                 priority=priority,
@@ -261,7 +293,10 @@ class ApiFirewall(Construct):
                                 statements=[_api_host(api_host), _not_health()]
                             )
                         ),
-                        **kwargs,
+                        rule_action_overrides=[
+                            wafv2.CfnWebACL.RuleActionOverrideProperty(name=name, action_to_use={"count": {}})
+                            for name in always_counted
+                        ] or None,
                     )
                 ),
                 override_action={"none": {}} if mode == "block" else {"count": {}},

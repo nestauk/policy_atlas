@@ -79,7 +79,7 @@ def test_w1_web_acl_association_config_pin_and_validation():
     assert properties["Scope"] == "REGIONAL"
     assert properties["Name"] == waf.WEB_ACL_NAME
     assert properties["DefaultAction"] == {"Allow": {}}
-    _assert_visibility(properties["VisibilityConfig"], "pa-v3-waf")
+    _assert_visibility(properties["VisibilityConfig"], waf.WEB_ACL_NAME)
     _, association = _one(APP, "AWS::WAFv2::WebACLAssociation")
     assert association["Properties"]["WebACLArn"] == {"Fn::GetAtt": [acl_id, "Arn"]}
     parameter = next(
@@ -126,7 +126,7 @@ def test_w3_general_rate_rule_is_host_scoped_and_mode_controlled():
         assert rate["Limit"] == waf.GENERAL_RATE_LIMIT
         assert rate["ScopeDownStatement"] == {"ByteMatchStatement": {
             "FieldToMatch": {"SingleHeader": {"name": "host"}},
-            "PositionalConstraint": "EXACTLY", "SearchString": "api.v3.policyatlas.uk",
+            "PositionalConstraint": "STARTS_WITH", "SearchString": "api.v3.policyatlas.uk",
             "TextTransformations": [{"Priority": 0, "Type": "LOWERCASE"}],
         }}
         assert rule["Action"] == action
@@ -151,12 +151,12 @@ def test_w4_managed_rules_are_host_scoped_skip_health_and_keep_body_counted():
             host = statements[0]["ByteMatchStatement"]
             assert host == {
                 "FieldToMatch": {"SingleHeader": {"name": "host"}},
-                "PositionalConstraint": "EXACTLY", "SearchString": "api.v3.policyatlas.uk",
+                "PositionalConstraint": "STARTS_WITH", "SearchString": "api.v3.policyatlas.uk",
                 "TextTransformations": [{"Priority": 0, "Type": "LOWERCASE"}],
             }
             paths = statements[1]["NotStatement"]["Statement"]["OrStatement"]["Statements"]
             assert [item["ByteMatchStatement"]["SearchString"] for item in paths] == list(waf.HEALTH_PATHS)
-            assert all(item["ByteMatchStatement"]["PositionalConstraint"] == "STARTS_WITH" for item in paths)
+            assert all(item["ByteMatchStatement"]["PositionalConstraint"] == "EXACTLY" for item in paths)
             assert all(item["ByteMatchStatement"]["FieldToMatch"] == {"UriPath": {}} for item in paths)
             assert all(item["ByteMatchStatement"]["TextTransformations"] == [{"Priority": 0, "Type": "NONE"}]
                        for item in paths)
@@ -199,14 +199,20 @@ def test_w8_logging_and_visibility_configs_are_rendered_for_matches_only():
     destination = properties["LogDestinationConfigs"][0]
     assert "aws-waf-logs-policy-atlas-v3" in json.dumps(destination)
     assert ":*" not in json.dumps(destination)
+    # CloudFormation's key names (PascalCase); CDK types this property `Any`.
     log_filter = properties["LoggingFilter"]
-    assert log_filter["defaultBehavior"] == "DROP"
-    (filter_,) = log_filter["filters"]
-    assert (filter_["behavior"], filter_["requirement"]) == ("KEEP", "MEETS_ANY")
-    assert {condition["actionCondition"]["action"] for condition in filter_["conditions"]} == {
+    assert log_filter["DefaultBehavior"] == "DROP"
+    (filter_,) = log_filter["Filters"]
+    assert (filter_["Behavior"], filter_["Requirement"]) == ("KEEP", "MEETS_ANY")
+    assert {condition["ActionCondition"]["Action"] for condition in filter_["Conditions"]} == {
         "COUNT", "BLOCK", "CAPTCHA", "EXCLUDED_AS_COUNT"
     }
+    assert not any(key[0].islower() for key in json.dumps(log_filter).split('"')[1::2] if key)
     assert log_id in logging["DependsOn"]
-    _assert_visibility(acl["Properties"]["VisibilityConfig"], "pa-v3-waf")
+    # The bearer token of a counted signed-in request must never reach the log.
+    assert properties["RedactedFields"] == [
+        {"SingleHeader": {"Name": name}} for name in ("authorization", "cookie", "x-aws-waf-token")
+    ]
+    _assert_visibility(acl["Properties"]["VisibilityConfig"], waf.WEB_ACL_NAME)
     for rule in acl["Properties"]["Rules"]:
         _assert_visibility(rule["VisibilityConfig"], rule["Name"])
