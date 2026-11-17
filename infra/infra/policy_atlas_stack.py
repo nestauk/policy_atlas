@@ -167,6 +167,7 @@ class PolicyAtlasStack(Stack):
             "CognitoAuth",
             domain_name=domain_name,
             domain_prefix=pa_app_config["cognito_domain_prefix"],
+            email=pa_app_config.get("email"),
         )
         # One image build for three consumers: the API task, the migration
         # task and the ingest function (which starts it with another command).

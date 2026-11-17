@@ -359,9 +359,8 @@ synth-time context query and must not run before the VPC exists.
      `PA_OPS_*_PROD` variables and prod-account credentials, not
      `AWS_PROFILE=pa-dev`.
 
-     **When the invitation email is not viable** (the `COGNITO_DEFAULT` sender
-     is `no-reply@verificationemail.com`, which spam filters routinely
-     swallow), add `INVITE=manual` (CLI: `--invite manual`): the email is
+     **When the invitation email does not arrive**, add `INVITE=manual` (CLI:
+     `--invite manual`): the email is
      suppressed and the CLI **mints** a single-use temporary password, printed
      once for out-of-band handover — the person sets their own at first
      sign-in (`FORCE_CHANGE_PASSWORD`, 30-day validity). The CLI still accepts
@@ -369,8 +368,22 @@ synth-time context query and must not run before the VPC exists.
      `AdminCreateUser`. If that password expires or is lost before first
      sign-in, `make user-reissue ENV=<env> EMAIL=<user-email>` mints and prints
      a replacement on the same terms (it refuses any account that has already
-     signed in; needs `AdminSetUserPassword`). The durable fix is SES-backed pool email
-     (docs/deferred.md § Organisations — SES entry).
+     signed in; needs `AdminSetUserPassword`). SES-backed pool email is now in
+     place through task 065; see [Pool email through SES (task 065)](#pool-email-through-ses-task-065).
+
+     ### Pool email through SES (task 065)
+
+     Check production access before enabling the sender:
+
+     ```bash
+     aws sesv2 get-account --region eu-west-2
+     ```
+
+     Confirm `ProductionAccessEnabled` is true. Verify the SES identity first,
+     then obtain production access, set `email.enabled` to true in
+     `pa_config.json`, and deploy. The daily sending limit is SES's own
+     `SendQuota`, returned by the same command. Use `--invite manual` only as
+     the fallback when an invitation email does not arrive.
 
      **Removing a person's access (task 064a, Q10).** `user de-enrol` changes
      the database only: the person's Cognito account still signs in and their

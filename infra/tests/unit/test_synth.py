@@ -25,6 +25,7 @@ from infra.components.nesta_ssm_endpoints import (
 )
 from infra.database_stack import DatabaseStack
 from infra.cert_stack import PaV3CertStack
+import infra.cognito_auth as cognito_auth
 from infra.cognito_auth import CognitoAuth
 from infra.analytics_stack import PaV3AnalyticsStack
 from infra.network_stack import NetworkStack
@@ -180,6 +181,17 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         env_name=ENV_NAME,
         cross_region_references=True,
     )
+    email_config = json.loads(json.dumps(PA_CONFIG))
+    email_config["policy_atlas_config"]["email"]["enabled"] = True
+    EMAIL_APP_STACK = PolicyAtlasStack(
+        APP,
+        "PaV3AppStackEmail",
+        pa_config=email_config,
+        certificate=CERT_STACK.certificate,
+        env=ENV,
+        env_name=ENV_NAME,
+        cross_region_references=True,
+    )
     ANALYTICS_STACK = PaV3AnalyticsStack(
         APP,
         "PaV3AnalyticsStack",
@@ -200,6 +212,7 @@ TEMPLATES = {
 BEDROCK_APP_TEMPLATE = Template.from_stack(ROUTE_APP_STACKS["bedrock"]).to_json()
 OPENAI_APP_TEMPLATE = Template.from_stack(ROUTE_APP_STACKS["openai-direct"]).to_json()
 IN_PROCESS_APP_TEMPLATE = Template.from_stack(IN_PROCESS_APP_STACK).to_json()
+EMAIL_APP_TEMPLATE = Template.from_stack(EMAIL_APP_STACK).to_json()
 RENDERED_TEMPLATES = {
     stack_name: json.dumps(template, sort_keys=True)
     for stack_name, template in TEMPLATES.items()
@@ -1064,6 +1077,89 @@ def test_cognito_user_pool_is_operator_managed_and_retained():
     assert properties["AccountRecoverySetting"] == {
         "RecoveryMechanisms": [{"Name": "verified_email", "Priority": 1}]
     }
+
+
+def test_cognito_default_email_has_no_ses_configuration_or_templates():
+    _, user_pool = _resources(TEMPLATES["app"], "AWS::Cognito::UserPool")[0]
+    properties = user_pool["Properties"]
+    assert "EmailConfiguration" not in properties
+    assert "InviteMessageTemplate" not in properties["AdminCreateUserConfig"]
+    # CDK emits Cognito's built-in verification-code default because this pool
+    # auto-verifies email. The branded body is absent until SES is enabled.
+    verification = properties["VerificationMessageTemplate"]
+    assert verification["EmailSubject"] == "Verify your new account"
+    assert verification["EmailMessage"] == "The verification code to your new account is {####}"
+    assert "LambdaConfig" not in properties
+
+
+def test_cognito_ses_email_renders_branded_templates():
+    _, user_pool = _resources(EMAIL_APP_TEMPLATE, "AWS::Cognito::UserPool")[0]
+    properties = user_pool["Properties"]
+    email_configuration = properties["EmailConfiguration"]
+    assert email_configuration["EmailSendingAccount"] == "DEVELOPER"
+    assert email_configuration["From"] == "Policy Atlas <no-reply@v3.policyatlas.uk>"
+    source_arn = email_configuration["SourceArn"]
+    assert "Fn::Join" in source_arn
+    source_arn_json = json.dumps(source_arn)
+    for expected in (
+        ":ses:eu-west-2:111111111111:identity/v3.policyatlas.uk",
+        "AWS::Partition",
+    ):
+        assert expected in source_arn_json
+
+    invitation = properties["AdminCreateUserConfig"]["InviteMessageTemplate"]
+    assert invitation["EmailSubject"] == "Your Policy Atlas account"
+    for expected in (
+        "{username}",
+        "{####}",
+        "https://v3.policyatlas.uk",
+        "https://v3.policyatlas.uk/brand/email-logo.png",
+    ):
+        assert expected in invitation["EmailMessage"]
+    assert "__SIGN_IN_URL__" not in invitation["EmailMessage"]
+    assert "__LOGO_URL__" not in invitation["EmailMessage"]
+
+    verification = properties["VerificationMessageTemplate"]
+    assert verification["EmailSubject"] == "Your Policy Atlas verification code"
+    assert "{####}" in verification["EmailMessage"]
+    assert verification["DefaultEmailOption"] == "CONFIRM_WITH_CODE"
+    assert "LambdaConfig" not in properties
+
+
+def test_cognito_email_creates_no_ses_identity_or_dkim_record():
+    templates = [
+        json.loads(template_path.read_text())
+        for template_path in Path(ASSEMBLY.directory).rglob("*.template.json")
+    ]
+    for template in templates:
+        for resource in template.get("Resources", {}).values():
+            assert resource["Type"] != "AWS::SES::EmailIdentity"
+            if resource["Type"] == "AWS::Route53::RecordSet":
+                assert "_domainkey" not in json.dumps(resource["Properties"]["Name"])
+
+
+def test_cognito_email_template_requires_code_placeholder(tmp_path, monkeypatch):
+    (tmp_path / "invitation.subject.txt").write_text("Invitation")
+    (tmp_path / "invitation.html").write_text("Welcome {username}")
+    (tmp_path / "verification.subject.txt").write_text("Verification")
+    (tmp_path / "verification.html").write_text("Verification")
+    monkeypatch.setattr(cognito_auth, "EMAIL_DIRECTORY", tmp_path)
+
+    app = cdk.App()
+    stack = cdk.Stack(app, "InvalidEmailTemplateStack")
+    with pytest.raises(ValueError, match=r"invitation.html.*\{####\}"):
+        CognitoAuth(
+            stack,
+            "CognitoAuth",
+            domain_name="policy.example.test",
+            domain_prefix="invalid-email-template-test",
+            email={
+                "enabled": True,
+                "sender_domain": "policy.example.test",
+                "from_address": "no-reply@policy.example.test",
+                "from_name": "Policy Atlas",
+            },
+        )
 
 
 def test_cognito_password_policy_keeps_default_rules_with_30_day_temporary_passwords():
