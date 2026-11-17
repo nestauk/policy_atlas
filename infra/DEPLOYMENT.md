@@ -782,7 +782,7 @@ matches nothing. ADR 0047 has the reasoning.
 `POST` to `/api/v1/waitlist` without a valid token is refused with 405 and the
 header `x-amzn-waf-action: captcha`); `waitlist-rate` (more than 50 waitlist
 posts in 5 minutes from one address are blocked, always); `general-rate` (more
-than 3,000 requests in 5 minutes from one address to the API host);
+than 6,000 requests in 5 minutes from one address to the API host);
 `managed-common`, `managed-known-bad-inputs`, `managed-ip-reputation` (AWS's
 own rule groups for common web attacks, known bad inputs and bad-reputation
 addresses, applied to the API host except `/healthz` and `/readyz`, so the

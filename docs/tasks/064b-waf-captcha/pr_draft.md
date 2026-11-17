@@ -18,7 +18,7 @@ Task folder: `docs/tasks/064b-waf-captcha/`. Decision record:
    (off means nothing is built), `waf.mode` (`count` or `block`), `waf.captcha`.
 2. **Six rules.** A CAPTCHA on `POST /api/v1/waitlist` (staging on, production off until
    staging has proved it); more than 50 waitlist posts in 5 minutes from one address are
-   blocked; more than 3,000 requests in 5 minutes from one address to the API are counted
+   blocked; more than 6,000 requests in 5 minutes from one address to the API are counted
    now and blocked later; AWS's three managed rule groups (common attacks, known bad inputs,
    bad-reputation addresses) on the API host, skipping the two health paths. Everything that
    could refuse a real person starts in **count mode**: the rules record what they would
@@ -59,10 +59,12 @@ Evidence: `docs/tasks/064b-waf-captcha/verification.md`.
   domains, disabled and invalid configs, the log's filter and redaction; six vitest cases
   for the form's CAPTCHA branches; a CORS preflight test; guard and key-lookup cases
   against a stubbed `aws`; the report against two recorded log records.
+- **The general rate limit is measured, not guessed:** 6,000, from the busiest 5-minute
+  window in 14 days of the staging API log (520 requests, all clients together; the
+  per-address figure waits for 064a's client-address logging). Method and result in
+  verification.md § Phase 0.
 - **Not yet done, by design:** the staging live check (needs the two hand steps and this
-  merge), the Phase 0 measurement that pins the general rate limit (needs a staging SSO
-  session; the code ships the contract's 3,000 floor), the count week. Each is listed in
-  verification.md with the exact commands.
+  merge) and the count week. Each is listed in verification.md with the exact commands.
 
 ## Risk tier
 

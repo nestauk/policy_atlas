@@ -93,22 +93,43 @@ account and a push to `dev`.
 
 ## Phase 0 measurement (W3, owner ruling)
 
-**Not run yet.** The staging SSO session had expired and the login is interactive. The
-component ships with `GENERAL_RATE_LIMIT = 3000`, the contract's floor. To pin it, with
-`aws sso login --profile pa_staging` done:
+**Run 2026-11-17, from a console export.** The staging SSO token had expired, so the owner
+ran the query in the CloudWatch console (Log Analytics, log group
+`/policy_atlas_v3/application`, last 14 days) and exported the result as CSV into this
+folder (gitignored by `*.csv`, deleted after the read).
+
+The contract's per-address query cannot work on staging yet: the API logs the load
+balancer's private address, not the visitor's, because `--proxy-headers` (task 064a, PR
+#120) is not deployed there. A first raw export confirmed it: three addresses in five
+hours, all private. So the measurement took the **site-wide** peak instead, which bounds
+any single address from above:
 
 ```
-AWS_PROFILE=pa_staging aws logs start-query --region eu-west-2 \
-  --log-group-name /policy_atlas_v3/application \
-  --start-time $(( $(date +%s) - 14*86400 )) --end-time $(date +%s) \
-  --query-string 'fields @message | parse @message /(?<ip>\d+\.\d+\.\d+\.\d+):\d+ - "(?<method>[A-Z]+) (?<path>\S+)/ | filter ispresent(ip) | stats count(*) as requests by ip, bin(5m) as window | sort requests desc | limit 20'
-# then: aws logs get-query-results --query-id <id>
+SOURCE logGroups(namePrefix: ["/policy_atlas_v3/application"], class: "STANDARD") START=-14d END=0s |
+fields @message
+| parse @message /:\d+ - "(?<method>[A-Z]+) (?<path>\S+)/
+| filter ispresent(path) and path not like /^\/(healthz|readyz)/
+| stats count(*) as requests by bin(5m) as window
+| sort requests desc
+| limit 10000
 ```
 
-Record the top rows here (requests and window only, no addresses), pin the constant at
-ten times the top row rounded up to a thousand (never below 3,000), and update the
-contract's W3 row and ADR 0047. If the measurement lands after the merge, it is a one-line
-config-like change to the component and a normal deploy.
+| Window (UTC) | Requests, all clients, health paths excluded |
+|---|---|
+| 2026-11-10 14:35 | 520 |
+| 2026-11-09 14:35 | 474 |
+| 2026-11-09 15:25 | 450 |
+| 2026-11-16 21:10 | 400 |
+| 2026-11-04 14:25 | 400 |
+
+1,699 windows from 2026-11-04 to 2026-11-17; median 17, 95th percentile 117. The same
+query on production (owner export, same day): 343 windows from 2026-11-03 to 2026-11-17,
+peak **264** (2026-11-06 14:05 UTC), median 14, 95th percentile 94, so staging's peak is
+the higher one and the one the limit is derived from. Ten times the staging peak is
+5,200, rounded up to a thousand: **`GENERAL_RATE_LIMIT = 6000`**
+(`infra/infra/components/waf.py`). Contract W3 row, ADR 0047, `infra/DEPLOYMENT.md` and
+`docs/deferred.md` say the same. A per-address re-measurement after 064a reaches staging
+can only lower the figure, never below 3,000; it is one constant and a normal deploy.
 
 ## Staging live check (contract § Acceptance checks)
 
@@ -299,7 +320,7 @@ check; the report test grew from one weak substring assertion to five row assert
 ## Rubric status
 
 1. Contract rows W1 to W8: in the code (tests above); W1's "synth tests pin both
-   environments' values" holds; W3's number is the floor pending Phase 0.
+   environments' values" holds; W3's number is measured (§ Phase 0).
 2. `make verify`, `make -C infra test`, `make deploy-build-guard-test`: pass. Staging live
    checks: **pending** the hand steps and the deploy. Count week: **pending**.
 3. No approval-gated change beyond the contract's list.
@@ -334,8 +355,8 @@ check; the report test grew from one weak substring assertion to five row assert
 
 ## Known unverified items
 
-- Phase 0 measurement (W3 number), the staging live check, the real-widget screenshot, the
-  report against real data, the count week.
+- The staging live check, the real-widget screenshot, the report against real data, the
+  count week; a per-address re-measurement of W3 once 064a logs the client address.
 - `aws wafv2 check-capacity` has not been run; the arithmetic (925 + a few) is under
   1,500.
 

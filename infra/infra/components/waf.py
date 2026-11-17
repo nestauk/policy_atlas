@@ -12,8 +12,10 @@ is the site domain for which WAF can issue that CAPTCHA token.
 from aws_cdk import ArnFormat, RemovalPolicy, Stack, aws_logs as logs, aws_wafv2 as wafv2
 from constructs import Construct
 
-# Pinned by the Phase 0 measurement; never below 3,000.
-GENERAL_RATE_LIMIT = 3000
+# Pinned by the Phase 0 measurement (2026-11-17): the busiest 5-minute window in 14 days
+# of the staging API log held 520 non-health requests from all clients together, so no
+# single address sent more; ten times that, rounded up to a thousand. Never below 3,000.
+GENERAL_RATE_LIMIT = 6000
 WAITLIST_RATE_LIMIT = 50
 RATE_WINDOW_SECONDS = 300
 CAPTCHA_IMMUNITY_SECONDS = 1800

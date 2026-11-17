@@ -1,8 +1,8 @@
 # ADR 0047 — A web application firewall on the shared load balancer, counted before it blocks, and a CAPTCHA on the waitlist form
 
 - **Status:** Accepted — 2026-11-17 (Karlis Kanders, owner, task 064b plan gate). Built
-  2026-11-17 as decided; the one open number, the general rate limit, stays at the 3,000
-  floor until the Phase 0 measurement runs (recorded in the task's `verification.md`).
+  2026-11-17 as decided; the general rate limit was pinned at 6,000 the same day from the
+  Phase 0 measurement (recorded in the task's `verification.md`).
 - **Date:** 2026-11-17
 - **Task:** [064b-waf-captcha](../tasks/064b-waf-captcha/contract.md), second slice of the
   [064 security hardening programme](../tasks/064-security-hardening/programme.md).
@@ -69,7 +69,10 @@ The AWS documentation pages these decisions rest on (gathered 2026-11-17):
    CAPTCHA already stops scripts, so the number only bounds a script with a stolen token,
    and fifty leaves room for an office or an event behind one address. The general rate
    limit is not guessed: the build measures the busiest address's 5-minute peak in the
-   staging API log and sets the limit at ten times that, never below 3,000.
+   staging API log and sets the limit at ten times that, never below 3,000. Measured
+   2026-11-17: staging did not yet log the client address (that arrives with 064a), so
+   the build took the site-wide peak, 520 requests in one 5-minute window over 14 days,
+   as the bound no single address can exceed, and pinned 6,000.
 5. **The common group's body-size rule is always counted.** `SizeRestrictions_BODY` matches
    bodies over 8 KB, which this API sees in normal use. It is overridden to count in both
    modes. This also settles review finding H-02 (a request size limit at the edge): it

@@ -3755,7 +3755,7 @@ Left open by the 064b build (2026-11-17; contract and ADR 0047 for the rulings):
 - **The deploy's readiness check in block mode.** After each deploy the script calls
   `/readyz` from a GitHub runner address. The managed groups skip the two health paths
   (owner ruling), so they cannot refuse it; the general rate rule could in theory, if a
-  runner shared an address that sent over 3,000 requests in 5 minutes, which no runner
+  runner shared an address that sent over 6,000 requests in 5 minutes, which no runner
   does. Noted so the risk is not read as forgotten.
 - **A person whose browser blocks `awswaf.com` cannot sign up.** The form shows "The
   sign-up check did not load. Reload the page to try again." and keeps submit disabled.
@@ -3772,7 +3772,9 @@ Left open by the 064b build (2026-11-17; contract and ADR 0047 for the rulings):
   `waf.enabled`) would fail the deploy loudly instead; a few lines plus a stubbed test.
 - **The report reads at most 10,000 matched requests per run.** Logs Insights' ceiling per
   query; the count week on this traffic is far below it. Page by day if it is ever hit.
-- **The general rate limit is a floor, not a measurement, until Phase 0's query runs.**
-  The staging SSO login was not available during the build; `GENERAL_RATE_LIMIT` is 3,000
-  (the contract's minimum). The query in plan Phase 0 pins it from the staging API log;
-  `verification.md` records the result when it lands.
+- **The general rate limit is pinned from a site-wide peak, not a per-address one.**
+  Staging logged the load balancer's address, not the visitor's, until 064a deploys, so
+  Phase 0 took the busiest 5-minute window of all traffic (520 in 14 days) as the bound
+  and set `GENERAL_RATE_LIMIT = 6000`. Once 064a is on staging the per-address query in
+  `docs/tasks/064b-waf-captcha/verification.md` § Phase 0 can re-measure; the constant
+  is one line and a normal deploy.
