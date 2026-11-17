@@ -75,6 +75,9 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 
 ## Testing rules
 
+* [A test that stamps Alembic back without downgrading breaks later migration tests](alembic-stamp-back-without-downgrade-breaks-later-migration-tests.md) - `stamp` moves the note, not the tables; downgrade first, end with `upgrade head` (065).
+* [Tests that commit fixed subjects or addresses collide](committed-test-rows-need-unique-subjects-and-cleanup.md) - UUID-suffix them; a whole-table reader gets its own domain and an autouse cleanup (`test_sweep.py`, 065).
+* [Postgres collation ignores spaces at the first level](postgres-collation-order-is-not-python-sorted.md) - `ORDER BY` is not `sorted()`; take the expected order from the database (065).
 * [Historical migration tests reflect old names below a rename revision and use current metadata at head](migration-tests-reflect-old-names-below-rename-revision.md) - one `Table` object cannot address both catalogs; `tests/core/legacy_catalog.py` `legacy_table` below the 038 revision, `schema.metadata` at head; snapshot through the reflected tables for byte-identity (038 D9, eleven tests reshaped).
 * [Widening an auth boundary needs sweeps for both caller classes](auth-boundary-widening-needs-both-caller-sweeps.md) - a route's 401 dependency masks a widened row grade for signed-in callers, and derived conformance case lists shrink silently when a class is pruned from their shared source (037 review stack: the `decisions` leak + the 19→8 sweep).
 * [A slice that adds a table bumps the metadata table-count asserts in the same PR](new-table-bumps-count-asserts.md) - six `len(metadata.tables) == N` tests; skipping the bump fails the *next* slice's baseline, not your own (036 → 037).
@@ -103,6 +106,9 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 
 ## Invariants (verified)
 
+* [A FastAPI yield dependency declared before get_conn tears down after the commit](yield-dependency-order-sets-teardown-order.md) - the ops action log line is emitted only once the write is durable (065).
+* [A BEFORE UPDATE trigger does not guard INSERT](before-update-trigger-does-not-guard-insert.md) - a can-clear-never-grant rule needs `INSERT OR UPDATE` (065).
+* [A sweep that retries every failure forever lets a poisoned form row drive unbounded calls](retry-sweeps-need-terminal-refusals-and-counted-failures.md) - deterministic refusals are terminal; failures spend the hourly allowance (065).
 * [A new ScopeConstraints field must touch every projection surface — and the Task Agent sees it via the wire draft, not the CLI render](scope-constraint-fields-projection-surfaces.md) - five surfaces (PlanDraftWire with a normaliser at the API fold, build_plan fold, CLI render, scopeChips + the overlay's chip-slicing geography derivation, the removal note); a missed one is an invisible field, a 500 path, or a silent edit-behaviour change (039; mechanism corrected by the step-7 verifier).
 * [Fields the server compiles jointly must travel together in partial updates](jointly-compiled-fields-patch-together.md) - PATCH /plan compiles geography per backend_scope and nulls what no longer fits, so a dirty-only diff pruning an "unchanged" geography from a scope-changing patch silently deletes the restriction; the pruned patch re-sends displayed geography whenever it carries backend_scope (039 review stack).
 * [An identifier sweep renames stored JSON keys in code but not in data — audit every JSON column on real rows](stored-json-keys-are-vocabulary-too.md) - scan `information_schema` JSON columns on the migrated dev DB for retired keys/values; derived rows get a reversible key rewrite in the migration, append-only logs get a both-names reader; compatibility readers are legitimate residue of a "no retired word" invariant (038 review stack: `pss_id`, `project_source_snapshot_id`).
@@ -180,6 +186,8 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 
 ## Integration quirks (infra / tooling)
 
+* [Cognito invitation and verification templates render only with the SES sender](cognito-invitation-templates-need-ses-sender.md) - the default sender keeps CDK's built-in template (065).
+* [str(engine.url) hides the password](sqlalchemy-url-str-hides-password.md) - use `render_as_string(hide_password=False)` when handing a URL on, and never log it (065).
 * [A rename manifest from SQLAlchemy metadata is not the catalog](schema-manifest-from-catalog-not-metadata.md) - unnamed FKs have `name=None` (sort on the resolved default or the order is non-deterministic) and six were created under explicit names; `scripts/schema_manifest.py` `EXPLICIT_FK_NAMES`, generate from the pre-rename checkout, the round-trip test compares `(table, name)` pairs (038).
 * [The prompt hash guard hashes the whole module](prompt-hash-guard-hashes-whole-module.md) - a package move changes component prompt hashes through import lines alone; the words-only proof of a prompt change is the prose diff (038 prompt-diff.md), never hash equality; re-pin in the same commit; the guard pins by filename, so inline prompts (`synthesis_backend.py`) sit outside it, and hash-pinned modules are excluded from identifier sweeps whole (044).
 * [A module-level react-router data router is pinned to the URL captured at import](react-router-singleton-pinned-to-import-location.md) - `history.replaceState` fires no `popstate`, so the OIDC callback's rewrite is invisible; sync once from `window.location` with `navigate(target, { replace: true })`; same-origin because `replaceState` rejects cross-origin URLs and `replace` never falls back to `location.assign` (038 V11).

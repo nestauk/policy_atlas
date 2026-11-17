@@ -2449,8 +2449,9 @@ omissions.
   to verified recipients) and the note that the 50/day cap becomes SES's own
   limits. Until then `user create --invite manual` (single-use minted temp
   password, printed once, forced change at first sign-in) is the workaround.
-  **Discharged by task 065 on 2026-11-17** (SES is the pool's sender); the
-  `--invite manual` path stays as a recorded fallback.
+  **Built by task 065 on 2026-11-17** (the pool sends through SES wherever
+  `email.enabled` is true in `pa_config.json`; both environments switch it on from the
+  staging checks onward); the `--invite manual` path stays as a recorded fallback.
 - **Self-signup domains beyond `nesta.org.uk`.** Task 065 lists one domain. Reopen when a
   second organisation wants self-signup; adding one is `org domain add`, not a deploy.
 - **Editing the domain table from the ops pages.** Rare, and a tenancy decision, so it is
@@ -3790,3 +3791,25 @@ Left open by the 064b build (2026-11-17; contract and ADR 0047 for the rulings):
   and set `GENERAL_RATE_LIMIT = 6000`. Once 064a is on staging the per-address query in
   `docs/tasks/064b-waf-captcha/verification.md` § Phase 0 can re-measure; the constant
   is one line and a normal deploy.
+
+## Accounts and ops portal (task 065 seams)
+
+Noted by the 065 build (2026-11-17). Self-signup domains beyond `nesta.org.uk`, the domain
+table on the ops pages, application-sent email and the ops action log on the pages are
+recorded above under their own entries.
+
+- **A single-person read route on the ops host.** The quota page finds the person by
+  reading the whole people list and picking one out. Reopen when the list is long enough
+  to slow that page, or when a second page needs one person.
+- **A route that reports the settings defaults.** The pages show "default · n" by
+  inferring it from a person with no override. If nobody has no override, the default is
+  not shown. Reopen when a page must show the default on its own, or when the defaults
+  change often enough that inferring them misleads.
+- **An assign route that accepts either kind of id.** The assign page tries a task id
+  first, then a project id, so a wrong id costs one failed call. Reopen when the extra
+  call shows up as latency or an error in the logs, or when a third kind of id is added.
+- **Owner decision open: should sweep-created accounts take the waitlist row's name?**
+  Contract C3 says yes; the review stack showed anyone can type a colleague's address with
+  any name. The code does (a) (keep C3, never rename an existing account). Options and the
+  recommendation are in `docs/tasks/065-accounts/verification.md` § Owner decisions
+  raised by the stack, item 1. Reopen when the owner rules.

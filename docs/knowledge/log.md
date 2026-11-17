@@ -18,6 +18,18 @@
   the agent definition that lists skills not installed (an agentic-ops fix, noted in the PR),
   the Playwright script stub for placement screenshots (a trick, not an invariant).
 
+## 2026-11-17 (task 065, durable records)
+* **New**: [alembic-stamp-back-without-downgrade-breaks-later-migration-tests](alembic-stamp-back-without-downgrade-breaks-later-migration-tests.md)
+* **New**: [committed-test-rows-need-unique-subjects-and-cleanup](committed-test-rows-need-unique-subjects-and-cleanup.md)
+* **New**: [cognito-invitation-templates-need-ses-sender](cognito-invitation-templates-need-ses-sender.md)
+* **New**: [yield-dependency-order-sets-teardown-order](yield-dependency-order-sets-teardown-order.md)
+* **New**: [sqlalchemy-url-str-hides-password](sqlalchemy-url-str-hides-password.md)
+* **New**: [postgres-collation-order-is-not-python-sorted](postgres-collation-order-is-not-python-sorted.md)
+* **New**: [before-update-trigger-does-not-guard-insert](before-update-trigger-does-not-guard-insert.md)
+* **New**: [retry-sweeps-need-terminal-refusals-and-counted-failures](retry-sweeps-need-terminal-refusals-and-counted-failures.md)
+* **Update**: [delegated-executor-practices](delegated-executor-practices.md) — Codex cannot reach Docker either.
+* **Update**: [parallel-agent-test-databases](parallel-agent-test-databases.md) — a worktree has no `backend/.env`; set `COMPOSE_PROJECT_NAME=policy_atlas`.
+
 ## 2026-11-09 (task 058, review stack)
 * **New**: [route-step-needs-three-rows](route-step-needs-three-rows.md) — the streamed
   section turn's missing cache-mode row made every streamed turn fall back silently; the
