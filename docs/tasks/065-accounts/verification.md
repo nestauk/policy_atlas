@@ -10,8 +10,8 @@ address ranges, passwords, email addresses or account ids.
 | Command | Result | Notes |
 |---|---:|---|
 | `make verify` (build-open baseline) | pass | 2026-11-17, after rebasing onto 064a head `1182bb11` (the first run failed on `test_healthz_is_async_so_it_needs_no_pool_thread`, which 064a fixed in `2cd648e5`; the worktree has no `backend/.env`). 4829 passed, 1 skipped; infra, drift-check and frontend-verify green. |
-| `make verify` (step-6 exit) | pending | |
-| `make openapi-sync && make drift-check` | pending | |
+| `make verify` (step-6 exit) | pass | 2026-11-17 on `232bd7a6`: backend 4935 passed, 1 skipped; infra 133 passed; drift-check OK (both documents, the browser smoke); frontend 2027 tests, build and ops build. A first run failed on `tests/theory_of_change/test_progress.py::test_the_automatic_chain_posts_no_draft_landed_line` while the local end-to-end servers ran alongside; the test is outside this slice, untouched by it, and green alone and on the rerun (a timing-sensitive test under load; recorded, not fixed here). |
+| `make openapi-sync && make drift-check` | pass | 2026-11-17 (Phase 6, and inside the exit verify). |
 | `make -C infra test` | pass | 2026-11-17 (Phase 7): 133 passed. |
 | `make deploy-build-guard-test` | pass | 2026-11-17 (Phase 9): the build guard, the migration waiter and the new deploy-order harness. |
 | `aws sesv2 get-account` (both profiles) | blocked | SSO tokens expired on 2026-11-17; the owner signs in and the build re-runs it. Both accounts had production access on 2026-11-16 (contract fact 1). |
