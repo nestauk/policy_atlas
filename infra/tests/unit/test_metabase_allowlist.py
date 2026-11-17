@@ -100,6 +100,19 @@ def test_error_messages_never_echo_the_offending_entry(value):
     assert "entry" in message
 
 
+def test_ops_label_is_used_in_validation_messages():
+    with pytest.raises(ValueError, match="ops allowlist"):
+        validate_parameter_payload({"Type": "String", "Value": "192.0.2.10/32"}, label="ops")
+
+
+def test_ops_label_is_used_in_rule_verification_messages():
+    with pytest.raises(ValueError, match="ops listener rules"):
+        verify_listener_rule(
+            [DEFAULT_RULE, _rule("ops.example.test", ["198.51.100.0/24"])],
+            "ops.example.test", "192.0.2.10/32", label="ops",
+        )
+
+
 def test_rule_lookup_returns_the_metabase_rule_source_cidrs():
     rules = [DEFAULT_RULE, API_RULE, _rule(METABASE_HOST, ["192.0.2.10/32"])]
     assert metabase_rule_source_cidrs({"Rules": rules}, METABASE_HOST) == {

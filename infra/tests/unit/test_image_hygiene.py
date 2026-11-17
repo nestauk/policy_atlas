@@ -10,6 +10,9 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 BACKEND_ROOT = REPO_ROOT / "backend"
 DOCKERIGNORE_PATH = BACKEND_ROOT / ".dockerignore"
 DOCKERFILE_PATH = BACKEND_ROOT / "Dockerfile"
+# The deploy script creates this image input immediately before Docker builds.
+# Task 065 B3 intentionally keeps it out of Git while retaining it in Docker context.
+_DELIBERATE_IMAGE_INPUTS = {"ops-ui/"}
 
 
 def _ignore_patterns(path: Path) -> list[str]:
@@ -51,6 +54,8 @@ def test_dockerignore_covers_gitignored_backend_content() -> None:
     for ignore_file in (REPO_ROOT / ".gitignore", BACKEND_ROOT / ".gitignore"):
         for pattern in _ignore_patterns(ignore_file):
             context_pattern = _could_match_backend_context(pattern, ignore_file)
+            if context_pattern in _DELIBERATE_IMAGE_INPUTS:
+                continue
             if context_pattern and not _dockerignore_covers(context_pattern, docker_patterns):
                 uncovered.append(f"{ignore_file.relative_to(REPO_ROOT)}: {pattern}")
 

@@ -59,6 +59,7 @@ class CognitoAuth(Construct):
         domain_name: str,
         domain_prefix: str,
         email: dict | None = None,
+        extra_domains: list[str] | None = None,
     ) -> None:
         super().__init__(scope, construct_id)
 
@@ -87,6 +88,8 @@ class CognitoAuth(Construct):
                     email_style=cognito.VerificationEmailStyle.CODE,
                 ),
             }
+
+        extra_domains = extra_domains or []
 
         self.user_pool = cognito.UserPool(
             self,
@@ -137,10 +140,14 @@ class CognitoAuth(Construct):
                 callback_urls=[
                     f"https://{domain_name}",
                     f"https://{domain_name}/",
+                    *[f"https://{domain}" for domain in extra_domains],
+                    *[f"https://{domain}/" for domain in extra_domains],
                 ],
                 logout_urls=[
                     f"https://{domain_name}",
                     f"https://{domain_name}/",
+                    *[f"https://{domain}" for domain in extra_domains],
+                    *[f"https://{domain}/" for domain in extra_domains],
                 ],
             ),
         )

@@ -95,6 +95,7 @@ PA_CONFIG = _load_config("pa_config.json")
 METABASE_CONFIG = _load_config("metabase_config.json")
 # Five CIDRs exercise the split: one full rule of four and a second rule of one.
 ANALYTICS_ALLOWLIST_SIZE = 5
+OPS_ALLOWLIST_SIZE = 5
 APP = cdk.App(context={"aws:cdk:bundling-stacks": []})
 ENV = Environment(account=DUMMY_ACCOUNT, region=NETWORK_CONFIG["aws_region"])
 CERT_ENV = Environment(account=DUMMY_ACCOUNT, region="us-east-1")
@@ -149,6 +150,7 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         certificate=CERT_STACK.certificate,
         env=ENV,
         env_name=ENV_NAME,
+        ops_allowlist_size=OPS_ALLOWLIST_SIZE,
         cross_region_references=True,
     )
     # The same app stack pinned to each model route, to show the Bedrock key is
@@ -166,6 +168,7 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
             certificate=CERT_STACK.certificate,
             env=ENV,
             env_name=ENV_NAME,
+            ops_allowlist_size=OPS_ALLOWLIST_SIZE,
             cross_region_references=True,
         )
     # The same app stack with the other ingest mode (task 057), so the API
@@ -179,6 +182,7 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         certificate=CERT_STACK.certificate,
         env=ENV,
         env_name=ENV_NAME,
+        ops_allowlist_size=OPS_ALLOWLIST_SIZE,
         cross_region_references=True,
     )
     email_config = json.loads(json.dumps(PA_CONFIG))
@@ -190,6 +194,7 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         certificate=CERT_STACK.certificate,
         env=ENV,
         env_name=ENV_NAME,
+        ops_allowlist_size=OPS_ALLOWLIST_SIZE,
         cross_region_references=True,
     )
     ANALYTICS_STACK = PaV3AnalyticsStack(
@@ -465,15 +470,12 @@ def test_metabase_hostname_health_check_and_dns_are_pinned():
         "Default": "/policy_atlas_v3/metabase/allowed_cidrs",
     }
 
-    app_listener_rules = _resources(
-        TEMPLATES["app"], "AWS::ElasticLoadBalancingV2::ListenerRule"
+    app_listener_rules = _resources(TEMPLATES["app"], "AWS::ElasticLoadBalancingV2::ListenerRule")
+    api_rule = next(
+        rule for _, rule in app_listener_rules
+        if rule["Properties"]["Priority"] == 10
     )
-    assert app_listener_rules
-    assert all(
-        condition["Field"] != "source-ip"
-        for _, rule in app_listener_rules
-        for condition in rule["Properties"]["Conditions"]
-    )
+    assert all(condition["Field"] != "source-ip" for condition in api_rule["Properties"]["Conditions"])
 
     _, record = _resources(analytics, "AWS::Route53::RecordSet")[0]
     assert record["Properties"]["Name"] == "metabase.v3.policyatlas.uk."
@@ -1178,7 +1180,10 @@ def test_cognito_password_policy_keeps_default_rules_with_30_day_temporary_passw
 def test_cognito_spa_client_is_public_code_flow_with_exact_redirects():
     _, client = _resources(TEMPLATES["app"], "AWS::Cognito::UserPoolClient")[0]
     properties = client["Properties"]
-    urls = ["https://v3.policyatlas.uk", "https://v3.policyatlas.uk/"]
+    urls = [
+        "https://v3.policyatlas.uk", "https://v3.policyatlas.uk/",
+        "https://ops.v3.policyatlas.uk", "https://ops.v3.policyatlas.uk/",
+    ]
     assert properties["GenerateSecret"] is False
     assert properties["AllowedOAuthFlowsUserPoolClient"] is True
     assert properties["AllowedOAuthFlows"] == ["code"]
@@ -1195,6 +1200,50 @@ def test_cognito_spa_client_is_public_code_flow_with_exact_redirects():
         "RefreshToken": "minutes",
     }
     assert properties["PreventUserExistenceErrors"] == "ENABLED"
+
+
+def test_ops_service_hostname_allowlist_and_dns_are_pinned():
+    app = TEMPLATES["app"]
+    listener_rules = sorted(
+        [rule for _, rule in _resources(app, "AWS::ElasticLoadBalancingV2::ListenerRule")
+         if rule["Properties"]["Priority"] >= 30],
+        key=lambda rule: rule["Properties"]["Priority"],
+    )
+    assert [rule["Properties"]["Priority"] for rule in listener_rules] == [30, 31]
+    references = set()
+    positions = []
+    for rule in listener_rules:
+        conditions = rule["Properties"]["Conditions"]
+        assert conditions[0] == {
+            "Field": "host-header",
+            "HostHeaderConfig": {"Values": ["ops.v3.policyatlas.uk"]},
+        }
+        assert conditions[1]["Field"] == "source-ip"
+        for value in conditions[1]["SourceIpConfig"]["Values"]:
+            position, reference = value["Fn::Select"]
+            positions.append(position)
+            references.add(reference["Ref"])
+    assert positions == list(range(OPS_ALLOWLIST_SIZE))
+    assert len(references) == 1
+    assert app["Parameters"][references.pop()] == {
+        "Type": "AWS::SSM::Parameter::Value<List<String>>",
+        "Default": "/policy_atlas_v3/ops/allowed_cidrs",
+    }
+    ops_record = next(
+        resource for _, resource in _resources(app, "AWS::Route53::RecordSet")
+        if resource["Properties"]["Name"] == "ops.v3.policyatlas.uk."
+    )
+    assert ops_record["Properties"]["Type"] == "A"
+
+
+@pytest.mark.parametrize("allowlist_size", [0, 9, "5"])
+def test_ops_rejects_an_allowlist_size_outside_the_cap(allowlist_size):
+    with pytest.raises(ValueError, match="ops_allowlist_size"):
+        PolicyAtlasStack(
+            cdk.App(), "InvalidOpsAllowlist", pa_config=PA_CONFIG,
+            certificate=CERT_STACK.certificate, env=ENV, env_name=ENV_NAME,
+            ops_allowlist_size=allowlist_size,
+        )
 
 
 def test_cognito_hosted_ui_uses_the_fixed_prefix():
@@ -1320,7 +1369,25 @@ def test_auth_and_deploy_ssm_exports_are_present():
         "/policy_atlas_v3/deploy/frontend_bucket_name",
         "/policy_atlas_v3/deploy/fonts_bucket_name",
         "/policy_atlas_v3/deploy/distribution_id",
+        "/policy_atlas_v3/deploy/ops_service_name",
+        "/policy_atlas_v3/deploy/ops_target_group_arn",
+        "/policy_atlas_v3/deploy/ops_db_secret_arn",
+        "/policy_atlas_v3/deploy/ops_domain",
     } <= parameter_names
+
+
+def test_ops_database_secret_has_only_the_generated_password_shape():
+    _, secret = next(
+        item for item in _resources(TEMPLATES["app"], "AWS::SecretsManager::Secret")
+        if item[1]["Properties"].get("Name") == "policy_atlas_v3/ops_db"
+    )
+    generator = secret["Properties"]["GenerateSecretString"]
+    assert generator == {
+        "ExcludePunctuation": True,
+        "GenerateStringKey": "password",
+        "PasswordLength": 40,
+        "SecretStringTemplate": '{"username": "pa_ops"}',
+    }
 
 
 def test_www_requests_are_redirected_to_the_apex():

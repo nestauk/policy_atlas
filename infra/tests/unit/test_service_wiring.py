@@ -38,6 +38,12 @@ APP_SECRET_NAMES = {
     "LANGFUSE_SECRET_KEY",
     "LANGFUSE_HOST",
 }
+OPS_ENVIRONMENT_NAMES = {
+    "OIDC_ISSUER", "OIDC_JWKS_URL", "OIDC_CLIENT_ID", "APP_ORIGIN",
+    "POLICY_ATLAS_SERVICE_ROLE", "POLICY_ATLAS_SELF_SIGNUP",
+    "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR", "OPS_UI_DIR",
+    "FORWARDED_ALLOW_IPS", "LOG_LEVEL", "LOG_FORMAT", "PA_BACKEND_MODE",
+}
 
 
 def _task_definition(family: str, template: dict | None = None) -> dict:
@@ -169,6 +175,56 @@ def test_api_container_references_database_and_app_secrets_without_values():
         assert "secretsmanager" in rendered or "Fn::" in rendered or "Ref" in rendered
 
 
+def test_ops_container_has_the_complete_least_privilege_environment_and_secret_map():
+    container = _container(_task_definition("policy-atlas-v3-ops"))
+    environment = {item["Name"]: item["Value"] for item in container["Environment"]}
+    assert set(environment) == OPS_ENVIRONMENT_NAMES
+    assert environment == {
+        "OIDC_ISSUER": environment["OIDC_ISSUER"],
+        "OIDC_JWKS_URL": environment["OIDC_JWKS_URL"],
+        "OIDC_CLIENT_ID": environment["OIDC_CLIENT_ID"],
+        "APP_ORIGIN": "https://ops.v3.policyatlas.uk",
+        "POLICY_ATLAS_SERVICE_ROLE": "ops",
+        "POLICY_ATLAS_SELF_SIGNUP": "0",
+        "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR": "20",
+        "OPS_UI_DIR": "/app/ops-ui",
+        "FORWARDED_ALLOW_IPS": "1.2.3.4/5",
+        "LOG_LEVEL": "INFO",
+        "LOG_FORMAT": "json",
+        "PA_BACKEND_MODE": "stub",
+    }
+    secrets = _secret_map(container)
+    assert set(secrets) == {"DATABASE_URL"}
+    assert "OpsDbSecret" in json.dumps(secrets["DATABASE_URL"])
+    assert "db_connection_string" in json.dumps(secrets["DATABASE_URL"])
+
+
+def test_ops_and_api_task_roles_hold_only_their_expected_cognito_permissions():
+    policies = _resources(TEMPLATES["app"], "AWS::IAM::Policy")
+    api_role = _task_definition("policy-atlas-v3-api")["TaskRoleArn"]["Fn::GetAtt"][0]
+    ops_role = _task_definition("policy-atlas-v3-ops")["TaskRoleArn"]["Fn::GetAtt"][0]
+    api_actions = []
+    ops_actions = []
+    for _, policy in policies:
+        roles = policy["Properties"]["Roles"]
+        actions = [
+            action
+            for statement in policy["Properties"]["PolicyDocument"]["Statement"]
+            for action in statement["Action"]
+            if action.startswith("cognito-idp:")
+        ]
+        if roles == [{"Ref": api_role}]:
+            api_actions.extend(actions)
+        if roles == [{"Ref": ops_role}]:
+            ops_actions.extend(actions)
+    assert not api_actions
+    assert sorted(ops_actions) == sorted([
+        "cognito-idp:AdminCreateUser", "cognito-idp:AdminGetUser",
+        "cognito-idp:ListUsers", "cognito-idp:AdminDisableUser",
+        "cognito-idp:AdminUserGlobalSignOut",
+    ])
+
+
 def test_bedrock_route_adds_only_the_bedrock_key_from_the_app_secret():
     """Task 053: a Bedrock route passes AWS_BEARER_TOKEN_BEDROCK; OpenAI direct does not."""
     container = _container(_task_definition("policy-atlas-v3-api", BEDROCK_APP_TEMPLATE))
@@ -198,14 +254,34 @@ def test_migration_task_is_one_shot_and_has_only_the_database_secret():
     assert migration["Memory"] == "1024"
 
     container = _container(migration)
-    assert container["Command"] == ["alembic", "upgrade", "head"]
+    assert container["Command"] == ["sh", "-c", "alembic upgrade head && python -m policy_atlas.ops.db_role sync"]
+    assert [item["Name"] for item in container["Environment"]] == ["OPS_DB_SECRET_ARN"]
+    assert "OpsDbSecret" in json.dumps(container["Environment"])
     secrets = _secret_map(container)
     assert set(secrets) == {"DATABASE_URL"}
     assert "db_connection_string" in json.dumps(secrets["DATABASE_URL"])
 
     services = _resources(TEMPLATES["app"], "AWS::ECS::Service")
-    assert len(services) == 1
-    assert services[0][1]["Properties"]["DesiredCount"] == 0
+    assert len(services) == 2
+    assert all(service["Properties"]["DesiredCount"] == 0 for _, service in services)
+
+
+def test_migration_task_role_can_read_and_update_only_the_ops_database_secret():
+    migration_role = _task_definition("policy-atlas-v3-migrate")["TaskRoleArn"]["Fn::GetAtt"][0]
+    policies = [
+        policy["Properties"]["PolicyDocument"]["Statement"]
+        for _, policy in _resources(TEMPLATES["app"], "AWS::IAM::Policy")
+        if policy["Properties"]["Roles"] == [{"Ref": migration_role}]
+    ]
+    actions = {
+        action
+        for statements in policies
+        for statement in statements
+        for action in statement["Action"]
+        if action.startswith("secretsmanager:")
+    }
+    assert actions == {"secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"}
+    assert all("OpsDbSecret" in json.dumps(statement["Resource"]) for statements in policies for statement in statements)
 
 
 def test_alb_timeout_and_migration_deploy_export_are_present_without_autoscaling():

@@ -23,6 +23,10 @@ RUN uv sync --no-dev --no-group ops --no-install-project --frozen
 
 COPY . .
 
+# deploy.sh builds the ops pages into backend/ops-ui/ before this image build
+# (task 065 B3, plan P1). The API uses this image too and never reads it.
+RUN mkdir -p /app/ops-ui
+
 # Install the src-layout project itself into the virtual environment.
 RUN uv sync --no-dev --no-group ops --frozen
 
@@ -42,6 +46,7 @@ COPY --from=builder --chown=app:app /app/.venv ./.venv
 COPY --from=builder --chown=app:app /app/src ./src
 COPY --from=builder --chown=app:app /app/alembic ./alembic
 COPY --from=builder --chown=app:app /app/alembic.ini ./alembic.ini
+COPY --from=builder --chown=app:app /app/ops-ui ./ops-ui
 
 # Compile every Python file to bytecode once, at build time (task 057, N13).
 # Without this, each fresh container (an API task or an ingest function) compiles

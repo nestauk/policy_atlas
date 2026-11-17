@@ -50,6 +50,7 @@ scripts/evals/theory_of_change/downloads/
 node_modules/
 .vite/
 *.tsbuildinfo
+backend/ops-ui/
 
 # Task 026: CDK context cache (account-scoped lookups) and synth output
 cdk.context.json
