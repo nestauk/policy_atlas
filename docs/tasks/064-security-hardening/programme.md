@@ -198,19 +198,26 @@ One-way, and only through 065a:
 
 ### 064b WAF and CAPTCHA
 
-- `aws_wafv2.CfnWebACL` in the network stack, regional scope in eu-west-2, associated to
-  the load balancer with `CfnWebACLAssociation`. CDK has only L1 constructs for WAF.
-- Rules: rate rule per IP on `POST /api/v1/waitlist` (10 per 5 minutes), a loose general
-  rate rule, the three AWS managed groups (common, known bad inputs, IP reputation) in
-  **count mode first**, a CAPTCHA rule on the waitlist path.
+Contracted 2026-11-17: `docs/tasks/064b-waf-captcha/contract.md` (problems W1 to W8) and
+ADR 0047. The sketch below is kept to the contract's shape.
+
+- `aws_wafv2.CfnWebACL` created by the **app stack** (not the network stack: the app stack
+  already imports the load balancer's ARN, and the keys live in `pa_config.json`), regional
+  scope in eu-west-2, associated to the load balancer with `CfnWebACLAssociation`. CDK has
+  only L1 constructs for WAF.
+- Rules: rate rule per IP on `POST /api/v1/waitlist`, a loose general rate rule, the three
+  AWS managed groups (common, known bad inputs, IP reputation) in **count mode first**, a
+  CAPTCHA rule on the waitlist path. A filtered WAF log (matched requests only) and a
+  read-only report script, because WAF keeps request samples for three hours only.
 - The common group blocks bodies over 8 KB and can match pasted HTML. Chat and plan bodies
-  can exceed 8 KB. Count for a week on staging, exclude the body-size rule, then block.
-  Production runs its own count week.
-- Frontend: load the WAF CAPTCHA script, get a token, send it in `x-aws-waf-token`. CORS
-  must allow that header. The API hostname goes on the web ACL token domain list. The
-  waitlist API must never itself return 405, or the form will mistake it for a CAPTCHA.
-- Per-env config: `waf.enabled`, `waf.managed_mode` (count or block), `waf.captcha`.
-  Per-env `VITE_WAF_*` values injected by the deploy script.
+  can exceed 8 KB, so the body-size rule is always counted. Count for a week on staging,
+  then block. Production runs its own count week.
+- Frontend: load the WAF CAPTCHA script, render the puzzle, send the token in
+  `x-aws-waf-token`. CORS must allow that header. The environment's domain goes on the web
+  ACL token domain list (it covers the page and the API as subdomains). The form recognises
+  a CAPTCHA refusal by the `x-amzn-waf-action` header, not by the 405 status.
+- Per-env config: `waf.enabled`, `waf.mode` (count or block), `waf.captcha`. Per-env
+  `VITE_WAF_*` values resolved by the deploy script from the deployed web ACL.
 - Cost: about $11 a month (web ACL $5, six rules at $1) plus $0.60 per million requests and
   $0.40 per 1,000 puzzles.
 
