@@ -35,6 +35,7 @@ from aws_cdk import (
 from infra.cognito_auth import CognitoAuth
 from infra.components.ingest_worker import IngestWorker
 from infra.components.shared_alb import import_shared_alb
+from infra.components.waf import ApiFirewall
 
 # How the API reads documents' full text (task 057): "in_process" parses them
 # inside the API task as before; "queued" sends one message per document to
@@ -65,6 +66,15 @@ class PolicyAtlasStack(Stack):
         shared_alb_sg = shared_alb_imports.security_group
         shared_alb = shared_alb_imports.load_balancer
         shared_listener = shared_alb_imports.listener
+
+        # Task 064b: the firewall in front of the API (ADR 0047). Reads backend.waf
+        # from pa_config.json; nothing from it reaches the container.
+        ApiFirewall(self, "ApiFirewall",
+            load_balancer_arn=shared_alb.load_balancer_arn,
+            api_host=be_domain,
+            domain_name=domain_name,
+            waf_config=be_config.get("waf"),
+        )
 
         # --- Import DB resources from DatabaseStack ---
         db_secret_name = ssm.StringParameter.value_for_string_parameter(self,

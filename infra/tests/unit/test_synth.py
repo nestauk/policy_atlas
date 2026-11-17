@@ -47,6 +47,7 @@ NAMESPACING_CASES = (
     ("ECS service", "policy-atlas-v3-api-service", ("app",)),
     ("API task family", "policy-atlas-v3-api", ("app",)),
     ("Log group", "/policy_atlas_v3/application", ("app",)),
+    ("WAF log group", "aws-waf-logs-policy-atlas-v3", ("app",)),
     ("Domain", "v3.policyatlas.uk", ("network", "app")),
     ("Hosted UI prefix", "policy-atlas-v3", ("app",)),
     ("Metabase target group", "pa-v3-metabase-staging", ("analytics",)),
