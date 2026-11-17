@@ -12,6 +12,11 @@ from typing import Literal
 #: threads (the default), or ``queued`` through the cloud queue and function.
 IngestMode = Literal["in_process", "queued"]
 
+#: The in-app feedback elements, each switched on by name in
+#: ``POLICY_ATLAS_FEEDBACK`` (task 059): citation flag, missing paper,
+#: use-intent question, claim flag, report a problem, onboarding profile.
+FEEDBACK_ELEMENTS = frozenset({"cf", "mp", "uiq", "clf", "rap", "op"})
+
 
 @dataclass(frozen=True, slots=True)
 class Settings:
@@ -36,6 +41,11 @@ class Settings:
         ingest_mode: Where full-text ingestion runs (``POLICY_ATLAS_INGEST_MODE``).
         ingest_queue_url: The SQS queue the documents go to in ``queued`` mode
             (``POLICY_ATLAS_INGEST_QUEUE_URL``); None in process.
+        feedback_elements: The in-app feedback elements that are on
+            (``POLICY_ATLAS_FEEDBACK``, a comma-separated list of
+            ``FEEDBACK_ELEMENTS`` names; task 059). Empty by default.
+        pa_version: The deployed git commit (``POLICY_ATLAS_VERSION``), stored
+            on each feedback event; None in local development.
     """
 
     oidc_issuer: str
@@ -53,6 +63,8 @@ class Settings:
     theory_of_change_enabled: bool = False
     ingest_mode: IngestMode = "in_process"
     ingest_queue_url: str | None = None
+    feedback_elements: frozenset[str] = frozenset()
+    pa_version: str | None = None
 
 
 def load_settings() -> Settings:
@@ -106,7 +118,29 @@ def load_settings() -> Settings:
         theory_of_change_enabled=_optional("POLICY_ATLAS_THEORY_OF_CHANGE") == "1",
         ingest_mode=ingest_mode,
         ingest_queue_url=ingest_queue_url_from_env(ingest_mode),
+        feedback_elements=feedback_elements_from_env(),
+        pa_version=_optional("POLICY_ATLAS_VERSION"),
     )
+
+
+def feedback_elements_from_env() -> frozenset[str]:
+    """Read ``POLICY_ATLAS_FEEDBACK``: the feedback elements that are on.
+
+    Returns:
+        The element names; empty when the variable is unset or blank.
+
+    Raises:
+        RuntimeError: The variable names an element that does not exist.
+    """
+    value = _optional("POLICY_ATLAS_FEEDBACK") or ""
+    elements = frozenset(name.strip() for name in value.split(",") if name.strip())
+    unknown = elements - FEEDBACK_ELEMENTS
+    if unknown:
+        raise RuntimeError(
+            f"POLICY_ATLAS_FEEDBACK names unknown elements {sorted(unknown)}; "
+            f"known: {sorted(FEEDBACK_ELEMENTS)}"
+        )
+    return elements
 
 
 def ingest_mode_from_env() -> IngestMode:

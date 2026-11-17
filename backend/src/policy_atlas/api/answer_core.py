@@ -384,14 +384,6 @@ def _appraised_chunk_ids(transcript: list[ToolExchange]) -> set[str]:
     return appraised
 
 
-def _trace_id(root_span: Any) -> str | None:
-    """Read the SDK-exposed trace id without pretending one exists in no-op mode."""
-    if root_span is None:
-        return None
-    value = getattr(root_span, "trace_id", None) or getattr(root_span, "id", None)
-    return str(value) if value is not None else None
-
-
 def answer_over_scope(
     engine: Engine,
     *,
@@ -581,7 +573,7 @@ def answer_over_scope(
                 },
                 metadata={"prompt_version": CHAT_PROMPT_VERSION, "model": CHAT_MODEL},
             )
-        trace_id = _trace_id(root_span)
+        trace_id = tracing.span_trace_id(root_span)
     payload = AnswerPayload(
         claims=floored.claims,
         citations=_resolve_citation_sources(engine, floored.citations, task_id=task_id),

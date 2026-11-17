@@ -16,7 +16,8 @@
                 "db_pool_size": 15,
                 "db_max_overflow": 10,
                 "upload_bucket_name": "policy-atlas-v3-staging-uploads",
-                "theory_of_change": true
+                "theory_of_change": true,
+                "feedback": []
             }
         },
         "deploy_analytics": true
@@ -38,7 +39,8 @@
                 "db_pool_size": 15,
                 "db_max_overflow": 10,
                 "upload_bucket_name": "policy-atlas-v3-prod-uploads",
-                "theory_of_change": false
+                "theory_of_change": false,
+                "feedback": []
             }
         },
         "deploy_analytics": true

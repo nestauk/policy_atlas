@@ -131,7 +131,7 @@ def test_table_count(conn: Connection) -> None:
     # `intervention_profile_record`; no evidence-search table changed. 49 -> 50:
     # task 054 iteration 3 adds `toc_figure` (C37); 50 -> 51: increment 2 adds
     # `toc_proposal` (C45); 51 -> 52: increment 5 adds `task_upload` (C8).
-    assert len(metadata.tables) == 52
+    assert len(metadata.tables) == 55  # task 059 adds the three feedback tables
 
 
 def test_uq_chunk_embedding_unit_rejects_duplicate(conn: Connection) -> None:

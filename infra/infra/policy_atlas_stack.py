@@ -101,6 +101,12 @@ class PolicyAtlasStack(Stack):
         # is "1". On in staging for colleagues to try; off in production until
         # the capability is complete.
         theory_of_change = "1" if be_config.get("theory_of_change") else "0"
+        # Task 059 (ADR 0045): the in-app feedback elements that are on, by
+        # name (cf, mp, uiq, clf, rap, op). scripts/deploy.sh reads the same
+        # list for the frontend build. The version is the git commit that
+        # deploy.sh passes as context; it is stored on each feedback event.
+        feedback = ",".join(be_config.get("feedback", []))
+        pa_version = self.node.try_get_context("pa_version") or ""
         if ingest_mode not in INGEST_MODES:
             raise ValueError(
                 f"backend.ingest_mode must be one of {INGEST_MODES} in pa_config.json, "
@@ -216,6 +222,8 @@ class PolicyAtlasStack(Stack):
                 "POLICY_ATLAS_MODEL_ROUTE": model_route,
                 "POLICY_ATLAS_UPLOAD_BUCKET": uploads_bucket.bucket_name,
                 "POLICY_ATLAS_THEORY_OF_CHANGE": theory_of_change,
+                "POLICY_ATLAS_FEEDBACK": feedback,
+                "POLICY_ATLAS_VERSION": pa_version,
                 "POLICY_ATLAS_INGEST_MODE": ingest_mode,
                 "POLICY_ATLAS_INGEST_QUEUE_URL": ingest.queue.queue_url,
             },

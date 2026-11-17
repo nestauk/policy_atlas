@@ -69,6 +69,42 @@ def test_the_theory_of_change_setting_is_on_only_for_1(
     assert load_settings().theory_of_change_enabled is enabled
 
 
+def test_the_feedback_elements_and_version_are_off_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`POLICY_ATLAS_FEEDBACK` and `POLICY_ATLAS_VERSION` (task 059): unset or blank is off."""
+    _set_required_env(monkeypatch)
+    monkeypatch.delenv("POLICY_ATLAS_FEEDBACK", raising=False)
+    monkeypatch.setenv("POLICY_ATLAS_VERSION", "")
+
+    settings = load_settings()
+
+    assert settings.feedback_elements == frozenset()
+    assert settings.pa_version is None
+
+
+def test_the_feedback_elements_are_a_comma_separated_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_required_env(monkeypatch)
+    monkeypatch.setenv("POLICY_ATLAS_FEEDBACK", "cf, rap,")
+    monkeypatch.setenv("POLICY_ATLAS_VERSION", "abc1234")
+
+    settings = load_settings()
+
+    assert settings.feedback_elements == {"cf", "rap"}
+    assert settings.pa_version == "abc1234"
+
+
+def test_an_unknown_feedback_element_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A typing mistake must stop the deploy, not leave an element silently off."""
+    _set_required_env(monkeypatch)
+    monkeypatch.setenv("POLICY_ATLAS_FEEDBACK", "cf,claims")
+
+    with pytest.raises(RuntimeError, match="POLICY_ATLAS_FEEDBACK"):
+        load_settings()
+
+
 def test_db_pool_size_zero_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     """`DB_POOL_SIZE` must be a positive integer — a zero-sized pool is nonsensical."""
     _set_required_env(monkeypatch)
