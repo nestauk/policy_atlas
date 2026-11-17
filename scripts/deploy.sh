@@ -78,6 +78,23 @@ if None in regions or len(regions) != 1:
 
 app = application.get("policy_atlas_config", {})
 backend = app.get("backend", {})
+waf = backend.get("waf")
+if not isinstance(waf, dict):
+    raise SystemExit("FAIL: backend.waf must be an object")
+for key in ("enabled", "mode", "captcha"):
+    if key not in waf:
+        raise SystemExit(f"FAIL: backend.waf.{key} is required")
+for key in waf:
+    if key not in {"enabled", "mode", "captcha"}:
+        raise SystemExit(f"FAIL: backend.waf.{key} is not permitted")
+if type(waf["enabled"]) is not bool:
+    raise SystemExit("FAIL: backend.waf.enabled must be a JSON boolean")
+if type(waf["captcha"]) is not bool:
+    raise SystemExit("FAIL: backend.waf.captcha must be a JSON boolean")
+if waf["mode"] not in ("count", "block"):
+    raise SystemExit("FAIL: backend.waf.mode must be count or block")
+if waf["captcha"] and not waf["enabled"]:
+    raise SystemExit("FAIL: backend.waf.captcha requires backend.waf.enabled")
 public_domain = network.get("public_domain_name")
 if not public_domain or app.get("domain_name") != public_domain:
     raise SystemExit(
@@ -192,13 +209,14 @@ values = [
     required["backend.secret_name"],
     analytics_allowlist_parameter,
     metabase_domain,
+    "1" if waf["enabled"] and waf["captcha"] else "0",
 ]
 if any("\t" in value or "\n" in value for value in values):
     raise SystemExit("FAIL: deployment config values may not contain tabs or newlines")
 print("\t".join(values))
 PY
 )"
-IFS=$'\t' read -r DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER METABASE_DOMAIN <<< "$deploy_config"
+IFS=$'\t' read -r DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER METABASE_DOMAIN WAF_CAPTCHA <<< "$deploy_config"
 readonly DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER METABASE_DOMAIN
 readonly API_BASE_URL="https://${BACKEND_SUBDOMAIN}.${PUBLIC_DOMAIN}"
 
@@ -596,10 +614,49 @@ require_production_build_environment() {
     [[ -n "${VITE_OIDC_AUTHORITY:-}" && "${VITE_OIDC_AUTHORITY:-}" != "None" ]] || missing+=("VITE_OIDC_AUTHORITY")
     [[ -n "${VITE_OIDC_CLIENT_ID:-}" && "${VITE_OIDC_CLIENT_ID:-}" != "None" ]] || missing+=("VITE_OIDC_CLIENT_ID")
 
+    if [[ "$WAF_CAPTCHA" == "1" ]]; then
+        [[ -n "${VITE_WAF_CAPTCHA_SCRIPT_URL:-}" && "${VITE_WAF_CAPTCHA_SCRIPT_URL:-}" != "None" ]] || missing+=("VITE_WAF_CAPTCHA_SCRIPT_URL")
+        [[ -n "${VITE_WAF_CAPTCHA_API_KEY:-}" && "${VITE_WAF_CAPTCHA_API_KEY:-}" != "None" ]] || missing+=("VITE_WAF_CAPTCHA_API_KEY")
+    fi
+
     if (( ${#missing[@]} > 0 )); then
         echo "ERROR: refusing production frontend build; missing: ${missing[*]}" >&2
         exit 1
     fi
+}
+
+# Resolve the public CAPTCHA browser values before any AWS state changes. A missing
+# permission or API key must fail the deploy before CDK can alter the environment.
+resolve_waf_captcha_values() {
+    local api_keys_json captcha_values script_url api_key
+
+    if ! api_keys_json="$(aws wafv2 list-api-keys \
+        --scope REGIONAL \
+        --region "$DEPLOY_REGION" \
+        --output json)"; then
+        fail "deploy role needs wafv2:ListAPIKeys"
+    fi
+    if ! captcha_values="$(python3 -c '
+import json
+import sys
+
+document = json.load(sys.stdin)
+domain = sys.argv[1]
+url = document.get("ApplicationIntegrationURL")
+for summary in document.get("APIKeySummaries", []):
+    if summary.get("TokenDomains") == [domain] and summary.get("APIKey"):
+        if not isinstance(url, str) or not url:
+            raise SystemExit(1)
+        print("{}\t{}".format(url, summary["APIKey"]))
+        raise SystemExit(0)
+raise SystemExit(1)
+' "$PUBLIC_DOMAIN" <<<"$api_keys_json")"; then
+        fail "no WAF API key for ${PUBLIC_DOMAIN}; run: aws wafv2 create-api-key --scope REGIONAL --token-domains ${PUBLIC_DOMAIN} (infra/DEPLOYMENT.md § 2)"
+    fi
+    IFS=$'\t' read -r script_url api_key <<< "$captcha_values"
+    export VITE_WAF_CAPTCHA_SCRIPT_URL="$script_url"
+    export VITE_WAF_CAPTCHA_API_KEY="$api_key"
+    echo "PASS: resolved WAF CAPTCHA API key for ${PUBLIC_DOMAIN}"
 }
 
 # Resolve and validate everything publish_frontend needs. Called from
@@ -716,7 +773,17 @@ export AWS_DEFAULT_REGION="$DEPLOY_REGION"
 # invokes the exact production guard before CDK/AWS commands, with no parsing
 # or extracted copy of its logic in the test itself.
 if [[ "${PA_DEPLOY_GUARD_ONLY:-}" == "1" ]]; then
+    # This override is honoured by the direct guard harness and nowhere else.
+    WAF_CAPTCHA="${PA_DEPLOY_GUARD_WAF_CAPTCHA:-$WAF_CAPTCHA}"
     require_production_build_environment
+    exit 0
+fi
+
+# This harness runs the production lookup with the caller's (usually stubbed) aws.
+if [[ "${PA_DEPLOY_WAF_KEYS_ONLY:-}" == "1" ]]; then
+    resolve_waf_captcha_values
+    echo "VITE_WAF_CAPTCHA_SCRIPT_URL=${VITE_WAF_CAPTCHA_SCRIPT_URL}"
+    echo "VITE_WAF_CAPTCHA_API_KEY=${VITE_WAF_CAPTCHA_API_KEY}"
     exit 0
 fi
 
@@ -735,6 +802,13 @@ if [[ "$METABASE_ALLOWLIST_PARAMETER" != "-" ]]; then
     gate_check \
         "Metabase allowlist SSM parameter contains one to eight valid IPv4 CIDRs" \
         check_metabase_allowlist_parameter
+fi
+
+# Contract W7: the CAPTCHA values are resolved before anything touches AWS
+# state, so a missing key or permission fails with nothing changed. Both
+# bootstrap and update publish the frontend, so both need them.
+if [[ "$WAF_CAPTCHA" == "1" ]]; then
+    resolve_waf_captcha_values
 fi
 
 if [[ "$mode" == "bootstrap" ]]; then
