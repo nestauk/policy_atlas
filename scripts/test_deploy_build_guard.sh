@@ -145,3 +145,117 @@ if [[ "$off_output" != *"VITE_WAF_CAPTCHA_SCRIPT_URL="$'\n'* || "$off_output" ==
 fi
 
 echo "deploy-build-guard-test: PASS"
+
+work_dir="$(mktemp -d "${TMPDIR:-/tmp}/policy-atlas-deploy-order.XXXXXX")"
+trap 'rm -rf "$work_dir"' EXIT
+stub_dir="$work_dir/bin"
+mkdir -p "$stub_dir"
+
+cat >"$stub_dir/aws" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "$1" == "ssm" && "$2" == "get-parameter" ]]; then
+  name=""
+  query=""
+  for ((index = 1; index <= $#; index++)); do
+    if [[ "${!index}" == "--name" ]]; then
+      next=$((index + 1)); name="${!next}"
+    elif [[ "${!index}" == "--query" ]]; then
+      next=$((index + 1)); query="${!next}"
+    fi
+  done
+  if [[ "$query" == "Parameter" ]]; then
+    printf '%s\n' '{"Type":"StringList","Value":"203.0.113.0/24"}'
+    exit 0
+  fi
+  case "$name" in
+    */allowed_cidrs) printf '%s\n' '203.0.113.0/24' ;;
+    */ops_db_secret_arn) printf '%s\n' 'arn:aws:secretsmanager:region:account:secret:ops_db' ;;
+    */ops_target_group_arn) printf '%s\n' 'target-group-arn' ;;
+    */https_listener_arn) printf '%s\n' 'listener-arn' ;;
+    */cluster_arn) printf '%s\n' 'cluster-arn' ;;
+    */private_subnet_ids) printf '%s\n' 'subnet-a,subnet-b' ;;
+    */migration_sg_id) printf '%s\n' 'security-group-id' ;;
+    */migration_task_def_arn) printf '%s\n' 'migration-task-definition' ;;
+    */frontend_bucket_name) printf '%s\n' 'frontend-bucket' ;;
+    */fonts_bucket_name) printf '%s\n' 'fonts-bucket' ;;
+    */distribution_id) printf '%s\n' 'distribution-id' ;;
+    */issuer) printf '%s\n' 'https://issuer.invalid' ;;
+    */client_id) printf '%s\n' 'client-id' ;;
+    *) printf '%s\n' 'value' ;;
+  esac
+  exit 0
+fi
+
+case "$1 $2" in
+  "secretsmanager describe-secret") exit 0 ;;
+  "secretsmanager get-secret-value")
+    printf '%s\n' '{"username":"pa_ops","password":"test","db_connection_string":"postgresql://pa_ops:test@db/test"}'
+    exit 0
+    ;;
+  "ecs describe-services")
+    if [[ "$*" == *"services[0].status"* ]]; then printf '%s\n' ACTIVE; else printf '%s\n' 0; fi
+    exit 0
+    ;;
+  "ecs list-tasks") printf '%s\n' 0; exit 0 ;;
+  "ecs run-task") printf '%s\n' migration-task; exit 0 ;;
+  "ecs describe-tasks")
+    if [[ "$*" == *"lastStatus"* ]]; then printf '%s\n' STOPPED; else printf '%s\n' 0; fi
+    exit 0
+    ;;
+  "ecs update-service"|"ecs wait"|"cloudfront wait") exit 0 ;;
+  "s3 sync")
+    if [[ "$*" == *"frontend/public/fonts/"* ]]; then
+      mkdir -p frontend/public/fonts
+      touch frontend/public/fonts/guard-font.woff2
+    fi
+    exit 0
+    ;;
+  "s3 ls") printf '%s\n' 'font.woff2'; exit 0 ;;
+  "cloudfront create-invalidation") printf '%s\n' invalidation-id; exit 0 ;;
+  "elbv2 describe-rules")
+    printf '%s\n' '{"Rules":[{"Priority":"1","Conditions":[{"Field":"host-header","HostHeaderConfig":{"Values":["ops.v3.policyatlas.uk"]}},{"Field":"source-ip","SourceIpConfig":{"Values":["203.0.113.0/24"]}}]},{"Priority":"2","Conditions":[{"Field":"host-header","HostHeaderConfig":{"Values":["metabase.v3.policyatlas.uk"]}},{"Field":"source-ip","SourceIpConfig":{"Values":["203.0.113.0/24"]}}]}]}'
+    exit 0
+    ;;
+esac
+echo "unexpected aws command: $*" >&2
+exit 1
+EOF
+chmod +x "$stub_dir/aws"
+
+cat >"$stub_dir/npx" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "$stub_dir/npx"
+
+cat >"$stub_dir/pnpm" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "build:ops" ]]; then
+  mkdir -p ../backend/ops-ui
+  touch ../backend/ops-ui/index.html
+fi
+exit 0
+EOF
+chmod +x "$stub_dir/pnpm"
+
+cat >"$stub_dir/curl" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "$stub_dir/curl"
+
+order_output="$work_dir/order.out"
+PATH="$stub_dir:$PATH" PA_DEPLOY_ORDER_ONLY=1 \
+  bash "$deploy_script" update >"$order_output"
+
+expected_order=$'check ops allowlist\nbuild ops pages\ncdk deploy\ncheck ops secret\ncheck ops service\nstop api\nstop ops\nmigrate\nstart api\nstart ops\npublish frontend'
+actual_order="$(grep -E '^(check ops allowlist|build ops pages|cdk deploy|check ops secret|check ops service|stop api|stop ops|migrate|start api|start ops|publish frontend)$' "$order_output")"
+if [[ "$actual_order" != "$expected_order" ]]; then
+  echo "ERROR: deploy sequence differs from its required order" >&2
+  printf '%s\n' "$actual_order" >&2
+  exit 1
+fi
+
+echo "deploy-order-test: PASS"

@@ -8,6 +8,7 @@ set -euo pipefail
 readonly CERTIFICATE_REGION="us-east-1"
 readonly ENV_NAME="${PA_DEPLOY_ENV_NAME:-staging}"
 readonly ECS_SERVICE_NAME="policy-atlas-v3-api-service"
+readonly OPS_SERVICE_NAME="policy-atlas-v3-ops-service"
 readonly SERVICE_STOP_TIMEOUT_SECONDS=600
 readonly SERVICE_STOP_POLL_SECONDS=5
 # The migration task is polled every 15 s for at most MIGRATION_WAIT_MAX_S seconds
@@ -91,6 +92,7 @@ if waf["mode"] not in ("count", "block"):
     raise SystemExit("FAIL: backend.waf.mode must be count or block")
 if waf["captcha"] and not waf["enabled"]:
     raise SystemExit("FAIL: backend.waf.captcha requires backend.waf.enabled")
+ops = app.get("ops", {})
 public_domain = network.get("public_domain_name")
 if not public_domain or app.get("domain_name") != public_domain:
     raise SystemExit(
@@ -198,6 +200,22 @@ if missing:
         f"FAIL: {env_name!r} deployment config is missing: {', '.join(missing)}"
     )
 
+ops_subdomain = ops.get("subdomain")
+if not isinstance(ops_subdomain, str) or re.fullmatch(
+    r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", ops_subdomain
+) is None:
+    raise SystemExit("FAIL: ops.subdomain must be a valid DNS label")
+ops_allowlist_parameter = ops.get("allowed_cidrs_parameter_name")
+if not isinstance(ops_allowlist_parameter, str) or re.fullmatch(
+    r"/policy_atlas_v3/ops/[A-Za-z0-9_.-]+", ops_allowlist_parameter
+) is None:
+    raise SystemExit(
+        "FAIL: ops.allowed_cidrs_parameter_name must be under /policy_atlas_v3/ops/"
+    )
+ops_desired_count = ops.get("desired_count")
+if ops_desired_count not in (0, 1):
+    raise SystemExit("FAIL: ops.desired_count must be 0 or 1")
+
 values = [
     regions.pop(),
     public_domain,
@@ -206,15 +224,19 @@ values = [
     analytics_allowlist_parameter,
     metabase_domain,
     "1" if waf["enabled"] and waf["captcha"] else "0",
+    ops_subdomain,
+    ops_allowlist_parameter,
+    str(ops_desired_count),
 ]
 if any("\t" in value or "\n" in value for value in values):
     raise SystemExit("FAIL: deployment config values may not contain tabs or newlines")
 print("\t".join(values))
 PY
 )"
-IFS=$'\t' read -r DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER METABASE_DOMAIN WAF_CAPTCHA <<< "$deploy_config"
-readonly DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER METABASE_DOMAIN
+IFS=$'\t' read -r DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER METABASE_DOMAIN WAF_CAPTCHA OPS_SUBDOMAIN OPS_ALLOWLIST_PARAMETER OPS_DESIRED_COUNT <<< "$deploy_config"
+readonly DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER METABASE_DOMAIN OPS_SUBDOMAIN OPS_ALLOWLIST_PARAMETER OPS_DESIRED_COUNT
 readonly API_BASE_URL="https://${BACKEND_SUBDOMAIN}.${PUBLIC_DOMAIN}"
+readonly OPS_DOMAIN="${OPS_SUBDOMAIN}.${PUBLIC_DOMAIN}"
 
 readonly SSM_CLUSTER_ARN="/policy_atlas_v3/deploy/cluster_arn"
 readonly SSM_PRIVATE_SUBNET_IDS="/policy_atlas_v3/deploy/private_subnet_ids"
@@ -227,6 +249,8 @@ readonly SSM_USER_POOL_ID="/policy_atlas_v3/auth/user_pool_id"
 readonly SSM_OIDC_ISSUER="/policy_atlas_v3/auth/issuer"
 readonly SSM_OIDC_CLIENT_ID="/policy_atlas_v3/auth/client_id"
 readonly SSM_SHARED_LISTENER_ARN="/policy_atlas_v3/shared_alb/https_listener_arn"
+readonly SSM_OPS_TARGET_GROUP_ARN="/policy_atlas_v3/deploy/ops_target_group_arn"
+readonly SSM_OPS_DB_SECRET_ARN="/policy_atlas_v3/deploy/ops_db_secret_arn"
 
 usage() {
     echo "Usage: $0 {bootstrap|update|check}" >&2
@@ -254,6 +278,14 @@ gate_check() {
             printf '%s\n' "$diagnostics" | sed -E 's/[0-9]{12}/<account-id>/g' >&2
         fi
         fail "${description}"
+    fi
+}
+
+# The order-only harness records the irreversible sequence while stubbing its
+# external commands. Normal deploy output remains the existing gate messages.
+deploy_step() {
+    if [[ "${PA_DEPLOY_ORDER_ONLY:-}" == "1" ]]; then
+        echo "$1"
     fi
 }
 
@@ -324,7 +356,8 @@ check_metabase_allowlist_parameter() {
         --name "$METABASE_ALLOWLIST_PARAMETER" \
         --query Parameter \
         --output json | \
-        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.metabase_allowlist
+        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.metabase_allowlist \
+            validate --label "Metabase"
 }
 
 metabase_allowlist_size() {
@@ -334,6 +367,26 @@ metabase_allowlist_size() {
         --query Parameter \
         --output json | \
         PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.metabase_allowlist size
+}
+
+check_ops_allowlist_parameter() {
+    aws ssm get-parameter \
+        --region "$DEPLOY_REGION" \
+        --name "$OPS_ALLOWLIST_PARAMETER" \
+        --query Parameter \
+        --output json | \
+        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.metabase_allowlist \
+            validate --label "ops allowlist"
+}
+
+ops_allowlist_size() {
+    aws ssm get-parameter \
+        --region "$DEPLOY_REGION" \
+        --name "$OPS_ALLOWLIST_PARAMETER" \
+        --query Parameter \
+        --output json | \
+        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.metabase_allowlist \
+            size --label "ops allowlist"
 }
 
 # The listener rules read the allowlist through an AWS::SSM::Parameter::Value
@@ -355,6 +408,60 @@ check_metabase_listener_rule_matches_allowlist() {
         METABASE_ALLOWLIST_VALUE="$allowlist_value" \
         PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.metabase_allowlist \
             verify-rule --host "$METABASE_DOMAIN"
+}
+
+check_ops_listener_rule_matches_allowlist() {
+    local listener_arn allowlist_value
+    listener_arn="$(ssm_value "$SSM_SHARED_LISTENER_ARN")"
+    allowlist_value="$(ssm_value "$OPS_ALLOWLIST_PARAMETER")"
+    aws elbv2 describe-rules \
+        --region "$DEPLOY_REGION" \
+        --listener-arn "$listener_arn" \
+        --query Rules \
+        --output json | \
+        METABASE_ALLOWLIST_VALUE="$allowlist_value" \
+        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.metabase_allowlist \
+            verify-rule --host "$OPS_DOMAIN" --label "ops allowlist"
+}
+
+check_ops_secret() {
+    local secret_arn
+    secret_arn="$(ssm_value "$SSM_OPS_DB_SECRET_ARN")"
+    require_value "ops database secret ARN SSM export" "$secret_arn"
+    aws secretsmanager describe-secret --region "$DEPLOY_REGION" --secret-id "$secret_arn" >/dev/null
+}
+
+check_ops_service() {
+    local status
+    status="$(aws ecs describe-services \
+        --region "$DEPLOY_REGION" \
+        --cluster "$CLUSTER_ARN" \
+        --services "$OPS_SERVICE_NAME" \
+        --query 'services[0].status' \
+        --output text)"
+    [[ "$status" == "ACTIVE" ]]
+}
+
+check_ops_target_group_export() {
+    local target_group_arn
+    target_group_arn="$(ssm_value "$SSM_OPS_TARGET_GROUP_ARN")"
+    require_value "ops target-group ARN SSM export" "$target_group_arn"
+}
+
+check_ops_db_connection_string() {
+    local secret_arn
+    secret_arn="$(ssm_value "$SSM_OPS_DB_SECRET_ARN")"
+    aws secretsmanager get-secret-value \
+        --region "$DEPLOY_REGION" \
+        --secret-id "$secret_arn" \
+        --query SecretString \
+        --output text | python3 -c '
+import json
+import sys
+
+secret = json.load(sys.stdin)
+sys.exit(0 if isinstance(secret.get("db_connection_string"), str) and secret["db_connection_string"] else 1)
+'
 }
 
 check_fonts_uploaded() {
@@ -405,17 +512,22 @@ run_cdk() {
 }
 
 deploy_all_stacks() {
-    local analytics_context=()
+    local analytics_context=() ops_context
     if [[ "$METABASE_ALLOWLIST_PARAMETER" != "-" ]]; then
         local allowlist_size
         allowlist_size="$(metabase_allowlist_size)"
         analytics_context=(-c "metabase_allowlist_size=${allowlist_size}")
     fi
+    ops_context=(-c "ops_allowlist_size=$(ops_allowlist_size)")
+    deploy_step "cdk deploy"
     (
         cd "$REPO_ROOT/infra"
         # app.py requires env_name; stage=all is explicit for reproducible deploys.
+        # The `${array[@]+...}` form keeps an empty array safe under `set -u`
+        # on the macOS bash 3.2 operators run this from.
         run_cdk deploy -c "env_name=${ENV_NAME}" -c stage=all \
-            ${analytics_context[@]+"${analytics_context[@]}"} --all
+            ${analytics_context[@]+"${analytics_context[@]}"} \
+            ${ops_context[@]+"${ops_context[@]}"} --all
     )
     verify_metabase_allowlist_applied
 }
@@ -431,6 +543,13 @@ verify_metabase_allowlist_applied() {
     gate_check \
         "Metabase listener rules' source-ip conditions match the SSM allowlist" \
         check_metabase_listener_rule_matches_allowlist
+}
+
+verify_ops_allowlist_applied() {
+    echo "Postconditions gate: ops allowlist"
+    gate_check \
+        "ops listener rules' source-ip conditions match the SSM allowlist" \
+        check_ops_listener_rule_matches_allowlist
 }
 
 bootstrap() {
@@ -451,39 +570,40 @@ bootstrap() {
 # 2026-07-28). Explicitly aligning to the template value is idempotent and
 # keeps stop-old-before-migrate deterministic on every path.
 scale_down_service() {
+    local service_name="$1"
     aws ecs update-service \
         --region "$DEPLOY_REGION" \
         --cluster "$CLUSTER_ARN" \
-        --service "$ECS_SERVICE_NAME" \
+        --service "$service_name" \
         --desired-count 0 >/dev/null
 }
 
 wait_for_service_to_stop() {
-    local deadline running_count running_tasks
+    local service_name="$1" service_label="$2" deadline running_count running_tasks
     deadline=$((SECONDS + SERVICE_STOP_TIMEOUT_SECONDS))
 
     while true; do
         running_count="$(aws ecs describe-services \
             --region "$DEPLOY_REGION" \
             --cluster "$CLUSTER_ARN" \
-            --services "$ECS_SERVICE_NAME" \
+            --services "$service_name" \
             --query 'services[0].runningCount' \
             --output text)"
         running_tasks="$(aws ecs list-tasks \
             --region "$DEPLOY_REGION" \
             --cluster "$CLUSTER_ARN" \
-            --service-name "$ECS_SERVICE_NAME" \
+            --service-name "$service_name" \
             --desired-status RUNNING \
             --query 'length(taskArns)' \
             --output text)"
 
         if [[ "$running_count" == "0" && "$running_tasks" == "0" ]]; then
-            echo "PASS: API service has no running tasks"
+            echo "PASS: ${service_label} service has no running tasks"
             return
         fi
 
         if (( SECONDS >= deadline )); then
-            fail "timed out waiting for the API service to stop"
+            fail "timed out waiting for the ${service_label} service to stop"
         fi
 
         sleep "$SERVICE_STOP_POLL_SECONDS"
@@ -595,12 +715,34 @@ scale_up_service() {
             break
         fi
         if [[ "$attempt" == 10 ]]; then
-            echo "FAIL: $API_BASE_URL/readyz never returned 200" >&2
+            echo "FAIL: API /readyz never returned 200" >&2
             return 1
         fi
         sleep 15
     done
     echo "PASS: API service scaled to one task and /readyz answers 200"
+}
+
+scale_up_ops_service() {
+    aws ecs update-service \
+        --region "$DEPLOY_REGION" \
+        --cluster "$CLUSTER_ARN" \
+        --service "$OPS_SERVICE_NAME" \
+        --desired-count "$OPS_DESIRED_COUNT" >/dev/null
+    aws ecs wait services-stable \
+        --region "$DEPLOY_REGION" \
+        --cluster "$CLUSTER_ARN" \
+        --services "$OPS_SERVICE_NAME"
+    if [[ "$OPS_DESIRED_COUNT" == "1" ]]; then
+        if [[ "${PA_DEPLOY_OPS_HEALTH:-}" == "1" ]]; then
+            curl --fail --silent --output /dev/null "https://${OPS_DOMAIN}/healthz"
+            echo "PASS: ops service scaled to one task and /healthz answers 200"
+        else
+            echo "NOTE: ops health check skipped; set PA_DEPLOY_OPS_HEALTH=1 from an allowlisted network"
+        fi
+    else
+        echo "PASS: ops service remains scaled to zero"
+    fi
 }
 
 require_production_build_environment() {
@@ -729,6 +871,41 @@ publish_frontend() {
     echo "PASS: frontend published and invalidated"
 }
 
+build_ops_pages() {
+    (
+        cd "$REPO_ROOT/frontend"
+        pnpm install --frozen-lockfile
+        VITE_API_BASE_URL=/api \
+            VITE_OIDC_AUTHORITY="$VITE_OIDC_AUTHORITY" \
+            VITE_OIDC_CLIENT_ID="$VITE_OIDC_CLIENT_ID" \
+            pnpm build:ops
+    )
+}
+
+check_ops_pages_bundle() {
+    [[ -f "$REPO_ROOT/backend/ops-ui/index.html" ]]
+}
+
+prepare_ops_deploy() {
+    deploy_step "check ops allowlist"
+    gate_check \
+        "ops allowlist SSM parameter contains one to eight valid IPv4 CIDRs" \
+        check_ops_allowlist_parameter
+    if [[ "$mode" == "bootstrap" ]]; then
+        # The bundle embeds the Cognito issuer and client id, which the first
+        # deploy is about to create. The image ships an empty ops-ui directory
+        # and the ops service stays at zero; the next update builds the pages.
+        echo "NOTE: ops pages are built on the next update deploy (no OIDC exports yet)"
+        return 0
+    fi
+    # This validates the OIDC exports before the build that embeds them. The
+    # public frontend later reuses these same resolved values unchanged.
+    resolve_frontend_publish_config
+    deploy_step "build ops pages"
+    gate_check "ops pages build and bundle contains index.html" build_ops_pages
+    gate_check "ops pages bundle exists" check_ops_pages_bundle
+}
+
 common_tail() {
     CLUSTER_ARN="$(ssm_value "$SSM_CLUSTER_ARN")"
     PRIVATE_SUBNET_IDS="$(ssm_value "$SSM_PRIVATE_SUBNET_IDS")"
@@ -740,12 +917,33 @@ common_tail() {
     require_value "migration security-group ID SSM export" "$MIGRATION_SG_ID"
     require_value "migration task-definition ARN SSM export" "$MIGRATION_TASK_DEF_ARN"
 
+    # Re-resolved here so a bootstrap (which skipped the ops build) still has
+    # the publish settings; on an update this repeats the earlier reads.
     resolve_frontend_publish_config
 
-    scale_down_service
-    wait_for_service_to_stop
+    deploy_step "check ops secret"
+    gate_check "ops database secret exists" check_ops_secret
+    deploy_step "check ops service"
+    gate_check "ops ECS service is ACTIVE" check_ops_service
+    gate_check "ops target-group ARN SSM export is present" check_ops_target_group_export
+    verify_ops_allowlist_applied
+
+    # The same stop → migrate → start order applies to a downgrade: stop both
+    # services, run the downgrade, start the API, then start the ops service.
+    deploy_step "stop api"
+    scale_down_service "$ECS_SERVICE_NAME"
+    wait_for_service_to_stop "$ECS_SERVICE_NAME" "API"
+    deploy_step "stop ops"
+    scale_down_service "$OPS_SERVICE_NAME"
+    wait_for_service_to_stop "$OPS_SERVICE_NAME" "ops"
+    deploy_step "migrate"
     run_migrations
+    gate_check "ops database secret carries db_connection_string" check_ops_db_connection_string
+    deploy_step "start api"
     scale_up_service
+    deploy_step "start ops"
+    scale_up_ops_service
+    deploy_step "publish frontend"
     publish_frontend
 }
 
@@ -821,6 +1019,7 @@ fi
 # state, so a missing key or permission fails with nothing changed. Both
 # bootstrap and update publish the frontend, so both need them.
 apply_waf_captcha_values
+prepare_ops_deploy
 
 if [[ "$mode" == "bootstrap" ]]; then
     bootstrap
