@@ -1,0 +1,228 @@
+import { useState, type FormEvent, type ReactNode } from "react";
+import { Navigate, useParams } from "react-router";
+
+import { Button } from "../../ui/brand/Button";
+import { PageBackLink, PageHeader } from "../../ui/brand/PageHeader";
+import {
+  inferDefaults,
+  OpsApiError,
+  useOrganisationQuota,
+  useOrganisations,
+  usePeople,
+  usePeopleQuota,
+  type Organisation,
+  type Person,
+  type QuotaValues,
+} from "../api";
+import { facts, limitWord, plural } from "../format";
+import { FailedLine, Loading, Panel, useRecordedToast } from "../ui";
+import { draftOf, QuotaFields, valuesOf, type QuotaDraft } from "./QuotaFields";
+
+/** A placeholder naming where an empty field's value comes from. */
+function inherits(from: string, value: number | null | undefined): string {
+  return value === undefined ? `Inherits ${from}` : facts(`Inherits ${from}`, limitWord(value));
+}
+
+/**
+ * The quota page's frame, for a person or an organisation: the way back,
+ * the title, one line under it, the two fields, Save quota and Clear and
+ * inherit, and an optional panel beside the form.
+ */
+function QuotaPage({
+  back,
+  title,
+  line,
+  initial,
+  placeholders,
+  save,
+  aside,
+}: {
+  back: ReactNode;
+  title: string;
+  line: string;
+  initial: QuotaDraft;
+  placeholders: { tasks: string; runs: string };
+  save: (values: QuotaValues, done: { onSaved: () => void; onRefused: (message: string) => void; onFailed: () => void }) => void;
+  aside?: ReactNode;
+}) {
+  const toast = useRecordedToast();
+  const [draft, setDraft] = useState(initial);
+  const [refused, setRefused] = useState<string | null>(null);
+  const [failed, setFailed] = useState<(() => void) | null>(null);
+  const [pending, setPending] = useState(false);
+
+  const send = (next: QuotaDraft) => {
+    setRefused(null);
+    setFailed(null);
+    setPending(true);
+    save(valuesOf(next), {
+      onSaved: () => {
+        setPending(false);
+        setDraft(next);
+        toast("Quota saved");
+      },
+      onRefused: (message) => {
+        setPending(false);
+        setRefused(message);
+      },
+      onFailed: () => {
+        setPending(false);
+        setFailed(() => () => send(next));
+      },
+    });
+  };
+
+  return (
+    <>
+      <PageHeader context={back} title={title} actions={null} filters={<p className="text-body text-grey">{line}</p>} />
+      <div className="mt-6 grid gap-8 md:grid-cols-[minmax(0,34rem)_minmax(0,22rem)]">
+        <form
+          onSubmit={(event: FormEvent) => {
+            event.preventDefault();
+            send(draft);
+          }}
+          className="flex flex-col gap-6 border border-line-2 bg-paper p-6 shadow-paper max-md:p-4"
+        >
+          <QuotaFields
+            draft={draft}
+            onChange={setDraft}
+            tasksPlaceholder={placeholders.tasks}
+            runsPlaceholder={placeholders.runs}
+          />
+          {refused !== null && (
+            <p role="alert" className="text-body text-red">
+              {refused}
+            </p>
+          )}
+          {failed !== null && <FailedLine onRetry={failed} />}
+          <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
+            <Button variant="ghost" disabled={pending} onClick={() => send({ tasks: "", runs: "" })}>
+              Clear and inherit
+            </Button>
+            <Button type="submit" disabled={pending}>
+              Save quota
+            </Button>
+          </div>
+        </form>
+        {aside}
+      </div>
+    </>
+  );
+}
+
+/** Where a person's limit comes from: their own number, their organisation's, or the default. */
+function source(own: number | null | undefined, org: Organisation | undefined, orgValue: number | null | undefined) {
+  if (own != null) return "this person";
+  if (org !== undefined && orgValue != null) return org.name;
+  return "the default";
+}
+
+function LimitsPanel({ person, org }: { person: Person; org: Organisation | undefined }) {
+  const rows = [
+    facts(
+      "Tasks per year",
+      limitWord(person.limits.task_quota_per_year),
+      `from ${source(person.task_quota_per_year, org, org?.task_quota_per_year)}`,
+    ),
+    facts(
+      "Simultaneous tasks",
+      limitWord(person.limits.runs_per_user),
+      `from ${source(person.runs_per_user, org, org?.runs_per_user)}`,
+    ),
+    facts("Admin exemption", person.is_admin ? "yes" : "no"),
+  ];
+  return (
+    <Panel title="Limits that apply" className="self-start">
+      <ul className="flex flex-col">
+        {rows.map((row) => (
+          <li key={row} className="border-t border-line py-2.5 text-meta text-ink first:border-t-0 first:pt-0">
+            {row}
+          </li>
+        ))}
+      </ul>
+    </Panel>
+  );
+}
+
+/** A person's quota (`/people/:userId/quota`). */
+export function PersonQuotaView() {
+  const { userId = "" } = useParams();
+  const people = usePeople();
+  const organisations = useOrganisations();
+  const quota = usePeopleQuota();
+  if (people.isPending || organisations.isPending) return <Loading />;
+  if (people.isError || organisations.isError) {
+    return (
+      <FailedLine
+        onRetry={() => {
+          void people.refetch();
+          void organisations.refetch();
+        }}
+      />
+    );
+  }
+  const person = people.data.find((entry) => entry.user_id === userId);
+  if (person === undefined) return <Navigate to="/people" replace />;
+  const org = organisations.data.find((entry) => entry.org_id === person.organisation?.org_id);
+  const defaults = inferDefaults(people.data, organisations.data);
+  return (
+    <QuotaPage
+      key={person.user_id}
+      back={<PageBackLink to="/people">People</PageBackLink>}
+      title={`Quota for ${person.display_name}`}
+      line={facts(
+        person.organisation?.name ?? "not enrolled",
+        `${plural(person.tasks_this_year, "task")} created in the last 365 days`,
+      )}
+      initial={draftOf(person)}
+      placeholders={{
+        tasks:
+          org?.task_quota_per_year != null
+            ? inherits(org.name, org.task_quota_per_year)
+            : inherits("the default", defaults.tasks),
+        runs: org?.runs_per_user != null ? inherits(org.name, org.runs_per_user) : inherits("the default", defaults.runs),
+      }}
+      save={(values, done) =>
+        quota.mutate(
+          { user_ids: [person.user_id], ...values },
+          {
+            onSuccess: ({ results }) =>
+              results[0]?.outcome === "ok" ? done.onSaved() : done.onRefused(results[0]?.message ?? ""),
+            onError: done.onFailed,
+          },
+        )
+      }
+      aside={<LimitsPanel person={person} org={org} />}
+    />
+  );
+}
+
+/** An organisation's quota defaults (`/organisations/:orgId/quota`). */
+export function OrganisationQuotaView() {
+  const { orgId = "" } = useParams();
+  const people = usePeople();
+  const organisations = useOrganisations();
+  const quota = useOrganisationQuota(orgId);
+  if (organisations.isPending) return <Loading />;
+  if (organisations.isError) return <FailedLine onRetry={() => void organisations.refetch()} />;
+  const org = organisations.data.find((entry) => entry.org_id === orgId);
+  if (org === undefined) return <Navigate to="/organisations" replace />;
+  const defaults = inferDefaults(people.data ?? [], organisations.data);
+  return (
+    <QuotaPage
+      key={org.org_id}
+      back={<PageBackLink to="/organisations">Organisations</PageBackLink>}
+      title={`Quota for ${org.name}`}
+      line={`Applies to everyone in ${org.name} who has no number of their own.`}
+      initial={draftOf(org)}
+      placeholders={{ tasks: inherits("the default", defaults.tasks), runs: inherits("the default", defaults.runs) }}
+      save={(values, done) =>
+        quota.mutate(values, {
+          onSuccess: done.onSaved,
+          onError: (error) =>
+            error instanceof OpsApiError && error.code === "ops_refused" ? done.onRefused(error.message) : done.onFailed(),
+        })
+      }
+    />
+  );
+}

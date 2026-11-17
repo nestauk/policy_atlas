@@ -141,3 +141,29 @@ chips except the ones named here.
 
 The audit log on the pages; editing the domain table; cohorts and the revision-2 pages. The
 explainer's revision 2 is a later task.
+
+## Rulings during the build (lead, 2026-11-17)
+
+The `frontend-designer` agent proposed wording where the script gave none. All of it
+is accepted and is now part of the script:
+
+- Toast summaries: "Moved <name> to <org> · recorded", "De-enrolled <name> · recorded",
+  "Offboarded <name> · recorded", "Invitation sent to <email> · recorded",
+  "<name> approved · recorded", "Created <org> · recorded". The move toast uses real
+  plurals ("1 project and 4 tasks").
+- Offboard dialog title for several people: "Offboard <n> people?". Bulk "Set quota…"
+  opens a dialog "Quota for <n> people" with the same two fields, the name list and empty
+  placeholders. The Move and De-enrol dialogs for several people list every name and
+  address (B6).
+- Account menu: the person's name and email, then "Sign out".
+- Relative times: "<n> min ago", "<n> h ago", "<n> d ago", then the short date after
+  30 days. Page title "Policy Atlas Ops". The Move dialog's select is labelled
+  "Organisation".
+- Add a person with no organisation chosen: "Choose an organisation." Empty lists:
+  "No people match." / "No requests yet." / "No organisations match."
+- Where the script and `DESIGN.md` disagree (relative times, chips in a table, a red
+  button, no orange chip tone), the script wins for the ops pages; `DESIGN.md` gains a
+  red-button entry in a later pass if the owner wants one.
+- "· recorded" after a create, an organisation quota save or an approve rests on the
+  2xx alone: those routes write the audit row in the same transaction as the response,
+  so a 2xx means recorded; they return no `action_id`.
