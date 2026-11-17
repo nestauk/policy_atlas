@@ -171,6 +171,7 @@ frontend-install:
 openapi-sync:
 	$(MAKE) -C backend openapi
 	cd frontend && pnpm run gen
+	cd frontend && pnpm run gen:ops
 
 # Schema-first drift gate (task 025 F.1): one schema generates both API
 # ends, so this fails the build the moment either committed artifact
@@ -194,6 +195,20 @@ drift-check:
 		rm -f "$$tmp_types"; exit 1; \
 	fi; \
 	rm -f "$$tmp_types"
+	@tmp_openapi_ops=$$(mktemp) && \
+	uv run --project backend python -m policy_atlas.api.export_openapi "$$tmp_openapi_ops" --mode ops && \
+	if ! diff -u frontend/openapi-ops.json "$$tmp_openapi_ops"; then \
+		echo "ERROR: frontend/openapi-ops.json is stale relative to the ops contract." >&2; \
+		rm -f "$$tmp_openapi_ops"; exit 1; \
+	fi; \
+	rm -f "$$tmp_openapi_ops"
+	@tmp_types_ops=$$(mktemp) && \
+	(cd frontend && pnpm exec openapi-typescript openapi-ops.json -o "$$tmp_types_ops") && \
+	if ! diff -u frontend/src/api/gen/types-ops.ts "$$tmp_types_ops"; then \
+		echo "ERROR: frontend/src/api/gen/types-ops.ts is stale relative to frontend/openapi-ops.json." >&2; \
+		rm -f "$$tmp_types_ops"; exit 1; \
+	fi; \
+	rm -f "$$tmp_types_ops"
 	@echo "drift-check: OK"
 
 # Font-binary guard (task 025, contract strand 7): Averta/Zosia are licensed

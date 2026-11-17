@@ -168,13 +168,14 @@ class ActionResult(BaseModel):
         user_id: The subject.
         outcome: How it ended.
         message: The command's one-line summary, or the refusal's reason.
-        action_id: The ``ops_action`` row's id.
+        action_id: The ``ops_action`` row's id, or ``None`` for ``too_soon``
+            (nothing happened, so nothing was recorded).
     """
 
     user_id: str
     outcome: ActionOutcome
     message: str
-    action_id: uuid.UUID
+    action_id: uuid.UUID | None = None
 
 
 class BulkOut(BaseModel):

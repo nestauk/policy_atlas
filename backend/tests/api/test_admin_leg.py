@@ -1039,3 +1039,37 @@ def test_no_raw_sql_string_reaches_the_is_admin_flag_behind_the_walk() -> None:
         # Task 065 (B12): the resolver reads the flag for the quota exemption.
         "routers/common.py": {"effective_limits"},
     }
+
+
+#: Task 065 (B1, B9): the closed list of `is_ops` readers, kept the way
+#: `_IS_ADMIN_READERS` is. The ops routes' own dependency reads the flag to
+#: admit a caller, and the people-list shape declares it; nothing else under
+#: `api/` may touch it — no HTTP route sets it (contract B1).
+_IS_OPS_READERS = {
+    "routers/ops.py": {"require_ops"},
+    "contract/ops.py": {"PersonOut"},
+}
+
+
+def test_only_the_named_code_sites_read_the_is_ops_flag() -> None:
+    """Contract B1's reader rule for `is_ops`, asserted against a closed list."""
+    root = Path(policy_atlas.api.__file__).parent
+    actual = {
+        str(path.relative_to(root)): scopes
+        for path in _api_modules()
+        if (scopes := _scopes_mentioning(path, "is_ops"))
+    }
+
+    assert actual == _IS_OPS_READERS
+
+
+def test_no_raw_sql_string_reaches_the_is_ops_flag_behind_the_walk() -> None:
+    """The `is_ops` list a second way: no code string under `api/` contains the name."""
+    root = Path(policy_atlas.api.__file__).parent
+    actual = {
+        str(path.relative_to(root)): scopes
+        for path in _api_modules()
+        if (scopes := _scopes_with_a_string_containing(path, "is_ops"))
+    }
+
+    assert actual == {}

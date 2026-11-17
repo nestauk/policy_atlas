@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+import re
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager, suppress
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -13,16 +16,18 @@ import structlog
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
+from starlette.staticfiles import StaticFiles
 
 from policy_atlas.api import continuation
 from policy_atlas.api.auth import JwtAuthenticator
 from policy_atlas.api.contract import ErrorBody, ErrorEnvelope
+from policy_atlas.api.deps import Identity
 from policy_atlas.api.settings import IngestMode, Settings, load_settings
 from policy_atlas.core import tracing
 from policy_atlas.core.logging import configure_logging
@@ -71,9 +76,12 @@ _CONFLICT_CODES = {
     "task_quota",
     # Task 064a (Q15): a free-text preview's confirm token is gone; compile again.
     "confirm_expired",
+    # Task 065 ops-host command refusals.
+    "ops_refused",
+    "enrolled_elsewhere",
 }
 
-_CAPACITY_CODES = {"chat_capacity"}
+_CAPACITY_CODES = {"chat_capacity", "resend_cooldown"}
 
 #: Task 054 (S14): a readable task that is not a theory of change.
 _NOT_FOUND_CODES = {"toc_not_found"}
@@ -182,12 +190,17 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
     # run before anything below can log.
     configure_logging()
     app_settings = settings if settings is not None else load_settings()
+    lifespan = (
+        _ops_lifespan(app_settings)
+        if app_settings.service_role == "ops"
+        else _lifespan(app_settings)
+    )
     app = FastAPI(
         title="Policy Atlas API",
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
-        lifespan=_lifespan(app_settings),
+        lifespan=lifespan,
         # Every route, including any a later slice adds: the request's log
         # context gains the route template the router just resolved. See
         # `bind_route_template`.
@@ -274,6 +287,13 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
             raise HTTPException(status_code=503, detail="database is unavailable") from None
         return {"status": "ok"}
 
+    if app_settings.service_role == "ops":
+        from policy_atlas.api.routers.ops import router as ops_router
+
+        app.include_router(ops_router)
+        _mount_ops_ui(app, app_settings.ops_ui_dir)
+        return app
+
     # Imported here so resource routers can use ApiConflict without an import
     # cycle during module initialisation.
     from policy_atlas.api.routers.check_ins import router as check_ins_router
@@ -314,6 +334,35 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
     ):
         app.include_router(router)
     return app
+
+
+def _mount_ops_ui(app: FastAPI, ops_ui_dir: Path | None) -> None:
+    """Mount an operations SPA bundle when its built files are available.
+
+    Args:
+        app: The operations FastAPI application.
+        ops_ui_dir: Directory carrying the built operations UI, if configured.
+    """
+    if ops_ui_dir is None:
+        return
+    index = ops_ui_dir / "index.html"
+    assets = ops_ui_dir / "assets"
+    if assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets), name="ops-assets")
+    if not index.is_file():
+        return
+
+    ui_root = ops_ui_dir.resolve()
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def ops_page(path: str) -> FileResponse:
+        """Serve a bundle file or the SPA entry point for browser routes."""
+        if path.startswith("api/"):
+            raise HTTPException(404)
+        candidate = (ui_root / path).resolve()
+        if candidate.parent == ui_root and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(index)
 
 
 async def bind_route_template(request: Request) -> None:
@@ -415,6 +464,86 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
             engine.dispose()
 
     return lifespan
+
+
+def _ops_lifespan(
+    settings: Settings,
+) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
+    """Build the isolated operations-service lifespan.
+
+    The operations service owns the identity provider and optional signup sweep,
+    but never starts the API process's executor, continuation drainer, ingest
+    consumer, or startup sweep.
+    """
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        engine = create_engine(
+            settings.database_url,
+            pool_pre_ping=True,
+            pool_size=settings.db_pool_size,
+            max_overflow=settings.db_max_overflow,
+        )
+        http_client = httpx.Client(timeout=httpx.Timeout(5.0), follow_redirects=False)
+        app.state.engine = engine
+        app.state.http_client = http_client
+        app.state.authenticator = JwtAuthenticator(settings, http_client)
+        identity = identity_from_issuer(settings.oidc_issuer)
+        app.state.identity = identity
+        if settings.ops_ui_dir is None or not settings.ops_ui_dir.is_dir():
+            log.info("ops.ui_absent", ops_ui_dir=str(settings.ops_ui_dir))
+        task: asyncio.Task[None] | None = None
+        if settings.self_signup_enabled:
+            task = asyncio.create_task(_sweep_loop(engine, identity, settings))
+            app.state.sweep_task = task
+        try:
+            yield
+        finally:
+            if task is not None:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+            http_client.close()
+            engine.dispose()
+
+    return lifespan
+
+
+def identity_from_issuer(issuer: str) -> Identity:
+    """Build the optional Cognito seam encoded by an OIDC issuer URL.
+
+    Args:
+        issuer: The configured OIDC issuer.
+
+    Returns:
+        A Cognito client and its pool metadata for a Cognito issuer, otherwise
+        an empty identity for the local development issuer.
+    """
+    match = re.fullmatch(
+        r"https://cognito-idp\.([a-z0-9-]+)\.amazonaws\.com/([^/?#]+)", issuer
+    )
+    if match is None:
+        return Identity(None, None, None)
+    region, pool_id = match.groups()
+    import boto3
+
+    return Identity(boto3.client("cognito-idp", region_name=region), pool_id, region)
+
+
+async def _sweep_loop(engine: Engine, identity: Identity, settings: Settings) -> None:
+    """Run the self-signup sweep every minute; a failing tick is logged, never fatal.
+
+    The sweep itself lives in :mod:`policy_atlas.ops.sweep` and takes the clock,
+    so its tests call it directly and never sleep (plan P10).
+    """
+    while True:
+        await asyncio.sleep(60)
+        try:
+            from policy_atlas.ops.sweep import sweep_once
+
+            await asyncio.to_thread(sweep_once, engine, identity, settings)
+        except Exception:
+            log.exception("ops.sweep_failed")
 
 
 def _claim_and_execute(
