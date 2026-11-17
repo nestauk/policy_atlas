@@ -1,0 +1,69 @@
+"""Round-trip coverage for task 065's account-management revision."""
+
+from __future__ import annotations
+
+import pytest
+from alembic import command
+from sqlalchemy import inspect, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.exc import IntegrityError
+
+from tests.conftest import _alembic_cfg
+
+
+def test_065_round_trip_restores_the_fresh_upgrade_schema(engine: Engine) -> None:
+    """Upgrade, reverse one revision, and upgrade again to the same catalog."""
+    cfg = _alembic_cfg()
+    try:
+        with engine.connect() as conn:
+            before = {
+                table: tuple(sorted(column["name"] for column in inspect(conn).get_columns(table)))
+                for table in (
+                    "app_user",
+                    "organisation",
+                    "waitlist_entry",
+                    "ops_action",
+                    "organisation_domain",
+                )
+            }
+        command.downgrade(cfg, "-1")
+        with engine.connect() as conn:
+            assert "ops_action" not in inspect(conn).get_table_names()
+            assert "organisation_domain" not in inspect(conn).get_table_names()
+        command.upgrade(cfg, "head")
+        with engine.connect() as conn:
+            after = {
+                table: tuple(sorted(column["name"] for column in inspect(conn).get_columns(table)))
+                for table in before
+            }
+        assert after == before
+    finally:
+        command.upgrade(cfg, "head")
+
+
+def test_065_checks_trigger_and_nologin_role(engine: Engine) -> None:
+    """The quota constraints, privilege trigger, and role exist after upgrade."""
+    with engine.begin() as conn:
+        with pytest.raises(IntegrityError), conn.begin_nested():
+            conn.execute(
+                text(
+                    "INSERT INTO app_user "
+                    "(user_id, display_name, is_admin, is_ops, created_at, task_quota_per_year) "
+                    "VALUES ('negative-quota', 'Negative quota', false, false, "
+                    "CURRENT_TIMESTAMP, -1)"
+                )
+            )
+        assert (
+            conn.execute(
+                text(
+                    "SELECT 1 FROM pg_trigger WHERE tgname = 'trg_app_user_refuse_privilege_grant'"
+                )
+            ).scalar_one()
+            == 1
+        )
+        assert (
+            conn.execute(
+                text("SELECT rolcanlogin FROM pg_roles WHERE rolname = 'pa_ops'")
+            ).scalar_one()
+            is False
+        )
