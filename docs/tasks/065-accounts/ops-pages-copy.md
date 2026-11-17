@@ -1,0 +1,143 @@
+# Ops pages: sections, states and copy (task 065, B6, B12, C5)
+
+The lead's script for the ops pages, from the owner's explainer and wireframes (an artifact,
+not committed; direction settled 2026-11-16). The `frontend-designer` agent builds from it.
+Copy here is final unless the owner changes it; layout, spacing and motion are the agent's
+within `DESIGN.md`. Voice: short label, then one plain sentence. Sentence case. No pills or
+chips except the ones named here.
+
+## Addresses and shell
+
+- The pages live at `https://ops.<domain>` (staging `ops.v3.policyatlas.uk`, production
+  `ops.policyatlas.uk`), served by the ops service. Routes: `/people`, `/people/new`,
+  `/people/:userId/quota`, `/organisations`, `/organisations/:orgId/quota`, `/requests`.
+  `/` redirects to `/people`.
+- Sign-in is the same Cognito sign-in as the app (the shared `AuthProvider`). Signed out: the
+  shell shows one button, "Sign in".
+- Top bar (its own, not the app's): the wordmark, a chip "Ops" (blue tone, like BETA), the
+  sections **People · Organisations · Requests** (Requests carries a count of waiting rows when
+  it is above zero), a link "Back to Policy Atlas" to `https://<domain>` at the right, and the
+  signed-in person's initials. No New, Tasks or Projects.
+- Every page: a title (Display size), one primary action at the right where the page has one,
+  a filter row with a search field, then a plain table.
+
+## States every page shares
+
+- **Loading:** "Loading…" (role status), nothing else.
+- **No ops role (403 on the first call):** the shell, then one paragraph: "Your account does
+  not have the ops role." and one sentence under it: "Ask an operator to grant it from the
+  command line." Nothing else renders. No retry button.
+- **Unauthenticated (401 after refresh):** the "Sign in" button.
+- **Request failed (5xx or network):** a line under the table, "Something went wrong. Try
+  again." with a "Try again" ghost button.
+- **Toast after a write:** "<Summary> · recorded" where recorded means the audit row was
+  written (the response carries `action_id`). On a bulk action: "<n> done, <m> failed ·
+  recorded"; the failed rows show their message inline in the table under the person.
+
+## People (`/people`)
+
+- Title "People". Primary "Add person" → `/people/new`. Search placeholder "Find by name,
+  email or organisation" (filters the loaded list client-side; the route takes `q` too).
+- Columns: Name · Email · Organisation · Flags · Tasks this year · Invited · (row menu).
+  - Organisation: the name, or "not enrolled" in grey.
+  - Flags: chips "Admin" and "Ops" when true; otherwise empty.
+  - Tasks this year: "12 of 50", or "no limit" when `limits.task_quota_per_year` is null.
+  - Invited: relative time of `invited_at` ("2 h ago"), or "—".
+- Row menu (one person): "Enrol or move to an organisation…", "Set quota…",
+  "Resend invitation", "De-enrol", "Offboard…".
+  - "Resend invitation" is disabled inside the hour, with the hint "sent 2 h ago, try again
+    after 15:40" (the time one hour after `invited_at`, local time).
+  - "De-enrol" is disabled when the person is not enrolled and holds no flag.
+- Selection: a checkbox per row and one in the header. With one or more ticked, a bar above
+  the table: "<n> selected" · "Set quota…" · "Move to…" · "Resend invitation" · "De-enrol" ·
+  "Offboard…" · "Clear selection". The bar's actions use the bulk routes with every ticked
+  subject.
+- **Enrol or move dialog:** title "Move <name> to an organisation" (or "Move <n> people to an
+  organisation"); a select of organisations; help "Their tasks and projects move with them and
+  become private."; buttons "Move" (primary) and "Cancel".
+- **De-enrol dialog:** title "De-enrol <name>?" (or "<n> people"); sentence "They stay signed in
+  but leave their organisation. Their tasks and projects stay with them and leave the
+  organisation too."; buttons "De-enrol" and "Cancel".
+- **Offboard dialog (one person):** title "Offboard <name>?"; sentence "This stops them signing
+  in, signs them out everywhere, removes them from their organisation and takes down any public
+  links to their tasks. Their tasks stay in the database. This cannot be undone from here.";
+  field label "Type the email to confirm" with the address as placeholder; the button
+  "Offboard" is red (the one red button, DESIGN.md) and disabled until the typed value equals
+  the address; "Keep the account" cancels.
+- **Offboard dialog (several):** the same sentence, then a list of every person's name and
+  address, then the field "Type the number of people to confirm" (the button enables when the
+  typed value equals the count).
+- **Resend (bulk) outcome:** rows with `too_soon` show "Sent less than an hour ago" under the
+  name.
+
+## Add a person (`/people/new`)
+
+- Back link "People". Title "Add a person".
+- Fields: "Email" · "Display name" (help "Shown to colleagues. Not the email.") · "Organisation"
+  (select, required). Buttons "Create and send invitation" (primary) and "Cancel".
+- Side panel "What happens": three sentences: "Cognito creates the account and emails a
+  temporary password from no-reply@<domain>. It is valid for 30 days." · "If the address
+  already has an account with no organisation, it is added to this one and no email is sent."
+  · "If it already belongs to another organisation, nothing changes and you are told which one."
+- Errors: 409 `enrolled_elsewhere` → a red line under the email field: "Already in <org>. Use
+  Enrol or move from the People list."; 409 `ops_refused` → the message under the form; the
+  form keeps what was typed.
+- Success: toast "Invitation sent to <email> · recorded" or "Added to <org>, no email sent ·
+  recorded"; navigate to `/people`.
+
+## Set a quota (`/people/:userId/quota`, `/organisations/:orgId/quota`)
+
+- Back link "People" (or "Organisations"). Title "Quota for <name>".
+- Under the title, one line of facts: "<Organisation> · <n> tasks created in the last 365 days"
+  (person page only).
+- Field "Tasks per year": number input; placeholder shows the inherited value, e.g. "Inherits
+  Nesta · 100" or "Inherits the default · 50"; help "Leave empty to inherit. Enter 0 for no
+  limit."
+- Field "Simultaneous tasks": number input; placeholder "Inherits the default · 3"; help
+  (warning tone, yellow tint band, the Word Beside the Colour Rule): "Warning: this limit
+  protects the shared run capacity. A higher number lets this person take more of it at the
+  same time, which can slow other people's runs." Editable all the same.
+- Organisation form: the same two fields; help "Applies to everyone in <org> who has no number
+  of their own."
+- Buttons "Save quota" (primary) and "Clear and inherit" (ghost; sends both fields null).
+- Side panel "Limits that apply" (person page): three rows: "Tasks per year · <value or no
+  limit> · from <this person | <org> | the default>", "Simultaneous tasks · … · …",
+  "Admin exemption · yes | no".
+- Toast: "Quota saved · recorded".
+
+## Requests (`/requests`)
+
+- Title "Access requests". No primary. Search placeholder "Find by name or email".
+- Above the table, one line: "Self-signup on for <domains> · <sent> of <max> invitations sent
+  this hour", or "Self-signup off" when disabled.
+- Columns: Name · Email · Requested (relative time) · Status · (action).
+  - Status chips (the word beside the colour): green "Invited <time>"; yellow "Waiting";
+    orange "Check: already in <org>".
+  - Action: "Approve into…" for Waiting (opens the organisation select, then calls approve);
+    nothing for Invited; "Open person" for Check (links to `/people?q=<email>`).
+- Approve dialog: title "Approve <name>"; select "Organisation"; sentence "Cognito emails them a
+  temporary password. If the address already has an account, it is enrolled without an email.";
+  buttons "Approve" and "Cancel". 409 `enrolled_elsewhere` → the row turns to Check with the
+  message.
+
+## Organisations (`/organisations`)
+
+- Title "Organisations". Primary "Add organisation" (opens a dialog: field "Name", buttons
+  "Create" and "Cancel"; 409 → "An organisation with that name already exists.").
+- Search placeholder "Find an organisation".
+- Columns: Name · People · Tasks per year · Simultaneous tasks · Self-signup domain · Created ·
+  (row menu).
+  - Tasks per year / Simultaneous tasks: the override, or "default · <settings value>" in grey
+    (the settings values are the defaults the server reports through a person's limits; show
+    "default" alone when unknown).
+  - Self-signup domain: the domains joined with ", ", or "—". Read-only.
+- Row menu: "Set quota defaults…" only.
+- Below the table, a panel "Move a task or project to another organisation": field "Task or
+  project id" (help "Paste the id from its web address"), select "Move to", button "Move".
+  Success toast "Moved <n> project(s) and <m> task(s) into <org> · recorded"; the response's
+  `message` is shown under the panel.
+
+## Not in this slice
+
+The audit log on the pages; editing the domain table; cohorts and the revision-2 pages. The
+explainer's revision 2 is a later task.
