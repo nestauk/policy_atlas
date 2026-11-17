@@ -19,6 +19,7 @@ import structlog
 from langfuse import Langfuse
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.exc import SQLAlchemyError
 
 from policy_atlas.api.contract import StageKey
 from policy_atlas.api.lifecycle import touch_task
@@ -6084,11 +6085,16 @@ def _run_step_attempt(
             trace_id = tracing.span_trace_id(run_span)
             if trace_id is not None:
                 # Its own transaction, so the id survives a rollback of the
-                # component's work: feedback on a failed run still joins.
-                with engine.begin() as conn:
-                    conn.execute(
-                        runs.update().where(runs.c.run_id == run_id).values(trace_id=trace_id)
-                    )
+                # component's work: feedback on a failed run still joins. A
+                # failure here is logged and the component runs on: the id
+                # serves feedback only, and feedback never stops a search.
+                try:
+                    with engine.begin() as conn:
+                        conn.execute(
+                            runs.update().where(runs.c.run_id == run_id).values(trace_id=trace_id)
+                        )
+                except SQLAlchemyError:
+                    log.warning("run.trace_id_not_stored", run_id=str(run_id), exc_info=True)
             ingest_backends = backends
             if registry_component == "ingest_full_text" and backends.queue is None:
                 # A bundle built without the construction paths (tests, stubs):

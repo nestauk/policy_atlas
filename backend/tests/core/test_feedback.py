@@ -294,6 +294,39 @@ def test_the_runner_stores_the_trace_id_even_when_the_component_rolls_back(
         _cleanup(engine, task_id)
 
 
+def test_a_failed_trace_id_write_does_not_fail_the_component(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    task_id: uuid.UUID | None = None
+
+    @contextmanager
+    def traced_span(*args: Any, **kwargs: Any) -> Iterator[Any]:
+        # Postgres refuses a NUL character in text, so the write of this id fails.
+        yield SimpleNamespace(trace_id="bad\x00id")
+
+    def succeeding_harness(conn: Connection, *, run_id: uuid.UUID, **kwargs: Any) -> dict[str, Any]:
+        conn.execute(
+            runs.update().where(runs.c.run_id == run_id).values(status="succeeded", ended_at=now())
+        )
+        return {"summary": {"sources_added": 1}, "error": None}
+
+    monkeypatch.setattr(tracing, "component_span", traced_span)
+    monkeypatch.setattr(runner_module, "run_harness", succeeding_harness)
+    try:
+        task_id, scope_id = _seed_task(engine)
+        outcome = _single_component_attempt(
+            engine, task_id=task_id, scope_id=scope_id, component="acquire"
+        )
+        assert outcome.status == "succeeded"
+        with engine.connect() as conn:
+            stored = conn.execute(
+                select(runs.c.trace_id).where(runs.c.task_id == task_id)
+            ).scalar_one()
+        assert stored is None
+    finally:
+        _cleanup(engine, task_id)
+
+
 def test_the_revision_round_trips(engine: Engine) -> None:
     cfg = _alembic_cfg()
 
