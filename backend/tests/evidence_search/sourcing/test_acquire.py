@@ -183,7 +183,7 @@ def test_acquire_table_count(conn: Connection) -> None:
     # Link between two tasks); 38 -> 43: task 045 adds `option`,
     # `option_membership`, `option_relation`, `longlist_result` and
     # `intervention_profile_record`; no evidence-search table changed.
-    assert len(metadata.tables) == 52  # task 054 adds toc_figure, toc_proposal and task_upload
+    assert len(metadata.tables) == 55  # task 062 adds the three feedback tables
 
 
 def seed_coverage_row(

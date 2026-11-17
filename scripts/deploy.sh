@@ -185,6 +185,16 @@ if missing:
         f"FAIL: {env_name!r} deployment config is missing: {', '.join(missing)}"
     )
 
+# In-app feedback (task 062): the element names that are on. The API gets the
+# same list from the CDK stack; the frontend build gets it below.
+feedback = backend.get("feedback", [])
+if not isinstance(feedback, list) or not all(
+    isinstance(name, str) and re.fullmatch(r"[a-z]+", name) for name in feedback
+):
+    raise SystemExit(
+        f"FAIL: {env_name!r} backend.feedback must be a JSON list of element names"
+    )
+
 values = [
     regions.pop(),
     public_domain,
@@ -192,14 +202,15 @@ values = [
     required["backend.secret_name"],
     analytics_allowlist_parameter,
     metabase_domain,
+    ",".join(feedback) or "-",
 ]
 if any("\t" in value or "\n" in value for value in values):
     raise SystemExit("FAIL: deployment config values may not contain tabs or newlines")
 print("\t".join(values))
 PY
 )"
-IFS=$'\t' read -r DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER METABASE_DOMAIN <<< "$deploy_config"
-readonly DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER METABASE_DOMAIN
+IFS=$'\t' read -r DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER METABASE_DOMAIN FEEDBACK_ELEMENTS <<< "$deploy_config"
+readonly DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER METABASE_DOMAIN FEEDBACK_ELEMENTS
 readonly API_BASE_URL="https://${BACKEND_SUBDOMAIN}.${PUBLIC_DOMAIN}"
 
 readonly SSM_CLUSTER_ARN="/policy_atlas_v3/deploy/cluster_arn"
@@ -400,7 +411,10 @@ deploy_all_stacks() {
     (
         cd "$REPO_ROOT/infra"
         # app.py requires env_name; stage=all is explicit for reproducible deploys.
+        # pa_version: the commit being deployed, stored on each feedback
+        # event (task 062).
         run_cdk deploy -c "env_name=${ENV_NAME}" -c stage=all \
+            -c "pa_version=$(git -C "$REPO_ROOT" rev-parse --short HEAD)" \
             ${analytics_context[@]+"${analytics_context[@]}"} --all
     )
     verify_metabase_allowlist_applied
@@ -613,6 +627,11 @@ resolve_frontend_publish_config() {
     if [[ "$ENV_NAME" == "staging" ]]; then
         export VITE_OPTIONS_SCOPING=1
         export VITE_THEORY_OF_CHANGE=1
+    fi
+    # In-app feedback (task 062): the same element list the API gets from
+    # infra/pa_config.json, so the two sides cannot disagree.
+    if [[ "$FEEDBACK_ELEMENTS" != "-" ]]; then
+        export VITE_FEEDBACK="$FEEDBACK_ELEMENTS"
     fi
 }
 
