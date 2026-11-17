@@ -325,6 +325,10 @@ runs = Table(
     # the composite FK below binds only once it's set (MATCH SIMPLE, per
     # synthesis_result's optional-reference precedent).
     Column("capability_run_id", UUID(as_uuid=True), nullable=True),
+    # The Langfuse trace of this component run (task 062, ADR 0045 decision 4),
+    # written when the span opens. NULL for a run made before task 062 or with
+    # tracing off: feedback on it is saved but has no Langfuse score.
+    Column("trace_id", Text, nullable=True),
     # Composite unique so event_log can FK on (run_id, task_id) and prevent cross-task events.
     UniqueConstraint("run_id", "task_id", name="uq_runs_run_task"),
     # Cross-task FK guard, per the synthesis-result/task-plan
@@ -2220,4 +2224,113 @@ task_upload = Table(
     ),
     CheckConstraint("size_bytes > 0 AND size_bytes <= 10485760", name="ck_task_upload_size"),
     Index("ix_task_upload_task", "task_id"),
+)
+
+# --- In-app feedback (task 062, ADR 0045) ---
+
+#: The feedback kinds where one user has at most one active row per run and
+#: target: a second submit changes or retracts the first. The partial unique
+#: index below and ``core.feedback`` both read this.
+FEEDBACK_TOGGLE_KINDS = ("citation_flag", "screening_override", "claim_flag", "use_intent")
+
+#: One row for each piece of feedback a user gives. Rows are never deleted: an
+#: undo sets ``retracted_at``. ``payload`` is validated per kind in application
+#: code. ``trace_id`` is copied from the component run the feedback is about,
+#: and ``feedback_event_id`` is also the id of the mirrored Langfuse score.
+feedback_event = Table(
+    "feedback_event",
+    metadata,
+    Column("feedback_event_id", UUID(as_uuid=True), primary_key=True),
+    Column("user_id", Text, ForeignKey("app_user.user_id"), nullable=False),
+    # NULL only for a problem report made before a run exists.
+    Column(
+        "capability_run_id",
+        UUID(as_uuid=True),
+        ForeignKey("capability_run.capability_run_id"),
+        nullable=True,
+    ),
+    Column("trace_id", Text, nullable=True),
+    Column("surface", Text, nullable=False),
+    Column("kind", Text, nullable=False),
+    Column("target_type", Text, nullable=False),
+    # An internal id as text: a task_source_snapshot_id for a document, never
+    # an OpenAlex id (ADR 0045 decision 8).
+    Column("target_id", Text, nullable=True),
+    Column("payload", JSONB, nullable=False),
+    Column("pa_version", Text, nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("retracted_at", DateTime(timezone=True), nullable=True),
+    CheckConstraint(
+        "kind IN ('citation_flag', 'screening_override', 'missing_paper', 'use_intent', "
+        "'claim_flag', 'problem_report')",
+        name="ck_feedback_event_kind",
+    ),
+    CheckConstraint(
+        "surface IN ('report_references', 'sources_all', 'report_foot', 'sources_tab', "
+        "'screened_out_row', 'report_key_findings', 'report_claim_sidebar', 'app_header')",
+        name="ck_feedback_event_surface",
+    ),
+    CheckConstraint(
+        "target_type IN ('document', 'run', 'report', 'claim')",
+        name="ck_feedback_event_target_type",
+    ),
+    CheckConstraint("jsonb_typeof(payload) = 'object'", name="ck_feedback_event_payload_object"),
+    Index("ix_feedback_event_run", "capability_run_id"),
+    Index("ix_feedback_event_user", "user_id"),
+    Index("ix_feedback_event_kind_created", "kind", "created_at"),
+    Index("ix_feedback_event_target", "target_type", "target_id"),
+    # One active row per user, run, target and kind, for toggle kinds only. The
+    # run is in the key because a document id is the same for every run of a task.
+    Index(
+        "uq_feedback_event_active_toggle",
+        "user_id",
+        "capability_run_id",
+        "target_type",
+        "target_id",
+        "kind",
+        unique=True,
+        postgresql_where=text(
+            "retracted_at IS NULL AND kind IN ("
+            + ", ".join(f"'{kind}'" for kind in FEEDBACK_TOGGLE_KINDS)
+            + ")"
+        ),
+    ),
+)
+
+#: Where the pipeline lost a paper that a user reported as missing: one row for
+#: each ``missing_paper`` feedback event, written by the resolver.
+missing_paper_resolution = Table(
+    "missing_paper_resolution",
+    metadata,
+    Column(
+        "feedback_event_id",
+        UUID(as_uuid=True),
+        ForeignKey("feedback_event.feedback_event_id"),
+        primary_key=True,
+    ),
+    Column("resolved_id", Text, nullable=True),  # NULL when the input matched nothing
+    Column("failure_stage", Text, nullable=False),
+    Column("resolver_confidence", Float, nullable=True),
+    Column("resolved_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint(
+        "failure_stage IN ('unresolved', 'cited', 'not_cited', 'not_selected', "
+        "'screened_out_s2', 'screened_out_s1', 'acquired_only', 'not_retrieved')",
+        name="ck_missing_paper_resolution_stage",
+    ),
+)
+
+#: A user's answers to the onboarding questions: one row for each user. The
+#: team types and jobs will change after user testing, so they have no database
+#: check; the application validates them (ADR 0045 decision 2).
+user_profile = Table(
+    "user_profile",
+    metadata,
+    Column("user_id", Text, ForeignKey("app_user.user_id"), primary_key=True),
+    Column("department", Text, nullable=True),
+    Column("team_type", Text, nullable=True),
+    Column("primary_job", Text, nullable=True),
+    Column("secondary_job", Text, nullable=True),
+    Column("panel_opt_in", Boolean, nullable=True),
+    Column("completed_at", DateTime(timezone=True), nullable=True),
+    Column("skipped_once_at", DateTime(timezone=True), nullable=True),
 )

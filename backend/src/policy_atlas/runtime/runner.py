@@ -6081,6 +6081,14 @@ def _run_step_attempt(
             component=step.component,
             session_id=session_id,
         ) as run_span:
+            trace_id = tracing.span_trace_id(run_span)
+            if trace_id is not None:
+                # Its own transaction, so the id survives a rollback of the
+                # component's work: feedback on a failed run still joins.
+                with engine.begin() as conn:
+                    conn.execute(
+                        runs.update().where(runs.c.run_id == run_id).values(trace_id=trace_id)
+                    )
             ingest_backends = backends
             if registry_component == "ingest_full_text" and backends.queue is None:
                 # A bundle built without the construction paths (tests, stubs):
