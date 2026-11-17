@@ -2356,7 +2356,9 @@ omissions.
   it is the designated home for admin capability, but it ships **no admin screen**. An
   admin sees the ordinary product, wider. A dashboard, an impersonation tool or an ops
   view is the slice that adds the surface — and the first one to need *per-organisation*
-  admin rather than a global boolean turns this flag into the roles slice.
+  admin rather than a global boolean turns this flag into the roles slice. Task 065 (2026-11-17)
+  adds the ops pages on a separate address-gated service (ADR 0046), so an ops surface now
+  exists; per-organisation roles stay deferred.
 - **What remains of the workspace-cluster IA** — this slice discharged the
   *navigational* half of the IA seam: one lifecycle, a grouping above tasks, and one
   destination per task state. It did **not** re-parent plan, run or artefact onto a
@@ -2447,6 +2449,16 @@ omissions.
   to verified recipients) and the note that the 50/day cap becomes SES's own
   limits. Until then `user create --invite manual` (single-use minted temp
   password, printed once, forced change at first sign-in) is the workaround.
+  **Discharged by task 065 on 2026-11-17** (SES is the pool's sender); the
+  `--invite manual` path stays as a recorded fallback.
+- **Self-signup domains beyond `nesta.org.uk`.** Task 065 lists one domain. Reopen when a
+  second organisation wants self-signup; adding one is `org domain add`, not a deploy.
+- **Editing the domain table from the ops pages.** Rare, and a tenancy decision, so it is
+  CLI only (`org domain add` / `remove`) for now. Reopen if the edits become routine.
+- **Email sent by the application itself.** Today Cognito is the only sender (invitations).
+  Reopen when the product needs its own mail (notifications, receipts).
+- **The ops action log on the ops pages.** The `ops_action` table is queryable by an
+  operator; a page for it is a later slice. Reopen when operators ask for it.
 - **Membership moves race API row creation** (review finding, 2026-08-25, declined
   as a code fix). `creator_org_id` is a non-locking read, so a task created in
   the window around an enrol/re-enrol/de-enrol can carry the old membership's

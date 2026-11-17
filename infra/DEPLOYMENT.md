@@ -371,20 +371,6 @@ synth-time context query and must not run before the VPC exists.
      signed in; needs `AdminSetUserPassword`). SES-backed pool email is now in
      place through task 065; see [Pool email through SES (task 065)](#pool-email-through-ses-task-065).
 
-     ### Pool email through SES (task 065)
-
-     Check production access before enabling the sender:
-
-     ```bash
-     aws sesv2 get-account --region eu-west-2
-     ```
-
-     Confirm `ProductionAccessEnabled` is true. Verify the SES identity first,
-     then obtain production access, set `email.enabled` to true in
-     `pa_config.json`, and deploy. The daily sending limit is SES's own
-     `SendQuota`, returned by the same command. Use `--invite manual` only as
-     the fallback when an invitation email does not arrive.
-
      **Removing a person's access (task 064a, Q10).** `user de-enrol` changes
      the database only: the person's Cognito account still signs in and their
      public links stay public. `user offboard` is the command to use when
@@ -415,9 +401,10 @@ synth-time context query and must not run before the VPC exists.
      run ends. It needs `AdminDisableUser` and `AdminUserGlobalSignOut` on the
      pool, from the operator's own credentials.
 
-     The invitation goes through the `COGNITO_DEFAULT` sender (the pool has no
-     `EmailConfiguration`), which is capped at 50 messages a day and needs a
-     real deliverable mailbox.
+     With `email.enabled` false the invitation goes through the `COGNITO_DEFAULT`
+     sender, which is capped at 50 messages a day; with it true it goes through
+     SES (see [Pool email through SES (task 065)](#pool-email-through-ses-task-065)).
+     Either way it needs a real deliverable mailbox.
 
 4. **Migration task** — one-shot ECS task running the backend image
    (`alembic upgrade head`), invoked with a fail-loud wait on the task's exit
@@ -466,6 +453,81 @@ secret's value into the new secret (`aws secretsmanager put-secret-value`)
 before the service first starts against the restored database, then delete the
 orphaned secret. With no data source connected yet, a lost key costs only the
 re-entry of source credentials.
+
+### Pool email through SES (task 065)
+
+Check production access before enabling the sender:
+
+```bash
+aws sesv2 get-account --region eu-west-2
+```
+
+Confirm `ProductionAccessEnabled` is true. Verify the SES identity first,
+then obtain production access, set `email.enabled` to true in
+`pa_config.json`, and deploy. The daily sending limit is SES's own
+`SendQuota`, returned by the same command. Use `--invite manual` only as
+the fallback when an invitation email does not arrive.
+
+### The ops service (task 065)
+
+The ops service is a second ECS (Elastic Container Service) service built from
+the same image as the API. It serves the ops pages and the `/api/v1/ops/*`
+routes, and nothing else. The load balancer lets in only allowlisted addresses.
+
+**The ops address.** `https://ops.<domain>`, from `ops.subdomain` in
+`pa_config.json` (staging: `https://ops.v3.policyatlas.uk`).
+
+**The allowlist parameter.** `/policy_atlas_v3/ops/allowed_cidrs` in Parameter
+Store (the AWS settings store). A CIDR (Classless Inter-Domain Routing) range is
+an address block such as `203.0.113.0/24`. The parameter is a `StringList` of up
+to 8 IPv4 CIDRs, checked by the same validator as Metabase's. Create it by hand
+before the first deploy; the deploy fails loudly if it is missing or invalid.
+
+**The ops database secret.** `policy_atlas_v3/ops_db` in Secrets Manager.
+CDK (Cloud Development Kit) generates it with the username `pa_ops` and a random
+password. The migration task writes `db_connection_string` into it after every
+migration, so the ops service always logs in as the restricted `pa_ops`
+database role.
+
+**First-deploy order.**
+
+1. Create the allowlist parameter.
+2. Deploy with `ops.desired_count` set to 0. The service exists but runs no
+   tasks.
+3. Grant the first ops role from your machine:
+
+   ```bash
+   uv run python -m policy_atlas.ops --env staging ops grant --email <email>
+   ```
+
+   Only the CLI can grant `is_ops`; no web page can.
+4. Set `ops.desired_count` to 1 and deploy again.
+
+**Self-signup.** `self_signup.enabled` in `pa_config.json` is false by default
+(`max_per_hour` caps accounts per hour). Before switching it on, make sure the
+Nesta organisation exists and has its domain:
+
+```bash
+uv run python -m policy_atlas.ops --env staging org create --name Nesta
+uv run python -m policy_atlas.ops --env staging org domain add --domain nesta.org.uk --org Nesta
+```
+
+Then set `enabled` to true and deploy. On production, do this only after the
+WAF (web application firewall) rate rule from task 064b is live.
+
+**Rollback, one step at a time.**
+
+- Email (SES): set `email.enabled` to false and deploy. The pool goes back to
+  the default sender and templates.
+- Ops service: set `ops.desired_count` to 0 and deploy. If the schema must go
+  too, stop both services first, then run the downgrade that drops `is_ops`,
+  `invited_at`, the four quota columns and `ops_action`. The public API reads
+  the quota columns, so it must be stopped.
+- Self-signup: set `self_signup.enabled` to false and deploy. The sweep stops.
+  If the schema must go, stop the ops service, then run the downgrade that drops
+  the domain table and the waitlist columns.
+
+A rollback never drops a table while a service that reads it is running.
 
 ## 4. Steady-state deploys + the deploy invariant
 

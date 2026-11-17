@@ -106,8 +106,21 @@ structurally as a closed code-site list (`_access.admin_read_leg` and
 `owner_email` gate and the trace decision — plus `me.get_me`, the
 `MeOut` field declaration, and `tasks.create_task`, whose task-quota
 exemption is the one administrator behaviour that is not a read — task
-064a Q8, ADR 0045); that exemption is the only write path that reads it,
-and no HTTP surface can set it.
+064a Q8, ADR 0045). The reader list now also names
+`routers/common.py::effective_limits` (the quota exemption moved there) and
+`contract/ops.py::PersonOut` (the ops-host people list projects both flags), as
+the closed-list test records. The
+exemption is the only write path that reads the flag, and no HTTP surface can
+set it.
+
+**The ops host (task 065, ADR 0046).** A second service, built from the same
+image with `POLICY_ATLAS_SERVICE_ROLE=ops`, serves only health,
+`/api/v1/ops/*` and the ops pages at `https://ops.<domain>`. The load balancer
+lets in only allowlisted addresses. Every ops route needs `app_user.is_ops`,
+which only the CLI grants; no HTTP route sets `is_admin` or `is_ops`.
+`/api/v1/me` is not mounted there. The ops routes have their own OpenAPI
+document (`frontend/openapi-ops.json`). Email addresses are visible to
+ops-role holders on that host and nowhere else.
 
 ## Error envelope
 
@@ -162,6 +175,14 @@ Splash-page **Request access** intake. Public — no bearer token.
   firewall (task 064b) the form sends a CAPTCHA token in the `x-aws-waf-token`
   request header, which CORS allows; the firewall checks it and the API never
   reads it.
+
+With the self-signup flag on (task 065), the ops service's sweep turns rows
+whose address domain is in `organisation_domain` into accounts within about a
+minute, and stamps `account_user_id` and `account_created_at` on the row. The
+public route and its response are unchanged, and the honeypot stays. The abuse
+ceiling: one invitation per address, `max_per_hour` accounts per hour, listed
+domains only, and a one-hour resend cooldown. Production turns the flag on only
+after the WAF (web application firewall) rate rule from task 064b is live.
 
 ### Tasks
 
@@ -879,6 +900,11 @@ no instance-ownership lease, so deploys must fully stop the old process
 (hard-kill — default SIGTERM lets the walk executor drain-run) **before**
 booting the new one; overlapping instances would interrupt each other's
 live walks. The lease belongs to the cross-instance seam (infra slice).
+
+**The ops service (task 065).** It runs none of the API's lifespan jobs: no
+executor, no startup sweep, no continuation drainer, no ingest consumer. Its
+only loop is the self-signup sweep, which is an ops-service job, so the
+one-process rule for the API is untouched.
 
 **Backend mode:** `PA_BACKEND_MODE=live|stub|auto` (default `auto` = presence of the
 model route's key variable, `OPENAI_API_KEY` on `openai-direct` and
