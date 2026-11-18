@@ -23,6 +23,8 @@ API_ENVIRONMENT_NAMES = {
     "POLICY_ATLAS_MODEL_ROUTE",
     "POLICY_ATLAS_UPLOAD_BUCKET",
     "POLICY_ATLAS_THEORY_OF_CHANGE",
+    "POLICY_ATLAS_FEEDBACK",
+    "POLICY_ATLAS_VERSION",
     "POLICY_ATLAS_INGEST_MODE",
     "POLICY_ATLAS_INGEST_QUEUE_URL",
 }
@@ -77,6 +79,17 @@ def test_api_container_has_the_complete_deployed_plain_environment_map():
     assert "IngestQueue" in json.dumps(environment["POLICY_ATLAS_INGEST_QUEUE_URL"])
     assert environment["POLICY_ATLAS_UPLOAD_BUCKET"] == {"Ref": _uploads_bucket_id()}
     assert environment["POLICY_ATLAS_THEORY_OF_CHANGE"] == "1"
+    assert environment["POLICY_ATLAS_FEEDBACK"] == ""
+    assert environment["POLICY_ATLAS_VERSION"] == ""
+
+
+def test_every_feedback_element_is_off_in_every_environment():
+    """In-app feedback ships dark: an owner turns an element on by name."""
+    config = json.loads((REPO_ROOT / "infra/pa_config.json").read_text())
+    assert {env: config[env]["policy_atlas_config"]["backend"]["feedback"] for env in config} == {
+        "staging": "",
+        "prod": "",
+    }
 
 
 def test_theory_of_change_is_on_in_staging_only():

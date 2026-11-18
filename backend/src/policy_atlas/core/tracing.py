@@ -1004,6 +1004,87 @@ def classification_score_summary(
     )
 
 
+def trace_id_of(span: Any) -> str | None:
+    """Return the Langfuse trace id of a span.
+
+    Args:
+        span: A span from :func:`component_span`, or ``None`` when tracing is off.
+
+    Returns:
+        The trace id, or ``None`` when there is no span.
+    """
+    if span is None:
+        return None
+    value = getattr(span, "trace_id", None)
+    return str(value) if value is not None else None
+
+
+def score_feedback(
+    client: Langfuse | None,
+    *,
+    feedback_event_id: uuid.UUID,
+    trace_id: str | None,
+    name: str,
+    value: float | str,
+    comment: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    """Mirror one feedback event as a Langfuse score on a finished trace.
+
+    Postgres is the system of record. The score is a copy for error analysis.
+    The score id is the Postgres row id, so the two records reconcile, and a
+    second call with the same id replaces the score. The SDK queues the write
+    and logs its own failures, so this call does not block or raise.
+
+    Args:
+        client: Langfuse client, or ``None`` for no-op tracing.
+        feedback_event_id: The ``feedback_event`` row id. Becomes the score id.
+        trace_id: The trace to score, or ``None`` when the run has no stored
+            trace (an old run, or a run made with tracing off). Then no score
+            is written.
+        name: The score name. By convention the feedback kind.
+        value: A number (NUMERIC score) or a label (CATEGORICAL score).
+        comment: Free text from the user, if any.
+        metadata: Other fields of the event, for filters in Langfuse.
+    """
+    if client is None or trace_id is None:
+        return
+    common: dict[str, Any] = {
+        "score_id": str(feedback_event_id),
+        "trace_id": trace_id,
+        "name": name,
+        "comment": comment,
+        "metadata": {**(metadata or {}), "feedback_event_id": str(feedback_event_id)},
+    }
+    # Two calls, because the SDK types a label and a number as separate overloads.
+    if isinstance(value, str):
+        client.create_score(value=value, data_type="CATEGORICAL", **common)
+    else:
+        client.create_score(value=value, data_type="NUMERIC", **common)
+
+
+def delete_feedback_score(client: Langfuse | None, feedback_event_id: uuid.UUID) -> None:
+    """Delete the mirrored score of a retracted feedback event.
+
+    This is a direct HTTP call, not a queued write. A failure is logged and
+    not raised: the retraction is already safe in Postgres.
+
+    Args:
+        client: Langfuse client, or ``None`` for no-op tracing.
+        feedback_event_id: The ``feedback_event`` row id, which is the score id.
+    """
+    if client is None:
+        return
+    try:
+        client.api.legacy.score_v1.delete(str(feedback_event_id))
+    except Exception as exc:  # noqa: BLE001 - a mirror failure must not fail the request
+        log.warning(
+            "feedback.score_delete_failed",
+            feedback_event_id=str(feedback_event_id),
+            error=type(exc).__name__,
+        )
+
+
 def flush(client: Langfuse | None) -> None:
     """Flush pending Langfuse telemetry when tracing is enabled.
 

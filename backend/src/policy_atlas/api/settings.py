@@ -12,6 +12,20 @@ from typing import Literal
 #: threads (the default), or ``queued`` through the cloud queue and function.
 IngestMode = Literal["in_process", "queued"]
 
+#: The in-app feedback elements. Each one has its own feature flag: an element
+#: is on only when ``POLICY_ATLAS_FEEDBACK`` names it. The frontend reads the
+#: same names from ``VITE_FEEDBACK`` at build time.
+FEEDBACK_ELEMENTS = frozenset(
+    {
+        "citation_flag",
+        "missing_paper",
+        "use_intent",
+        "claim_flag",
+        "problem_report",
+        "onboarding",
+    }
+)
+
 
 @dataclass(frozen=True, slots=True)
 class Settings:
@@ -36,6 +50,12 @@ class Settings:
         ingest_mode: Where full-text ingestion runs (``POLICY_ATLAS_INGEST_MODE``).
         ingest_queue_url: The SQS queue the documents go to in ``queued`` mode
             (``POLICY_ATLAS_INGEST_QUEUE_URL``); None in process.
+        feedback_elements: The in-app feedback elements that are on
+            (``POLICY_ATLAS_FEEDBACK``, a comma-separated list of names from
+            :data:`FEEDBACK_ELEMENTS`). Empty by default: every element is off.
+        pa_version: The version of the running application
+            (``POLICY_ATLAS_VERSION``, set from the git tag or commit at
+            deploy time). Stored on each feedback event. None when unset.
     """
 
     oidc_issuer: str
@@ -53,6 +73,8 @@ class Settings:
     theory_of_change_enabled: bool = False
     ingest_mode: IngestMode = "in_process"
     ingest_queue_url: str | None = None
+    feedback_elements: frozenset[str] = frozenset()
+    pa_version: str | None = None
 
 
 def load_settings() -> Settings:
@@ -106,7 +128,31 @@ def load_settings() -> Settings:
         theory_of_change_enabled=_optional("POLICY_ATLAS_THEORY_OF_CHANGE") == "1",
         ingest_mode=ingest_mode,
         ingest_queue_url=ingest_queue_url_from_env(ingest_mode),
+        feedback_elements=feedback_elements_from_env(),
+        pa_version=_optional("POLICY_ATLAS_VERSION"),
     )
+
+
+def feedback_elements_from_env() -> frozenset[str]:
+    """Read ``POLICY_ATLAS_FEEDBACK``: the feedback elements that are on.
+
+    Returns:
+        The named elements. Empty when the variable is unset or blank.
+
+    Raises:
+        RuntimeError: The variable names an element that does not exist, so a
+            spelling mistake fails at startup and does not leave an element
+            silently off.
+    """
+    value = _optional("POLICY_ATLAS_FEEDBACK") or ""
+    elements = frozenset(name.strip() for name in value.split(",") if name.strip())
+    unknown = elements - FEEDBACK_ELEMENTS
+    if unknown:
+        raise RuntimeError(
+            f"POLICY_ATLAS_FEEDBACK names unknown elements {sorted(unknown)}; "
+            f"the elements are {sorted(FEEDBACK_ELEMENTS)}"
+        )
+    return elements
 
 
 def ingest_mode_from_env() -> IngestMode:

@@ -69,6 +69,51 @@ def test_the_theory_of_change_setting_is_on_only_for_1(
     assert load_settings().theory_of_change_enabled is enabled
 
 
+@pytest.mark.parametrize(
+    ("value", "elements"),
+    [
+        (None, frozenset()),
+        ("", frozenset()),
+        ("citation_flag", frozenset({"citation_flag"})),
+        (" onboarding , problem_report,", frozenset({"onboarding", "problem_report"})),
+    ],
+)
+def test_the_feedback_setting_is_a_list_of_element_names(
+    monkeypatch: pytest.MonkeyPatch, value: str | None, elements: frozenset[str]
+) -> None:
+    """`POLICY_ATLAS_FEEDBACK`: every element is off unless the list names it."""
+    _set_required_env(monkeypatch)
+    if value is None:
+        monkeypatch.delenv("POLICY_ATLAS_FEEDBACK", raising=False)
+    else:
+        monkeypatch.setenv("POLICY_ATLAS_FEEDBACK", value)
+
+    assert load_settings().feedback_elements == elements
+
+
+def test_an_unknown_feedback_element_fails_at_startup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A spelling mistake must not leave an element silently off."""
+    _set_required_env(monkeypatch)
+    monkeypatch.setenv("POLICY_ATLAS_FEEDBACK", "citation_flag,thumbs")
+
+    with pytest.raises(RuntimeError, match="unknown elements \\['thumbs'\\]"):
+        load_settings()
+
+
+@pytest.mark.parametrize(("value", "version"), [(None, None), ("", None), ("v3.2.0", "v3.2.0")])
+def test_the_version_setting_is_optional(
+    monkeypatch: pytest.MonkeyPatch, value: str | None, version: str | None
+) -> None:
+    """`POLICY_ATLAS_VERSION` is stored on feedback events; blank means unknown."""
+    _set_required_env(monkeypatch)
+    if value is None:
+        monkeypatch.delenv("POLICY_ATLAS_VERSION", raising=False)
+    else:
+        monkeypatch.setenv("POLICY_ATLAS_VERSION", value)
+
+    assert load_settings().pa_version == version
+
+
 def test_db_pool_size_zero_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     """`DB_POOL_SIZE` must be a positive integer — a zero-sized pool is nonsensical."""
     _set_required_env(monkeypatch)

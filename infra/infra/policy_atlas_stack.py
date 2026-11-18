@@ -101,6 +101,14 @@ class PolicyAtlasStack(Stack):
         # is "1". On in staging for colleagues to try; off in production until
         # the capability is complete.
         theory_of_change = "1" if be_config.get("theory_of_change") else "0"
+        # In-app feedback: a comma-separated list of the elements that are on
+        # (backend/src/policy_atlas/api/settings.py, FEEDBACK_ELEMENTS). Empty
+        # means every element is off. scripts/deploy.sh reads the same value
+        # for the frontend build (VITE_FEEDBACK), so the two sides agree.
+        feedback = be_config.get("feedback", "")
+        # The git tag or commit of this deploy (scripts/deploy.sh passes it as
+        # CDK context). Stored on each feedback event. Empty when not given.
+        pa_version = self.node.try_get_context("pa_version") or ""
         if ingest_mode not in INGEST_MODES:
             raise ValueError(
                 f"backend.ingest_mode must be one of {INGEST_MODES} in pa_config.json, "
@@ -216,6 +224,8 @@ class PolicyAtlasStack(Stack):
                 "POLICY_ATLAS_MODEL_ROUTE": model_route,
                 "POLICY_ATLAS_UPLOAD_BUCKET": uploads_bucket.bucket_name,
                 "POLICY_ATLAS_THEORY_OF_CHANGE": theory_of_change,
+                "POLICY_ATLAS_FEEDBACK": feedback,
+                "POLICY_ATLAS_VERSION": pa_version,
                 "POLICY_ATLAS_INGEST_MODE": ingest_mode,
                 "POLICY_ATLAS_INGEST_QUEUE_URL": ingest.queue.queue_url,
             },

@@ -29,4 +29,13 @@ interface ImportMetaEnv {
   readonly VITE_OPTIONS_SCOPING?: string;
   /** `"1"` shows the Theory of change capability (New task picker). Same rule as above. */
   readonly VITE_THEORY_OF_CHANGE?: string;
+  /**
+   * The in-app feedback elements that are on: a comma-separated list such as
+   * `"citation_flag,problem_report"` (see `src/lib/feedback.ts`). Unset or
+   * empty means that every element is off. The API reads the same list from
+   * `POLICY_ATLAS_FEEDBACK`.
+   */
+  readonly VITE_FEEDBACK?: string;
+  /** The git tag or commit of this build. Shown in "Report a problem". */
+  readonly VITE_PA_VERSION?: string;
 }

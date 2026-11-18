@@ -19,6 +19,7 @@ import structlog
 from langfuse import Langfuse
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.exc import SQLAlchemyError
 
 from policy_atlas.api.contract import StageKey
 from policy_atlas.api.lifecycle import touch_task
@@ -6081,6 +6082,7 @@ def _run_step_attempt(
             component=step.component,
             session_id=session_id,
         ) as run_span:
+            _store_trace_id(engine, run_id=run_id, trace_id=tracing.trace_id_of(run_span))
             ingest_backends = backends
             if registry_component == "ingest_full_text" and backends.queue is None:
                 # A bundle built without the construction paths (tests, stubs):
@@ -6349,6 +6351,28 @@ def _record_component_timing(
 
 def _bounded_error(exc: Exception) -> str:
     return f"{type(exc).__name__}: {str(exc)[:200]}"
+
+
+def _store_trace_id(engine: Engine, *, run_id: uuid.UUID, trace_id: str | None) -> None:
+    """Store the Langfuse trace id of a component run on its ``runs`` row.
+
+    In-app feedback reads this column to join a feedback event to the trace.
+    The write has its own short transaction, so it survives a rollback of the
+    component transaction: a failed run is the one a problem report needs.
+    A failure is logged and not raised, because telemetry must not fail a run.
+
+    Args:
+        engine: The process engine.
+        run_id: The component run.
+        trace_id: The trace id, or ``None`` when tracing is off (nothing is written).
+    """
+    if trace_id is None:
+        return
+    try:
+        with engine.begin() as conn:
+            conn.execute(runs.update().where(runs.c.run_id == run_id).values(trace_id=trace_id))
+    except SQLAlchemyError as exc:
+        log.warning("run.trace_id_not_stored", run_id=str(run_id), error=type(exc).__name__)
 
 
 def _stamped_stage(
