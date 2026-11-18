@@ -16,6 +16,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 from contextlib import suppress
+from datetime import UTC, datetime
 from typing import Annotated, Any, NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -35,6 +36,7 @@ from policy_atlas.api.contract.feedback import (
     MissingPaperResolutionOut,
     ProblemReportIn,
     ScreeningOverrideIn,
+    UseIntentIn,
 )
 from policy_atlas.api.deps import (
     get_current_user,
@@ -75,9 +77,19 @@ ELEMENT_OF_KIND: dict[str, str] = {
     "problem_report": "problem_report",
     "missing_paper": "missing_paper",
     "screening_override": "missing_paper",
+    "use_intent": "use_intent",
 }
 #: The Langfuse score values of a citation flag (the brief, element A).
 CITATION_FLAG_SCORE = {"useful": 1.0, "not_relevant": -1.0}
+#: The Langfuse score values of a use-intent answer (the brief, element C).
+#: "Not now" has no number: the SDK cannot write a score with a null value, so
+#: it is the categorical score ``dismissed`` under the same name.
+USE_INTENT_SCORE: dict[str, float | str] = {
+    "as_is": 2.0,
+    "with_edits": 1.0,
+    "no": 0.0,
+    "dismissed": "dismissed",
+}
 #: A submit that loses a race on the toggle index is tried once more.
 SUBMIT_ATTEMPTS = 2
 #: The pipeline step that removes documents at each screening stage.
@@ -317,12 +329,45 @@ def _screening_override(conn: Connection, body: ScreeningOverrideIn, user_id: st
     )
 
 
+def _use_intent(conn: Connection, body: UseIntentIn, user_id: str) -> _Prepared:
+    """Prepare a use-intent answer (element C). The trace is the synthesise step's.
+
+    The payload keeps when the question was first shown (the browser's clock)
+    and when it was answered (the server's clock).
+    """
+    accessible_task(conn, task_id=body.task_id, user_id=user_id)
+    run_id = _run_of_report(conn, body.task_id, body.artefact_id)
+    if run_id is None:
+        raise _not_found()
+    answer: dict[str, Any] = {"use_intent": body.use_intent}
+    if body.change_reasons:
+        answer["change_reasons"] = body.change_reasons
+    payload = {
+        **answer,
+        "shown_at": body.shown_at.isoformat(),
+        "answered_at": datetime.now(UTC).isoformat(),
+    }
+    if body.note:
+        payload["note"] = body.note
+    return _Prepared(
+        target_type="report",
+        target_id=str(body.artefact_id),
+        payload=payload,
+        capability_run_id=run_id,
+        component="synthesise",
+        score_value=USE_INTENT_SCORE[body.use_intent],
+        score_comment=body.note,
+        score_metadata=answer,
+    )
+
+
 #: One prepare function per kind. Each checks access and builds the record.
 _PREPARE: dict[str, Callable[[Connection, Any, str], _Prepared]] = {
     "citation_flag": _citation_flag,
     "problem_report": _problem_report,
     "missing_paper": _missing_paper,
     "screening_override": _screening_override,
+    "use_intent": _use_intent,
 }
 
 #: Feedback records with the resolution of a missing paper beside them.

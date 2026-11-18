@@ -8875,6 +8875,55 @@ export interface components {
             plan_version: number;
         };
         /**
+         * UseIntentIn
+         * @description Element C: "Would you use this report in your work?", under Key findings.
+         *
+         *     A toggle: one answer per user and report, which the user can change.
+         *     ``dismissed`` is "Not now": it is recorded so that the question is never
+         *     asked again for that report.
+         */
+        UseIntentIn: {
+            /**
+             * Artefact Id
+             * Format: uuid
+             * @description The report that the answer is about.
+             */
+            artefact_id: string;
+            /**
+             * Change Reasons
+             * @description What would need to change. Optional.
+             */
+            change_reasons?: ("missing_evidence" | "wrong_emphasis" | "accuracy_concern" | "length" | "tone_or_format" | "other")[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "use_intent";
+            /** Note */
+            note?: string | null;
+            /**
+             * Shown At
+             * Format: date-time
+             * @description When the browser first showed the question.
+             */
+            shown_at: string;
+            /**
+             * Surface
+             * @constant
+             */
+            surface: "report_key_findings";
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+            /**
+             * Use Intent
+             * @enum {string}
+             */
+            use_intent: "as_is" | "with_edits" | "no" | "dismissed";
+        };
+        /**
          * UserProfileIn
          * @description Inbound body for ``PUT /api/v1/me/profile``.
          *
@@ -9333,7 +9382,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CitationFlagIn"] | components["schemas"]["ProblemReportIn"] | components["schemas"]["MissingPaperIn"] | components["schemas"]["ScreeningOverrideIn"];
+                "application/json": components["schemas"]["CitationFlagIn"] | components["schemas"]["ProblemReportIn"] | components["schemas"]["MissingPaperIn"] | components["schemas"]["ScreeningOverrideIn"] | components["schemas"]["UseIntentIn"];
             };
         };
         responses: {

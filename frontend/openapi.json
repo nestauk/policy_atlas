@@ -14121,6 +14121,87 @@
         "title": "TurnDecisionOut",
         "type": "object"
       },
+      "UseIntentIn": {
+        "additionalProperties": false,
+        "description": "Element C: \"Would you use this report in your work?\", under Key findings.\n\nA toggle: one answer per user and report, which the user can change.\n``dismissed`` is \"Not now\": it is recorded so that the question is never\nasked again for that report.",
+        "properties": {
+          "artefact_id": {
+            "description": "The report that the answer is about.",
+            "format": "uuid",
+            "title": "Artefact Id",
+            "type": "string"
+          },
+          "change_reasons": {
+            "description": "What would need to change. Optional.",
+            "items": {
+              "enum": [
+                "missing_evidence",
+                "wrong_emphasis",
+                "accuracy_concern",
+                "length",
+                "tone_or_format",
+                "other"
+              ],
+              "type": "string"
+            },
+            "title": "Change Reasons",
+            "type": "array"
+          },
+          "kind": {
+            "const": "use_intent",
+            "title": "Kind",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "shown_at": {
+            "description": "When the browser first showed the question.",
+            "format": "date-time",
+            "title": "Shown At",
+            "type": "string"
+          },
+          "surface": {
+            "const": "report_key_findings",
+            "title": "Surface",
+            "type": "string"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "use_intent": {
+            "enum": [
+              "as_is",
+              "with_edits",
+              "no",
+              "dismissed"
+            ],
+            "title": "Use Intent",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "surface",
+          "task_id",
+          "artefact_id",
+          "use_intent",
+          "shown_at"
+        ],
+        "title": "UseIntentIn",
+        "type": "object"
+      },
       "UserProfileIn": {
         "additionalProperties": false,
         "description": "Inbound body for ``PUT /api/v1/me/profile``.\n\nThe first two questions (department with team type, and the main use) are\nrequired. All other fields are optional.",
@@ -15044,7 +15125,8 @@
                     "citation_flag": "#/components/schemas/CitationFlagIn",
                     "missing_paper": "#/components/schemas/MissingPaperIn",
                     "problem_report": "#/components/schemas/ProblemReportIn",
-                    "screening_override": "#/components/schemas/ScreeningOverrideIn"
+                    "screening_override": "#/components/schemas/ScreeningOverrideIn",
+                    "use_intent": "#/components/schemas/UseIntentIn"
                   },
                   "propertyName": "kind"
                 },
@@ -15060,6 +15142,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/ScreeningOverrideIn"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UseIntentIn"
                   }
                 ],
                 "title": "Body"

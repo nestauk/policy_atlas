@@ -40,6 +40,15 @@ MissingPaperFailureStage = Literal[
     "acquired_only",
     "not_retrieved",
 ]
+UseIntent = Literal["as_is", "with_edits", "no", "dismissed"]
+UseIntentChangeReason = Literal[
+    "missing_evidence",
+    "wrong_emphasis",
+    "accuracy_concern",
+    "length",
+    "tone_or_format",
+    "other",
+]
 CitationFlagReason = Literal["off_topic", "wrong_population", "not_evidence", "duplicate", "other"]
 
 
@@ -137,8 +146,30 @@ class ScreeningOverrideIn(BaseModel):
     source_id: uuid.UUID = Field(description="The document: its task source identity.")
 
 
+class UseIntentIn(BaseModel):
+    """Element C: "Would you use this report in your work?", under Key findings.
+
+    A toggle: one answer per user and report, which the user can change.
+    ``dismissed`` is "Not now": it is recorded so that the question is never
+    asked again for that report.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["use_intent"]
+    surface: Literal["report_key_findings"]
+    task_id: uuid.UUID
+    artefact_id: uuid.UUID = Field(description="The report that the answer is about.")
+    use_intent: UseIntent
+    change_reasons: list[UseIntentChangeReason] = Field(
+        default_factory=list, description="What would need to change. Optional."
+    )
+    note: str | None = Field(default=None, max_length=FEEDBACK_NOTE_MAX)
+    shown_at: datetime = Field(description="When the browser first showed the question.")
+
+
 FeedbackIn = Annotated[
-    CitationFlagIn | ProblemReportIn | MissingPaperIn | ScreeningOverrideIn,
+    CitationFlagIn | ProblemReportIn | MissingPaperIn | ScreeningOverrideIn | UseIntentIn,
     Field(discriminator="kind"),
 ]
 

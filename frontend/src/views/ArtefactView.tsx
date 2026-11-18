@@ -74,6 +74,7 @@ import {
 import { usePublicView } from "./publicView";
 import { CitationFlag } from "./feedback/CitationFlag";
 import { MissingPaperCard } from "./feedback/MissingPaper";
+import { UseIntentCard } from "./feedback/UseIntentCard";
 import { feedbackEnabled } from "../lib/feedback";
 import {
   DisclosureHeading,
@@ -3923,7 +3924,16 @@ function ArtefactReport() {
             </h2>
           ),
 
-          ...frontSections.map(renderSection),
+          // In-app feedback, element C: the use-intent question sits
+          // immediately below the Key findings section.
+          ...frontSections.flatMap((entry) =>
+            entry.section.role === "key_findings" && feedbackEnabled("use_intent") && !isPublicView
+              ? [
+                  renderSection(entry),
+                  <UseIntentCard key="use-intent" taskId={taskId} artefactId={data.artefact_id} />,
+                ]
+              : [renderSection(entry)],
+          ),
 
           /* The executive summary's last part, above the Full report (owner,
              round 11, reversing round 10's D2). A baseline writes no
