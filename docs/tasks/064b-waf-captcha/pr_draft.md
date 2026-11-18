@@ -51,6 +51,29 @@ Task folder: `docs/tasks/064b-waf-captcha/`. Decision record:
    can inspect. So a request size limit cannot be done in the firewall. It is left for a
    later change in the API.
 
+What count mode does and does not block. Two narrow rules act from the first day; the four
+that look at the whole API only watch:
+
+| Rule | In count mode | In block mode |
+|---|---|---|
+| Waitlist CAPTCHA (staging only for now) | **Refuses** a sign-up without a solved puzzle | Same |
+| Waitlist limit, 50 sign-ups in 5 minutes per address | **Blocks** | Same |
+| General limit, 6,000 requests in 5 minutes per address | Counts only | Blocks |
+| Common web attacks | Counts only | Blocks, except the body-size rule, which always counts |
+| Known bad inputs | Counts only | Blocks |
+| Bad-reputation addresses | Counts only | Blocks |
+
+So the waitlist is protected at once, because those two rules cannot catch normal use of the
+app. Everything else, known bad actors included, is counted and logged but not blocked until
+the mode is switched. AWS's ready-made rules are written for generic websites, and an app
+full of free text (chat messages, plan edits) can trip them by accident; the count week shows
+whether it does.
+
+Production's config is already in place (`enabled: true`, `mode: count`, `captcha: false`),
+so the next release to `main` gives production the firewall in count mode with no extra
+step. Switching production to block, and turning on its puzzle, are later one-line config
+changes, each after its own evidence.
+
 **The waitlist form**
 
 10. The puzzle appears when a visitor first clicks into a field, never on page load. So a
