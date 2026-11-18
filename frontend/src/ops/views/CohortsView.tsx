@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 import { formatDate } from "../../lib/dates";
 import { Figures } from "../../lib/figures";
@@ -7,7 +7,7 @@ import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { PageHeader, PagePrimary } from "../../ui/brand/PageHeader";
 import { OpsApiError, useCohorts, useDeleteCohort, useSaveCohort, type Cohort } from "../api";
-import { plural } from "../format";
+import { limitWord, plural } from "../format";
 import {
   ACTIONS_TD_CLASS,
   ACTIONS_TH_CLASS,
@@ -17,6 +17,7 @@ import {
   FailedLine,
   Field,
   FIGURE_CLASS,
+  SortTh,
   INPUT_CLASS,
   Loading,
   RowMenu,
@@ -26,6 +27,7 @@ import {
   TD_CLASS,
   TH_CLASS,
   useRecordedToast,
+  useSort,
 } from "../ui";
 
 /** A cohort's date, "1 Dec 2026", always with its year; read as a local day, not a UTC instant. */
@@ -38,6 +40,16 @@ function dates(cohort: Cohort): string {
   if (start != null) return `from ${day(start)}`;
   if (end != null) return `until ${day(end)}`;
   return "—";
+}
+
+const TASKS_NOTE =
+  "The number of tasks each person in this cohort can create in a year. It is per person, not shared by the cohort.";
+const RUNS_NOTE =
+  "The number of tasks each person in this cohort can run at the same time. It is per person, not shared by the cohort.";
+
+/** A cohort's override, or "—" in grey when it sets none (its members inherit). */
+function Quota({ value }: { value: number | null | undefined }) {
+  return value == null ? <span className="text-grey">—</span> : <Figures text={limitWord(value)} />;
 }
 
 /** A link's words in the table: its host and path, without the scheme. */
@@ -54,24 +66,40 @@ export function CohortsView() {
   const [editing, setEditing] = useState<Cohort | "new" | null>(null);
   const [deleting, setDeleting] = useState<Cohort | null>(null);
 
-  if (cohorts.isPending) return <Loading />;
   const all = cohorts.data ?? [];
   const q = query.trim().toLowerCase();
-  const rows = all.filter(
-    (cohort) => q === "" || [cohort.name, cohort.description ?? ""].some((value) => value.toLowerCase().includes(q)),
+  const { sorted: rows, sort, onSort } = useSort(
+    all.filter(
+      (cohort) => q === "" || [cohort.name, cohort.description ?? ""].some((value) => value.toLowerCase().includes(q)),
+    ),
+    {
+      name: (cohort) => cohort.name,
+      people: (cohort) => cohort.people,
+      tasks: (cohort) => cohort.task_quota_per_year,
+      runs: (cohort) => cohort.runs_per_user,
+      dates: (cohort) => cohort.starts_on ?? cohort.ends_on,
+      links: (cohort) => cohort.links[0],
+    },
   );
+  const th = { sort, onSort };
+
+  if (cohorts.isPending) return <Loading />;
 
   return (
     <>
       <PageHeader
         title="Cohorts"
         actions={<PagePrimary onClick={() => setEditing("new")}>Add cohort</PagePrimary>}
-        filters={<SearchField placeholder="Find a cohort" value={query} onChange={setQuery} />}
+        filters={
+          <div className="flex flex-col gap-4">
+            <p className="max-w-[44em] text-body text-grey">
+              A cohort is a label for a group of people, such as a pilot or a user segment. A person can be in
+              several cohorts. Add people to cohorts from the People tab.
+            </p>
+            <SearchField placeholder="Find a cohort" value={query} onChange={setQuery} />
+          </div>
+        }
       />
-      <p className="mt-4 max-w-[44em] text-body text-grey">
-        A cohort is a label for a group of people, such as a pilot or a panel. A person can be in several. It does
-        not change what they can see: their organisation decides that. Add people from the People list.
-      </p>
       <div className="mt-6">
         {cohorts.isError ? (
           <FailedLine message="Could not load the cohorts." onRetry={() => void cohorts.refetch()} />
@@ -80,10 +108,12 @@ export function CohortsView() {
             <table className={TABLE_CLASS} aria-label="Cohorts">
               <thead>
                 <tr>
-                  <th className={cn(TH_CLASS, "pl-4")}>Name</th>
-                  <th className={cn(TH_CLASS, "w-24 text-right")}>People</th>
-                  <th className={cn(TH_CLASS, "w-64")}>Dates</th>
-                  <th className={cn(TH_CLASS, "w-64")}>Links</th>
+                  <SortTh {...th} sortKey="name" label="Name" className="w-52 pl-4" />
+                  <SortTh {...th} sortKey="people" label="People" align="end" className="w-24" />
+                  <SortTh {...th} sortKey="tasks" label="Tasks per year" note={TASKS_NOTE} align="end" className="w-44" />
+                  <SortTh {...th} sortKey="runs" label="Simultaneous tasks" note={RUNS_NOTE} align="end" className="w-56" />
+                  <SortTh {...th} sortKey="dates" label="Dates" className="w-44" />
+                  <SortTh {...th} sortKey="links" label="Links" className="w-48" />
                   <th className={cn(TH_CLASS, ACTIONS_TH_CLASS)}>
                     <span className="sr-only">Actions</span>
                   </th>
@@ -93,14 +123,24 @@ export function CohortsView() {
                 {rows.map((cohort) => (
                   <tr key={cohort.cohort_id} className="bg-paper">
                     <td className={cn(TD_CLASS, "pl-4")}>
-                      <span className="block truncate font-semibold text-navy" title={cohort.name}>
+                      <Link
+                        to={`/people?cohort=${cohort.cohort_id}`}
+                        title={`Show the people in ${cohort.name}`}
+                        className="block truncate font-semibold text-navy hover:text-blue hover:underline"
+                      >
                         {cohort.name}
-                      </span>
+                      </Link>
                       {cohort.description != null && (
                         <span className="line-clamp-2 text-meta text-grey">{cohort.description}</span>
                       )}
                     </td>
                     <td className={cn(TD_CLASS, FIGURE_CLASS, "tabular-nums")}>{cohort.people}</td>
+                    <td className={cn(TD_CLASS, FIGURE_CLASS)}>
+                      <Quota value={cohort.task_quota_per_year} />
+                    </td>
+                    <td className={cn(TD_CLASS, FIGURE_CLASS)}>
+                      <Quota value={cohort.runs_per_user} />
+                    </td>
                     <td className={cn(TD_CLASS, "whitespace-nowrap")}>
                       <Figures text={dates(cohort)} />
                     </td>
@@ -123,8 +163,9 @@ export function CohortsView() {
                       <RowMenu
                         label={`Actions for ${cohort.name}`}
                         items={[
-                          { label: "Show people", onSelect: () => navigate("/people", { state: { q: cohort.name } }) },
+                          { label: "Show people", onSelect: () => navigate(`/people?cohort=${cohort.cohort_id}`) },
                           { label: "Edit…", onSelect: () => setEditing(cohort) },
+                          { label: "Set quota…", onSelect: () => navigate(`/cohorts/${cohort.cohort_id}/quota`) },
                           { label: "Delete…", onSelect: () => setDeleting(cohort) },
                         ]}
                       />

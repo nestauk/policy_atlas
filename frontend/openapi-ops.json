@@ -194,7 +194,7 @@
         "type": "object"
       },
       "CohortOut": {
-        "description": "One cohort as the Cohorts page lists it (owner, 2026-11-18).\n\nArgs:\n    cohort_id: The cohort's identity.\n    name: Its unique display name.\n    description: What the group is for, or ``None``.\n    starts_on: When it starts, or ``None``.\n    ends_on: When it ends, or ``None``.\n    links: Web addresses about it (a plan, a sheet, a channel), in order.\n    created_at: When it was created.\n    people: How many people are in it.",
+        "description": "One cohort as the Cohorts page lists it (owner, 2026-11-18).\n\nArgs:\n    cohort_id: The cohort's identity.\n    name: Its unique display name.\n    description: What the group is for, or ``None``.\n    starts_on: When it starts, or ``None``.\n    ends_on: When it ends, or ``None``.\n    links: Web addresses about it (a plan, a sheet, a channel), in order.\n    created_at: When it was created.\n    people: How many people are in it.\n    task_quota_per_year: Its task-quota override, or ``None`` (inherit).\n    runs_per_user: Its run-cap override, or ``None`` (inherit).",
         "properties": {
           "cohort_id": {
             "format": "uuid",
@@ -244,6 +244,17 @@
             "title": "People",
             "type": "integer"
           },
+          "runs_per_user": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Runs Per User"
+          },
           "starts_on": {
             "anyOf": [
               {
@@ -255,6 +266,17 @@
               }
             ],
             "title": "Starts On"
+          },
+          "task_quota_per_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Quota Per Year"
           }
         },
         "required": [
@@ -362,8 +384,12 @@
         "type": "object"
       },
       "LimitsOut": {
-        "description": "The limits that apply to one person after resolution (contract B12).\n\nArgs:\n    task_quota_per_year: Tasks the person may create in 365 days, or\n        ``None`` for no limit (an administrator, or an override of 0).\n    runs_per_user: Walks the person's tasks may hold at once, or ``None``\n        for no limit (an override of 0).",
+        "description": "The limits that apply to one person after resolution (contract B12).\n\nArgs:\n    task_quota_per_year: Tasks the person may create in 365 days, or\n        ``None`` for no limit (an administrator, or an override of 0).\n    runs_per_user: Walks the person's tasks may hold at once, or ``None``\n        for no limit (an override of 0).\n    task_quota_from: Where the task quota came from: \"this person\", a\n        cohort's or an organisation's name, \"the default\" or\n        \"administrator\".\n    runs_from: The same for the run cap.",
         "properties": {
+          "runs_from": {
+            "title": "Runs From",
+            "type": "string"
+          },
           "runs_per_user": {
             "anyOf": [
               {
@@ -374,6 +400,10 @@
               }
             ],
             "title": "Runs Per User"
+          },
+          "task_quota_from": {
+            "title": "Task Quota From",
+            "type": "string"
           },
           "task_quota_per_year": {
             "anyOf": [
@@ -389,7 +419,9 @@
         },
         "required": [
           "task_quota_per_year",
-          "runs_per_user"
+          "runs_per_user",
+          "task_quota_from",
+          "runs_from"
         ],
         "title": "LimitsOut",
         "type": "object"
@@ -541,7 +573,7 @@
         "type": "object"
       },
       "PersonOut": {
-        "description": "One person as the ops pages list them (contract B4 \"list people\").\n\nArgs:\n    user_id: The Cognito subject.\n    display_name: The stored name (never derived from the email here).\n    email: The stored address, or ``None`` for a person who only ever\n        signed in. Ops-facing: this shape never leaves the ops host.\n    organisation: Their organisation, or ``None`` when unenrolled.\n    is_admin: Whether they hold the administrator flag.\n    is_ops: Whether they hold the ops role.\n    created_at: When the row was created.\n    invited_at: When Cognito last sent them an invitation through this\n        service, or ``None``. The resend cooldown reads it.\n    task_quota_per_year: Their own override, or ``None``.\n    runs_per_user: Their own override, or ``None``.\n    tasks_this_year: Tasks they created in the last 365 days.\n    limits: The limits that apply after resolution.\n    cohorts: The cohorts they are in, by name.",
+        "description": "One person as the ops pages list them (contract B4 \"list people\").\n\nArgs:\n    user_id: The Cognito subject.\n    display_name: The stored name (never derived from the email here).\n    email: The stored address, or ``None`` for a person who only ever\n        signed in. Ops-facing: this shape never leaves the ops host.\n    organisation: Their organisation, or ``None`` when unenrolled.\n    is_admin: Whether they hold the administrator flag.\n    is_ops: Whether they hold the ops role.\n    created_at: When the row was created.\n    invited_at: When Cognito last sent them an invitation through this\n        service, or ``None``. The resend cooldown reads it.\n    first_signed_in_at: When they first opened the app, or ``None``.\n    task_quota_per_year: Their own override, or ``None``.\n    runs_per_user: Their own override, or ``None``.\n    tasks_this_year: Tasks they created in the last 365 days.\n    last_task_at: When they created their latest task, or ``None``.\n    limits: The limits that apply after resolution.\n    cohorts: The cohorts they are in, by name.",
         "properties": {
           "cohorts": {
             "items": {
@@ -570,6 +602,18 @@
             ],
             "title": "Email"
           },
+          "first_signed_in_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Signed In At"
+          },
           "invited_at": {
             "anyOf": [
               {
@@ -589,6 +633,18 @@
           "is_ops": {
             "title": "Is Ops",
             "type": "boolean"
+          },
+          "last_task_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Task At"
           },
           "limits": {
             "$ref": "#/components/schemas/LimitsOut"
@@ -749,6 +805,18 @@
             ],
             "title": "Organisation"
           },
+          "rejected_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected At"
+          },
           "role_or_reason": {
             "title": "Role Or Reason",
             "type": "string"
@@ -757,7 +825,8 @@
             "enum": [
               "waiting",
               "invited",
-              "check"
+              "check",
+              "rejected"
             ],
             "title": "Status",
             "type": "string"
@@ -1051,6 +1120,65 @@
           }
         ],
         "summary": "Update Cohort",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/cohorts/{cohort_id}/quota": {
+      "post": {
+        "description": "Set or clear a cohort's quota overrides.",
+        "operationId": "set_cohort_quota_api_v1_ops_cohorts__cohort_id__quota_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cohort_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Cohort Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuotaSet"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CohortOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Cohort Quota",
         "tags": [
           "ops"
         ]
@@ -1626,8 +1754,20 @@
     },
     "/api/v1/ops/requests": {
       "get": {
-        "description": "List waitlist rows and their sweep-derived operational state.",
+        "description": "List waitlist rows still waiting for a decision, and the rejected ones when asked.",
         "operationId": "list_requests_api_v1_ops_requests_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "rejected",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Rejected",
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -1638,6 +1778,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -1646,6 +1796,48 @@
           }
         ],
         "summary": "List Requests",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/requests/{entry_id}": {
+      "delete": {
+        "description": "Delete a rejected request for good.",
+        "operationId": "delete_request_api_v1_ops_requests__entry_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Request",
         "tags": [
           "ops"
         ]
@@ -1705,6 +1897,48 @@
           }
         ],
         "summary": "Approve Request",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/requests/{entry_id}/reject": {
+      "post": {
+        "description": "Take a request off the waitlist without an email.",
+        "operationId": "reject_request_api_v1_ops_requests__entry_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Entry Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reject Request",
         "tags": [
           "ops"
         ]

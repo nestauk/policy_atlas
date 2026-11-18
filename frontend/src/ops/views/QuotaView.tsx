@@ -6,11 +6,12 @@ import { PageBackLink } from "../../ui/brand/PageHeader";
 import {
   inferDefaults,
   OpsApiError,
+  useCohortQuota,
+  useCohorts,
   useOrganisationQuota,
   useOrganisations,
   usePeople,
   usePeopleQuota,
-  type Organisation,
   type Person,
   type QuotaValues,
 } from "../api";
@@ -128,22 +129,15 @@ function QuotaPage({
   );
 }
 
-/** Where a person's limit comes from: their own number, their organisation's, or the default. */
-function source(own: number | null | undefined, org: Organisation | undefined, orgValue: number | null | undefined) {
-  if (own != null) return "this person";
-  if (org !== undefined && orgValue != null) return org.name;
-  return "the default";
-}
-
-function LimitsPanel({ person, org }: { person: Person; org: Organisation | undefined }) {
+function LimitsPanel({ person }: { person: Person }) {
   const rows = [
     `Tasks per year: ${facts(
       limitWord(person.limits.task_quota_per_year),
-      `from ${source(person.task_quota_per_year, org, org?.task_quota_per_year)}`,
+      `from ${person.limits.task_quota_from}`,
     )}`,
     `Simultaneous tasks: ${facts(
       limitWord(person.limits.runs_per_user),
-      `from ${source(person.runs_per_user, org, org?.runs_per_user)}`,
+      `from ${person.limits.runs_from}`,
     )}`,
     `Admin exemption: ${person.is_admin ? "yes" : "no"}`,
   ];
@@ -181,7 +175,7 @@ export function PersonQuotaView() {
   const person = people.data.find((entry) => entry.user_id === userId);
   if (person === undefined) return <Navigate to="/people" replace />;
   const org = organisations.data.find((entry) => entry.org_id === person.organisation?.org_id);
-  const defaults = inferDefaults(people.data, organisations.data);
+  const defaults = inferDefaults(people.data);
   return (
     <QuotaPage
       key={person.user_id}
@@ -193,11 +187,21 @@ export function PersonQuotaView() {
       )}
       initial={draftOf(person)}
       placeholders={{
+        // What applies without the person's own number: the server's source
+        // when that is not the person; else the organisation's or the default
+        // (a cohort's number is shown in the panel beside the form).
         tasks:
-          org?.task_quota_per_year != null
-            ? inherits(org.name, org.task_quota_per_year)
-            : inherits("the default", defaults.tasks),
-        runs: org?.runs_per_user != null ? inherits(org.name, org.runs_per_user) : inherits("the default", defaults.runs),
+          person.task_quota_per_year == null
+            ? inherits(person.limits.task_quota_from, person.limits.task_quota_per_year ?? 0)
+            : org?.task_quota_per_year != null
+              ? inherits(org.name, org.task_quota_per_year)
+              : inherits("the default", defaults.tasks),
+        runs:
+          person.runs_per_user == null
+            ? inherits(person.limits.runs_from, person.limits.runs_per_user ?? 0)
+            : org?.runs_per_user != null
+              ? inherits(org.name, org.runs_per_user)
+              : inherits("the default", defaults.runs),
       }}
       save={(values, done) =>
         quota.mutate(
@@ -209,7 +213,7 @@ export function PersonQuotaView() {
           },
         )
       }
-      aside={<LimitsPanel person={person} org={org} />}
+      aside={<LimitsPanel person={person} />}
     />
   );
 }
@@ -224,7 +228,7 @@ export function OrganisationQuotaView() {
   if (organisations.isError) return <FailedLine message="Could not load this organisation’s quota." onRetry={() => void organisations.refetch()} />;
   const org = organisations.data.find((entry) => entry.org_id === orgId);
   if (org === undefined) return <Navigate to="/organisations" replace />;
-  const defaults = inferDefaults(people.data ?? [], organisations.data);
+  const defaults = inferDefaults(people.data ?? []);
   return (
     <QuotaPage
       key={org.org_id}
@@ -244,3 +248,35 @@ export function OrganisationQuotaView() {
     />
   );
 }
+
+/** A cohort's quota (`/cohorts/:cohortId/quota`), between a person's own and their organisation's. */
+export function CohortQuotaView() {
+  const { cohortId = "" } = useParams();
+  const people = usePeople();
+  const cohorts = useCohorts();
+  const quota = useCohortQuota(cohortId);
+  if (cohorts.isPending) return <Loading />;
+  if (cohorts.isError) return <FailedLine message="Could not load this cohort’s quota." onRetry={() => void cohorts.refetch()} />;
+  const cohort = cohorts.data.find((entry) => entry.cohort_id === cohortId);
+  if (cohort === undefined) return <Navigate to="/cohorts" replace />;
+  const defaults = inferDefaults(people.data ?? []);
+  return (
+    <QuotaPage
+      key={cohort.cohort_id}
+      back={<PageBackLink to="/cohorts">Cohorts</PageBackLink>}
+      title={`Quota for ${cohort.name}`}
+      line={`Applies to everyone in ${cohort.name} who doesn't have a personalised quota, before their organisation's. If someone is in several cohorts with a quota, the one they joined last applies.`}
+      initial={draftOf(cohort)}
+      placeholders={{ tasks: inherits("the organisation or default", defaults.tasks), runs: inherits("the organisation or default", defaults.runs) }}
+      who={WARNING_WHO.organisation(cohort.name)}
+      save={(values, done) =>
+        quota.mutate(values, {
+          onSuccess: done.onSaved,
+          onError: (error) =>
+            error instanceof OpsApiError && error.code === "ops_refused" ? done.onRefused(error.message) : done.onFailed(),
+        })
+      }
+    />
+  );
+}
+

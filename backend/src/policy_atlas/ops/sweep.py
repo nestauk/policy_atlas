@@ -95,6 +95,8 @@ def sweep_once(
                 select(waitlist_entry)
                 .where(
                     waitlist_entry.c.account_created_at.is_(None),
+                    # An operator rejected it: no email, ever (owner, 2026-11-18).
+                    waitlist_entry.c.rejected_at.is_(None),
                     func.lower(func.split_part(waitlist_entry.c.email, "@", 2)).in_(
                         bindparam("domains", expanding=True)
                     ),

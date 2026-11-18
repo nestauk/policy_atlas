@@ -75,14 +75,41 @@ function bulk(ids: string[], run: (subject: Person) => ActionResult["outcome"] |
   });
 }
 
-function route(method: string, path: string, body: Record<string, unknown>): Response {
+function route(method: string, path: string, body: Record<string, unknown>, query = new URLSearchParams()): Response {
   const ids = (body.user_ids as string[] | undefined) ?? [];
   const now = new Date().toISOString();
 
   if (method === "GET" && path === "/api/v1/ops/people") return json(opsMock.people);
   if (method === "GET" && path === "/api/v1/ops/organisations") return json(opsMock.organisations);
-  if (method === "GET" && path === "/api/v1/ops/requests") return json(opsMock.requests);
+  if (method === "GET" && path === "/api/v1/ops/requests") {
+    // Like the server: only requests still waiting for a decision, and the
+    // rejected ones when asked.
+    const rejected = query.get("rejected") === "true";
+    return json({
+      ...opsMock.requests,
+      items: opsMock.requests.items.filter(
+        (item) => item.status !== "invited" && (rejected || item.status !== "rejected"),
+      ),
+    });
+  }
+  const rejectPath = /^\/api\/v1\/ops\/requests\/([^/]+)\/reject$/.exec(path);
+  if (rejectPath !== null && method === "POST") {
+    const target = opsMock.requests.items.find((item) => item.entry_id === rejectPath[1]);
+    if (target === undefined) return apiError(404, "not_found", "resource not found");
+    target.status = "rejected";
+    target.rejected_at = now;
+    return new Response(null, { status: 204 });
+  }
   if (method === "GET" && path === "/api/v1/ops/cohorts") return json(opsMock.cohorts);
+
+  const cohortQuota = /^\/api\/v1\/ops\/cohorts\/([^/]+)\/quota$/.exec(path);
+  if (cohortQuota !== null && method === "POST") {
+    const target = opsMock.cohorts.find((entry) => entry.cohort_id === cohortQuota[1]);
+    if (target === undefined) return apiError(404, "not_found", "resource not found");
+    target.task_quota_per_year = (body.task_quota_per_year as number | null) ?? null;
+    target.runs_per_user = (body.runs_per_user as number | null) ?? null;
+    return json(target);
+  }
 
   const cohortPath = /^\/api\/v1\/ops\/cohorts(?:\/([^/]+))?$/.exec(path);
   if (cohortPath !== null && method === "POST") {
@@ -160,7 +187,7 @@ function route(method: string, path: string, body: Record<string, unknown>): Res
       task_quota_per_year: null,
       runs_per_user: null,
       tasks_this_year: 0,
-      limits: { task_quota_per_year: 50, runs_per_user: 3 },
+      limits: { task_quota_per_year: 50, runs_per_user: 3, task_quota_from: "the default", runs_from: "the default" },
       cohorts: [],
     };
     opsMock.people.push(created);
@@ -243,7 +270,16 @@ function route(method: string, path: string, body: Record<string, unknown>): Res
     if (entry === undefined || org === undefined) return apiError(404, "not_found", "resource not found");
     entry.status = "invited";
     entry.account_created_at = now;
+    entry.rejected_at = null;
     return json(entry);
+  }
+  const requestPath = /^\/api\/v1\/ops\/requests\/([^/]+)$/.exec(path);
+  if (method === "DELETE" && requestPath !== null) {
+    const entry = opsMock.requests.items.find((item) => item.entry_id === requestPath[1]);
+    if (entry === undefined) return apiError(404, "not_found", "resource not found");
+    if (entry.status !== "rejected") return apiError(409, "ops_refused", "only a rejected request can be deleted");
+    opsMock.requests.items = opsMock.requests.items.filter((item) => item !== entry);
+    return new Response(null, { status: 204 });
   }
 
   return apiError(404, "not_found", "resource not found");
@@ -252,11 +288,12 @@ function route(method: string, path: string, body: Record<string, unknown>): Res
 /** Answer one ops request from memory. */
 export async function opsMockFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const request = input instanceof Request ? input : new Request(input, init);
-  const path = new URL(request.url).pathname;
+  const url = new URL(request.url);
+  const path = url.pathname;
   const text = request.method === "GET" ? "" : await request.clone().text();
   const body = (text === "" ? {} : JSON.parse(text)) as Record<string, unknown>;
   if (request.method !== "GET") opsMock.writes.push({ method: request.method, path, body });
-  return opsMock.override?.(request.method, path, body) ?? route(request.method, path, body);
+  return opsMock.override?.(request.method, path, body) ?? route(request.method, path, body, url.searchParams);
 }
 
 /** A signed-in ops person, for the mock and the tests. */

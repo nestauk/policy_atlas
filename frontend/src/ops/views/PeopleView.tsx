@@ -1,13 +1,13 @@
-import { useRef, useState } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router";
+import { useRef, useState, type ReactNode } from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 
+import { formatDate } from "../../lib/dates";
 import { Figures } from "../../lib/figures";
 import { Button } from "../../ui/brand/Button";
 import { Checkbox } from "../../ui/brand/Checkbox";
 import { Chip } from "../../ui/brand/Chip";
 import { cn } from "../../ui/brand/cn";
 import { PageHeader, PagePrimary } from "../../ui/brand/PageHeader";
-import { Select } from "../../ui/brand/Select";
 import {
   errorStatus,
   useBulk,
@@ -22,7 +22,7 @@ import {
   type Organisation,
   type Person,
 } from "../api";
-import { ago, inCooldown, limitWord, resendHint } from "../format";
+import { ago, facts, inCooldown, limitWord, resendHint } from "../format";
 import {
   ACTIONS_TD_CLASS,
   ACTIONS_TH_CLASS,
@@ -38,11 +38,14 @@ import {
   OrganisationSelect,
   RowMenu,
   SearchField,
+  SearchSelect,
+  SortTh,
   TABLE_CLASS,
   TABLE_WRAP_CLASS,
   TD_CLASS,
   TH_CLASS,
   useRecordedToast,
+  useSort,
 } from "../ui";
 import { draftErrors, draftIsValid, QuotaFields, valuesOf, WARNING_WHO, type QuotaDraft, type QuotaErrors } from "./QuotaFields";
 
@@ -55,6 +58,13 @@ type DialogKind = "move" | "deenrol" | "offboard" | "quota" | "cohortAdd" | "coh
 type DialogState = { kind: DialogKind; ids: string[]; from: "row" | "bar" } | null;
 
 const COOLDOWN_NOTE = "Sent less than an hour ago";
+
+/** The column filters' "no filter" value, and the organisation filter's "not enrolled". */
+const ALL = "all";
+
+/** An organisation or cohort name that filters the list to it: plain text until pointed at. */
+const FILTER_LINK_CLASS = "text-ink hover:text-blue hover:underline";
+const NO_ORG = "none";
 
 const DE_ENROL_SENTENCE =
   "They stay signed in but leave their organisation. Their tasks and projects stay with them and leave the organisation too.";
@@ -98,7 +108,11 @@ function counts(results: readonly ActionResult[]): string {
 /** The People list (ops-pages-copy.md § People). */
 export function PeopleView() {
   const navigate = useNavigate();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
+  // The two column filters live in the address (ids only), so "Show people"
+  // on an organisation or cohort lands here filtered.
+  const orgFilter = params.get("org") ?? ALL;
+  const cohortFilter = params.get("cohort") ?? ALL;
   const location = useLocation();
   // "Open person" on Requests passes the address in router state, so it stays
   // out of the URL; a plain search word may still come as ?q=.
@@ -107,6 +121,7 @@ export function PeopleView() {
   );
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [dialog, setDialog] = useState<DialogState>(null);
+  const [viewing, setViewing] = useState<Person | null>(null);
   const [notes, setNotes] = useState<Record<string, Note>>({});
   const [retry, setRetry] = useState<(() => void) | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
@@ -124,9 +139,36 @@ export function PeopleView() {
   const cohortAdd = useCohortMembers("/api/v1/ops/people/cohort-add");
   const cohortRemove = useCohortMembers("/api/v1/ops/people/cohort-remove");
 
-  if (people.isPending) return <Loading />;
   const all = people.data ?? [];
-  const visible = all.filter((person) => matches(person, query));
+  const visible = all.filter(
+    (person) =>
+      matches(person, query) &&
+      (orgFilter === ALL ||
+        (orgFilter === NO_ORG ? person.organisation == null : person.organisation?.org_id === orgFilter)) &&
+      (cohortFilter === ALL || person.cohorts.some((own) => own.cohort_id === cohortFilter)),
+  );
+  const { sorted: shown, sort, onSort } = useSort(visible, {
+    name: (person) => person.display_name,
+    email: (person) => person.email,
+    organisation: (person) => person.organisation?.name,
+    cohorts: (person) => person.cohorts[0]?.name,
+    flags: (person) => (person.is_admin ? "a" : "") + (person.is_ops ? "o" : "") || null,
+    tasks: (person) => person.tasks_this_year,
+    // Invited people sort by when they were sent the invitation, everyone else by their latest task.
+    last: (person) => (waitingForSignIn(person) ? person.invited_at : person.last_task_at),
+  });
+  const th = { sort, onSort };
+  if (people.isPending) return <Loading />;
+  const setFilter = (key: "org" | "cohort", value: string) => {
+    const next = new URLSearchParams(params);
+    if (value === ALL) next.delete(key);
+    else next.set(key, value);
+    setParams(next, { replace: true });
+    setSelected(new Set());
+  };
+  const selectAllShown = () => setSelected(new Set(visible.map((person) => person.user_id)));
+  const selectAllLabel =
+    visible.length === all.length ? `Select all ${visible.length}` : `Select all ${visible.length} shown`;
   const byId = new Map(all.map((person) => [person.user_id, person]));
   const subjects = (ids: readonly string[]) => ids.flatMap((id) => byId.get(id) ?? []);
   const allVisibleTicked = visible.length > 0 && visible.every((person) => selected.has(person.user_id));
@@ -204,12 +246,17 @@ export function PeopleView() {
       { label: "Set quota…", onSelect: () => navigate(`/people/${person.user_id}/quota`) },
       { label: "Add to cohort…", onSelect: open("cohortAdd") },
       { label: "Remove from cohort…", onSelect: open("cohortRemove"), disabled: person.cohorts.length === 0 },
-      {
-        label: "Resend invitation",
-        onSelect: () => sendInvitations([person.user_id]),
-        disabled: cooling,
-        hint: cooling && person.invited_at != null ? resendHint(person.invited_at) : undefined,
-      },
+      // Only while the invitation is unused (owner, 2026-11-18).
+      ...(waitingForSignIn(person)
+        ? [
+            {
+              label: "Resend invitation",
+              onSelect: () => sendInvitations([person.user_id]),
+              disabled: cooling,
+              hint: cooling && person.invited_at != null ? resendHint(person.invited_at) : undefined,
+            },
+          ]
+        : []),
       {
         label: "De-enrol",
         onSelect: open("deenrol"),
@@ -254,11 +301,51 @@ export function PeopleView() {
       <PageHeader
         title="People"
         actions={<PagePrimary to="/people/new">Add person</PagePrimary>}
-        filters={<SearchField placeholder="Find a person, organisation or cohort" value={query} onChange={search} />}
+        filters={
+          <div className="flex flex-wrap items-center gap-3">
+            <SearchField placeholder="Find a person, organisation or cohort" value={query} onChange={search} />
+            <div className="w-60">
+              <SearchSelect
+                label="Organisation filter"
+                value={orgFilter}
+                options={[
+                  { value: ALL, label: "All organisations" },
+                  { value: NO_ORG, label: "Not enrolled" },
+                  ...(organisations.data ?? []).map((org) => ({ value: org.org_id, label: org.name })),
+                ]}
+                onChange={(value) => setFilter("org", value)}
+                placeholder="All organisations"
+                filterLabel="Find an organisation"
+                empty="No organisations match."
+              />
+            </div>
+            <div className="w-60">
+              <SearchSelect
+                label="Cohort filter"
+                value={cohortFilter}
+                options={[
+                  { value: ALL, label: "All cohorts" },
+                  ...(cohorts.data ?? []).map((cohort) => ({ value: cohort.cohort_id, label: cohort.name })),
+                ]}
+                onChange={(value) => setFilter("cohort", value)}
+                placeholder="All cohorts"
+                filterLabel="Find a cohort"
+                empty="No cohorts match."
+              />
+            </div>
+          </div>
+        }
       />
       {/* The bar's room is kept while nothing is ticked, so ticking the first
           box does not push the table down. */}
       <div className="mt-6 min-h-12">
+        {ticked.length === 0 && visible.length > 0 && (
+          <div className="flex min-h-12 items-center">
+            <Button variant="ghost" size="sm" onClick={selectAllShown}>
+              {selectAllLabel}
+            </Button>
+          </div>
+        )}
         {ticked.length > 0 && (
           <div
             data-selection-bar=""
@@ -268,16 +355,16 @@ export function PeopleView() {
               <Figures text={`${ticked.length} selected`} />
             </span>
             <Button variant="secondary" size="sm" onClick={openBulk("quota")}>
-              Set quota…
+              Set quota
             </Button>
             <Button variant="secondary" size="sm" onClick={openBulk("move")}>
-              Move to…
+              Move to
             </Button>
             <Button variant="secondary" size="sm" onClick={openBulk("cohortAdd")}>
-              Add to cohort…
+              Add to cohort
             </Button>
             <Button variant="secondary" size="sm" onClick={openBulk("cohortRemove")}>
-              Remove from cohort…
+              Remove from cohort
             </Button>
             <Button variant="secondary" size="sm" onClick={() => sendInvitations(ticked)}>
               Resend invitation
@@ -286,8 +373,13 @@ export function PeopleView() {
               De-enrol
             </Button>
             <Button variant="secondary" size="sm" onClick={openBulk("offboard")}>
-              Offboard…
+              Offboard
             </Button>
+            {!allVisibleTicked && (
+              <Button variant="ghost" size="sm" onClick={selectAllShown}>
+                {selectAllLabel}
+              </Button>
+            )}
             <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
               Clear selection
             </Button>
@@ -317,20 +409,20 @@ export function PeopleView() {
                     }
                   />
                 </th>
-                <th className={cn(TH_CLASS, "w-44")}>Name</th>
-                <th className={TH_CLASS}>Email</th>
-                <th className={cn(TH_CLASS, "w-40")}>Organisation</th>
-                <th className={cn(TH_CLASS, "w-40")}>Cohorts</th>
-                <th className={cn(TH_CLASS, "w-32")}>Flags</th>
-                <th className={cn(TH_CLASS, "w-36 text-right")}>Tasks this year</th>
-                <th className={cn(TH_CLASS, "w-28")}>Invited</th>
+                <SortTh {...th} sortKey="name" label="Name" className="w-36" />
+                <SortTh {...th} sortKey="email" label="Email" className="w-44" />
+                <SortTh {...th} sortKey="organisation" label="Organisation" className="w-36" />
+                <SortTh {...th} sortKey="cohorts" label="Cohorts" className="w-32" />
+                <SortTh {...th} sortKey="flags" label="Flags" className="w-24" />
+                <SortTh {...th} sortKey="tasks" label="Tasks this year" align="end" className="w-40" />
+                <SortTh {...th} sortKey="last" label="Last task" className="w-36" />
                 <th className={cn(TH_CLASS, ACTIONS_TH_CLASS)}>
                   <span className="sr-only">Actions</span>
                 </th>
               </tr>
             </thead>
             <tbody>
-              {visible.map((person) => {
+              {shown.map((person) => {
                 const note = notes[person.user_id];
                 const quotaLimit = person.limits.task_quota_per_year;
                 const isTicked = selected.has(person.user_id);
@@ -344,9 +436,15 @@ export function PeopleView() {
                       />
                     </td>
                     <td className={TD_CLASS}>
-                      <span className="block truncate font-semibold text-navy" title={person.display_name}>
-                        {person.display_name}
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setViewing(person)}
+                        className="block max-w-full cursor-pointer text-left text-navy hover:text-blue hover:underline"
+                      >
+                        <span className="block truncate font-semibold" title={person.display_name}>
+                          {person.display_name}
+                        </span>
+                      </button>
                       {note !== undefined && (
                         <span className={cn("block text-meta", note.failed ? "text-red" : "text-grey")}>
                           {note.text}
@@ -358,7 +456,14 @@ export function PeopleView() {
                     </td>
                     <td className={cn(TD_CLASS, "truncate")}>
                       {person.organisation != null ? (
-                        person.organisation.name
+                        <Link
+                          to={`/people?org=${person.organisation.org_id}`}
+                          onClick={() => setSelected(new Set())}
+                          className={FILTER_LINK_CLASS}
+                          title={`Show everyone in ${person.organisation.name}`}
+                        >
+                          {person.organisation.name}
+                        </Link>
                       ) : (
                         <span className="text-grey">not enrolled</span>
                       )}
@@ -367,9 +472,20 @@ export function PeopleView() {
                       {person.cohorts.length === 0 ? (
                         <span className="text-grey">—</span>
                       ) : (
-                        <span className="line-clamp-2" title={person.cohorts.map((cohort) => cohort.name).join(", ")}>
-                          {person.cohorts.map((cohort) => cohort.name).join(", ")}
-                        </span>
+                        <ul className="flex flex-col gap-0.5">
+                          {person.cohorts.map((cohort) => (
+                            <li key={cohort.cohort_id} className="truncate">
+                              <Link
+                                to={`/people?cohort=${cohort.cohort_id}`}
+                                onClick={() => setSelected(new Set())}
+                                className={FILTER_LINK_CLASS}
+                                title={`Show everyone in ${cohort.name}`}
+                              >
+                                {cohort.name}
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
                       )}
                     </td>
                     <td className={cn(TD_CLASS, "py-2.5")}>
@@ -383,8 +499,8 @@ export function PeopleView() {
                         text={quotaLimit == null ? "no limit" : `${person.tasks_this_year} of ${limitWord(quotaLimit)}`}
                       />
                     </td>
-                    <td className={cn(TD_CLASS, "whitespace-nowrap")}>
-                      <Figures text={person.invited_at != null ? ago(person.invited_at) : "—"} />
+                    <td className={cn(TD_CLASS, "py-2.5")}>
+                      <LastActivity person={person} />
                     </td>
                     <td className={cn(TD_CLASS, ACTIONS_TD_CLASS, "py-2 pr-2")}>
                       <RowMenu
@@ -403,6 +519,13 @@ export function PeopleView() {
       )}
       {retry !== null && <FailedLine message="Could not finish the action." onRetry={retry} />}
 
+      {viewing !== null && (
+        <PersonDialog
+          person={byId.get(viewing.user_id) ?? viewing}
+          onClose={() => setViewing(null)}
+          onQuota={() => navigate(`/people/${viewing.user_id}/quota`)}
+        />
+      )}
       {dialog?.kind === "move" && (
         <MoveDialog
           people={chosen}
@@ -690,14 +813,15 @@ function CohortDialog({
           </p>
         ) : (
           <Field id="cohort-pick" label="Cohort">
-            <Select
+            <SearchSelect
               id="cohort-pick"
               label="Cohort"
               value={cohortId}
               placeholder="Choose a cohort."
               options={cohorts.map((entry) => ({ value: entry.cohort_id, label: entry.name }))}
               onChange={setCohortId}
-              className="w-full"
+              filterLabel="Find a cohort"
+              empty="No cohorts match."
             />
           </Field>
         )}
@@ -706,3 +830,99 @@ function CohortDialog({
     </Dialog>
   );
 }
+
+/** One person's full record: everything the table truncates or leaves out. */
+function PersonDialog({ person, onClose, onQuota }: { person: Person; onClose: () => void; onQuota: () => void }) {
+  const flags = [person.is_admin && "Admin", person.is_ops && "Ops"].filter(Boolean).join(", ");
+  const limit = (value: number | null | undefined, from: string) => facts(limitWord(value), `from ${from}`);
+  const rows: Array<[string, ReactNode]> = [
+    ["Email", person.email ?? <span className="text-grey">none stored</span>],
+    ["Organisation", person.organisation?.name ?? <span className="text-grey">not enrolled</span>],
+    [
+      "Cohorts",
+      person.cohorts.length === 0 ? (
+        <span className="text-grey">none</span>
+      ) : (
+        <ul>
+          {person.cohorts.map((cohort) => (
+            <li key={cohort.cohort_id}>{cohort.name}</li>
+          ))}
+        </ul>
+      ),
+    ],
+    ["Flags", flags === "" ? <span className="text-grey">none</span> : flags],
+    ["Tasks this year", `${person.tasks_this_year} in the last 365 days`],
+    ["Tasks per year", limit(person.limits.task_quota_per_year, person.limits.task_quota_from)],
+    ["Simultaneous tasks", limit(person.limits.runs_per_user, person.limits.runs_from)],
+    [
+      "Last task",
+      waitingForSignIn(person)
+        ? "Invited, not signed in yet"
+        : person.last_task_at != null
+          ? `${formatDate(person.last_task_at, "long")}, ${formatDate(person.last_task_at, "time")}`
+          : "No tasks yet",
+    ],
+    ["Invited", person.invited_at != null ? `${formatDate(person.invited_at, "long")}, ${formatDate(person.invited_at, "time")}` : "—"],
+    [
+      "First signed in",
+      person.first_signed_in_at != null
+        ? `${formatDate(person.first_signed_in_at, "long")}, ${formatDate(person.first_signed_in_at, "time")}`
+        : "—",
+    ],
+    ["Account created", `${formatDate(person.created_at, "long")}, ${formatDate(person.created_at, "time")}`],
+  ];
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={person.display_name}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Close
+          </Button>
+          <Button variant="outline" onClick={onQuota}>
+            Set quota
+          </Button>
+        </>
+      }
+    >
+      <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-6 gap-y-3 text-body">
+        {rows.map(([label, value]) => (
+          <div key={label} className="contents">
+            <dt className="font-semibold text-navy">{label}</dt>
+            <dd className="break-words">
+              {typeof value === "string" ? <Figures text={value} /> : value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </Dialog>
+  );
+}
+
+/** Invited by the ops pages or the sweep, and has not opened the app since. */
+function waitingForSignIn(person: Person): boolean {
+  return person.invited_at != null && person.first_signed_in_at == null;
+}
+
+/**
+ * When the person last worked: their latest task's age. Until an invited
+ * person first opens the app, the yellow "Invited" and when it was sent
+ * instead (owner, 2026-11-18); Resend is in the row menu.
+ */
+function LastActivity({ person }: { person: Person }) {
+  if (waitingForSignIn(person)) {
+    return (
+      <div className="flex flex-col items-start gap-1">
+        <Chip tone="yellow">Invited</Chip>
+        <span className="text-meta text-grey">
+          <Figures text={`sent ${ago(person.invited_at ?? "")}`} />
+        </span>
+      </div>
+    );
+  }
+  if (person.last_task_at == null) return <span className="text-grey">No tasks yet</span>;
+  return <Figures text={ago(person.last_task_at)} />;
+}
+

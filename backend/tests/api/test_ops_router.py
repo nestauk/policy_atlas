@@ -63,6 +63,7 @@ _OPS_ROUTES = {
     ("GET", "/api/v1/ops/cohorts"),
     ("POST", "/api/v1/ops/cohorts"),
     ("POST", "/api/v1/ops/cohorts/{cohort_id}"),
+    ("POST", "/api/v1/ops/cohorts/{cohort_id}/quota"),
     ("DELETE", "/api/v1/ops/cohorts/{cohort_id}"),
     ("POST", "/api/v1/ops/people/cohort-add"),
     ("POST", "/api/v1/ops/people/cohort-remove"),
@@ -75,6 +76,8 @@ _OPS_ROUTES = {
     ("POST", "/api/v1/ops/people/quota"),
     ("GET", "/api/v1/ops/requests"),
     ("POST", "/api/v1/ops/requests/{entry_id}/approve"),
+    ("POST", "/api/v1/ops/requests/{entry_id}/reject"),
+    ("DELETE", "/api/v1/ops/requests/{entry_id}"),
 }
 
 
@@ -426,10 +429,14 @@ def test_people_list_projects_columns_counts_tasks_and_filters_literally(ops: Ha
     assert (row["is_admin"], row["is_ops"]) == (True, False)
     assert datetime.fromisoformat(row["invited_at"]) == invited
     assert row["tasks_this_year"] == 2
-    assert row["limits"] == {"task_quota_per_year": None, "runs_per_user": None}
+    assert row["last_task_at"] is not None
+    assert row["limits"] == {"task_quota_per_year": None, "runs_per_user": None,
+                             "task_quota_from": "administrator", "runs_from": "administrator"}
     assert next(p for p in everyone if p["user_id"] == other)["limits"] == {
         "task_quota_per_year": 50,
         "runs_per_user": 3,
+        "task_quota_from": "the default",
+        "runs_from": "the default",
     }
 
     by_name = {p["user_id"] for p in people("100% " + percent.upper())}
@@ -699,8 +706,8 @@ def test_requests_list_shows_the_three_states_and_the_self_signup_block(ops: Har
     after = listing()
     items = {uuid.UUID(item["entry_id"]): item for item in after["items"]}
     assert items[waiting]["status"] == "waiting" and items[waiting]["note"] is None
-    assert items[invited]["status"] == "invited"
-    assert items[invited]["account_user_id"] == "someone"
+    # An invited request has left the waitlist: the person is on People now.
+    assert invited not in items
     assert (items[check]["status"], items[check]["note"]) == ("check", other_name)
     created = [item["created_at"] for item in after["items"]]
     assert created == sorted(created)
@@ -982,4 +989,82 @@ def test_bulk_cohort_membership_shows_on_people_and_is_idempotent(ops: Harness) 
     response, lines = _post(ops, "/api/v1/ops/people/cohort-add",
                             {"user_ids": [first], "cohort_id": str(uuid.uuid4())})
     assert response.status_code == 404 and lines == []
+
+
+def test_cohort_quota_is_audited_and_reaches_its_members_limits(ops: Harness) -> None:
+    """A cohort's override applies to a member with none of their own."""
+    member = _seed_person(ops, org_id=None, label="cohort-quota")
+    cohort_id = _post(ops, "/api/v1/ops/cohorts",
+                      _cohort_body(f"Quota {uuid.uuid4()}"))[0].json()["cohort_id"]
+    _post(ops, "/api/v1/ops/people/cohort-add", {"user_ids": [member], "cohort_id": cohort_id})
+    response, lines = _post(ops, f"/api/v1/ops/cohorts/{cohort_id}/quota",
+                            {"task_quota_per_year": 120, "runs_per_user": None})
+    assert response.status_code == 200, response.text
+    assert (response.json()["task_quota_per_year"], response.json()["runs_per_user"]) == (120, None)
+    _assert_audited(ops, lines, action="cohort.quota", target=cohort_id, outcome="ok")
+    people = {p["user_id"]: p for p in ops.client.get(
+        "/api/v1/ops/people", headers=ops.actor.headers).json()}
+    assert people[member]["limits"]["task_quota_per_year"] == 120
+    response, _ = _post(ops, f"/api/v1/ops/cohorts/{uuid.uuid4()}/quota",
+                        {"task_quota_per_year": 1, "runs_per_user": 1})
+    assert response.status_code == 404
+
+
+def test_reject_takes_a_request_off_the_waitlist_and_approve_then_refuses(ops: Harness) -> None:
+    """Reject writes one audit row and no email; the row leaves the list; approve refuses it."""
+    entry_id = _seed_request(ops)
+    with capture_logs() as captured:
+        response = ops.client.post(
+            f"/api/v1/ops/requests/{entry_id}/reject", headers=ops.actor.headers
+        )
+    assert response.status_code == 204, response.text
+    _assert_audited(ops, _ops_lines(captured), action="request.reject", target=str(entry_id),
+                    outcome="ok")
+    listed = ops.client.get("/api/v1/ops/requests", headers=ops.actor.headers).json()["items"]
+    assert str(entry_id) not in [item["entry_id"] for item in listed]
+    with_rejected = ops.client.get(
+        "/api/v1/ops/requests?rejected=true", headers=ops.actor.headers
+    ).json()["items"]
+    record = next(item for item in with_rejected if item["entry_id"] == str(entry_id))
+    assert record["status"] == "rejected" and record["rejected_at"] is not None
+    again = ops.client.post(f"/api/v1/ops/requests/{entry_id}/reject", headers=ops.actor.headers)
+    assert again.status_code == 409
+    ops.stubber.assert_no_pending_responses()
+
+
+def test_a_rejected_request_can_be_deleted_and_only_a_rejected_one(ops: Harness) -> None:
+    """Delete refuses a waiting request, removes a rejected one, and is audited."""
+    entry_id = _seed_request(ops)
+    refused = ops.client.delete(f"/api/v1/ops/requests/{entry_id}", headers=ops.actor.headers)
+    assert refused.status_code == 409
+    ops.client.post(f"/api/v1/ops/requests/{entry_id}/reject", headers=ops.actor.headers)
+    with capture_logs() as captured:
+        response = ops.client.delete(f"/api/v1/ops/requests/{entry_id}", headers=ops.actor.headers)
+    assert response.status_code == 204, response.text
+    _assert_audited(ops, _ops_lines(captured), action="request.delete", target=str(entry_id),
+                    outcome="ok")
+    with ops.engine.connect() as conn:
+        assert conn.execute(
+            select(func.count()).where(waitlist_entry.c.entry_id == entry_id)
+        ).scalar_one() == 0
+    assert ops.client.delete(
+        f"/api/v1/ops/requests/{entry_id}", headers=ops.actor.headers
+    ).status_code == 404
+
+
+def test_approving_a_rejected_request_reverses_the_decision(ops: Harness) -> None:
+    """A rejected request can still be approved; the rejection mark is cleared."""
+    org_id = _seed_org(ops)
+    email, sub = unique_email("second-thoughts"), f"second-{uuid.uuid4()}"
+    entry_id = _seed_request(ops, email=email)
+    ops.client.post(f"/api/v1/ops/requests/{entry_id}/reject", headers=ops.actor.headers)
+    expect_lookup(ops.stubber, email=email, sub=None)
+    expect_create(ops.stubber, email=email, sub=sub)
+    response, _ = _post(ops, f"/api/v1/ops/requests/{entry_id}/approve", {"org_id": str(org_id)})
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "invited"
+    with ops.engine.connect() as conn:
+        assert conn.execute(
+            select(waitlist_entry.c.rejected_at).where(waitlist_entry.c.entry_id == entry_id)
+        ).scalar_one() is None
 

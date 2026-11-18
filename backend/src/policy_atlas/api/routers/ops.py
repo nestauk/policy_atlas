@@ -10,7 +10,7 @@ from typing import Annotated, Any
 import structlog
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, true
 from sqlalchemy.engine import Connection, RowMapping
 
 from policy_atlas.api.app import ApiCapacity, ApiConflict
@@ -154,6 +154,7 @@ def _organisation_out(conn: Connection, org_id: uuid.UUID) -> OrganisationOut:
 def _person_out(
     conn: Connection, row: RowMapping, *, settings: Settings, task_counts: dict[str, int],
     cohorts: dict[str, list[CohortRef]] | None = None,
+    last_tasks: dict[str, datetime] | None = None,
 ) -> PersonOut:
     """Project one people-list row, resolving its effective limits."""
     values = dict(row)
@@ -167,7 +168,11 @@ def _person_out(
             OrganisationRef(org_id=org_id, name=org_name) if org_id is not None else None
         ),
         tasks_this_year=task_counts.get(user_id, 0),
-        limits=LimitsOut(task_quota_per_year=limits.task_quota, runs_per_user=limits.runs),
+        last_task_at=(last_tasks or {}).get(user_id),
+        limits=LimitsOut(
+            task_quota_per_year=limits.task_quota, runs_per_user=limits.runs,
+            task_quota_from=limits.task_quota_from, runs_from=limits.runs_from,
+        ),
         cohorts=(cohorts or {}).get(user_id, []),
     )
 
@@ -308,6 +313,21 @@ def update_cohort(
     return _cohort_rows(conn, cohort_id)[0]
 
 
+@router.post("/cohorts/{cohort_id}/quota", response_model=CohortOut)
+def set_cohort_quota(
+    cohort_id: uuid.UUID, body: QuotaSet, request: Request,
+    actor: Annotated[AuthenticatedUser, Depends(require_ops)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> CohortOut:
+    """Set or clear a cohort's quota overrides."""
+    try:
+        commands.set_quota(conn, cohort_id=cohort_id, **body.model_dump())
+    except NotFound as exc:
+        raise HTTPException(404, str(exc)) from None
+    _audit(request, conn, actor=actor.user_id, action="cohort.quota", target=str(cohort_id))
+    return _cohort_rows(conn, cohort_id)[0]
+
+
 @router.delete("/cohorts/{cohort_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_cohort(
     cohort_id: uuid.UUID, request: Request,
@@ -358,8 +378,17 @@ def list_people(
         ).mappings()
     } if subjects else {}
     cohorts = _cohorts_of(conn, subjects)
+    last_tasks = {
+        str(owner): at
+        for owner, at in conn.execute(
+            select(task.c.owner_user_id, func.max(task.c.created_at))
+            .where(task.c.owner_user_id.in_(subjects))
+            .group_by(task.c.owner_user_id)
+        )
+    } if subjects else {}
     return [
-        _person_out(conn, row, settings=settings, task_counts=task_counts, cohorts=cohorts)
+        _person_out(conn, row, settings=settings, task_counts=task_counts, cohorts=cohorts,
+                    last_tasks=last_tasks)
         for row in rows
     ]
 
@@ -556,10 +585,19 @@ def remove_people_from_cohort(
 def list_requests(
     conn: Annotated[Connection, Depends(get_conn)],
     settings: Annotated[Settings, Depends(get_settings)],
+    rejected: bool = False,
 ) -> RequestsOut:
-    """List waitlist rows and their sweep-derived operational state."""
+    """List waitlist rows still waiting for a decision, and the rejected ones when asked."""
+    # Only requests still waiting for a decision (owner, 2026-11-18): an
+    # invited person is on People, a rejected request is gone.
     rows = conn.execute(
-        select(waitlist_entry).order_by(waitlist_entry.c.created_at, waitlist_entry.c.entry_id)
+        select(waitlist_entry)
+        .where(
+            waitlist_entry.c.account_created_at.is_(None),
+            # Rejected rows are kept as a record and shown on request (owner, 2026-11-18).
+            true() if rejected else waitlist_entry.c.rejected_at.is_(None),
+        )
+        .order_by(waitlist_entry.c.created_at, waitlist_entry.c.entry_id)
     ).mappings().all()
     ids = [str(row["entry_id"]) for row in rows]
     terminal = set(conn.execute(
@@ -591,6 +629,7 @@ def list_requests(
         items.append(RequestOut(
             **row,
             status="invited" if row["account_created_at"] is not None else
+            "rejected" if row["rejected_at"] is not None else
             "check" if check else "waiting",
             note=note,
         ))
@@ -600,6 +639,40 @@ def list_requests(
                                  sent_this_hour=sent,
                                  max_per_hour=settings.self_signup_max_per_hour),
     )
+
+
+@router.post("/requests/{entry_id}/reject", status_code=status.HTTP_204_NO_CONTENT)
+def reject_request(
+    entry_id: uuid.UUID, request: Request,
+    actor: Annotated[AuthenticatedUser, Depends(require_ops)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> Response:
+    """Take a request off the waitlist without an email."""
+    try:
+        commands.reject_request(conn, entry_id=entry_id, now=_now())
+    except NotFound as exc:
+        raise HTTPException(404, str(exc)) from None
+    except OpsError as exc:
+        raise ApiConflict("ops_refused", str(exc)) from None
+    _audit(request, conn, actor=actor.user_id, action="request.reject", target=str(entry_id))
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/requests/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_request(
+    entry_id: uuid.UUID, request: Request,
+    actor: Annotated[AuthenticatedUser, Depends(require_ops)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> Response:
+    """Delete a rejected request for good."""
+    try:
+        commands.delete_request(conn, entry_id=entry_id)
+    except NotFound as exc:
+        raise HTTPException(404, str(exc)) from None
+    except OpsError as exc:
+        raise ApiConflict("ops_refused", str(exc)) from None
+    _audit(request, conn, actor=actor.user_id, action="request.delete", target=str(entry_id))
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/requests/{entry_id}/approve", response_model=RequestOut)

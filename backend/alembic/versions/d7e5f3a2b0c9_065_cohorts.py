@@ -2,7 +2,8 @@
 
 A cohort is a label, separate from the organisation (which decides who sees
 whose work): one person can be in several cohorts, and one cohort can span
-organisations. ``cohort_member`` links people to cohorts; deleting a cohort
+organisations. A cohort may carry the two quota overrides; they sit between the
+person's own and the organisation's. ``cohort_member`` links people to cohorts; deleting a cohort
 deletes its links. The ops role may create, edit and delete cohorts and add or
 remove members, and nothing else on these tables.
 
@@ -37,7 +38,11 @@ def upgrade() -> None:
             "links", postgresql.ARRAY(sa.Text()), nullable=False, server_default=sa.text("'{}'")
         ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("task_quota_per_year", sa.Integer(), nullable=True),
+        sa.Column("runs_per_user", sa.Integer(), nullable=True),
         sa.UniqueConstraint("name", name="uq_cohort_name"),
+        sa.CheckConstraint("task_quota_per_year >= 0", name="ck_cohort_task_quota_nonneg"),
+        sa.CheckConstraint("runs_per_user >= 0", name="ck_cohort_runs_nonneg"),
         sa.CheckConstraint(
             "starts_on IS NULL OR ends_on IS NULL OR ends_on >= starts_on",
             name="ck_cohort_dates_ordered",
@@ -57,7 +62,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_cohort_member_user_id", "cohort_member", ["user_id"])
     op.execute("GRANT SELECT, INSERT, DELETE ON cohort TO pa_ops")
-    op.execute("GRANT UPDATE (name, description, starts_on, ends_on, links) ON cohort TO pa_ops")
+    op.execute("GRANT UPDATE (name, description, starts_on, ends_on, links, task_quota_per_year, runs_per_user) ON cohort TO pa_ops")
     op.execute("GRANT SELECT, INSERT, DELETE ON cohort_member TO pa_ops")
 
 

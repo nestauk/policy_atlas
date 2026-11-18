@@ -126,6 +126,7 @@ app_user = Table(
     Column("invited_at", DateTime(timezone=True), nullable=True),
     Column("task_quota_per_year", Integer, nullable=True),
     Column("runs_per_user", Integer, nullable=True),
+    Column("first_signed_in_at", DateTime(timezone=True), nullable=True),
     CheckConstraint("task_quota_per_year >= 0", name="ck_app_user_task_quota_nonneg"),
     CheckConstraint("runs_per_user >= 0", name="ck_app_user_runs_nonneg"),
 )
@@ -166,7 +167,11 @@ cohort = Table(
     Column("ends_on", Date, nullable=True),
     Column("links", ARRAY(Text), nullable=False, server_default=text("'{}'")),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("task_quota_per_year", Integer, nullable=True),
+    Column("runs_per_user", Integer, nullable=True),
     UniqueConstraint("name", name="uq_cohort_name"),
+    CheckConstraint("task_quota_per_year >= 0", name="ck_cohort_task_quota_nonneg"),
+    CheckConstraint("runs_per_user >= 0", name="ck_cohort_runs_nonneg"),
     CheckConstraint(
         "starts_on IS NULL OR ends_on IS NULL OR ends_on >= starts_on",
         name="ck_cohort_dates_ordered",
@@ -200,6 +205,7 @@ waitlist_entry = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("account_user_id", Text, nullable=True),
     Column("account_created_at", DateTime(timezone=True), nullable=True),
+    Column("rejected_at", DateTime(timezone=True), nullable=True),
     UniqueConstraint("email", name="uq_waitlist_entry_email"),
 )
 

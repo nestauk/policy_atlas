@@ -227,3 +227,71 @@ is accepted and is now part of the script:
   select ("Choose a cohort."; removing lists only cohorts one of them is in), buttons "Add" /
   "Remove". With no cohorts: "No cohorts yet. Create one on the Cohorts page first."
 
+## Owner pass 4 (2026-11-18)
+
+- Every ops dialog title is in the body type (Averta), Lead size, bold Navy; one change in
+  the shared dialog covers them all.
+- Waitlist: the row button is "Approve"; the approve help starts "Policy Atlas will email them
+  a temporary password."; a name opens a dialog titled with it, listing Email, Organisation
+  ("not given" when empty), Role or reason, Requested (date and time) and Status, with "Close"
+  and, while waiting, "Approve".
+- Cohorts: the intro reads "A cohort is a label for a group of people, such as a pilot or a
+  user segment. A person can be in several cohorts. Add people to cohorts from the People
+  tab."; columns Tasks per year and Simultaneous tasks ("—" in grey when unset); row menu
+  "Show people" · "Edit…" · "Set quota…" · "Delete…". Quota page "Quota for <cohort>", line
+  "Applies to everyone in <cohort> who doesn't have a personalised quota, before their
+  organisation's. If someone is in several cohorts with a quota, the one they joined last
+  applies."
+- Organisations: row menu "Show people" first.
+- People: beside the search, "All organisations" (also "Not enrolled" and each organisation)
+  and "All cohorts" filters, kept in the address; "Select all <n>" (or "Select all <n> shown"
+  when filtered) above the table, and in the selection bar until all are ticked; the bar's
+  buttons carry no "…"; each cohort on its own line as a link to that cohort's people; the
+  limits panel names the cohort a limit comes from.
+
+
+- Toasts after a write say only what happened ("Created Acme"), with no "· recorded" ending (owner, 2026-11-18). Every write still leaves its audit row.
+- People's last column is "Last task": an invited person who has not opened the app yet shows
+  the yellow "Invited" and "sent <ago>"; anyone else shows their latest task's age, or "No tasks
+  yet" in grey. There is no "Active" status: it is the normal case. "Resend invitation" is in
+  the row menu only for an invited person who has not signed in.
+- Waitlist: only requests waiting for a decision. Each has "Reject" beside "Approve" (and the
+  selection bar has both). Reject's dialog: "Reject <name>?" / "Reject <n> requests?",
+  "This will remove them from the waitlist. No account is created and no email is sent.", red
+  "Reject"; toast "<name> rejected" or "<n> rejected". Rejected requests are kept: "Show
+  rejected" beside "Select all" lists them with a grey "Rejected <ago>" and no actions; the
+  button then reads "Hide rejected". The sweep never invites a rejected request.
+- Waitlist status is plain text like Requested: "Waiting", "Already in <org>" (with "Open
+  person"), "Rejected <ago>". No badges.
+- Every column of the four tables sorts on click: ascending first, the second click reverses,
+  empty values last; the header carries the product's sort arrow and `aria-sort`, and keeps
+  its info hint. Organisations' quota columns sort by the value that applies (the default
+  when unset); People's Last task sorts invited people by when they were invited.
+- A rejected request (shown with "Show rejected") has "Delete" (red) and "Approve". Approving
+  it reverses the decision and clears the rejection. Delete's dialog: "Delete <name>'s
+  request?", "This removes the request permanently. If they ask again, a new request appears
+  here.", red "Delete"; toast "<name>'s request deleted". Only a rejected request can be
+  deleted; the audit row stays.
+- Every organisation and cohort dropdown (the People filters, the cohort picker in Add to /
+  Remove from cohort, and the organisation picker in forms) is a searchable dropdown: a filter
+  field at the top ("Find an organisation", "Find a cohort"; the form picker also creates,
+  "Find or create an organisation"), Enter takes the only match.
+- People: a name opens the person's record; organisation and cohort names in the table link
+  to the filtered list (Ink, Blue on hover). Organisations and cohorts: the name links to its
+  people. Cohort quota columns carry the same hints as Organisations ("…per person, not
+  shared by the cohort."). Waitlist: tick boxes, "Select all <n> waiting", bulk Approve and
+  Reject. Tables size every column, so narrow screens scroll sideways instead of hiding one.
+
+## Emails (owner, 2026-11-18)
+
+- White page, a Blue (#0000ff) hairline round the card, the 16 px diamond 4 px from the
+  wordmark. Invitation: "…helps policy teams put evidence at the heart of policymaking.", "You
+  set your own password the first time you sign in.", "The account won't be activated until
+  you sign in with these details."; footer ends "This message was sent automatically."
+- The code email is the password reset: subject "Reset your Policy Atlas password", heading
+  "Reset your password", "Enter this code on the Policy Atlas sign-in page to set a new
+  password. (If you were asked to confirm your email address, enter it there instead.)",
+  "If you did not ask to reset your password, you can ignore this message. Your password has
+  not changed." The logo is served from the product host (`/brand/email-logo.png`).
+- Open: a help address in the footer waits for the owner's choice (a Nesta group address
+  now, or `help@policyatlas.uk`, which needs mail receiving on the domain).

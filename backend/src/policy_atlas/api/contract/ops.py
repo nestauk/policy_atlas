@@ -42,10 +42,16 @@ class LimitsOut(BaseModel):
             ``None`` for no limit (an administrator, or an override of 0).
         runs_per_user: Walks the person's tasks may hold at once, or ``None``
             for no limit (an override of 0).
+        task_quota_from: Where the task quota came from: "this person", a
+            cohort's or an organisation's name, "the default" or
+            "administrator".
+        runs_from: The same for the run cap.
     """
 
     task_quota_per_year: int | None
     runs_per_user: int | None
+    task_quota_from: str
+    runs_from: str
 
 
 class QuotaSet(BaseModel):
@@ -105,6 +111,8 @@ class CohortOut(BaseModel):
         links: Web addresses about it (a plan, a sheet, a channel), in order.
         created_at: When it was created.
         people: How many people are in it.
+        task_quota_per_year: Its task-quota override, or ``None`` (inherit).
+        runs_per_user: Its run-cap override, or ``None`` (inherit).
     """
 
     cohort_id: uuid.UUID
@@ -115,6 +123,8 @@ class CohortOut(BaseModel):
     links: list[str]
     created_at: datetime
     people: int
+    task_quota_per_year: int | None = None
+    runs_per_user: int | None = None
 
 
 class CohortSave(BaseModel):
@@ -163,9 +173,11 @@ class PersonOut(BaseModel):
         created_at: When the row was created.
         invited_at: When Cognito last sent them an invitation through this
             service, or ``None``. The resend cooldown reads it.
+        first_signed_in_at: When they first opened the app, or ``None``.
         task_quota_per_year: Their own override, or ``None``.
         runs_per_user: Their own override, or ``None``.
         tasks_this_year: Tasks they created in the last 365 days.
+        last_task_at: When they created their latest task, or ``None``.
         limits: The limits that apply after resolution.
         cohorts: The cohorts they are in, by name.
     """
@@ -178,9 +190,11 @@ class PersonOut(BaseModel):
     is_ops: bool
     created_at: datetime
     invited_at: datetime | None = None
+    first_signed_in_at: datetime | None = None
     task_quota_per_year: int | None = None
     runs_per_user: int | None = None
     tasks_this_year: int
+    last_task_at: datetime | None = None
     limits: LimitsOut
     cohorts: list[CohortRef]
 
@@ -282,7 +296,7 @@ class BulkQuota(BulkSubjects, QuotaSet):
 #: account yet and no listed domain, so an operator approves it; ``invited``:
 #: stamped by the sweep or an approval; ``check``: the address already belongs
 #: to another organisation, left for a person to decide.
-RequestStatus = Literal["waiting", "invited", "check"]
+RequestStatus = Literal["waiting", "invited", "check", "rejected"]
 
 
 class RequestOut(BaseModel):
@@ -311,6 +325,7 @@ class RequestOut(BaseModel):
     status: RequestStatus
     account_user_id: str | None = None
     account_created_at: datetime | None = None
+    rejected_at: datetime | None = None
     note: str | None = None
 
 

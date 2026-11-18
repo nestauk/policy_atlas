@@ -44,15 +44,15 @@ describe("Add a person", () => {
     expect(opsMock.writes).toEqual([]);
   });
 
-  it("sends the invitation, toasts it as recorded and goes back to People", async () => {
+  it("sends the invitation, toasts it and goes back to People", async () => {
     const router = await fill("ana.lopez@westbury.gov.uk");
-    expect(await screen.findByText("Invitation sent to ana.lopez@westbury.gov.uk · recorded")).toBeInTheDocument();
+    expect(await screen.findByText("Invitation sent to ana.lopez@westbury.gov.uk")).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/people");
   });
 
   it("says when an existing unenrolled account was added without an email", async () => {
     await fill("sam.holt@example.com");
-    expect(await screen.findByText("Added to Nesta, no email sent · recorded")).toBeInTheDocument();
+    expect(await screen.findByText("Added to Nesta, no email sent")).toBeInTheDocument();
   });
 
   it("puts enrolled_elsewhere under the email and keeps what was typed", async () => {

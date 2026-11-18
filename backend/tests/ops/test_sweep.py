@@ -168,6 +168,19 @@ def test_sweep_skips_already_stamped_rows(engine: Engine) -> None:
         assert sweep_once(engine, _identity(client), _settings(), now=_NOW) == SweepReport()
 
 
+def test_sweep_skips_a_rejected_row(engine: Engine) -> None:
+    """An operator's rejection means no email, ever (owner, 2026-11-18)."""
+    _domain(engine)
+    entry_id = _entry(engine, email=f"rejected@{_DOMAIN}")
+    with engine.begin() as conn:
+        conn.execute(
+            waitlist_entry.update().where(waitlist_entry.c.entry_id == entry_id)
+            .values(rejected_at=_NOW)
+        )
+    with cognito() as (client, _stubber):
+        assert sweep_once(engine, _identity(client), _settings(), now=_NOW) == SweepReport()
+
+
 def test_sweep_retries_a_failed_row(engine: Engine, monkeypatch: pytest.MonkeyPatch) -> None:
     """A failed audit outcome does not become a terminal request state."""
     _domain(engine)

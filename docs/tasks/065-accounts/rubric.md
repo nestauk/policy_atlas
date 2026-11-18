@@ -90,4 +90,5 @@ Slice-specific:
         `pa_ops` grants include exactly the cohort list; create, edit, delete, add and remove
         each write one `ops_action` row; a name is unique, a link must be a web address, the end
         may not precede the start; adding twice changes nothing; the People list shows and
-        searches cohorts; the Cohorts page and both People actions are tested.
+        searches cohorts; the Cohorts page and both People actions are tested; a cohort's quota
+        sits between the person's and the organisation's, latest-joined cohort first, tested.

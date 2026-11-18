@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
 
@@ -70,6 +70,14 @@ def get_me(
             created_at=datetime.now(UTC),
         )
         .on_conflict_do_nothing(index_elements=["user_id"])
+    )
+    # The first time the person opens the app (task 065, owner 2026-11-18): the
+    # ops pages tell an invitation still waiting from one used. Later calls
+    # match no row and write nothing.
+    conn.execute(
+        update(app_user)
+        .where(app_user.c.user_id == user.user_id, app_user.c.first_signed_in_at.is_(None))
+        .values(first_signed_in_at=datetime.now(UTC))
     )
     row = conn.execute(
         select(

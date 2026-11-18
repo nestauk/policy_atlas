@@ -9,18 +9,19 @@ check and ``/me`` read it, through ``tenancy_client`` against committed rows.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
 
 from fastapi.testclient import TestClient
 from httpx import Response
-from sqlalchemy import select, update
+from sqlalchemy import insert, select, update
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.routers.common import Limits, effective_limits
 from policy_atlas.api.routers.runs import user_at_run_cap
 from policy_atlas.api.settings import Settings
-from policy_atlas.core.schema import app_user, organisation, task
+from policy_atlas.core.schema import app_user, cohort, cohort_member, organisation, task
 from tests.api.org_support import (
     make_org,
     make_task,
@@ -73,6 +74,44 @@ def test_precedence_is_person_then_organisation_then_settings_per_field(
     # An unenrolled person has no organisation to inherit from.
     _set_user(conn, user_id, org_id=None, task_quota_per_year=None)
     assert _limits(conn, user_id) == Limits(task_quota=50, runs=1)
+
+
+def _cohort(conn: Connection, user_id: str, *, joined_days_ago: int, **values: object) -> None:
+    """One cohort with these overrides, joined by the person that many days ago."""
+    cohort_id = uuid.uuid4()
+    now = datetime.now(UTC)
+    conn.execute(insert(cohort).values(
+        cohort_id=cohort_id, name=f"cohort {cohort_id}", created_at=now, **values))
+    conn.execute(insert(cohort_member).values(
+        cohort_id=cohort_id, user_id=user_id, added_at=now - timedelta(days=joined_days_ago)))
+
+
+def latest_cohort(conn: Connection, user_id: str, days_ago: int) -> str:
+    """The id of the cohort the person joined that many days ago (the helper names it after it)."""
+    rows = conn.execute(select(cohort_member.c.cohort_id, cohort_member.c.added_at)
+                        .where(cohort_member.c.user_id == user_id)).all()
+    now = datetime.now(UTC)
+    return str(min(rows, key=lambda r: abs((now - r[1]).days - days_ago))[0])
+
+
+def test_a_cohort_sits_between_the_person_and_the_organisation(conn: Connection) -> None:
+    """Person, then cohort, then organisation; the latest-joined cohort that sets a field wins."""
+    org_id = make_org(conn)
+    user_id = make_user(conn, org_id=org_id)
+    _set_org(conn, org_id, task_quota_per_year=20, runs_per_user=2)
+    _cohort(conn, user_id, joined_days_ago=10, task_quota_per_year=200, runs_per_user=None)
+    assert _limits(conn, user_id) == Limits(task_quota=200, runs=2)
+    # A later cohort that sets only runs leaves tasks to the earlier one.
+    _cohort(conn, user_id, joined_days_ago=1, runs_per_user=5)
+    assert _limits(conn, user_id) == Limits(task_quota=200, runs=5)
+    _cohort(conn, user_id, joined_days_ago=0, task_quota_per_year=0)
+    assert _limits(conn, user_id) == Limits(task_quota=None, runs=5)
+    limits = _limits(conn, user_id)
+    assert (limits.task_quota_from, limits.runs_from) == (
+        f"cohort {latest_cohort(conn, user_id, 0)}", f"cohort {latest_cohort(conn, user_id, 1)}")
+    _set_user(conn, user_id, task_quota_per_year=7)
+    assert _limits(conn, user_id) == Limits(task_quota=7, runs=5)
+    assert _limits(conn, user_id).task_quota_from == "this person"
 
 
 def test_a_cleared_override_falls_back(conn: Connection) -> None:

@@ -1,10 +1,9 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 import { formatDate } from "../../lib/dates";
 import { Figures } from "../../lib/figures";
 import { Button } from "../../ui/brand/Button";
-import { InfoHint } from "../../ui/brand/InfoHint";
 import { cn } from "../../ui/brand/cn";
 import { PageHeader, PagePrimary } from "../../ui/brand/PageHeader";
 import {
@@ -24,6 +23,7 @@ import {
   FailedLine,
   Field,
   FIGURE_CLASS,
+  SortTh,
   INPUT_CLASS,
   Loading,
   RowMenu,
@@ -33,6 +33,7 @@ import {
   TD_CLASS,
   TH_CLASS,
   useRecordedToast,
+  useSort,
 } from "../ui";
 
 /** An override, or "default · <value>" in grey (just "default" when the value is unknown). */
@@ -52,16 +53,6 @@ const RUNS_NOTE =
 const DOMAIN_NOTE =
   "People who request access with an email at this domain get an account in this organisation without approval. An administrator adds or removes a domain from the command line.";
 
-/** A column header with its info hint beside the words. */
-function HeaderHint({ label, note, align }: { label: string; note: string; align?: "end" }) {
-  return (
-    <span className={cn("-my-1 inline-flex items-center gap-1", align === "end" && "justify-end")}>
-      {label}
-      <InfoHint label={`About ${label.toLowerCase()}`} note={note} />
-    </span>
-  );
-}
-
 /** Organisations (ops-pages-copy.md § Organisations). */
 export function OrganisationsView() {
   const navigate = useNavigate();
@@ -76,11 +67,24 @@ export function OrganisationsView() {
     unwrap(client.POST("/api/v1/ops/organisations", { body })),
   );
 
-  if (organisations.isPending) return <Loading />;
   const all = organisations.data ?? [];
   const q = query.trim().toLowerCase();
-  const rows = all.filter((org) => q === "" || org.name.toLowerCase().includes(q));
-  const defaults = inferDefaults(people.data ?? [], all);
+  const defaults = inferDefaults(people.data ?? []);
+  const { sorted: rows, sort, onSort } = useSort(
+    all.filter((org) => q === "" || org.name.toLowerCase().includes(q)),
+    {
+      name: (org) => org.name,
+      people: (org) => org.people,
+      // An organisation with no number of its own sorts by the default it inherits.
+      tasks: (org) => org.task_quota_per_year ?? defaults.tasks,
+      runs: (org) => org.runs_per_user ?? defaults.runs,
+      domain: (org) => org.domains[0],
+      created: (org) => org.created_at,
+    },
+  );
+  const th = { sort, onSort };
+
+  if (organisations.isPending) return <Loading />;
 
   const submitCreate = (event: FormEvent) => {
     event.preventDefault();
@@ -127,18 +131,12 @@ export function OrganisationsView() {
             <table className={TABLE_CLASS}>
               <thead>
                 <tr>
-                  <th className={cn(TH_CLASS, "pl-4")}>Name</th>
-                  <th className={cn(TH_CLASS, "w-24 text-right")}>People</th>
-                  <th className={cn(TH_CLASS, "w-40 text-right")}>
-                    <HeaderHint label="Tasks per year" note={TASKS_NOTE} align="end" />
-                  </th>
-                  <th className={cn(TH_CLASS, "w-56 text-right")}>
-                    <HeaderHint label="Simultaneous tasks" note={RUNS_NOTE} align="end" />
-                  </th>
-                  <th className={cn(TH_CLASS, "w-56")}>
-                    <HeaderHint label="Self-signup domain" note={DOMAIN_NOTE} />
-                  </th>
-                  <th className={cn(TH_CLASS, "w-28")}>Created</th>
+                  <SortTh {...th} sortKey="name" label="Name" className="w-60 pl-4" />
+                  <SortTh {...th} sortKey="people" label="People" align="end" className="w-24" />
+                  <SortTh {...th} sortKey="tasks" label="Tasks per year" note={TASKS_NOTE} align="end" className="w-44" />
+                  <SortTh {...th} sortKey="runs" label="Simultaneous tasks" note={RUNS_NOTE} align="end" className="w-56" />
+                  <SortTh {...th} sortKey="domain" label="Self-signup domain" note={DOMAIN_NOTE} className="w-56" />
+                  <SortTh {...th} sortKey="created" label="Created" className="w-28" />
                   <th className={cn(TH_CLASS, ACTIONS_TH_CLASS)}>
                     <span className="sr-only">Actions</span>
                   </th>
@@ -147,8 +145,14 @@ export function OrganisationsView() {
               <tbody>
                 {rows.map((org) => (
                   <tr key={org.org_id} className="bg-paper">
-                    <td className={cn(TD_CLASS, "truncate pl-4 font-semibold text-navy")} title={org.name}>
-                      {org.name}
+                    <td className={cn(TD_CLASS, "truncate pl-4 font-semibold")}>
+                      <Link
+                        to={`/people?org=${org.org_id}`}
+                        title={`Show the people in ${org.name}`}
+                        className="text-navy hover:text-blue hover:underline"
+                      >
+                        {org.name}
+                      </Link>
                     </td>
                     <td className={cn(TD_CLASS, FIGURE_CLASS, "tabular-nums")}>{org.people}</td>
                     <td className={cn(TD_CLASS, FIGURE_CLASS)}>
@@ -165,6 +169,7 @@ export function OrganisationsView() {
                       <RowMenu
                         label={`Actions for ${org.name}`}
                         items={[
+                          { label: "Show people", onSelect: () => navigate(`/people?org=${org.org_id}`) },
                           { label: "Set quota defaults…", onSelect: () => navigate(`/organisations/${org.org_id}/quota`) },
                         ]}
                       />

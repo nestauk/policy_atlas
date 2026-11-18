@@ -38,11 +38,6 @@ export function facts(...parts: string[]): string {
   return parts.join(" · ");
 }
 
-/** A toast after a write the server recorded: "<summary> · recorded". */
-export function recorded(summary: string): string {
-  return facts(summary, "recorded");
-}
-
 /** A limit's value: the count, or "no limit" for none (null, or an override of 0). */
 export function limitWord(value: number | null | undefined): string {
   return value == null || value === 0 ? "no limit" : formatCount(value);

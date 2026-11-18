@@ -32,6 +32,10 @@ describe("Organisations", () => {
     expect(nesta).toHaveTextContent("nesta.org.uk");
     expect(within(row("Westbury Council")).getByText("westbury.gov.uk, westbury.example")).toBeInTheDocument();
     expect(within(row("Policy Lab")).getByText("—")).toBeInTheDocument();
+    expect(within(row("Policy Lab")).getByRole("link", { name: "Policy Lab" })).toHaveAttribute(
+      "href",
+      "/people?org=00000000-0000-4000-8000-00000000000b",
+    );
     expect(row("Policy Lab")).toHaveTextContent("default · 50");
     await user.click(within(nesta).getByRole("button", { name: "Actions for Nesta" }));
     await user.click(await screen.findByRole("menuitem", { name: "Set quota defaults…" }));
@@ -49,7 +53,7 @@ describe("Organisations", () => {
     await user.clear(within(dialog).getByLabelText("Name"));
     await user.type(within(dialog).getByLabelText("Name"), "Harbour Trust");
     await user.click(within(dialog).getByRole("button", { name: "Create" }));
-    expect(await screen.findByText("Created Harbour Trust · recorded")).toBeInTheDocument();
+    expect(await screen.findByText("Created Harbour Trust")).toBeInTheDocument();
     expect(await screen.findByText("Harbour Trust")).toBeInTheDocument();
   });
 
@@ -60,4 +64,17 @@ describe("Organisations", () => {
     expect(screen.getByRole("status")).toHaveTextContent("No organisations match.");
     expect(screen.getAllByRole("columnheader")).toHaveLength(7);
   });
+
+  it("sorts by a column on click, and reverses on the second click", async () => {
+    const user = userEvent.setup();
+    renderOps("/organisations");
+    await screen.findByRole("table");
+    const names = () => screen.getAllByRole("row").slice(1).map((row) => within(row).getAllByRole("cell")[0].textContent);
+    await user.click(screen.getByRole("button", { name: "Sort by people" }));
+    expect(names()).toEqual(["Westbury Council", "Policy Lab", "Nesta"]);
+    expect(screen.getByRole("columnheader", { name: /People/ })).toHaveAttribute("aria-sort", "ascending");
+    await user.click(screen.getByRole("button", { name: "Sort by people" }));
+    expect(names()).toEqual(["Nesta", "Policy Lab", "Westbury Council"]);
+  });
 });
+

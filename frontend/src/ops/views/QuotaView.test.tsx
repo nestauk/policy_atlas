@@ -36,13 +36,13 @@ describe("Set a quota", () => {
     await user.clear(runs);
     await user.type(runs, "8");
     await user.click(screen.getByRole("button", { name: "Save quota" }));
-    expect(await screen.findByText("Quota saved · recorded")).toBeInTheDocument();
+    expect(await screen.findByText("Quota saved")).toBeInTheDocument();
     expect(opsMock.writes.at(-1)).toMatchObject({
       path: "/api/v1/ops/people/quota",
       body: { user_ids: ["sub-mara"], task_quota_per_year: 0, runs_per_user: 8 },
     });
     await user.click(screen.getByRole("button", { name: "Clear and inherit" }));
-    await screen.findAllByText("Quota saved · recorded");
+    await screen.findAllByText("Quota saved");
     expect(opsMock.writes.at(-1)?.body).toEqual({ user_ids: ["sub-mara"], task_quota_per_year: null, runs_per_user: null });
     expect(screen.getByLabelText("Simultaneous tasks")).toHaveValue("");
   });
@@ -64,7 +64,7 @@ describe("Set a quota", () => {
     await user.type(runs, "4");
     await user.clear(tasks);
     await user.click(screen.getByRole("button", { name: "Save quota" }));
-    expect(await screen.findByText("Quota saved · recorded")).toBeInTheDocument();
+    expect(await screen.findByText("Quota saved")).toBeInTheDocument();
     expect(screen.queryByText("Enter a whole number, or leave it empty.")).toBeNull();
     expect(opsMock.writes.at(-1)?.body).toEqual({ user_ids: ["sub-mara"], task_quota_per_year: null, runs_per_user: 4 });
   });
@@ -82,7 +82,7 @@ describe("Set a quota", () => {
     );
     expect(screen.getByLabelText("Tasks per year")).toHaveAccessibleDescription("Leave empty to inherit. Enter 0 for no limit.");
     await user.click(screen.getByRole("button", { name: "Clear and inherit" }));
-    expect(await screen.findByText("Quota saved · recorded")).toBeInTheDocument();
+    expect(await screen.findByText("Quota saved")).toBeInTheDocument();
     expect(opsMock.writes.at(-1)).toEqual({
       method: "POST",
       path: `/api/v1/ops/organisations/${POLICY_LAB}/quota`,

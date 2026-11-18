@@ -273,7 +273,26 @@ stepping down to `b1e7c3a9d5f2` by name, both 065 revisions), four Cohorts page 
 People cohort tests. Driven live on the local ops server: two cohorts created, two people
 added. No CLI for cohorts (the pages are the tool; add one when a script needs it). A
 cohort's members are not removed on de-enrol or offboard: the label is research history.
-This revision was not run through a fresh review stack.
+Owner pass 4 (2026-11-18) added cohort quotas (migration columns, resolver order person →
+cohort → organisation → default with the latest-joined cohort first, `LimitsOut` sources,
+`POST /cohorts/{id}/quota`, the cohort quota page), People filters by organisation and cohort,
+"Show people" on organisations and cohorts, a visible "Select all", clickable cohort names,
+the waitlist details popup, dialog titles in the body font, and copy changes. Tests: resolver
+precedence and sources, the cohort quota route, cohort quota page, filters, select-all and
+the waitlist popup. This revision was not run through a fresh review stack.
+
+## Owner passes 5 to 7 (2026-11-18)
+
+Built on the owner's notes in one sitting, recorded in `ops-pages-copy.md`: the main-app top
+bar with an orange OPS chip; a person popup; waitlist details, multi-select, bulk approve,
+reject (kept as a record behind "Show rejected"), approve-after-reject and delete of a
+rejected request; "Last task" on People with Invited and Resend in the row menu; click-to-sort
+on every column; searchable dropdowns; cohort quotas with the server naming each limit's
+source; column sizing for narrow screens; the email redesign and the password-reset wording.
+Schema: migration `e8f6a4b3c1d0` (`app_user.first_signed_in_at`, stamped by `/me`;
+`waitlist_entry.rejected_at`; `pa_ops` may set it and delete waitlist rows, the command
+refusing any row that is not rejected). The sweep skips rejected rows. Emails sent from
+staging SES to the owner four times for review. Not run through a fresh review stack.
 
 ## Rubric status
 

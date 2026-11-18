@@ -52,6 +52,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ops/cohorts/{cohort_id}/quota": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Cohort Quota
+         * @description Set or clear a cohort's quota overrides.
+         */
+        post: operations["set_cohort_quota_api_v1_ops_cohorts__cohort_id__quota_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ops/organisations": {
         parameters: {
             query?: never;
@@ -269,12 +289,32 @@ export interface paths {
         };
         /**
          * List Requests
-         * @description List waitlist rows and their sweep-derived operational state.
+         * @description List waitlist rows still waiting for a decision, and the rejected ones when asked.
          */
         get: operations["list_requests_api_v1_ops_requests_get"];
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/requests/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Request
+         * @description Delete a rejected request for good.
+         */
+        delete: operations["delete_request_api_v1_ops_requests__entry_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -294,6 +334,26 @@ export interface paths {
          * @description Approve a waitlist request using the shared sweep command.
          */
         post: operations["approve_request_api_v1_ops_requests__entry_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/requests/{entry_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject Request
+         * @description Take a request off the waitlist without an email.
+         */
+        post: operations["reject_request_api_v1_ops_requests__entry_id__reject_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -446,6 +506,8 @@ export interface components {
          *         links: Web addresses about it (a plan, a sheet, a channel), in order.
          *         created_at: When it was created.
          *         people: How many people are in it.
+         *         task_quota_per_year: Its task-quota override, or ``None`` (inherit).
+         *         runs_per_user: Its run-cap override, or ``None`` (inherit).
          */
         CohortOut: {
             /**
@@ -468,8 +530,12 @@ export interface components {
             name: string;
             /** People */
             people: number;
+            /** Runs Per User */
+            runs_per_user?: number | null;
             /** Starts On */
             starts_on?: string | null;
+            /** Task Quota Per Year */
+            task_quota_per_year?: number | null;
         };
         /**
          * CohortRef
@@ -517,10 +583,18 @@ export interface components {
          *             ``None`` for no limit (an administrator, or an override of 0).
          *         runs_per_user: Walks the person's tasks may hold at once, or ``None``
          *             for no limit (an override of 0).
+         *         task_quota_from: Where the task quota came from: "this person", a
+         *             cohort's or an organisation's name, "the default" or
+         *             "administrator".
+         *         runs_from: The same for the run cap.
          */
         LimitsOut: {
+            /** Runs From */
+            runs_from: string;
             /** Runs Per User */
             runs_per_user: number | null;
+            /** Task Quota From */
+            task_quota_from: string;
             /** Task Quota Per Year */
             task_quota_per_year: number | null;
         };
@@ -634,9 +708,11 @@ export interface components {
          *         created_at: When the row was created.
          *         invited_at: When Cognito last sent them an invitation through this
          *             service, or ``None``. The resend cooldown reads it.
+         *         first_signed_in_at: When they first opened the app, or ``None``.
          *         task_quota_per_year: Their own override, or ``None``.
          *         runs_per_user: Their own override, or ``None``.
          *         tasks_this_year: Tasks they created in the last 365 days.
+         *         last_task_at: When they created their latest task, or ``None``.
          *         limits: The limits that apply after resolution.
          *         cohorts: The cohorts they are in, by name.
          */
@@ -652,12 +728,16 @@ export interface components {
             display_name: string;
             /** Email */
             email?: string | null;
+            /** First Signed In At */
+            first_signed_in_at?: string | null;
             /** Invited At */
             invited_at?: string | null;
             /** Is Admin */
             is_admin: boolean;
             /** Is Ops */
             is_ops: boolean;
+            /** Last Task At */
+            last_task_at?: string | null;
             limits: components["schemas"]["LimitsOut"];
             organisation?: components["schemas"]["OrganisationRef"] | null;
             /** Runs Per User */
@@ -722,13 +802,15 @@ export interface components {
             note?: string | null;
             /** Organisation */
             organisation?: string | null;
+            /** Rejected At */
+            rejected_at?: string | null;
             /** Role Or Reason */
             role_or_reason: string;
             /**
              * Status
              * @enum {string}
              */
-            status: "waiting" | "invited" | "check";
+            status: "waiting" | "invited" | "check" | "rejected";
         };
         /**
          * RequestsOut
@@ -886,6 +968,41 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_cohort_quota_api_v1_ops_cohorts__cohort_id__quota_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cohort_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuotaSet"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CohortOut"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -1283,7 +1400,9 @@ export interface operations {
     };
     list_requests_api_v1_ops_requests_get: {
         parameters: {
-            query?: never;
+            query?: {
+                rejected?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1297,6 +1416,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RequestsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_request_api_v1_ops_requests__entry_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1324,6 +1481,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RequestOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_request_api_v1_ops_requests__entry_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

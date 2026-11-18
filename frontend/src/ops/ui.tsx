@@ -2,6 +2,8 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { cn } from "../ui/brand/cn";
+import { InfoHint } from "../ui/brand/InfoHint";
+import { SortArrow, type SortOrder } from "../ui/brand/SortableColumnHeader";
 import { ChevronIcon, MoreIcon, SearchIcon, iconButtonClass, ICON_ROW } from "../ui/brand/icons";
 import { CAPTION_LABEL_CLASS, PANE_LABEL_CLASS } from "../ui/brand/label";
 import { PAGE_TITLE_CLASS } from "../ui/brand/PageHeader";
@@ -11,7 +13,6 @@ import { SHEET_SCRIM_CLASS } from "../ui/radix/Sheet";
 import { useToast } from "../ui/radix/Toast";
 import { portalContainer } from "../ui/radix/portal";
 import { OpsApiError, unwrap, useOpsAction, type Organisation } from "./api";
-import { recorded } from "./format";
 
 /* The ops pages' own pieces, built from the shared design system. */
 
@@ -36,10 +37,10 @@ export function FailedLine({ message, onRetry }: { message: string; onRetry: () 
   );
 }
 
-/** The toast after a write: "<summary> · recorded". */
+/** The toast after a write: its summary (owner, 2026-11-18: no "· recorded"). */
 export function useRecordedToast() {
   const { toast } = useToast();
-  return (summary: string) => toast({ title: recorded(summary), tone: "default" });
+  return (summary: string) => toast({ title: summary, tone: "default" });
 }
 
 /** A field's control: Paper, a Line 2 hairline, square, 40 px, Body words. */
@@ -117,74 +118,69 @@ export function Field({
 /** What an organisation select says until one is chosen, and its error. */
 export const CHOOSE_ORGANISATION = "Choose an organisation.";
 
+/** One choice in a searchable dropdown. */
+export interface SearchOption {
+  value: string;
+  label: string;
+}
+
 /**
- * The organisation picker every form shares (owner pass, 2026-11-18): the
- * select's trigger, and a popover with a filter field at its top (focused as
- * it opens; typing narrows the list by name) over the organisations. When
- * the typed name matches no organisation exactly, a last row offers to
- * create it; the new organisation is chosen at once. Enter takes the only
- * match, or creates; the arrow keys move between the rows.
+ * A searchable dropdown (owner pass, 2026-11-18): the select's trigger, and a
+ * popover with a filter field at its top (focused as it opens; typing
+ * narrows the list by name) over the choices. With `create`, when the typed
+ * name matches no choice exactly, a last row offers to create it. Enter takes
+ * the only match, or creates; the arrow keys move between the rows.
  */
-export function OrganisationSelect({
+export function SearchSelect({
   id,
   label,
-  organisations,
+  options,
   value,
   onChange,
+  placeholder,
+  filterLabel,
+  empty,
   describedBy,
   invalid,
+  className,
+  create,
 }: {
-  id: string;
+  id?: string;
   label: string;
-  organisations: readonly Organisation[];
+  options: readonly SearchOption[];
   value: string;
-  onChange: (orgId: string) => void;
+  onChange: (value: string) => void;
+  placeholder: string;
+  filterLabel: string;
+  empty: string;
   describedBy?: string;
   invalid?: boolean;
+  className?: string;
+  create?: { noun: string; pending: boolean; error: string | null; run: (name: string, close: () => void) => void; clearError: () => void };
 }) {
-  const toast = useRecordedToast();
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
-  const [createError, setCreateError] = useState<string | null>(null);
-  // The one just created, until the refetched list carries it.
-  const [made, setMade] = useState<Organisation | null>(null);
   const filterRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const listId = useId();
-  const create = useOpsAction((client, name: string) =>
-    unwrap(client.POST("/api/v1/ops/organisations", { body: { name } })),
-  );
-  const chosen = organisations.find((org) => org.org_id === value) ?? (made?.org_id === value ? made : undefined);
+  const chosen = options.find((option) => option.value === value);
   const typed = filter.trim();
   const needle = typed.toLocaleLowerCase();
-  const listed = needle === "" ? organisations : organisations.filter((org) => org.name.toLocaleLowerCase().includes(needle));
-  const canCreate = typed !== "" && !organisations.some((org) => org.name.toLocaleLowerCase() === needle);
+  const listed = needle === "" ? options : options.filter((option) => option.label.toLocaleLowerCase().includes(needle));
+  const canCreate =
+    create !== undefined && typed !== "" && !options.some((option) => option.label.toLocaleLowerCase() === needle);
 
   const setOpenState = (next: boolean) => {
     setOpen(next);
     if (!next) {
       setFilter("");
-      setCreateError(null);
+      create?.clearError();
     }
   };
-  const pick = (orgId: string) => {
-    onChange(orgId);
+  const pick = (next: string) => {
+    onChange(next);
     setOpenState(false);
   };
-  const createOrg = () =>
-    create.mutate(typed, {
-      onSuccess: (org) => {
-        setMade(org);
-        toast(`Created ${org.name}`);
-        pick(org.org_id);
-      },
-      onError: (error) =>
-        setCreateError(
-          error instanceof OpsApiError && error.status === 409
-            ? "An organisation with that name already exists."
-            : "Could not create the organisation. Try again.",
-        ),
-    });
   const rows = () => Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
   const onFilterKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "ArrowDown") {
@@ -192,8 +188,8 @@ export function OrganisationSelect({
       rows()[0]?.focus();
     } else if (event.key === "Enter") {
       event.preventDefault();
-      if (listed.length === 1) pick(listed[0].org_id);
-      else if (canCreate && !create.isPending) createOrg();
+      if (listed.length === 1) pick(listed[0].value);
+      else if (canCreate && !create.pending) create.run(typed, () => setOpenState(false));
     }
   };
   const onListKeyDown = (event: KeyboardEvent<HTMLUListElement>) => {
@@ -222,17 +218,18 @@ export function OrganisationSelect({
             "relative inline-flex h-10 w-full min-w-0 cursor-pointer items-center border bg-paper pr-9 pl-3 text-left text-body text-ink",
             "transition-colors duration-150",
             open ? "border-navy" : invalid ? "border-red" : "border-line-2",
+            className,
           )}
         >
           <span className={cn("min-w-0 flex-1 truncate", chosen === undefined && "text-grey")}>
-            {chosen?.name ?? CHOOSE_ORGANISATION}
+            {chosen?.label ?? placeholder}
           </span>
           <ChevronIcon size={12} className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 rotate-90 text-grey" />
         </button>
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-[var(--radix-popover-trigger-width)] min-w-80 max-w-[calc(100vw-2rem)] p-1"
+        className="w-[var(--radix-popover-trigger-width)] min-w-72 max-w-[calc(100vw-2rem)] p-1"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           filterRef.current?.focus();
@@ -241,13 +238,13 @@ export function OrganisationSelect({
         <input
           ref={filterRef}
           type="search"
-          aria-label="Find or create an organisation"
-          placeholder="Find or create an organisation"
+          aria-label={filterLabel}
+          placeholder={filterLabel}
           autoComplete="off"
           value={filter}
           onChange={(event) => {
             setFilter(event.target.value);
-            setCreateError(null);
+            create?.clearError();
           }}
           onKeyDown={onFilterKeyDown}
           className="mb-1 h-10 w-full border border-line-2 bg-paper px-3 text-body text-ink focus-visible:outline-2 focus-visible:outline-blue"
@@ -260,29 +257,29 @@ export function OrganisationSelect({
           onKeyDown={onListKeyDown}
           className="flex max-h-72 flex-col overflow-y-auto"
         >
-          {listed.map((org) => {
-            const selected = org.org_id === value;
+          {listed.map((option) => {
+            const selected = option.value === value;
             return (
-              <li key={org.org_id} role="none">
+              <li key={option.value} role="none">
                 <button
                   type="button"
                   role="option"
                   aria-selected={selected}
-                  onClick={() => pick(org.org_id)}
+                  onClick={() => pick(option.value)}
                   className={cn(
                     "block min-h-10 w-full cursor-pointer px-3 py-2 text-left text-meta text-navy",
                     "hover:bg-blue-tint-2 hover:text-blue focus-visible:bg-blue-tint-2",
                     selected ? "bg-blue-tint-2 font-semibold" : "font-normal",
                   )}
                 >
-                  {org.name}
+                  {option.label}
                 </button>
               </li>
             );
           })}
           {listed.length === 0 && !canCreate && (
             <li role="none" className="px-3 py-2 text-meta text-grey">
-              No organisations yet. Type a name to create one.
+              {empty}
             </li>
           )}
           {canCreate && (
@@ -291,22 +288,173 @@ export function OrganisationSelect({
                 type="button"
                 role="option"
                 aria-selected={false}
-                disabled={create.isPending}
-                onClick={createOrg}
+                disabled={create.pending}
+                onClick={() => create.run(typed, () => setOpenState(false))}
                 className="block min-h-10 w-full cursor-pointer px-3 py-2 text-left text-meta font-semibold text-blue hover:bg-blue-tint-2 focus-visible:bg-blue-tint-2 disabled:cursor-default disabled:text-grey"
               >
-                Create organisation “{typed}”
+                Create {create.noun} “{typed}”
               </button>
             </li>
           )}
         </ul>
-        {createError !== null && (
+        {create?.error != null && (
           <p role="alert" className="px-3 py-2 text-meta text-red">
-            {createError}
+            {create.error}
           </p>
         )}
       </PopoverContent>
     </Popover>
+  );
+}
+
+/**
+ * The organisation picker every form shares: the searchable dropdown, which
+ * can create an organisation from the typed name and choose it at once.
+ */
+export function OrganisationSelect({
+  id,
+  label,
+  organisations,
+  value,
+  onChange,
+  describedBy,
+  invalid,
+}: {
+  id: string;
+  label: string;
+  organisations: readonly Organisation[];
+  value: string;
+  onChange: (orgId: string) => void;
+  describedBy?: string;
+  invalid?: boolean;
+}) {
+  const toast = useRecordedToast();
+  const [error, setError] = useState<string | null>(null);
+  // The one just created, until the refetched list carries it.
+  const [made, setMade] = useState<Organisation | null>(null);
+  const create = useOpsAction((client, name: string) =>
+    unwrap(client.POST("/api/v1/ops/organisations", { body: { name } })),
+  );
+  const options = organisations.map((org) => ({ value: org.org_id, label: org.name }));
+  if (made !== null && !organisations.some((org) => org.org_id === made.org_id)) {
+    options.push({ value: made.org_id, label: made.name });
+  }
+  return (
+    <SearchSelect
+      id={id}
+      label={label}
+      options={options}
+      value={value}
+      onChange={onChange}
+      placeholder={CHOOSE_ORGANISATION}
+      filterLabel="Find or create an organisation"
+      empty="No organisations yet. Type a name to create one."
+      describedBy={describedBy}
+      invalid={invalid}
+      create={{
+        noun: "organisation",
+        pending: create.isPending,
+        error,
+        clearError: () => setError(null),
+        run: (name, close) =>
+          create.mutate(name, {
+            onSuccess: (org) => {
+              setMade(org);
+              toast(`Created ${org.name}`);
+              onChange(org.org_id);
+              close();
+            },
+            onError: (failure) =>
+              setError(
+                failure instanceof OpsApiError && failure.status === 409
+                  ? "An organisation with that name already exists."
+                  : "Could not create the organisation. Try again.",
+              ),
+          }),
+      }}
+    />
+  );
+}
+
+/** A value a column sorts by; empty values always sort last. */
+export type SortValue = string | number | null | undefined;
+
+function compareValues(a: SortValue, b: SortValue, order: SortOrder): number {
+  if (a == null || a === "") return b == null || b === "" ? 0 : 1;
+  if (b == null || b === "") return -1;
+  const result =
+    typeof a === "number" && typeof b === "number"
+      ? a - b
+      : String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+  return order === "asc" ? result : -result;
+}
+
+/**
+ * Click-to-sort for an ops table (owner, 2026-11-18): the first click on a
+ * column sorts ascending, the next reverses it. Unsorted, rows keep the
+ * server's order.
+ */
+export function useSort<T, K extends string>(rows: readonly T[], columns: Record<K, (row: T) => SortValue>) {
+  const [sort, setSort] = useState<{ key: K; order: SortOrder } | null>(null);
+  const sorted =
+    sort === null ? rows : [...rows].sort((a, b) => compareValues(columns[sort.key](a), columns[sort.key](b), sort.order));
+  const onSort = (key: K) =>
+    setSort((current) => ({ key, order: current?.key === key && current.order === "asc" ? "desc" : "asc" }));
+  return { sorted, sort, onSort };
+}
+
+/**
+ * A sortable column header: the words and the product's sort arrow as one
+ * button ("Sort by <label>"), `aria-sort` on the cell, and an optional info
+ * hint beside it.
+ */
+export function SortTh<K extends string>({
+  sortKey,
+  label,
+  sort,
+  onSort,
+  align,
+  note,
+  className,
+}: {
+  sortKey: K;
+  label: string;
+  sort: { key: K; order: SortOrder } | null;
+  onSort: (key: K) => void;
+  align?: "end";
+  note?: string;
+  className?: string;
+}) {
+  const order = sort?.key === sortKey ? sort.order : null;
+  return (
+    <th
+      aria-sort={order === "asc" ? "ascending" : order === "desc" ? "descending" : "none"}
+      className={cn(TH_CLASS, align === "end" && "text-right", className)}
+    >
+      <span className={cn("inline-flex max-w-full items-center gap-1 align-bottom", align === "end" && "justify-end")}>
+        <button
+          type="button"
+          aria-label={`Sort by ${label.toLowerCase()}`}
+          onClick={() => onSort(sortKey)}
+          className={cn(
+            "group inline-flex min-w-0 cursor-pointer items-center gap-1 uppercase hover:text-navy",
+            order !== null && "text-navy",
+          )}
+        >
+          {/* Right-aligned, the arrow leads; in the markup, not by reversing the
+              row, which would move the header's text baseline. */}
+          {align === "end" && <SortArrow order={order} />}
+          <span className="truncate">{label}</span>
+          {align !== "end" && <SortArrow order={order} />}
+        </button>
+        {note !== undefined && (
+          // The hint's 24 px target must not lift this header off the row's baseline.
+          <span className="-my-1.5 inline-flex">
+            <InfoHint label={`About ${label.toLowerCase()}`} note={note} />
+          </span>
+        )}
+      </span>
+    </th>
   );
 }
 
@@ -319,7 +467,10 @@ export const TABLE_WRAP_CLASS = "relative overflow-x-auto border-y border-line b
  * search, a note under a name or a status change never moves a column. On
  * a phone the table keeps its columns and scrolls sideways in its frame.
  */
-export const TABLE_CLASS = "w-full min-w-[52rem] table-fixed border-collapse text-left";
+// Every column states a width: the table is never narrower than their sum
+// (`min-w-max`), so on a narrow screen it scrolls sideways in its frame
+// instead of squeezing an unsized column to nothing.
+export const TABLE_CLASS = "w-full min-w-max table-fixed border-collapse text-left";
 export const TH_CLASS = cn(CAPTION_LABEL_CLASS, "h-10 truncate px-3 pb-2 align-bottom font-bold");
 /** The actions column stays at the frame's right edge while the table
  *  scrolls sideways, so a row's controls stay in reach on a phone. Its rows
@@ -423,7 +574,7 @@ export function Dialog({
             "border border-line-2 bg-paper shadow-overlay focus-visible:outline-none",
           )}
         >
-          <DialogPrimitive.Title className="px-6 pt-5 font-display text-lead font-bold text-navy">
+          <DialogPrimitive.Title className="px-6 pt-5 font-sans text-lead font-bold text-navy">
             {title}
           </DialogPrimitive.Title>
           <div className="min-h-0 overflow-y-auto px-6 pb-2 pt-3">

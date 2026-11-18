@@ -102,6 +102,14 @@ export function useSaveCohort() {
   );
 }
 
+export function useCohortQuota(cohortId: string) {
+  return useOpsAction((client, body: QuotaValues) =>
+    unwrap(
+      client.POST("/api/v1/ops/cohorts/{cohort_id}/quota", { params: { path: { cohort_id: cohortId } }, body }),
+    ),
+  );
+}
+
 export function useDeleteCohort() {
   return useOpsAction(async (client, cohortId: string) => {
     const { response } = await client.DELETE("/api/v1/ops/cohorts/{cohort_id}", {
@@ -116,9 +124,13 @@ export function useCohortMembers(path: "/api/v1/ops/people/cohort-add" | "/api/v
   return useOpsAction((client, body: { user_ids: string[]; cohort_id: string }) => unwrap(client.POST(path, { body })));
 }
 
-export function useRequests() {
+/** The waitlist; with `rejected`, the rejected requests too (kept as a record). */
+export function useRequests(rejected = false) {
   const client = useOpsClient();
-  return useQuery({ queryKey: REQUESTS, queryFn: () => unwrap(client.GET("/api/v1/ops/requests")) });
+  return useQuery({
+    queryKey: [...REQUESTS, { rejected }],
+    queryFn: () => unwrap(client.GET("/api/v1/ops/requests", { params: { query: { rejected } } })),
+  });
 }
 
 /**
@@ -184,25 +196,8 @@ export function useOrganisationQuota(orgId: string) {
  */
 export function inferDefaults(
   people: readonly Person[],
-  organisations: readonly Organisation[],
 ): { tasks: number | null | undefined; runs: number | null | undefined } {
-  const orgById = new Map(organisations.map((org) => [org.org_id, org]));
-  const orgOf = (person: Person) =>
-    person.organisation == null ? undefined : orgById.get(person.organisation.org_id);
-  const tasks = people.find(
-    (person) =>
-      !person.is_admin &&
-      person.task_quota_per_year == null &&
-      orgOf(person)?.task_quota_per_year == null &&
-      (person.organisation == null || orgOf(person) !== undefined),
-  );
-  // Administrators are exempt from both limits, so neither shows the default.
-  const runs = people.find(
-    (person) =>
-      !person.is_admin &&
-      person.runs_per_user == null &&
-      orgOf(person)?.runs_per_user == null &&
-      (person.organisation == null || orgOf(person) !== undefined),
-  );
+  const tasks = people.find((person) => person.limits.task_quota_from === "the default");
+  const runs = people.find((person) => person.limits.runs_from === "the default");
   return { tasks: tasks?.limits.task_quota_per_year, runs: runs?.limits.runs_per_user };
 }

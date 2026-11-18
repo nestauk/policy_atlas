@@ -5,7 +5,7 @@ import { AddPersonView } from "./views/AddPersonView";
 import { CohortsView } from "./views/CohortsView";
 import { OrganisationsView } from "./views/OrganisationsView";
 import { PeopleView } from "./views/PeopleView";
-import { OrganisationQuotaView, PersonQuotaView } from "./views/QuotaView";
+import { CohortQuotaView, OrganisationQuotaView, PersonQuotaView } from "./views/QuotaView";
 import { RequestsView } from "./views/RequestsView";
 
 /** The ops pages' routes (ops-pages-copy.md § Addresses and shell). */
@@ -21,6 +21,7 @@ export const opsRoutes: RouteObject[] = [
       { path: "organisations", element: <OrganisationsView /> },
       { path: "organisations/:orgId/quota", element: <OrganisationQuotaView /> },
       { path: "cohorts", element: <CohortsView /> },
+      { path: "cohorts/:cohortId/quota", element: <CohortQuotaView /> },
       { path: "waitlist", element: <RequestsView /> },
       { path: "*", element: <Navigate to="/people" replace /> },
     ],

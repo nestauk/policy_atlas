@@ -1497,15 +1497,17 @@ def set_quota(
     *,
     user_id: str | None = None,
     org_id: uuid.UUID | None = None,
+    cohort_id: uuid.UUID | None = None,
     task_quota_per_year: int | None,
     runs_per_user: int | None,
 ) -> QuotaChange:
-    """Set or clear both quota overrides on exactly one user or organisation.
+    """Set or clear both quota overrides on exactly one user, organisation or cohort.
 
     Args:
         conn: Open connection inside the command transaction.
         user_id: User subject, mutually exclusive with ``org_id``.
-        org_id: Organisation identifier, mutually exclusive with ``user_id``.
+        org_id: Organisation identifier; exactly one of the three is given.
+        cohort_id: Cohort identifier (owner, 2026-11-18).
         task_quota_per_year: Task quota override; ``None`` inherits.
         runs_per_user: Simultaneous run override; ``None`` inherits.
 
@@ -1515,20 +1517,25 @@ def set_quota(
     Raises:
         OpsError: If selection is invalid, absent, or a quota is negative.
     """
-    if (user_id is None) == (org_id is None):
-        raise OpsError("give exactly one of user_id or org_id")
+    choices = (("user", user_id), ("organisation", org_id), ("cohort", cohort_id))
+    given = [(name, value) for name, value in choices if value is not None]
+    if len(given) != 1:
+        raise OpsError("give exactly one of user_id, org_id or cohort_id")
     if any(value is not None and value < 0 for value in (task_quota_per_year, runs_per_user)):
         raise OpsError("quota values cannot be negative")
-    table = app_user if user_id is not None else organisation
-    key = app_user.c.user_id if user_id is not None else organisation.c.org_id
-    identifier = user_id if user_id is not None else org_id
+    kind, identifier = given[0]
+    table, key = {
+        "user": (app_user, app_user.c.user_id),
+        "organisation": (organisation, organisation.c.org_id),
+        "cohort": (cohort, cohort.c.cohort_id),
+    }[kind]
     row = (
         conn.execute(select(table).where(key == identifier).with_for_update())
         .mappings()
         .one_or_none()
     )
     if row is None:
-        raise NotFound(f"no {'user' if user_id is not None else 'organisation'} {identifier}")
+        raise NotFound(f"no {kind} {identifier}")
     conn.execute(
         update(table)
         .where(key == identifier)
@@ -1779,9 +1786,54 @@ def approve_request(
     conn.execute(
         update(waitlist_entry)
         .where(waitlist_entry.c.entry_id == entry_id)
-        .values(account_user_id=enrolment.user_id, account_created_at=now)
+        # Approving a rejected request reverses the decision (owner, 2026-11-18).
+        .values(account_user_id=enrolment.user_id, account_created_at=now, rejected_at=None)
     )
     return Approval(entry_id=entry_id, enrolment=enrolment, created_at=now)
+
+
+def reject_request(conn: Connection, *, entry_id: uuid.UUID, now: datetime) -> None:
+    """Mark one waiting request rejected: it leaves the waitlist and no email is sent.
+
+    Raises:
+        NotFound: If no request has that id.
+        OpsError: If it was already invited or rejected.
+    """
+    row = (
+        conn.execute(
+            select(waitlist_entry).where(waitlist_entry.c.entry_id == entry_id).with_for_update()
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if row is None:
+        raise NotFound(f"no waitlist request {entry_id}")
+    if row["account_created_at"] is not None:
+        raise OpsError("already invited")
+    if row["rejected_at"] is not None:
+        raise OpsError("already rejected")
+    conn.execute(
+        update(waitlist_entry).where(waitlist_entry.c.entry_id == entry_id).values(rejected_at=now)
+    )
+
+
+def delete_request(conn: Connection, *, entry_id: uuid.UUID) -> None:
+    """Delete a rejected request for good; the address may ask again later.
+
+    Raises:
+        NotFound: If no request has that id.
+        OpsError: If it is not rejected (only a rejected request is deleted).
+    """
+    rejected_at = conn.execute(
+        select(waitlist_entry.c.rejected_at)
+        .where(waitlist_entry.c.entry_id == entry_id)
+        .with_for_update()
+    ).one_or_none()
+    if rejected_at is None:
+        raise NotFound(f"no waitlist request {entry_id}")
+    if rejected_at[0] is None:
+        raise OpsError("only a rejected request can be deleted")
+    conn.execute(delete(waitlist_entry).where(waitlist_entry.c.entry_id == entry_id))
 
 
 # --------------------------------------------------------------------------

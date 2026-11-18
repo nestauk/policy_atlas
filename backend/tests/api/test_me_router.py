@@ -115,10 +115,23 @@ def test_me_is_idempotent_and_never_clobbers_ops_set_fields(
 def test_me_provisioning_writes_exactly_one_row_across_repeated_calls(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """Provisioning is once-per-user, which is what justifies a write in a GET."""
+    """Provisioning is once-per-user, which is what justifies a write in a GET.
+
+    The first call also stamps the first sign-in (task 065); later calls leave it.
+    """
+    def first_sign_in(user_id: str) -> object:
+        with seeded(engine) as conn:
+            return conn.execute(
+                select(app_user.c.first_signed_in_at).where(app_user.c.user_id == user_id)
+            ).scalar_one()
+
     with tenancy_client(tmp_path, count=1) as (client, (caller,)):
-        for _ in range(3):
+        assert client.get("/api/v1/me", headers=caller.headers).status_code == 200
+        stamped = first_sign_in(caller.user_id)
+        assert stamped is not None
+        for _ in range(2):
             assert client.get("/api/v1/me", headers=caller.headers).status_code == 200
+        assert first_sign_in(caller.user_id) == stamped
 
         with seeded(engine) as conn:
             rows = conn.execute(

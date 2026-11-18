@@ -41,17 +41,19 @@ describe("People", () => {
       "Cohorts",
       "Flags",
       "Tasks this year",
-      "Invited",
+      "Last task",
       "Actions",
     ]);
     expect(row("Tom Ellis")).toHaveTextContent("12 of 100");
-    expect(row("Tom Ellis")).toHaveTextContent("25 min ago");
+    // Invited 25 minutes ago and not signed in yet; Priya has signed in.
+    expect(row("Tom Ellis")).toHaveTextContent("Invitedsent 25 min ago");
     expect(row("Priya Shah")).toHaveTextContent("no limit");
     expect(within(row("Priya Shah")).getByText("Admin")).toBeInTheDocument();
     expect(within(row("Priya Shah")).getByText("Ops")).toBeInTheDocument();
     expect(within(row("Sam Holt")).getByText("not enrolled")).toBeInTheDocument();
-    // No address, and in no cohort.
-    expect(within(row("Jon Reyes")).getAllByText("—")).toHaveLength(2);
+    // In no cohort, and no tasks in the fixtures.
+    expect(within(row("Jon Reyes")).getAllByText("—")).toHaveLength(1);
+    expect(within(row("Jon Reyes")).getByText("No tasks yet")).toBeInTheDocument();
     expect(row("Priya Shah")).toHaveTextContent("Priority panel");
   });
 
@@ -84,7 +86,17 @@ describe("People", () => {
     await user.click(screen.getByRole("checkbox", { name: "Select Jon Reyes" }));
     const bar = selectionBar();
     expect(bar).toHaveTextContent("2 selected");
-    for (const name of ["Set quota…", "Move to…", "Resend invitation", "De-enrol", "Offboard…", "Clear selection"]) {
+    for (const name of [
+      "Set quota",
+      "Move to",
+      "Add to cohort",
+      "Remove from cohort",
+      "Resend invitation",
+      "De-enrol",
+      "Offboard",
+      "Select all 6",
+      "Clear selection",
+    ]) {
       expect(within(bar).getByRole("button", { name })).toBeInTheDocument();
     }
     await user.click(within(bar).getByRole("button", { name: "De-enrol" }));
@@ -92,7 +104,7 @@ describe("People", () => {
     expect(dialog).toHaveTextContent("Tom Ellis");
     expect(dialog).toHaveTextContent("jon.reyes@policylab.example");
     await user.click(within(dialog).getByRole("button", { name: "De-enrol" }));
-    expect(await screen.findByText("2 done, 0 failed · recorded")).toBeInTheDocument();
+    expect(await screen.findByText("2 done, 0 failed")).toBeInTheDocument();
     expect(opsMock.writes.at(-1)).toMatchObject({
       path: "/api/v1/ops/people/de-enrol",
       body: { user_ids: ["sub-tom", "sub-jon"] },
@@ -120,14 +132,14 @@ describe("People", () => {
         : undefined;
     await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
     await user.click(screen.getByRole("checkbox", { name: "Select Jon Reyes" }));
-    await user.click(screen.getByRole("button", { name: "Move to…" }));
+    await user.click(screen.getByRole("button", { name: "Move to" }));
     const dialog = await screen.findByRole("dialog", { name: "Move 2 people to an organisation" });
     expect(dialog).toHaveTextContent("Their tasks and projects move with them and become private.");
     expect(within(dialog).getByRole("button", { name: "Move" })).toBeDisabled();
     await user.click(within(dialog).getByRole("combobox", { name: "Organisation" }));
     await user.click(await screen.findByRole("option", { name: "Policy Lab" }));
     await user.click(within(dialog).getByRole("button", { name: "Move" }));
-    expect(await screen.findByText("1 done, 1 failed · recorded")).toBeInTheDocument();
+    expect(await screen.findByText("1 done, 1 failed")).toBeInTheDocument();
     expect(within(row("Jon Reyes")).getByText("Cognito refused the change")).toBeInTheDocument();
   });
 
@@ -139,7 +151,7 @@ describe("People", () => {
     await user.click(within(dialog).getByRole("combobox", { name: "Organisation" }));
     await user.click(await screen.findByRole("option", { name: "Nesta" }));
     await user.click(within(dialog).getByRole("button", { name: "Move" }));
-    expect(await screen.findByText("Moved Sam Holt to Nesta · recorded")).toBeInTheDocument();
+    expect(await screen.findByText("Moved Sam Holt to Nesta")).toBeInTheDocument();
   });
 
   it("offboards one person once the typed address matches", async () => {
@@ -157,7 +169,7 @@ describe("People", () => {
     expect(button).toBeEnabled();
     expect(within(dialog).getByRole("button", { name: "Keep the account" })).toBeInTheDocument();
     await user.click(button);
-    expect(await screen.findByText(/· recorded$/)).toBeInTheDocument();
+    expect(await screen.findByText(/^Offboarded /)).toBeInTheDocument();
   });
 
   it("offboards several by typing the count, under every name and address", async () => {
@@ -165,7 +177,7 @@ describe("People", () => {
     await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
     await user.click(screen.getByRole("checkbox", { name: "Select Mara Okafor" }));
     await user.click(screen.getByRole("checkbox", { name: "Select Sam Holt" }));
-    await user.click(screen.getByRole("button", { name: "Offboard…" }));
+    await user.click(screen.getByRole("button", { name: "Offboard" }));
     const dialog = await screen.findByRole("dialog", { name: "Offboard 3 people?" });
     for (const text of ["Tom Ellis", "tom.ellis@nesta.org.uk", "Mara Okafor", "mara.okafor@nesta.org.uk", "Sam Holt"]) {
       expect(dialog).toHaveTextContent(text);
@@ -178,7 +190,7 @@ describe("People", () => {
     await user.type(field, "3");
     expect(button).toBeEnabled();
     await user.click(button);
-    expect(await screen.findByText("3 done, 0 failed · recorded")).toBeInTheDocument();
+    expect(await screen.findByText("3 done, 0 failed")).toBeInTheDocument();
   });
 
   it("marks rows still cooling down after a bulk resend", async () => {
@@ -186,7 +198,7 @@ describe("People", () => {
     await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
     await user.click(screen.getByRole("checkbox", { name: "Select Sam Holt" }));
     await user.click(screen.getByRole("button", { name: "Resend invitation" }));
-    expect(await screen.findByText("1 done, 1 too soon · recorded")).toBeInTheDocument();
+    expect(await screen.findByText("1 done, 1 too soon")).toBeInTheDocument();
     expect(within(row("Tom Ellis")).getByText("Sent less than an hour ago")).toBeInTheDocument();
   });
 
@@ -220,7 +232,7 @@ describe("People, after the review", () => {
     const dialog = await screen.findByRole("dialog", { name: "De-enrol Jon Reyes?" });
     expect(dialog).not.toHaveTextContent("Tom Ellis");
     await user.click(within(dialog).getByRole("button", { name: "De-enrol" }));
-    await screen.findByText(/· recorded$/);
+    await screen.findByText(/^De-enrolled /);
     expect(opsMock.writes.at(-1)?.body).toEqual({ user_ids: ["sub-jon"] });
   });
 
@@ -228,7 +240,7 @@ describe("People, after the review", () => {
     const user = await openPeople();
     await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
     await user.click(screen.getByRole("checkbox", { name: "Select Jon Reyes" }));
-    await user.click(within(selectionBar()).getByRole("button", { name: "Set quota…" }));
+    await user.click(within(selectionBar()).getByRole("button", { name: "Set quota" }));
     const dialog = await screen.findByRole("dialog", { name: "Quota for 2 people" });
     await user.type(within(dialog).getByLabelText("Tasks per year"), "ten");
     await user.click(within(dialog).getByRole("button", { name: "Save quota" }));
@@ -247,9 +259,31 @@ describe("People, after the review", () => {
     const user = await openPeople();
     const slot = screen.getByRole("table", { name: "People" }).parentElement?.previousElementSibling as HTMLElement;
     expect(slot).toHaveClass("min-h-12");
-    expect(slot).toBeEmptyDOMElement();
+    // With nothing ticked the room holds only "Select all".
+    expect(within(slot).getByRole("button", { name: "Select all 6" })).toBeInTheDocument();
     await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
     expect(slot).toContainElement(selectionBar());
+  });
+
+  it("selects every person the filters show, and filters by organisation and cohort from the address", async () => {
+    const user = userEvent.setup();
+    renderOps("/people?org=00000000-0000-4000-8000-00000000000a");
+    await screen.findByRole("heading", { name: "People" });
+    expect(screen.getByRole("combobox", { name: "Organisation filter" })).toHaveTextContent("Nesta");
+    const shown = screen.getAllByRole("checkbox", { name: /^Select (?!everyone)/ }).length;
+    await user.click(screen.getByRole("button", { name: `Select all ${shown} shown` }));
+    expect(selectionBar()).toHaveTextContent(`${shown} selected`);
+
+    await user.click(screen.getByRole("combobox", { name: "Cohort filter" }));
+    await user.click(await screen.findByRole("option", { name: "Priority panel" }));
+    expect(screen.getAllByRole("checkbox", { name: /^Select (?!everyone)/ })).toHaveLength(1);
+    expect(screen.getByText("Priya Shah", { selector: "span[title]" })).toBeInTheDocument();
+  });
+
+  it("shows each cohort on its own line, linking to that cohort's people", async () => {
+    await openPeople();
+    const link = screen.getByRole("link", { name: "Priority panel" });
+    expect(link).toHaveAttribute("href", "/people?cohort=00000000-0000-4000-8000-00000000000d");
   });
 
   it("returns focus to the row's menu button when its dialog closes", async () => {
@@ -268,7 +302,7 @@ describe("People, after the review", () => {
     await user.click(within(selectionBar()).getByRole("button", { name: "De-enrol" }));
     const dialog = await screen.findByRole("dialog", { name: "De-enrol 2 people?" });
     await user.click(within(dialog).getByRole("button", { name: "De-enrol" }));
-    await screen.findByText("2 done, 0 failed · recorded");
+    await screen.findByText("2 done, 0 failed");
     await waitFor(() => expect(screen.getByRole("table", { name: "People" })).toHaveFocus());
   });
 
@@ -276,7 +310,7 @@ describe("People, after the review", () => {
     const user = await openPeople();
     await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
     await user.click(screen.getByRole("checkbox", { name: "Select Jon Reyes" }));
-    await user.click(within(selectionBar()).getByRole("button", { name: "Offboard…" }));
+    await user.click(within(selectionBar()).getByRole("button", { name: "Offboard" }));
     const dialog = await screen.findByRole("dialog", { name: "Offboard 2 people?" });
     expect(dialog).toHaveAccessibleDescription(/^This stops them signing in/);
     const sentence = within(dialog).getByText(/^This stops them signing in/);
@@ -289,7 +323,7 @@ describe("People, after the review", () => {
     const user = await openPeople();
     await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
     await user.click(screen.getByRole("checkbox", { name: "Select Jon Reyes" }));
-    await user.click(within(selectionBar()).getByRole("button", { name: "Set quota…" }));
+    await user.click(within(selectionBar()).getByRole("button", { name: "Set quota" }));
     const dialog = await screen.findByRole("dialog", { name: "Quota for 2 people" });
     const buttons = within(dialog)
       .getAllByRole("button")
@@ -310,12 +344,12 @@ describe("People, cohorts", () => {
     const row = (name: string) => screen.getByText(name, { selector: "span[title]" }).closest("tr") as HTMLElement;
     await user.click(within(row("Tom Ellis")).getByRole("checkbox"));
     await user.click(within(row("Jon Reyes")).getByRole("checkbox"));
-    await user.click(screen.getByRole("button", { name: "Add to cohort…" }));
+    await user.click(screen.getByRole("button", { name: "Add to cohort" }));
     const dialog = await screen.findByRole("dialog", { name: "Add 2 people to a cohort" });
     await user.click(within(dialog).getByRole("combobox", { name: "Cohort" }));
     await user.click(await screen.findByRole("option", { name: "DHSC V3 pilot" }));
     await user.click(within(dialog).getByRole("button", { name: "Add" }));
-    expect(await screen.findByText("2 done, 0 failed · recorded")).toBeInTheDocument();
+    expect(await screen.findByText("2 done, 0 failed")).toBeInTheDocument();
     expect(opsMock.writes.at(-1)).toMatchObject({
       path: "/api/v1/ops/people/cohort-add",
       body: { cohort_id: "00000000-0000-4000-8000-00000000000e" },
@@ -333,7 +367,32 @@ describe("People, cohorts", () => {
     expect(screen.queryByRole("option", { name: "DHSC V3 pilot" })).toBeNull();
     await user.click(screen.getByRole("option", { name: "Priority panel" }));
     await user.click(within(dialog).getByRole("button", { name: "Remove" }));
-    expect(await screen.findByText("Removed Priya Shah from Priority panel · recorded")).toBeInTheDocument();
+    expect(await screen.findByText("Removed Priya Shah from Priority panel")).toBeInTheDocument();
+  });
+});
+
+describe("People, details", () => {
+  it("opens a person's full record from their name", async () => {
+    const user = await openPeople();
+    await user.click(screen.getByRole("button", { name: "Priya Shah" }));
+    const dialog = await screen.findByRole("dialog", { name: "Priya Shah" });
+    expect(dialog).toHaveTextContent("priya.shah@nesta.org.uk");
+    expect(dialog).toHaveTextContent("Priority panel");
+    expect(dialog).toHaveTextContent("Tasks per yearno limit · from administrator");
+    await user.click(within(dialog).getByRole("button", { name: "Set quota" }));
+    expect(await screen.findByRole("heading", { name: "Quota for Priya Shah" })).toBeInTheDocument();
+  });
+});
+
+describe("People, filter dropdowns", () => {
+  it("narrows the cohort filter by typing, and picks the only match on Enter", async () => {
+    const user = await openPeople();
+    await user.click(screen.getByRole("combobox", { name: "Cohort filter" }));
+    await user.type(screen.getByRole("searchbox", { name: "Find a cohort" }), "panel");
+    expect(screen.queryByRole("option", { name: "DHSC V3 pilot" })).toBeNull();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("combobox", { name: "Cohort filter" })).toHaveTextContent("Priority panel");
+    expect(screen.getAllByRole("checkbox", { name: /^Select (?!everyone)/ })).toHaveLength(1);
   });
 });
 

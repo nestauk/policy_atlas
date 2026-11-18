@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Collection
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, cast
 
@@ -28,6 +28,8 @@ from policy_atlas.core.schema import (
     app_user,
     artefact,
     capability_run,
+    cohort,
+    cohort_member,
     event_log,
     evidence_scope,
     longlist_result,
@@ -64,6 +66,11 @@ class Limits:
 
     task_quota: int | None
     runs: int | None
+    # Where each limit came from, for the ops pages: "this person", a cohort's
+    # or an organisation's name, "the default" or "administrator". Not part of
+    # equality: callers compare the numbers.
+    task_quota_from: str = field(default="the default", compare=False)
+    runs_from: str = field(default="the default", compare=False)
 
 
 def parentless_walk() -> ColumnElement[bool]:
@@ -142,13 +149,16 @@ def created_in_last_days(days: int) -> ColumnElement[bool]:
 
 
 def effective_limits(conn: Connection, user_id: str, *, settings: Settings) -> Limits:
-    """Resolve one person's limits: their own override, else their organisation's, else settings.
+    """Resolve one person's limits: their own override, a cohort's, their organisation's, settings.
 
     Task 065 (B12, plan P7). A stored ``0`` means no limit and comes back as
     ``None``. An administrator's limits are both ``None`` (the exemptions of
     task 064a, ADR 0045, moved here from the task-create route and from
     ``user_at_run_cap``). The task-create check, the run-cap sites and
-    ``/me`` call this and nothing else reads the four override columns.
+    ``/me`` call this and nothing else reads the six override columns. A
+    cohort's number (owner, 2026-11-18) sits between the person's and the
+    organisation's; in several cohorts that set one, the most recently
+    joined wins, per limit.
 
     Args:
         conn: Open database connection.
@@ -158,11 +168,24 @@ def effective_limits(conn: Connection, user_id: str, *, settings: Settings) -> L
     Returns:
         Effective task and run limits, with ``None`` meaning unlimited.
     """
+    def from_cohort(column: ColumnElement[Any]) -> Any:
+        """The latest-joined cohort that sets this limit: its value and name, as a row."""
+        return (
+            select(column, cohort.c.name)
+            .select_from(
+                cohort_member.join(cohort, cohort.c.cohort_id == cohort_member.c.cohort_id)
+            )
+            .where(cohort_member.c.user_id == user_id, column.is_not(None))
+            .order_by(cohort_member.c.added_at.desc(), cohort.c.name)
+            .limit(1)
+        )
+
     row = conn.execute(
         select(
             app_user.c.is_admin,
             app_user.c.task_quota_per_year.label("user_task_quota"),
             app_user.c.runs_per_user.label("user_runs"),
+            organisation.c.name.label("org_name"),
             organisation.c.task_quota_per_year.label("org_task_quota"),
             organisation.c.runs_per_user.label("org_runs"),
         )
@@ -170,32 +193,41 @@ def effective_limits(conn: Connection, user_id: str, *, settings: Settings) -> L
         .where(app_user.c.user_id == user_id)
     ).mappings().one_or_none()
     if row is None:
-        task_quota = settings.task_quota_per_year
-        runs = settings.runs_per_user
-    else:
-        task_quota = (
-            row["user_task_quota"]
-            if row["user_task_quota"] is not None
-            else row["org_task_quota"]
-            if row["org_task_quota"] is not None
-            else settings.task_quota_per_year
+        return _limits(
+            (settings.task_quota_per_year, "the default"), (settings.runs_per_user, "the default")
         )
-        runs = (
-            row["user_runs"]
-            if row["user_runs"] is not None
-            else row["org_runs"]
-            if row["org_runs"] is not None
-            else settings.runs_per_user
-        )
-        if row["is_admin"]:
-            # Administrators are exempt from both limits (owner rulings
-            # 2026-11-16: the task quota in 064a Q8, the run cap in 064a's
-            # review); an override on their row does not pull them back under.
-            task_quota = 0
-            runs = 0
+    if row["is_admin"]:
+        # Administrators are exempt from both limits (owner rulings
+        # 2026-11-16: the task quota in 064a Q8, the run cap in 064a's
+        # review); an override on their row does not pull them back under.
+        return _limits((0, "administrator"), (0, "administrator"))
+
+    def resolve(own: int | None, cohort_column: ColumnElement[Any], org_value: int | None,
+                default: int) -> tuple[int, str]:
+        if own is not None:
+            return own, "this person"
+        found = conn.execute(from_cohort(cohort_column)).one_or_none()
+        if found is not None:
+            return int(found[0]), str(found[1])
+        if org_value is not None:
+            return org_value, str(row["org_name"])
+        return default, "the default"
+
+    return _limits(
+        resolve(row["user_task_quota"], cohort.c.task_quota_per_year, row["org_task_quota"],
+                settings.task_quota_per_year),
+        resolve(row["user_runs"], cohort.c.runs_per_user, row["org_runs"],
+                settings.runs_per_user),
+    )
+
+
+def _limits(task_quota: tuple[int, str], runs: tuple[int, str]) -> Limits:
+    """Build limits from (value, source) pairs; a stored 0 means no limit."""
     return Limits(
-        task_quota=None if task_quota == 0 else task_quota,
-        runs=None if runs == 0 else runs,
+        task_quota=None if task_quota[0] == 0 else task_quota[0],
+        runs=None if runs[0] == 0 else runs[0],
+        task_quota_from=task_quota[1],
+        runs_from=runs[1],
     )
 
 
