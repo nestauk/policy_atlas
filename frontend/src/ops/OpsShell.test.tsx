@@ -23,7 +23,7 @@ describe("the ops shell", () => {
     expect(within(nav).getByRole("link", { name: "People" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Organisations" })).toBeInTheDocument();
     // One request is waiting in the fixtures.
-    expect(await within(nav).findByRole("link", { name: "Requests, 1 waiting" })).toBeInTheDocument();
+    expect(await within(nav).findByRole("link", { name: "Waitlist, 1 waiting" })).toBeInTheDocument();
     expect(within(nav).queryByRole("link", { name: "Back to Policy Atlas" })).toBeNull();
     expect(within(nav).queryByText(/New|Tasks|Projects/)).toBeNull();
     // The account icon opens who is signed in (Priya Shah).

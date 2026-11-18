@@ -19,7 +19,7 @@ export const opsRoutes: RouteObject[] = [
       { path: "people/:userId/quota", element: <PersonQuotaView /> },
       { path: "organisations", element: <OrganisationsView /> },
       { path: "organisations/:orgId/quota", element: <OrganisationQuotaView /> },
-      { path: "requests", element: <RequestsView /> },
+      { path: "waitlist", element: <RequestsView /> },
       { path: "*", element: <Navigate to="/people" replace /> },
     ],
   },

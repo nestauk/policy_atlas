@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 import { formatDate } from "../../lib/dates";
 import { Figures } from "../../lib/figures";
 import { Button } from "../../ui/brand/Button";
+import { InfoHint } from "../../ui/brand/InfoHint";
 import { cn } from "../../ui/brand/cn";
 import { PageHeader, PagePrimary } from "../../ui/brand/PageHeader";
 import {
@@ -40,6 +41,23 @@ function Override({ value, fallback }: { value: number | null | undefined; fallb
   return (
     <span className="text-grey">
       <Figures text={fallback === undefined ? "default" : facts("default", limitWord(fallback))} />
+    </span>
+  );
+}
+
+const TASKS_NOTE =
+  "The number of tasks each person in this organisation can create in a year. It is per person, not shared by the organisation.";
+const RUNS_NOTE =
+  "The number of tasks each person in this organisation can run at the same time. It is per person, not shared by the organisation.";
+const DOMAIN_NOTE =
+  "People who request access with an email at this domain get an account in this organisation without approval. An administrator adds or removes a domain from the command line.";
+
+/** A column header with its info hint beside the words. */
+function HeaderHint({ label, note, align }: { label: string; note: string; align?: "end" }) {
+  return (
+    <span className={cn("-my-1 inline-flex items-center gap-1", align === "end" && "justify-end")}>
+      {label}
+      <InfoHint label={`About ${label.toLowerCase()}`} note={note} />
     </span>
   );
 }
@@ -111,9 +129,15 @@ export function OrganisationsView() {
                 <tr>
                   <th className={cn(TH_CLASS, "pl-4")}>Name</th>
                   <th className={cn(TH_CLASS, "w-24 text-right")}>People</th>
-                  <th className={cn(TH_CLASS, "w-36 text-right")}>Tasks per year</th>
-                  <th className={cn(TH_CLASS, "w-44 text-right")}>Simultaneous tasks</th>
-                  <th className={cn(TH_CLASS, "w-60")}>Self-signup domain</th>
+                  <th className={cn(TH_CLASS, "w-40 text-right")}>
+                    <HeaderHint label="Tasks per year" note={TASKS_NOTE} align="end" />
+                  </th>
+                  <th className={cn(TH_CLASS, "w-56 text-right")}>
+                    <HeaderHint label="Simultaneous tasks" note={RUNS_NOTE} align="end" />
+                  </th>
+                  <th className={cn(TH_CLASS, "w-56")}>
+                    <HeaderHint label="Self-signup domain" note={DOMAIN_NOTE} />
+                  </th>
                   <th className={cn(TH_CLASS, "w-28")}>Created</th>
                   <th className={cn(TH_CLASS, ACTIONS_TH_CLASS)}>
                     <span className="sr-only">Actions</span>

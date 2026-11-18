@@ -191,3 +191,11 @@ is accepted and is now part of the script:
   quota."
 - Organisations: no "Move a task or project" panel (removed by the owner; the CLI keeps
   `rows assign`).
+- Organisations table headers (owner pass 3, 2026-11-18): an info hint beside "Tasks per year"
+  ("The number of tasks each person in this organisation can create in a year. It is per
+  person, not shared by the organisation."), "Simultaneous tasks" (the same, "can run at the
+  same time") and "Self-signup domain" ("People who request access with an email at this
+  domain get an account in this organisation without approval. An administrator adds or
+  removes a domain from the command line."). Domains stay command-line only (owner ruling).
+- The Requests section is "Waitlist" (owner pass 3): the tab, the page title, the table's name
+  and its failed line; the address is `/waitlist`.

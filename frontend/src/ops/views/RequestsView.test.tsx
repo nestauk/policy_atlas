@@ -12,10 +12,10 @@ function row(name: string) {
   return screen.getByText(name, { selector: "span" }).closest("tr") as HTMLElement;
 }
 
-describe("Access requests", () => {
+describe("Waitlist", () => {
   it("shows the self-signup line and the three status chips with their actions", async () => {
-    renderOps("/requests");
-    expect(await screen.findByRole("heading", { name: "Access requests" })).toBeInTheDocument();
+    renderOps("/waitlist");
+    expect(await screen.findByRole("heading", { name: "Waitlist" })).toBeInTheDocument();
     expect(
       screen.getByText("Self-signup on for nesta.org.uk, westbury.gov.uk · 2 of 20 invitations sent this hour"),
     ).toBeInTheDocument();
@@ -30,15 +30,15 @@ describe("Access requests", () => {
 
   it("says when there are no requests, inside the table's frame", async () => {
     opsMock.requests.items = [];
-    renderOps("/requests");
+    renderOps("/waitlist");
     expect(await screen.findByText("No requests yet.")).toHaveAttribute("role", "status");
     expect(screen.getAllByRole("columnheader")).toHaveLength(5);
   });
 
   it("Open person lands on People searching for the address, with the address kept out of the URL", async () => {
     const user = userEvent.setup();
-    const router = renderOps("/requests");
-    await screen.findByRole("heading", { name: "Access requests" });
+    const router = renderOps("/waitlist");
+    await screen.findByRole("heading", { name: "Waitlist" });
     await user.click(within(row("Jon Reyes")).getByRole("link", { name: "Open person" }));
     expect(await screen.findByRole("searchbox", { name: "Find by name, email or organisation" })).toHaveValue(
       "jon.reyes@policylab.example",
@@ -50,13 +50,13 @@ describe("Access requests", () => {
 
   it("says Self-signup off when it is", async () => {
     opsMock.requests.self_signup.enabled = false;
-    renderOps("/requests");
+    renderOps("/waitlist");
     expect(await screen.findByText("Self-signup off")).toBeInTheDocument();
   });
 
   it("approves into an organisation", async () => {
     const user = userEvent.setup();
-    renderOps("/requests");
+    renderOps("/waitlist");
     await user.click(await screen.findByRole("button", { name: "Approve into…" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve Ana Lopez" });
     expect(dialog).toHaveAccessibleDescription(
@@ -71,7 +71,7 @@ describe("Access requests", () => {
     expect(opsMock.writes.at(-1)?.body).toEqual({ org_id: WESTBURY_FOR_TEST });
     expect(await within(row("Ana Lopez")).findByText(/^Invited /)).toBeInTheDocument();
     // The row's button is gone: focus goes to the table.
-    await waitFor(() => expect(screen.getByRole("table", { name: "Access requests" })).toHaveFocus());
+    await waitFor(() => expect(screen.getByRole("table", { name: "Waitlist" })).toHaveFocus());
   });
 
   it("turns the row to Check when the address is enrolled elsewhere", async () => {
@@ -84,7 +84,7 @@ describe("Access requests", () => {
           )
         : undefined;
     const user = userEvent.setup();
-    renderOps("/requests");
+    renderOps("/waitlist");
     await user.click(await screen.findByRole("button", { name: "Approve into…" }));
     const dialog = await screen.findByRole("dialog", { name: "Approve Ana Lopez" });
     await user.click(within(dialog).getByRole("combobox", { name: "Organisation" }));

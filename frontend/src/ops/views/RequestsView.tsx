@@ -111,7 +111,7 @@ export function RequestsView() {
   return (
     <>
       <PageHeader
-        title="Access requests"
+        title="Waitlist"
         actions={null}
         filters={<SearchField placeholder="Find by name or email" value={query} onChange={setQuery} />}
       />
@@ -127,10 +127,10 @@ export function RequestsView() {
       )}
       <div className="mt-4">
         {requests.isError ? (
-          <FailedLine message="Could not load the access requests." onRetry={() => void requests.refetch()} />
+          <FailedLine message="Could not load the waitlist." onRetry={() => void requests.refetch()} />
         ) : (
           <div className={TABLE_WRAP_CLASS}>
-            <table ref={tableRef} tabIndex={-1} aria-label="Access requests" className={TABLE_CLASS}>
+            <table ref={tableRef} tabIndex={-1} aria-label="Waitlist" className={TABLE_CLASS}>
               <thead>
                 <tr>
                   <th className={cn(TH_CLASS, "w-48 pl-4")}>Name</th>
