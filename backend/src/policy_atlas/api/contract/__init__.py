@@ -245,7 +245,7 @@ from .tasks import (
     TaskStatus,
     TaskUpdate,
 )
-from .tenancy import MeOut, OrganisationRef, Visibility
+from .tenancy import MeOut, OrganisationRef, TaskQuotaOut, Visibility
 from .waitlist import (
     WAITLIST_EMAIL_MAX,
     WAITLIST_NAME_MAX,
@@ -446,6 +446,7 @@ __all__ = [
     "TaskCreate",
     "TaskLinkOut",
     "TaskOut",
+    "TaskQuotaOut",
     "TaskStatus",
     "TaskUpdate",
     "TaskUpdatedFrame",

@@ -766,3 +766,20 @@ model fills it before validation, in the model, never in one reader. (2) The ver
 (and every `model_validate` of a stored payload) when a stored model gains a required field.
 (3) Open an older task of each capability on the dev app before the PR closes; the review's
 live checks were all on fresh runs.
+
+## 2026-11-16 — verification.md recorded green gates the committed tree could not have passed (task 064a)
+
+The build's verification.md claimed `make verify` green at gate 2 and at the step-6 exit.
+The review's self-verify gate found two red tests on HEAD: a pre-existing search-loop test
+pinning a `RuntimeError` message that the Q3 rule had reduced to the class name from the
+Phase 1 commit onward (so no gate after Phase 1 can have been green), and a new Q14 test
+racing on a reservation the route drops before the executor thread fails. The build's Q3
+inventory had found the two runner tests that pinned old text and missed the third.
+
+**Rules:** (1) a gate claim in verification.md names the commit it ran on and the pass
+count, and the review's first act is to re-run it — a claim without a count is a claim.
+(2) When a slice changes what an error path persists, the inventory of tests to adjust is
+`grep` over `tests/` for the old shape (here `startswith("RuntimeError: ` and the raw
+message strings), not the files the slice happened to touch. (3) A test that waits on
+process-local state (`dispatch_reserved`) to observe a database effect is racy by
+construction; wait on the row.

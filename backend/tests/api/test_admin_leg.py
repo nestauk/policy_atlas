@@ -824,10 +824,11 @@ def test_no_write_under_the_api_can_set_is_admin() -> None:
     )
 
 
-#: Every code site under `api/` that references `is_admin`, as
-#: `module path -> enclosing scope`. Contract § 3a names **four semantic
-#: readers**; this is what they are in code, and the mapping between the two
-#: lists is deliberate rather than incidental:
+#: Every code site under `api/` that references `is_admin`, or calls
+#: `_is_admin` from outside `access.py`, as `module path -> enclosing scope`.
+#: Contract § 3a names **four semantic readers** and ADR 0045 adds a fifth;
+#: this is what they are in code, and the mapping between the two lists is
+#: deliberate rather than incidental:
 #:
 #: - `routers/access.py::admin_read_leg` — the SQL leg. Serves reader **(i)**
 #:   the row-access helper's admin leg *and* reader **(ii)** the listing scope
@@ -843,12 +844,21 @@ def test_no_write_under_the_api_can_set_is_admin() -> None:
 #:   `get_me` fills in. Named here because an honest closed list enumerates
 #:   what the code *contains*, and pretending a field declaration is invisible
 #:   would make the assertion weaker, not cleaner.
+#: - `routers/tasks.py::create_task` — reader **(v)**, task creation's quota
+#:   exemption (task 064a, ADR 0045), asked through `_is_admin`. The first
+#:   write path to consult the flag; it still sets nothing.
+#: - `routers/runs.py::user_at_run_cap` — reader **(vi)**, the per-user run
+#:   cap's exemption (task 064a, owner ruling 2026-11-16), asked through
+#:   `_is_admin` for the task's owner. One function serves all three start
+#:   sites.
 #:
-#: A fifth entry is a defect, and the most likely fifth entry is a write path.
+#: Any further entry is a defect and needs its own amendment.
 _IS_ADMIN_READERS = {
     "routers/access.py": {"admin_read_leg", "_is_admin"},
     "routers/me.py": {"get_me"},
     "contract/tenancy.py": {"MeOut"},
+    "routers/tasks.py": {"create_task"},
+    "routers/runs.py": {"user_at_run_cap"},
 }
 
 
@@ -989,7 +999,12 @@ def test_only_the_named_code_sites_read_the_is_admin_flag() -> None:
     actual = {
         str(path.relative_to(root)): scopes
         for path in _api_modules()
-        if (scopes := _scopes_mentioning(path, "is_admin"))
+        if (
+            scopes := _scopes_mentioning(path, "is_admin")
+            # A call to the helper outside its own module reads the flag too
+            # (ADR 0045); inside `access.py` it serves readers (ii) and (iii).
+            | (set() if path.name == "access.py" else _scopes_mentioning(path, "_is_admin"))
+        )
     }
 
     assert actual == _IS_ADMIN_READERS

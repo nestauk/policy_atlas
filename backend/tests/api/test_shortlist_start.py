@@ -137,6 +137,7 @@ def _open(engine: Engine, task_id: uuid.UUID, *, suggest: bool) -> tuple[uuid.UU
         backends=_runner_backends(),
         executor=executor,  # type: ignore[arg-type]
         user_id="dev-user",
+        user_cap=99,
         suggest=suggest,
     )
     return walk_id, executor

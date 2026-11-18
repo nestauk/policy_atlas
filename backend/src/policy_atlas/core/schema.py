@@ -621,6 +621,12 @@ source_screening_result = Table(
         name="ck_ssr_null_when_failed",
     ),
     Index("ix_ssr_scope_status", "evidence_scope_id", "status"),
+    # Task 064a Q9: matches the effective-screen window's partition key, task
+    # first, so a caller's task filter reads one task's rows (migration b1e7c3a9d5f2).
+    Index(
+        "ix_ssr_task_scope_snapshot",
+        "task_id", "evidence_scope_id", "task_source_snapshot_id",
+    ),
 )
 
 # --- Classification model (task 005) ---

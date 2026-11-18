@@ -808,9 +808,9 @@ def test_db_abort_backstop_records_failure_event_and_fails_spine_plan(
         screen_outcome = outcome.steps[-1]
         assert screen_outcome.status == "failed"
         assert screen_outcome.retried is True
-        assert screen_outcome.reason is not None
-        assert screen_outcome.reason.startswith("RuntimeError: forced db abort ")
-        assert "tail-marker" not in screen_outcome.reason
+        # Task 064a Q3: a library exception persists only its class name now,
+        # so the message (and its tail) never reaches the reason or the payload.
+        assert screen_outcome.reason == "RuntimeError"
 
         assert screen_outcome.run_id is not None
         with engine.connect() as conn:
@@ -827,8 +827,7 @@ def test_db_abort_backstop_records_failure_event_and_fails_spine_plan(
         )
         assert len(failed_payloads) == 1
         assert failed_payloads[0]["component"] == "screen"
-        assert failed_payloads[0]["error"].startswith("RuntimeError: forced db abort ")
-        assert "tail-marker" not in failed_payloads[0]["error"]
+        assert failed_payloads[0]["error"] == "RuntimeError"
     finally:
         _cleanup(engine, task_id)
 
@@ -1119,12 +1118,47 @@ def test_component_rollback_retains_started_then_backstop_failed_pair(
             "component.started",
             "component.failed",
         ]
+        # Task 064a Q3: a library exception persists only its class name.
         assert component_events[1]["payload"] == {
             "component": "acquire",
-            "error": "RuntimeError: forced unhandled component rollback",
+            "error": "RuntimeError",
         }
     finally:
         _cleanup(engine, task_id)
+
+
+def test_backstop_persists_class_name_only_for_library_exceptions(
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task 064a Q3: the runner backstop never writes a library message to the log."""
+    task_id: uuid.UUID | None = None
+
+    def leaking_harness(conn: Connection, **kwargs: Any) -> dict[str, Any]:
+        del conn, kwargs
+        raise RuntimeError("SELECT 1 FROM x WHERE host=db.internal")
+
+    monkeypatch.setattr(runner_module, "run_harness", leaking_harness)
+    try:
+        task_id, scope_id = _seed_task(engine)
+        outcome = _single_component_attempt(
+            engine, task_id=task_id, scope_id=scope_id, component="acquire"
+        )
+        assert outcome.status == "failed"
+        with engine.connect() as conn:
+            payloads = [
+                row["payload"]
+                for row in events.read(conn, task_id)
+                if row["event_type"] == "component.failed"
+            ]
+        assert [p["error"] for p in payloads] == ["RuntimeError"]
+        assert "db.internal" not in str(payloads)
+    finally:
+        _cleanup(engine, task_id)
+
+    # A product-shaped message keeps its text, still capped at 200 characters.
+    product_error = type("ProductError", (RuntimeError,), {"__module__": "policy_atlas.x"})
+    assert runner_module._bounded_error(product_error("y" * 300)) == "y" * 200
 
 
 def test_synthesis_progress_survives_rolled_back_component_before_terminal_events(

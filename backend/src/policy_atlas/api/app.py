@@ -46,8 +46,6 @@ _CONFLICT_CODES = {
     # answer — the two ways out are changing the Project's visibility and
     # leaving the Task out of the Project.
     "visibility_conflict",
-    # Splash waitlist: the email is already on waitlist_entry.
-    "already_registered",
     # Task 044 (C11, C12): a task can only start from a task it shares a
     # project with, and only from one whose latest walk has finished — and
     # only from an Evidence search, whose report is what inheritance reads
@@ -67,6 +65,12 @@ _CONFLICT_CODES = {
     # place or was set aside; a shortlist place for an excluded or merged option.
     "nothing_to_propose",
     "not_included",
+    # Task 064a (Q7): the caller's tasks already hold `runs_per_user` walks.
+    "user_capacity",
+    # Task 064a (Q8): the caller created `task_quota_per_year` tasks in 365 days.
+    "task_quota",
+    # Task 064a (Q15): a free-text preview's confirm token is gone; compile again.
+    "confirm_expired",
 }
 
 _CAPACITY_CODES = {"chat_capacity"}
@@ -252,7 +256,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         return response
 
     @app.get("/healthz")
-    def healthz() -> dict[str, str]:
+    async def healthz() -> dict[str, str]:
         """Report process liveness without touching external dependencies."""
         return {"status": "ok"}
 
@@ -353,6 +357,7 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
         engine = create_engine(
             settings.database_url,
             pool_pre_ping=True,
+            hide_parameters=True,  # keep bound values (user text) out of error logs
             pool_size=settings.db_pool_size,
             max_overflow=settings.db_max_overflow,
         )

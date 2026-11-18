@@ -42,6 +42,11 @@ execution checkpoints (audit plane ≠ telemetry plane).
 is what makes "single writer per task at a time" hold under two writer families that aren't
 otherwise coordinated, not a relaxation of the ordering guarantee. The third family arrived in 045 and
 the bound moved to 32 — any wider fan-out re-checks it.
+**Re-checked 2026-11-16 (task 064a's CI):** the theory-of-change check fan-out (width 6, task 054)
+exhausted the 32 retries twice in eight full runs, once locally and once on a CI runner; the children
+write about a dozen events each in under a second, so the bound is per event lost, not per writer.
+Seam in deferred.md § Security quick wins; the fix is a per-task advisory lock in `append` or the
+per-walk sequence.
 
 **The retry is not free** (045 deviation 16, adversarial B8): each collision waits for the
 competing writer's commit, and acquire, screen, classify and appraise append events inside long

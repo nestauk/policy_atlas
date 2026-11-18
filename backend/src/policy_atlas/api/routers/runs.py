@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api import continuation
 from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import RunCreate, RunOut, RunStageOut
@@ -25,7 +26,7 @@ from policy_atlas.api.deps import (
     get_settings,
     get_title_backend,
 )
-from policy_atlas.api.routers.access import accessible_task
+from policy_atlas.api.routers.access import _is_admin, accessible_task
 from policy_atlas.api.routers.common import (
     active_parentless_walk,
     executor_walk,
@@ -40,7 +41,7 @@ from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
 from policy_atlas.api.titles import TitleWriter, in_background, name_task_from_question
 from policy_atlas.core import tracing
-from policy_atlas.core.schema import capability_run, task_agent_transcript
+from policy_atlas.core.schema import capability_run, task, task_agent_transcript
 from policy_atlas.runtime.capability_registry import (
     THEORY_OF_CHANGE,
     expect_toc_plan,
@@ -68,9 +69,14 @@ _dispatching_tasks: set[uuid.UUID] = set()
 _search_reservations: set[uuid.UUID] = set()
 
 
+def executor_reservation_tasks() -> set[uuid.UUID]:
+    """The reserved tasks whose walk will occupy a worker. Call under ``_dispatch_lock``."""
+    return _dispatching_tasks - _search_reservations
+
+
 def executor_reservations() -> int:
     """The reservations that will occupy an executor worker. Call under ``_dispatch_lock``."""
-    return len(_dispatching_tasks - _search_reservations)
+    return len(executor_reservation_tasks())
 
 
 def executor_full(conn: Connection, capacity: int | None) -> bool:
@@ -87,6 +93,54 @@ def executor_full(conn: Connection, capacity: int | None) -> bool:
         .where(executor_walk())
     ).scalar_one()
     return capacity is None or int(running) + executor_reservations() >= capacity
+
+
+def user_at_run_cap(conn: Connection, *, user_id: str | None, cap: int) -> bool:
+    """Whether one person's tasks already hold ``cap`` executor walks (task 064a, Q7).
+
+    Call under ``_dispatch_lock``, right after :func:`executor_full`. Counts
+    the running parentless executor walks on tasks the person owns, plus the
+    person's tasks in the reservation set. Reservations count because a start
+    writes its walk row only after the lock is released: counting rows alone
+    would admit any number of simultaneous starts. Call it before the
+    caller's own task joins the reservation set, so that task is not counted.
+    The cap is on the owner's tasks, so the sites pass the task's owner and a
+    collaborator with write access cannot lift it. An administrator owner is
+    exempt (owner ruling 2026-11-16, like the task quota): reader **(vi)** of
+    ``is_admin`` in the closed list of ADR 0033, through :func:`_is_admin`.
+
+    Args:
+        conn: Open database connection.
+        user_id: The task's owner, matched on ``task.owner_user_id``;
+            ``None`` (an ownerless task, never reachable from the product)
+            is never capped.
+        cap: The per-person limit (``settings.runs_per_user``).
+
+    Returns:
+        ``True`` when the person is at or over the limit.
+    """
+    if user_id is None or _is_admin(conn, user_id):
+        return False
+    running = conn.execute(
+        select(func.count())
+        .select_from(capability_run.join(task, task.c.task_id == capability_run.c.task_id))
+        .where(task.c.owner_user_id == user_id)
+        .where(capability_run.c.status == "running")
+        .where(parentless_walk())
+        .where(executor_walk())
+    ).scalar_one()
+    reserved_tasks = executor_reservation_tasks()
+    reserved = (
+        conn.execute(
+            select(func.count())
+            .select_from(task)
+            .where(task.c.task_id.in_(reserved_tasks))
+            .where(task.c.owner_user_id == user_id)
+        ).scalar_one()
+        if reserved_tasks
+        else 0
+    )
+    return int(running) + int(reserved) >= cap
 
 
 def dispatch_reserved(task_id: uuid.UUID) -> bool:
@@ -126,7 +180,8 @@ def _dispatch_run(
             plan row's own (task 045: a longlist walk runs under the longlist
             record the start surface minted). ``None`` uses the plan row's.
         capability_run_id: The walk's identity when the start surface minted
-            it (task 045); ``None`` lets the runner mint one.
+            it (task 045); ``None`` lets the runner mint one. A walk whose
+            dispatch raises is marked ``interrupted`` by this id only.
     """
     try:
         # Opened inside the executor worker: contextvars do not cross a plain
@@ -187,8 +242,16 @@ def _dispatch_run(
                 )
     except Exception:
         log.exception("api.run_dispatch_failed", task_id=str(task_id))
+        # Only the id this dispatch minted, never a lookup by task: the
+        # reservation is dropped once the row exists, and another surface can
+        # start a walk on the task in that gap (task 064a, Q14).
+        if capability_run_id is not None:
+            continuation.mark_interrupted_best_effort(
+                engine, task_id=task_id, capability_run_id=capability_run_id
+            )
     finally:
         queued = None
+        next_id = uuid.uuid4()
         with _dispatch_lock:
             if capability == THEORY_OF_CHANGE:
                 # A check queued while this walk ran starts now, on this worker.
@@ -201,8 +264,14 @@ def _dispatch_run(
                     log.exception("api.toc_queue_failed", task_id=str(task_id))
             if queued is None:
                 _dispatching_tasks.discard(task_id)
+            else:
+                # This walk's reservation was given back when its row appeared
+                # (review stack, 2026-11-16); the chained check has its own
+                # pre-insert window, so reserve again and release on its row.
+                _dispatching_tasks.add(task_id)
     if queued is not None:
         scope_id, next_plan_row, next_user = queued
+        release_when_open(engine, task_id=task_id, capability_run_id=next_id)
         _dispatch_run(
             engine,
             task_id=task_id,
@@ -211,7 +280,7 @@ def _dispatch_run(
             backends=backends,
             user_id=next_user or user_id,
             evidence_scope_id=scope_id,
-            capability_run_id=uuid.uuid4(),
+            capability_run_id=next_id,
         )
 
 
@@ -366,6 +435,12 @@ def create_run(
                 raise ApiConflict("run_active", "the task already has an active run")
             if executor_full(conn, settings.run_executor_max):
                 raise ApiConflict("capacity", "the walk executor is at capacity")
+            if user_at_run_cap(
+                conn, user_id=access.row["owner_user_id"], cap=settings.runs_per_user
+            ):
+                raise ApiConflict(
+                    "user_capacity", f"you already have {settings.runs_per_user} runs in progress"
+                )
             plan_row = latest_approved_plan_row(conn, task_id)
             if plan_row is None:
                 raise HTTPException(status_code=400, detail="no approved plan")
@@ -391,17 +466,10 @@ def create_run(
                     "plan_stale",
                     "the plan predates your latest Task Agent message — review it, then start",
                 )
-            existing_ids = {
-                row[0]
-                for row in conn.execute(
-                    select(capability_run.c.capability_run_id).where(
-                        capability_run.c.task_id == task_id
-                    )
-                )
-            }
             if access.row["capability"] == THEORY_OF_CHANGE:
                 toc_question = expect_toc_plan(approved_plan).question
             _dispatching_tasks.add(task_id)
+        walk_id = uuid.uuid4()
         executor.submit(
             _dispatch_run,
             engine,
@@ -410,9 +478,12 @@ def create_run(
             plan_row=dict(plan_row),
             backends=backends,
             user_id=user.user_id,
+            capability_run_id=walk_id,
         )
     try:
-        created = _await_new_run(engine, task_id=task_id, existing_ids=existing_ids)
+        created = _await_new_run(
+            engine, task_id=task_id, existing_ids=set(), capability_run_id=walk_id
+        )
     finally:
         # Once the runtime row exists, the database's ``running`` count owns
         # capacity accounting; keeping the launch reservation would double-count.
@@ -548,7 +619,7 @@ def start_toc_check(
         The new walk's id, or ``None`` when the check was queued.
 
     Raises:
-        ApiConflict: ``capacity``.
+        ApiConflict: ``capacity`` or ``user_capacity``.
         HTTPException: 400 when the task has no approved plan.
     """
     # Imported here: the opener imports this module.
@@ -574,6 +645,13 @@ def start_toc_check(
                 return None
             if executor_full(conn, settings.run_executor_max):
                 raise ApiConflict("capacity", "the walk executor is at capacity")
+            owner = conn.execute(
+                select(task.c.owner_user_id).where(task.c.task_id == task_id)
+            ).scalar_one()
+            if user_at_run_cap(conn, user_id=owner, cap=settings.runs_per_user):
+                raise ApiConflict(
+                    "user_capacity", f"you already have {settings.runs_per_user} runs in progress"
+                )
             scope_id = mint_scope(
                 conn,
                 task_id=task_id,
@@ -596,4 +674,8 @@ def start_toc_check(
             evidence_scope_id=scope_id,
             capability_run_id=walk_id,
         )
+    # Give the reservation back once the row exists, as the other start
+    # surfaces do; held for the whole check it counted twice against both
+    # caps (review stack, 2026-11-16).
+    release_when_open(engine, task_id=task_id, capability_run_id=walk_id)
     return walk_id

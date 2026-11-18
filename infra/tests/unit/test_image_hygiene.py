@@ -97,5 +97,6 @@ def test_dockerfile_runs_as_non_root_and_uses_factory_entrypoint() -> None:
     assert users[-1].lower() not in {"root", "0", "0:0"}
     assert (
         'CMD ["uvicorn", "policy_atlas.api.app:create_app", "--factory", "--host", '
-        '"0.0.0.0", "--port", "8000"]'
+        '"0.0.0.0", "--port", "8000", "--timeout-keep-alive", "125", '
+        '"--proxy-headers", "--no-server-header"]'
     ) in dockerfile

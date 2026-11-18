@@ -738,3 +738,19 @@ into [bedrock-route-facts](bedrock-route-facts.md). Declined: "two checkouts sha
 database" (superseded by task 056's per-worker copies and
 [parallel-agent-test-databases](parallel-agent-test-databases.md)); "vitest setup takes 15
 minutes under load" (a machine condition, not a system fact; kept in verification.md).
+
+## 2026-11-16 — task 064a (security quick wins), the review stack before the PR
+
+Added: [bound-the-fetch-not-the-key](bound-the-fetch-not-the-key.md),
+[constant-column-in-partition-key-pushes-filter](constant-column-in-partition-key-pushes-filter.md),
+[forwarded-allow-ips-trust-the-vpc](forwarded-allow-ips-trust-the-vpc.md) and
+[parallel-mypy-runs-share-one-cache](parallel-mypy-runs-share-one-cache.md) (from the build's
+knowledge candidates in verification.md § Review handoff, with the stack's JWKS edge cases
+folded into the first). Folded: the reservation-release corollary into
+[db-row-is-the-single-flight-authority](db-row-is-the-single-flight-authority.md) (the
+stack's `start_toc_check` finding); "a test that proves state through a status code loses
+its proof when the code goes" into [assert-on-row-not-summary](assert-on-row-not-summary.md)
+(the honeypot test); the `DATABASE_URL` rule for pytest outside `make test` into
+[testing-database](testing-database.md) and AGENTS.md § Landmines. Declined: nothing; the
+build's five candidates were all durable. The build's unreproducible green-gate claim went
+to `docs/agentic-ops/failure-log.md`, not here.

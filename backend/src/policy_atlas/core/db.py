@@ -21,4 +21,6 @@ def get_engine() -> Engine:
     url = os.environ.get("DATABASE_URL")
     if not url:
         raise RuntimeError("DATABASE_URL environment variable is not set")
-    return create_engine(url)
+    # hide_parameters: a database error message otherwise carries the bound
+    # values (user text) into the logs.
+    return create_engine(url, hide_parameters=True)

@@ -96,6 +96,32 @@ def active_parentless_walk(conn: Connection, task_id: uuid.UUID) -> RowMapping |
     ).mappings().one_or_none()
 
 
+def tasks_created_since(conn: Connection, user_id: str, *, days: int) -> int:
+    """Count the tasks one person created in the last ``days`` days (task 064a, Q8).
+
+    By the database clock, never the API's. Archived tasks count: archiving
+    does not give a task back to the quota.
+
+    Args:
+        conn: Open database connection.
+        user_id: The person, matched on ``task.owner_user_id``.
+        days: The window's length.
+
+    Returns:
+        How many of the person's task rows were created inside the window.
+    """
+    return int(
+        conn.execute(
+            select(func.count())
+            .select_from(task)
+            .where(task.c.owner_user_id == user_id)
+            # make_interval(years, months, weeks, days): the length is a bound
+            # parameter, not text spliced into the statement.
+            .where(task.c.created_at >= func.now() - func.make_interval(0, 0, 0, days))
+        ).scalar_one()
+    )
+
+
 def executor_walk() -> ColumnElement[bool]:
     """Return the predicate "this walk runs on the walk executor" (task 045, A12).
 

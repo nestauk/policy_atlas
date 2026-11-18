@@ -166,6 +166,8 @@ class NetworkStack(Stack):
         https_listener = shared_alb.add_listener("SharedHTTPS",
             port=443,
             certificates=[wildcard_cert],
+            # AWS's recommended TLS (encryption protocol) policy for the load balancer.
+            ssl_policy=elbv2.SslPolicy.RECOMMENDED_TLS,
             open=False,
         )
         https_listener.add_action("DefaultAction",

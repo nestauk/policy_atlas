@@ -25,9 +25,11 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
 
 from policy_atlas.api.auth import AuthenticatedUser
-from policy_atlas.api.contract import MeOut, OrganisationRef
-from policy_atlas.api.deps import get_conn, get_current_user
+from policy_atlas.api.contract import MeOut, OrganisationRef, TaskQuotaOut
+from policy_atlas.api.deps import get_conn, get_current_user, get_settings
 from policy_atlas.api.identity import sub_display
+from policy_atlas.api.routers.common import tasks_created_since
+from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import app_user, organisation
 
 router = APIRouter(
@@ -41,6 +43,7 @@ router = APIRouter(
 def get_me(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> MeOut:
     """Return the caller's identity row, provisioning it on first call.
 
@@ -53,9 +56,11 @@ def get_me(
     Args:
         user: The authenticated caller.
         conn: Open database connection.
+        settings: Application settings (the yearly task quota).
 
     Returns:
-        The caller's identity, with their organisation resolved by name.
+        The caller's identity, with their organisation resolved by name, and
+        their task quota unless they are exempt (task 064a, Q8).
     """
     conn.execute(
         pg_insert(app_user)
@@ -95,4 +100,12 @@ def get_me(
         email=row["email"],
         organisation=org,
         is_admin=row["is_admin"],
+        task_quota=(
+            None
+            if row["is_admin"]
+            else TaskQuotaOut(
+                used=tasks_created_since(conn, user.user_id, days=365),
+                limit=settings.task_quota_per_year,
+            )
+        ),
     )

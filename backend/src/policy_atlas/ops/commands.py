@@ -15,10 +15,13 @@ than re-implementing the write it believes the CLI performs.
 key (contract § 3b) and only Cognito can turn an address into one, so
 ``user create``, ``user enrol`` and ``user resync`` call ``ListUsers`` /
 ``AdminCreateUser``, and ``user reissue`` calls ``ListUsers`` /
-``AdminSetUserPassword``. ``admin grant``, ``admin revoke``, ``user de-enrol``
-and ``rows assign`` resolve entirely in the database and make no AWS call at
-all — which is also why operator IAM needs nothing beyond ``ListUsers``,
-``AdminCreateUser`` and ``AdminSetUserPassword`` (contract § 9).
+``AdminSetUserPassword``. ``user offboard`` is the one command that changes an
+account's state in Cognito: ``ListUsers``, then ``AdminDisableUser`` and
+``AdminUserGlobalSignOut`` (task 064a, ADR 0045 decision 5). ``admin grant``,
+``admin revoke``, ``user de-enrol`` and ``rows assign`` resolve entirely in the
+database and make no AWS call at all — which is also why operator IAM needs
+nothing beyond ``ListUsers``, ``AdminCreateUser``, ``AdminSetUserPassword``,
+``AdminDisableUser`` and ``AdminUserGlobalSignOut`` (contract § 9).
 
 *Compare and refuse under the row lock.* Every write to ``app_user`` reads the
 row ``FOR UPDATE`` first and refuses when the state is not what the operator was
@@ -360,6 +363,35 @@ class AdminChange(Record):
     def admin_changes(self) -> Sequence[AdminTrace]:
         """The change itself, for the CLI to trace after the commit."""
         return (AdminTrace(subject=self.user_id, direction=self.direction),)
+
+
+@dataclass(frozen=True)
+class Offboarding(Record):
+    """One person locked out: Cognito account disabled, then the database cleaned.
+
+    Attributes:
+        user_id: The Cognito subject.
+        email: The address they were found by or stored under, if any.
+        steps: One plain sentence per step taken or skipped, in order.
+        links_made_private: Tasks whose public link was switched off.
+        de_enrolment: The de-enrolment, when the person was still enrolled or
+            held the support role; ``None`` when it was skipped.
+    """
+
+    user_id: str
+    email: str | None
+    steps: tuple[str, ...]
+    links_made_private: int
+    de_enrolment: DeEnrolment | None
+
+    def summary(self) -> str:
+        """Render the offboarding as one header line and one line per step."""
+        who = f"{self.email} ({self.user_id})" if self.email else self.user_id
+        return f"offboarded {who}:\n" + "\n".join(f"  - {step}" for step in self.steps)
+
+    def admin_changes(self) -> Sequence[AdminTrace]:
+        """The support-role revoke the de-enrolment made, traced like ``admin revoke``."""
+        return self.de_enrolment.admin_changes() if self.de_enrolment else ()
 
 
 # --------------------------------------------------------------------------
@@ -958,6 +990,175 @@ def de_enrol_user(
     )
 
 
+def offboard_user(
+    conn: Connection,
+    cognito: CognitoIdentityProviderClient,
+    *,
+    pool_id: str,
+    email: str | None = None,
+    sub: str | None = None,
+) -> Offboarding:
+    """Lock a person out: disable their login, then clean up the database.
+
+    This is what to run when someone leaves. ``user de-enrol`` alone only
+    changes the database: the person can still sign in and their public task
+    links still work (finding M-02).
+
+    **The order, and why.**
+
+    1. Find the person (see below).
+    2. Cognito: ``AdminDisableUser`` (no new sign-in), then
+       ``AdminUserGlobalSignOut`` (their refresh tokens stop working, so no
+       session can be renewed). If either call fails, this stops and raises
+       before any database write, so the database is untouched.
+    3. Database, inside the caller's one transaction: de-enrol them if they
+       are still in an organisation or hold the support role (the plain
+       :func:`de_enrol_user`, unchanged), then switch off every public link on
+       the tasks they own (``task.is_public = false``). Project ``visibility``
+       is about who in the organisation can see a project, not a public link,
+       so it is left alone (ADR 0045 decision 5).
+
+    Cognito goes first so the dangerous half — a working login — is closed
+    before anything else. If the database step then fails, the account stays
+    disabled and the transaction rolls back; running the same command again
+    completes it (disabling an already-disabled account succeeds).
+
+    An access token issued before this runs stays valid until it expires (up to
+    60 minutes), and an open progress stream can outlive it. That window is
+    accepted and documented in the deployment guide.
+
+    **Finding the person.** Exactly one of ``email`` or ``sub``:
+
+    - ``sub``: the ``app_user`` row with that id, if any.
+    - ``email``: the ``app_user`` row storing that address; if none does (they
+      only ever signed in, so no address was stored), Cognito is asked which
+      account has that address, and that account's row is used if one exists.
+
+    Three cases follow, each reported in :attr:`Offboarding.steps`:
+
+    - **Enrolled** (in an organisation, or holding the support role):
+      Cognito, de-enrol, public links off.
+    - **Already de-enrolled** (row exists, no organisation, no support role —
+      M-02's main case: removed earlier, login still working): Cognito, public
+      links off; de-enrol is skipped because it would refuse.
+    - **No** ``app_user`` **row** (a Cognito account that never reached the
+      app): Cognito only.
+    - **No Cognito account** but a row (the account was deleted from the pool
+      earlier): the database half only, reported as such. Neither a row nor
+      an account is a refusal.
+
+    Args:
+        conn: Open connection inside the command's transaction.
+        cognito: Client bound to the verified pool.
+        pool_id: The verified user pool.
+        email: The address to find them by; mutually exclusive with ``sub``.
+        sub: The Cognito subject to find them by.
+
+    Returns:
+        The offboarding, listing the steps taken and the counts.
+
+    Raises:
+        OpsError: If neither or both selectors are given, the address is
+            stored on more than one row, neither the pool nor the database
+            knows the person, or Cognito refuses either call (the database
+            is then untouched).
+    """
+    if (email is None) == (sub is None):
+        raise OpsError("give exactly one of --email or --sub")
+    row: RowMapping | None
+    if sub is not None:
+        _require_filter_safe(sub)
+        row = _lock_user(conn, sub)
+        user = _find_user_by_sub(cognito, pool_id=pool_id, sub=sub)
+    else:
+        assert email is not None  # narrowed by the check above
+        _require_filter_safe(email)
+        stored = (
+            conn.execute(select(app_user).where(app_user.c.email == email).with_for_update())
+            .mappings()
+            .all()
+        )
+        if len(stored) > 1:
+            subjects = ", ".join(str(r["user_id"]) for r in stored)
+            raise OpsError(
+                f"{len(stored)} users share the address {email} ({subjects}); "
+                "resolve with --sub instead. Nothing was changed."
+            )
+        if stored:
+            row = stored[0]
+            user = _find_user_by_sub(cognito, pool_id=pool_id, sub=str(row["user_id"]))
+        else:
+            user = _find_user_by_email(cognito, pool_id=pool_id, email=email)
+            found_sub = _sub_of(user.get("Attributes", [])) if user is not None else ""
+            row = _lock_user(conn, found_sub) if found_sub else None
+    if row is not None:
+        user_id = str(row["user_id"])
+    elif user is not None:
+        user_id = _sub_of(user.get("Attributes", []))
+    else:
+        raise OpsError(f"no account in the pool for {email or sub}. Nothing was changed.")
+    who = email or (row["email"] if row is not None else None) or user_id
+
+    if user is None:
+        # The account was deleted from the pool earlier (by hand, or the pool
+        # was replaced) but the row remains: nothing to disable, and the
+        # database half must still run or their public links stay live
+        # (review stack, 2026-11-16).
+        steps = ["no Cognito account in the pool (deleted earlier): nothing to disable"]
+    else:
+        username = user["Username"]
+        # Cognito first. A failure here raises before any database write.
+        try:
+            cognito.admin_disable_user(UserPoolId=pool_id, Username=username)
+        except ClientError as error:
+            code = error.response.get("Error", {}).get("Code", "") or "ClientError"
+            raise OpsError(
+                f"Cognito refused to disable {who} ({code}). Nothing was changed."
+            ) from error
+        try:
+            cognito.admin_user_global_sign_out(UserPoolId=pool_id, Username=username)
+        except ClientError as error:
+            code = error.response.get("Error", {}).get("Code", "") or "ClientError"
+            raise OpsError(
+                f"the Cognito account for {who} is DISABLED, but signing it out everywhere "
+                f"failed ({code}). Nothing in the database was changed. Re-run "
+                f"`user offboard --sub {user_id}` to finish."
+            ) from error
+        steps = ["disabled the Cognito account", "signed out everywhere (refresh tokens revoked)"]
+
+    if row is None:
+        steps.append("no app_user row: Cognito only, the database was not touched")
+        return Offboarding(
+            user_id=user_id,
+            email=email,
+            steps=tuple(steps),
+            links_made_private=0,
+            de_enrolment=None,
+        )
+
+    de_enrolment: DeEnrolment | None = None
+    if row["org_id"] is not None or row["is_admin"]:
+        de_enrolment = de_enrol_user(conn, sub=user_id)
+        steps.append(de_enrolment.summary())
+    else:
+        steps.append("de-enrol skipped: not enrolled")
+    links = int(
+        conn.execute(
+            update(task)
+            .where(task.c.owner_user_id == user_id, task.c.is_public)
+            .values(is_public=False)
+        ).rowcount
+    )
+    steps.append(f"made {links} public task link(s) private")
+    return Offboarding(
+        user_id=user_id,
+        email=row["email"] or email,
+        steps=tuple(steps),
+        links_made_private=links,
+        de_enrolment=de_enrolment,
+    )
+
+
 def set_admin(
     conn: Connection, *, grant: bool, email: str | None = None, sub: str | None = None
 ) -> AdminChange:
@@ -1398,6 +1599,19 @@ def _find_user_by_email(
     return users[0] if users else None
 
 
+def _find_user_by_sub(
+    cognito: CognitoIdentityProviderClient, *, pool_id: str, sub: str
+) -> UserTypeTypeDef | None:
+    """Return the Cognito user with this subject, or ``None``.
+
+    ``sub`` is unique in a pool, so the match is exact. The returned
+    ``Username`` is what the admin calls address the account by.
+    """
+    response = cognito.list_users(UserPoolId=pool_id, Filter=f'sub = "{sub}"', Limit=1)
+    users = response.get("Users") or []
+    return users[0] if users else None
+
+
 def _sub_of(attributes: Sequence[AttributeTypeTypeDef]) -> str:
     """Pull ``sub`` out of a Cognito attribute list."""
     for attribute in attributes:
@@ -1415,7 +1629,7 @@ def _require_filter_safe(email: str) -> None:
     and because such an address cannot be looked up at all.
     """
     if '"' in email or "\\" in email:
-        raise OpsError(f"refusing an address containing a quote or backslash: {email!r}")
+        raise OpsError(f"refusing a value containing a quote or backslash: {email!r}")
 
 
 def _now() -> datetime:

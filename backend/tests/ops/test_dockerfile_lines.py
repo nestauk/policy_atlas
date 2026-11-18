@@ -34,3 +34,11 @@ def test_dockerfile_makes_app_readable_by_any_user() -> None:
     assert any(
         re.search(r"\bchmod\s+(?:-\S+\s+)*0?755\s+/app\s*$", line) for line in _lines()
     )
+
+
+def test_dockerfile_cmd_has_keepalive_proxy_and_server_header_flags() -> None:
+    # Keep-alive 125 s outlasts the load balancer's 120 s idle time (else 502s).
+    cmd = next(line for line in _lines() if line.startswith("CMD"))
+    assert '"--timeout-keep-alive", "125"' in cmd
+    assert '"--proxy-headers"' in cmd
+    assert '"--no-server-header"' in cmd

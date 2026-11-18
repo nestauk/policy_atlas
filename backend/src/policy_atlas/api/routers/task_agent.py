@@ -60,6 +60,7 @@ from policy_atlas.api.deps import (
     get_engine,
     get_executor,
     get_runner_backends,
+    get_settings,
     get_task_agent_backend,
     get_title_backend,
 )
@@ -85,6 +86,7 @@ from policy_atlas.api.routers.check_ins import execute_claimed
 from policy_atlas.api.routers.common import (
     active_parentless_walk,
 )
+from policy_atlas.api.settings import Settings
 from policy_atlas.api.stage_vocabulary import STAGE_PRESENTATION, STAGE_ROW, STEP_VERBS
 from policy_atlas.api.titles import TitleWriter, in_background, name_task_from_question
 from policy_atlas.api.toc_start import walk_kind as toc_walk_kind
@@ -796,6 +798,7 @@ def _dispatch_gate_turn(
     embedding_backend: EmbeddingBackend,
     executor: ThreadPoolExecutor,
     runner_backends: RunnerBackends,
+    user_cap: int,
 ) -> TaskAgentTurnOut | _ContinuedTurn:
     """Sort one turn taken at the gate and carry out what it turned out to be.
 
@@ -812,6 +815,7 @@ def _dispatch_gate_turn(
         embedding_backend: Retrieval embedder seam for an answer.
         executor: Walk executor, for a decision that resumes the walk.
         runner_backends: Runner bundle for that resumed walk.
+        user_cap: The per-person run limit for a longlist walk the decision opens.
 
     Returns:
         The completed turn, or the instruction the planning half of this same
@@ -900,6 +904,7 @@ def _dispatch_gate_turn(
                         executor=executor,
                         runner_backends=runner_backends,
                         user_id=user_id,
+                        user_cap=user_cap,
                     )
                     if outcome.recorded and outcome.follow_on == LONGLIST_PURPOSE
                     else None
@@ -974,6 +979,7 @@ def _open_follow_on_longlist(
     executor: ThreadPoolExecutor,
     runner_backends: RunnerBackends,
     user_id: str,
+    user_cap: int,
 ) -> LatestRun | None:
     """Open the longlist walk a gate decision asked for (task 045, S3; P7).
 
@@ -996,6 +1002,7 @@ def _open_follow_on_longlist(
             backends=runner_backends,
             executor=executor,
             user_id=user_id,
+            user_cap=user_cap,
         )
     except LonglistRefused as exc:
         log.warning("gate_turn_longlist_refused", task_id=str(task_id), reason=exc.reason)
@@ -1075,6 +1082,7 @@ def create_task_agent_turn(
     executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
     runner_backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
     titles: Annotated[TitleWriter, Depends(get_title_backend)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> StreamingResponse:
     """Advance one task's durable task_agent conversation once per client turn id.
 
@@ -1152,6 +1160,7 @@ def create_task_agent_turn(
                     embedding_backend=embedding_backend,
                     executor=executor,
                     runner_backends=runner_backends,
+                    user_cap=settings.runs_per_user,
                 )
             if isinstance(sorted_turn, TaskAgentTurnOut):
                 return _one_line_stream(sorted_turn)
@@ -1783,6 +1792,7 @@ def patch_plan(
     executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
     backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
     titles: Annotated[TitleWriter, Depends(get_title_backend)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> PlanOut:
     """Apply typed edits to the current plan and persist a new approved version.
 
@@ -1879,6 +1889,7 @@ def patch_plan(
         user=user,
         executor=executor,
         backends=backends,
+        user_cap=settings.runs_per_user,
         previous=scoped[0],
         current=scoped[1],
         out=out,
@@ -1892,6 +1903,7 @@ def _open_shortlist_after_patch(
     user: AuthenticatedUser,
     executor: ThreadPoolExecutor,
     backends: RunnerBackends,
+    user_cap: int,
     previous: ScopingPlan,
     current: ScopingPlan,
     out: PlanOut,
@@ -1916,6 +1928,7 @@ def _open_shortlist_after_patch(
         user: The user traces are attributed to.
         executor: The walk executor.
         backends: The runner backend bundle.
+        user_cap: The per-person run limit (``settings.runs_per_user``).
         previous: The approved plan before the patch.
         current: The plan the patch saved.
         out: The patch's response.
@@ -1938,6 +1951,7 @@ def _open_shortlist_after_patch(
             backends=backends,
             executor=executor,
             user_id=user.user_id,
+            user_cap=user_cap,
             suggest=False,
         )
     except LonglistRefused as exc:
@@ -2098,6 +2112,7 @@ def confirm_baseline(
     engine: Annotated[Engine, Depends(get_engine)],
     executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
     backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> PlanOut:
     """Record that a plan version was confirmed, and open the longlist walk.
 
@@ -2205,7 +2220,13 @@ def confirm_baseline(
     if idempotent and longlist_walk_exists(engine, task_id=task_id, plan_id=row["plan_id"]):
         return out
     return _open_confirmed_longlist(
-        engine, task_id=task_id, out=out, executor=executor, backends=backends, user=user
+        engine,
+        task_id=task_id,
+        out=out,
+        executor=executor,
+        backends=backends,
+        user=user,
+        user_cap=settings.runs_per_user,
     )
 
 
@@ -2217,6 +2238,7 @@ def _open_confirmed_longlist(
     executor: ThreadPoolExecutor,
     backends: RunnerBackends,
     user: AuthenticatedUser,
+    user_cap: int,
 ) -> PlanOut:
     """Open the longlist walk on the committed confirmed version (P6).
 
@@ -2228,8 +2250,8 @@ def _open_confirmed_longlist(
         ``out`` with ``opened_run`` set.
 
     Raises:
-        ApiConflict: The opener's ``run_active``, ``capacity`` or
-            ``plan_stale``.
+        ApiConflict: The opener's ``run_active``, ``capacity``,
+            ``user_capacity`` or ``plan_stale``.
         HTTPException: 422 when the plan cannot be screened against.
     """
     with engine.connect() as conn:
@@ -2250,6 +2272,7 @@ def _open_confirmed_longlist(
             backends=backends,
             executor=executor,
             user_id=user.user_id,
+            user_cap=user_cap,
         )
     except LonglistRefused as exc:
         raise http_error(exc) from None
