@@ -18,7 +18,7 @@ from httpx import Response
 from sqlalchemy import insert, select, update
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.api.routers.common import Limits, effective_limits
+from policy_atlas.api.routers.common import Limits, LimitSource, effective_limits
 from policy_atlas.api.routers.runs import user_at_run_cap
 from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import app_user, cohort, cohort_member, organisation, task
@@ -108,10 +108,43 @@ def test_a_cohort_sits_between_the_person_and_the_organisation(conn: Connection)
     assert _limits(conn, user_id) == Limits(task_quota=None, runs=5)
     limits = _limits(conn, user_id)
     assert (limits.task_quota_from, limits.runs_from) == (
-        f"cohort {latest_cohort(conn, user_id, 0)}", f"cohort {latest_cohort(conn, user_id, 1)}")
+        LimitSource("cohort", f"cohort {latest_cohort(conn, user_id, 0)}"),
+        LimitSource("cohort", f"cohort {latest_cohort(conn, user_id, 1)}"),
+    )
     _set_user(conn, user_id, task_quota_per_year=7)
     assert _limits(conn, user_id) == Limits(task_quota=7, runs=5)
-    assert _limits(conn, user_id).task_quota_from == "this person"
+    assert _limits(conn, user_id).task_quota_from == LimitSource("person")
+
+
+def test_cohorts_joined_at_the_same_moment_tie_break_on_id_not_name(conn: Connection) -> None:
+    """Equal join times pick the lowest cohort id; renaming a cohort cannot change the answer."""
+    user_id = make_user(conn)
+    now = datetime.now(UTC)
+    # Name order and id order disagree, so a name tie-break picks the other one.
+    for number, name, quota in ((1, "zz tie", 11), (2, "aa tie", 22)):
+        cohort_id = uuid.UUID(int=number)
+        conn.execute(insert(cohort).values(cohort_id=cohort_id, name=name, created_at=now,
+                                           task_quota_per_year=quota))
+        conn.execute(insert(cohort_member).values(cohort_id=cohort_id, user_id=user_id,
+                                                  added_at=now))
+    limits = _limits(conn, user_id)
+    assert (limits.task_quota, limits.task_quota_from) == (11, LimitSource("cohort", "zz tie"))
+
+
+def test_a_cohort_zero_lifts_one_limit_and_a_cleared_cohort_value_falls_back(
+    conn: Connection,
+) -> None:
+    """A cohort's 0 is no limit for that field only; clearing it hands back to the organisation."""
+    org_id = make_org(conn)
+    user_id = make_user(conn, org_id=org_id)
+    _set_org(conn, org_id, task_quota_per_year=20, runs_per_user=2)
+    _cohort(conn, user_id, joined_days_ago=0, runs_per_user=0)
+    assert _limits(conn, user_id) == Limits(task_quota=20, runs=None)
+    conn.execute(update(cohort).values(runs_per_user=None).where(
+        cohort.c.cohort_id == uuid.UUID(latest_cohort(conn, user_id, 0))))
+    limits = _limits(conn, user_id)
+    assert limits == Limits(task_quota=20, runs=2)
+    assert limits.runs_from.kind == "organisation"
 
 
 def test_a_cleared_override_falls_back(conn: Connection) -> None:

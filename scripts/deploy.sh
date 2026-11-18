@@ -648,16 +648,21 @@ wait_for_migration_task() {
 
         if (( SECONDS >= deadline )); then
             stopped_reason="$(migration_stopped_reason)"
-            echo "ERROR: migration task did not stop within ${MIGRATION_WAIT_MAX_S} s (MIGRATION_WAIT_MAX_S); last status: ${last_status}; stoppedReason: ${stopped_reason:-unavailable}; task: ${MIGRATION_TASK_ARN}. The task was left running." >&2
+            echo "ERROR: ${ONE_OFF_LABEL} task did not stop within ${MIGRATION_WAIT_MAX_S} s (MIGRATION_WAIT_MAX_S); last status: ${last_status}; stoppedReason: ${stopped_reason:-unavailable}; task: ${MIGRATION_TASK_ARN}. The task was left running." >&2
             exit 1
         fi
 
-        echo "migration task status: ${last_status}; waiting"
+        echo "${ONE_OFF_LABEL} task status: ${last_status}; waiting"
         sleep "$MIGRATION_POLL_SECONDS"
     done
 }
 
-run_migrations() {
+#: What the one-off task being waited on is called in the messages.
+ONE_OFF_LABEL="migration"
+
+# Start one task from the migration task definition (its network, database
+# secret and ops-secret access), optionally with extra run-task arguments.
+start_one_off_task() {
     local network_configuration
     network_configuration="awsvpcConfiguration={subnets=[${PRIVATE_SUBNET_IDS}],securityGroups=[${MIGRATION_SG_ID}],assignPublicIp=DISABLED}"
 
@@ -668,10 +673,25 @@ run_migrations() {
         --launch-type FARGATE \
         --count 1 \
         --network-configuration "$network_configuration" \
+        "$@" \
         --query 'tasks[0].taskArn' \
         --output text)"
-    require_value "migration task ARN returned by ECS" "$MIGRATION_TASK_ARN"
+    require_value "${ONE_OFF_LABEL} task ARN returned by ECS" "$MIGRATION_TASK_ARN"
+}
 
+run_migrations() {
+    ONE_OFF_LABEL="migration"
+    start_one_off_task
+    check_migration_task
+}
+
+# A real sign-in as the ops database login, before the ops service starts:
+# the migration container's login sync never fails the task (a public outage
+# must not follow an ops-only step), so this is where a broken login stops
+# the ops phase. Runs `db_role check` in the migration task definition.
+check_ops_db_login() {
+    ONE_OFF_LABEL="ops login check"
+    start_one_off_task --overrides '{"containerOverrides":[{"name":"policy-atlas-migration-container","command":["python","-m","policy_atlas.ops.db_role","check"]}]}'
     check_migration_task
 }
 
@@ -689,11 +709,11 @@ check_migration_task() {
         --output text)"
     if [[ "$exit_code" != "0" ]]; then
         stopped_reason="$(migration_stopped_reason)"
-        echo "ERROR: migration task failed with exit code ${exit_code}; stoppedReason: ${stopped_reason:-unavailable}" >&2
+        echo "ERROR: ${ONE_OFF_LABEL} task failed with exit code ${exit_code}; stoppedReason: ${stopped_reason:-unavailable}" >&2
         exit 1
     fi
 
-    echo "PASS: migration task completed successfully"
+    echo "PASS: ${ONE_OFF_LABEL} task completed successfully"
 }
 
 scale_up_service() {
@@ -952,6 +972,8 @@ common_tail() {
     # back, so an ops-only failure (a login sync, an unhealthy ops task) never
     # stops the public deploy (review stack, 2026-11-17).
     gate_check "ops database secret carries db_connection_string" check_ops_db_connection_string
+    deploy_step "check ops login"
+    check_ops_db_login
     deploy_step "start ops"
     scale_up_ops_service
 }
@@ -1015,6 +1037,17 @@ if [[ "${PA_DEPLOY_MIGRATION_WAIT_ONLY:-}" == "1" ]]; then
     CLUSTER_ARN="${CLUSTER_ARN:?set CLUSTER_ARN}"
     MIGRATION_TASK_ARN="${MIGRATION_TASK_ARN:?set MIGRATION_TASK_ARN}"
     check_migration_task
+    exit 0
+fi
+
+# The same for the ops login check: starts the (stubbed) one-off task and
+# waits on it, against the exports the caller supplies.
+if [[ "${PA_DEPLOY_OPS_LOGIN_CHECK_ONLY:-}" == "1" ]]; then
+    CLUSTER_ARN="${CLUSTER_ARN:?set CLUSTER_ARN}"
+    PRIVATE_SUBNET_IDS="${PRIVATE_SUBNET_IDS:?set PRIVATE_SUBNET_IDS}"
+    MIGRATION_SG_ID="${MIGRATION_SG_ID:?set MIGRATION_SG_ID}"
+    MIGRATION_TASK_DEF_ARN="${MIGRATION_TASK_DEF_ARN:?set MIGRATION_TASK_DEF_ARN}"
+    check_ops_db_login
     exit 0
 fi
 

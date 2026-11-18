@@ -143,6 +143,17 @@ describe("Waitlist", () => {
     expect(screen.getByRole("button", { name: "Hide rejected" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("shows the server's message when it refuses a reject", async () => {
+    opsMock.override = (method, path) =>
+      method === "POST" && path.endsWith("/reject") ? apiError(409, "ops_refused", "already rejected") : undefined;
+    const user = userEvent.setup();
+    renderOps("/waitlist");
+    await screen.findByText("Ana Lopez", { selector: "button" });
+    await user.click(within(row("Ana Lopez")).getByRole("button", { name: "Reject" }));
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Reject" }));
+    expect(await screen.findByText("already rejected")).toBeInTheDocument();
+  });
+
   it("deletes a rejected request for good, and can still approve one", async () => {
     const user = userEvent.setup();
     renderOps("/waitlist");

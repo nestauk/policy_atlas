@@ -86,7 +86,9 @@ quota object is `null` for an administrator, who has no quota — task 064a
 Q8) — provisions the caller's `app_user` row
 just-in-time with `ON CONFLICT DO NOTHING` (a once-per-user insert that
 never clobbers ops-set fields; ops enrolment is the deliberate
-`DO UPDATE`). `get_current_user` stays DB-free and Cognito-free.
+`DO UPDATE`). The first call also stamps `app_user.first_signed_in_at`
+(task 065), so the ops pages can tell a used invitation from an unused one.
+`get_current_user` stays DB-free and Cognito-free.
 
 Listing filters: `scope=all|mine` (default `all` = owner ∪ org-visible;
 for an admin, `all` spans every organisation) on both listings ·
@@ -180,7 +182,8 @@ Splash-page **Request access** intake. Public — no bearer token.
 With the self-signup flag on (task 065), the ops service's sweep turns rows
 whose address domain is in `organisation_domain` into accounts within about a
 minute, and stamps `account_user_id` and `account_created_at` on the row. The
-public route and its response are unchanged, and the honeypot stays. The abuse
+public route and its response are unchanged, and the honeypot stays. The
+sweep skips a row an operator has rejected (`rejected_at` set). The abuse
 ceiling: one invitation per address, `max_per_hour` invitations (sent or failed attempts) per hour, listed
 domains only, and a one-hour resend cooldown. Production turns the flag on only
 after the WAF (web application firewall) rate rule from task 064b is live.

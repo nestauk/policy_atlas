@@ -14,6 +14,7 @@ import {
   usePeopleQuota,
   type Person,
   type QuotaValues,
+  sourceLabel,
 } from "../api";
 import { facts, limitWord, plural } from "../format";
 import { FailedLine, FormHeader, Loading, Panel, useRecordedToast } from "../ui";
@@ -133,11 +134,11 @@ function LimitsPanel({ person }: { person: Person }) {
   const rows = [
     `Tasks per year: ${facts(
       limitWord(person.limits.task_quota_per_year),
-      `from ${person.limits.task_quota_from}`,
+      `from ${sourceLabel(person.limits.task_quota_from)}`,
     )}`,
     `Simultaneous tasks: ${facts(
       limitWord(person.limits.runs_per_user),
-      `from ${person.limits.runs_from}`,
+      `from ${sourceLabel(person.limits.runs_from)}`,
     )}`,
     `Admin exemption: ${person.is_admin ? "yes" : "no"}`,
   ];
@@ -192,13 +193,13 @@ export function PersonQuotaView() {
         // (a cohort's number is shown in the panel beside the form).
         tasks:
           person.task_quota_per_year == null
-            ? inherits(person.limits.task_quota_from, person.limits.task_quota_per_year ?? 0)
+            ? inherits(sourceLabel(person.limits.task_quota_from), person.limits.task_quota_per_year ?? 0)
             : org?.task_quota_per_year != null
               ? inherits(org.name, org.task_quota_per_year)
               : inherits("the default", defaults.tasks),
         runs:
           person.runs_per_user == null
-            ? inherits(person.limits.runs_from, person.limits.runs_per_user ?? 0)
+            ? inherits(sourceLabel(person.limits.runs_from), person.limits.runs_per_user ?? 0)
             : org?.runs_per_user != null
               ? inherits(org.name, org.runs_per_user)
               : inherits("the default", defaults.runs),

@@ -8,7 +8,7 @@ import { Checkbox } from "../../ui/brand/Checkbox";
 import { cn } from "../../ui/brand/cn";
 import { LINK_CLASS } from "../../ui/brand/inlineActions";
 import { PageHeader } from "../../ui/brand/PageHeader";
-import { OpsApiError, unwrap, useOpsAction, useOrganisations, useRequests, type AccessRequest } from "../api";
+import { OpsApiError, unwrap, unwrapEmpty, useOpsAction, useOrganisations, useRequests, type AccessRequest } from "../api";
 import { ago, facts, orgInRefusal } from "../format";
 import {
   ACTIONS_TD_CLASS,
@@ -35,9 +35,8 @@ import {
 type Refusal = { org: string; message: string };
 
 /**
- * A request's status, the word beside its colour: green Invited, yellow
- * Waiting, orange Check. The chip set has no orange tone, so Check is the
- * default chip led by an orange 6 px status mark.
+ * A request's status in plain words: Waiting, Rejected, or Already in an
+ * organisation (Check). An invited request is on People, never listed here.
  */
 function Status({ request, refusal }: { request: AccessRequest; refusal: Refusal | undefined }) {
   // Plain words like the Requested column (owner, 2026-11-18): no badges.
@@ -46,9 +45,6 @@ function Status({ request, refusal }: { request: AccessRequest; refusal: Refusal
   }
   if (request.status === "rejected") {
     return <Figures text={request.rejected_at != null ? `Rejected ${ago(request.rejected_at)}` : "Rejected"} />;
-  }
-  if (request.status === "invited") {
-    return <Figures text={request.account_created_at != null ? `Invited ${ago(request.account_created_at)}` : "Invited"} />;
   }
   return <>Waiting</>;
 }
@@ -67,18 +63,12 @@ export function RequestsView() {
   const [bulkPending, setBulkPending] = useState(false);
   const [rejecting, setRejecting] = useState<AccessRequest[] | null>(null);
   const [deleting, setDeleting] = useState<AccessRequest | null>(null);
-  const remove = useOpsAction(async (client, entryId: string) => {
-    const { response } = await client.DELETE("/api/v1/ops/requests/{entry_id}", {
-      params: { path: { entry_id: entryId } },
-    });
-    if (!response.ok) throw new OpsApiError(response.status, "", "");
-  });
-  const reject = useOpsAction(async (client, entryId: string) => {
-    const { response } = await client.POST("/api/v1/ops/requests/{entry_id}/reject", {
-      params: { path: { entry_id: entryId } },
-    });
-    if (!response.ok) throw new OpsApiError(response.status, "", "");
-  });
+  const remove = useOpsAction((client, entryId: string) =>
+    unwrapEmpty(client.DELETE("/api/v1/ops/requests/{entry_id}", { params: { path: { entry_id: entryId } } })),
+  );
+  const reject = useOpsAction((client, entryId: string) =>
+    unwrapEmpty(client.POST("/api/v1/ops/requests/{entry_id}/reject", { params: { path: { entry_id: entryId } } })),
+  );
   const [viewing, setViewing] = useState<AccessRequest | null>(null);
   const [orgId, setOrgId] = useState("");
   const [refusals, setRefusals] = useState<Record<string, Refusal>>({});
@@ -158,11 +148,13 @@ export function RequestsView() {
     setBulkPending(true);
     setRetry(null);
     const failed: AccessRequest[] = [];
+    let refusal = "";
     for (const request of many) {
       try {
         await reject.mutateAsync(request.entry_id);
-      } catch {
+      } catch (error) {
         failed.push(request);
+        if (error instanceof OpsApiError) refusal = error.message;
       }
     }
     setBulkPending(false);
@@ -172,7 +164,9 @@ export function RequestsView() {
     toast(
       many.length === 1 && failed.length === 0
         ? `${many[0].name} rejected`
-        : facts(`${done} rejected`, ...(failed.length > 0 ? [`${failed.length} failed`] : [])),
+        : many.length === 1 && refusal !== ""
+          ? refusal
+          : facts(`${done} rejected`, ...(failed.length > 0 ? [`${failed.length} failed`] : [])),
     );
     if (failed.length > 0) setRetry(() => () => void rejectMany(failed));
   };
@@ -429,10 +423,10 @@ export function RequestsView() {
                       toast(`${deleting.name}'s request deleted`);
                       setDeleting(null);
                     },
-                    onError: () => {
+                    onError: (error) => {
                       setDeleting(null);
                       setRetry(null);
-                      toast(`Could not delete ${deleting.name}'s request`);
+                      toast(error.message || `Could not delete ${deleting.name}'s request`);
                     },
                   })
                 }

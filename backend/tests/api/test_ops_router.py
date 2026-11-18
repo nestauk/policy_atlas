@@ -350,7 +350,8 @@ def test_quota_overrides_reach_the_public_me_route(ops: Harness, tmp_path: Path)
         )
         assert response.status_code == 200, response.text
         assert response.json()["task_quota_per_year"] == 7
-        _assert_audited(ops, lines, action="org.quota", target=str(org_id), outcome="ok")
+        _assert_audited(ops, lines, action="org.quota", outcome="ok", target=(
+            f"{org_id}: tasks per year inherit → 7, simultaneous tasks inherit → inherit"))
         assert limit() == 7
 
         response, lines = _post(
@@ -360,7 +361,8 @@ def test_quota_overrides_reach_the_public_me_route(ops: Harness, tmp_path: Path)
         )
         assert response.status_code == 200, response.text
         assert response.json()["results"][0]["outcome"] == "ok"
-        _assert_audited(ops, lines, action="person.quota", target=member.user_id, outcome="ok")
+        _assert_audited(ops, lines, action="person.quota", outcome="ok", target=(
+            f"{member.user_id}: tasks per year inherit → 3, simultaneous tasks inherit → 1"))
         row = _user(ops, member.user_id)
         assert row is not None and (row["task_quota_per_year"], row["runs_per_user"]) == (3, 1)
         assert limit() == 3
@@ -430,13 +432,14 @@ def test_people_list_projects_columns_counts_tasks_and_filters_literally(ops: Ha
     assert datetime.fromisoformat(row["invited_at"]) == invited
     assert row["tasks_this_year"] == 2
     assert row["last_task_at"] is not None
+    admin = {"kind": "administrator", "name": None}
     assert row["limits"] == {"task_quota_per_year": None, "runs_per_user": None,
-                             "task_quota_from": "administrator", "runs_from": "administrator"}
+                             "task_quota_from": admin, "runs_from": admin}
     assert next(p for p in everyone if p["user_id"] == other)["limits"] == {
         "task_quota_per_year": 50,
         "runs_per_user": 3,
-        "task_quota_from": "the default",
-        "runs_from": "the default",
+        "task_quota_from": {"kind": "default", "name": None},
+        "runs_from": {"kind": "default", "name": None},
     }
 
     by_name = {p["user_id"] for p in people("100% " + percent.upper())}
@@ -760,6 +763,16 @@ def test_approve_stamps_the_row_and_refuses_a_second_approval(ops: Harness) -> N
     assert [r["outcome"] for r in _audit(ops)] == ["invited", "enrolled"]
 
 
+def test_approve_of_an_unknown_request_is_not_found(ops: Harness) -> None:
+    """A missing waitlist row answers 404, like reject and delete, and writes nothing."""
+    org_id = _seed_org(ops)
+    response, lines = _post(
+        ops, f"/api/v1/ops/requests/{uuid.uuid4()}/approve", {"org_id": str(org_id)}
+    )
+    assert response.status_code == 404, response.text
+    assert lines == []
+
+
 def test_approve_refuses_an_address_enrolled_elsewhere(ops: Harness) -> None:
     """409 ``enrolled_elsewhere``; the row stays unstamped and nothing is audited."""
     here, there = _seed_org(ops), _seed_org(ops)
@@ -966,7 +979,11 @@ def test_bulk_cohort_membership_shows_on_people_and_is_idempotent(ops: Harness) 
                             {"user_ids": [first, second, "no-such-person"],
                              "cohort_id": cohort_id})
     assert [r["outcome"] for r in response.json()["results"]] == ["ok", "ok", "failed"]
+    assert "nothing changed" not in response.json()["results"][0]["message"]
     assert len(lines) == 3
+    # Each audit row names the cohort, the failed one too.
+    assert [line["target"] for line in lines] == [
+        f"{who}/cohort/{cohort_id}" for who in (first, second, "no-such-person")]
     again = _post(ops, "/api/v1/ops/people/cohort-add",
                   {"user_ids": [first], "cohort_id": cohort_id})[0].json()["results"][0]
     assert again["outcome"] == "ok" and "nothing changed" in again["message"]
@@ -1001,7 +1018,8 @@ def test_cohort_quota_is_audited_and_reaches_its_members_limits(ops: Harness) ->
                             {"task_quota_per_year": 120, "runs_per_user": None})
     assert response.status_code == 200, response.text
     assert (response.json()["task_quota_per_year"], response.json()["runs_per_user"]) == (120, None)
-    _assert_audited(ops, lines, action="cohort.quota", target=cohort_id, outcome="ok")
+    _assert_audited(ops, lines, action="cohort.quota", outcome="ok", target=(
+        f"{cohort_id}: tasks per year inherit → 120, simultaneous tasks inherit → inherit"))
     people = {p["user_id"]: p for p in ops.client.get(
         "/api/v1/ops/people", headers=ops.actor.headers).json()}
     assert people[member]["limits"]["task_quota_per_year"] == 120
@@ -1010,8 +1028,10 @@ def test_cohort_quota_is_audited_and_reaches_its_members_limits(ops: Harness) ->
     assert response.status_code == 404
 
 
-def test_reject_takes_a_request_off_the_waitlist_and_approve_then_refuses(ops: Harness) -> None:
-    """Reject writes one audit row and no email; the row leaves the list; approve refuses it."""
+def test_reject_takes_a_request_off_the_waitlist_and_a_second_reject_is_refused(
+    ops: Harness,
+) -> None:
+    """Reject writes one audit row and no email; the row leaves the list; rejecting again is 409."""
     entry_id = _seed_request(ops)
     with capture_logs() as captured:
         response = ops.client.post(

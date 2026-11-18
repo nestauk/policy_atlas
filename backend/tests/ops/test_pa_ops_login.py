@@ -143,6 +143,27 @@ def test_pa_ops_cannot_grant_admin_or_ops(pa_ops_engine: Engine, seeded_user: st
         assert error.value.orig.sqlstate == "42501"  # type: ignore[union-attr]
 
 
+def test_pa_ops_deletes_only_a_rejected_request(pa_ops_engine: Engine, engine: Engine) -> None:
+    """The trigger refuses the ops login a delete of a request still waiting (42501)."""
+    waiting, rejected = uuid.uuid4(), uuid.uuid4()
+    with seeded(engine) as conn:
+        for entry_id, rejected_at in ((waiting, None), (rejected, datetime.now(UTC))):
+            conn.execute(waitlist_entry.insert().values(
+                entry_id=entry_id, email=f"{entry_id}@example.test", name="Asker",
+                role_or_reason="curious", created_at=datetime.now(UTC), rejected_at=rejected_at,
+            ))
+    _assert_refused(f"DELETE FROM waitlist_entry WHERE entry_id = '{waiting}'", pa_ops_engine)
+    with _as_pa_ops(pa_ops_engine) as conn:
+        deleted = conn.execute(
+            text("DELETE FROM waitlist_entry WHERE entry_id = :id"), {"id": rejected}
+        )
+        assert deleted.rowcount == 1
+    with engine.begin() as conn:
+        conn.execute(
+            waitlist_entry.delete().where(waitlist_entry.c.entry_id.in_((waiting, rejected)))
+        )
+
+
 def test_pa_ops_allows_the_current_positive_smoke(
     pa_ops_engine: Engine, seeded_admin_user: str
 ) -> None:
@@ -249,6 +270,30 @@ def test_pa_ops_runs_every_ops_write_of_this_slice(
             conn, org_id=org.org_id, task_quota_per_year=None, runs_per_user=2
         )
         assert (person.task_quota_after, organisation_change.runs_after) == (5, 2)
+
+    with _as_pa_ops(pa_ops_engine) as conn:
+        made = commands.save_cohort(
+            conn, cohort_id=None, name=f"pa-ops {uuid.uuid4()}", description=None,
+            starts_on=None, ends_on=None, links=[],
+        )
+        commands.save_cohort(
+            conn, cohort_id=made.cohort_id, name=made.name, description="renamed",
+            starts_on=None, ends_on=None, links=["https://example.test"],
+        )
+        quota = commands.set_quota(
+            conn, cohort_id=made.cohort_id, task_quota_per_year=9, runs_per_user=None
+        )
+        assert quota.task_quota_after == 9
+        assert commands.add_to_cohort(conn, target=made, user_id=mover).changed
+        assert commands.remove_from_cohort(conn, target=made, user_id=mover).changed
+        assert commands.delete_cohort(conn, cohort_id=made.cohort_id) == made
+
+    with _as_pa_ops(pa_ops_engine) as conn:
+        commands.reject_request(conn, entry_id=entry_id, now=moment)
+        commands.delete_request(conn, entry_id=entry_id)
+        assert conn.execute(
+            select(waitlist_entry.c.entry_id).where(waitlist_entry.c.entry_id == entry_id)
+        ).one_or_none() is None
 
     with _as_pa_ops(pa_ops_engine) as conn:
         action_id = commands.record_action(

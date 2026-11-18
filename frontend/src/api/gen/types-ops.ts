@@ -575,6 +575,23 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * LimitSourceOut
+         * @description Where one limit came from (contract B12).
+         *
+         *     Args:
+         *         kind: A fixed word the pages branch on; never an operator-typed name.
+         *         name: The cohort's or organisation's name for those two kinds, else ``None``.
+         */
+        LimitSourceOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "person" | "cohort" | "organisation" | "default" | "administrator";
+            /** Name */
+            name?: string | null;
+        };
+        /**
          * LimitsOut
          * @description The limits that apply to one person after resolution (contract B12).
          *
@@ -583,18 +600,14 @@ export interface components {
          *             ``None`` for no limit (an administrator, or an override of 0).
          *         runs_per_user: Walks the person's tasks may hold at once, or ``None``
          *             for no limit (an override of 0).
-         *         task_quota_from: Where the task quota came from: "this person", a
-         *             cohort's or an organisation's name, "the default" or
-         *             "administrator".
+         *         task_quota_from: Where the task quota came from.
          *         runs_from: The same for the run cap.
          */
         LimitsOut: {
-            /** Runs From */
-            runs_from: string;
+            runs_from: components["schemas"]["LimitSourceOut"];
             /** Runs Per User */
             runs_per_user: number | null;
-            /** Task Quota From */
-            task_quota_from: string;
+            task_quota_from: components["schemas"]["LimitSourceOut"];
             /** Task Quota Per Year */
             task_quota_per_year: number | null;
         };

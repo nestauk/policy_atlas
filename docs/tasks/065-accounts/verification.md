@@ -15,6 +15,7 @@ address ranges, passwords, email addresses or account ids.
 | `make openapi-sync && make drift-check` | pass | 2026-11-17 (Phase 6, and inside the exit verify). |
 | `make -C infra test` | pass | 2026-11-17 (Phase 7): 133 passed. |
 | `make deploy-build-guard-test` | pass | 2026-11-17 (Phase 9): the build guard, the migration waiter and the new deploy-order harness. |
+| `make verify` (after the delta review-stack fixes, uncommitted on `16d1af76`) | pass | 2026-11-18: backend 4960 passed, 1 skipped; infra 139 passed; drift-check OK; frontend 2069 tests and both builds. A run before it failed only on an import-order lint in the new theory-of-change fixture, fixed. |
 | `aws sesv2 get-account` (both profiles) | blocked | SSO tokens expired on 2026-11-17; the owner signs in and the build re-runs it. Both accounts had production access on 2026-11-16 (contract fact 1). |
 
 ## Checks beyond the build
@@ -28,8 +29,8 @@ address ranges, passwords, email addresses or account ids.
 | # | Check | When | Result |
 |---|---|---|---|
 | 1 | Ops-page "create person" sends an invitation from `no-reply@v3.policyatlas.uk`, DKIM pass, person signs in | | pending |
-| 2 | Resend sends again; a second resend within the hour is 429 | | pending |
-| 3 | A `nesta.org.uk` request gets an invitation within two minutes and shows "invited"; an unlisted address is a plain row with the same form response | | pending |
+| 2 | Resend sends again; a second resend within the hour is 429 (run on a second person who has not signed in, or before check 1's sign-in: resend is offered only then) | | pending |
+| 3 | A `nesta.org.uk` request gets an invitation within two minutes, leaves the Waitlist and shows on People as invited (B15); an unlisted address is a plain row with the same form response | | pending |
 | 4 | `https://ops.v3.policyatlas.uk` refused from a non-allowlisted address | | pending |
 | 5 | Non-ops signed-in person sees "does not have the ops role"; 403 on every ops route; `/api/v1/me` on the ops host is 404; `https://v3.policyatlas.uk/ops` is the public not-found page; public bundle has no ops code | | pending |
 | 6 | Deployed task-role policies: no `cognito-idp` on the API's; the five on the ops service's | | pending |
@@ -80,7 +81,7 @@ Twelve commits on `task/065-accounts` after the design-phase exit, one per plan 
   `pa_config.json`; with `enabled` true the pool sends through the environment's own SES
   identity (ARN built in the pool's account and region; nothing creates an identity) and
   carries the invitation and verification templates from `infra/email/` with the sign-in
-  and logo URLs substituted at synth. `enabled` is false in both environments today.
+  and logo URLs substituted at synth. `enabled` was false in both environments at the build; commit `16d1af76` turns it on for staging (production stays off).
   The logo PNG is the fold mark under `frontend/public/brand/`.
 - **B. Schema (Phase 3).** Migration `c6d4e2f1a9b8`: `app_user.is_ops`, `invited_at`, the
   four quota overrides with `CHECK (>= 0)`, `ops_action`, `organisation_domain`, the two
@@ -269,7 +270,7 @@ routes `GET/POST /cohorts`, `POST/DELETE /cohorts/{id}`, `POST /people/cohort-ad
 `/people/cohort-remove`, `PersonOut.cohorts`, the Cohorts page and the People column, search
 and actions. Tests: three backend route tests (create/edit/delete audited, bad links and dates
 refused, bulk add idempotent and shown on People), the grant pin, the 065 round trip (now
-stepping down to `b1e7c3a9d5f2` by name, both 065 revisions), four Cohorts page tests and two
+stepping down to `b1e7c3a9d5f2` by name, so it covers all three 065 revisions), four Cohorts page tests and two
 People cohort tests. Driven live on the local ops server: two cohorts created, two people
 added. No CLI for cohorts (the pages are the tool; add one when a script needs it). A
 cohort's members are not removed on de-enrol or offboard: the label is research history.
@@ -307,9 +308,9 @@ After the review stack and its fixes (2026-11-17):
 | 5 | Holds: one test removed with reason (§ Diff summary); pins changed are justified there |
 | 6 | Holds: this record |
 | 7 | Holds: `docs/deferred.md` updated; knowledge records are step 8's |
-| 8 | Holds, with one gap: the adversarial lane ran on Claude because Codex's workspace is out of credits; a Codex pass follows when credits return |
+| 8 | Holds: the first stack's adversarial lane ran on Claude (Codex was out of credits); the second stack (2026-11-18, § Review stack on the post-review delta) ran Codex on the delta |
 | 9 | Holds (synth tests) |
-| 10 | Holds apart from the owner's browser review of the two templates (pending) |
+| 10 | Holds: the owner reviewed real invitation and verification emails sent through staging SES (owner passes 5 to 7, 2026-11-18) |
 | 11 | Holds: no HTTP writer; INSERT and UPDATE refused by the trigger; closed reader list; trace; offboard clears it |
 | 12 | Holds (route-table and patched-lifespan tests) |
 | 13 | Holds: both task roles synth-pinned with the pool-ARN scope; listener rules; the deploy order with both services stopped; the ops service template-pinned at 0; the image proved by a build |
@@ -329,8 +330,8 @@ After the review stack and its fixes (2026-11-17):
 - The ops pages' copy is the lead's script (`ops-pages-copy.md`) with the build rulings
   appended; the owner has not yet reviewed the email templates in a browser (A2) or the
   pages on staging.
-- `email.enabled`, `ops.desired_count` and `self_signup.enabled` are off in both
-  environments until the owner switches them on staging (Phase 11).
+- Staging has `email.enabled` true and `ops.desired_count` 1 (commit `16d1af76`); `self_signup.enabled`
+  is off in both environments, and production has email and ops off (Phase 11).
 - The ops allowlist parameter `/policy_atlas_v3/ops/allowed_cidrs` must exist before the
   first deploy of this branch; the deploy guide says how.
 
@@ -352,6 +353,75 @@ No address range, password, email address or account id is in the committed diff
 the logs quoted here. The test addresses are `example.test` or UUID-suffixed. The deploy
 script and the sync log names and counts, never values. Screenshots of the mock live only in
 the session scratchpad.
+
+## Review stack on the post-review delta (2026-11-18)
+
+Scope: `0cab4212..16d1af76` (owner passes 1 to 7, revision 4 cohorts, the `e8f6` migration,
+the staging switches, the event-log lock), generated OpenAPI files excluded. Run in a fresh
+conversation. `make verify` on `16d1af76` before the lanes: 4957 passed, 1 skipped; infra
+139; frontend 2067 and both builds.
+
+Lanes: contract verifier (Opus, 11 findings) · security audit (Claude, 5) · Codex adversarial
+(read-only, 3) · `/code-review medium` (Claude, 9) · a trace of all 88 `events.append` sites
+(Claude, after two lanes raised the lock).
+
+**Owner rulings (2026-11-18):** a cohort may be more generous than its organisation (the
+organisation is not a ceiling); `e8f6` and the `/me` first-sign-in stamp are approved as
+contract revision 4.1 (B15); `c6d4`, `d7e5` and `e8f6` never ran outside local databases, so
+they are edited in place; the staging switches stay; the event-log lock is reverted and
+deferred, and the theory-of-change tests get a test-only retry ceiling so the known
+production ceiling does not fail them.
+
+**Adopted and fixed:**
+- Convergent (security 5, code review 2, verifier 11, Codex noted): the event-log lock is
+  held to the end of the caller's transaction; the trace found screening holding it across
+  the whole stage-1 LLM pass, acquire across embedding, and a park/claim lock-order
+  inversion. Reverted; `docs/deferred.md` holds the three sites. The 40-writer test went
+  with it. **Recorded relaxation (owner ruling):** `tests/theory_of_change/conftest.py`
+  raises `APPEND_ATTEMPTS` to 256 for those tests only.
+- Security 2 + contract B15: a `BEFORE DELETE` trigger refuses the ops login's delete of a
+  waitlist row that is not rejected; tested as `pa_ops`.
+- Verifier 2: the pa_ops write test now runs every new write (cohort save, update, quota,
+  add, remove, delete; request reject and delete) as `pa_ops` with a password. **It found a
+  real bug:** `add_to_cohort` read `rowcount`, which a Core INSERT reports as -1 here, so
+  every first add said "nothing changed"; it now uses `RETURNING`.
+- Security 1: cohort add and remove audit rows name the cohort; every quota change (person,
+  organisation, cohort) records the values before and after.
+- Codex 2 / security 4: equal cohort join times break on `cohort_id`, not the name; tests for
+  the tie, a per-limit 0 and a cleared cohort value.
+- Code review 3: a limit's source is a fixed kind plus a name, so a cohort named "the
+  default" cannot fool the pages; tested.
+- Code review 4: refusals on reject, delete-request and delete-cohort show the server's
+  message (one `unwrapEmpty` helper).
+- Code review 6, 8, 9: one grouped task query for People; the unreachable "invited" waitlist
+  branch removed; approving a missing request is 404.
+- Codex 1 (in part): `scripts/deploy.sh` runs `db_role check` as a one-off task before it
+  scales the ops service up and fails the ops phase if the login does not work. The
+  migration container's `|| echo` stays (first stack's ruling: an ops-only step must not
+  cause a public outage).
+- Verifier 1, 4 to 9: contract revision 4.1 (B15; B4, B6, B13, B14, C5 and rollback amended);
+  ADR 0046 decision 6 grant list; `infra/DEPLOYMENT.md` rollback names
+  `alembic downgrade b1e7c3a9d5f2` and the API image before 065, plus the first-deploy note
+  for the committed `desired_count` 1; stale lines here, in `web-api.md` and the ops copy;
+  staging checks 2 and 3 corrected. Verifier 10: test renamed.
+
+**Declined:**
+- Code review 1 (the `task.updated_at` grant breaks `rows assign`): the CLI runs on the
+  master login (`ops/cli.py`, `DATABASE_URL`), as recorded at owner pass 1; nothing as
+  `pa_ops` writes that column.
+- Security 3 / verifier 6 (in-place migration edit): owner confirmed `c6d4` never ran
+  outside local databases.
+
+**Deferred:** code review 5 (People costs about three queries per person; fine at today's
+size, batch the resolver when the list reaches hundreds) and 7 (bulk reject sends one
+request per row) → `docs/deferred.md`.
+
+**Pre-deploy items, not code (Codex 3, security):** before the staging deploy, re-run
+`aws sesv2 get-account` on the staging profile and confirm `/policy_atlas_v3/ops/allowed_cidrs`
+holds office or VPN ranges, never `0.0.0.0/0`.
+
+**Outside this slice:** `scripts/test_deploy_build_guard.sh` fails on `dev` as well (its
+stub `aws` does not answer the Metabase allowlist read); `make verify` does not run it.
 
 ## Review handoff (step-7/8 inputs)
 
@@ -388,4 +458,4 @@ Seams left open → [docs/deferred.md](../../deferred.md): self-signup domains b
 log on the pages. Not in this slice, noted by the build: a single-person read route, the
 settings defaults reported by a route (the pages infer "default · n" from a person with no
 override), an assign route that accepts either kind of id, `action_id` on the single-object
-responses, and the revision-2 explainer's cohorts and feature control (a later task).
+responses, and the revision-2 explainer's feature control (a later task; cohorts landed in revision 4).

@@ -21,6 +21,7 @@ import {
   type Cohort,
   type Organisation,
   type Person,
+  sourceLabel,
 } from "../api";
 import { ago, facts, inCooldown, limitWord, resendHint } from "../format";
 import {
@@ -852,8 +853,8 @@ function PersonDialog({ person, onClose, onQuota }: { person: Person; onClose: (
     ],
     ["Flags", flags === "" ? <span className="text-grey">none</span> : flags],
     ["Tasks this year", `${person.tasks_this_year} in the last 365 days`],
-    ["Tasks per year", limit(person.limits.task_quota_per_year, person.limits.task_quota_from)],
-    ["Simultaneous tasks", limit(person.limits.runs_per_user, person.limits.runs_from)],
+    ["Tasks per year", limit(person.limits.task_quota_per_year, sourceLabel(person.limits.task_quota_from))],
+    ["Simultaneous tasks", limit(person.limits.runs_per_user, sourceLabel(person.limits.runs_from))],
     [
       "Last task",
       waitingForSignIn(person)

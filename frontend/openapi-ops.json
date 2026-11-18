@@ -383,12 +383,43 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "LimitSourceOut": {
+        "description": "Where one limit came from (contract B12).\n\nArgs:\n    kind: A fixed word the pages branch on; never an operator-typed name.\n    name: The cohort's or organisation's name for those two kinds, else ``None``.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "person",
+              "cohort",
+              "organisation",
+              "default",
+              "administrator"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "LimitSourceOut",
+        "type": "object"
+      },
       "LimitsOut": {
-        "description": "The limits that apply to one person after resolution (contract B12).\n\nArgs:\n    task_quota_per_year: Tasks the person may create in 365 days, or\n        ``None`` for no limit (an administrator, or an override of 0).\n    runs_per_user: Walks the person's tasks may hold at once, or ``None``\n        for no limit (an override of 0).\n    task_quota_from: Where the task quota came from: \"this person\", a\n        cohort's or an organisation's name, \"the default\" or\n        \"administrator\".\n    runs_from: The same for the run cap.",
+        "description": "The limits that apply to one person after resolution (contract B12).\n\nArgs:\n    task_quota_per_year: Tasks the person may create in 365 days, or\n        ``None`` for no limit (an administrator, or an override of 0).\n    runs_per_user: Walks the person's tasks may hold at once, or ``None``\n        for no limit (an override of 0).\n    task_quota_from: Where the task quota came from.\n    runs_from: The same for the run cap.",
         "properties": {
           "runs_from": {
-            "title": "Runs From",
-            "type": "string"
+            "$ref": "#/components/schemas/LimitSourceOut"
           },
           "runs_per_user": {
             "anyOf": [
@@ -402,8 +433,7 @@
             "title": "Runs Per User"
           },
           "task_quota_from": {
-            "title": "Task Quota From",
-            "type": "string"
+            "$ref": "#/components/schemas/LimitSourceOut"
           },
           "task_quota_per_year": {
             "anyOf": [

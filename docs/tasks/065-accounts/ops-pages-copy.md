@@ -134,7 +134,7 @@ chips except the ones named here.
 
 ## Not in this slice
 
-The audit log on the pages; editing the domain table; cohorts and the revision-2 pages. The
+The audit log on the pages; editing the domain table; the revision-2 pages (cohorts landed in revision 4, § Cohorts below). The
 explainer's revision 2 is a later task.
 
 ## Rulings during the build (lead, 2026-11-17)

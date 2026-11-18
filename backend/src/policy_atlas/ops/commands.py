@@ -426,11 +426,15 @@ class QuotaChange(Record):
 
     def summary(self) -> str:
         """Render quota override changes, using inherit for a cleared value."""
+        return f"quota for {self.audit_target()}"
+
+    def audit_target(self) -> str:
+        """The audit row's target: who, then each value before and after."""
         def show(value: int | None) -> str:
             return "inherit" if value is None else str(value)
 
         return (
-            f"quota for {self.who}: tasks per year {show(self.task_quota_before)} → "
+            f"{self.who}: tasks per year {show(self.task_quota_before)} → "
             f"{show(self.task_quota_after)}, simultaneous tasks {show(self.runs_before)} → "
             f"{show(self.runs_after)}"
         )
@@ -1700,12 +1704,14 @@ def add_to_cohort(conn: Connection, *, target: Cohort, user_id: str) -> CohortMe
     """
     if _lock_user(conn, user_id) is None:
         raise NotFound(f"no user {user_id}")
+    # RETURNING, not rowcount: an INSERT's rowcount is -1 through SQLAlchemy here.
     added = conn.execute(
         pg_insert(cohort_member)
         .values(cohort_id=target.cohort_id, user_id=user_id, added_at=_now())
         .on_conflict_do_nothing()
-    )
-    return CohortMembership(cohort=target, user_id=user_id, added=True, changed=added.rowcount == 1)
+        .returning(cohort_member.c.user_id)
+    ).first()
+    return CohortMembership(cohort=target, user_id=user_id, added=True, changed=added is not None)
 
 
 def remove_from_cohort(conn: Connection, *, target: Cohort, user_id: str) -> CohortMembership:
@@ -1761,7 +1767,8 @@ def approve_request(
         The stamped request and its enrolment.
 
     Raises:
-        OpsError: If the row is missing or was already approved.
+        NotFound: If no request has that id.
+        OpsError: If the request was already approved.
         EnrolledElsewhere: If the address belongs to another organisation.
     """
     row = (
@@ -1772,7 +1779,7 @@ def approve_request(
         .one_or_none()
     )
     if row is None:
-        raise OpsError(f"no waitlist request {entry_id}")
+        raise NotFound(f"no waitlist request {entry_id}")
     if row["account_created_at"] is not None:
         raise OpsError("already invited")
     enrolment = ensure_account_enrolled(

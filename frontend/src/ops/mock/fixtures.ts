@@ -93,7 +93,7 @@ export function peopleFixtures(): Person[] {
       runs_per_user: null,
       tasks_this_year: 31,
       // An administrator is exempt from both limits.
-      limits: { task_quota_per_year: null, runs_per_user: null, task_quota_from: "administrator", runs_from: "administrator" },
+      limits: { task_quota_per_year: null, runs_per_user: null, task_quota_from: { kind: "administrator" }, runs_from: { kind: "administrator" } },
       cohorts: [{ cohort_id: PANEL, name: "Priority panel" }],
     },
     {
@@ -109,7 +109,7 @@ export function peopleFixtures(): Person[] {
       task_quota_per_year: null,
       runs_per_user: null,
       tasks_this_year: 12,
-      limits: { task_quota_per_year: 100, runs_per_user: 3, task_quota_from: "Nesta", runs_from: "the default" },
+      limits: { task_quota_per_year: 100, runs_per_user: 3, task_quota_from: { kind: "organisation", name: "Nesta" }, runs_from: { kind: "default" } },
       cohorts: [],
     },
     {
@@ -125,7 +125,7 @@ export function peopleFixtures(): Person[] {
       task_quota_per_year: 0,
       runs_per_user: 6,
       tasks_this_year: 64,
-      limits: { task_quota_per_year: null, runs_per_user: 6, task_quota_from: "this person", runs_from: "this person" },
+      limits: { task_quota_per_year: null, runs_per_user: 6, task_quota_from: { kind: "person" }, runs_from: { kind: "person" } },
       cohorts: [],
     },
     {
@@ -141,7 +141,7 @@ export function peopleFixtures(): Person[] {
       task_quota_per_year: null,
       runs_per_user: null,
       tasks_this_year: 3,
-      limits: { task_quota_per_year: 50, runs_per_user: 5, task_quota_from: "the default", runs_from: "Policy Lab" },
+      limits: { task_quota_per_year: 50, runs_per_user: 5, task_quota_from: { kind: "default" }, runs_from: { kind: "cohort", name: "Policy Lab" } },
       cohorts: [],
     },
     {
@@ -157,7 +157,7 @@ export function peopleFixtures(): Person[] {
       task_quota_per_year: null,
       runs_per_user: null,
       tasks_this_year: 0,
-      limits: { task_quota_per_year: 50, runs_per_user: 3, task_quota_from: "the default", runs_from: "the default" },
+      limits: { task_quota_per_year: 50, runs_per_user: 3, task_quota_from: { kind: "default" }, runs_from: { kind: "default" } },
       cohorts: [],
     },
     {
@@ -173,7 +173,7 @@ export function peopleFixtures(): Person[] {
       task_quota_per_year: null,
       runs_per_user: null,
       tasks_this_year: 7,
-      limits: { task_quota_per_year: 100, runs_per_user: 3, task_quota_from: "Nesta", runs_from: "the default" },
+      limits: { task_quota_per_year: 100, runs_per_user: 3, task_quota_from: { kind: "organisation", name: "Nesta" }, runs_from: { kind: "default" } },
       cohorts: [],
     },
   ];

@@ -219,7 +219,7 @@ export function CohortsView() {
         >
           {remove.isError && (
             <p role="alert" className="mt-3 text-body text-red">
-              Could not delete the cohort. Try again.
+              {remove.error?.message || "Could not delete the cohort. Try again."}
             </p>
           )}
         </Dialog>

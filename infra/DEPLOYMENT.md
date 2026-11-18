@@ -503,6 +503,10 @@ database role.
    Only the CLI can grant `is_ops`; no web page can.
 4. Set `ops.desired_count` to 1 and deploy again.
 
+   The committed staging config already has `desired_count` 1. On an
+   environment where the ops service has never run, set it to 0 for step 2,
+   then back to 1.
+
 **Self-signup.** `self_signup.enabled` in `pa_config.json` is false by default
 (`max_per_hour` caps the invitations the sweep sends, and its failed attempts, per hour; an enrolment of an existing account sends nothing and is not capped). Before switching it on, make sure the
 Nesta organisation exists and has its domain:
@@ -520,12 +524,16 @@ WAF (web application firewall) rate rule from task 064b is live.
 - Email (SES): set `email.enabled` to false and deploy. The pool goes back to
   the default sender and templates.
 - Ops service: set `ops.desired_count` to 0 and deploy. If the schema must go
-  too, stop both services first, then run the downgrade that drops `is_ops`,
-  `invited_at`, the four quota columns and `ops_action`. The public API reads
-  the quota columns, so it must be stopped.
+  too, stop both services first, then run `alembic downgrade b1e7c3a9d5f2` (the
+  revision before task 065). It removes all three 065 migrations, newest first:
+  the first-sign-in and rejected-request columns, the cohort tables, then
+  `is_ops`, `invited_at`, the four quota columns, `ops_action`, the domain table,
+  the waitlist stamp columns, the trigger and the `pa_ops` role. The public API
+  reads the quota and cohort tables and writes the first-sign-in column, so it
+  must be stopped, and the API image you start afterwards must be one from
+  before task 065.
 - Self-signup: set `self_signup.enabled` to false and deploy. The sweep stops.
-  If the schema must go, stop the ops service, then run the downgrade that drops
-  the domain table and the waitlist columns.
+  Its schema is removed only by the full downgrade above.
 
 A rollback never drops a table while a service that reads it is running.
 

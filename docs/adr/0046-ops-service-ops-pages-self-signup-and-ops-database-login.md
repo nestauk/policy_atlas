@@ -111,8 +111,12 @@ surface, so decision 4 and the deferred list are amended below rather than left 
    `SELECT, INSERT` and column-level `UPDATE` on `app_user` and `organisation`; `SELECT` on
    `organisation_domain`; `SELECT` and column-level `UPDATE` on `waitlist_entry` (the two stamp
    columns); `SELECT, INSERT` on `ops_action`; `SELECT` and column-level `UPDATE` on `task` and
-   `project`; `SELECT, DELETE` on `project_membership` (the one delete: moving a person severs
-   their cross-owner memberships); nothing on `capability_run`, `alembic_version` or any other
+   `project`; `SELECT, DELETE` on `project_membership` (moving a person severs their cross-owner
+   memberships); `SELECT, INSERT, DELETE` on `cohort` and `cohort_member` and `UPDATE` on the
+   seven cohort detail and quota columns (B14); `UPDATE (rejected_at)` and `DELETE` on
+   `waitlist_entry`, with a `BEFORE DELETE` trigger that refuses this login's delete of a row
+   that is not rejected (B15; amended at the review stack, 2026-11-18, contract revision 4.1);
+   nothing on `capability_run`, `alembic_version` or any other
    table. A `BEFORE INSERT OR UPDATE` trigger on `app_user` refuses this login setting
    `is_admin` or `is_ops` to true, by an update or by inserting a row that already carries the
    flag. A test reads the grants back from the catalogue and compares them to this list. The grants live in a migration so a reviewer can read them, a later migration that

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable, Generator
+from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
@@ -26,6 +27,7 @@ from policy_atlas.api.contract.ops import (
     CohortOut,
     CohortRef,
     CohortSave,
+    LimitSourceOut,
     LimitsOut,
     OrganisationCreate,
     OrganisationOut,
@@ -171,7 +173,8 @@ def _person_out(
         last_task_at=(last_tasks or {}).get(user_id),
         limits=LimitsOut(
             task_quota_per_year=limits.task_quota, runs_per_user=limits.runs,
-            task_quota_from=limits.task_quota_from, runs_from=limits.runs_from,
+            task_quota_from=LimitSourceOut(**asdict(limits.task_quota_from)),
+            runs_from=LimitSourceOut(**asdict(limits.runs_from)),
         ),
         cohorts=(cohorts or {}).get(user_id, []),
     )
@@ -253,15 +256,12 @@ def set_organisation_quota(
 ) -> OrganisationOut:
     """Set or clear an organisation's quota overrides."""
     try:
-        commands.set_quota(conn, org_id=org_id, **body.model_dump())
+        change = commands.set_quota(conn, org_id=org_id, **body.model_dump())
     except NotFound as exc:
         raise HTTPException(404, str(exc)) from None
     except OpsError as exc:
         raise ApiConflict("ops_refused", str(exc)) from None
-    action_id = commands.record_action(conn, actor=actor.user_id, action="org.quota",
-                                       target=str(org_id), outcome="ok")
-    _queue_log(request, actor=actor.user_id, action="org.quota", target=str(org_id),
-               outcome="ok", action_id=action_id)
+    _audit(request, conn, actor=actor.user_id, action="org.quota", target=change.audit_target())
     return _organisation_out(conn, org_id)
 
 
@@ -321,10 +321,11 @@ def set_cohort_quota(
 ) -> CohortOut:
     """Set or clear a cohort's quota overrides."""
     try:
-        commands.set_quota(conn, cohort_id=cohort_id, **body.model_dump())
+        change = commands.set_quota(conn, cohort_id=cohort_id, **body.model_dump())
     except NotFound as exc:
         raise HTTPException(404, str(exc)) from None
-    _audit(request, conn, actor=actor.user_id, action="cohort.quota", target=str(cohort_id))
+    _audit(request, conn, actor=actor.user_id, action="cohort.quota",
+           target=change.audit_target())
     return _cohort_rows(conn, cohort_id)[0]
 
 
@@ -368,24 +369,18 @@ def list_people(
     subjects = [str(row["user_id"]) for row in rows]
     # ponytail: the people list is under one hundred rows; this grouped task query
     # and one effective-limits lookup per person are sufficient, with no cache.
-    task_counts = {
-        str(row["owner_user_id"]): int(row["count"])
-        for row in conn.execute(
-            select(task.c.owner_user_id, func.count().label("count"))
-            .where(task.c.owner_user_id.in_(subjects))
-            .where(created_in_last_days(365))
-            .group_by(task.c.owner_user_id)
-        ).mappings()
-    } if subjects else {}
-    cohorts = _cohorts_of(conn, subjects)
-    last_tasks = {
-        str(owner): at
-        for owner, at in conn.execute(
-            select(task.c.owner_user_id, func.max(task.c.created_at))
-            .where(task.c.owner_user_id.in_(subjects))
-            .group_by(task.c.owner_user_id)
+    task_rows = conn.execute(
+        select(
+            task.c.owner_user_id,
+            func.count().filter(created_in_last_days(365)),
+            func.max(task.c.created_at),
         )
-    } if subjects else {}
+        .where(task.c.owner_user_id.in_(subjects))
+        .group_by(task.c.owner_user_id)
+    ).all() if subjects else []
+    task_counts = {str(owner): int(count) for owner, count, _ in task_rows}
+    last_tasks = {str(owner): at for owner, _, at in task_rows}
+    cohorts = _cohorts_of(conn, subjects)
     return [
         _person_out(conn, row, settings=settings, task_counts=task_counts, cohorts=cohorts,
                     last_tasks=last_tasks)
@@ -435,17 +430,23 @@ def create_person(
 def _bulk(
     *, request: Request, actor: str, conn: Connection, user_ids: list[str], action: str,
     run: Callable[[str], str], skip: Callable[[Exception], bool] | None = None,
+    target_of: Callable[[str], str] = str,
 ) -> BulkOut:
-    """Run a command per subject in savepoints and audit every non-skipped result."""
+    """Run a command per subject in savepoints and audit every non-skipped result.
+
+    ``target_of`` turns a subject into the audit row's target, when the row
+    must say more than who (the cohort, or a quota's before and after).
+    """
     results: list[ActionResult] = []
     for user_id in user_ids:
         try:
             with conn.begin_nested():
                 message = run(user_id)
+                target = target_of(user_id)
                 action_id = commands.record_action(
-                    conn, actor=actor, action=action, target=user_id, outcome="ok"
+                    conn, actor=actor, action=action, target=target, outcome="ok"
                 )
-            _queue_log(request, actor=actor, action=action, target=user_id, outcome="ok",
+            _queue_log(request, actor=actor, action=action, target=target, outcome="ok",
                        action_id=action_id)
             results.append(ActionResult(user_id=user_id, outcome="ok", message=message,
                                         action_id=action_id))
@@ -455,10 +456,11 @@ def _bulk(
                 results.append(ActionResult(user_id=user_id, outcome="too_soon",
                                             message=str(exc), action_id=None))
                 continue
+            target = target_of(user_id)
             action_id = commands.record_action(
-                conn, actor=actor, action=action, target=user_id, outcome="failed"
+                conn, actor=actor, action=action, target=target, outcome="failed"
             )
-            _queue_log(request, actor=actor, action=action, target=user_id, outcome="failed",
+            _queue_log(request, actor=actor, action=action, target=target, outcome="failed",
                        action_id=action_id)
             # A refusal is written for the operator; anything else (a database
             # or Cognito error) stays out of the browser.
@@ -540,12 +542,21 @@ def set_people_quota(
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> BulkOut:
     """Set the same quota overrides for every selected person."""
-    return _bulk(
-        request=request, actor=actor.user_id, conn=conn, user_ids=body.user_ids,
-        action="person.quota", run=lambda user_id: commands.set_quota(
+    # Each change's before and after, for its audit row; a failure has none.
+    targets: dict[str, str] = {}
+
+    def run(user_id: str) -> str:
+        change = commands.set_quota(
             conn, user_id=user_id, task_quota_per_year=body.task_quota_per_year,
             runs_per_user=body.runs_per_user,
-        ).summary(),
+        )
+        targets[user_id] = change.audit_target()
+        return change.summary()
+
+    return _bulk(
+        request=request, actor=actor.user_id, conn=conn, user_ids=body.user_ids,
+        action="person.quota", run=run,
+        target_of=lambda user_id: targets.get(user_id, user_id),
     )
 
 
@@ -566,7 +577,8 @@ def add_people_to_cohort(
     target = _cohort(conn, body.cohort_id)
     return _bulk(request=request, actor=actor.user_id, conn=conn, user_ids=body.user_ids,
                  action="cohort.add", run=lambda user_id: commands.add_to_cohort(
-                     conn, target=target, user_id=user_id).summary())
+                     conn, target=target, user_id=user_id).summary(),
+                 target_of=lambda user_id: f"{user_id}/cohort/{target.cohort_id}")
 
 
 @router.post("/people/cohort-remove", response_model=BulkOut)
@@ -578,7 +590,8 @@ def remove_people_from_cohort(
     target = _cohort(conn, body.cohort_id)
     return _bulk(request=request, actor=actor.user_id, conn=conn, user_ids=body.user_ids,
                  action="cohort.remove", run=lambda user_id: commands.remove_from_cohort(
-                     conn, target=target, user_id=user_id).summary())
+                     conn, target=target, user_id=user_id).summary(),
+                 target_of=lambda user_id: f"{user_id}/cohort/{target.cohort_id}")
 
 
 @router.get("/requests", response_model=RequestsOut)
@@ -628,8 +641,7 @@ def list_requests(
             ).scalar_one_or_none()
         items.append(RequestOut(
             **row,
-            status="invited" if row["account_created_at"] is not None else
-            "rejected" if row["rejected_at"] is not None else
+            status="rejected" if row["rejected_at"] is not None else
             "check" if check else "waiting",
             note=note,
         ))
@@ -689,6 +701,8 @@ def approve_request(
         approved = commands.approve_request(
             conn, cognito, pool_id=pool_id, entry_id=entry_id, org=org, now=_now()
         )
+    except NotFound as exc:
+        raise HTTPException(404, str(exc)) from None
     except EnrolledElsewhere as exc:
         raise ApiConflict("enrolled_elsewhere", str(exc)) from None
     except OpsError as exc:

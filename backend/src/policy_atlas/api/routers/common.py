@@ -60,17 +60,29 @@ _RESOLVE = object()
 ACTIVE_WALK_STATUSES: tuple[str, ...] = ("running", "paused")
 
 
+LimitKind = Literal["person", "cohort", "organisation", "default", "administrator"]
+
+
+@dataclass(frozen=True)
+class LimitSource:
+    """Where one limit came from: a fixed kind, plus the cohort's or organisation's name."""
+
+    kind: LimitKind
+    name: str | None = None
+
+
 @dataclass(frozen=True)
 class Limits:
     """Effective task and simultaneous-run limits for one person."""
 
     task_quota: int | None
     runs: int | None
-    # Where each limit came from, for the ops pages: "this person", a cohort's
-    # or an organisation's name, "the default" or "administrator". Not part of
-    # equality: callers compare the numbers.
-    task_quota_from: str = field(default="the default", compare=False)
-    runs_from: str = field(default="the default", compare=False)
+    # Where each limit came from, for the ops pages. Not part of equality:
+    # callers compare the numbers.
+    task_quota_from: LimitSource = field(
+        default_factory=lambda: LimitSource("default"), compare=False
+    )
+    runs_from: LimitSource = field(default_factory=lambda: LimitSource("default"), compare=False)
 
 
 def parentless_walk() -> ColumnElement[bool]:
@@ -176,7 +188,10 @@ def effective_limits(conn: Connection, user_id: str, *, settings: Settings) -> L
                 cohort_member.join(cohort, cohort.c.cohort_id == cohort_member.c.cohort_id)
             )
             .where(cohort_member.c.user_id == user_id, column.is_not(None))
-            .order_by(cohort_member.c.added_at.desc(), cohort.c.name)
+            # Equal join times (rare: the command stamps each with the clock)
+            # fall back to the cohort id, which never changes, not the name,
+            # which an operator may rename.
+            .order_by(cohort_member.c.added_at.desc(), cohort.c.cohort_id)
             .limit(1)
         )
 
@@ -193,25 +208,25 @@ def effective_limits(conn: Connection, user_id: str, *, settings: Settings) -> L
         .where(app_user.c.user_id == user_id)
     ).mappings().one_or_none()
     if row is None:
-        return _limits(
-            (settings.task_quota_per_year, "the default"), (settings.runs_per_user, "the default")
-        )
+        default = LimitSource("default")
+        return _limits((settings.task_quota_per_year, default), (settings.runs_per_user, default))
     if row["is_admin"]:
         # Administrators are exempt from both limits (owner rulings
         # 2026-11-16: the task quota in 064a Q8, the run cap in 064a's
         # review); an override on their row does not pull them back under.
-        return _limits((0, "administrator"), (0, "administrator"))
+        admin = LimitSource("administrator")
+        return _limits((0, admin), (0, admin))
 
     def resolve(own: int | None, cohort_column: ColumnElement[Any], org_value: int | None,
-                default: int) -> tuple[int, str]:
+                default: int) -> tuple[int, LimitSource]:
         if own is not None:
-            return own, "this person"
+            return own, LimitSource("person")
         found = conn.execute(from_cohort(cohort_column)).one_or_none()
         if found is not None:
-            return int(found[0]), str(found[1])
+            return int(found[0]), LimitSource("cohort", str(found[1]))
         if org_value is not None:
-            return org_value, str(row["org_name"])
-        return default, "the default"
+            return org_value, LimitSource("organisation", str(row["org_name"]))
+        return default, LimitSource("default")
 
     return _limits(
         resolve(row["user_task_quota"], cohort.c.task_quota_per_year, row["org_task_quota"],
@@ -221,7 +236,7 @@ def effective_limits(conn: Connection, user_id: str, *, settings: Settings) -> L
     )
 
 
-def _limits(task_quota: tuple[int, str], runs: tuple[int, str]) -> Limits:
+def _limits(task_quota: tuple[int, LimitSource], runs: tuple[int, LimitSource]) -> Limits:
     """Build limits from (value, source) pairs; a stored 0 means no limit."""
     return Limits(
         task_quota=None if task_quota[0] == 0 else task_quota[0],

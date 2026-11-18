@@ -57,14 +57,13 @@ def test_065_checks_trigger_and_nologin_role(engine: Engine) -> None:
                     "CURRENT_TIMESTAMP, -1)"
                 )
             )
-        assert (
-            conn.execute(
-                text(
-                    "SELECT 1 FROM pg_trigger WHERE tgname = 'trg_app_user_refuse_privilege_grant'"
-                )
-            ).scalar_one()
-            == 1
-        )
+        for trigger in (
+            "trg_app_user_refuse_privilege_grant",
+            "trg_waitlist_entry_refuse_unrejected_delete",
+        ):
+            assert conn.execute(
+                text("SELECT 1 FROM pg_trigger WHERE tgname = :name"), {"name": trigger}
+            ).scalar_one() == 1
         # The role is cluster-wide: another test database's login fixture may
         # hold LOGIN on it at this moment, so only its existence is asserted.
         assert conn.execute(

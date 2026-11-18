@@ -3743,14 +3743,19 @@ Found by the 064a review stack (2026-11-16) and left as seams:
   and once on CI (`test_check_steps`, run 43921736642), the dispatch failing with
   `uq_event_log_task_sequence` after the children finished. `dev`'s last twelve CI runs
   were green and 064a adds no event writer, so it is a pre-existing ceiling the ToC
-  fan-out (width 6, wider than the longlist's 4) never re-checked. **Fixed in task 065
-  (2026-11-18, owner):** `append` takes a transaction-scoped per-task advisory lock (the
-  two-key form, first key `EVENT_LOG_LOCK_SPACE`) before reading the max, so writers queue;
-  the retry loop stays as a safety net. Pinned by
-  `test_more_concurrent_writers_than_retries_all_append_in_order` (40 writers on one task;
-  it fails without the lock). The lock is held to the end of the caller's transaction, so
-  an append inside a long transaction would hold others back; none was seen in the runtime,
-  theory-of-change and longlist suites.
+  fan-out (width 6, wider than the longlist's 4) never re-checked. **Still open (task 065 review stack, 2026-11-18, owner).** A
+  transaction-scoped per-task advisory lock before the max read fixed the race, but it is
+  held to the end of the caller's transaction, and a trace of all 88 append sites found
+  three that hold it across slow work or in the wrong order: `assess/screen.py:700`
+  appends for retracted documents and then runs the whole stage-1 LLM screening in the same
+  transaction; `sourcing/acquire.py:886/940/1005` append and then embed (a remote call with
+  backoff); and `runner.py:1939` / `option_search.py:410` take the run row then append,
+  while `continuation.py:464` appends then updates the run row (a possible deadlock). Any
+  steering or stop call on the task would hang behind the first two. The lock was reverted
+  before the PR. The fix (move those appends after the slow work, or allocate the sequence
+  outside the caller's transaction, then add the lock) is its own slice. Until then the
+  theory-of-change tests run with 256 retries through an autouse fixture
+  (`tests/theory_of_change/conftest.py`), so this known ceiling does not fail them.
 
 ## Firewall and CAPTCHA (task 064b seams)
 
@@ -3823,3 +3828,13 @@ recorded above under their own entries.
   any name. The code does (a) (keep C3, never rename an existing account). Options and the
   recommendation are in `docs/tasks/065-accounts/verification.md` § Owner decisions
   raised by the stack, item 1. Reopen when the owner rules.
+
+## Ops pages scale (task 065 review stack, 2026-11-18)
+
+- **People list costs about three queries per person.** `list_people` calls
+  `effective_limits` once per person, and each call reads the person's cohorts. Fine at
+  today's size; resolve the limits for the whole list in one or two grouped queries when
+  the list reaches a few hundred people.
+- **Bulk approve and reject send one request per row**, and each one reloads every ops
+  list. Add a server-side bulk route (like `people/*`) or reload once after the loop when
+  operators handle tens of requests at a time.

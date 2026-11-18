@@ -187,7 +187,7 @@ function route(method: string, path: string, body: Record<string, unknown>, quer
       task_quota_per_year: null,
       runs_per_user: null,
       tasks_this_year: 0,
-      limits: { task_quota_per_year: 50, runs_per_user: 3, task_quota_from: "the default", runs_from: "the default" },
+      limits: { task_quota_per_year: 50, runs_per_user: 3, task_quota_from: { kind: "default" }, runs_from: { kind: "default" } },
       cohorts: [],
     };
     opsMock.people.push(created);

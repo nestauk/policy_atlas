@@ -8,6 +8,7 @@ import { useAuth } from "../auth";
 import type { AuthApi } from "../auth/types";
 
 export type Person = components["schemas"]["PersonOut"];
+export type LimitSource = components["schemas"]["LimitSourceOut"];
 export type Organisation = components["schemas"]["OrganisationOut"];
 export type AccessRequest = components["schemas"]["RequestOut"];
 export type Requests = components["schemas"]["RequestsOut"];
@@ -64,6 +65,13 @@ export async function unwrap<T>(
   return result.data;
 }
 
+/** Resolve a call that answers 204 No Content, or throw `OpsApiError` with the server's code and message. */
+export async function unwrapEmpty(
+  call: Promise<{ error?: unknown; response: Response }>,
+): Promise<void> {
+  await unwrap(call.then((result) => (result.response.ok ? { ...result, data: null } : result)));
+}
+
 /** The HTTP status behind a query or mutation error, or null. */
 export function errorStatus(error: unknown): number | null {
   return error instanceof OpsApiError ? error.status : null;
@@ -111,12 +119,9 @@ export function useCohortQuota(cohortId: string) {
 }
 
 export function useDeleteCohort() {
-  return useOpsAction(async (client, cohortId: string) => {
-    const { response } = await client.DELETE("/api/v1/ops/cohorts/{cohort_id}", {
-      params: { path: { cohort_id: cohortId } },
-    });
-    if (!response.ok) throw new OpsApiError(response.status, "", "");
-  });
+  return useOpsAction((client, cohortId: string) =>
+    unwrapEmpty(client.DELETE("/api/v1/ops/cohorts/{cohort_id}", { params: { path: { cohort_id: cohortId } } })),
+  );
 }
 
 /** Add the people to a cohort, or take them out of it. */
@@ -188,16 +193,25 @@ export function useOrganisationQuota(orgId: string) {
   );
 }
 
+/** Where a limit came from, in the pages' words: "this person", a name, "the default", "administrator". */
+export function sourceLabel(source: LimitSource): string {
+  if (source.kind === "person") return "this person";
+  if (source.kind === "default") return "the default";
+  if (source.kind === "administrator") return "administrator";
+  return source.name ?? source.kind;
+}
+
 /**
  * The settings defaults, which no route reports directly: the limits of a
  * person with no override of their own and none from their organisation
  * and who is not an administrator (exempt from both).
- * `undefined` when no such person is listed.
+ * `undefined` when no such person is listed. Matched on the source's fixed
+ * kind, never its name: a cohort may be called "the default".
  */
 export function inferDefaults(
   people: readonly Person[],
 ): { tasks: number | null | undefined; runs: number | null | undefined } {
-  const tasks = people.find((person) => person.limits.task_quota_from === "the default");
-  const runs = people.find((person) => person.limits.runs_from === "the default");
+  const tasks = people.find((person) => person.limits.task_quota_from.kind === "default");
+  const runs = people.find((person) => person.limits.runs_from.kind === "default");
   return { tasks: tasks?.limits.task_quota_per_year, runs: runs?.limits.runs_per_user };
 }
