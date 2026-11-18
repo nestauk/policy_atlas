@@ -16,18 +16,19 @@ describe("the ops shell", () => {
     expect(await screen.findByRole("heading", { name: "People" })).toBeInTheDocument();
   });
 
-  it("has its own top bar: the Ops chip, the three sections, the waiting count and the way back", async () => {
+  it("has its own top bar: the OPS chip, the three sections, the waiting count and the account icon", async () => {
     renderOps("/people");
     const nav = screen.getByRole("navigation");
-    expect(within(nav).getByText("Ops")).toBeInTheDocument();
+    expect(within(nav).getByText("OPS")).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "People" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Organisations" })).toBeInTheDocument();
     // One request is waiting in the fixtures.
     expect(await within(nav).findByRole("link", { name: "Requests, 1 waiting" })).toBeInTheDocument();
-    expect(within(nav).getByRole("link", { name: "Back to Policy Atlas" })).toBeInTheDocument();
+    expect(within(nav).queryByRole("link", { name: "Back to Policy Atlas" })).toBeNull();
     expect(within(nav).queryByText(/New|Tasks|Projects/)).toBeNull();
-    // The signed-in person's initials (Priya Shah).
-    expect(await within(nav).findByRole("button", { name: "Account" })).toHaveTextContent("PS");
+    // The account icon opens who is signed in (Priya Shah).
+    await userEvent.setup().click(await within(nav).findByRole("button", { name: "Account" }));
+    expect(await screen.findByText("Priya Shah", { selector: "p" })).toBeInTheDocument();
   });
 
   it("on a 403 shows exactly the two sentences, with no retry", async () => {

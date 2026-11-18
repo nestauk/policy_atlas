@@ -183,6 +183,11 @@ is accepted and is now part of the script:
   quota.", "Could not finish the action.", "Could not approve the request.", "Could not save
   the quota.". A failed form submit says "Could not create the account. Try again." (or "the
   organisation") under the form; its own button is the retry.
-- The top bar: "Ops" follows the wordmark in the wordmark's type and Navy; no chip.
+- The top bar (owner pass 2, 2026-11-18) matches the main app's: the wordmark, then an "OPS"
+  chip in BETA's shape tinted Nesta orange; People, Organisations and Requests pinned right;
+  the account icon (the main app's person glyph) at the far right opens the name, email and
+  Sign out. No "Back to Policy Atlas" link.
+- Organisation quota help: "Applies to everyone in <org> who doesn't have a personalised
+  quota."
 - Organisations: no "Move a task or project" panel (removed by the owner; the CLI keeps
   `rows assign`).

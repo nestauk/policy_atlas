@@ -74,7 +74,7 @@ describe("Set a quota", () => {
     renderOps(`/organisations/${POLICY_LAB}/quota`);
     expect(await screen.findByRole("heading", { name: "Quota for Policy Lab" })).toBeInTheDocument();
     expect(within(screen.getByRole("main")).getByRole("link", { name: "Organisations" })).toBeInTheDocument();
-    expect(screen.getByText("Applies to everyone in Policy Lab who has no number of their own.")).toBeInTheDocument();
+    expect(screen.getByText("Applies to everyone in Policy Lab who doesn't have a personalised quota.")).toBeInTheDocument();
     expect(screen.getByLabelText("Tasks per year")).toHaveAttribute("placeholder", "Inherits the default · 50");
     expect(screen.getByLabelText("Simultaneous tasks")).toHaveValue("5");
     expect(screen.getByLabelText("Simultaneous tasks")).toHaveAccessibleDescription(

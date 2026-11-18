@@ -230,7 +230,7 @@ export function OrganisationQuotaView() {
       key={org.org_id}
       back={<PageBackLink to="/organisations">Organisations</PageBackLink>}
       title={`Quota for ${org.name}`}
-      line={`Applies to everyone in ${org.name} who has no number of their own.`}
+      line={`Applies to everyone in ${org.name} who doesn't have a personalised quota.`}
       initial={draftOf(org)}
       placeholders={{ tasks: inherits("the default", defaults.tasks), runs: inherits("the default", defaults.runs) }}
       who={WARNING_WHO.organisation(org.name)}

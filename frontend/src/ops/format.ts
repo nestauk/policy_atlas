@@ -61,15 +61,3 @@ export function plural(n: number, one: string, many = `${one}s`): string {
 export function orgInRefusal(message: string): string | null {
   return /is already in (.+?)\. Nothing was written/.exec(message)?.[1] ?? null;
 }
-
-/** The public app's address: this host without its `ops.` label. */
-export function productOrigin(location: Location = window.location): string {
-  return location.host.startsWith("ops.")
-    ? `${location.protocol}//${location.host.slice(4)}`
-    : location.origin;
-}
-
-/** The mail domain the invitations come from: the product's host. */
-export function productDomain(location: Location = window.location): string {
-  return location.hostname.startsWith("ops.") ? location.hostname.slice(4) : location.hostname;
-}
