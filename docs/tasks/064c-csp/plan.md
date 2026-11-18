@@ -1,11 +1,11 @@
 # Implementation plan: 064c-csp
 
-> Status: **draft 2 (2026-11-18)**, awaiting the owner's plan gate. Draft 1 was reviewed the
+> Status: **approved by the owner 2026-11-18, draft 2.** Draft 1 was reviewed the
 > same day by Codex (read-only, 4 findings, raw record in the gitignored `research/`), all
 > folded here: a review phase and its evidence (F1); a coupling test in place of the
 > "same shape" test, and `csp_mode` validated through the whole stack (F2); the exact dry-run
 > command (F3); the policy name checked free in both accounts (F4, done at plan time). Contract: [contract.md](contract.md) (revision 2, approved). Rubric:
-> [rubric.md](rubric.md). ADR: [0048](../../adr/0048-content-security-policy-and-security-headers-on-cloudfront.md), Proposed.
+> [rubric.md](rubric.md). ADR: [0048](../../adr/0048-content-security-policy-and-security-headers-on-cloudfront.md), Accepted 2026-11-18.
 > Problems S1 to S6 and the terms are defined in the contract and not restated here.
 > Executor routing follows `docs/agentic-ops/harness.md` § Agent-side model routing. The
 > build runs in a fresh conversation with task-cycle-build, opening on Phase 0.

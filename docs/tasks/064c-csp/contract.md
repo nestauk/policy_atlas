@@ -12,7 +12,8 @@ Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in [docs/specs/](../../
 > (F2); the deploy script does not read `csp_mode`, synth alone validates it (F3); the DNS
 > inventory recorded (F4); the `frame-ancestors`
 > and `frame-src` reasons corrected (F5, F6). · Plan approved (before implementation):
-> _pending_ · ADR: 0048 (to be drafted with the plan).
+> 2026-11-18 · owner (draft 2) · ADR:
+> [0048](../../adr/0048-content-security-policy-and-security-headers-on-cloudfront.md), Accepted 2026-11-18.
 
 ## Goal
 

@@ -1,6 +1,6 @@
 # ADR 0048 — A Content Security Policy and our own security headers on CloudFront, report-only before enforce
 
-- **Status:** Proposed — 2026-11-18 (task 064c, awaiting the owner's plan gate).
+- **Status:** Accepted — 2026-11-18 (owner, task 064c plan gate).
 - **Date:** 2026-11-18
 - **Task:** [064c-csp](../tasks/064c-csp/contract.md), third slice of the
   [064 security hardening programme](../tasks/064-security-hardening/programme.md).
