@@ -16,18 +16,16 @@ upsert that updates; this one only ever creates.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
 
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import MeOut, OrganisationRef
 from policy_atlas.api.deps import get_conn, get_current_user
-from policy_atlas.api.identity import sub_display
+from policy_atlas.api.identity import provision_user
 from policy_atlas.core.schema import app_user, organisation
 
 router = APIRouter(
@@ -57,15 +55,7 @@ def get_me(
     Returns:
         The caller's identity, with their organisation resolved by name.
     """
-    conn.execute(
-        pg_insert(app_user)
-        .values(
-            user_id=user.user_id,
-            display_name=sub_display(user.user_id),
-            created_at=datetime.now(UTC),
-        )
-        .on_conflict_do_nothing(index_elements=["user_id"])
-    )
+    provision_user(conn, user.user_id)
     row = conn.execute(
         select(
             app_user.c.user_id,

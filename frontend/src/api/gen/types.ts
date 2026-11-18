@@ -177,6 +177,79 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Profile
+         * @description Return the caller's onboarding profile.
+         *
+         *     Args:
+         *         user: The authenticated caller.
+         *         conn: Open database connection.
+         *
+         *     Returns:
+         *         The profile. ``completed_at`` is null until the form is completed.
+         */
+        get: operations["get_profile_api_v1_me_profile_get"];
+        /**
+         * Save Profile
+         * @description Complete the caller's profile, or edit a completed one.
+         *
+         *     ``completed_at`` keeps the time of the first completion. A later edit
+         *     replaces the answers and leaves that time unchanged.
+         *
+         *     Args:
+         *         payload: The validated answers.
+         *         user: The authenticated caller.
+         *         conn: Open database connection.
+         *
+         *     Returns:
+         *         The stored profile.
+         */
+        put: operations["save_profile_api_v1_me_profile_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/profile/skip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Skip Profile
+         * @description Record the caller's one "Skip for now".
+         *
+         *     Only the first skip is recorded: a second call changes nothing, so
+         *     ``skipped_once_at`` always holds the time of the first skip. The frontend
+         *     offers no skip when this time is set (``frontend/src/lib/profileGate.ts``).
+         *
+         *     Args:
+         *         user: The authenticated caller.
+         *         conn: Open database connection.
+         *
+         *     Returns:
+         *         The stored profile.
+         */
+        post: operations["skip_profile_api_v1_me_profile_skip_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects": {
         parameters: {
             query?: never;
@@ -8445,6 +8518,63 @@ export interface components {
             /** Plan Version */
             plan_version: number;
         };
+        /**
+         * UserProfileIn
+         * @description Inbound body for ``PUT /api/v1/me/profile``.
+         *
+         *     The first two questions (department with team type, and the main use) are
+         *     required. All other fields are optional.
+         */
+        UserProfileIn: {
+            /**
+             * Department
+             * @description A department code, or 'other'. A code, never free text.
+             */
+            department: string;
+            /**
+             * Department Other
+             * @description The department name that the user typed, when the code is 'other'.
+             */
+            department_other?: string | null;
+            /** Panel Opt In */
+            panel_opt_in?: boolean | null;
+            /**
+             * Primary Job
+             * @enum {string}
+             */
+            primary_job: "j1" | "j2" | "j3" | "j4" | "j5" | "j6" | "j7" | "other";
+            /** Secondary Job */
+            secondary_job?: ("j1" | "j2" | "j3" | "j4" | "j5" | "j6" | "j7" | "other") | null;
+            /**
+             * Team Type
+             * @enum {string}
+             */
+            team_type: "policy" | "analysis_evidence" | "strategy_finance" | "private_office" | "other";
+        };
+        /**
+         * UserProfileOut
+         * @description The caller's onboarding profile. Every field is null before the first answer.
+         */
+        UserProfileOut: {
+            /** Completed At */
+            completed_at?: string | null;
+            /** Department */
+            department?: string | null;
+            /** Department Other */
+            department_other?: string | null;
+            /** Panel Opt In */
+            panel_opt_in?: boolean | null;
+            /** Primary Job */
+            primary_job?: ("j1" | "j2" | "j3" | "j4" | "j5" | "j6" | "j7" | "other") | null;
+            /** Secondary Job */
+            secondary_job?: ("j1" | "j2" | "j3" | "j4" | "j5" | "j6" | "j7" | "other") | null;
+            /** Skipped Once At */
+            skipped_once_at?: string | null;
+            /** Source */
+            source?: ("signup" | "migration" | "waitlist") | null;
+            /** Team Type */
+            team_type?: ("policy" | "analysis_evidence" | "strategy_finance" | "private_office" | "other") | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -8822,6 +8952,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MeOut"];
+                };
+            };
+        };
+    };
+    get_profile_api_v1_me_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserProfileOut"];
+                };
+            };
+        };
+    };
+    save_profile_api_v1_me_profile_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserProfileIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    skip_profile_api_v1_me_profile_skip_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserProfileOut"];
                 };
             };
         };

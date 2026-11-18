@@ -13633,6 +13633,237 @@
         "title": "TurnDecisionOut",
         "type": "object"
       },
+      "UserProfileIn": {
+        "additionalProperties": false,
+        "description": "Inbound body for ``PUT /api/v1/me/profile``.\n\nThe first two questions (department with team type, and the main use) are\nrequired. All other fields are optional.",
+        "properties": {
+          "department": {
+            "description": "A department code, or 'other'. A code, never free text.",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9_]+$",
+            "title": "Department",
+            "type": "string"
+          },
+          "department_other": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The department name that the user typed, when the code is 'other'.",
+            "title": "Department Other"
+          },
+          "panel_opt_in": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Panel Opt In"
+          },
+          "primary_job": {
+            "enum": [
+              "j1",
+              "j2",
+              "j3",
+              "j4",
+              "j5",
+              "j6",
+              "j7",
+              "other"
+            ],
+            "title": "Primary Job",
+            "type": "string"
+          },
+          "secondary_job": {
+            "anyOf": [
+              {
+                "enum": [
+                  "j1",
+                  "j2",
+                  "j3",
+                  "j4",
+                  "j5",
+                  "j6",
+                  "j7",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secondary Job"
+          },
+          "team_type": {
+            "enum": [
+              "policy",
+              "analysis_evidence",
+              "strategy_finance",
+              "private_office",
+              "other"
+            ],
+            "title": "Team Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "department",
+          "team_type",
+          "primary_job"
+        ],
+        "title": "UserProfileIn",
+        "type": "object"
+      },
+      "UserProfileOut": {
+        "description": "The caller's onboarding profile. Every field is null before the first answer.",
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "department": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department"
+          },
+          "department_other": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department Other"
+          },
+          "panel_opt_in": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Panel Opt In"
+          },
+          "primary_job": {
+            "anyOf": [
+              {
+                "enum": [
+                  "j1",
+                  "j2",
+                  "j3",
+                  "j4",
+                  "j5",
+                  "j6",
+                  "j7",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Job"
+          },
+          "secondary_job": {
+            "anyOf": [
+              {
+                "enum": [
+                  "j1",
+                  "j2",
+                  "j3",
+                  "j4",
+                  "j5",
+                  "j6",
+                  "j7",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secondary Job"
+          },
+          "skipped_once_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skipped Once At"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "signup",
+                  "migration",
+                  "waitlist"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "team_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "policy",
+                  "analysis_evidence",
+                  "strategy_finance",
+                  "private_office",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Type"
+          }
+        },
+        "title": "UserProfileOut",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -14272,6 +14503,105 @@
         "summary": "Get Me",
         "tags": [
           "me"
+        ]
+      }
+    },
+    "/api/v1/me/profile": {
+      "get": {
+        "description": "Return the caller's onboarding profile.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The profile. ``completed_at`` is null until the form is completed.",
+        "operationId": "get_profile_api_v1_me_profile_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Profile",
+        "tags": [
+          "profile"
+        ]
+      },
+      "put": {
+        "description": "Complete the caller's profile, or edit a completed one.\n\n``completed_at`` keeps the time of the first completion. A later edit\nreplaces the answers and leaves that time unchanged.\n\nArgs:\n    payload: The validated answers.\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The stored profile.",
+        "operationId": "save_profile_api_v1_me_profile_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserProfileIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Save Profile",
+        "tags": [
+          "profile"
+        ]
+      }
+    },
+    "/api/v1/me/profile/skip": {
+      "post": {
+        "description": "Record the caller's one \"Skip for now\".\n\nOnly the first skip is recorded: a second call changes nothing, so\n``skipped_once_at`` always holds the time of the first skip. The frontend\noffers no skip when this time is set (``frontend/src/lib/profileGate.ts``).\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The stored profile.",
+        "operationId": "skip_profile_api_v1_me_profile_skip_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfileOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Skip Profile",
+        "tags": [
+          "profile"
         ]
       }
     },

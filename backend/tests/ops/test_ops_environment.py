@@ -29,7 +29,12 @@ import pytest
 from sqlalchemy import insert
 from sqlalchemy.engine import Connection
 
-from policy_atlas.core.schema import app_user
+from policy_atlas.core.schema import (
+    app_user,
+    feedback_event,
+    missing_paper_resolution,
+    user_profile,
+)
 from policy_atlas.ops import cli
 from policy_atlas.ops.environment import Target, resolve_target, verify_environment
 from policy_atlas.ops.errors import OpsError
@@ -57,6 +62,12 @@ def _accept(_: Target) -> bool:
 
 def _emit(_line: str) -> None:
     """Where the confirmation's own lines go; the test asserts on the prompt."""
+
+
+def _delete_every_user(conn: Connection) -> None:
+    """Empty ``app_user``, after the in-app feedback rows that reference it."""
+    for table in (missing_paper_resolution, feedback_event, user_profile, app_user):
+        conn.execute(table.delete())
 
 
 def _seed_subject(conn: Connection) -> str:
@@ -182,9 +193,9 @@ def test_environment_falls_back_to_confirmation_when_there_is_nothing_to_sample(
     """
     # The test database is shared across the suite, so the empty-table state
     # has to be made rather than assumed. The `conn` fixture rolls it back, and
-    # nothing else needs clearing: the tenancy foreign keys on `task` and
-    # `project` point at `organisation`, not at `app_user`.
-    conn.execute(app_user.delete())
+    # only the in-app feedback tables need clearing first: the tenancy foreign
+    # keys on `task` and `project` point at `organisation`, not at `app_user`.
+    _delete_every_user(conn)
     with cognito() as (client, stubber):
         expect_environment(stubber)
         verification = verify_environment(
@@ -214,7 +225,7 @@ def test_environment_refuses_a_non_empty_table_it_cannot_sample_a_subject_from(
     Policy Atlas subjects got the *softest* outcome the check has. It is a hard
     refusal, and ``confirm`` is wired to accept here to prove nothing lifts it.
     """
-    conn.execute(app_user.delete())
+    _delete_every_user(conn)
     org_id = make_org(conn)
     for user_id in ('sub"quote', "sub\\backslash"):
         conn.execute(
@@ -244,7 +255,7 @@ def test_environment_still_samples_the_filter_safe_subjects_beside_unsafe_rows(
     a real answer available from the rows it can ask about, and a refusal here
     would be a false alarm on a correct pairing.
     """
-    conn.execute(app_user.delete())
+    _delete_every_user(conn)
     org_id = make_org(conn)
     good = fresh_sub("cognito")
     ops_enrol(conn, user_id=good, org_id=org_id, email=unique_email("member"))
@@ -280,7 +291,7 @@ def test_no_flag_lifts_the_empty_database_confirmation(
     (``test_ops_structure``) and the prompt builder has no argument one could
     reach it through (``test_ops_cli``).
     """
-    conn.execute(app_user.delete())
+    _delete_every_user(conn)
     asked: list[str] = []
 
     def typed(answer: str) -> Callable[[str], str]:
@@ -318,7 +329,7 @@ def test_the_empty_database_confirmation_refuses_without_a_terminal(
     and needs no patching — which is also the point: a scripted or piped
     invocation cannot reach the write.
     """
-    conn.execute(app_user.delete())
+    _delete_every_user(conn)
     with cognito() as (client, stubber):
         expect_environment(stubber)
         with pytest.raises(OpsError, match="no terminal to confirm on"):

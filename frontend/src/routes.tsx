@@ -3,6 +3,7 @@ import { createBrowserRouter } from "react-router";
 
 import { AppShell } from "./views/AppShell";
 import { ArtefactView } from "./views/ArtefactView";
+import { ProfileView } from "./views/feedback/ProfileView";
 import { FindingsView } from "./views/FindingsView";
 import { HistoryView } from "./views/HistoryView";
 import { LandscapeSkeleton } from "./views/LandscapeViewSkeleton";
@@ -96,6 +97,8 @@ export const authenticatedRouter = createBrowserRouter([
           { path: "/projects/:projectId", element: <ProjectDetailView /> },
           { path: "/privacy", element: <PrivacyView /> },
           { path: "/terms", element: <TermsView /> },
+          // In-app feedback, element F: edit the onboarding answers.
+          { path: "/profile", element: <ProfileView /> },
 
           {
             path: "/tasks/:taskId",

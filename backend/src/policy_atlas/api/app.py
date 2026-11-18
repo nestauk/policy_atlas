@@ -277,6 +277,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
     )
     from policy_atlas.api.routers.longlist import router as longlist_router
     from policy_atlas.api.routers.me import router as me_router
+    from policy_atlas.api.routers.profile import router as profile_router
     from policy_atlas.api.routers.projects import router as projects_router
     from policy_atlas.api.routers.read_models import router as read_models_router
     from policy_atlas.api.routers.runs import router as runs_router
@@ -291,6 +292,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
 
     for router in (
         me_router,
+        profile_router,
         tasks_router,
         tasks_public_read_router,
         projects_router,
