@@ -133,9 +133,11 @@ can only lower the figure, never below 3,000; it is one constant and a normal de
 
 ## Staging live check (contract § Acceptance checks)
 
-**Pending** the owner's two hand steps in the staging account (`wafv2:ListAPIKeys` on the
-deploy role; `aws wafv2 create-api-key --scope REGIONAL --token-domains v3.policyatlas.uk`),
-then the push to `dev`. To record afterwards, in this order:
+**Hand steps done 2026-11-18.** The deploy role in both accounts (`GithubOIDCRole`) already
+allows `wafv2:ListAPIKeys`: it has `AdministratorAccess` (checked with
+`iam simulate-principal-policy`; wider than DEPLOYMENT.md § 1 asks for, a separate task). The
+owner created the staging API key for `v3.policyatlas.uk`; `list-api-keys` returns it with the
+account's CAPTCHA script URL. **Pending** the merge of #120 and this PR to `dev`. To record afterwards, in this order:
 
 1. W1: `aws wafv2 get-web-acl` lists the six rule names; the association points at the
    load balancer.
