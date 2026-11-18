@@ -16,7 +16,7 @@ address ranges, passwords, email addresses or account ids.
 | `make -C infra test` | pass | 2026-11-17 (Phase 7): 133 passed. |
 | `make deploy-build-guard-test` | pass | 2026-11-17 (Phase 9): the build guard, the migration waiter and the new deploy-order harness. |
 | `make verify` (after the delta review-stack fixes, uncommitted on `16d1af76`) | pass | 2026-11-18: backend 4960 passed, 1 skipped; infra 139 passed; drift-check OK; frontend 2069 tests and both builds. A run before it failed only on an import-order lint in the new theory-of-change fixture, fixed. |
-| `aws sesv2 get-account` (both profiles) | blocked | SSO tokens expired on 2026-11-17; the owner signs in and the build re-runs it. Both accounts had production access on 2026-11-16 (contract fact 1). |
+| `aws sesv2 get-account` (both profiles) | pass | 2026-11-18 (owner, live): both accounts have production access, both sender domains verified with DKIM; two template test sends from staging accepted. (Blocked on 2026-11-17: SSO tokens had expired.) |
 
 ## Checks beyond the build
 
