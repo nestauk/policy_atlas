@@ -82,3 +82,13 @@ The pages these decisions rest on (gathered 2026-11-18, more in the task's gitig
   CSP (recorded in `docs/deferred.md`).
 - Rollback: `csp_mode: "report-only"` and a deploy; a full revert restores the managed
   policy.
+
+## As built (2026-11-18)
+
+Built as decided, with no deviation. The component is
+`infra/infra/components/security_headers.py`: a pure function `content_security_policy`
+returns the CSP string, and the construct `SecurityHeaders` creates the policy
+`policy-atlas-v3-security-headers` and refuses an unknown `csp_mode` or a string over 1,783
+characters. The staging CSP is 457 characters and production's 422. The synth tests in
+`infra/tests/unit/test_security_headers.py` pin both environments' strings literally, so
+any change to a source shows as a failed test.

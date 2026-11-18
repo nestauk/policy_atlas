@@ -982,6 +982,132 @@ each `SearchString`, and pass it as `--rules file://rules.json`.
 **Cost.** About $11 a month per environment (the web ACL, six rules), plus
 $0.60 per million requests and $0.40 per thousand CAPTCHA puzzles.
 
+### Security headers (task 064c)
+
+**What it is.** CloudFront adds a set of security headers to every response
+of the web app: the pages, the scripts, the fonts, and the deep links that
+the error responses answer with `/index.html`. A **response headers policy**
+(`policy-atlas-v3-security-headers`, built by
+`infra/infra/components/security_headers.py` in the app stack) holds them and
+is attached to both cache behaviours (the default one and `/index.html`). It
+replaced AWS's managed `SECURITY_HEADERS` policy, which cannot be changed.
+The API's responses come from the load balancer and the ops pages (task 065)
+from the backend, so neither gets these headers. ADR 0048 has the reasoning.
+
+**The headers.**
+
+| Header | Value | Why |
+| --- | --- | --- |
+| `Strict-Transport-Security` (HSTS) | `max-age=31536000; includeSubDomains` | Browsers use only HTTPS for this host and every subdomain, for one year. |
+| `X-Frame-Options` | `SAMEORIGIN` | Only our own pages may show the app in a frame (older browsers). |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | Other sites see only our host name, never the page path. |
+| `X-XSS-Protection` | `1; mode=block` | Kept from the managed policy; modern browsers ignore it. |
+| `X-Content-Type-Options` | `nosniff` | The browser trusts the declared file type. |
+| `Permissions-Policy` | eight features off: accelerometer, camera, geolocation, gyroscope, magnetometer, microphone, payment, usb | The app uses none of them, so nothing on the page may. |
+| `Content-Security-Policy` or `Content-Security-Policy-Report-Only` | the CSP below | The browser refuses scripts, network calls and frames from any source not listed. |
+
+The first five have the managed policy's values and override flags (only
+`X-Content-Type-Options` replaces a value sent by the origin), with one
+change: HSTS adds `includeSubDomains`. The two new headers always replace an
+origin value, so a header from S3 can never weaken them.
+
+**HSTS `includeSubDomains` has a long tail.** A browser that saw it forces
+HTTPS on every subdomain of the domain for up to a year, even after a
+rollback. Every web name under `policyatlas.uk` and `v3.policyatlas.uk`
+served HTTPS on 2026-11-18. Do not add a plain-HTTP subdomain under either.
+
+**The CSP (Content Security Policy).** The component builds it from
+`pa_config.json`; it is never written by hand. Each directive lists the
+sources the browser may use for one kind of resource. `'self'` means the
+app's own host.
+
+| Directive | Sources | Where each source comes from |
+| --- | --- | --- |
+| `default-src` | `'self'` | Anything not listed below. |
+| `script-src` | `'self'`, plus `https://*.awswaf.com` when the CAPTCHA is on | The app bundle; the WAF CAPTCHA script (`backend.waf.captcha`). Never `'unsafe-inline'` or `'unsafe-eval'`. |
+| `style-src` | `'self' 'unsafe-inline'` | The app CSS; Radix (dialogs, sheets) adds a `<style>` element at run time. Inline styles cannot run code. |
+| `img-src` | `'self' data: blob:` | Upload previews (`blob:`) and theory-of-change image exports (`data:`). |
+| `font-src` | `'self'` | The self-hosted fonts under `/fonts/`. |
+| `connect-src` | `'self'`, `https://<backend_subdomain>.<domain_name>`, `https://cognito-idp.<aws_region>.amazonaws.com`, `https://<cognito_domain_prefix>.auth.<aws_region>.amazoncognito.com`, plus `https://*.awswaf.com` when the CAPTCHA is on | The API (including the progress stream); the Cognito sign-in settings; the Cognito token exchange and refresh; the CAPTCHA's own calls. |
+| `frame-src` | the Cognito hosted domain | The sign-in library's hidden-frame fallback. |
+| `frame-ancestors` | `'self'` | Who may show our page in a frame (same as `X-Frame-Options`). |
+| `form-action` | `'self'` | Where a form may post. |
+| `object-src` | `'none'` | No plug-ins. |
+| `base-uri` | `'self'` | No `<base>` tag pointing elsewhere. |
+
+Sign-in and sign-out are page redirects to Cognito, which a CSP does not
+govern. CloudFront allows at most 1,783 characters in the header; synth fails
+above that.
+
+**The key** `csp_mode` in `policy_atlas_config`, per environment:
+
+| Value | Effect |
+| --- | --- |
+| `"report-only"` | The policy goes in `Content-Security-Policy-Report-Only`. The browser blocks nothing and prints a "[Report Only]" line in the console for each violation. |
+| `"enforce"` | The policy goes in `Content-Security-Policy`. The browser blocks every violation. |
+
+Never both headers at once. A missing key or any other value fails `cdk
+synth`, which the deploy runs before it changes anything in AWS.
+`deploy.sh` does not read the key.
+
+**The manual pass.** There is no report collector, so the browser console is
+the only place a violation shows. Run the pass after the first deploy in
+report-only mode, again after the switch to enforce, and again whenever a
+change adds a third-party library, script or host. In Chrome, open the
+developer console, turn on "Preserve log", and sign in.
+
+1. **First, the proof.** In the console, run `fetch("https://example.com")`.
+   In report-only mode it must print a "[Report Only]" line naming
+   `connect-src`; in enforce mode, a refusal line. If no line appears, stop:
+   console silence then proves nothing.
+2. Use every surface once: the splash page and the waitlist puzzle including
+   its audio option (where the CAPTCHA is on); sign-in; sign-out; a token
+   refresh (keep a signed-in tab open past the access token's one-hour
+   lifetime, then use the app); the task list; a new task with an image upload
+   preview; a running task with its progress stream; a side sheet; the
+   sources view and its CSV and JSON downloads; the map view; a theory of
+   change with its PNG, SVG and draw.io exports and print; a report's print;
+   a public task view; the legal page; a deep link opened directly in a new
+   tab (for example `/tasks/<id>`).
+3. Record each console line that names the Content Security Policy, with the
+   page and the blocked address. Never record tokens or user data.
+
+Check the headers themselves with `curl`; the deep link proves the policy
+reaches the error-response path:
+
+```bash
+for p in / /index.html /tasks/x; do
+  echo "== $p"; curl -sI "https://<domain_name>$p" \
+    | grep -iE 'content-security|permissions-policy|strict-transport|x-frame|referrer|x-content-type|x-xss'
+done
+```
+
+**Switching to enforce.** After a report-only pass with no unexplained line,
+set `csp_mode` to `"enforce"` for that environment, merge and deploy the
+normal way, run the `curl` check, and repeat the manual pass at once: it must
+show zero CSP lines. Staging leads by one release: staging enforces before
+production does.
+
+**Adding a source.** When a pass shows a real need (for example the CAPTCHA
+script loading an image from `awswaf.com`), add the source in
+`security_headers.py`, update its literal expected string in
+`infra/tests/unit/test_security_headers.py`, and deploy. Never edit the policy
+in the CloudFront console as a fix: the next deploy puts the code's version
+back. Never add `'unsafe-inline'` or `'unsafe-eval'` to `script-src`; a
+library that needs either is a design question, not a header change.
+
+**Rollback.** Set `csp_mode` back to `"report-only"` and deploy. CloudFormation
+updates the policy in place; CloudFront applies it within minutes, and
+`index.html` has a 60-second cache. For an emergency that cannot wait for a
+deploy, edit the policy in the CloudFront console (Policies → Response headers
+→ `policy-atlas-v3-security-headers`): move the CSP out of the security headers
+or delete it. The next deploy restores the code's version, so make the config
+change too. A full revert of the 064c change restores the managed policy. The
+HSTS subdomain setting stays in browsers that saw it (above).
+
+**Cost.** Nil. Response headers policies are free (20 custom policies per
+account; this is the first).
+
 ## 5. Env & secret map
 
 Generated from `settings.py`'s required/optional calls plus the direct

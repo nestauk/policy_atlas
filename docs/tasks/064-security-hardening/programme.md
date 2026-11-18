@@ -225,14 +225,20 @@ ADR 0047. The sketch below is kept to the contract's shape.
 
 - A custom `ResponseHeadersPolicy` replacing the managed `SECURITY_HEADERS`, keeping its
   headers and adding CSP, `Permissions-Policy` and `includeSubDomains` on HSTS.
-- Sources: `default-src 'self'`; `connect-src 'self' <api origin> <cognito domain>
-  https://*.awswaf.com`; `script-src 'self' https://*.awswaf.com`; `img-src 'self' data:
-  blob:` (the theory-of-change upload preview uses blob URLs); `frame-ancestors 'none'`;
-  `object-src 'none'`; `base-uri 'self'`. The ops hostname is added when the ops page lands.
-- Built in CDK from `pa_config.json` values, never hand-written. A per-env flag chooses
-  `Content-Security-Policy-Report-Only` or enforce. Order: staging report-only, staging
-  enforce, production enforce. There is no report collector, so report-only means one
-  person opens the browser console on staging and uses every page once.
+- Sources (as built, task 064c): `default-src 'self'`; `script-src 'self'` plus
+  `https://*.awswaf.com` when the CAPTCHA is on; `style-src 'self' 'unsafe-inline'` (Radix
+  adds a `<style>` element at run time; accepted defect); `img-src 'self' data: blob:`
+  (upload previews and theory-of-change exports); `font-src 'self'`; `connect-src 'self'`,
+  the API origin, the Cognito issuer and hosted domain, plus `https://*.awswaf.com` when the
+  CAPTCHA is on; `frame-src` the Cognito hosted domain (the sign-in library's hidden-frame
+  fallback); `frame-ancestors 'self'` (same as today's `X-Frame-Options: SAMEORIGIN`);
+  `form-action 'self'`; `object-src 'none'`; `base-uri 'self'`. The 065 ops pages are served
+  by the backend, not CloudFront, so this policy does not reach them (a deferred seam).
+- Built in CDK from `pa_config.json` values, never hand-written. A per-env key `csp_mode`
+  chooses `Content-Security-Policy-Report-Only` or enforce. Order: staging and production
+  report-only with the same release, then staging enforce, then production enforce. There
+  is no report collector, so report-only means one person opens the browser console and
+  uses every page once (`infra/DEPLOYMENT.md` § 4 "Security headers").
 - Written after 064b so the WAF script source is listed once.
 
 ### 064d MFA and threat protection
