@@ -50,9 +50,9 @@ def _api_host(api_host: str) -> wafv2.CfnWebACL.StatementProperty:
     # ignores a ":443" suffix or a trailing dot, so a request that reaches the
     # API may carry either; an exact match would let it skip these rules.
     return _byte_match(
-        field=wafv2.CfnWebACL.FieldToMatchProperty(
-            single_header=wafv2.CfnWebACL.SingleHeaderProperty(name="host")
-        ),
+        # single_header is typed Any: a SingleHeaderProperty would render "name",
+        # which the WAF service rejects (docs/knowledge/cdk-any-typed-property-…).
+        field=wafv2.CfnWebACL.FieldToMatchProperty(single_header={"Name": "host"}),
         constraint="STARTS_WITH",
         search=api_host,
         transforms=("LOWERCASE",),

@@ -357,8 +357,20 @@ check; the report test grew from one weak substring assertion to five row assert
 
 - The staging live check, the real-widget screenshot, the report against real data, the
   count week; a per-address re-measurement of W3 once 064a logs the client address.
-- `aws wafv2 check-capacity` has not been run; the arithmetic (925 + a few) is under
-  1,500.
+- `aws wafv2 check-capacity` run 2026-11-18 on the synthesised rules (staging session):
+  **987** capacity units of 1,500. It first rejected `SingleHeader: {"name": "host"}` in
+  the host match (the rate rule and the three managed groups): `single_header` is another
+  `Any`-typed field, so the typed `SingleHeaderProperty` rendered a camelCase key that
+  synth, the tests and the review stack all accepted. Fixed to the plain dict
+  `{"Name": "host"}`; the test now asserts no lower-case key anywhere in the web ACL.
+  Without this check the first staging deploy would have failed and rolled back.
+- `cdk diff PaV3AppStack` against live staging (read-only change set, 2026-11-18, with the
+  fix): four additions, `AWS::WAFv2::WebACL`, `AWS::WAFv2::WebACLAssociation`,
+  `AWS::Logs::LogGroup`, `AWS::WAFv2::LoggingConfiguration`; no IAM or security-group
+  change. Every other line is 064a's (PR #120, not yet deployed): the pool's deletion
+  protection and 12-character minimum, the two new container environment values and
+  `FORWARDED_ALLOW_IPS`, the new image digest, the `/healthz` target-group check, the
+  CloudFront redirect to HTTPS. The cert stack has no differences.
 
 ## Public safety
 

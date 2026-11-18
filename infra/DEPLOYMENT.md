@@ -888,8 +888,13 @@ addresses and request headers; the `authorization`, `cookie` and
 person's bearer token never reaches the log. The log group is private to the
 account.
 
-**Capacity.** A web ACL may use 1,500 capacity units; these rules use about
-935. Adding a fourth managed group needs `aws wafv2 check-capacity` first.
+**Capacity, and the dry run.** A web ACL may use 1,500 capacity units; these
+rules use 987 (`aws wafv2 check-capacity`, 2026-11-18). The same command is the
+dry run for any rule change: it validates every statement against the WAF
+service without creating anything (the synth tests cannot, see
+`docs/knowledge/cdk-any-typed-property-takes-cloudformation-dict.md`). Take the
+`Rules` list from the synthesised `PaV3AppStack.template.json`, base64-encode
+each `SearchString`, and pass it as `--rules file://rules.json`.
 
 **Cost.** About $11 a month per environment (the web ACL, six rules), plus
 $0.60 per million requests and $0.40 per thousand CAPTCHA puzzles.

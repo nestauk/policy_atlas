@@ -37,6 +37,17 @@ def _acl(template: dict) -> tuple[str, dict]:
     return _one(template, "AWS::WAFv2::WebACL")
 
 
+def _keys(obj):
+    """Every dict key anywhere inside ``obj``."""
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            yield key
+            yield from _keys(value)
+    elif isinstance(obj, list):
+        for item in obj:
+            yield from _keys(item)
+
+
 def _rule(template: dict, name: str) -> dict:
     _, acl = _acl(template)
     return next(rule for rule in acl["Properties"]["Rules"] if rule["Name"] == name)
@@ -125,7 +136,7 @@ def test_w3_general_rate_rule_is_host_scoped_and_mode_controlled():
         rate = rule["Statement"]["RateBasedStatement"]
         assert rate["Limit"] == waf.GENERAL_RATE_LIMIT
         assert rate["ScopeDownStatement"] == {"ByteMatchStatement": {
-            "FieldToMatch": {"SingleHeader": {"name": "host"}},
+            "FieldToMatch": {"SingleHeader": {"Name": "host"}},
             "PositionalConstraint": "STARTS_WITH", "SearchString": "api.v3.policyatlas.uk",
             "TextTransformations": [{"Priority": 0, "Type": "LOWERCASE"}],
         }}
@@ -150,7 +161,7 @@ def test_w4_managed_rules_are_host_scoped_skip_health_and_keep_body_counted():
             statements = group["ScopeDownStatement"]["AndStatement"]["Statements"]
             host = statements[0]["ByteMatchStatement"]
             assert host == {
-                "FieldToMatch": {"SingleHeader": {"name": "host"}},
+                "FieldToMatch": {"SingleHeader": {"Name": "host"}},
                 "PositionalConstraint": "STARTS_WITH", "SearchString": "api.v3.policyatlas.uk",
                 "TextTransformations": [{"Priority": 0, "Type": "LOWERCASE"}],
             }
@@ -216,3 +227,6 @@ def test_w8_logging_and_visibility_configs_are_rendered_for_matches_only():
     _assert_visibility(acl["Properties"]["VisibilityConfig"], waf.WEB_ACL_NAME)
     for rule in acl["Properties"]["Rules"]:
         _assert_visibility(rule["VisibilityConfig"], rule["Name"])
+    # Every Any-typed field (SingleHeader, UriPath, …) must render CloudFormation's
+    # PascalCase keys; `aws wafv2 check-capacity` rejected a lower-case "name" (2026-11-18).
+    assert not [key for key in _keys(acl["Properties"]) if key[0].islower()]

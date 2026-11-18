@@ -27,10 +27,20 @@ to catch a misspelling.
 The contract verifier found this on 064b by fetching the CloudFormation reference and
 comparing it with the rendered template; the build's own test had locked in the defect.
 
+The same class bit a second time, a day later, on `CfnWebACL.FieldToMatchProperty.single_header`
+(also `Any`): `SingleHeaderProperty(name="host")` rendered `{"name": "host"}` in four
+rules, and synth, the tests and four review lanes accepted it. `aws wafv2 check-capacity`
+on the synthesised `Rules` list (search strings base64-encoded) rejected it in one second
+and is the dry run to run before any first deploy or rule change. The synth test now walks
+every key in the web ACL and fails on a lower-case one; do the same for any new L1 resource
+with `Any`-typed fields.
+
 # Citations
 
 - [task 064b verification](../tasks/064b-waf-captcha/verification.md) § Review findings
   (contract verifier F1).
 - `infra/infra/components/waf.py` (`logging_filter=`) and
   `infra/tests/unit/test_waf.py::test_w8_…`.
-- CloudFormation: `AWS::WAFv2::LoggingConfiguration LoggingFilter`.
+- CloudFormation: `AWS::WAFv2::LoggingConfiguration LoggingFilter`,
+  `AWS::WAFv2::WebACL FieldToMatch SingleHeader`.
+- `infra/DEPLOYMENT.md` § 4 "The firewall", Capacity and the dry run.
