@@ -192,7 +192,7 @@ describe("People", () => {
       method === "GET" && path === "/api/v1/ops/people" ? apiError(500, "internal", "internal server error") : undefined;
     const user = userEvent.setup();
     renderOps("/people");
-    expect(await screen.findByText("Something went wrong. Try again.")).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/^Could not load the people list\. Try again$/);
     opsMock.override = undefined;
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Tom Ellis")).toBeInTheDocument();

@@ -4,7 +4,7 @@ import { useNavigate } from "react-router";
 import { Button } from "../../ui/brand/Button";
 import { PageBackLink } from "../../ui/brand/PageHeader";
 import { OpsApiError, unwrap, useOpsAction, useOrganisations } from "../api";
-import { orgInRefusal, productDomain } from "../format";
+import { orgInRefusal } from "../format";
 import { CHOOSE_ORGANISATION, Field, FormHeader, INPUT_CLASS, OrganisationSelect, Panel, useRecordedToast } from "../ui";
 
 /** Add a person (ops-pages-copy.md § Add a person): create in an organisation. */
@@ -53,7 +53,7 @@ export function AddPersonView() {
           } else if (error instanceof OpsApiError && error.code === "ops_refused") {
             setFormError(error.message);
           } else {
-            setFormError("Something went wrong. Try again.");
+            setFormError("Could not create the account. Try again.");
           }
         },
       },
@@ -80,7 +80,7 @@ export function AddPersonView() {
               />
             )}
           </Field>
-          <Field id="person-name" label="Display name" help="Shown to colleagues. Not the email.">
+          <Field id="person-name" label="Display name">
             {(describedBy) => (
               <input
                 id="person-name"
@@ -122,13 +122,12 @@ export function AddPersonView() {
         </form>
         <Panel title="What happens" className="self-start">
           <div className="flex flex-col gap-3 text-body text-ink">
+            <p>Policy Atlas emails them a temporary password. It is valid for 30 days.</p>
             <p>
-              Cognito creates the account and emails a temporary password from{" "}
-              <span className="whitespace-nowrap">no-reply@{productDomain()}</span>. It is valid
-              for 30 days.
+              If the email already has an account that is in no organisation, that account is added to this
+              organisation. No email is sent, because they can already sign in.
             </p>
-            <p>If the address already has an account with no organisation, it is added to this one and no email is sent.</p>
-            <p>If it already belongs to another organisation, nothing changes and you are told which one.</p>
+            <p>If the email already belongs to another organisation, nothing changes.</p>
           </div>
         </Panel>
       </div>

@@ -19,23 +19,22 @@ async function fill(email: string, org = "Nesta") {
 }
 
 describe("Add a person", () => {
-  it("shows the fields, their help and the three sentences of What happens", async () => {
+  it("shows the fields and the three sentences of What happens", async () => {
     renderOps("/people/new");
     await screen.findByRole("heading", { name: "Add a person" });
     expect(within(screen.getByRole("main")).getByRole("link", { name: "People" })).toHaveAttribute("href", "/people");
-    expect(screen.getByText("Shown to colleagues. Not the email.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Display name")).not.toHaveAccessibleDescription();
     expect(screen.getByRole("region", { name: "What happens" })).toHaveTextContent(
-      /from no-reply@localhost\. It is valid for 30 days\..*no email is sent\..*you are told which one\./,
+      /temporary password\. It is valid for 30 days\..*No email is sent, because they can already sign in\.If the email already belongs to another organisation, nothing changes\.$/,
     );
   });
 
-  it("asks for an organisation when none is chosen, and links the help and the error to their fields", async () => {
+  it("asks for an organisation when none is chosen, and links the error to its field", async () => {
     const user = userEvent.setup();
     renderOps("/people/new");
     await screen.findByRole("heading", { name: "Add a person" });
     const select = screen.getByRole("combobox", { name: "Organisation" });
     expect(select).toHaveTextContent("Choose an organisation.");
-    expect(screen.getByLabelText("Display name")).toHaveAccessibleDescription("Shown to colleagues. Not the email.");
     await user.type(screen.getByLabelText("Email"), "ana@x.org");
     await user.type(screen.getByLabelText("Display name"), "Ana Lopez");
     await user.click(screen.getByRole("button", { name: "Create and send invitation" }));
@@ -74,5 +73,42 @@ describe("Add a person", () => {
     await fill("ana@x.org");
     expect(await screen.findByRole("alert")).toHaveTextContent("ana@x.org already exists in the pool — use user enrol");
     expect(screen.getByLabelText("Email")).toHaveValue("ana@x.org");
+  });
+
+  it("narrows the organisations as you type, and Enter takes the only match", async () => {
+    const user = userEvent.setup();
+    renderOps("/people/new");
+    await screen.findByRole("heading", { name: "Add a person" });
+    await user.click(screen.getByRole("combobox", { name: "Organisation" }));
+    await user.type(screen.getByRole("searchbox", { name: "Find or create an organisation" }), "lab");
+    expect(screen.queryByRole("option", { name: "Nesta" })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Policy Lab" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Create organisation “lab”" })).toBeInTheDocument();
+    await user.clear(screen.getByRole("searchbox", { name: "Find or create an organisation" }));
+    await user.type(screen.getByRole("searchbox", { name: "Find or create an organisation" }), "policy lab{Enter}");
+    expect(screen.getByRole("combobox", { name: "Organisation" })).toHaveTextContent("Policy Lab");
+    expect(opsMock.writes).toEqual([]);
+  });
+
+  it("creates a new organisation from the picker and chooses it", async () => {
+    const user = userEvent.setup();
+    renderOps("/people/new");
+    await screen.findByRole("heading", { name: "Add a person" });
+    await user.click(screen.getByRole("combobox", { name: "Organisation" }));
+    await user.type(screen.getByRole("searchbox", { name: "Find or create an organisation" }), "Fresh Org");
+    await user.click(screen.getByRole("option", { name: "Create organisation “Fresh Org”" }));
+    expect(await screen.findByRole("combobox", { name: "Organisation" })).toHaveTextContent("Fresh Org");
+    expect(opsMock.writes.map((write) => write.body)).toEqual([{ name: "Fresh Org" }]);
+  });
+
+  it("says so when the new organisation's name is taken", async () => {
+    const user = userEvent.setup();
+    opsMock.override = (method, path) =>
+      method === "POST" && path === "/api/v1/ops/organisations" ? apiError(409, "conflict", "exists") : undefined;
+    renderOps("/people/new");
+    await screen.findByRole("heading", { name: "Add a person" });
+    await user.click(screen.getByRole("combobox", { name: "Organisation" }));
+    await user.type(screen.getByRole("searchbox", { name: "Find or create an organisation" }), "Taken{Enter}");
+    expect(await screen.findByRole("alert")).toHaveTextContent("An organisation with that name already exists.");
   });
 });

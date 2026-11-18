@@ -193,7 +193,10 @@ surface, so decision 4 and the deferred list are amended below rather than left 
   shown as "Check" for an operator; failed attempts count against the hourly allowance, so
   a bad row cannot drive unbounded Cognito calls. The ops host sets `X-Frame-Options: DENY`.
   The ops service's engine hides bound parameters from error tracebacks.
-- **Open for the owner (2026-11-17):** whether a sweep-created account should take the
+- **Ruled by the owner (2026-11-18):** a sweep-created account keeps the form's name, and
+  `max_per_hour` is 5 on production. The ops pages do not move single tasks or projects
+  (that stays in the CLI), so `pa_ops` has no grant on `task.updated_at`.
+- **Was open for the owner (2026-11-17):** whether a sweep-created account should take the
   waitlist row's name at all (anyone can type a colleague's address with any name; the name
   is never written onto an existing account) and whether an address that already has an
   account should be left for an operator instead of enrolled; and `max_per_hour` on

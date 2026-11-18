@@ -78,7 +78,7 @@
             },
             "self_signup": {
                 "enabled": false,
-                "max_per_hour": 20
+                "max_per_hour": 5
             }
         },
         "deploy_analytics": true

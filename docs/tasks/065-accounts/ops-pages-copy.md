@@ -28,8 +28,8 @@ chips except the ones named here.
   not have the ops role." and one sentence under it: "Ask an operator to grant it from the
   command line." Nothing else renders. No retry button.
 - **Unauthenticated (401 after refresh):** the "Sign in" button.
-- **Request failed (5xx or network):** a line under the table, "Something went wrong. Try
-  again." with a "Try again" ghost button.
+- **Request failed (5xx or network):** a line under the table that names what failed, then
+  an inline "Try again" link (§ Owner pass 1).
 - **Toast after a write:** "<Summary> · recorded" where recorded means the audit row was
   written (the response carries `action_id`). On a bulk action: "<n> done, <m> failed ·
   recorded"; the failed rows show their message inline in the table under the person.
@@ -73,12 +73,11 @@ chips except the ones named here.
 ## Add a person (`/people/new`)
 
 - Back link "People". Title "Add a person".
-- Fields: "Email" · "Display name" (help "Shown to colleagues. Not the email.") · "Organisation"
-  (select, required). Buttons "Create and send invitation" (primary) and "Cancel".
-- Side panel "What happens": three sentences: "Cognito creates the account and emails a
-  temporary password from no-reply@<domain>. It is valid for 30 days." · "If the address
-  already has an account with no organisation, it is added to this one and no email is sent."
-  · "If it already belongs to another organisation, nothing changes and you are told which one."
+- Fields: "Email" · "Display name" · "Organisation" (the organisation picker, required). Buttons "Create and send invitation" (primary) and "Cancel".
+- Side panel "What happens": three sentences: "Policy Atlas emails them a temporary password.
+  It is valid for 30 days." · "If the email already has an account that is in no organisation,
+  that account is added to this organisation. No email is sent, because they can already sign
+  in." · "If the email already belongs to another organisation, nothing changes."
 - Errors: 409 `enrolled_elsewhere` → a red line under the email field: "Already in <org>. Use
   Enrol or move from the People list."; 409 `ops_refused` → the message under the form; the
   form keeps what was typed.
@@ -100,9 +99,9 @@ chips except the ones named here.
 - Organisation form: the same two fields; help "Applies to everyone in <org> who has no number
   of their own."
 - Buttons "Save quota" (primary) and "Clear and inherit" (ghost; sends both fields null).
-- Side panel "Limits that apply" (person page): three rows: "Tasks per year · <value or no
-  limit> · from <this person | <org> | the default>", "Simultaneous tasks · … · …",
-  "Admin exemption · yes | no".
+- Side panel "Currently applied limits" (person page): three rows: "Tasks per year: <value or
+  no limit> · from <this person | <org> | the default>", "Simultaneous tasks: … · …",
+  "Admin exemption: yes | no".
 - Toast: "Quota saved · recorded".
 
 ## Requests (`/requests`)
@@ -132,10 +131,6 @@ chips except the ones named here.
     "default" alone when unknown).
   - Self-signup domain: the domains joined with ", ", or "—". Read-only.
 - Row menu: "Set quota defaults…" only.
-- Below the table, a panel "Move a task or project to another organisation": field "Task or
-  project id" (help "Paste the id from its web address"), select "Move to", button "Move".
-  Success toast "Moved <n> project(s) and <m> task(s) into <org> · recorded"; the response's
-  `message` is shown under the panel.
 
 ## Not in this slice
 
@@ -167,3 +162,27 @@ is accepted and is now part of the script:
 - "· recorded" after a create, an organisation quota save or an approve rests on the
   2xx alone: those routes write the audit row in the same transaction as the response,
   so a 2xx means recorded; they return no `action_id`.
+
+## Owner pass 1 (owner, 2026-11-18)
+
+- Add a person: the display name has no help line. "What happens" names no sender address
+  (the page guessed it from its own host, so it read `no-reply@localhost` locally); its second
+  and third sentences are reworded as above.
+- Quota: the side panel is "Currently applied limits", and each row is "<label>: <facts>".
+- The organisation picker, in every form (Add a person, Approve into, Move to): a field trigger that opens a popover with a filter field "Find or create an
+  organisation" (focused) over the organisations it matches. When the typed name matches no
+  organisation exactly, a last row "Create organisation “<name>”" creates it (toast "Created
+  <name> · recorded") and chooses it. Enter takes the only match, or creates. A taken name says
+  "An organisation with that name already exists." under the list. An empty list says "No
+  organisations yet. Type a name to create one."
+- An account is always created in an organisation (lead recommendation, for the owner to confirm).
+- A failed load or action: one line, "<what failed>." then a bold Blue "Try again" link in the
+  same size, which repeats the load or the action. The words name what failed: "Could not load
+  the people list.", "Could not load the access requests.", "Could not load the
+  organisations.", "Could not load this person's quota.", "Could not load this organisation's
+  quota.", "Could not finish the action.", "Could not approve the request.", "Could not save
+  the quota.". A failed form submit says "Could not create the account. Try again." (or "the
+  organisation") under the form; its own button is the retry.
+- The top bar: "Ops" follows the wordmark in the wordmark's type and Navy; no chip.
+- Organisations: no "Move a task or project" panel (removed by the owner; the CLI keeps
+  `rows assign`).

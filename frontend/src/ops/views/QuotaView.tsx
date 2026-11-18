@@ -112,7 +112,7 @@ function QuotaPage({
               {refused}
             </p>
           )}
-          {failed !== null && <FailedLine onRetry={failed} />}
+          {failed !== null && <FailedLine message="Could not save the quota." onRetry={failed} />}
           <div className="flex flex-wrap items-center justify-end gap-3 pt-2">
             <Button variant="ghost" disabled={pending} onClick={() => send({ tasks: "", runs: "" })}>
               Clear and inherit
@@ -137,20 +137,18 @@ function source(own: number | null | undefined, org: Organisation | undefined, o
 
 function LimitsPanel({ person, org }: { person: Person; org: Organisation | undefined }) {
   const rows = [
-    facts(
-      "Tasks per year",
+    `Tasks per year: ${facts(
       limitWord(person.limits.task_quota_per_year),
       `from ${source(person.task_quota_per_year, org, org?.task_quota_per_year)}`,
-    ),
-    facts(
-      "Simultaneous tasks",
+    )}`,
+    `Simultaneous tasks: ${facts(
       limitWord(person.limits.runs_per_user),
       `from ${source(person.runs_per_user, org, org?.runs_per_user)}`,
-    ),
-    facts("Admin exemption", person.is_admin ? "yes" : "no"),
+    )}`,
+    `Admin exemption: ${person.is_admin ? "yes" : "no"}`,
   ];
   return (
-    <Panel title="Limits that apply" className="self-start">
+    <Panel title="Currently applied limits" className="self-start">
       <ul className="flex flex-col">
         {rows.map((row) => (
           <li key={row} className="border-t border-line py-2.5 text-meta text-ink first:border-t-0 first:pt-0">
@@ -172,6 +170,7 @@ export function PersonQuotaView() {
   if (people.isError || organisations.isError) {
     return (
       <FailedLine
+        message="Could not load this person’s quota."
         onRetry={() => {
           void people.refetch();
           void organisations.refetch();
@@ -222,7 +221,7 @@ export function OrganisationQuotaView() {
   const organisations = useOrganisations();
   const quota = useOrganisationQuota(orgId);
   if (organisations.isPending) return <Loading />;
-  if (organisations.isError) return <FailedLine onRetry={() => void organisations.refetch()} />;
+  if (organisations.isError) return <FailedLine message="Could not load this organisation’s quota." onRetry={() => void organisations.refetch()} />;
   const org = organisations.data.find((entry) => entry.org_id === orgId);
   if (org === undefined) return <Navigate to="/organisations" replace />;
   const defaults = inferDefaults(people.data ?? [], organisations.data);

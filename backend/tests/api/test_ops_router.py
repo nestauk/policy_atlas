@@ -31,16 +31,13 @@ from policy_atlas.core.schema import (
     ops_action,
     organisation,
     organisation_domain,
-    project,
     task,
     waitlist_entry,
 )
 from tests.api.org_support import (
     Principal,
     make_org,
-    make_project,
     make_task,
-    make_user,
     ops_enrol,
     seeded,
     tenancy_client,
@@ -72,7 +69,6 @@ _OPS_ROUTES = {
     ("POST", "/api/v1/ops/people/quota"),
     ("GET", "/api/v1/ops/requests"),
     ("POST", "/api/v1/ops/requests/{entry_id}/approve"),
-    ("POST", "/api/v1/ops/rows/assign"),
 }
 
 
@@ -774,61 +770,6 @@ def test_approve_refuses_an_address_enrolled_elsewhere(ops: Harness) -> None:
 
 
 # --- rows (B4) ----------------------------------------------------------------
-
-
-def test_rows_assign_moves_a_task_or_a_project_and_validates_the_selector(
-    ops: Harness,
-) -> None:
-    """A task and a project each move; both ids → 422; a missing row → 404."""
-    org_id = _seed_org(ops)
-    with seeded(ops.engine) as conn:
-        owner = make_user(conn)
-        task_id = make_task(conn, owner_user_id=owner)
-        project_id = make_project(conn, owner_user_id=owner)
-        member_id = make_task(conn, owner_user_id=owner, project_id=project_id)
-    response, lines = _post(
-        ops, "/api/v1/ops/rows/assign", {"task_id": str(task_id), "org_id": str(org_id)}
-    )
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert (body["tasks_moved"], body["projects_moved"]) == (1, 0)
-    assert body["org"]["org_id"] == str(org_id)
-    _assert_audited(ops, lines, action="rows.assign", target=str(task_id), outcome="ok")
-    assert body["action_id"] == lines[0]["action_id"]
-
-    response, lines = _post(
-        ops, "/api/v1/ops/rows/assign", {"project_id": str(project_id), "org_id": str(org_id)}
-    )
-    assert response.status_code == 200, response.text
-    assert (response.json()["tasks_moved"], response.json()["projects_moved"]) == (1, 1)
-    with ops.engine.connect() as conn:
-        assert (
-            conn.execute(select(task.c.org_id).where(task.c.task_id == task_id)).scalar_one()
-            == org_id
-        )
-        assert (
-            conn.execute(select(task.c.org_id).where(task.c.task_id == member_id)).scalar_one()
-            == org_id
-        )
-        assert (
-            conn.execute(
-                select(project.c.org_id).where(project.c.project_id == project_id)
-            ).scalar_one()
-            == org_id
-        )
-    assert [r["target"] for r in _audit(ops)] == [str(task_id), str(project_id)]
-
-    response, lines = _post(
-        ops,
-        "/api/v1/ops/rows/assign",
-        {"task_id": str(task_id), "project_id": str(project_id), "org_id": str(org_id)},
-    )
-    assert response.status_code == 422 and lines == []
-    response, lines = _post(
-        ops, "/api/v1/ops/rows/assign", {"task_id": str(uuid.uuid4()), "org_id": str(org_id)}
-    )
-    assert response.status_code == 404 and lines == []
-    assert len(_audit(ops)) == 2
 
 
 def test_an_operator_cannot_offboard_or_de_enrol_themselves(ops: Harness) -> None:

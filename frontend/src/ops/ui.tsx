@@ -1,19 +1,16 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { useId, useRef, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
-import { Button } from "../ui/brand/Button";
 import { cn } from "../ui/brand/cn";
-import { MoreIcon, SearchIcon, iconButtonClass, ICON_ROW } from "../ui/brand/icons";
+import { ChevronIcon, MoreIcon, SearchIcon, iconButtonClass, ICON_ROW } from "../ui/brand/icons";
 import { CAPTION_LABEL_CLASS, PANE_LABEL_CLASS } from "../ui/brand/label";
-import { LIST_CONTROL_CLASS } from "../ui/brand/list/ListStates";
 import { PAGE_TITLE_CLASS } from "../ui/brand/PageHeader";
-import { Select } from "../ui/brand/Select";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { MENU_ITEM_CLASS, moveMenuFocus } from "../ui/radix/menu";
 import { SHEET_SCRIM_CLASS } from "../ui/radix/Sheet";
 import { useToast } from "../ui/radix/Toast";
 import { portalContainer } from "../ui/radix/portal";
-import type { Organisation } from "./api";
+import { OpsApiError, unwrap, useOpsAction, type Organisation } from "./api";
 import { recorded } from "./format";
 
 /* The ops pages' own pieces, built from the shared design system. */
@@ -28,14 +25,14 @@ export function Loading() {
 }
 
 /** A request that failed (5xx or no answer): one line under the table. */
-export function FailedLine({ onRetry }: { onRetry: () => void }) {
+export function FailedLine({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div role="alert" className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
-      <p className="text-body text-navy">Something went wrong. Try again.</p>
-      <Button variant="ghost" className={LIST_CONTROL_CLASS} onClick={onRetry}>
+    <p role="alert" className="mt-3 text-body text-navy">
+      {message}{" "}
+      <button type="button" onClick={onRetry} className="cursor-pointer font-bold text-blue hover:underline">
         Try again
-      </Button>
-    </div>
+      </button>
+    </p>
   );
 }
 
@@ -120,7 +117,14 @@ export function Field({
 /** What an organisation select says until one is chosen, and its error. */
 export const CHOOSE_ORGANISATION = "Choose an organisation.";
 
-/** The organisation picker every form shares (the app's one dropdown). */
+/**
+ * The organisation picker every form shares (owner pass, 2026-11-18): the
+ * select's trigger, and a popover with a filter field at its top (focused as
+ * it opens; typing narrows the list by name) over the organisations. When
+ * the typed name matches no organisation exactly, a last row offers to
+ * create it; the new organisation is chosen at once. Enter takes the only
+ * match, or creates; the arrow keys move between the rows.
+ */
 export function OrganisationSelect({
   id,
   label,
@@ -138,19 +142,171 @@ export function OrganisationSelect({
   describedBy?: string;
   invalid?: boolean;
 }) {
+  const toast = useRecordedToast();
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
+  // The one just created, until the refetched list carries it.
+  const [made, setMade] = useState<Organisation | null>(null);
+  const filterRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const listId = useId();
+  const create = useOpsAction((client, name: string) =>
+    unwrap(client.POST("/api/v1/ops/organisations", { body: { name } })),
+  );
+  const chosen = organisations.find((org) => org.org_id === value) ?? (made?.org_id === value ? made : undefined);
+  const typed = filter.trim();
+  const needle = typed.toLocaleLowerCase();
+  const listed = needle === "" ? organisations : organisations.filter((org) => org.name.toLocaleLowerCase().includes(needle));
+  const canCreate = typed !== "" && !organisations.some((org) => org.name.toLocaleLowerCase() === needle);
+
+  const setOpenState = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      setFilter("");
+      setCreateError(null);
+    }
+  };
+  const pick = (orgId: string) => {
+    onChange(orgId);
+    setOpenState(false);
+  };
+  const createOrg = () =>
+    create.mutate(typed, {
+      onSuccess: (org) => {
+        setMade(org);
+        toast(`Created ${org.name}`);
+        pick(org.org_id);
+      },
+      onError: (error) =>
+        setCreateError(
+          error instanceof OpsApiError && error.status === 409
+            ? "An organisation with that name already exists."
+            : "Could not create the organisation. Try again.",
+        ),
+    });
+  const rows = () => Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
+  const onFilterKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      rows()[0]?.focus();
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      if (listed.length === 1) pick(listed[0].org_id);
+      else if (canCreate && !create.isPending) createOrg();
+    }
+  };
+  const onListKeyDown = (event: KeyboardEvent<HTMLUListElement>) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    const buttons = rows();
+    const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === "ArrowUp" && current <= 0) filterRef.current?.focus();
+    else buttons[Math.min(current + (event.key === "ArrowDown" ? 1 : -1), buttons.length - 1)]?.focus();
+  };
+
   return (
-    <Select
-      id={id}
-      label={label}
-      value={value}
-      placeholder={CHOOSE_ORGANISATION}
-      options={organisations.map((org) => ({ value: org.org_id, label: org.name }))}
-      onChange={onChange}
-      describedBy={describedBy}
-      invalid={invalid}
-      className="w-full"
-      contentClassName="w-80"
-    />
+    <Popover open={open} onOpenChange={setOpenState}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          id={id}
+          role="combobox"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-controls={open ? listId : undefined}
+          aria-label={label}
+          aria-describedby={describedBy}
+          aria-invalid={invalid || undefined}
+          className={cn(
+            "relative inline-flex h-10 w-full min-w-0 cursor-pointer items-center border bg-paper pr-9 pl-3 text-left text-body text-ink",
+            "transition-colors duration-150",
+            open ? "border-navy" : invalid ? "border-red" : "border-line-2",
+          )}
+        >
+          <span className={cn("min-w-0 flex-1 truncate", chosen === undefined && "text-grey")}>
+            {chosen?.name ?? CHOOSE_ORGANISATION}
+          </span>
+          <ChevronIcon size={12} className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 rotate-90 text-grey" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-[var(--radix-popover-trigger-width)] min-w-80 max-w-[calc(100vw-2rem)] p-1"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          filterRef.current?.focus();
+        }}
+      >
+        <input
+          ref={filterRef}
+          type="search"
+          aria-label="Find or create an organisation"
+          placeholder="Find or create an organisation"
+          autoComplete="off"
+          value={filter}
+          onChange={(event) => {
+            setFilter(event.target.value);
+            setCreateError(null);
+          }}
+          onKeyDown={onFilterKeyDown}
+          className="mb-1 h-10 w-full border border-line-2 bg-paper px-3 text-body text-ink focus-visible:outline-2 focus-visible:outline-blue"
+        />
+        <ul
+          ref={listRef}
+          id={listId}
+          role="listbox"
+          aria-label={label}
+          onKeyDown={onListKeyDown}
+          className="flex max-h-72 flex-col overflow-y-auto"
+        >
+          {listed.map((org) => {
+            const selected = org.org_id === value;
+            return (
+              <li key={org.org_id} role="none">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  onClick={() => pick(org.org_id)}
+                  className={cn(
+                    "block min-h-10 w-full cursor-pointer px-3 py-2 text-left text-meta text-navy",
+                    "hover:bg-blue-tint-2 hover:text-blue focus-visible:bg-blue-tint-2",
+                    selected ? "bg-blue-tint-2 font-semibold" : "font-normal",
+                  )}
+                >
+                  {org.name}
+                </button>
+              </li>
+            );
+          })}
+          {listed.length === 0 && !canCreate && (
+            <li role="none" className="px-3 py-2 text-meta text-grey">
+              No organisations yet. Type a name to create one.
+            </li>
+          )}
+          {canCreate && (
+            <li role="none" className={cn(listed.length > 0 && "border-t border-line")}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={false}
+                disabled={create.isPending}
+                onClick={createOrg}
+                className="block min-h-10 w-full cursor-pointer px-3 py-2 text-left text-meta font-semibold text-blue hover:bg-blue-tint-2 focus-visible:bg-blue-tint-2 disabled:cursor-default disabled:text-grey"
+              >
+                Create organisation “{typed}”
+              </button>
+            </li>
+          )}
+        </ul>
+        {createError !== null && (
+          <p role="alert" className="px-3 py-2 text-meta text-red">
+            {createError}
+          </p>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 

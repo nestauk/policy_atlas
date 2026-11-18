@@ -18,7 +18,6 @@ from policy_atlas.api.auth import AuthenticatedUser, get_current_user
 from policy_atlas.api.contract.ops import (
     ActionResult,
     ApproveRequest,
-    AssignmentOut,
     BulkEnrol,
     BulkOut,
     BulkQuota,
@@ -32,7 +31,6 @@ from policy_atlas.api.contract.ops import (
     QuotaSet,
     RequestOut,
     RequestsOut,
-    RowAssign,
     SelfSignupOut,
 )
 from policy_atlas.api.contract.tenancy import OrganisationRef
@@ -499,35 +497,3 @@ def approve_request(
         select(waitlist_entry).where(waitlist_entry.c.entry_id == entry_id)
     ).mappings().one()
     return RequestOut(**row, status="invited")
-
-
-@router.post("/rows/assign", response_model=AssignmentOut)
-def assign_rows(
-    body: RowAssign, request: Request, actor: Annotated[AuthenticatedUser, Depends(require_ops)],
-    conn: Annotated[Connection, Depends(get_conn)],
-) -> AssignmentOut:
-    """Assign exactly one task or project to an organisation."""
-    org = _org(conn, body.org_id)
-    if (body.task_id is None) == (body.project_id is None):
-        raise HTTPException(422, "give exactly one of task_id or project_id")
-    try:
-        assignment = commands.assign_rows(
-            conn, org=org, task_id=body.task_id, project_id=body.project_id
-        )
-    except NotFound as exc:
-        raise HTTPException(404, str(exc)) from None
-    except OpsError as exc:
-        raise HTTPException(422, str(exc)) from None
-    target = str(body.task_id or body.project_id)
-    action_id = commands.record_action(
-        conn, actor=actor.user_id, action="rows.assign", target=target, outcome="ok"
-    )
-    _queue_log(request, actor=actor.user_id, action="rows.assign", target=target,
-               outcome="ok", action_id=action_id)
-    return AssignmentOut(
-        org=OrganisationRef(org_id=org.org_id, name=org.name),
-        project_id=assignment.project_id, tasks_moved=assignment.tasks_moved,
-        projects_moved=assignment.projects_moved,
-        followed_membership=assignment.followed_membership,
-        privatised=assignment.privatised, message=assignment.summary(), action_id=action_id,
-    )

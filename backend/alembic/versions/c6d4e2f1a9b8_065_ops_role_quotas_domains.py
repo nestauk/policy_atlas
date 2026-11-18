@@ -98,7 +98,7 @@ def upgrade() -> None:
     op.execute("GRANT UPDATE (account_user_id, account_created_at) ON waitlist_entry TO pa_ops")
     op.execute("GRANT SELECT, INSERT ON ops_action TO pa_ops")
     op.execute("GRANT SELECT ON task TO pa_ops")
-    op.execute("GRANT UPDATE (org_id, visibility, is_public, updated_at) ON task TO pa_ops")
+    op.execute("GRANT UPDATE (org_id, visibility, is_public) ON task TO pa_ops")
     op.execute("GRANT SELECT ON project TO pa_ops")
     op.execute("GRANT UPDATE (org_id, visibility) ON project TO pa_ops")
     op.execute("GRANT SELECT, DELETE ON project_membership TO pa_ops")

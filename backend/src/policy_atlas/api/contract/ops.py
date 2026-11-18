@@ -280,26 +280,3 @@ class ApproveRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     org_id: uuid.UUID
-
-
-class RowAssign(BaseModel):
-    """Body of ``POST /api/v1/ops/rows/assign``: exactly one of the two ids."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    task_id: uuid.UUID | None = None
-    project_id: uuid.UUID | None = None
-    org_id: uuid.UUID
-
-
-class AssignmentOut(BaseModel):
-    """What ``rows assign`` moved (see :class:`policy_atlas.ops.commands.Assignment`)."""
-
-    org: OrganisationRef
-    project_id: uuid.UUID | None = None
-    tasks_moved: int
-    projects_moved: int
-    followed_membership: bool
-    privatised: bool
-    message: str
-    action_id: uuid.UUID

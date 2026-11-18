@@ -58,62 +58,6 @@
         "title": "ApproveRequest",
         "type": "object"
       },
-      "AssignmentOut": {
-        "description": "What ``rows assign`` moved (see :class:`policy_atlas.ops.commands.Assignment`).",
-        "properties": {
-          "action_id": {
-            "format": "uuid",
-            "title": "Action Id",
-            "type": "string"
-          },
-          "followed_membership": {
-            "title": "Followed Membership",
-            "type": "boolean"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "org": {
-            "$ref": "#/components/schemas/OrganisationRef"
-          },
-          "privatised": {
-            "title": "Privatised",
-            "type": "boolean"
-          },
-          "project_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project Id"
-          },
-          "projects_moved": {
-            "title": "Projects Moved",
-            "type": "integer"
-          },
-          "tasks_moved": {
-            "title": "Tasks Moved",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "org",
-          "tasks_moved",
-          "projects_moved",
-          "followed_membership",
-          "privatised",
-          "message",
-          "action_id"
-        ],
-        "title": "AssignmentOut",
-        "type": "object"
-      },
       "BulkEnrol": {
         "additionalProperties": false,
         "description": "Body of ``POST /api/v1/ops/people/enrol``: enrol or move into ``org_id``.",
@@ -660,46 +604,6 @@
           "self_signup"
         ],
         "title": "RequestsOut",
-        "type": "object"
-      },
-      "RowAssign": {
-        "additionalProperties": false,
-        "description": "Body of ``POST /api/v1/ops/rows/assign``: exactly one of the two ids.",
-        "properties": {
-          "org_id": {
-            "format": "uuid",
-            "title": "Org Id",
-            "type": "string"
-          },
-          "project_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project Id"
-          },
-          "task_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Task Id"
-          }
-        },
-        "required": [
-          "org_id"
-        ],
-        "title": "RowAssign",
         "type": "object"
       },
       "SelfSignupOut": {
@@ -1343,53 +1247,6 @@
           }
         ],
         "summary": "Approve Request",
-        "tags": [
-          "ops"
-        ]
-      }
-    },
-    "/api/v1/ops/rows/assign": {
-      "post": {
-        "description": "Assign exactly one task or project to an organisation.",
-        "operationId": "assign_rows_api_v1_ops_rows_assign_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RowAssign"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AssignmentOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Assign Rows",
         "tags": [
           "ops"
         ]

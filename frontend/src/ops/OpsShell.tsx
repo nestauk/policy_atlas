@@ -3,7 +3,6 @@ import { Link, Outlet } from "react-router";
 
 import { useAuth } from "../auth";
 import { Button } from "../ui/brand/Button";
-import { Chip } from "../ui/brand/Chip";
 import { cn } from "../ui/brand/cn";
 import { NavBar, NavItem, NavLogo } from "../ui/brand/Nav";
 import { PAGE_COLUMN_CLASS } from "../ui/brand/PageHeader";
@@ -13,7 +12,7 @@ import { errorStatus, usePeople, useRequests, type Person } from "./api";
 import { productOrigin } from "./format";
 
 /**
- * The ops pages' frame: their own top bar (the wordmark, the "Ops" chip, the
+ * The ops pages' frame: their own top bar (the wordmark followed by "Ops", the
  * sections when there is something to show, the way back to the product and
  * the signed-in person) over the page column. No New, Tasks or Projects:
  * ops work is separate from using the product (contract B6).
@@ -23,12 +22,10 @@ function Frame({ sections, account, children }: { sections?: ReactNode; account?
     <div className="flex min-h-svh flex-col bg-ground">
       <NavBar>
         <div className="flex min-w-0 flex-wrap items-center gap-x-8 gap-y-1">
-          <div className="flex items-center gap-3">
-            <Link to="/people" className="min-w-0 no-underline">
-              <NavLogo />
-            </Link>
-            <Chip tone="blue">Ops</Chip>
-          </div>
+          <Link to="/people" className="flex min-w-0 items-center gap-2 no-underline">
+            <NavLogo />
+            <span className="font-display text-heading font-extrabold tracking-[-0.02em] text-navy">Ops</span>
+          </Link>
           {sections}
         </div>
         <div className="flex items-center gap-4">

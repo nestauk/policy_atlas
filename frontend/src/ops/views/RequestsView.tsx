@@ -127,7 +127,7 @@ export function RequestsView() {
       )}
       <div className="mt-4">
         {requests.isError ? (
-          <FailedLine onRetry={() => void requests.refetch()} />
+          <FailedLine message="Could not load the access requests." onRetry={() => void requests.refetch()} />
         ) : (
           <div className={TABLE_WRAP_CLASS}>
             <table ref={tableRef} tabIndex={-1} aria-label="Access requests" className={TABLE_CLASS}>
@@ -196,7 +196,7 @@ export function RequestsView() {
             {rows.length === 0 && <EmptyRows label="No requests yet." />}
           </div>
         )}
-        {retry !== null && <FailedLine onRetry={retry} />}
+        {retry !== null && <FailedLine message="Could not approve the request." onRetry={retry} />}
       </div>
 
       {approving !== null && (

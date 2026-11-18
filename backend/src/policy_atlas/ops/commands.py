@@ -1717,7 +1717,7 @@ def assign_rows(
             select(task.c.task_id, task.c.org_id).where(task.c.task_id == task_id).with_for_update()
         ).one_or_none()
         if row is None:
-            raise NotFound(f"no task {task_id}")
+            raise OpsError(f"no task {task_id}")
         member_of = [
             membership_row[0]
             for membership_row in conn.execute(
@@ -1759,7 +1759,7 @@ def assign_rows(
         .with_for_update()
     ).one_or_none()
     if current is None:
-        raise NotFound(f"no project {target}")
+        raise OpsError(f"no project {target}")
     # Membership is many-to-many (ADR 0032), so "a membership moves whole"
     # means the **connected component**: every project reachable through
     # shared members moves too, or the shared member would be left matching

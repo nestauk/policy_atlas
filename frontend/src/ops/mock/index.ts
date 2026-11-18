@@ -188,23 +188,6 @@ function route(method: string, path: string, body: Record<string, unknown>): Res
     return json(entry);
   }
 
-  if (method === "POST" && path === "/api/v1/ops/rows/assign") {
-    const org = orgRef(String(body.org_id));
-    const id = String(body.task_id ?? body.project_id ?? "");
-    if (org === undefined || !id.startsWith("00000000")) return apiError(404, "not_found", "resource not found");
-    const isProject = body.project_id != null;
-    return json({
-      action_id: newId(),
-      org,
-      project_id: isProject ? id : null,
-      projects_moved: isProject ? 1 : 0,
-      tasks_moved: isProject ? 4 : 1,
-      followed_membership: false,
-      privatised: true,
-      message: `moved ${isProject ? 1 : 0} project(s) and ${isProject ? 4 : 1} task(s) into '${org.name}'`,
-    });
-  }
-
   return apiError(404, "not_found", "resource not found");
 }
 

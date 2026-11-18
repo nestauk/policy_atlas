@@ -212,26 +212,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/ops/rows/assign": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Assign Rows
-         * @description Assign exactly one task or project to an organisation.
-         */
-        post: operations["assign_rows_api_v1_ops_rows_assign_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -310,30 +290,6 @@ export interface components {
              * Format: uuid
              */
             org_id: string;
-        };
-        /**
-         * AssignmentOut
-         * @description What ``rows assign`` moved (see :class:`policy_atlas.ops.commands.Assignment`).
-         */
-        AssignmentOut: {
-            /**
-             * Action Id
-             * Format: uuid
-             */
-            action_id: string;
-            /** Followed Membership */
-            followed_membership: boolean;
-            /** Message */
-            message: string;
-            org: components["schemas"]["OrganisationRef"];
-            /** Privatised */
-            privatised: boolean;
-            /** Project Id */
-            project_id?: string | null;
-            /** Projects Moved */
-            projects_moved: number;
-            /** Tasks Moved */
-            tasks_moved: number;
         };
         /**
          * BulkEnrol
@@ -608,21 +564,6 @@ export interface components {
             /** Items */
             items: components["schemas"]["RequestOut"][];
             self_signup: components["schemas"]["SelfSignupOut"];
-        };
-        /**
-         * RowAssign
-         * @description Body of ``POST /api/v1/ops/rows/assign``: exactly one of the two ids.
-         */
-        RowAssign: {
-            /**
-             * Org Id
-             * Format: uuid
-             */
-            org_id: string;
-            /** Project Id */
-            project_id?: string | null;
-            /** Task Id */
-            task_id?: string | null;
         };
         /**
          * SelfSignupOut
@@ -1025,39 +966,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RequestOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    assign_rows_api_v1_ops_rows_assign_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RowAssign"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AssignmentOut"];
                 };
             };
             /** @description Validation Error */

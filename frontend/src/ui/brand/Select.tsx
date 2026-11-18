@@ -45,8 +45,6 @@ const MOVE_KEYS = new Set(["ArrowDown", "ArrowUp", "Home", "End"]);
  *     merges its own onto it). Omitted, the field's trigger shows.
  *   contentClassName: Width of the open list, when the trigger's is too
  *     narrow for the choices.
- *   describedBy: Ids of the help or error lines under the field.
- *   invalid: The field's error look (a Red border), with `aria-invalid`.
  */
 export function Select<V extends string>({
   label,
@@ -60,8 +58,6 @@ export function Select<V extends string>({
   className,
   renderTrigger,
   contentClassName,
-  describedBy,
-  invalid = false,
 }: {
   label: string;
   value: V | "";
@@ -74,8 +70,6 @@ export function Select<V extends string>({
   className?: string;
   renderTrigger?: (state: { open: boolean; chosen: SelectOption<V> | undefined }) => ReactElement;
   contentClassName?: string;
-  describedBy?: string;
-  invalid?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const listRef = useRef<HTMLUListElement>(null);
@@ -134,8 +128,6 @@ export function Select<V extends string>({
           aria-expanded={open}
           aria-controls={open ? listId : undefined}
           aria-label={label}
-          aria-describedby={describedBy}
-          aria-invalid={invalid || undefined}
           onKeyDown={(event) => {
             if (event.key === "ArrowDown" || event.key === "ArrowUp") {
               event.preventDefault();
@@ -146,7 +138,7 @@ export function Select<V extends string>({
             "relative inline-flex max-w-full min-w-0 cursor-pointer items-center border bg-paper pr-9 pl-3 text-left text-ink",
             "transition-colors duration-150",
             size === 40 ? "h-10 text-body" : "h-8 text-meta",
-            open ? "border-navy" : invalid ? "border-red" : "border-line-2",
+            open ? "border-navy" : "border-line-2",
             "disabled:cursor-default disabled:bg-ground disabled:text-grey",
             className,
           )}

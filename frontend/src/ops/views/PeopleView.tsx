@@ -277,7 +277,7 @@ export function PeopleView() {
         )}
       </div>
       {people.isError ? (
-        <FailedLine onRetry={() => void people.refetch()} />
+        <FailedLine message="Could not load the people list." onRetry={() => void people.refetch()} />
       ) : (
         <div className={TABLE_WRAP_CLASS}>
           <table ref={tableRef} tabIndex={-1} aria-label="People" className={TABLE_CLASS}>
@@ -373,7 +373,7 @@ export function PeopleView() {
           {visible.length === 0 && <EmptyRows label="No people match." />}
         </div>
       )}
-      {retry !== null && <FailedLine onRetry={retry} />}
+      {retry !== null && <FailedLine message="Could not finish the action." onRetry={retry} />}
 
       {dialog?.kind === "move" && (
         <MoveDialog

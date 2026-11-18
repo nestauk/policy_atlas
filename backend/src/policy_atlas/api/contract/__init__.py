@@ -58,7 +58,6 @@ from .common import (
 from .ops import (
     ActionResult,
     ApproveRequest,
-    AssignmentOut,
     BulkEnrol,
     BulkOut,
     BulkQuota,
@@ -72,7 +71,6 @@ from .ops import (
     QuotaSet,
     RequestOut,
     RequestsOut,
-    RowAssign,
     SelfSignupOut,
 )
 from .projects import (
@@ -512,7 +510,6 @@ __all__ = [
     "WaitlistSignupOut",
     "ActionResult",
     "ApproveRequest",
-    "AssignmentOut",
     "BulkEnrol",
     "BulkOut",
     "BulkQuota",
@@ -526,6 +523,5 @@ __all__ = [
     "QuotaSet",
     "RequestOut",
     "RequestsOut",
-    "RowAssign",
     "SelfSignupOut",
 ]

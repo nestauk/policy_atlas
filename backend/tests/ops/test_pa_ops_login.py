@@ -209,9 +209,6 @@ def test_pa_ops_runs_every_ops_write_of_this_slice(
         conn.execute(
             update(app_user).where(app_user.c.user_id == mover).values(email=email)
         )
-        task_id = make_task(conn, owner_user_id=other)
-        project_id = make_project(conn, owner_user_id=other)
-        make_task(conn, owner_user_id=other, project_id=project_id)
         entry_id = uuid.uuid4()
         conn.execute(
             waitlist_entry.insert().values(
@@ -252,11 +249,6 @@ def test_pa_ops_runs_every_ops_write_of_this_slice(
             conn, org_id=org.org_id, task_quota_per_year=None, runs_per_user=2
         )
         assert (person.task_quota_after, organisation_change.runs_after) == (5, 2)
-
-    with _as_pa_ops(pa_ops_engine) as conn:
-        assert commands.assign_rows(conn, org=org, task_id=task_id).tasks_moved == 1
-        by_project = commands.assign_rows(conn, org=org, project_id=project_id)
-        assert (by_project.tasks_moved, by_project.projects_moved) == (1, 1)
 
     with _as_pa_ops(pa_ops_engine) as conn:
         action_id = commands.record_action(
@@ -318,7 +310,7 @@ _EXPECTED_COLUMN_UPDATES: dict[str, set[str]] = {
     },
     "organisation": {"name", "task_quota_per_year", "runs_per_user"},
     "waitlist_entry": {"account_user_id", "account_created_at"},
-    "task": {"org_id", "visibility", "is_public", "updated_at"},
+    "task": {"org_id", "visibility", "is_public"},
     "project": {"org_id", "visibility"},
 }
 

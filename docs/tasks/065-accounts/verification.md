@@ -235,8 +235,29 @@ a family-diverse Codex pass is pending a refill (recorded under Known unverified
    (`check`), creating only new ones. Recommendation: (b) for new accounts and (a)'s
    auto-enrol kept, because de-enrol is not a lockout (offboard is) and the person can be
    renamed. Until the owner rules, the code does (a) with the no-rename fix.
+   **Owner ruling (2026-11-18): (a).** A new account takes the name typed on the form. The
+   code already does this; nothing changed.
 2. **`max_per_hour` on production** (security M3): 20 is the contract's default; the
-   security lane suggests 5 for the first weeks. Config only.
+   security lane suggests 5 for the first weeks. Config only. **Owner ruling (2026-11-18):
+   5 on production** (`infra/pa_config.json`); staging keeps 20.
+
+## Owner pass 1 on the ops pages (2026-11-18)
+
+The owner looked at the pages on the local ops server. Changes, with the rulings in
+`ops-pages-copy.md` § Owner pass 1:
+
+- Copy: Add a person's help line and sender address removed, two sentences reworded; the
+  quota side panel is "Currently applied limits" with "<label>: <facts>" rows.
+- The organisation picker is a search popover that can create an organisation (all forms).
+- A failed load or action says what failed ("Could not load the organisations.") with an
+  inline "Try again" link; the second, separate button is gone.
+- "Ops" beside the wordmark is set in the wordmark's type, not a chip.
+- **Removed: "Move a task or project to another organisation"** and everything built only
+  for it: the `POST /api/v1/ops/rows/assign` route, its contract models (`RowAssign`,
+  `AssignmentOut`), the panel, its mock and tests, and the `pa_ops` grant on
+  `task.updated_at` (only that route wrote it). The CLI `rows assign` command stays
+  (it runs on the master login). This narrows contract B6 and B13: a flagged deviation by
+  owner ruling.
 
 ## Rubric status
 

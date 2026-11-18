@@ -21,10 +21,10 @@ describe("Set a quota", () => {
       "Warning: this limit protects the shared run capacity. A higher number lets this person take more of it at the same time, which can slow other people's runs.",
     );
     expect(warning).toHaveClass("bg-yellow-tint");
-    const limits = screen.getByRole("region", { name: "Limits that apply" });
-    expect(limits).toHaveTextContent("Tasks per year · 100 · from Nesta");
-    expect(limits).toHaveTextContent("Simultaneous tasks · 3 · from the default");
-    expect(limits).toHaveTextContent("Admin exemption · no");
+    const limits = screen.getByRole("region", { name: "Currently applied limits" });
+    expect(limits).toHaveTextContent("Tasks per year: 100 · from Nesta");
+    expect(limits).toHaveTextContent("Simultaneous tasks: 3 · from the default");
+    expect(limits).toHaveTextContent("Admin exemption: no");
   });
 
   it("saves the numbers, and Clear and inherit sends nulls", async () => {
@@ -32,7 +32,7 @@ describe("Set a quota", () => {
     renderOps("/people/sub-mara/quota");
     const runs = await screen.findByLabelText("Simultaneous tasks");
     expect(runs).toHaveValue("6");
-    expect(within(screen.getByRole("region", { name: "Limits that apply" })).getByText(/Tasks per year · no limit · from this person/)).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Currently applied limits" })).getByText(/Tasks per year: no limit · from this person/)).toBeInTheDocument();
     await user.clear(runs);
     await user.type(runs, "8");
     await user.click(screen.getByRole("button", { name: "Save quota" }));
