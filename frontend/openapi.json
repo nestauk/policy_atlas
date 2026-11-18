@@ -1416,6 +1416,96 @@
         "title": "ChunkContextOut",
         "type": "object"
       },
+      "CitationFlagIn": {
+        "additionalProperties": false,
+        "description": "Element A: \"Useful\" or \"Not relevant\" on one cited or screened-in document.\n\nA toggle: a second submit for the same document replaces the first. The\nreason and the note refine a \"Not relevant\" flag and are optional.",
+        "properties": {
+          "action": {
+            "enum": [
+              "useful",
+              "not_relevant"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "artefact_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The report that the flag was given on. It names the run. Absent on the Sources tab: the task's latest run is used.",
+            "title": "Artefact Id"
+          },
+          "kind": {
+            "const": "citation_flag",
+            "title": "Kind",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "off_topic",
+                  "wrong_population",
+                  "not_evidence",
+                  "duplicate",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "source_id": {
+            "description": "The document: its task source identity.",
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "surface": {
+            "enum": [
+              "report_references",
+              "sources_all"
+            ],
+            "title": "Surface",
+            "type": "string"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "surface",
+          "task_id",
+          "source_id",
+          "action"
+        ],
+        "title": "CitationFlagIn",
+        "type": "object"
+      },
       "CitationOut": {
         "description": "One citation attached to a citation-type claim.\n\nArgs:\n    citation_id: Durable citation identity \u2014 the key for the\n        chunk-context endpoint (`GET .../citations/{citation_id}/context`).\n    n: Reference number (matches a `ReferenceOut.n`).\n    source_id: The cited document's task source identity, when the\n        citation resolves to one (joins to the sources/dossier surface).\n    source_title: Cited source's title (envelope metadata).\n    quote: The quoted span from the source.\n    appraisal_label: Optional appraisal label.\n    evidence_type: The cited document's classified evidence type \u2014 the\n        input the appraisal rubric scores from.\n    text_basis: The cited document's extraction basis (`abstract_only`\n        or `full_text`), when known (task 046).",
         "properties": {
@@ -2722,6 +2812,96 @@
           "message"
         ],
         "title": "FailedEventError",
+        "type": "object"
+      },
+      "FeedbackListOut": {
+        "description": "The caller's active feedback records on one task.",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/FeedbackOut"
+            },
+            "title": "Data",
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "FeedbackListOut",
+        "type": "object"
+      },
+      "FeedbackOut": {
+        "description": "One stored feedback record of the caller.",
+        "properties": {
+          "capability_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability Run Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "feedback_event_id": {
+            "format": "uuid",
+            "title": "Feedback Event Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "citation_flag",
+              "missing_paper",
+              "screening_override",
+              "use_intent",
+              "claim_flag",
+              "problem_report"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "surface": {
+            "title": "Surface",
+            "type": "string"
+          },
+          "target_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Id"
+          },
+          "target_type": {
+            "title": "Target Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "feedback_event_id",
+          "kind",
+          "surface",
+          "target_type",
+          "payload",
+          "created_at"
+        ],
+        "title": "FeedbackOut",
         "type": "object"
       },
       "FindingOut": {
@@ -6436,6 +6616,130 @@
         "title": "PlanUpdatedFrame",
         "type": "object"
       },
+      "ProblemClientInfo": {
+        "additionalProperties": false,
+        "description": "What the browser attaches to a problem report.",
+        "properties": {
+          "browser": {
+            "description": "The user agent.",
+            "maxLength": 500,
+            "title": "Browser",
+            "type": "string"
+          },
+          "time": {
+            "description": "The browser's clock when the report was sent.",
+            "format": "date-time",
+            "title": "Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "browser",
+          "time"
+        ],
+        "title": "ProblemClientInfo",
+        "type": "object"
+      },
+      "ProblemReportIn": {
+        "additionalProperties": false,
+        "description": "Element E: \"Report a problem\", from the app header on any page.",
+        "properties": {
+          "client": {
+            "$ref": "#/components/schemas/ProblemClientInfo"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 5000,
+            "title": "Description",
+            "type": "string"
+          },
+          "kind": {
+            "const": "problem_report",
+            "title": "Kind",
+            "type": "string"
+          },
+          "page": {
+            "description": "The page path.",
+            "maxLength": 500,
+            "title": "Page",
+            "type": "string"
+          },
+          "problem_kind": {
+            "enum": [
+              "error",
+              "stalled",
+              "unusable",
+              "other"
+            ],
+            "title": "Problem Kind",
+            "type": "string"
+          },
+          "query_text": {
+            "anyOf": [
+              {
+                "maxLength": 5000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The research question, when the user left its checkbox on.",
+            "title": "Query Text"
+          },
+          "step_reached": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step Reached"
+          },
+          "step_status": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step Status"
+          },
+          "surface": {
+            "const": "app_header",
+            "title": "Surface",
+            "type": "string"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The task that was open. Absent on a page with no task: the report is then stored with no run.",
+            "title": "Task Id"
+          }
+        },
+        "required": [
+          "kind",
+          "surface",
+          "problem_kind",
+          "page",
+          "client"
+        ],
+        "title": "ProblemReportIn",
+        "type": "object"
+      },
       "ProfileLineOut": {
         "description": "One line of an option's profile (task 046, R37).\n\nArgs:\n    key: The line: cost, time to set up, time to effect, workforce, who\n        decides, dependencies, coordination or delivery complexity.\n    sentence: The line, in one sentence.\n    mark: `less` \u00b7 `more` when the option stands out on this line against\n        the other options of the list; `null` otherwise, and always for\n        `who_decides` and `dependencies`.",
         "properties": {
@@ -6776,7 +7080,7 @@
         "type": "object"
       },
       "ReferenceOut": {
-        "description": "One numbered reference in the artefact's reference list.\n\nArgs:\n    n: Reference number.\n    title: Reference title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    url: Optional reference URL.\n    authorships: Authors and their institutions, for display.",
+        "description": "One numbered reference in the artefact's reference list.\n\nArgs:\n    n: Reference number.\n    title: Reference title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    url: Optional reference URL.\n    authorships: Authors and their institutions, for display.\n    source_id: The cited document's task source identity, so that in-app\n        feedback on a reference names the document. ``None`` for a\n        snapshot with no link to the task.",
         "properties": {
           "authorships": {
             "items": {
@@ -6788,6 +7092,18 @@
           "n": {
             "title": "N",
             "type": "integer"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
           },
           "title": {
             "title": "Title",
@@ -14476,6 +14792,174 @@
         "summary": "Unarchive Conversation",
         "tags": [
           "conversations"
+        ]
+      }
+    },
+    "/api/v1/feedback": {
+      "get": {
+        "description": "List the caller's active records of one kind on one task.\n\nThe frontend reads this to show a flag again after a reload.\n\nArgs:\n    task_id: The task.\n    kind: The feedback kind.\n    user: The authenticated caller.\n    engine: The process engine.\n    settings: The application settings (feature flags).\n\nReturns:\n    The caller's records that are not retracted, newest first.\n\nRaises:\n    HTTPException: 404 when the kind's element is off, or the task is\n        absent or not readable by the caller.",
+        "operationId": "list_feedback_api_v1_feedback_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "citation_flag",
+                "missing_paper",
+                "screening_override",
+                "use_intent",
+                "claim_flag",
+                "problem_report"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackListOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Feedback",
+        "tags": [
+          "feedback"
+        ]
+      },
+      "post": {
+        "description": "Store one feedback record, then mirror it as a Langfuse score.\n\nFor a toggle kind, a second submit for the same target replaces the first:\nthe earlier record is retracted and its score is deleted.\n\nArgs:\n    body: The validated record of one kind.\n    user: The authenticated caller.\n    engine: The process engine. The route owns its transaction, so that\n        the mirror runs after the commit.\n    settings: The application settings (feature flags, version).\n    langfuse: The Langfuse client, or ``None`` when tracing is off.\n\nReturns:\n    The stored record.\n\nRaises:\n    HTTPException: 404 when the element is off, or when the task, the\n        report or the document is absent or not readable by the caller.",
+        "operationId": "submit_feedback_api_v1_feedback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "discriminator": {
+                  "mapping": {
+                    "citation_flag": "#/components/schemas/CitationFlagIn",
+                    "problem_report": "#/components/schemas/ProblemReportIn"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/CitationFlagIn"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ProblemReportIn"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Submit Feedback",
+        "tags": [
+          "feedback"
+        ]
+      }
+    },
+    "/api/v1/feedback/{feedback_event_id}": {
+      "delete": {
+        "description": "Retract one of the caller's records. The row is kept; its score is deleted.\n\nArgs:\n    feedback_event_id: The record.\n    user: The authenticated caller.\n    engine: The process engine.\n    settings: The application settings (feature flags).\n    langfuse: The Langfuse client, or ``None`` when tracing is off.\n\nReturns:\n    An empty 204 response.\n\nRaises:\n    HTTPException: 404 when no feedback kind is on, or when the caller has\n        no active record with this id.",
+        "operationId": "retract_api_v1_feedback__feedback_event_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "feedback_event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Feedback Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Retract",
+        "tags": [
+          "feedback"
         ]
       }
     },

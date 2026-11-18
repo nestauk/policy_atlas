@@ -144,6 +144,98 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Feedback
+         * @description List the caller's active records of one kind on one task.
+         *
+         *     The frontend reads this to show a flag again after a reload.
+         *
+         *     Args:
+         *         task_id: The task.
+         *         kind: The feedback kind.
+         *         user: The authenticated caller.
+         *         engine: The process engine.
+         *         settings: The application settings (feature flags).
+         *
+         *     Returns:
+         *         The caller's records that are not retracted, newest first.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the kind's element is off, or the task is
+         *             absent or not readable by the caller.
+         */
+        get: operations["list_feedback_api_v1_feedback_get"];
+        put?: never;
+        /**
+         * Submit Feedback
+         * @description Store one feedback record, then mirror it as a Langfuse score.
+         *
+         *     For a toggle kind, a second submit for the same target replaces the first:
+         *     the earlier record is retracted and its score is deleted.
+         *
+         *     Args:
+         *         body: The validated record of one kind.
+         *         user: The authenticated caller.
+         *         engine: The process engine. The route owns its transaction, so that
+         *             the mirror runs after the commit.
+         *         settings: The application settings (feature flags, version).
+         *         langfuse: The Langfuse client, or ``None`` when tracing is off.
+         *
+         *     Returns:
+         *         The stored record.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the element is off, or when the task, the
+         *             report or the document is absent or not readable by the caller.
+         */
+        post: operations["submit_feedback_api_v1_feedback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feedback/{feedback_event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Retract
+         * @description Retract one of the caller's records. The row is kept; its score is deleted.
+         *
+         *     Args:
+         *         feedback_event_id: The record.
+         *         user: The authenticated caller.
+         *         engine: The process engine.
+         *         settings: The application settings (feature flags).
+         *         langfuse: The Langfuse client, or ``None`` when tracing is off.
+         *
+         *     Returns:
+         *         An empty 204 response.
+         *
+         *     Raises:
+         *         HTTPException: 404 when no feedback kind is on, or when the caller has
+         *             no active record with this id.
+         */
+        delete: operations["retract_api_v1_feedback__feedback_event_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -2848,6 +2940,50 @@ export interface components {
             year?: number | null;
         };
         /**
+         * CitationFlagIn
+         * @description Element A: "Useful" or "Not relevant" on one cited or screened-in document.
+         *
+         *     A toggle: a second submit for the same document replaces the first. The
+         *     reason and the note refine a "Not relevant" flag and are optional.
+         */
+        CitationFlagIn: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "useful" | "not_relevant";
+            /**
+             * Artefact Id
+             * @description The report that the flag was given on. It names the run. Absent on the Sources tab: the task's latest run is used.
+             */
+            artefact_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "citation_flag";
+            /** Note */
+            note?: string | null;
+            /** Reason */
+            reason?: ("off_topic" | "wrong_population" | "not_evidence" | "duplicate" | "other") | null;
+            /**
+             * Source Id
+             * Format: uuid
+             * @description The document: its task source identity.
+             */
+            source_id: string;
+            /**
+             * Surface
+             * @enum {string}
+             */
+            surface: "report_references" | "sources_all";
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+        };
+        /**
          * CitationOut
          * @description One citation attached to a citation-type claim.
          *
@@ -3527,6 +3663,47 @@ export interface components {
             code: string;
             /** Message */
             message: string;
+        };
+        /**
+         * FeedbackListOut
+         * @description The caller's active feedback records on one task.
+         */
+        FeedbackListOut: {
+            /** Data */
+            data: components["schemas"]["FeedbackOut"][];
+        };
+        /**
+         * FeedbackOut
+         * @description One stored feedback record of the caller.
+         */
+        FeedbackOut: {
+            /** Capability Run Id */
+            capability_run_id?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Feedback Event Id
+             * Format: uuid
+             */
+            feedback_event_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "citation_flag" | "missing_paper" | "screening_override" | "use_intent" | "claim_flag" | "problem_report";
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /** Surface */
+            surface: string;
+            /** Target Id */
+            target_id?: string | null;
+            /** Target Type */
+            target_type: string;
         };
         FindingOut: components["schemas"]["IofFindingOut"] | components["schemas"]["IcfFindingOut"];
         /**
@@ -5275,6 +5452,69 @@ export interface components {
             version: number;
         };
         /**
+         * ProblemClientInfo
+         * @description What the browser attaches to a problem report.
+         */
+        ProblemClientInfo: {
+            /**
+             * Browser
+             * @description The user agent.
+             */
+            browser: string;
+            /**
+             * Time
+             * Format: date-time
+             * @description The browser's clock when the report was sent.
+             */
+            time: string;
+        };
+        /**
+         * ProblemReportIn
+         * @description Element E: "Report a problem", from the app header on any page.
+         */
+        ProblemReportIn: {
+            client: components["schemas"]["ProblemClientInfo"];
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "problem_report";
+            /**
+             * Page
+             * @description The page path.
+             */
+            page: string;
+            /**
+             * Problem Kind
+             * @enum {string}
+             */
+            problem_kind: "error" | "stalled" | "unusable" | "other";
+            /**
+             * Query Text
+             * @description The research question, when the user left its checkbox on.
+             */
+            query_text?: string | null;
+            /** Step Reached */
+            step_reached?: string | null;
+            /** Step Status */
+            step_status?: string | null;
+            /**
+             * Surface
+             * @constant
+             */
+            surface: "app_header";
+            /**
+             * Task Id
+             * @description The task that was open. Absent on a page with no task: the report is then stored with no run.
+             */
+            task_id?: string | null;
+        };
+        /**
          * ProfileLineOut
          * @description One line of an option's profile (task 046, R37).
          *
@@ -5509,12 +5749,17 @@ export interface components {
          *         venue: Publication venue, or `None` if unknown.
          *         url: Optional reference URL.
          *         authorships: Authors and their institutions, for display.
+         *         source_id: The cited document's task source identity, so that in-app
+         *             feedback on a reference names the document. ``None`` for a
+         *             snapshot with no link to the task.
          */
         ReferenceOut: {
             /** Authorships */
             authorships?: components["schemas"]["AuthorshipOut"][];
             /** N */
             n: number;
+            /** Source Id */
+            source_id?: string | null;
             /** Title */
             title: string;
             /** Url */
@@ -8924,6 +9169,100 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ConversationOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_feedback_api_v1_feedback_get: {
+        parameters: {
+            query: {
+                task_id: string;
+                kind: "citation_flag" | "missing_paper" | "screening_override" | "use_intent" | "claim_flag" | "problem_report";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_feedback_api_v1_feedback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CitationFlagIn"] | components["schemas"]["ProblemReportIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retract_api_v1_feedback__feedback_event_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                feedback_event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

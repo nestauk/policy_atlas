@@ -30,6 +30,7 @@ import { iconButtonClass } from "../ui/brand/icons";
 import { PROSE_LINK_CLASS } from "../ui/brand/inlineActions";
 import { AppFooter } from "./AppFooter";
 import { OnboardingGate } from "./feedback/OnboardingGate";
+import { ReportProblem } from "./feedback/ReportProblem";
 import { SensitiveInfoBanner } from "./SensitiveInfoBanner";
 import { ChatSidePanel } from "./workspace/chat/ChatSidePanel";
 import { PlanDocument } from "./workspace/PlanDocument";
@@ -458,6 +459,10 @@ export function AppShell() {
             {TASK.many}
           </NavItem>
           <NavItem to="/projects">{PROJECT.many}</NavItem>
+          {/* In-app feedback, element E: on every signed-in page. */}
+          {feedbackEnabled("problem_report") && auth.user !== null && (
+            <ReportProblem task={task.data} />
+          )}
         </div>
         {/* 026 live-check gap: the AuthApi always had signOut; nothing
             rendered it — Cognito users had no way out of a session. */}

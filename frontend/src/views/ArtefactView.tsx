@@ -72,6 +72,8 @@ import {
   type ReportFact,
 } from "./reportPage";
 import { usePublicView } from "./publicView";
+import { CitationFlag } from "./feedback/CitationFlag";
+import { feedbackEnabled } from "../lib/feedback";
 import {
   DisclosureHeading,
   FullReportExpandAllButton,
@@ -3971,7 +3973,25 @@ function ArtefactReport() {
             {bodySections.map(renderSection)}
 
             {(data.references ?? []).length > 0 && (
-              <ReferencesSection references={data.references ?? []} onOpenReference={openDossier} />
+              <ReferencesSection
+                references={data.references ?? []}
+                onOpenReference={openDossier}
+                // In-app feedback, element A: for signed-in readers only.
+                rowExtra={
+                  feedbackEnabled("citation_flag") && !isPublicView
+                    ? (reference) =>
+                        reference.source_id != null && (
+                          <CitationFlag
+                            taskId={taskId}
+                            artefactId={data.artefact_id}
+                            sourceId={reference.source_id}
+                            title={reference.title}
+                            surface="report_references"
+                          />
+                        )
+                    : undefined
+                }
+              />
             )}
 
             <div className={arriving}>
@@ -3997,6 +4017,18 @@ function ArtefactReport() {
   );
 }
 
+/** One row of the reference list. */
+type ReferenceRow = {
+  n: number;
+  title: string;
+  year?: number | null;
+  venue?: string | null;
+  url?: string | null;
+  authorships?: components["schemas"]["AuthorshipOut"][];
+  /** The cited document's task source identity, when it has one. */
+  source_id?: string | null;
+};
+
 /** References as a collapsible entry with an always-visible summary line —
  *  it is the ArtefactOut.references collection, not a synthesis section
  *  (028 strand 10, binding record). While the report is written the same
@@ -4013,18 +4045,14 @@ export function ReferencesSection({
   references,
   onOpenReference,
   defaultOpen = false,
+  rowExtra,
 }: {
-  references: Array<{
-    n: number;
-    title: string;
-    year?: number | null;
-    venue?: string | null;
-    url?: string | null;
-    authorships?: components["schemas"]["AuthorshipOut"][];
-  }>;
+  references: ReferenceRow[];
   /** Absent while the report is live: the titles are not links yet. */
   onOpenReference?: (title: string) => void;
   defaultOpen?: boolean;
+  /** A block under each reference (in-app feedback: the citation flag). */
+  rowExtra?: (reference: ReferenceRow) => ReactNode;
 }) {
   const [open, setOpen] = useRememberedOpen("references", defaultOpen);
   const arriving = useArrivingClass();
@@ -4062,7 +4090,14 @@ export function ReferencesSection({
               ) : (
                 <span className="w-9 shrink-0 text-right font-semibold tabular-nums text-grey">[{reference.n}]</span>
               )}
-              <ReferenceEntry reference={reference} onOpen={onOpenReference} arrivingClass={arriving} />
+              {rowExtra === undefined ? (
+                <ReferenceEntry reference={reference} onOpen={onOpenReference} arrivingClass={arriving} />
+              ) : (
+                <div className="min-w-0 flex-1">
+                  <ReferenceEntry reference={reference} onOpen={onOpenReference} arrivingClass={arriving} />
+                  {rowExtra(reference)}
+                </div>
+              )}
             </li>
           ))}
         </ol>

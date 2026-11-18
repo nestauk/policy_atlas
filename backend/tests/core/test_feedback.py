@@ -8,7 +8,6 @@ the test suite, so the score calls go to a fake client.
 from __future__ import annotations
 
 import uuid
-from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -17,41 +16,15 @@ from sqlalchemy import inspect, select
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
 
-from policy_atlas.core import events, tracing
+from policy_atlas.core import tracing
 from policy_atlas.core.feedback import record_feedback, retract_feedback, trace_id_for
 from policy_atlas.core.schema import app_user, feedback_event, runs
 from policy_atlas.runtime.runner import _store_trace_id
 from tests.conftest import _alembic_cfg
-from tests.helpers import delete_task_data, now, seed_run, seed_task_and_run, seed_walk
+from tests.feedback_support import FakeLangfuse, seed_component_run
+from tests.helpers import delete_task_data, now, seed_task_and_run, seed_walk
 
 PREVIOUS_REVISION = "f5a1c8e93b27"
-
-
-class FakeScoreApi:
-    """Stands in for ``client.api.legacy.score_v1``: records each delete."""
-
-    def __init__(self, error: Exception | None = None) -> None:
-        self.deleted: list[str] = []
-        self.error = error
-
-    def delete(self, score_id: str) -> None:
-        """Record the delete, or raise the configured error."""
-        if self.error is not None:
-            raise self.error
-        self.deleted.append(score_id)
-
-
-class FakeLangfuse:
-    """Stands in for the Langfuse client: records each ``create_score`` call."""
-
-    def __init__(self, delete_error: Exception | None = None) -> None:
-        self.scores: list[dict[str, Any]] = []
-        self.score_api = FakeScoreApi(delete_error)
-        self.api = type("Api", (), {"legacy": type("Legacy", (), {"score_v1": self.score_api})})
-
-    def create_score(self, **kwargs: Any) -> None:
-        """Record the keyword arguments of one score write."""
-        self.scores.append(kwargs)
 
 
 def _user(conn: Connection) -> str:
@@ -61,33 +34,6 @@ def _user(conn: Connection) -> str:
         app_user.insert().values(user_id=user_id, display_name="Tester", created_at=now())
     )
     return user_id
-
-
-def _component_run(
-    conn: Connection,
-    task_id: uuid.UUID,
-    walk_id: uuid.UUID,
-    component: str,
-    *,
-    trace_id: str | None,
-    age_minutes: int = 0,
-) -> uuid.UUID:
-    """Insert a component run with its ``component.started`` event and trace id."""
-    run_id = seed_run(
-        conn,
-        task_id,
-        capability_run_id=walk_id,
-        started_at=now() - timedelta(minutes=age_minutes),
-    )
-    conn.execute(runs.update().where(runs.c.run_id == run_id).values(trace_id=trace_id))
-    events.append(
-        conn,
-        task_id=task_id,
-        run_id=run_id,
-        event_type="component.started",
-        payload={"component": component},
-    )
-    return run_id
 
 
 def _flag(conn: Connection, user_id: str, **overrides: Any) -> Any:
@@ -108,8 +54,8 @@ def test_a_record_carries_the_full_envelope(conn: Connection) -> None:
     user_id = _user(conn)
     task_id, _ = seed_task_and_run(conn)
     walk = seed_walk(conn, task_id, capability="evidence_search")
-    _component_run(conn, task_id, walk.walk_id, "acquire", trace_id="trace-acquire")
-    _component_run(conn, task_id, walk.walk_id, "synthesise", trace_id="trace-synthesise")
+    seed_component_run(conn, task_id, walk.walk_id, "acquire", trace_id="trace-acquire")
+    seed_component_run(conn, task_id, walk.walk_id, "synthesise", trace_id="trace-synthesise")
 
     recorded = _flag(
         conn,
@@ -225,9 +171,9 @@ def test_the_trace_is_the_newest_run_of_the_component(conn: Connection) -> None:
     task_id, _ = seed_task_and_run(conn)
     walk = seed_walk(conn, task_id, capability="evidence_search")
     walk_id = walk.walk_id
-    _component_run(conn, task_id, walk_id, "screen_abstract", trace_id="old", age_minutes=9)
-    _component_run(conn, task_id, walk_id, "screen_abstract", trace_id="new", age_minutes=5)
-    _component_run(conn, task_id, walk_id, "synthesise", trace_id="synth", age_minutes=1)
+    seed_component_run(conn, task_id, walk_id, "screen_abstract", trace_id="old", age_minutes=9)
+    seed_component_run(conn, task_id, walk_id, "screen_abstract", trace_id="new", age_minutes=5)
+    seed_component_run(conn, task_id, walk_id, "synthesise", trace_id="synth", age_minutes=1)
 
     assert trace_id_for(conn, capability_run_id=walk_id, component="screen_abstract") == "new"
     assert trace_id_for(conn, capability_run_id=walk_id) == "synth"
@@ -238,7 +184,7 @@ def test_a_run_with_no_stored_trace_gives_no_trace(conn: Connection) -> None:
     """An old run, or a run with tracing off, has a NULL trace id."""
     task_id, _ = seed_task_and_run(conn)
     walk = seed_walk(conn, task_id, capability="evidence_search")
-    _component_run(conn, task_id, walk.walk_id, "synthesise", trace_id=None)
+    seed_component_run(conn, task_id, walk.walk_id, "synthesise", trace_id=None)
 
     assert trace_id_for(conn, capability_run_id=walk.walk_id, component="synthesise") is None
 

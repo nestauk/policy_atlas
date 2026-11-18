@@ -15,10 +15,23 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any, NamedTuple
 
+import structlog
+from langfuse import Langfuse
 from sqlalchemy import exists, select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.schema import FEEDBACK_TOGGLE_KINDS, event_log, feedback_event, runs
+
+log = structlog.get_logger()
+
+#: Where each kind of problem report goes (the brief, element E): errors and
+#: stalls to the engineering alert channel, the rest to the eval backlog.
+PROBLEM_REPORT_ROUTES: dict[str, str] = {
+    "error": "engineering_alert",
+    "stalled": "engineering_alert",
+    "unusable": "eval_backlog",
+    "other": "eval_backlog",
+}
 
 
 class RecordedFeedback(NamedTuple):
@@ -178,3 +191,44 @@ def record_feedback(
         )
     )
     return RecordedFeedback(feedback_event_id, trace_id, replaced_id)
+
+
+def route_problem_report(
+    client: Langfuse | None,
+    *,
+    feedback_event_id: uuid.UUID,
+    problem_kind: str,
+    trace_id: str | None,
+) -> tuple[str, str | None]:
+    """Send one problem report to its destination.
+
+    This function is the one seam for routing. The destinations are stubs: the
+    repository has no alert channel (no Slack, SNS, SES or Sentry) and no eval
+    backlog. Each destination is a structured log line, which CloudWatch
+    keeps. To add a real channel, replace the log call for that destination.
+
+    Args:
+        client: Langfuse client, or ``None`` when tracing is off.
+        feedback_event_id: The ``feedback_event`` row of the report.
+        problem_kind: ``error``, ``stalled``, ``unusable`` or ``other``.
+        trace_id: The Langfuse trace of the run, if it has one.
+
+    Returns:
+        The destination name, and the direct link to the trace for an
+        engineering alert when the run has a trace.
+    """
+    destination = PROBLEM_REPORT_ROUTES[problem_kind]
+    trace_url = None
+    if destination == "engineering_alert" and client is not None and trace_id is not None:
+        try:
+            trace_url = client.get_trace_url(trace_id=trace_id)
+        except Exception as exc:  # noqa: BLE001 - the link is a convenience, not the record
+            log.warning("feedback.trace_url_failed", error=type(exc).__name__)
+    log.warning(
+        f"feedback.problem_report.{destination}",
+        feedback_event_id=str(feedback_event_id),
+        problem_kind=problem_kind,
+        trace_id=trace_id,
+        trace_url=trace_url,
+    )
+    return destination, trace_url

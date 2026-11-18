@@ -6,8 +6,14 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type { components } from "./gen/types";
+import type { components, paths } from "./gen/types";
 import { useApiClient } from "./queries";
+
+export type FeedbackRecord = components["schemas"]["FeedbackOut"];
+export type FeedbackKind = FeedbackRecord["kind"];
+/** The body of a submit: one of the per-kind models, selected by `kind`. */
+export type FeedbackBody =
+  paths["/api/v1/feedback"]["post"]["requestBody"]["content"]["application/json"];
 
 export type UserProfile = components["schemas"]["UserProfileOut"];
 export type UserProfileAnswers = components["schemas"]["UserProfileIn"];
@@ -74,5 +80,77 @@ export function useSkipProfile() {
       return data;
     },
     onSuccess: (profile) => queryClient.setQueryData(PROFILE_KEY, profile),
+  });
+}
+
+const feedbackKey = (taskId: string, kind: FeedbackKind) => ["feedback", taskId, kind] as const;
+
+/**
+ * `GET /api/v1/feedback`: the caller's active records of one kind on a task.
+ * A flag shows again after a reload because of this read.
+ *
+ * Args:
+ *   taskId: The task.
+ *   kind: The feedback kind.
+ *   enabled: False when the kind's element is off, so no request is made.
+ *
+ * Returns:
+ *   The query. Its data is the list of records that are not retracted.
+ */
+export function useFeedback(taskId: string, kind: FeedbackKind, enabled = true) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: feedbackKey(taskId, kind),
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/feedback", {
+        params: { query: { task_id: taskId, kind } },
+      });
+      if (error) raise(error);
+      return data.data;
+    },
+    enabled: enabled && taskId !== "",
+  });
+}
+
+/**
+ * `POST /api/v1/feedback`: store one feedback record.
+ *
+ * Args:
+ *   taskId: The task whose list of records to refresh, when there is one.
+ */
+export function useSubmitFeedback(taskId?: string) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: FeedbackBody) => {
+      const { data, error } = await client.POST("/api/v1/feedback", { body });
+      if (error) raise(error);
+      return data;
+    },
+    onSuccess: (record) =>
+      taskId === undefined
+        ? undefined
+        : queryClient.invalidateQueries({ queryKey: feedbackKey(taskId, record.kind) }),
+  });
+}
+
+/**
+ * `DELETE /api/v1/feedback/{id}`: retract one record. The row is kept.
+ *
+ * Args:
+ *   taskId: The task whose list of records to refresh.
+ *   kind: The kind of the record.
+ */
+export function useRetractFeedback(taskId: string, kind: FeedbackKind) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (feedbackEventId: string) => {
+      const { error } = await client.DELETE("/api/v1/feedback/{feedback_event_id}", {
+        params: { path: { feedback_event_id: feedbackEventId } },
+      });
+      if (error) raise(error);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: feedbackKey(taskId, kind) }),
   });
 }
