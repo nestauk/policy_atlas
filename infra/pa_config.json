@@ -6,7 +6,7 @@
             "backend_subdomain": "api",
             "cognito_domain_prefix": "policy-atlas-v3",
             "email": {
-                "enabled": false,
+                "enabled": true,
                 "sender_domain": "v3.policyatlas.uk",
                 "from_address": "no-reply@v3.policyatlas.uk",
                 "from_name": "Policy Atlas"
@@ -31,7 +31,7 @@
                 "subdomain": "ops",
                 "cpu": 256,
                 "memory_limit_mib": 512,
-                "desired_count": 0,
+                "desired_count": 1,
                 "allowed_cidrs_parameter_name": "/policy_atlas_v3/ops/allowed_cidrs"
             },
             "self_signup": {

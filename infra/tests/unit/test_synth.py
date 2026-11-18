@@ -197,6 +197,20 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         ops_allowlist_size=OPS_ALLOWLIST_SIZE,
         cross_region_references=True,
     )
+    # The email-off case on its own, whatever the committed environment says
+    # (staging turned SES on, owner 2026-11-18).
+    no_email_config = json.loads(json.dumps(PA_CONFIG))
+    no_email_config["policy_atlas_config"]["email"]["enabled"] = False
+    NO_EMAIL_APP_STACK = PolicyAtlasStack(
+        APP,
+        "PaV3AppStackNoEmail",
+        pa_config=no_email_config,
+        certificate=CERT_STACK.certificate,
+        env=ENV,
+        env_name=ENV_NAME,
+        ops_allowlist_size=OPS_ALLOWLIST_SIZE,
+        cross_region_references=True,
+    )
     ANALYTICS_STACK = PaV3AnalyticsStack(
         APP,
         "PaV3AnalyticsStack",
@@ -218,6 +232,7 @@ BEDROCK_APP_TEMPLATE = Template.from_stack(ROUTE_APP_STACKS["bedrock"]).to_json(
 OPENAI_APP_TEMPLATE = Template.from_stack(ROUTE_APP_STACKS["openai-direct"]).to_json()
 IN_PROCESS_APP_TEMPLATE = Template.from_stack(IN_PROCESS_APP_STACK).to_json()
 EMAIL_APP_TEMPLATE = Template.from_stack(EMAIL_APP_STACK).to_json()
+NO_EMAIL_APP_TEMPLATE = Template.from_stack(NO_EMAIL_APP_STACK).to_json()
 RENDERED_TEMPLATES = {
     stack_name: json.dumps(template, sort_keys=True)
     for stack_name, template in TEMPLATES.items()
@@ -1082,7 +1097,7 @@ def test_cognito_user_pool_is_operator_managed_and_retained():
 
 
 def test_cognito_default_email_has_no_ses_configuration_or_templates():
-    _, user_pool = _resources(TEMPLATES["app"], "AWS::Cognito::UserPool")[0]
+    _, user_pool = _resources(NO_EMAIL_APP_TEMPLATE, "AWS::Cognito::UserPool")[0]
     properties = user_pool["Properties"]
     assert "EmailConfiguration" not in properties
     assert "InviteMessageTemplate" not in properties["AdminCreateUserConfig"]

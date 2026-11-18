@@ -3743,9 +3743,14 @@ Found by the 064a review stack (2026-11-16) and left as seams:
   and once on CI (`test_check_steps`, run 43921736642), the dispatch failing with
   `uq_event_log_task_sequence` after the children finished. `dev`'s last twelve CI runs
   were green and 064a adds no event writer, so it is a pre-existing ceiling the ToC
-  fan-out (width 6, wider than the longlist's 4) never re-checked. Fix in a follow-on:
-  take `pg_advisory_xact_lock(hashtext(task_id))` around the read-and-insert in
-  `append`, or the per-walk sequence already deferred under § Options scoping longlist.
+  fan-out (width 6, wider than the longlist's 4) never re-checked. **Fixed in task 065
+  (2026-11-18, owner):** `append` takes a transaction-scoped per-task advisory lock (the
+  two-key form, first key `EVENT_LOG_LOCK_SPACE`) before reading the max, so writers queue;
+  the retry loop stays as a safety net. Pinned by
+  `test_more_concurrent_writers_than_retries_all_append_in_order` (40 writers on one task;
+  it fails without the lock). The lock is held to the end of the caller's transaction, so
+  an append inside a long transaction would hold others back; none was seen in the runtime,
+  theory-of-change and longlist suites.
 
 ## Firewall and CAPTCHA (task 064b seams)
 

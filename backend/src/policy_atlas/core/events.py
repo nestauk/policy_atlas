@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import Text, cast, func, select
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import IntegrityError
 
@@ -28,6 +28,11 @@ from policy_atlas.core.schema import event_log
 #: the same task) and the API: five was too few — measured on the stub
 #: longlist walk, a child's ``run.started`` exhausted it.
 APPEND_ATTEMPTS = 32
+
+#: The first key of the two-key advisory lock that serialises one task's
+#: appends. The two-key form never shares a lock with the single-key locks
+#: elsewhere (``chat_turns``, ``extract``), whatever their hashes.
+EVENT_LOG_LOCK_SPACE = 4501
 
 
 def append(
@@ -65,6 +70,15 @@ def append(
     # errors after the bounded retries; misordering remains impossible.
     # Task 045 added a third family: a longlist walk's child walks, which run
     # concurrently on the same task (see ``APPEND_ATTEMPTS``).
+    # A theory-of-change check's six child walks write a dozen events each in
+    # under a second, so the parent's append could lose more than 32 races
+    # (deferred note from task 064a; seen in CI and local full runs). The
+    # transaction-scoped per-task lock makes appenders queue: the next one
+    # reads the max only after the holder commits. Held to the end of the
+    # caller's transaction; the retry loop below stays as the safety net.
+    conn.execute(
+        select(func.pg_advisory_xact_lock(EVENT_LOG_LOCK_SPACE, func.hashtext(cast(task_id, Text))))
+    )
     event_id = uuid.uuid4()
     for attempt in range(APPEND_ATTEMPTS):
         current_max = conn.execute(

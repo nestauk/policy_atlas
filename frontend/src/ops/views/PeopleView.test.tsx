@@ -48,8 +48,8 @@ describe("People", () => {
     // Invited 25 minutes ago and not signed in yet; Priya has signed in.
     expect(row("Tom Ellis")).toHaveTextContent("Invitedsent 25 min ago");
     expect(row("Priya Shah")).toHaveTextContent("no limit");
-    expect(within(row("Priya Shah")).getByText("Admin")).toBeInTheDocument();
-    expect(within(row("Priya Shah")).getByText("Ops")).toBeInTheDocument();
+    expect(within(row("Priya Shah")).getByText("ADMIN")).toBeInTheDocument();
+    expect(within(row("Priya Shah")).getByText("OPS")).toBeInTheDocument();
     expect(within(row("Sam Holt")).getByText("not enrolled")).toBeInTheDocument();
     // In no cohort, and no tasks in the fixtures.
     expect(within(row("Jon Reyes")).getAllByText("—")).toHaveLength(1);

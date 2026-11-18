@@ -490,8 +490,8 @@ export function PeopleView() {
                     </td>
                     <td className={cn(TD_CLASS, "py-2.5")}>
                       <span className="flex gap-1.5">
-                        {person.is_admin && <Chip>Admin</Chip>}
-                        {person.is_ops && <Chip>Ops</Chip>}
+                        {person.is_admin && <Chip>ADMIN</Chip>}
+                        {person.is_ops && <Chip>OPS</Chip>}
                       </span>
                     </td>
                     <td className={cn(TD_CLASS, FIGURE_CLASS)}>
@@ -833,7 +833,7 @@ function CohortDialog({
 
 /** One person's full record: everything the table truncates or leaves out. */
 function PersonDialog({ person, onClose, onQuota }: { person: Person; onClose: () => void; onQuota: () => void }) {
-  const flags = [person.is_admin && "Admin", person.is_ops && "Ops"].filter(Boolean).join(", ");
+  const flags = [person.is_admin && "ADMIN", person.is_ops && "OPS"].filter(Boolean).join(", ");
   const limit = (value: number | null | undefined, from: string) => facts(limitWord(value), `from ${from}`);
   const rows: Array<[string, ReactNode]> = [
     ["Email", person.email ?? <span className="text-grey">none stored</span>],

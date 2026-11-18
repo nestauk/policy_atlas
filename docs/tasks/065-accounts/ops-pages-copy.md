@@ -295,3 +295,4 @@ is accepted and is now part of the script:
   not changed." The logo is served from the product host (`/brand/email-logo.png`).
 - Open: a help address in the footer waits for the owner's choice (a Nesta group address
   now, or `help@policyatlas.uk`, which needs mail receiving on the domain).
+- People's Flags column and the person popup show "ADMIN" and "OPS" in capitals (owner, 2026-11-18).
