@@ -5,6 +5,7 @@
             "domain_name": "v3.policyatlas.uk",
             "backend_subdomain": "api",
             "cognito_domain_prefix": "policy-atlas-v3",
+            "csp_mode": "report-only",
             "email": {
                 "enabled": true,
                 "sender_domain": "v3.policyatlas.uk",
@@ -47,6 +48,7 @@
             "domain_name": "policyatlas.uk",
             "backend_subdomain": "api",
             "cognito_domain_prefix": "policy-atlas-v3-prod",
+            "csp_mode": "report-only",
             "email": {
                 "enabled": false,
                 "sender_domain": "policyatlas.uk",

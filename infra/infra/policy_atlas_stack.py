@@ -37,6 +37,7 @@ from aws_cdk import Fn
 from infra.cognito_auth import CognitoAuth
 from infra.components.ingest_worker import IngestWorker
 from infra.components.shared_alb import import_shared_alb
+from infra.components.security_headers import SecurityHeaders
 from infra.components.waf import ApiFirewall
 
 # How the API reads documents' full text (task 057): "in_process" parses them
@@ -493,9 +494,19 @@ class PolicyAtlasStack(Stack):
         frontend_origin = cloudfront_origins.S3BucketOrigin.with_origin_access_control(
             frontend_bucket,
         )
-        # Review-stack hardening (026 step 7): baseline security headers (HSTS,
-        # X-Frame-Options, nosniff, referrer policy) on every response.
-        security_headers = cloudfront.ResponseHeadersPolicy.SECURITY_HEADERS
+        # Task 064c / ADR 0048: application security headers on every response.
+        security_headers = SecurityHeaders(
+            self,
+            "SecurityHeaders",
+            csp_mode=pa_app_config.get("csp_mode"),
+            api_origin=f"https://{be_domain}",
+            cognito_region=self.region,
+            cognito_hosted_domain=(
+                f"https://{pa_app_config['cognito_domain_prefix']}.auth."
+                f"{self.region}.amazoncognito.com"
+            ),
+            waf_captcha=be_config["waf"]["captcha"],
+        ).policy
         # www is a courtesy alias only: 301 to the apex so Cognito callback
         # URLs and the API's single-origin CORS stay canonical (#53 follow-up).
         www_redirect = cloudfront.Function(self, "WwwRedirectFunction",
