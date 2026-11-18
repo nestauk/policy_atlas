@@ -1651,6 +1651,87 @@
         "title": "CitedSourceOut",
         "type": "object"
       },
+      "ClaimFlagIn": {
+        "additionalProperties": false,
+        "description": "Element D: a flag on one claim, from the foot of the claim's evidence sheet.\n\nA toggle: one flag per user and claim, which the user can change or\nretract. The reason is required. ``unsupported`` (\"Citation doesn't\nsupport it\") needs at least one failing citation.",
+        "properties": {
+          "artefact_id": {
+            "description": "The report that holds the claim.",
+            "format": "uuid",
+            "title": "Artefact Id",
+            "type": "string"
+          },
+          "claim_id": {
+            "format": "uuid",
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "failing_citation_ids": {
+            "description": "The claim's citations that the user ticked as not supporting it.",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Failing Citation Ids",
+            "type": "array"
+          },
+          "kind": {
+            "const": "claim_flag",
+            "title": "Kind",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "provenance_viewed": {
+            "description": "The claim's citations whose source the user had in view before the submit.",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Provenance Viewed",
+            "type": "array"
+          },
+          "reason": {
+            "enum": [
+              "wrong",
+              "overstated",
+              "unsupported"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "surface": {
+            "const": "report_claim_sidebar",
+            "title": "Surface",
+            "type": "string"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "surface",
+          "task_id",
+          "artefact_id",
+          "claim_id",
+          "reason"
+        ],
+        "title": "ClaimFlagIn",
+        "type": "object"
+      },
       "ClaimOut": {
         "description": "One span-anchored claim annotation within a block.\n\nArgs:\n    claim_id: The claim's identity.\n    claim_type: Annotation type.\n    text: The spanned text.\n    span: Character offsets `[start, end]` into the block's `prose`, or\n        `None`.\n    citations: Citations attached to this claim (citation-type only).\n    grounding_tier: The grounding judge's verdict on the claim, when it\n        was checked (task 058, round 13: the claim's, not each citation's).\n    grounding_rationale: The judge's recorded reason for the verdict.\n    theme: Named themes or groups referenced by a theme claim.",
         "properties": {
@@ -15123,6 +15204,7 @@
                 "discriminator": {
                   "mapping": {
                     "citation_flag": "#/components/schemas/CitationFlagIn",
+                    "claim_flag": "#/components/schemas/ClaimFlagIn",
                     "missing_paper": "#/components/schemas/MissingPaperIn",
                     "problem_report": "#/components/schemas/ProblemReportIn",
                     "screening_override": "#/components/schemas/ScreeningOverrideIn",
@@ -15145,6 +15227,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/UseIntentIn"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClaimFlagIn"
                   }
                 ],
                 "title": "Body"

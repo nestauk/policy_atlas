@@ -3084,6 +3084,59 @@ export interface components {
             year?: string | null;
         };
         /**
+         * ClaimFlagIn
+         * @description Element D: a flag on one claim, from the foot of the claim's evidence sheet.
+         *
+         *     A toggle: one flag per user and claim, which the user can change or
+         *     retract. The reason is required. ``unsupported`` ("Citation doesn't
+         *     support it") needs at least one failing citation.
+         */
+        ClaimFlagIn: {
+            /**
+             * Artefact Id
+             * Format: uuid
+             * @description The report that holds the claim.
+             */
+            artefact_id: string;
+            /**
+             * Claim Id
+             * Format: uuid
+             */
+            claim_id: string;
+            /**
+             * Failing Citation Ids
+             * @description The claim's citations that the user ticked as not supporting it.
+             */
+            failing_citation_ids?: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "claim_flag";
+            /** Note */
+            note?: string | null;
+            /**
+             * Provenance Viewed
+             * @description The claim's citations whose source the user had in view before the submit.
+             */
+            provenance_viewed?: string[];
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "wrong" | "overstated" | "unsupported";
+            /**
+             * Surface
+             * @constant
+             */
+            surface: "report_claim_sidebar";
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+        };
+        /**
          * ClaimOut
          * @description One span-anchored claim annotation within a block.
          *
@@ -9382,7 +9435,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CitationFlagIn"] | components["schemas"]["ProblemReportIn"] | components["schemas"]["MissingPaperIn"] | components["schemas"]["ScreeningOverrideIn"] | components["schemas"]["UseIntentIn"];
+                "application/json": components["schemas"]["CitationFlagIn"] | components["schemas"]["ProblemReportIn"] | components["schemas"]["MissingPaperIn"] | components["schemas"]["ScreeningOverrideIn"] | components["schemas"]["UseIntentIn"] | components["schemas"]["ClaimFlagIn"];
             };
         };
         responses: {

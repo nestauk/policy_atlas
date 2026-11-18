@@ -73,6 +73,12 @@ import {
 } from "./reportPage";
 import { usePublicView } from "./publicView";
 import { CitationFlag } from "./feedback/CitationFlag";
+import {
+  ClaimFlagBlock,
+  ClaimFlagProvider,
+  FlagClaimButton,
+  FlaggableSource,
+} from "./feedback/ClaimFlag";
 import { MissingPaperCard } from "./feedback/MissingPaper";
 import { UseIntentCard } from "./feedback/UseIntentCard";
 import { feedbackEnabled } from "../lib/feedback";
@@ -142,6 +148,9 @@ interface ClaimLike {
    *  (the span, the tier, each citation's id, quote and title) and leaves out
    *  what only the committed report has. */
   live?: boolean;
+  /** In-app feedback, element D: the sheet opens scrolled to the flag form
+   *  (the claim's flag control was pressed). */
+  openAtFlag?: boolean;
 }
 interface BlockLike {
   block_id: string;
@@ -811,11 +820,14 @@ export function ProvenanceSheet({
   extras,
   judgement = null,
   onClose,
+  footer,
   children,
 }: {
   description?: string;
   claimTexts: string[];
   extras?: ReactNode;
+  /** A block at the foot of the sheet (in-app feedback: the claim flag). */
+  footer?: ReactNode;
   /** The claim's one verdict, shown once under the Claim (lead, round 13:
    *  the read model copies the claim's verdict onto every citation). */
   judgement?: CitationJudgement | null;
@@ -860,6 +872,7 @@ export function ProvenanceSheet({
               {children}
             </div>
           )}
+          {footer}
         </div>
       </SheetContent>
     </Sheet>
@@ -874,13 +887,19 @@ function ClaimPanel({
   claim,
   onClose,
   onOpenDossier,
+  flagArtefactId,
 }: {
   taskId: string;
   claim: ClaimLike | null;
   onClose: () => void;
   onOpenDossier: (title: string) => void;
+  /** In-app feedback, element D: the report whose claims can be flagged.
+   *  Absent, the sheet has no flag (flag off, public view, live report). */
+  flagArtefactId?: string;
 }) {
   if (claim === null) return null;
+  // A claim of the report while it is written has no stored id to flag.
+  const flagging = flagArtefactId !== undefined && claim.live !== true;
   const hint = TYPE_HINT[claim.claim_type];
   const gap = claim.gap ?? null;
   const extras = (
@@ -963,24 +982,51 @@ function ClaimPanel({
       )}
     </>
   );
-  return (
+  const sourceBlock = (group: CitationOut[]) => (
+    <SourceGroupBlock
+      key={group[0].citation_id}
+      taskId={taskId}
+      citations={group}
+      onOpenDossier={onOpenDossier}
+      live={claim.live === true}
+    />
+  );
+  const sheet = (
     <ProvenanceSheet
       description="Claim provenance"
       claimTexts={[claim.text]}
       extras={extras}
       judgement={claimJudgement(claim)}
       onClose={onClose}
+      footer={flagging ? <ClaimFlagBlock /> : undefined}
     >
-      {citationsBySource(claim.citations ?? []).map((group) => (
-        <SourceGroupBlock
-          key={group[0].citation_id}
-          taskId={taskId}
-          citations={group}
-          onOpenDossier={onOpenDossier}
-          live={claim.live === true}
-        />
-      ))}
+      {citationsBySource(claim.citations ?? []).map((group) =>
+        flagging ? (
+          // Each source block gains "Doesn't support the claim".
+          <FlaggableSource
+            key={group[0].citation_id}
+            citationIds={group.map((citation) => citation.citation_id)}
+          >
+            {sourceBlock(group)}
+          </FlaggableSource>
+        ) : (
+          sourceBlock(group)
+        ),
+      )}
     </ProvenanceSheet>
+  );
+  return flagging ? (
+    <ClaimFlagProvider
+      key={claim.claim_id}
+      taskId={taskId}
+      artefactId={flagArtefactId}
+      claimId={claim.claim_id}
+      openAtFlag={claim.openAtFlag === true}
+    >
+      {sheet}
+    </ClaimFlagProvider>
+  ) : (
+    sheet
   );
 }
 
@@ -1068,6 +1114,10 @@ function ClaimSpan({
   live?: boolean;
 }) {
   const swap = useContext(ReportSwapContext);
+  const isPublicView = usePublicView();
+  // A claim of the committed report, for a signed-in reader, can be flagged.
+  const canFlag =
+    feedbackEnabled("claim_flag") && !isPublicView && !live && claim.live !== true && showCitationMarker;
   // Dev-facing markings (source-check flags, connective reasoning) carry no
   // user-facing detail: their prose renders unmarked (owner, 2026-07-29).
   if (UNMARKED_TYPES.has(claim.claim_type)) return <span>{scrub(text)}</span>;
@@ -1135,7 +1185,9 @@ function ClaimSpan({
     );
   const typeLabel = TYPE_LABEL[claim.claim_type];
   return (
-    <span>
+    // `data-claim-id` makes the claim addressable in the page; `group` shows
+    // the flag control while the pointer is on the claim.
+    <span data-claim-id={claim.claim_id} className="group">
       {/* The words are a pointer target only: hover tints them and shows the
           preview, a click opens the panel. The marker after them is the one
           control a keyboard and a screen reader meet (round 10, finding 4),
@@ -1181,6 +1233,8 @@ function ClaimSpan({
           </button>
         </Tooltip>
       )}
+      {/* In-app feedback, element D: opens the same sheet at the flag form. */}
+      {canFlag && <FlagClaimButton onFlag={() => onOpen({ ...claim, openAtFlag: true })} />}
     </span>
   );
 }
@@ -3576,6 +3630,9 @@ function ArtefactReport() {
       taskId={taskId}
       claim={shownClaim}
       onClose={closeClaim}
+      flagArtefactId={
+        feedbackEnabled("claim_flag") && !isPublicView ? artefact.data?.artefact_id : undefined
+      }
       onOpenDossier={(sourceRef) =>
         shownClaim !== null && shownClaim.live !== true
           ? openDossierFromClaim(sourceRef, shownClaim.claim_id)

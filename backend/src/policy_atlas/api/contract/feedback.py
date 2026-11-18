@@ -168,8 +168,40 @@ class UseIntentIn(BaseModel):
     shown_at: datetime = Field(description="When the browser first showed the question.")
 
 
+class ClaimFlagIn(BaseModel):
+    """Element D: a flag on one claim, from the foot of the claim's evidence sheet.
+
+    A toggle: one flag per user and claim, which the user can change or
+    retract. The reason is required. ``unsupported`` ("Citation doesn't
+    support it") needs at least one failing citation.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["claim_flag"]
+    surface: Literal["report_claim_sidebar"]
+    task_id: uuid.UUID
+    artefact_id: uuid.UUID = Field(description="The report that holds the claim.")
+    claim_id: uuid.UUID
+    reason: Literal["wrong", "overstated", "unsupported"]
+    failing_citation_ids: list[uuid.UUID] = Field(
+        default_factory=list,
+        description="The claim's citations that the user ticked as not supporting it.",
+    )
+    provenance_viewed: list[uuid.UUID] = Field(
+        default_factory=list,
+        description="The claim's citations whose source the user had in view before the submit.",
+    )
+    note: str | None = Field(default=None, max_length=FEEDBACK_NOTE_MAX)
+
+
 FeedbackIn = Annotated[
-    CitationFlagIn | ProblemReportIn | MissingPaperIn | ScreeningOverrideIn | UseIntentIn,
+    CitationFlagIn
+    | ProblemReportIn
+    | MissingPaperIn
+    | ScreeningOverrideIn
+    | UseIntentIn
+    | ClaimFlagIn,
     Field(discriminator="kind"),
 ]
 

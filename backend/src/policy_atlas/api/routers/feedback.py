@@ -28,6 +28,7 @@ from sqlalchemy.exc import IntegrityError
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract.feedback import (
     CitationFlagIn,
+    ClaimFlagIn,
     FeedbackIn,
     FeedbackKind,
     FeedbackListOut,
@@ -57,8 +58,11 @@ from policy_atlas.core.feedback import (
     route_problem_report,
 )
 from policy_atlas.core.schema import (
+    annotation,
     artefact,
+    block,
     capability_run,
+    citation,
     feedback_event,
     missing_paper_resolution,
     source_snapshot,
@@ -78,7 +82,18 @@ ELEMENT_OF_KIND: dict[str, str] = {
     "missing_paper": "missing_paper",
     "screening_override": "missing_paper",
     "use_intent": "use_intent",
+    "claim_flag": "claim_flag",
 }
+#: The keys of a claim's annotation payload that hold the grounding judge's
+#: verdict. A claim flag stores them, so that each flag is a labelled case
+#: for the calibration of the judge.
+JUDGE_VERDICT_KEYS = (
+    "verdict",
+    "weakly_grounded",
+    "rationale",
+    "judge_model",
+    "judge_prompt_version",
+)
 #: The Langfuse score values of a citation flag (the brief, element A).
 CITATION_FLAG_SCORE = {"useful": 1.0, "not_relevant": -1.0}
 #: The Langfuse score values of a use-intent answer (the brief, element C).
@@ -361,6 +376,67 @@ def _use_intent(conn: Connection, body: UseIntentIn, user_id: str) -> _Prepared:
     )
 
 
+def _claim_flag(conn: Connection, body: ClaimFlagIn, user_id: str) -> _Prepared:
+    """Prepare a claim flag (element D). The trace is the synthesise step's.
+
+    The server reads the claim: its section (a block), its citations and the
+    grounding judge's verdict at this time. The judge gives one verdict for a
+    claim, not one for each citation, so one verdict is stored.
+
+    Raises:
+        HTTPException: 404 when the claim is not a claim of the report. 422
+            when a failing citation is not a citation of the claim, or when
+            the reason is ``unsupported`` and no citation is named.
+    """
+    accessible_task(conn, task_id=body.task_id, user_id=user_id)
+    run_id = _run_of_report(conn, body.task_id, body.artefact_id)
+    claim = conn.execute(
+        select(annotation.c.annotation_id, annotation.c.block_id, annotation.c.payload)
+        .select_from(annotation.join(block, block.c.block_id == annotation.c.block_id))
+        .where(annotation.c.unit_id == body.claim_id, block.c.artefact_id == body.artefact_id)
+    ).first()
+    if claim is None:
+        raise _not_found()
+    citation_ids = set(
+        conn.execute(
+            select(citation.c.citation_id).where(citation.c.annotation_id == claim.annotation_id)
+        ).scalars()
+    )
+    if not set(body.failing_citation_ids) <= citation_ids:
+        raise HTTPException(status_code=422, detail="a failing citation is not in this claim")
+    if body.reason == "unsupported" and not body.failing_citation_ids:
+        raise HTTPException(status_code=422, detail="tick at least one source above")
+    failing = [str(citation_id) for citation_id in body.failing_citation_ids]
+    verdict = {key: claim.payload[key] for key in JUDGE_VERDICT_KEYS if key in claim.payload}
+    payload = {
+        "reason": body.reason,
+        "failing_citation_ids": failing,
+        "provenance_viewed": [
+            str(viewed_id) for viewed_id in body.provenance_viewed if viewed_id in citation_ids
+        ],
+        "section_id": str(claim.block_id),
+        "citation_ids": sorted(str(citation_id) for citation_id in citation_ids),
+        "claim_tier": verdict.get("verdict"),
+        "judge_verdict": verdict,
+    }
+    if body.note:
+        payload["note"] = body.note
+    return _Prepared(
+        target_type="claim",
+        target_id=str(body.claim_id),
+        payload=payload,
+        capability_run_id=run_id,
+        component="synthesise",
+        score_value=body.reason,
+        score_comment=body.note,
+        score_metadata={
+            "reason": body.reason,
+            "failing_citation_ids": failing,
+            "claim_tier": verdict.get("verdict"),
+        },
+    )
+
+
 #: One prepare function per kind. Each checks access and builds the record.
 _PREPARE: dict[str, Callable[[Connection, Any, str], _Prepared]] = {
     "citation_flag": _citation_flag,
@@ -368,6 +444,7 @@ _PREPARE: dict[str, Callable[[Connection, Any, str], _Prepared]] = {
     "missing_paper": _missing_paper,
     "screening_override": _screening_override,
     "use_intent": _use_intent,
+    "claim_flag": _claim_flag,
 }
 
 #: Feedback records with the resolution of a missing paper beside them.
