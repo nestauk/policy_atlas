@@ -1,4 +1,4 @@
-import type { AccessRequest, Organisation, Person, Requests } from "../api";
+import type { AccessRequest, Cohort, Organisation, Person, Requests } from "../api";
 
 /*
  * The ops mock's fixtures: people with every flag and invitation time the
@@ -11,6 +11,8 @@ export const OPS_ME = "sub-ops-priya";
 export const NESTA = "00000000-0000-4000-8000-00000000000a";
 export const POLICY_LAB = "00000000-0000-4000-8000-00000000000b";
 export const EMPTY_ORG = "00000000-0000-4000-8000-00000000000c";
+export const PANEL = "00000000-0000-4000-8000-00000000000d";
+export const PILOT = "00000000-0000-4000-8000-00000000000e";
 
 const MINUTE = 60 * 1000;
 const iso = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();
@@ -47,6 +49,31 @@ export function organisationFixtures(): Organisation[] {
   ];
 }
 
+export function cohortFixtures(): Cohort[] {
+  return [
+    {
+      cohort_id: PANEL,
+      name: "Priority panel",
+      description: "Policy leads from HMT, No.10 and Nesta who test new features first.",
+      starts_on: null,
+      ends_on: null,
+      links: ["https://example.org/panel-notes"],
+      created_at: iso(30 * 24 * 60 * MINUTE),
+      people: 1,
+    },
+    {
+      cohort_id: PILOT,
+      name: "DHSC V3 pilot",
+      description: null,
+      starts_on: "2026-12-01",
+      ends_on: "2027-01-31",
+      links: [],
+      created_at: iso(2 * 24 * 60 * MINUTE),
+      people: 0,
+    },
+  ];
+}
+
 const nesta = { org_id: NESTA, name: "Nesta" };
 const policyLab = { org_id: POLICY_LAB, name: "Policy Lab" };
 
@@ -66,6 +93,7 @@ export function peopleFixtures(): Person[] {
       tasks_this_year: 31,
       // An administrator is exempt from both limits.
       limits: { task_quota_per_year: null, runs_per_user: null },
+      cohorts: [{ cohort_id: PANEL, name: "Priority panel" }],
     },
     {
       user_id: "sub-tom",
@@ -80,6 +108,7 @@ export function peopleFixtures(): Person[] {
       runs_per_user: null,
       tasks_this_year: 12,
       limits: { task_quota_per_year: 100, runs_per_user: 3 },
+      cohorts: [],
     },
     {
       user_id: "sub-mara",
@@ -94,6 +123,7 @@ export function peopleFixtures(): Person[] {
       runs_per_user: 6,
       tasks_this_year: 64,
       limits: { task_quota_per_year: null, runs_per_user: 6 },
+      cohorts: [],
     },
     {
       user_id: "sub-jon",
@@ -108,6 +138,7 @@ export function peopleFixtures(): Person[] {
       runs_per_user: null,
       tasks_this_year: 3,
       limits: { task_quota_per_year: 50, runs_per_user: 5 },
+      cohorts: [],
     },
     {
       user_id: "sub-sam",
@@ -122,6 +153,7 @@ export function peopleFixtures(): Person[] {
       runs_per_user: null,
       tasks_this_year: 0,
       limits: { task_quota_per_year: 50, runs_per_user: 3 },
+      cohorts: [],
     },
     {
       user_id: "sub-lena",
@@ -136,6 +168,7 @@ export function peopleFixtures(): Person[] {
       runs_per_user: null,
       tasks_this_year: 7,
       limits: { task_quota_per_year: 100, runs_per_user: 3 },
+      cohorts: [],
     },
   ];
 }

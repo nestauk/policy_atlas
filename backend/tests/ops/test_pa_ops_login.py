@@ -302,6 +302,8 @@ _EXPECTED_TABLE_GRANTS: dict[str, set[str]] = {
     "task": {"SELECT"},
     "project": {"SELECT"},
     "project_membership": {"SELECT", "DELETE"},
+    "cohort": {"SELECT", "INSERT", "DELETE"},
+    "cohort_member": {"SELECT", "INSERT", "DELETE"},
 }
 _EXPECTED_COLUMN_UPDATES: dict[str, set[str]] = {
     "app_user": {
@@ -312,6 +314,7 @@ _EXPECTED_COLUMN_UPDATES: dict[str, set[str]] = {
     "waitlist_entry": {"account_user_id", "account_created_at"},
     "task": {"org_id", "visibility", "is_public"},
     "project": {"org_id", "visibility"},
+    "cohort": {"name", "description", "starts_on", "ends_on", "links"},
 }
 
 

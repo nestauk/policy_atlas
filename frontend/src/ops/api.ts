@@ -12,6 +12,8 @@ export type Organisation = components["schemas"]["OrganisationOut"];
 export type AccessRequest = components["schemas"]["RequestOut"];
 export type Requests = components["schemas"]["RequestsOut"];
 export type ActionResult = components["schemas"]["ActionResult"];
+export type Cohort = components["schemas"]["CohortOut"];
+export type CohortSave = components["schemas"]["CohortSave"];
 
 /** A refused or failed ops call: the HTTP status (0 for no answer) and the
  *  error envelope's code and message. */
@@ -71,6 +73,7 @@ const OPS = ["ops"] as const;
 const PEOPLE = [...OPS, "people"] as const;
 const ORGANISATIONS = [...OPS, "organisations"] as const;
 const REQUESTS = [...OPS, "requests"] as const;
+const COHORTS = [...OPS, "cohorts"] as const;
 
 export function usePeople() {
   const client = useOpsClient();
@@ -83,6 +86,34 @@ export function useOrganisations() {
     queryKey: ORGANISATIONS,
     queryFn: () => unwrap(client.GET("/api/v1/ops/organisations")),
   });
+}
+
+export function useCohorts() {
+  const client = useOpsClient();
+  return useQuery({ queryKey: COHORTS, queryFn: () => unwrap(client.GET("/api/v1/ops/cohorts")) });
+}
+
+/** Create a cohort (no id) or replace one's details. */
+export function useSaveCohort() {
+  return useOpsAction((client, { cohortId, body }: { cohortId: string | null; body: CohortSave }) =>
+    cohortId === null
+      ? unwrap(client.POST("/api/v1/ops/cohorts", { body }))
+      : unwrap(client.POST("/api/v1/ops/cohorts/{cohort_id}", { params: { path: { cohort_id: cohortId } }, body })),
+  );
+}
+
+export function useDeleteCohort() {
+  return useOpsAction(async (client, cohortId: string) => {
+    const { response } = await client.DELETE("/api/v1/ops/cohorts/{cohort_id}", {
+      params: { path: { cohort_id: cohortId } },
+    });
+    if (!response.ok) throw new OpsApiError(response.status, "", "");
+  });
+}
+
+/** Add the people to a cohort, or take them out of it. */
+export function useCohortMembers(path: "/api/v1/ops/people/cohort-add" | "/api/v1/ops/people/cohort-remove") {
+  return useOpsAction((client, body: { user_ids: string[]; cohort_id: string }) => unwrap(client.POST(path, { body })));
 }
 
 export function useRequests() {

@@ -57,7 +57,7 @@ import string
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from botocore.exceptions import ClientError
@@ -68,6 +68,8 @@ from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.core.schema import (
     app_user,
+    cohort,
+    cohort_member,
     ops_action,
     organisation,
     organisation_domain,
@@ -1570,6 +1572,145 @@ def remove_domain(conn: Connection, *, domain: str) -> DomainChange:
     if removed.rowcount == 0:
         raise OpsError(f"no organisation domain {value}")
     return DomainChange(domain=value, org=None, added=False)
+
+
+#: The most links one cohort carries; a sanity bound, not a design limit.
+COHORT_LINKS_MAX = 10
+
+
+@dataclass(frozen=True)
+class Cohort(Record):
+    """One cohort, saved, deleted or resolved."""
+
+    cohort_id: uuid.UUID
+    name: str
+
+    def summary(self) -> str:
+        """Render the cohort line."""
+        return f"cohort {self.name!r} ({self.cohort_id})"
+
+
+@dataclass(frozen=True)
+class CohortMembership(Record):
+    """One person added to or removed from a cohort."""
+
+    cohort: Cohort
+    user_id: str
+    added: bool
+    changed: bool
+
+    def summary(self) -> str:
+        """Render the membership change, or say nothing changed."""
+        verb = "added to" if self.added else "removed from"
+        if not self.changed:
+            where = "in" if self.added else "not in"
+            return f"already {where} {self.cohort.name!r}; nothing changed"
+        return f"{verb} {self.cohort.name!r}"
+
+
+def _require_links(links: Sequence[str]) -> list[str]:
+    """Keep non-empty web addresses; refuse anything else."""
+    kept = [link.strip() for link in links if link.strip()]
+    if len(kept) > COHORT_LINKS_MAX:
+        raise OpsError(f"a cohort holds at most {COHORT_LINKS_MAX} links")
+    for link in kept:
+        if not link.startswith(("https://", "http://")) or any(c.isspace() for c in link):
+            raise OpsError(f"links must be web addresses starting with https:// ({link!r})")
+    return kept
+
+
+def resolve_cohort(conn: Connection, cohort_id: uuid.UUID) -> Cohort:
+    """Return one cohort by id.
+
+    Raises:
+        NotFound: If no cohort has that id.
+    """
+    name = conn.execute(
+        select(cohort.c.name).where(cohort.c.cohort_id == cohort_id)
+    ).scalar_one_or_none()
+    if name is None:
+        raise NotFound(f"no cohort {cohort_id}")
+    return Cohort(cohort_id=cohort_id, name=str(name))
+
+
+def save_cohort(
+    conn: Connection,
+    *,
+    cohort_id: uuid.UUID | None,
+    name: str,
+    description: str | None,
+    starts_on: date | None,
+    ends_on: date | None,
+    links: Sequence[str],
+) -> Cohort:
+    """Create a cohort (``cohort_id`` None) or replace an existing one's details.
+
+    Raises:
+        NotFound: If ``cohort_id`` names no cohort.
+        OpsError: On a taken name, an end before the start, or a bad link.
+    """
+    name = name.strip()
+    if not name:
+        raise OpsError("a cohort needs a name")
+    if starts_on is not None and ends_on is not None and ends_on < starts_on:
+        raise OpsError("the end date is before the start date")
+    values = {
+        "name": name,
+        "description": (description or "").strip() or None,
+        "starts_on": starts_on,
+        "ends_on": ends_on,
+        "links": _require_links(links),
+    }
+    taken = conn.execute(
+        select(cohort.c.cohort_id).where(cohort.c.name == name)
+    ).scalar_one_or_none()
+    if taken is not None and taken != cohort_id:
+        raise OpsError(f"a cohort named {name!r} already exists")
+    try:
+        if cohort_id is None:
+            cohort_id = uuid.uuid4()
+            conn.execute(insert(cohort).values(cohort_id=cohort_id, created_at=_now(), **values))
+        else:
+            resolve_cohort(conn, cohort_id)
+            conn.execute(update(cohort).where(cohort.c.cohort_id == cohort_id).values(**values))
+    except IntegrityError as error:  # a second operator won the race to the name
+        raise OpsError(f"a cohort named {name!r} already exists") from error
+    return Cohort(cohort_id=cohort_id, name=name)
+
+
+def delete_cohort(conn: Connection, *, cohort_id: uuid.UUID) -> Cohort:
+    """Delete a cohort and its memberships; the people are untouched."""
+    found = resolve_cohort(conn, cohort_id)
+    conn.execute(delete(cohort).where(cohort.c.cohort_id == cohort_id))
+    return found
+
+
+def add_to_cohort(conn: Connection, *, target: Cohort, user_id: str) -> CohortMembership:
+    """Add one person to a cohort; adding a member again changes nothing.
+
+    Raises:
+        NotFound: If no person has that id.
+    """
+    if _lock_user(conn, user_id) is None:
+        raise NotFound(f"no user {user_id}")
+    added = conn.execute(
+        pg_insert(cohort_member)
+        .values(cohort_id=target.cohort_id, user_id=user_id, added_at=_now())
+        .on_conflict_do_nothing()
+    )
+    return CohortMembership(cohort=target, user_id=user_id, added=True, changed=added.rowcount == 1)
+
+
+def remove_from_cohort(conn: Connection, *, target: Cohort, user_id: str) -> CohortMembership:
+    """Remove one person from a cohort; removing a non-member changes nothing."""
+    removed = conn.execute(
+        delete(cohort_member).where(
+            cohort_member.c.cohort_id == target.cohort_id, cohort_member.c.user_id == user_id
+        )
+    )
+    return CohortMembership(
+        cohort=target, user_id=user_id, added=False, changed=removed.rowcount == 1
+    )
 
 
 def record_action(

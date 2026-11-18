@@ -20,6 +20,7 @@ function person(overrides: Partial<Person>): Person {
     organisation: { org_id: "o1", name: "Nesta" },
     is_admin: false,
     is_ops: false,
+    cohorts: [],
     created_at: "2026-01-01T00:00:00Z",
     invited_at: null,
     task_quota_per_year: null,

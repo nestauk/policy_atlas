@@ -199,3 +199,31 @@ is accepted and is now part of the script:
   removes a domain from the command line."). Domains stay command-line only (owner ruling).
 - The Requests section is "Waitlist" (owner pass 3): the tab, the page title, the table's name
   and its failed line; the address is `/waitlist`.
+
+## Cohorts (`/cohorts`, owner revision 4, 2026-11-18)
+
+- Tab "Cohorts" between Organisations and Waitlist. Title "Cohorts"; primary "Add cohort";
+  search "Find a cohort". Under the search: "A cohort is a label for a group of people, such as
+  a pilot or a panel. A person can be in several. It does not change what they can see: their
+  organisation decides that. Add people from the People list."
+- Columns: Name (the description under it in grey) · People · Dates ("1 Dec 2026 – 31 Jan
+  2027", "from …", "until …" or "—") · Links (each link's address without `https://`, opening
+  in a new tab, or "—") · actions. Empty: "No cohorts yet." / "No cohorts match.".
+- Row menu: "Show people" (People, searching for the cohort's name) · "Edit…" · "Delete…".
+- Add / edit dialog ("Add cohort" / "Edit <name>"): "Name" · "Description (optional)" ·
+  "Start date (optional)" · "End date (optional)" · "Links (optional)" with help "One web
+  address per line, starting with https://". Buttons "Cancel" and "Create" / "Save". Errors
+  under the fields: "The end date is before the start date.", the server's refusal as a
+  sentence ("A cohort named '<name>' already exists."), "Check the links: at most 10, each a
+  web address.", "Could not save the cohort. Try again.". Toasts "Created <name> · recorded",
+  "Saved <name> · recorded".
+- Delete dialog "Delete <name>?": "This takes the label off <n> people. Their accounts,
+  organisations and work do not change." Red "Delete"; toast "Deleted <name> · recorded".
+- People: a "Cohorts" column (names joined by ", ", or "—"); search "Find a person,
+  organisation or cohort" also matches cohort names; row menu and selection bar gain "Add to
+  cohort…" and "Remove from cohort…". Their dialog: "Add <who> to a cohort" ("A cohort is a
+  label for research and pilots. It does not change what they can see.") or "Remove <who> from
+  a cohort" ("Only the label comes off. Their account and work do not change."), a "Cohort"
+  select ("Choose a cohort."; removing lists only cohorts one of them is in), buttons "Add" /
+  "Remove". With no cohorts: "No cohorts yet. Create one on the Cohorts page first."
+

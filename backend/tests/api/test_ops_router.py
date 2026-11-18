@@ -60,6 +60,12 @@ _OPS_ROUTES = {
     ("GET", "/api/v1/ops/organisations"),
     ("POST", "/api/v1/ops/organisations"),
     ("POST", "/api/v1/ops/organisations/{org_id}/quota"),
+    ("GET", "/api/v1/ops/cohorts"),
+    ("POST", "/api/v1/ops/cohorts"),
+    ("POST", "/api/v1/ops/cohorts/{cohort_id}"),
+    ("DELETE", "/api/v1/ops/cohorts/{cohort_id}"),
+    ("POST", "/api/v1/ops/people/cohort-add"),
+    ("POST", "/api/v1/ops/people/cohort-remove"),
     ("GET", "/api/v1/ops/people"),
     ("POST", "/api/v1/ops/people"),
     ("POST", "/api/v1/ops/people/enrol"),
@@ -243,7 +249,8 @@ def test_every_ops_route_refuses_without_a_token_or_the_role(
         plain = _principal(settings, tmp_path, "plain")
         with seeded(engine) as conn:
             ops_enrol(conn, user_id=plain.user_id)
-        filled = [(m, p.format(org_id=uuid.uuid4(), entry_id=uuid.uuid4())) for m, p in routes]
+        ids = {"org_id": uuid.uuid4(), "entry_id": uuid.uuid4(), "cohort_id": uuid.uuid4()}
+        filled = [(m, p.format(**ids)) for m, p in routes]
         for method, path in filled:
             assert client.request(method, path).status_code == 401, (method, path)
             assert client.request(method, path, headers=stranger.headers).status_code == 403
@@ -882,3 +889,97 @@ def test_quota_bodies_must_name_both_fields(ops: Harness) -> None:
         headers=ops.actor.headers,
     )
     assert response.status_code == 422, response.text
+
+
+# --- cohorts (owner, 2026-11-18) ---------------------------------------------
+
+
+def _cohort_body(name: str, **values: Any) -> dict[str, Any]:
+    """A full cohort form body."""
+    return {"name": name, "description": None, "starts_on": None, "ends_on": None,
+            "links": [], **values}
+
+
+def test_cohort_create_edit_and_delete_are_audited(ops: Harness) -> None:
+    """Create, replace and delete each write one audit row; the name stays unique."""
+    name = f"Pilot {uuid.uuid4()}"
+    response, lines = _post(ops, "/api/v1/ops/cohorts", _cohort_body(
+        name, description="DHSC V3 pilot", starts_on="2026-12-01", ends_on="2027-01-31",
+        links=["https://example.org/plan"],
+    ))
+    assert response.status_code == 201, response.text
+    created = response.json()
+    cohort_id = created["cohort_id"]
+    assert (created["people"], created["links"], created["ends_on"]) == (
+        0, ["https://example.org/plan"], "2027-01-31")
+    _assert_audited(ops, lines, action="cohort.create", target=cohort_id, outcome="ok")
+
+    response, _ = _post(ops, "/api/v1/ops/cohorts", _cohort_body(name))
+    assert response.status_code == 409 and response.json()["error"]["code"] == "ops_refused"
+
+    response, lines = _post(ops, f"/api/v1/ops/cohorts/{cohort_id}", _cohort_body(f"{name} b"))
+    assert response.status_code == 200, response.text
+    assert (response.json()["name"], response.json()["links"]) == (f"{name} b", [])
+    _assert_audited(ops, lines, action="cohort.update", target=cohort_id, outcome="ok")
+
+    listed = ops.client.get("/api/v1/ops/cohorts", headers=ops.actor.headers).json()
+    assert cohort_id in [row["cohort_id"] for row in listed]
+
+    with capture_logs() as captured:
+        response = ops.client.delete(f"/api/v1/ops/cohorts/{cohort_id}", headers=ops.actor.headers)
+    assert response.status_code == 204
+    _assert_audited(ops, _ops_lines(captured), action="cohort.delete", target=cohort_id,
+                    outcome="ok")
+    assert ops.client.delete(
+        f"/api/v1/ops/cohorts/{cohort_id}", headers=ops.actor.headers
+    ).status_code == 404
+
+
+def test_cohort_form_refuses_bad_links_and_reversed_dates(ops: Harness) -> None:
+    """A link must be a web address; the end may not come before the start."""
+    for body in (
+        _cohort_body(f"Bad {uuid.uuid4()}", links=["javascript:alert(1)"]),
+        _cohort_body(f"Bad {uuid.uuid4()}", starts_on="2027-02-01", ends_on="2027-01-01"),
+    ):
+        response, lines = _post(ops, "/api/v1/ops/cohorts", body)
+        assert response.status_code == 409 and lines == [], response.text
+    response, _ = _post(ops, "/api/v1/ops/cohorts", _cohort_body("x", links=["a"] * 11))
+    assert response.status_code == 422
+
+
+def test_bulk_cohort_membership_shows_on_people_and_is_idempotent(ops: Harness) -> None:
+    """Add twice changes once; the people list names the cohort; remove takes it away."""
+    org_id = _seed_org(ops)
+    first = _seed_person(ops, org_id=org_id, label="cohort-a")
+    second = _seed_person(ops, org_id=None, label="cohort-b")
+    name = f"Panel {uuid.uuid4()}"
+    cohort_id = _post(ops, "/api/v1/ops/cohorts", _cohort_body(name))[0].json()["cohort_id"]
+
+    response, lines = _post(ops, "/api/v1/ops/people/cohort-add",
+                            {"user_ids": [first, second, "no-such-person"],
+                             "cohort_id": cohort_id})
+    assert [r["outcome"] for r in response.json()["results"]] == ["ok", "ok", "failed"]
+    assert len(lines) == 3
+    again = _post(ops, "/api/v1/ops/people/cohort-add",
+                  {"user_ids": [first], "cohort_id": cohort_id})[0].json()["results"][0]
+    assert again["outcome"] == "ok" and "nothing changed" in again["message"]
+
+    people = {p["user_id"]: p for p in ops.client.get(
+        "/api/v1/ops/people", headers=ops.actor.headers).json()}
+    assert [c["name"] for c in people[first]["cohorts"]] == [name]
+    assert [c["name"] for c in people[second]["cohorts"]] == [name]
+    counted = [c for c in ops.client.get("/api/v1/ops/cohorts", headers=ops.actor.headers).json()
+               if c["cohort_id"] == cohort_id]
+    assert counted[0]["people"] == 2
+
+    response, _ = _post(ops, "/api/v1/ops/people/cohort-remove",
+                        {"user_ids": [first], "cohort_id": cohort_id})
+    assert response.json()["results"][0]["outcome"] == "ok"
+    people = {p["user_id"]: p for p in ops.client.get(
+        "/api/v1/ops/people", headers=ops.actor.headers).json()}
+    assert people[first]["cohorts"] == []
+
+    response, lines = _post(ops, "/api/v1/ops/people/cohort-add",
+                            {"user_ids": [first], "cohort_id": str(uuid.uuid4())})
+    assert response.status_code == 404 and lines == []
+

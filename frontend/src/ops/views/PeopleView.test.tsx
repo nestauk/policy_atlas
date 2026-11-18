@@ -38,6 +38,7 @@ describe("People", () => {
       "Name",
       "Email",
       "Organisation",
+      "Cohorts",
       "Flags",
       "Tasks this year",
       "Invited",
@@ -49,12 +50,14 @@ describe("People", () => {
     expect(within(row("Priya Shah")).getByText("Admin")).toBeInTheDocument();
     expect(within(row("Priya Shah")).getByText("Ops")).toBeInTheDocument();
     expect(within(row("Sam Holt")).getByText("not enrolled")).toBeInTheDocument();
-    expect(within(row("Jon Reyes")).getByText("—")).toBeInTheDocument();
+    // No address, and in no cohort.
+    expect(within(row("Jon Reyes")).getAllByText("—")).toHaveLength(2);
+    expect(row("Priya Shah")).toHaveTextContent("Priority panel");
   });
 
   it("filters by name, email or organisation, and opens on ?q=", async () => {
     const user = await openPeople();
-    await user.type(screen.getByRole("searchbox", { name: "Find by name, email or organisation" }), "policy lab");
+    await user.type(screen.getByRole("searchbox", { name: "Find a person, organisation or cohort" }), "policy lab");
     expect(screen.getByText("Jon Reyes")).toBeInTheDocument();
     expect(screen.queryByText("Tom Ellis")).toBeNull();
   });
@@ -210,7 +213,7 @@ describe("People, after the review", () => {
     const user = await openPeople();
     await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
     await user.click(screen.getByRole("checkbox", { name: "Select Jon Reyes" }));
-    await user.type(screen.getByRole("searchbox", { name: "Find by name, email or organisation" }), "policy lab");
+    await user.type(screen.getByRole("searchbox", { name: "Find a person, organisation or cohort" }), "policy lab");
     expect(document.querySelector("[data-selection-bar]")).toBeNull();
     await user.click(screen.getByRole("checkbox", { name: "Select everyone shown" }));
     await user.click(within(selectionBar()).getByRole("button", { name: "De-enrol" }));
@@ -235,9 +238,9 @@ describe("People, after the review", () => {
 
   it("says when nothing matches, inside the table's frame", async () => {
     const user = await openPeople();
-    await user.type(screen.getByRole("searchbox", { name: "Find by name, email or organisation" }), "zzz");
+    await user.type(screen.getByRole("searchbox", { name: "Find a person, organisation or cohort" }), "zzz");
     expect(screen.getByRole("status")).toHaveTextContent("No people match.");
-    expect(screen.getAllByRole("columnheader")).toHaveLength(8);
+    expect(screen.getAllByRole("columnheader")).toHaveLength(9);
   });
 
   it("keeps the selection bar's room, so ticking a box does not move the table", async () => {
@@ -300,3 +303,37 @@ describe("People, after the review", () => {
     expect(opsMock.writes).toEqual([]);
   });
 });
+
+describe("People, cohorts", () => {
+  it("adds the ticked people to a cohort, and finds people by cohort name", async () => {
+    const user = await openPeople();
+    const row = (name: string) => screen.getByText(name, { selector: "span[title]" }).closest("tr") as HTMLElement;
+    await user.click(within(row("Tom Ellis")).getByRole("checkbox"));
+    await user.click(within(row("Jon Reyes")).getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: "Add to cohort…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Add 2 people to a cohort" });
+    await user.click(within(dialog).getByRole("combobox", { name: "Cohort" }));
+    await user.click(await screen.findByRole("option", { name: "DHSC V3 pilot" }));
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+    expect(await screen.findByText("2 done, 0 failed · recorded")).toBeInTheDocument();
+    expect(opsMock.writes.at(-1)).toMatchObject({
+      path: "/api/v1/ops/people/cohort-add",
+      body: { cohort_id: "00000000-0000-4000-8000-00000000000e" },
+    });
+    await user.type(screen.getByRole("searchbox", { name: "Find a person, organisation or cohort" }), "dhsc");
+    await waitFor(() => expect(screen.getAllByRole("row")).toHaveLength(3));
+  });
+
+  it("removes one person from a cohort they are in, offering only their cohorts", async () => {
+    const user = await openPeople();
+    await user.click(screen.getByRole("button", { name: "Actions for Priya Shah" }));
+    await user.click(screen.getByRole("menuitem", { name: "Remove from cohort…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Remove Priya Shah from a cohort" });
+    await user.click(within(dialog).getByRole("combobox", { name: "Cohort" }));
+    expect(screen.queryByRole("option", { name: "DHSC V3 pilot" })).toBeNull();
+    await user.click(screen.getByRole("option", { name: "Priority panel" }));
+    await user.click(within(dialog).getByRole("button", { name: "Remove" }));
+    expect(await screen.findByText("Removed Priya Shah from Priority panel · recorded")).toBeInTheDocument();
+  });
+});
+

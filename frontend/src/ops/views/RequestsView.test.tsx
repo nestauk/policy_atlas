@@ -40,7 +40,7 @@ describe("Waitlist", () => {
     const router = renderOps("/waitlist");
     await screen.findByRole("heading", { name: "Waitlist" });
     await user.click(within(row("Jon Reyes")).getByRole("link", { name: "Open person" }));
-    expect(await screen.findByRole("searchbox", { name: "Find by name, email or organisation" })).toHaveValue(
+    expect(await screen.findByRole("searchbox", { name: "Find a person, organisation or cohort" })).toHaveValue(
       "jon.reyes@policylab.example",
     );
     expect(router.state.location.pathname).toBe("/people");

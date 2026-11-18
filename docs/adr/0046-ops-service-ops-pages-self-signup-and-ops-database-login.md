@@ -193,6 +193,9 @@ surface, so decision 4 and the deferred list are amended below rather than left 
   shown as "Check" for an operator; failed attempts count against the hourly allowance, so
   a bad row cannot drive unbounded Cognito calls. The ops host sets `X-Frame-Options: DENY`.
   The ops service's engine hides bound parameters from error tracebacks.
+- **Cohorts (owner, 2026-11-18, contract B14):** named groups of people, separate from
+  organisations, managed on the ops pages only; `pa_ops` may create, edit and delete cohorts and
+  their memberships. Feature versions per cohort are the next task.
 - **Ruled by the owner (2026-11-18):** a sweep-created account keeps the form's name, and
   `max_per_hour` is 5 on production. The ops pages do not move single tasks or projects
   (that stays in the CLI), so `pa_ops` has no grant on `task.updated_at`.

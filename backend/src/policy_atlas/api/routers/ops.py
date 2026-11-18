@@ -9,7 +9,7 @@ from typing import Annotated, Any
 
 import structlog
 from botocore.exceptions import ClientError
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.engine import Connection, RowMapping
 
@@ -18,10 +18,14 @@ from policy_atlas.api.auth import AuthenticatedUser, get_current_user
 from policy_atlas.api.contract.ops import (
     ActionResult,
     ApproveRequest,
+    BulkCohort,
     BulkEnrol,
     BulkOut,
     BulkQuota,
     BulkSubjects,
+    CohortOut,
+    CohortRef,
+    CohortSave,
     LimitsOut,
     OrganisationCreate,
     OrganisationOut,
@@ -39,6 +43,8 @@ from policy_atlas.api.routers.common import created_in_last_days, effective_limi
 from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import (
     app_user,
+    cohort,
+    cohort_member,
     ops_action,
     organisation,
     organisation_domain,
@@ -146,7 +152,8 @@ def _organisation_out(conn: Connection, org_id: uuid.UUID) -> OrganisationOut:
 
 
 def _person_out(
-    conn: Connection, row: RowMapping, *, settings: Settings, task_counts: dict[str, int]
+    conn: Connection, row: RowMapping, *, settings: Settings, task_counts: dict[str, int],
+    cohorts: dict[str, list[CohortRef]] | None = None,
 ) -> PersonOut:
     """Project one people-list row, resolving its effective limits."""
     values = dict(row)
@@ -161,7 +168,36 @@ def _person_out(
         ),
         tasks_this_year=task_counts.get(user_id, 0),
         limits=LimitsOut(task_quota_per_year=limits.task_quota, runs_per_user=limits.runs),
+        cohorts=(cohorts or {}).get(user_id, []),
     )
+
+
+def _cohorts_of(conn: Connection, user_ids: list[str]) -> dict[str, list[CohortRef]]:
+    """Each person's cohorts, by name."""
+    found: dict[str, list[CohortRef]] = {}
+    if not user_ids:
+        return found
+    for user_id, cohort_id, name in conn.execute(
+        select(cohort_member.c.user_id, cohort.c.cohort_id, cohort.c.name)
+        .join(cohort, cohort.c.cohort_id == cohort_member.c.cohort_id)
+        .where(cohort_member.c.user_id.in_(user_ids))
+        .order_by(cohort.c.name)
+    ):
+        found.setdefault(str(user_id), []).append(CohortRef(cohort_id=cohort_id, name=name))
+    return found
+
+
+def _cohort_rows(conn: Connection, cohort_id: uuid.UUID | None = None) -> list[CohortOut]:
+    """Cohorts with their member counts, by name; or the one cohort asked for."""
+    query = (
+        select(cohort, func.count(cohort_member.c.user_id).label("people"))
+        .outerjoin(cohort_member, cohort_member.c.cohort_id == cohort.c.cohort_id)
+        .group_by(*cohort.c)
+        .order_by(cohort.c.name)
+    )
+    if cohort_id is not None:
+        query = query.where(cohort.c.cohort_id == cohort_id)
+    return [CohortOut(**row) for row in conn.execute(query).mappings()]
 
 
 @router.get("/organisations", response_model=list[OrganisationOut])
@@ -224,6 +260,69 @@ def set_organisation_quota(
     return _organisation_out(conn, org_id)
 
 
+def _audit(request: Request, conn: Connection, *, actor: str, action: str, target: str) -> None:
+    """Write one ok audit row and queue its trace."""
+    action_id = commands.record_action(conn, actor=actor, action=action, target=target,
+                                       outcome="ok")
+    _queue_log(request, actor=actor, action=action, target=target, outcome="ok",
+               action_id=action_id)
+
+
+@router.get("/cohorts", response_model=list[CohortOut])
+def list_cohorts(conn: Annotated[Connection, Depends(get_conn)]) -> list[CohortOut]:
+    """List cohorts by name with how many people each holds."""
+    return _cohort_rows(conn)
+
+
+def _save(conn: Connection, cohort_id: uuid.UUID | None, body: CohortSave) -> commands.Cohort:
+    """Run the save command, mapping its refusals to the ordinary errors."""
+    try:
+        return commands.save_cohort(conn, cohort_id=cohort_id, **body.model_dump())
+    except NotFound as exc:
+        raise HTTPException(404, str(exc)) from None
+    except OpsError as exc:
+        raise ApiConflict("ops_refused", str(exc)) from None
+
+
+@router.post("/cohorts", response_model=CohortOut, status_code=status.HTTP_201_CREATED)
+def create_cohort(
+    body: CohortSave, request: Request,
+    actor: Annotated[AuthenticatedUser, Depends(require_ops)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> CohortOut:
+    """Create a cohort and its audit record."""
+    saved = _save(conn, None, body)
+    _audit(request, conn, actor=actor.user_id, action="cohort.create", target=str(saved.cohort_id))
+    return _cohort_rows(conn, saved.cohort_id)[0]
+
+
+@router.post("/cohorts/{cohort_id}", response_model=CohortOut)
+def update_cohort(
+    cohort_id: uuid.UUID, body: CohortSave, request: Request,
+    actor: Annotated[AuthenticatedUser, Depends(require_ops)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> CohortOut:
+    """Replace a cohort's details; its members are untouched."""
+    _save(conn, cohort_id, body)
+    _audit(request, conn, actor=actor.user_id, action="cohort.update", target=str(cohort_id))
+    return _cohort_rows(conn, cohort_id)[0]
+
+
+@router.delete("/cohorts/{cohort_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_cohort(
+    cohort_id: uuid.UUID, request: Request,
+    actor: Annotated[AuthenticatedUser, Depends(require_ops)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> Response:
+    """Delete a cohort and its memberships; the people are untouched."""
+    try:
+        commands.delete_cohort(conn, cohort_id=cohort_id)
+    except NotFound as exc:
+        raise HTTPException(404, str(exc)) from None
+    _audit(request, conn, actor=actor.user_id, action="cohort.delete", target=str(cohort_id))
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/people", response_model=list[PersonOut])
 def list_people(
     conn: Annotated[Connection, Depends(get_conn)],
@@ -258,7 +357,11 @@ def list_people(
             .group_by(task.c.owner_user_id)
         ).mappings()
     } if subjects else {}
-    return [_person_out(conn, row, settings=settings, task_counts=task_counts) for row in rows]
+    cohorts = _cohorts_of(conn, subjects)
+    return [
+        _person_out(conn, row, settings=settings, task_counts=task_counts, cohorts=cohorts)
+        for row in rows
+    ]
 
 
 @router.post("/people", response_model=PersonCreatedOut, status_code=status.HTTP_201_CREATED)
@@ -415,6 +518,38 @@ def set_people_quota(
             runs_per_user=body.runs_per_user,
         ).summary(),
     )
+
+
+def _cohort(conn: Connection, cohort_id: uuid.UUID) -> commands.Cohort:
+    """Resolve a cohort id or return the ordinary resource 404."""
+    try:
+        return commands.resolve_cohort(conn, cohort_id)
+    except NotFound as exc:
+        raise HTTPException(404, str(exc)) from None
+
+
+@router.post("/people/cohort-add", response_model=BulkOut)
+def add_people_to_cohort(
+    body: BulkCohort, request: Request, actor: Annotated[AuthenticatedUser, Depends(require_ops)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> BulkOut:
+    """Add every selected person to one cohort."""
+    target = _cohort(conn, body.cohort_id)
+    return _bulk(request=request, actor=actor.user_id, conn=conn, user_ids=body.user_ids,
+                 action="cohort.add", run=lambda user_id: commands.add_to_cohort(
+                     conn, target=target, user_id=user_id).summary())
+
+
+@router.post("/people/cohort-remove", response_model=BulkOut)
+def remove_people_from_cohort(
+    body: BulkCohort, request: Request, actor: Annotated[AuthenticatedUser, Depends(require_ops)],
+    conn: Annotated[Connection, Depends(get_conn)],
+) -> BulkOut:
+    """Remove every selected person from one cohort."""
+    target = _cohort(conn, body.cohort_id)
+    return _bulk(request=request, actor=actor.user_id, conn=conn, user_ids=body.user_ids,
+                 action="cohort.remove", run=lambda user_id: commands.remove_from_cohort(
+                     conn, target=target, user_id=user_id).summary())
 
 
 @router.get("/requests", response_model=RequestsOut)

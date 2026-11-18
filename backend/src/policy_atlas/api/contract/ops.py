@@ -17,7 +17,7 @@ route runs the command once per subject and answers with one
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -86,6 +86,61 @@ class OrganisationOut(BaseModel):
     domains: list[str]
 
 
+class CohortRef(BaseModel):
+    """A cohort as a person's row names it."""
+
+    cohort_id: uuid.UUID
+    name: str
+
+
+class CohortOut(BaseModel):
+    """One cohort as the Cohorts page lists it (owner, 2026-11-18).
+
+    Args:
+        cohort_id: The cohort's identity.
+        name: Its unique display name.
+        description: What the group is for, or ``None``.
+        starts_on: When it starts, or ``None``.
+        ends_on: When it ends, or ``None``.
+        links: Web addresses about it (a plan, a sheet, a channel), in order.
+        created_at: When it was created.
+        people: How many people are in it.
+    """
+
+    cohort_id: uuid.UUID
+    name: str
+    description: str | None = None
+    starts_on: date | None = None
+    ends_on: date | None = None
+    links: list[str]
+    created_at: datetime
+    people: int
+
+
+class CohortSave(BaseModel):
+    """Body of ``POST /api/v1/ops/cohorts`` (create) and ``/cohorts/{id}`` (replace).
+
+    Every field is sent: the form shows them all, and an empty optional field
+    clears it.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=OPS_NAME_MAX)
+    description: str | None = Field(default=None, max_length=2000)
+    starts_on: date | None = None
+    ends_on: date | None = None
+    links: list[str] = Field(default_factory=list, max_length=10)
+
+    @field_validator("links")
+    @classmethod
+    def bound_links(cls, links: list[str]) -> list[str]:
+        """Bound each link's size; the command checks that it is a web address."""
+        if any(len(link) > 2000 for link in links):
+            raise ValueError("a link is at most 2000 characters")
+        return links
+
+
 class OrganisationCreate(BaseModel):
     """Body of ``POST /api/v1/ops/organisations``."""
 
@@ -112,6 +167,7 @@ class PersonOut(BaseModel):
         runs_per_user: Their own override, or ``None``.
         tasks_this_year: Tasks they created in the last 365 days.
         limits: The limits that apply after resolution.
+        cohorts: The cohorts they are in, by name.
     """
 
     user_id: str
@@ -126,6 +182,7 @@ class PersonOut(BaseModel):
     runs_per_user: int | None = None
     tasks_this_year: int
     limits: LimitsOut
+    cohorts: list[CohortRef]
 
 
 class PersonCreate(BaseModel):
@@ -203,6 +260,12 @@ class BulkSubjects(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     user_ids: list[str] = Field(min_length=1, max_length=OPS_BULK_MAX)
+
+
+class BulkCohort(BulkSubjects):
+    """Body of ``POST /api/v1/ops/people/cohort-add`` and ``cohort-remove``."""
+
+    cohort_id: uuid.UUID
 
 
 class BulkEnrol(BulkSubjects):

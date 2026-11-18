@@ -7,14 +7,18 @@ import { Checkbox } from "../../ui/brand/Checkbox";
 import { Chip } from "../../ui/brand/Chip";
 import { cn } from "../../ui/brand/cn";
 import { PageHeader, PagePrimary } from "../../ui/brand/PageHeader";
+import { Select } from "../../ui/brand/Select";
 import {
   errorStatus,
   useBulk,
+  useCohortMembers,
+  useCohorts,
   useEnrol,
   useOrganisations,
   usePeople,
   usePeopleQuota,
   type ActionResult,
+  type Cohort,
   type Organisation,
   type Person,
 } from "../api";
@@ -45,7 +49,7 @@ import { draftErrors, draftIsValid, QuotaFields, valuesOf, WARNING_WHO, type Quo
 /** A line under a person's name after an action: a failure's message, or a cooldown. */
 type Note = { text: string; failed: boolean };
 
-type DialogKind = "move" | "deenrol" | "offboard" | "quota";
+type DialogKind = "move" | "deenrol" | "offboard" | "quota" | "cohortAdd" | "cohortRemove";
 
 /** The open dialog: what it does, to whom, and whether a row's menu or the selection bar opened it. */
 type DialogState = { kind: DialogKind; ids: string[]; from: "row" | "bar" } | null;
@@ -61,9 +65,12 @@ const OFFBOARD_SENTENCE =
 function matches(person: Person, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (q === "") return true;
-  return [person.display_name, person.email ?? "", person.organisation?.name ?? ""].some((value) =>
-    value.toLowerCase().includes(q),
-  );
+  return [
+    person.display_name,
+    person.email ?? "",
+    person.organisation?.name ?? "",
+    ...person.cohorts.map((cohort) => cohort.name),
+  ].some((value) => value.toLowerCase().includes(q));
 }
 
 /** "Tom Ellis" for one, "3 people" for several. */
@@ -113,6 +120,9 @@ export function PeopleView() {
   const offboard = useBulk("/api/v1/ops/people/offboard");
   const resend = useBulk("/api/v1/ops/people/resend");
   const quota = usePeopleQuota();
+  const cohorts = useCohorts();
+  const cohortAdd = useCohortMembers("/api/v1/ops/people/cohort-add");
+  const cohortRemove = useCohortMembers("/api/v1/ops/people/cohort-remove");
 
   if (people.isPending) return <Loading />;
   const all = people.data ?? [];
@@ -192,6 +202,8 @@ export function PeopleView() {
     return [
       { label: "Enrol or move to an organisation…", onSelect: open("move") },
       { label: "Set quota…", onSelect: () => navigate(`/people/${person.user_id}/quota`) },
+      { label: "Add to cohort…", onSelect: open("cohortAdd") },
+      { label: "Remove from cohort…", onSelect: open("cohortRemove"), disabled: person.cohorts.length === 0 },
       {
         label: "Resend invitation",
         onSelect: () => sendInvitations([person.user_id]),
@@ -242,7 +254,7 @@ export function PeopleView() {
       <PageHeader
         title="People"
         actions={<PagePrimary to="/people/new">Add person</PagePrimary>}
-        filters={<SearchField placeholder="Find by name, email or organisation" value={query} onChange={search} />}
+        filters={<SearchField placeholder="Find a person, organisation or cohort" value={query} onChange={search} />}
       />
       {/* The bar's room is kept while nothing is ticked, so ticking the first
           box does not push the table down. */}
@@ -260,6 +272,12 @@ export function PeopleView() {
             </Button>
             <Button variant="secondary" size="sm" onClick={openBulk("move")}>
               Move to…
+            </Button>
+            <Button variant="secondary" size="sm" onClick={openBulk("cohortAdd")}>
+              Add to cohort…
+            </Button>
+            <Button variant="secondary" size="sm" onClick={openBulk("cohortRemove")}>
+              Remove from cohort…
             </Button>
             <Button variant="secondary" size="sm" onClick={() => sendInvitations(ticked)}>
               Resend invitation
@@ -302,6 +320,7 @@ export function PeopleView() {
                 <th className={cn(TH_CLASS, "w-44")}>Name</th>
                 <th className={TH_CLASS}>Email</th>
                 <th className={cn(TH_CLASS, "w-40")}>Organisation</th>
+                <th className={cn(TH_CLASS, "w-40")}>Cohorts</th>
                 <th className={cn(TH_CLASS, "w-32")}>Flags</th>
                 <th className={cn(TH_CLASS, "w-36 text-right")}>Tasks this year</th>
                 <th className={cn(TH_CLASS, "w-28")}>Invited</th>
@@ -342,6 +361,15 @@ export function PeopleView() {
                         person.organisation.name
                       ) : (
                         <span className="text-grey">not enrolled</span>
+                      )}
+                    </td>
+                    <td className={TD_CLASS}>
+                      {person.cohorts.length === 0 ? (
+                        <span className="text-grey">—</span>
+                      ) : (
+                        <span className="line-clamp-2" title={person.cohorts.map((cohort) => cohort.name).join(", ")}>
+                          {person.cohorts.map((cohort) => cohort.name).join(", ")}
+                        </span>
                       )}
                     </td>
                     <td className={cn(TD_CLASS, "py-2.5")}>
@@ -385,6 +413,33 @@ export function PeopleView() {
           onMove={(org) =>
             run(enrol, { user_ids: dialog.ids, org_id: org.org_id }, dialog.ids, (person) =>
               `Moved ${person.display_name} to ${org.name}`,
+            )
+          }
+        />
+      )}
+      {(dialog?.kind === "cohortAdd" || dialog?.kind === "cohortRemove") && (
+        <CohortDialog
+          adding={dialog.kind === "cohortAdd"}
+          people={chosen}
+          cohorts={
+            dialog.kind === "cohortAdd"
+              ? (cohorts.data ?? [])
+              : (cohorts.data ?? []).filter((cohort) =>
+                  chosen.some((person) => person.cohorts.some((own) => own.cohort_id === cohort.cohort_id)),
+                )
+          }
+          pending={cohortAdd.isPending || cohortRemove.isPending}
+          onOpenChange={close}
+          returnFocus={returnFocus}
+          onSave={(cohort) =>
+            run(
+              dialog.kind === "cohortAdd" ? cohortAdd : cohortRemove,
+              { user_ids: dialog.ids, cohort_id: cohort.cohort_id },
+              dialog.ids,
+              (person) =>
+                dialog.kind === "cohortAdd"
+                  ? `Added ${person.display_name} to ${cohort.name}`
+                  : `Removed ${person.display_name} from ${cohort.name}`,
             )
           }
         />
@@ -586,6 +641,68 @@ function BulkQuotaDialog({
         errors={errors}
       />
       <NameList people={people} />
+    </Dialog>
+  );
+}
+
+/**
+ * Add the people to one cohort, or take them out of one. Removing lists only
+ * the cohorts at least one of them is in; adding with no cohorts yet points
+ * at the Cohorts page.
+ */
+function CohortDialog({
+  adding,
+  people,
+  cohorts,
+  pending,
+  onOpenChange,
+  returnFocus,
+  onSave,
+}: DialogProps & { adding: boolean; cohorts: readonly Cohort[]; onSave: (cohort: Cohort) => void }) {
+  const [cohortId, setCohortId] = useState("");
+  const cohort = cohorts.find((entry) => entry.cohort_id === cohortId);
+  return (
+    <Dialog
+      open
+      onOpenChange={onOpenChange}
+      returnFocus={returnFocus}
+      title={adding ? `Add ${who(people)} to a cohort` : `Remove ${who(people)} from a cohort`}
+      description={
+        adding
+          ? "A cohort is a label for research and pilots. It does not change what they can see."
+          : "Only the label comes off. Their account and work do not change."
+      }
+      footer={
+        <>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button disabled={cohort === undefined || pending} onClick={() => cohort !== undefined && onSave(cohort)}>
+            {adding ? "Add" : "Remove"}
+          </Button>
+        </>
+      }
+    >
+      <div className="mt-4">
+        {cohorts.length === 0 ? (
+          <p className="text-body text-grey">
+            {adding ? "No cohorts yet. Create one on the Cohorts page first." : "They are in no cohorts."}
+          </p>
+        ) : (
+          <Field id="cohort-pick" label="Cohort">
+            <Select
+              id="cohort-pick"
+              label="Cohort"
+              value={cohortId}
+              placeholder="Choose a cohort."
+              options={cohorts.map((entry) => ({ value: entry.cohort_id, label: entry.name }))}
+              onChange={setCohortId}
+              className="w-full"
+            />
+          </Field>
+        )}
+      </div>
+      {people.length > 1 && <NameList people={people} />}
     </Dialog>
   );
 }

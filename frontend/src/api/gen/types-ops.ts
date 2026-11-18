@@ -4,6 +4,54 @@
  */
 
 export interface paths {
+    "/api/v1/ops/cohorts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Cohorts
+         * @description List cohorts by name with how many people each holds.
+         */
+        get: operations["list_cohorts_api_v1_ops_cohorts_get"];
+        put?: never;
+        /**
+         * Create Cohort
+         * @description Create a cohort and its audit record.
+         */
+        post: operations["create_cohort_api_v1_ops_cohorts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/cohorts/{cohort_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update Cohort
+         * @description Replace a cohort's details; its members are untouched.
+         */
+        post: operations["update_cohort_api_v1_ops_cohorts__cohort_id__post"];
+        /**
+         * Delete Cohort
+         * @description Delete a cohort and its memberships; the people are untouched.
+         */
+        delete: operations["delete_cohort_api_v1_ops_cohorts__cohort_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ops/organisations": {
         parameters: {
             query?: never;
@@ -66,6 +114,46 @@ export interface paths {
          * @description Ensure a person is invited and enrolled in the requested organisation.
          */
         post: operations["create_person_api_v1_ops_people_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/people/cohort-add": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add People To Cohort
+         * @description Add every selected person to one cohort.
+         */
+        post: operations["add_people_to_cohort_api_v1_ops_people_cohort_add_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/people/cohort-remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove People From Cohort
+         * @description Remove every selected person from one cohort.
+         */
+        post: operations["remove_people_from_cohort_api_v1_ops_people_cohort_remove_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -292,6 +380,19 @@ export interface components {
             org_id: string;
         };
         /**
+         * BulkCohort
+         * @description Body of ``POST /api/v1/ops/people/cohort-add`` and ``cohort-remove``.
+         */
+        BulkCohort: {
+            /**
+             * Cohort Id
+             * Format: uuid
+             */
+            cohort_id: string;
+            /** User Ids */
+            user_ids: string[];
+        };
+        /**
          * BulkEnrol
          * @description Body of ``POST /api/v1/ops/people/enrol``: enrol or move into ``org_id``.
          */
@@ -331,6 +432,76 @@ export interface components {
         BulkSubjects: {
             /** User Ids */
             user_ids: string[];
+        };
+        /**
+         * CohortOut
+         * @description One cohort as the Cohorts page lists it (owner, 2026-11-18).
+         *
+         *     Args:
+         *         cohort_id: The cohort's identity.
+         *         name: Its unique display name.
+         *         description: What the group is for, or ``None``.
+         *         starts_on: When it starts, or ``None``.
+         *         ends_on: When it ends, or ``None``.
+         *         links: Web addresses about it (a plan, a sheet, a channel), in order.
+         *         created_at: When it was created.
+         *         people: How many people are in it.
+         */
+        CohortOut: {
+            /**
+             * Cohort Id
+             * Format: uuid
+             */
+            cohort_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description?: string | null;
+            /** Ends On */
+            ends_on?: string | null;
+            /** Links */
+            links: string[];
+            /** Name */
+            name: string;
+            /** People */
+            people: number;
+            /** Starts On */
+            starts_on?: string | null;
+        };
+        /**
+         * CohortRef
+         * @description A cohort as a person's row names it.
+         */
+        CohortRef: {
+            /**
+             * Cohort Id
+             * Format: uuid
+             */
+            cohort_id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * CohortSave
+         * @description Body of ``POST /api/v1/ops/cohorts`` (create) and ``/cohorts/{id}`` (replace).
+         *
+         *     Every field is sent: the form shows them all, and an empty optional field
+         *     clears it.
+         */
+        CohortSave: {
+            /** Description */
+            description?: string | null;
+            /** Ends On */
+            ends_on?: string | null;
+            /** Links */
+            links?: string[];
+            /** Name */
+            name: string;
+            /** Starts On */
+            starts_on?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -467,8 +638,11 @@ export interface components {
          *         runs_per_user: Their own override, or ``None``.
          *         tasks_this_year: Tasks they created in the last 365 days.
          *         limits: The limits that apply after resolution.
+         *         cohorts: The cohorts they are in, by name.
          */
         PersonOut: {
+            /** Cohorts */
+            cohorts: components["schemas"]["CohortRef"][];
             /**
              * Created At
              * Format: date-time
@@ -607,6 +781,123 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_cohorts_api_v1_ops_cohorts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CohortOut"][];
+                };
+            };
+        };
+    };
+    create_cohort_api_v1_ops_cohorts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CohortSave"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CohortOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_cohort_api_v1_ops_cohorts__cohort_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cohort_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CohortSave"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CohortOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_cohort_api_v1_ops_cohorts__cohort_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cohort_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_organisations_api_v1_ops_organisations_get: {
         parameters: {
             query?: never;
@@ -746,6 +1037,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PersonCreatedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_people_to_cohort_api_v1_ops_people_cohort_add_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkCohort"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_people_from_cohort_api_v1_ops_people_cohort_remove_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkCohort"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkOut"];
                 };
             };
             /** @description Validation Error */

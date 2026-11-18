@@ -259,6 +259,22 @@ The owner looked at the pages on the local ops server. Changes, with the rulings
   (it runs on the master login). This narrows contract B6 and B13: a flagged deviation by
   owner ruling.
 
+## Revision 4: cohorts (owner, 2026-11-18)
+
+The owner added cohorts to this task after the build (contract B14, rubric 24); feature
+versions per cohort, numbers per cohort, CSV import and onboarding answers stay for the next
+task. Built: migration `d7e5f3a2b0c9` (two tables, `pa_ops` grants), commands
+`save_cohort` / `delete_cohort` / `add_to_cohort` / `remove_from_cohort` / `resolve_cohort`,
+routes `GET/POST /cohorts`, `POST/DELETE /cohorts/{id}`, `POST /people/cohort-add` and
+`/people/cohort-remove`, `PersonOut.cohorts`, the Cohorts page and the People column, search
+and actions. Tests: three backend route tests (create/edit/delete audited, bad links and dates
+refused, bulk add idempotent and shown on People), the grant pin, the 065 round trip (now
+stepping down to `b1e7c3a9d5f2` by name, both 065 revisions), four Cohorts page tests and two
+People cohort tests. Driven live on the local ops server: two cohorts created, two people
+added. No CLI for cohorts (the pages are the tool; add one when a script needs it). A
+cohort's members are not removed on de-enrol or offboard: the label is research history.
+This revision was not run through a fresh review stack.
+
 ## Rubric status
 
 After the review stack and its fixes (2026-11-17):

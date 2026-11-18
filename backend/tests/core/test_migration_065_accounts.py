@@ -12,7 +12,7 @@ from tests.conftest import _alembic_cfg
 
 
 def test_065_round_trip_restores_the_fresh_upgrade_schema(engine: Engine) -> None:
-    """Upgrade, reverse one revision, and upgrade again to the same catalog."""
+    """Upgrade, step down to before 065 (both its revisions), and upgrade to the same catalog."""
     cfg = _alembic_cfg()
     try:
         with engine.connect() as conn:
@@ -24,12 +24,16 @@ def test_065_round_trip_restores_the_fresh_upgrade_schema(engine: Engine) -> Non
                     "waitlist_entry",
                     "ops_action",
                     "organisation_domain",
+                    "cohort",
+                    "cohort_member",
                 )
             }
-        command.downgrade(cfg, "-1")
+        # By name: 065 has two revisions (the cohorts one came later).
+        command.downgrade(cfg, "b1e7c3a9d5f2")
         with engine.connect() as conn:
             assert "ops_action" not in inspect(conn).get_table_names()
             assert "organisation_domain" not in inspect(conn).get_table_names()
+            assert "cohort" not in inspect(conn).get_table_names()
         command.upgrade(cfg, "head")
         with engine.connect() as conn:
             after = {

@@ -1,6 +1,6 @@
 import type { AuthApi } from "../../auth/types";
-import type { ActionResult, Organisation, Person, Requests } from "../api";
-import { OPS_ME, organisationFixtures, peopleFixtures, requestFixtures } from "./fixtures";
+import type { ActionResult, Cohort, Organisation, Person, Requests } from "../api";
+import { cohortFixtures, OPS_ME, organisationFixtures, peopleFixtures, requestFixtures } from "./fixtures";
 
 /*
  * The ops routes in memory, for `VITE_MOCK=1` and the vitest tests. Like the
@@ -12,6 +12,7 @@ import { OPS_ME, organisationFixtures, peopleFixtures, requestFixtures } from ".
 interface OpsMockState {
   people: Person[];
   organisations: Organisation[];
+  cohorts: Cohort[];
   requests: Requests;
   /** Answer before the in-memory routes; return undefined to fall through. */
   override?: (method: string, path: string, body: unknown) => Response | undefined;
@@ -19,12 +20,19 @@ interface OpsMockState {
   writes: Array<{ method: string; path: string; body: unknown }>;
 }
 
-export const opsMock: OpsMockState = { people: [], organisations: [], requests: requestFixtures(), writes: [] };
+export const opsMock: OpsMockState = {
+  people: [],
+  organisations: [],
+  cohorts: [],
+  requests: requestFixtures(),
+  writes: [],
+};
 
 /** Put the fixtures back and forget overrides and writes. */
 export function resetOpsMock() {
   opsMock.people = peopleFixtures();
   opsMock.organisations = organisationFixtures();
+  opsMock.cohorts = cohortFixtures();
   opsMock.requests = requestFixtures();
   opsMock.override = undefined;
   opsMock.writes = [];
@@ -74,6 +82,55 @@ function route(method: string, path: string, body: Record<string, unknown>): Res
   if (method === "GET" && path === "/api/v1/ops/people") return json(opsMock.people);
   if (method === "GET" && path === "/api/v1/ops/organisations") return json(opsMock.organisations);
   if (method === "GET" && path === "/api/v1/ops/requests") return json(opsMock.requests);
+  if (method === "GET" && path === "/api/v1/ops/cohorts") return json(opsMock.cohorts);
+
+  const cohortPath = /^\/api\/v1\/ops\/cohorts(?:\/([^/]+))?$/.exec(path);
+  if (cohortPath !== null && method === "POST") {
+    const name = String(body.name).trim();
+    const id = cohortPath[1];
+    if (opsMock.cohorts.some((entry) => entry.name.toLowerCase() === name.toLowerCase() && entry.cohort_id !== id)) {
+      return apiError(409, "ops_refused", `a cohort named '${name}' already exists`);
+    }
+    const existing = opsMock.cohorts.find((entry) => entry.cohort_id === id);
+    if (id !== undefined && existing === undefined) return apiError(404, "not_found", "resource not found");
+    const saved: Cohort = {
+      cohort_id: id ?? newId(),
+      created_at: existing?.created_at ?? now,
+      people: existing?.people ?? 0,
+      name,
+      description: (body.description as string | null) ?? null,
+      starts_on: (body.starts_on as string | null) ?? null,
+      ends_on: (body.ends_on as string | null) ?? null,
+      links: (body.links as string[] | undefined) ?? [],
+    };
+    opsMock.cohorts = [...opsMock.cohorts.filter((entry) => entry.cohort_id !== saved.cohort_id), saved].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    for (const subject of opsMock.people) {
+      subject.cohorts = subject.cohorts.map((own) => (own.cohort_id === saved.cohort_id ? { cohort_id: own.cohort_id, name } : own));
+    }
+    return json(saved, id === undefined ? 201 : 200);
+  }
+  if (cohortPath !== null && method === "DELETE" && cohortPath[1] !== undefined) {
+    const id = cohortPath[1];
+    if (!opsMock.cohorts.some((entry) => entry.cohort_id === id)) return apiError(404, "not_found", "resource not found");
+    opsMock.cohorts = opsMock.cohorts.filter((entry) => entry.cohort_id !== id);
+    for (const subject of opsMock.people) subject.cohorts = subject.cohorts.filter((own) => own.cohort_id !== id);
+    return new Response(null, { status: 204 });
+  }
+  if (method === "POST" && (path === "/api/v1/ops/people/cohort-add" || path === "/api/v1/ops/people/cohort-remove")) {
+    const target = opsMock.cohorts.find((entry) => entry.cohort_id === body.cohort_id);
+    if (target === undefined) return apiError(404, "not_found", "resource not found");
+    const adding = path.endsWith("cohort-add");
+    const response = bulk(ids, (subject) => {
+      const inIt = subject.cohorts.some((own) => own.cohort_id === target.cohort_id);
+      if (adding && !inIt) subject.cohorts = [...subject.cohorts, { cohort_id: target.cohort_id, name: target.name }];
+      if (!adding) subject.cohorts = subject.cohorts.filter((own) => own.cohort_id !== target.cohort_id);
+      return "ok";
+    });
+    target.people = opsMock.people.filter((subject) => subject.cohorts.some((own) => own.cohort_id === target.cohort_id)).length;
+    return response;
+  }
 
   if (method === "POST" && path === "/api/v1/ops/people") {
     const email = String(body.email).toLowerCase();
@@ -104,6 +161,7 @@ function route(method: string, path: string, body: Record<string, unknown>): Res
       runs_per_user: null,
       tasks_this_year: 0,
       limits: { task_quota_per_year: 50, runs_per_user: 3 },
+      cohorts: [],
     };
     opsMock.people.push(created);
     return json({ person: created, invitation_sent: true }, 201);

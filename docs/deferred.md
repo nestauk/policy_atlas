@@ -3794,6 +3794,11 @@ Left open by the 064b build (2026-11-17; contract and ADR 0047 for the rulings):
 
 ## Accounts and ops portal (task 065 seams)
 
+- **Cohort follow-ons (owner, 2026-11-18; the next task):** feature versions per organisation
+  or cohort, numbers per person and cohort (with Metabase and PostHog links), CSV import of a
+  pilot with cohorts, onboarding answers. Design: revision-2 explainer, section 7. Cohorts
+  themselves shipped in 065 (contract B14).
+
 Noted by the 065 build (2026-11-17). Self-signup domains beyond `nesta.org.uk`, the domain
 table on the ops pages, application-sent email and the ops action log on the pages are
 recorded above under their own entries.

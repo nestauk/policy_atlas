@@ -58,6 +58,32 @@
         "title": "ApproveRequest",
         "type": "object"
       },
+      "BulkCohort": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /api/v1/ops/people/cohort-add`` and ``cohort-remove``.",
+        "properties": {
+          "cohort_id": {
+            "format": "uuid",
+            "title": "Cohort Id",
+            "type": "string"
+          },
+          "user_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "minItems": 1,
+            "title": "User Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "user_ids",
+          "cohort_id"
+        ],
+        "title": "BulkCohort",
+        "type": "object"
+      },
       "BulkEnrol": {
         "additionalProperties": false,
         "description": "Body of ``POST /api/v1/ops/people/enrol``: enrol or move into ``org_id``.",
@@ -165,6 +191,161 @@
           "user_ids"
         ],
         "title": "BulkSubjects",
+        "type": "object"
+      },
+      "CohortOut": {
+        "description": "One cohort as the Cohorts page lists it (owner, 2026-11-18).\n\nArgs:\n    cohort_id: The cohort's identity.\n    name: Its unique display name.\n    description: What the group is for, or ``None``.\n    starts_on: When it starts, or ``None``.\n    ends_on: When it ends, or ``None``.\n    links: Web addresses about it (a plan, a sheet, a channel), in order.\n    created_at: When it was created.\n    people: How many people are in it.",
+        "properties": {
+          "cohort_id": {
+            "format": "uuid",
+            "title": "Cohort Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "ends_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends On"
+          },
+          "links": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Links",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "people": {
+            "title": "People",
+            "type": "integer"
+          },
+          "starts_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts On"
+          }
+        },
+        "required": [
+          "cohort_id",
+          "name",
+          "links",
+          "created_at",
+          "people"
+        ],
+        "title": "CohortOut",
+        "type": "object"
+      },
+      "CohortRef": {
+        "description": "A cohort as a person's row names it.",
+        "properties": {
+          "cohort_id": {
+            "format": "uuid",
+            "title": "Cohort Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cohort_id",
+          "name"
+        ],
+        "title": "CohortRef",
+        "type": "object"
+      },
+      "CohortSave": {
+        "additionalProperties": false,
+        "description": "Body of ``POST /api/v1/ops/cohorts`` (create) and ``/cohorts/{id}`` (replace).\n\nEvery field is sent: the form shows them all, and an empty optional field\nclears it.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "ends_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends On"
+          },
+          "links": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Links",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "starts_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts On"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CohortSave",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -360,8 +541,15 @@
         "type": "object"
       },
       "PersonOut": {
-        "description": "One person as the ops pages list them (contract B4 \"list people\").\n\nArgs:\n    user_id: The Cognito subject.\n    display_name: The stored name (never derived from the email here).\n    email: The stored address, or ``None`` for a person who only ever\n        signed in. Ops-facing: this shape never leaves the ops host.\n    organisation: Their organisation, or ``None`` when unenrolled.\n    is_admin: Whether they hold the administrator flag.\n    is_ops: Whether they hold the ops role.\n    created_at: When the row was created.\n    invited_at: When Cognito last sent them an invitation through this\n        service, or ``None``. The resend cooldown reads it.\n    task_quota_per_year: Their own override, or ``None``.\n    runs_per_user: Their own override, or ``None``.\n    tasks_this_year: Tasks they created in the last 365 days.\n    limits: The limits that apply after resolution.",
+        "description": "One person as the ops pages list them (contract B4 \"list people\").\n\nArgs:\n    user_id: The Cognito subject.\n    display_name: The stored name (never derived from the email here).\n    email: The stored address, or ``None`` for a person who only ever\n        signed in. Ops-facing: this shape never leaves the ops host.\n    organisation: Their organisation, or ``None`` when unenrolled.\n    is_admin: Whether they hold the administrator flag.\n    is_ops: Whether they hold the ops role.\n    created_at: When the row was created.\n    invited_at: When Cognito last sent them an invitation through this\n        service, or ``None``. The resend cooldown reads it.\n    task_quota_per_year: Their own override, or ``None``.\n    runs_per_user: Their own override, or ``None``.\n    tasks_this_year: Tasks they created in the last 365 days.\n    limits: The limits that apply after resolution.\n    cohorts: The cohorts they are in, by name.",
         "properties": {
+          "cohorts": {
+            "items": {
+              "$ref": "#/components/schemas/CohortRef"
+            },
+            "title": "Cohorts",
+            "type": "array"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -453,7 +641,8 @@
           "is_ops",
           "created_at",
           "tasks_this_year",
-          "limits"
+          "limits",
+          "cohorts"
         ],
         "title": "PersonOut",
         "type": "object"
@@ -692,6 +881,181 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/ops/cohorts": {
+      "get": {
+        "description": "List cohorts by name with how many people each holds.",
+        "operationId": "list_cohorts_api_v1_ops_cohorts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CohortOut"
+                  },
+                  "title": "Response List Cohorts Api V1 Ops Cohorts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Cohorts",
+        "tags": [
+          "ops"
+        ]
+      },
+      "post": {
+        "description": "Create a cohort and its audit record.",
+        "operationId": "create_cohort_api_v1_ops_cohorts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CohortSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CohortOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Cohort",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/cohorts/{cohort_id}": {
+      "delete": {
+        "description": "Delete a cohort and its memberships; the people are untouched.",
+        "operationId": "delete_cohort_api_v1_ops_cohorts__cohort_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cohort_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Cohort Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Cohort",
+        "tags": [
+          "ops"
+        ]
+      },
+      "post": {
+        "description": "Replace a cohort's details; its members are untouched.",
+        "operationId": "update_cohort_api_v1_ops_cohorts__cohort_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "cohort_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Cohort Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CohortSave"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CohortOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Cohort",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
     "/api/v1/ops/organisations": {
       "get": {
         "description": "List organisations alphabetically with their people and domains.",
@@ -926,6 +1290,100 @@
           }
         ],
         "summary": "Create Person",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/people/cohort-add": {
+      "post": {
+        "description": "Add every selected person to one cohort.",
+        "operationId": "add_people_to_cohort_api_v1_ops_people_cohort_add_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkCohort"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Add People To Cohort",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/people/cohort-remove": {
+      "post": {
+        "description": "Remove every selected person from one cohort.",
+        "operationId": "remove_people_from_cohort_api_v1_ops_people_cohort_remove_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkCohort"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Remove People From Cohort",
         "tags": [
           "ops"
         ]

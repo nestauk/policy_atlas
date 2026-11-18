@@ -86,3 +86,8 @@ Slice-specific:
         `deploy.sh` runs the sync after migrations and before starting the ops service; the
         downgrade revokes, drops the trigger and the role with the service stopped; staging
         check (11) is recorded.
+24. [ ] **B14.** Both cohort tables and their constraints exist and round-trip with 065; the
+        `pa_ops` grants include exactly the cohort list; create, edit, delete, add and remove
+        each write one `ops_action` row; a name is unique, a link must be a web address, the end
+        may not precede the start; adding twice changes nothing; the People list shows and
+        searches cohorts; the Cohorts page and both People actions are tested.

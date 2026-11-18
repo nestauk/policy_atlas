@@ -13,6 +13,7 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     ColumnElement,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -151,6 +152,39 @@ organisation_domain = Table(
     Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     CheckConstraint("domain = lower(domain)", name="ck_organisation_domain_lower"),
+)
+
+# Named groups of people for pilots and research (task 065, owner 2026-11-18).
+# A label, separate from the organisation: one person may be in several.
+cohort = Table(
+    "cohort",
+    metadata,
+    Column("cohort_id", UUID(as_uuid=True), primary_key=True),
+    Column("name", Text, nullable=False),
+    Column("description", Text, nullable=True),
+    Column("starts_on", Date, nullable=True),
+    Column("ends_on", Date, nullable=True),
+    Column("links", ARRAY(Text), nullable=False, server_default=text("'{}'")),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("name", name="uq_cohort_name"),
+    CheckConstraint(
+        "starts_on IS NULL OR ends_on IS NULL OR ends_on >= starts_on",
+        name="ck_cohort_dates_ordered",
+    ),
+)
+
+cohort_member = Table(
+    "cohort_member",
+    metadata,
+    Column(
+        "cohort_id", UUID(as_uuid=True), ForeignKey("cohort.cohort_id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "user_id", Text, ForeignKey("app_user.user_id", ondelete="CASCADE"), primary_key=True
+    ),
+    Column("added_at", DateTime(timezone=True), nullable=False),
+    Index("ix_cohort_member_user_id", "user_id"),
 )
 
 # Splash-page Request-access intake. No FK to app_user — ops enrolment is the

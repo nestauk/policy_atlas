@@ -144,6 +144,7 @@ function SignedInShell() {
     <>
       <NavItem to="/people">People</NavItem>
       <NavItem to="/organisations">Organisations</NavItem>
+      <NavItem to="/cohorts">Cohorts</NavItem>
       <NavItem to="/waitlist">
         Waitlist
         {waiting > 0 && (
