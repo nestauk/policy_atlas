@@ -1,5 +1,14 @@
 # Knowledge update log
 
+## 2026-11-18 (task 065, delta review stack)
+
+Added: [sqlalchemy-core-insert-rowcount-is-not-a-signal](sqlalchemy-core-insert-rowcount-is-not-a-signal.md)
+(from the stack's pa_ops write test). Folded: the reverted per-task advisory lock and its
+caller trace into [event-log-sequence](event-log-sequence.md). Declined: the in-place
+migration edits (an owner ruling for migrations that never left local databases, not a
+general rule) and the build-guard harness failure (a `dev` defect, recorded in
+verification.md).
+
 ## 2026-11-17 (task 064b, review stack)
 * **New**: [cdk-any-typed-property-takes-cloudformation-dict](cdk-any-typed-property-takes-cloudformation-dict.md)
   — the logging filter rendered camelCase through an `Any`-typed L1 property; synth and the
