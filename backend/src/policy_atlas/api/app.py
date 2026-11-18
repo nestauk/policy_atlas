@@ -199,7 +199,9 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         allow_origins=[app_settings.app_origin],
         allow_credentials=False,
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type"],
+        # x-aws-waf-token: the waitlist form's CAPTCHA token (task 064b);
+        # read by the firewall, never by the API.
+        allow_headers=["Authorization", "Content-Type", "x-aws-waf-token"],
     )
     _install_exception_handlers(app)
 

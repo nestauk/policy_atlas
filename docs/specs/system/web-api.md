@@ -158,7 +158,10 @@ Splash-page **Request access** intake. Public — no bearer token.
   is a honeypot (hidden on the form): any non-empty value gets a fake 201
   and stores nothing. No admin list/export in v1 — ops query the
   `waitlist_entry` table directly. Enrolment into Cognito remains the ops
-  CLI path (task 033), not an auto-promote from this table.
+  CLI path (task 033), not an auto-promote from this table. Behind the
+  firewall (task 064b) the form sends a CAPTCHA token in the `x-aws-waf-token`
+  request header, which CORS allows; the firewall checks it and the API never
+  reads it.
 
 ### Tasks
 

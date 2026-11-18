@@ -1,7 +1,7 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (064a (`task/064a-security-quick-wins`, security quick wins; ADR 0045) adds one migration,
+stands (064b (`task/064b-waf-captcha`, the firewall and the waitlist CAPTCHA; ADR 0047) adds no migration and no server setting; the two `VITE_WAF_CAPTCHA_*` values are set only by `scripts/deploy.sh` when an environment's CAPTCHA is on, so the local waitlist form shows no puzzle and there is nothing to do after pulling it; 064a (`task/064a-security-quick-wins`, security quick wins; ADR 0045) adds one migration,
 `b1e7c3a9d5f2` (an index on screening results, built `CONCURRENTLY`; its downgrade drops it) —
 `alembic upgrade head` against the dev DB after pulling it; two optional env vars with defaults,
 `RUNS_PER_USER` (3) and `TASK_QUOTA_PER_YEAR` (50) — `make dev` sets `TASK_QUOTA_PER_YEAR=100000`

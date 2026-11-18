@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast eval-check okf-validate audit audit-paths prompt-guard eval-search-recall frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test deploy-migration-wait-test infra-setup deploy-check deploy-update deploy-bootstrap
+.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast eval-check okf-validate audit audit-paths prompt-guard eval-search-recall frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test deploy-migration-wait-test waf-report-test infra-setup deploy-check deploy-update deploy-bootstrap
 
 # Root Makefile (025 A.2 monorepo hoist): the Python project lives in
 # backend/; this Makefile owns the shared db service + the root-level gates
@@ -222,13 +222,17 @@ fe-api-smoke:
 # Verifies deploy.sh's production VITE_* refusal directly once D.1 lands.
 # It deliberately reports a clear skip while that documented interface is absent.
 # CI runs this target, so it also runs the migration-waiter check below.
-deploy-build-guard-test: deploy-migration-wait-test
+deploy-build-guard-test: deploy-migration-wait-test waf-report-test
 	bash scripts/test_deploy_build_guard.sh
 
 # Checks deploy.sh's migration waiter (task 057) against a stubbed `aws`: polls
 # until STOPPED, fails loudly on a non-zero exit or after MIGRATION_WAIT_MAX_S.
 deploy-migration-wait-test:
 	bash scripts/test_deploy_migration_wait.sh
+
+# Checks the read-only WAF count-week report against recorded-shaped AWS output.
+waf-report-test:
+	bash scripts/test_waf_report.sh
 
 # GitHub Actions and operators share these deployment entry points. DEPLOY_ENV
 # selects one committed environment across infra/*_config.json; deploy-check is

@@ -2473,6 +2473,9 @@ omissions.
   email, and a `website` honeypot only. If real spam appears, add a
   CloudFront/WAF rate-based rule on that path — an infra change, no app
   code. Decided 2026-09-03 (036 review): no CAPTCHA, no in-app rate limiter.
+  **Superseded 2026-11-17 by task 064b** (owner ruling, ADR 0047): a WAF
+  rate rule on the path (50 per 5 minutes per address) *and* a CAPTCHA rule,
+  with the puzzle shown in the form. The honeypot stays.
 - **`RunPane`/`JourneyPane` are dead code — DISCHARGED (task 038, V10): deleted** with
   their tests and the orphaned `anim-bar` utility (owner chose delete over re-wire;
   `journey/presentation.ts` stays, `runProgress.ts` imports it). The original entry:
@@ -3677,7 +3680,12 @@ programme map in `docs/tasks/064-security-hardening/programme.md` carries the la
 - **Resuming after a check-in is uncapped.** The per-user run cap (Q7) applies at the
   three start surfaces; resuming a paused walk has no capacity check, because the
   person's decision is already committed when the resume runs (owner item 1, plan gate).
-- **Request body size limits (review finding H-02).** Not in this slice.
+- **Request body size limits (review finding H-02).** Not in this slice, and
+  **not closable at the load balancer** (task 064b): a web ACL on a load
+  balancer inspects the first 8 KB of a body and no more, so it can only tell
+  "over 8 KB" from "under", and over 8 KB is normal for this API (chat, plan
+  edits, theory-of-change imports). A real size cap belongs in the API process
+  (a body limit in the server or a middleware), a later slice.
 - **Library text inside steering rejections.** `steering.py` wraps pydantic
   `ValidationError`, `ValueError` and `TypeError` text into `SteeringAdjustmentError`,
   which `safe_error` (Q3) treats as product-shaped, so that text reaches the event log.
@@ -3725,3 +3733,48 @@ Found by the 064a review stack (2026-11-16) and left as seams:
   fan-out (width 6, wider than the longlist's 4) never re-checked. Fix in a follow-on:
   take `pg_advisory_xact_lock(hashtext(task_id))` around the read-and-insert in
   `append`, or the per-walk sequence already deferred under § Options scoping longlist.
+
+## Firewall and CAPTCHA (task 064b seams)
+
+Left open by the 064b build (2026-11-17; contract and ADR 0047 for the rulings):
+
+- **The count-to-block switch is a follow-on config change, per environment.** Both
+  environments ship with `waf.mode: count`. After its own count week and the deliberate
+  pass, each is switched by setting `mode: block` in `pa_config.json` and deploying, then
+  repeating the pass at once (`infra/DEPLOYMENT.md` § 4 "The firewall"). Staging first.
+- **Production's CAPTCHA is off until staging has proved the flow.** `waf.captcha: false` in
+  production; turned on by a config change after the staging live check (W5, W6). Until
+  then production's waitlist has the rate rule and the honeypot only.
+- **No alerts on firewall metrics.** There is no alarm topic yet (review finding H-05). When
+  one exists, an alarm on `BlockedRequests` for the general rate rule and the managed groups
+  is the first to add.
+- **The rule exclusion list is hard-coded.** `COMMON_RULES_ALWAYS_COUNTED` in
+  `infra/infra/components/waf.py` holds one name (`SizeRestrictions_BODY`). It becomes a
+  config key only if a count week finds a second name, or production and staging need
+  different lists.
+- **The deploy's readiness check in block mode.** After each deploy the script calls
+  `/readyz` from a GitHub runner address. The managed groups skip the two health paths
+  (owner ruling), so they cannot refuse it; the general rate rule could in theory, if a
+  runner shared an address that sent over 6,000 requests in 5 minutes, which no runner
+  does. Noted so the risk is not read as forgotten.
+- **A person whose browser blocks `awswaf.com` cannot sign up.** The form shows "The
+  sign-up check did not load. Reload the page to try again." and keeps submit disabled.
+  A contact address next to that message is privacy-notice work (Data Protection Officer).
+- **The firewall log and samples hold client addresses.** One month of retention in the
+  account; the report prints them only with `--addresses`. A redaction of
+  `httpRequest.clientIp` in the logging configuration would lose the one field the
+  count week needs to tell one scraper from an office; left as is.
+- **No deploy-time check that the firewall is attached.** After the emergency
+  `disassociate-web-acl`, a deploy does not re-attach the web ACL (CloudFormation
+  updates only changed template resources and does not detect the drift), so the
+  firewall stays off until `associate-web-acl` is run by hand. A postcondition in
+  `deploy.sh` (`aws wafv2 get-web-acl-for-resource` on the load balancer when
+  `waf.enabled`) would fail the deploy loudly instead; a few lines plus a stubbed test.
+- **The report reads at most 10,000 matched requests per run.** Logs Insights' ceiling per
+  query; the count week on this traffic is far below it. Page by day if it is ever hit.
+- **The general rate limit is pinned from a site-wide peak, not a per-address one.**
+  Staging logged the load balancer's address, not the visitor's, until 064a deploys, so
+  Phase 0 took the busiest 5-minute window of all traffic (520 in 14 days) as the bound
+  and set `GENERAL_RATE_LIMIT = 6000`. Once 064a is on staging the per-address query in
+  `docs/tasks/064b-waf-captcha/verification.md` § Phase 0 can re-measure; the constant
+  is one line and a normal deploy.
