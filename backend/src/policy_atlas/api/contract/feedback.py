@@ -30,6 +30,16 @@ FeedbackKind = Literal[
     "problem_report",
 ]
 
+MissingPaperFailureStage = Literal[
+    "unresolved",
+    "cited",
+    "not_cited",
+    "not_selected",
+    "screened_out_s2",
+    "screened_out_s1",
+    "acquired_only",
+    "not_retrieved",
+]
 CitationFlagReason = Literal["off_topic", "wrong_population", "not_evidence", "duplicate", "other"]
 
 
@@ -90,7 +100,61 @@ class ProblemReportIn(BaseModel):
     client: ProblemClientInfo
 
 
-FeedbackIn = Annotated[CitationFlagIn | ProblemReportIn, Field(discriminator="kind")]
+class MissingPaperIn(BaseModel):
+    """Element B: "A paper I expected is missing".
+
+    The user gives a DOI, a URL or a title. The server resolves the paper and
+    names the pipeline stage at which it was lost; the user never chooses one.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["missing_paper"]
+    surface: Literal["report_foot", "sources_tab"]
+    task_id: uuid.UUID
+    artefact_id: uuid.UUID | None = Field(
+        default=None,
+        description="The report that the form is under. It names the run. "
+        "Absent on the Sources tab: the task's latest run is used.",
+    )
+    raw_input: str = Field(
+        min_length=1, max_length=FEEDBACK_SHORT_TEXT_MAX, description="A DOI, a URL or a title."
+    )
+    why: str | None = Field(default=None, max_length=FEEDBACK_NOTE_MAX)
+
+
+class ScreeningOverrideIn(BaseModel):
+    """Element B: "Should have been kept" on one screened-out document.
+
+    A toggle with no free text. The server reads the screening stage.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["screening_override"]
+    surface: Literal["screened_out_row"]
+    task_id: uuid.UUID
+    source_id: uuid.UUID = Field(description="The document: its task source identity.")
+
+
+FeedbackIn = Annotated[
+    CitationFlagIn | ProblemReportIn | MissingPaperIn | ScreeningOverrideIn,
+    Field(discriminator="kind"),
+]
+
+
+class MissingPaperResolutionOut(BaseModel):
+    """The resolver's answer for one missing-paper record.
+
+    ``failure_stage`` is null while the resolver is still at work (pending).
+    ``resolved_id`` is the document's task source identity when the task holds
+    the paper, else the paper's own id (an OpenAlex address or a DOI).
+    """
+
+    failure_stage: MissingPaperFailureStage | None = None
+    resolved_id: str | None = None
+    resolver_confidence: float | None = None
+    resolved_at: datetime | None = None
 
 
 class FeedbackOut(BaseModel):
@@ -104,6 +168,9 @@ class FeedbackOut(BaseModel):
     capability_run_id: uuid.UUID | None = None
     payload: dict[str, Any]
     created_at: datetime
+    resolution: MissingPaperResolutionOut | None = Field(
+        default=None, description="For a missing-paper record only."
+    )
 
 
 class FeedbackListOut(BaseModel):

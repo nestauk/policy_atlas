@@ -2873,6 +2873,17 @@
             "title": "Payload",
             "type": "object"
           },
+          "resolution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MissingPaperResolutionOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a missing-paper record only."
+          },
           "surface": {
             "title": "Surface",
             "type": "string"
@@ -4419,6 +4430,132 @@
           "is_admin"
         ],
         "title": "MeOut",
+        "type": "object"
+      },
+      "MissingPaperIn": {
+        "additionalProperties": false,
+        "description": "Element B: \"A paper I expected is missing\".\n\nThe user gives a DOI, a URL or a title. The server resolves the paper and\nnames the pipeline stage at which it was lost; the user never chooses one.",
+        "properties": {
+          "artefact_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The report that the form is under. It names the run. Absent on the Sources tab: the task's latest run is used.",
+            "title": "Artefact Id"
+          },
+          "kind": {
+            "const": "missing_paper",
+            "title": "Kind",
+            "type": "string"
+          },
+          "raw_input": {
+            "description": "A DOI, a URL or a title.",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Raw Input",
+            "type": "string"
+          },
+          "surface": {
+            "enum": [
+              "report_foot",
+              "sources_tab"
+            ],
+            "title": "Surface",
+            "type": "string"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Why"
+          }
+        },
+        "required": [
+          "kind",
+          "surface",
+          "task_id",
+          "raw_input"
+        ],
+        "title": "MissingPaperIn",
+        "type": "object"
+      },
+      "MissingPaperResolutionOut": {
+        "description": "The resolver's answer for one missing-paper record.\n\n``failure_stage`` is null while the resolver is still at work (pending).\n``resolved_id`` is the document's task source identity when the task holds\nthe paper, else the paper's own id (an OpenAlex address or a DOI).",
+        "properties": {
+          "failure_stage": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unresolved",
+                  "cited",
+                  "not_cited",
+                  "not_selected",
+                  "screened_out_s2",
+                  "screened_out_s1",
+                  "acquired_only",
+                  "not_retrieved"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Stage"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "resolved_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Id"
+          },
+          "resolver_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolver Confidence"
+          }
+        },
+        "title": "MissingPaperResolutionOut",
         "type": "object"
       },
       "MostRelevantNoteOut": {
@@ -8177,6 +8314,41 @@
           "action"
         ],
         "title": "ScopingSteerPointDefaultOut",
+        "type": "object"
+      },
+      "ScreeningOverrideIn": {
+        "additionalProperties": false,
+        "description": "Element B: \"Should have been kept\" on one screened-out document.\n\nA toggle with no free text. The server reads the screening stage.",
+        "properties": {
+          "kind": {
+            "const": "screening_override",
+            "title": "Kind",
+            "type": "string"
+          },
+          "source_id": {
+            "description": "The document: its task source identity.",
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "surface": {
+            "const": "screened_out_row",
+            "title": "Surface",
+            "type": "string"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "surface",
+          "task_id",
+          "source_id"
+        ],
+        "title": "ScreeningOverrideIn",
         "type": "object"
       },
       "SearchQueryFrame": {
@@ -14861,7 +15033,7 @@
         ]
       },
       "post": {
-        "description": "Store one feedback record, then mirror it as a Langfuse score.\n\nFor a toggle kind, a second submit for the same target replaces the first:\nthe earlier record is retracted and its score is deleted.\n\nArgs:\n    body: The validated record of one kind.\n    user: The authenticated caller.\n    engine: The process engine. The route owns its transaction, so that\n        the mirror runs after the commit.\n    settings: The application settings (feature flags, version).\n    langfuse: The Langfuse client, or ``None`` when tracing is off.\n\nReturns:\n    The stored record.\n\nRaises:\n    HTTPException: 404 when the element is off, or when the task, the\n        report or the document is absent or not readable by the caller.",
+        "description": "Store one feedback record, then mirror it as a Langfuse score.\n\nFor a toggle kind, a second submit for the same target replaces the first:\nthe earlier record is retracted and its score is deleted.\n\nA missing-paper report is resolved on a worker thread. The request waits\nfor the answer up to :data:`RESOLVE_BUDGET_S`; after that the response has\na pending resolution, and ``GET /api/v1/feedback/{id}`` has the answer\nwhen the resolver is done.\n\nArgs:\n    body: The validated record of one kind.\n    user: The authenticated caller.\n    engine: The process engine. The route owns its transaction, so that\n        the mirror runs after the commit.\n    settings: The application settings (feature flags, version).\n    langfuse: The Langfuse client, or ``None`` when tracing is off.\n    lookup: The OpenAlex lookups for a missing paper, or ``None``.\n\nReturns:\n    The stored record.\n\nRaises:\n    HTTPException: 404 when the element is off, or when the task, the\n        report or the document is absent or not readable by the caller.\n        422 for an override of a document that was not screened out.",
         "operationId": "submit_feedback_api_v1_feedback_post",
         "requestBody": {
           "content": {
@@ -14870,7 +15042,9 @@
                 "discriminator": {
                   "mapping": {
                     "citation_flag": "#/components/schemas/CitationFlagIn",
-                    "problem_report": "#/components/schemas/ProblemReportIn"
+                    "missing_paper": "#/components/schemas/MissingPaperIn",
+                    "problem_report": "#/components/schemas/ProblemReportIn",
+                    "screening_override": "#/components/schemas/ScreeningOverrideIn"
                   },
                   "propertyName": "kind"
                 },
@@ -14880,6 +15054,12 @@
                   },
                   {
                     "$ref": "#/components/schemas/ProblemReportIn"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MissingPaperIn"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ScreeningOverrideIn"
                   }
                 ],
                 "title": "Body"
@@ -14958,6 +15138,53 @@
           }
         ],
         "summary": "Retract",
+        "tags": [
+          "feedback"
+        ]
+      },
+      "get": {
+        "description": "Return one of the caller's records.\n\nThe frontend polls this while a missing paper's resolution is pending.\n\nArgs:\n    feedback_event_id: The record.\n    user: The authenticated caller.\n    engine: The process engine.\n    settings: The application settings (feature flags).\n\nReturns:\n    The record, with its resolution for a missing paper.\n\nRaises:\n    HTTPException: 404 when no feedback kind is on, or when the caller has\n        no record with this id.",
+        "operationId": "get_feedback_api_v1_feedback__feedback_event_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "feedback_event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Feedback Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Feedback",
         "tags": [
           "feedback"
         ]

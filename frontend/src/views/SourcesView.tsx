@@ -63,6 +63,7 @@ import { csvCell, numberedAuthorships, triggerUrlDownload } from "./artefactPres
 import { referenceParts } from "../ui/brand/reference";
 import { ReferenceUrl } from "../ui/brand/ReferenceUrl";
 import { CitationFlag } from "./feedback/CitationFlag";
+import { MissingPaperForm, ScreeningOverrideButton } from "./feedback/MissingPaper";
 import { usePublicView } from "./publicView";
 import { isScoping } from "./scopingActivity";
 import { isFinished } from "./workspace/runProgress";
@@ -93,6 +94,35 @@ const SOURCES_FRAME_CLASS = "sources-frame";
 export function SourcesView() {
   const { taskId = "" } = useParams();
   const isPublicView = usePublicView();
+  // In-app feedback, elements A and B: for signed-in readers only.
+  const missingPaperOn = feedbackEnabled("missing_paper") && !isPublicView;
+  const [missingOpen, setMissingOpen] = useState(false);
+  const rowFeedback = (item: EvidenceItem) => {
+    if (isPublicView) return null;
+    if (feedbackEnabled("citation_flag") && item.screen_status === "relevant") {
+      return (
+        <CitationFlag
+          taskId={taskId}
+          sourceId={item.source_id}
+          title={item.title}
+          surface="sources_all"
+          className="mt-1"
+        />
+      );
+    }
+    // "Should have been kept": on each row that screening removed.
+    if (missingPaperOn && item.screen_status != null && item.screen_status !== "relevant") {
+      return (
+        <ScreeningOverrideButton
+          taskId={taskId}
+          sourceId={item.source_id}
+          title={item.title}
+          className="mt-1"
+        />
+      );
+    }
+    return null;
+  };
   const task = useTask(taskId);
   const landscape = useLandscape(taskId);
   const coverage = useCoverage(taskId);
@@ -447,8 +477,25 @@ export function SourcesView() {
             Clear filters
           </Button>
         )}
+        {/* In-app feedback, element B: opens the form under the toolbar. */}
+        {missingPaperOn && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="min-h-11"
+            aria-expanded={missingOpen}
+            onClick={() => setMissingOpen((open) => !open)}
+          >
+            + A paper is missing
+          </Button>
+        )}
         </div>
       </div>
+      )}
+      {missingPaperOn && missingOpen && (
+        <div className="mb-4 max-w-2xl border border-line-2 bg-paper p-4">
+          <MissingPaperForm taskId={taskId} surface="sources_tab" />
+        </div>
       )}
 
       <div ref={results} className="scroll-mt-4">
@@ -513,17 +560,7 @@ export function SourcesView() {
                       onOpen={() => updateParams((next) => { next.set("source", item.source_id); next.delete("option"); })}
                       // In-app feedback, element A: on each screened-in row,
                       // for signed-in readers only.
-                      feedback={
-                        feedbackEnabled("citation_flag") && !isPublicView && item.screen_status === "relevant" ? (
-                          <CitationFlag
-                            taskId={taskId}
-                            sourceId={item.source_id}
-                            title={item.title}
-                            surface="sources_all"
-                            className="mt-1"
-                          />
-                        ) : null
-                      }
+                      feedback={rowFeedback(item)}
                     />
                   ))}
                 </tbody>

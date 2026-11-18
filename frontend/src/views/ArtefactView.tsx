@@ -73,6 +73,7 @@ import {
 } from "./reportPage";
 import { usePublicView } from "./publicView";
 import { CitationFlag } from "./feedback/CitationFlag";
+import { MissingPaperCard } from "./feedback/MissingPaper";
 import { feedbackEnabled } from "../lib/feedback";
 import {
   DisclosureHeading,
@@ -3992,6 +3993,10 @@ function ArtefactReport() {
                     : undefined
                 }
               />
+            )}
+            {/* In-app feedback, element B: at the foot of the reference list. */}
+            {feedbackEnabled("missing_paper") && !isPublicView && (
+              <MissingPaperCard taskId={taskId} artefactId={data.artefact_id} />
             )}
 
             <div className={arriving}>

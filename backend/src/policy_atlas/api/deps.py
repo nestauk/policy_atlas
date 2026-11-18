@@ -23,6 +23,7 @@ from policy_atlas.core.embeddings import (
 )
 from policy_atlas.core.model_routes import live_api_key, route
 from policy_atlas.core.uploads import UploadStore, store_from_env
+from policy_atlas.evidence_search.sourcing.search_live import OpenAlexLiveBackend
 from policy_atlas.evidence_search.synthesis.grounding_judge import (
     GroundingJudgeBackend,
     OpenAIGroundingJudgeBackend,
@@ -125,6 +126,23 @@ def get_langfuse_client() -> Langfuse | None:
         this seam with a fake client to assert the score call.
     """
     return tracing.get_langfuse()
+
+
+def get_paper_lookup() -> OpenAlexLiveBackend | None:
+    """Return the OpenAlex client that resolves a reported missing paper.
+
+    Data source: OpenAlex Works API (publisher: OurResearch; worldwide coverage).
+
+    Returns:
+        The live client when the API runs live and ``OPENALEX_API_KEY`` is
+        set, else None. With None, only an identifier (a DOI or an OpenAlex
+        address) or an exact title of a task document resolves. Tests
+        override this seam with a fake.
+    """
+    key = os.environ.get("OPENALEX_API_KEY")
+    if not _live() or not key:
+        return None
+    return OpenAlexLiveBackend(key, email=os.environ.get("OPENALEX_EMAIL"))
 
 
 def get_engine(request: Request) -> Engine:
@@ -301,6 +319,7 @@ __all__ = [
     "get_engine",
     "get_executor",
     "get_langfuse_client",
+    "get_paper_lookup",
     "get_grounding_judge_backend",
     "get_agent_backend",
     "get_task_agent_backend",

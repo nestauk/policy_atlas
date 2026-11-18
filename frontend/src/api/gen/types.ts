@@ -180,6 +180,11 @@ export interface paths {
          *     For a toggle kind, a second submit for the same target replaces the first:
          *     the earlier record is retracted and its score is deleted.
          *
+         *     A missing-paper report is resolved on a worker thread. The request waits
+         *     for the answer up to :data:`RESOLVE_BUDGET_S`; after that the response has
+         *     a pending resolution, and ``GET /api/v1/feedback/{id}`` has the answer
+         *     when the resolver is done.
+         *
          *     Args:
          *         body: The validated record of one kind.
          *         user: The authenticated caller.
@@ -187,6 +192,7 @@ export interface paths {
          *             the mirror runs after the commit.
          *         settings: The application settings (feature flags, version).
          *         langfuse: The Langfuse client, or ``None`` when tracing is off.
+         *         lookup: The OpenAlex lookups for a missing paper, or ``None``.
          *
          *     Returns:
          *         The stored record.
@@ -194,6 +200,7 @@ export interface paths {
          *     Raises:
          *         HTTPException: 404 when the element is off, or when the task, the
          *             report or the document is absent or not readable by the caller.
+         *             422 for an override of a document that was not screened out.
          */
         post: operations["submit_feedback_api_v1_feedback_post"];
         delete?: never;
@@ -209,7 +216,26 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Get Feedback
+         * @description Return one of the caller's records.
+         *
+         *     The frontend polls this while a missing paper's resolution is pending.
+         *
+         *     Args:
+         *         feedback_event_id: The record.
+         *         user: The authenticated caller.
+         *         engine: The process engine.
+         *         settings: The application settings (feature flags).
+         *
+         *     Returns:
+         *         The record, with its resolution for a missing paper.
+         *
+         *     Raises:
+         *         HTTPException: 404 when no feedback kind is on, or when the caller has
+         *             no record with this id.
+         */
+        get: operations["get_feedback_api_v1_feedback__feedback_event_id__get"];
         put?: never;
         post?: never;
         /**
@@ -3698,6 +3724,8 @@ export interface components {
             payload: {
                 [key: string]: unknown;
             };
+            /** @description For a missing-paper record only. */
+            resolution?: components["schemas"]["MissingPaperResolutionOut"] | null;
             /** Surface */
             surface: string;
             /** Target Id */
@@ -4397,6 +4425,60 @@ export interface components {
             organisation?: components["schemas"]["OrganisationRef"] | null;
             /** User Id */
             user_id: string;
+        };
+        /**
+         * MissingPaperIn
+         * @description Element B: "A paper I expected is missing".
+         *
+         *     The user gives a DOI, a URL or a title. The server resolves the paper and
+         *     names the pipeline stage at which it was lost; the user never chooses one.
+         */
+        MissingPaperIn: {
+            /**
+             * Artefact Id
+             * @description The report that the form is under. It names the run. Absent on the Sources tab: the task's latest run is used.
+             */
+            artefact_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "missing_paper";
+            /**
+             * Raw Input
+             * @description A DOI, a URL or a title.
+             */
+            raw_input: string;
+            /**
+             * Surface
+             * @enum {string}
+             */
+            surface: "report_foot" | "sources_tab";
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+            /** Why */
+            why?: string | null;
+        };
+        /**
+         * MissingPaperResolutionOut
+         * @description The resolver's answer for one missing-paper record.
+         *
+         *     ``failure_stage`` is null while the resolver is still at work (pending).
+         *     ``resolved_id`` is the document's task source identity when the task holds
+         *     the paper, else the paper's own id (an OpenAlex address or a DOI).
+         */
+        MissingPaperResolutionOut: {
+            /** Failure Stage */
+            failure_stage?: ("unresolved" | "cited" | "not_cited" | "not_selected" | "screened_out_s2" | "screened_out_s1" | "acquired_only" | "not_retrieved") | null;
+            /** Resolved At */
+            resolved_at?: string | null;
+            /** Resolved Id */
+            resolved_id?: string | null;
+            /** Resolver Confidence */
+            resolver_confidence?: number | null;
         };
         /**
          * MostRelevantNoteOut
@@ -6261,6 +6343,35 @@ export interface components {
             action: "proceed_flag";
             /** Steer Point */
             steer_point: string;
+        };
+        /**
+         * ScreeningOverrideIn
+         * @description Element B: "Should have been kept" on one screened-out document.
+         *
+         *     A toggle with no free text. The server reads the screening stage.
+         */
+        ScreeningOverrideIn: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "screening_override";
+            /**
+             * Source Id
+             * Format: uuid
+             * @description The document: its task source identity.
+             */
+            source_id: string;
+            /**
+             * Surface
+             * @constant
+             */
+            surface: "screened_out_row";
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
         };
         /**
          * SearchQueryFrame
@@ -9222,12 +9333,43 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CitationFlagIn"] | components["schemas"]["ProblemReportIn"];
+                "application/json": components["schemas"]["CitationFlagIn"] | components["schemas"]["ProblemReportIn"] | components["schemas"]["MissingPaperIn"] | components["schemas"]["ScreeningOverrideIn"];
             };
         };
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_feedback_api_v1_feedback__feedback_event_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                feedback_event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -112,6 +112,40 @@ export function useFeedback(taskId: string, kind: FeedbackKind, enabled = true) 
   });
 }
 
+/** How often a pending missing-paper resolution is read again, in milliseconds. */
+const RESOLUTION_POLL_MS = 2000;
+
+/**
+ * `GET /api/v1/feedback/{id}`: one record, read again while the resolution of
+ * a missing paper is pending.
+ *
+ * Args:
+ *   feedbackEventId: The record.
+ *   initial: The record as the submit returned it. No request is made when
+ *     its resolution is already known.
+ *
+ * Returns:
+ *   The query. Its data is the newest read of the record.
+ */
+export function useFeedbackRecord(feedbackEventId: string, initial: FeedbackRecord) {
+  const client = useApiClient();
+  const pending = (record: FeedbackRecord | undefined) =>
+    record?.resolution != null && record.resolution.failure_stage == null;
+  return useQuery({
+    queryKey: ["feedback", "record", feedbackEventId] as const,
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/feedback/{feedback_event_id}", {
+        params: { path: { feedback_event_id: feedbackEventId } },
+      });
+      if (error) raise(error);
+      return data;
+    },
+    initialData: initial,
+    enabled: pending(initial),
+    refetchInterval: (query) => (pending(query.state.data) ? RESOLUTION_POLL_MS : false),
+  });
+}
+
 /**
  * `POST /api/v1/feedback`: store one feedback record.
  *
