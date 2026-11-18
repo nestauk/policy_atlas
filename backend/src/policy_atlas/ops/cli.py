@@ -324,7 +324,7 @@ def _run(
     identity = cognito if cognito is not None else cognito_client()
     tokens = sts if sts is not None else sts_client()
     ask = confirm if confirm is not None else _prompt(emit)
-    db = engine if engine is not None else create_engine(database_url)
+    db = engine if engine is not None else create_engine(database_url, hide_parameters=True)
 
     with db.begin() as conn:
         verification = verify_environment(

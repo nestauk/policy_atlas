@@ -2521,7 +2521,7 @@ def _baseline_gate_bundle(
                 conn, task_id=task_id, plan=plan, synthesise_run_id=synthesise_run_id
             )
     except Exception as exc:  # noqa: BLE001 - fail-safe, the pause must still happen
-        log.warning("baseline_gate.bundle_failed", task_id=str(task_id), error=str(exc))
+        log.warning("baseline_gate.bundle_failed", task_id=str(task_id), error=type(exc).__name__)
         return None
 
 

@@ -357,6 +357,7 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
         engine = create_engine(
             settings.database_url,
             pool_pre_ping=True,
+            hide_parameters=True,  # keep bound values (user text) out of error logs
             pool_size=settings.db_pool_size,
             max_overflow=settings.db_max_overflow,
         )

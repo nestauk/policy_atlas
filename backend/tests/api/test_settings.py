@@ -125,4 +125,9 @@ def test_lifespan_threads_pool_settings_into_create_engine(
         pass
 
     kwargs = captured["kwargs"]
-    assert kwargs == {"pool_pre_ping": True, "pool_size": 7, "max_overflow": 3}
+    assert kwargs == {
+        "pool_pre_ping": True,
+        "hide_parameters": True,
+        "pool_size": 7,
+        "max_overflow": 3,
+    }

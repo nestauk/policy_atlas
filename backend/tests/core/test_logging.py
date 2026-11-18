@@ -7,8 +7,11 @@ from pathlib import Path
 
 import pytest
 import structlog
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 
 from policy_atlas.api.settings import Settings
+from policy_atlas.core.db import get_engine
 from policy_atlas.core.logging import configure_logging
 
 PLANTED = "planted-secret-value-ab12"
@@ -46,3 +49,23 @@ def test_settings_repr_hides_database_url() -> None:
     settings = Settings("iss", "client", None, Path("jwks.json"), "http://app", url)
     assert url not in repr(settings)
     assert "planted-db-password" not in repr(settings)
+
+
+def test_db_error_log_hides_bound_values(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A failed query's bound values (user text) stay out of the error log."""
+    monkeypatch.setenv("DATABASE_URL", "sqlite://")
+    monkeypatch.setenv("LOG_FORMAT", "json")
+    try:
+        configure_logging()
+        try:
+            with get_engine().connect() as conn:
+                conn.execute(text("select * from no_such_table where q = :q"), {"q": PLANTED})
+        except DBAPIError:
+            structlog.get_logger().error("boom", exc_info=True)
+        raw = capsys.readouterr().out.strip()
+    finally:
+        structlog.reset_defaults()
+    assert "no_such_table" in raw
+    assert PLANTED not in raw
