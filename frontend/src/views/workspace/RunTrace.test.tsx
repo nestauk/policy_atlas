@@ -535,10 +535,10 @@ describe("PastRunLine — a run the stream is not following", () => {
     );
   });
 
-  it("reads a bad ending with the red mark and no link", () => {
+  it("reads a bad ending with the failed mark and no link", () => {
     const { container } = past({ run: run({ status: "failed" }) });
     expect(container).toHaveTextContent(/^Failed14 min$/);
-    expect(container.querySelector("[data-tone]")).toHaveClass("bg-red");
+    expect(container.querySelector("[data-tone]")).toHaveAttribute("data-tone", "failed");
     expect(container.querySelector("a")).toBeNull();
   });
 
@@ -546,7 +546,7 @@ describe("PastRunLine — a run the stream is not following", () => {
     const { container } = past({ run: run({ status: "paused", ended_at: null }) });
     expect(container.querySelector("a")).toBeNull();
     expect(container.querySelector("button")).toBeNull();
-    expect(container.querySelector("[data-tone]")).toHaveClass("bg-orange");
+    expect(container.querySelector("[data-tone]")).toHaveAttribute("data-tone", "paused");
   });
 });
 
