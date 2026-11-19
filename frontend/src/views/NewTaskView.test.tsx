@@ -142,6 +142,29 @@ describe("NewTaskView — question step", () => {
     });
   });
 
+  it("shows the API's sentence for a known conflict code, and the fallback otherwise (task 064a, Q8)", () => {
+    vi.mocked(mutations.useCreateTask).mockReturnValue({
+      mutate,
+      isPending: false,
+      isError: true,
+      error: Object.assign(new Error("quota"), { code: "task_quota", status: 409 }),
+    } as unknown as ReturnType<typeof mutations.useCreateTask>);
+    const { unmount } = renderNewTask("/new?capability=evidence_search");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "You have reached your usage quota of tasks. Contact your Policy Atlas administrator to request more.",
+    );
+    unmount();
+
+    vi.mocked(mutations.useCreateTask).mockReturnValue({
+      mutate,
+      isPending: false,
+      isError: true,
+      error: Object.assign(new Error("boom"), { status: 500 }),
+    } as unknown as ReturnType<typeof mutations.useCreateTask>);
+    renderNewTask("/new?capability=evidence_search");
+    expect(screen.getByRole("alert")).toHaveTextContent("couldn't be started. Try again.");
+  });
+
   it("states the Enter / Shift+Enter key hint", () => {
     renderNewTask("/new?capability=evidence_search");
     expect(screen.getByText(/Shift\+Enter/)).toBeInTheDocument();

@@ -147,7 +147,8 @@ Other rules:
 - **Runtime:** uv (Python), pnpm (frontend), Docker Compose (Postgres), alembic (database
   migrations), AWS CDK (infrastructure).
 - **Required plugins**, declared in `.claude/settings.json` (`enabledPlugins` and
-  `extraKnownMarketplaces`) so that a teammate gets them when they open the repository. The
+  `extraKnownMarketplaces`) so that Claude Code offers them to a teammate who opens the repository. Each teammate
+  installs them. The
   [task-cycle](../../.claude/skills/task-cycle/SKILL.md) says which phase uses which:
   - `agent-skills`: engineering skills (incremental implementation, test-driven development,
     debugging, interface design, ADRs, security, and more) and the

@@ -15,10 +15,13 @@ than re-implementing the write it believes the CLI performs.
 key (contract § 3b) and only Cognito can turn an address into one, so
 ``user create``, ``user enrol`` and ``user resync`` call ``ListUsers`` /
 ``AdminCreateUser``, and ``user reissue`` calls ``ListUsers`` /
-``AdminSetUserPassword``. ``admin grant``, ``admin revoke``, ``user de-enrol``
-and ``rows assign`` resolve entirely in the database and make no AWS call at
-all — which is also why operator IAM needs nothing beyond ``ListUsers``,
-``AdminCreateUser`` and ``AdminSetUserPassword`` (contract § 9).
+``AdminSetUserPassword``. ``user offboard`` is the one command that changes an
+account's state in Cognito: ``ListUsers``, then ``AdminDisableUser`` and
+``AdminUserGlobalSignOut`` (task 064a, ADR 0045 decision 5). ``admin grant``,
+``admin revoke``, ``user de-enrol`` and ``rows assign`` resolve entirely in the
+database and make no AWS call at all — which is also why operator IAM needs
+nothing beyond ``ListUsers``, ``AdminCreateUser``, ``AdminSetUserPassword``,
+``AdminDisableUser`` and ``AdminUserGlobalSignOut`` (contract § 9).
 
 *Compare and refuse under the row lock.* Every write to ``app_user`` reads the
 row ``FOR UPDATE`` first and refuses when the state is not what the operator was
@@ -54,11 +57,10 @@ import string
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from botocore.exceptions import ClientError
-from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
-from mypy_boto3_cognito_idp.type_defs import AttributeTypeTypeDef, UserTypeTypeDef
 from sqlalchemy import and_, case, delete, insert, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection, RowMapping
@@ -66,12 +68,21 @@ from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.core.schema import (
     app_user,
+    cohort,
+    cohort_member,
+    ops_action,
     organisation,
+    organisation_domain,
     project,
     project_membership,
     task,
+    waitlist_entry,
 )
-from policy_atlas.ops.errors import OpsError
+from policy_atlas.ops.errors import EnrolledElsewhere, NotFound, OpsError, ResendTooSoon
+
+if TYPE_CHECKING:
+    from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
+    from mypy_boto3_cognito_idp.type_defs import AttributeTypeTypeDef, UserTypeTypeDef
 
 #: The visibility every moved row arrives at. Owner call (j): **no operator
 #: action can expose a row.** Enrolment and ``rows assign`` stamp the
@@ -113,6 +124,7 @@ class AdminTrace:
 
     subject: str
     direction: str
+    flag: str = "is_admin"
 
 
 class Record:
@@ -166,6 +178,7 @@ class Enrolment(Record):
     #: Cross-owner membership links cut because the rows moved organisation
     #: (colleague assignment, owner ruling 2026-08-27).
     memberships_severed: int = 0
+    invitation_sent: bool = False
 
     def summary(self) -> str:
         """Render the enrolment line, including what moved."""
@@ -229,6 +242,7 @@ class DeEnrolment(Record):
     tasks_cleared: int
     projects_cleared: int
     admin_revoked: bool
+    ops_revoked: bool = False
     #: Cross-owner membership links cut because the rows left the organisation
     #: (colleague assignment, owner ruling 2026-08-27).
     memberships_severed: int = 0
@@ -237,6 +251,7 @@ class DeEnrolment(Record):
         """Render the de-enrolment line, including what was cleared."""
         who = self.email or self.user_id
         admin = "; support role revoked" if self.admin_revoked else ""
+        ops = "; ops role revoked" if self.ops_revoked else ""
         severed = (
             f"; cut {self.memberships_severed} membership(s) linking their rows to colleagues' rows"
             if self.memberships_severed
@@ -244,7 +259,7 @@ class DeEnrolment(Record):
         )
         return (
             f"de-enrolled {who}; cleared the organisation on {self.tasks_cleared} "
-            f"task(s) and {self.projects_cleared} project(s){severed}{admin}"
+            f"task(s) and {self.projects_cleared} project(s){severed}{admin}{ops}"
         )
 
     def admin_changes(self) -> Sequence[AdminTrace]:
@@ -255,9 +270,11 @@ class DeEnrolment(Record):
         role is taken away — and the one an investigation is most likely to be
         asking about, because it is what offboarding runs.
         """
-        if not self.admin_revoked:
-            return ()
-        return (AdminTrace(subject=self.user_id, direction="revoke"),)
+        return tuple(
+            AdminTrace(subject=self.user_id, direction="revoke", flag=flag)
+            for flag, revoked in (("is_admin", self.admin_revoked), ("is_ops", self.ops_revoked))
+            if revoked
+        )
 
 
 @dataclass(frozen=True)
@@ -362,6 +379,112 @@ class AdminChange(Record):
         return (AdminTrace(subject=self.user_id, direction=self.direction),)
 
 
+@dataclass(frozen=True)
+class Resend(Record):
+    """An invitation re-sent to a person awaiting their first sign-in."""
+
+    user_id: str
+    email: str
+    sent_at: datetime
+
+    def summary(self) -> str:
+        """Render the invitation resend line."""
+        return f"resent the invitation to {self.email} ({self.user_id})"
+
+
+@dataclass(frozen=True)
+class Approval(Record):
+    """A waitlist request enrolled and stamped with its resulting account."""
+
+    entry_id: uuid.UUID
+    enrolment: Enrolment
+    created_at: datetime
+
+    def summary(self) -> str:
+        """Render the approval without exposing the request address."""
+        return f"approved request {self.entry_id} for {self.enrolment.user_id}"
+
+
+@dataclass(frozen=True)
+class OpsChange(AdminChange):
+    """A grant or revoke of the ops role."""
+
+    def admin_changes(self) -> Sequence[AdminTrace]:
+        """Return the post-commit ops-role audit trace."""
+        return (AdminTrace(subject=self.user_id, direction=self.direction, flag="is_ops"),)
+
+
+@dataclass(frozen=True)
+class QuotaChange(Record):
+    """The before and after quota overrides for one user or organisation."""
+
+    who: str
+    task_quota_before: int | None
+    runs_before: int | None
+    task_quota_after: int | None
+    runs_after: int | None
+
+    def summary(self) -> str:
+        """Render quota override changes, using inherit for a cleared value."""
+        return f"quota for {self.audit_target()}"
+
+    def audit_target(self) -> str:
+        """The audit row's target: who, then each value before and after."""
+        def show(value: int | None) -> str:
+            return "inherit" if value is None else str(value)
+
+        return (
+            f"{self.who}: tasks per year {show(self.task_quota_before)} → "
+            f"{show(self.task_quota_after)}, simultaneous tasks {show(self.runs_before)} → "
+            f"{show(self.runs_after)}"
+        )
+
+
+@dataclass(frozen=True)
+class DomainChange(Record):
+    """One organisation-domain mapping added or removed."""
+
+    domain: str
+    org: Organisation | None
+    added: bool
+
+    def summary(self) -> str:
+        """Render the domain mapping change."""
+        if self.added:
+            assert self.org is not None
+            return f"added domain {self.domain} to {self.org.name!r}"
+        return f"removed domain {self.domain}"
+
+
+@dataclass(frozen=True)
+class Offboarding(Record):
+    """One person locked out: Cognito account disabled, then the database cleaned.
+
+    Attributes:
+        user_id: The Cognito subject.
+        email: The address they were found by or stored under, if any.
+        steps: One plain sentence per step taken or skipped, in order.
+        links_made_private: Tasks whose public link was switched off.
+        de_enrolment: The de-enrolment, when the person was still enrolled or
+            held the support role; ``None`` when it was skipped.
+    """
+
+    user_id: str
+    email: str | None
+    steps: tuple[str, ...]
+    links_made_private: int
+    de_enrolment: DeEnrolment | None
+
+    def summary(self) -> str:
+        """Render the offboarding as one header line and one line per step."""
+        who = f"{self.email} ({self.user_id})" if self.email else self.user_id
+        return f"offboarded {who}:\n" + "\n".join(f"  - {step}" for step in self.steps)
+
+    def admin_changes(self) -> Sequence[AdminTrace]:
+        """The support-role revoke the de-enrolment made, traced like ``admin revoke``."""
+        return self.de_enrolment.admin_changes() if self.de_enrolment else ()
+
+
 # --------------------------------------------------------------------------
 # Organisations
 # --------------------------------------------------------------------------
@@ -421,7 +544,7 @@ def resolve_organisation(conn: Connection, token: str) -> Organisation:
         select(organisation.c.name).where(organisation.c.org_id == org_id)
     ).scalar_one_or_none()
     if name is None:
-        raise OpsError(f"no organisation with id {token}")
+        raise NotFound(f"no organisation with id {token}")
     return Organisation(org_id=org_id, name=name)
 
 
@@ -603,6 +726,81 @@ def create_user(
             f"--org {org.name!r} --display-name {display_name!r}`"
         ) from error
     return replace(enrolment, temporary_password=minted)
+
+
+def ensure_account_enrolled(
+    conn: Connection,
+    cognito: CognitoIdentityProviderClient,
+    *,
+    pool_id: str,
+    email: str,
+    display_name: str,
+    org: Organisation,
+) -> Enrolment:
+    """Ensure an account exists and belongs to ``org``, sending only a new invitation.
+
+    Args:
+        conn: Open connection inside the command's transaction.
+        cognito: Client bound to the verified pool.
+        pool_id: The verified Cognito user pool.
+        email: The account address.
+        display_name: The name stored on enrolment.
+        org: The destination organisation.
+
+    Returns:
+        The idempotent enrolment result.
+
+    Raises:
+        EnrolledElsewhere: If the account already belongs to another organisation.
+        OpsError: If Cognito cannot create the account or does not return a subject.
+    """
+    _require_filter_safe(email)
+    _require_mailable(email)
+    sub = _find_sub_by_email(cognito, pool_id=pool_id, email=email)
+    if sub is None:
+        response = cognito.admin_create_user(
+            UserPoolId=pool_id,
+            Username=email,
+            UserAttributes=[
+                {"Name": "email", "Value": email},
+                {"Name": "email_verified", "Value": "true"},
+            ],
+            DesiredDeliveryMediums=["EMAIL"],
+        )
+        sub = _sub_of(response["User"].get("Attributes", []))
+        if not sub:
+            raise OpsError(
+                f"Cognito created {email} but returned no `sub` attribute. The account exists; "
+                "nothing was enrolled."
+            )
+        enrolment = _enrol(conn, sub=sub, email=email, display_name=display_name, org=org)
+        conn.execute(
+            update(app_user).where(app_user.c.user_id == sub).values(invited_at=_now())
+        )
+        return replace(enrolment, invitation_sent=True)
+    existing = _lock_user(conn, sub)
+    if existing is None:
+        return _enrol(conn, sub=sub, email=email, display_name=display_name, org=org)
+    if existing["org_id"] is None:
+        # An account that exists keeps its stored name: the name offered here
+        # may come from the public form (the sweep), and a stranger must not be
+        # able to rename a colleague (review stack, 2026-11-17).
+        return _enrol(
+            conn, sub=sub, email=email, display_name=existing["display_name"], org=org
+        )
+    if existing["org_id"] == org.org_id:
+        return Enrolment(
+            user_id=sub,
+            email=email,
+            org=org,
+            created=False,
+            tasks_moved=0,
+            projects_moved=0,
+        )
+    other = conn.execute(
+        select(organisation.c.name).where(organisation.c.org_id == existing["org_id"])
+    ).scalar_one()
+    raise EnrolledElsewhere(sub=sub, org_name=other, org_id=existing["org_id"], email=email)
 
 
 def _finish_unenrolled(
@@ -941,10 +1139,12 @@ def de_enrol_user(
     """
     row = _resolve_and_lock(conn, email=email, sub=sub)
     user_id = str(row["user_id"])
-    if row["org_id"] is None and not row["is_admin"]:
+    if row["org_id"] is None and not row["is_admin"] and not row["is_ops"]:
         raise OpsError(f"{user_id} is in no organisation; nothing to do")
     conn.execute(
-        update(app_user).where(app_user.c.user_id == user_id).values(org_id=None, is_admin=False)
+        update(app_user)
+        .where(app_user.c.user_id == user_id)
+        .values(org_id=None, is_admin=False, is_ops=False)
     )
     severed = _sever_cross_owner_memberships(conn, sub=user_id)
     tasks_cleared, projects_cleared = _clear_owned_rows(conn, sub=user_id)
@@ -954,7 +1154,177 @@ def de_enrol_user(
         tasks_cleared=tasks_cleared,
         projects_cleared=projects_cleared,
         admin_revoked=bool(row["is_admin"]),
+        ops_revoked=bool(row["is_ops"]),
         memberships_severed=severed,
+    )
+
+
+def offboard_user(
+    conn: Connection,
+    cognito: CognitoIdentityProviderClient,
+    *,
+    pool_id: str,
+    email: str | None = None,
+    sub: str | None = None,
+) -> Offboarding:
+    """Lock a person out: disable their login, then clean up the database.
+
+    This is what to run when someone leaves. ``user de-enrol`` alone only
+    changes the database: the person can still sign in and their public task
+    links still work (finding M-02).
+
+    **The order, and why.**
+
+    1. Find the person (see below).
+    2. Cognito: ``AdminDisableUser`` (no new sign-in), then
+       ``AdminUserGlobalSignOut`` (their refresh tokens stop working, so no
+       session can be renewed). If either call fails, this stops and raises
+       before any database write, so the database is untouched.
+    3. Database, inside the caller's one transaction: de-enrol them if they
+       are still in an organisation or hold the support role (the plain
+       :func:`de_enrol_user`, unchanged), then switch off every public link on
+       the tasks they own (``task.is_public = false``). Project ``visibility``
+       is about who in the organisation can see a project, not a public link,
+       so it is left alone (ADR 0045 decision 5).
+
+    Cognito goes first so the dangerous half — a working login — is closed
+    before anything else. If the database step then fails, the account stays
+    disabled and the transaction rolls back; running the same command again
+    completes it (disabling an already-disabled account succeeds).
+
+    An access token issued before this runs stays valid until it expires (up to
+    60 minutes), and an open progress stream can outlive it. That window is
+    accepted and documented in the deployment guide.
+
+    **Finding the person.** Exactly one of ``email`` or ``sub``:
+
+    - ``sub``: the ``app_user`` row with that id, if any.
+    - ``email``: the ``app_user`` row storing that address; if none does (they
+      only ever signed in, so no address was stored), Cognito is asked which
+      account has that address, and that account's row is used if one exists.
+
+    Three cases follow, each reported in :attr:`Offboarding.steps`:
+
+    - **Enrolled** (in an organisation, or holding the support role):
+      Cognito, de-enrol, public links off.
+    - **Already de-enrolled** (row exists, no organisation, no support role —
+      M-02's main case: removed earlier, login still working): Cognito, public
+      links off; de-enrol is skipped because it would refuse.
+    - **No** ``app_user`` **row** (a Cognito account that never reached the
+      app): Cognito only.
+    - **No Cognito account** but a row (the account was deleted from the pool
+      earlier): the database half only, reported as such. Neither a row nor
+      an account is a refusal.
+
+    Args:
+        conn: Open connection inside the command's transaction.
+        cognito: Client bound to the verified pool.
+        pool_id: The verified user pool.
+        email: The address to find them by; mutually exclusive with ``sub``.
+        sub: The Cognito subject to find them by.
+
+    Returns:
+        The offboarding, listing the steps taken and the counts.
+
+    Raises:
+        OpsError: If neither or both selectors are given, the address is
+            stored on more than one row, neither the pool nor the database
+            knows the person, or Cognito refuses either call (the database
+            is then untouched).
+    """
+    if (email is None) == (sub is None):
+        raise OpsError("give exactly one of --email or --sub")
+    row: RowMapping | None
+    if sub is not None:
+        _require_filter_safe(sub)
+        row = _lock_user(conn, sub)
+        user = _find_user_by_sub(cognito, pool_id=pool_id, sub=sub)
+    else:
+        assert email is not None  # narrowed by the check above
+        _require_filter_safe(email)
+        stored = (
+            conn.execute(select(app_user).where(app_user.c.email == email).with_for_update())
+            .mappings()
+            .all()
+        )
+        if len(stored) > 1:
+            subjects = ", ".join(str(r["user_id"]) for r in stored)
+            raise OpsError(
+                f"{len(stored)} users share the address {email} ({subjects}); "
+                "resolve with --sub instead. Nothing was changed."
+            )
+        if stored:
+            row = stored[0]
+            user = _find_user_by_sub(cognito, pool_id=pool_id, sub=str(row["user_id"]))
+        else:
+            user = _find_user_by_email(cognito, pool_id=pool_id, email=email)
+            found_sub = _sub_of(user.get("Attributes", [])) if user is not None else ""
+            row = _lock_user(conn, found_sub) if found_sub else None
+    if row is not None:
+        user_id = str(row["user_id"])
+    elif user is not None:
+        user_id = _sub_of(user.get("Attributes", []))
+    else:
+        raise OpsError(f"no account in the pool for {email or sub}. Nothing was changed.")
+    who = email or (row["email"] if row is not None else None) or user_id
+
+    if user is None:
+        # The account was deleted from the pool earlier (by hand, or the pool
+        # was replaced) but the row remains: nothing to disable, and the
+        # database half must still run or their public links stay live
+        # (review stack, 2026-11-16).
+        steps = ["no Cognito account in the pool (deleted earlier): nothing to disable"]
+    else:
+        username = user["Username"]
+        # Cognito first. A failure here raises before any database write.
+        try:
+            cognito.admin_disable_user(UserPoolId=pool_id, Username=username)
+        except ClientError as error:
+            code = error.response.get("Error", {}).get("Code", "") or "ClientError"
+            raise OpsError(
+                f"Cognito refused to disable {who} ({code}). Nothing was changed."
+            ) from error
+        try:
+            cognito.admin_user_global_sign_out(UserPoolId=pool_id, Username=username)
+        except ClientError as error:
+            code = error.response.get("Error", {}).get("Code", "") or "ClientError"
+            raise OpsError(
+                f"the Cognito account for {who} is DISABLED, but signing it out everywhere "
+                f"failed ({code}). Nothing in the database was changed. Re-run "
+                f"`user offboard --sub {user_id}` to finish."
+            ) from error
+        steps = ["disabled the Cognito account", "signed out everywhere (refresh tokens revoked)"]
+
+    if row is None:
+        steps.append("no app_user row: Cognito only, the database was not touched")
+        return Offboarding(
+            user_id=user_id,
+            email=email,
+            steps=tuple(steps),
+            links_made_private=0,
+            de_enrolment=None,
+        )
+
+    de_enrolment: DeEnrolment | None = None
+    if row["org_id"] is not None or row["is_admin"] or row["is_ops"]:
+        de_enrolment = de_enrol_user(conn, sub=user_id)
+        steps.append(de_enrolment.summary())
+    else:
+        steps.append("de-enrol skipped: not enrolled")
+    links = int(
+        conn.execute(
+            update(task)
+            .where(task.c.owner_user_id == user_id, task.c.is_public)
+            .values(is_public=False)
+        ).rowcount
+    )
+    steps.append(f"made {links} public task link(s) private")
+    return Offboarding(
+        user_id=user_id,
+        email=row["email"] or email,
+        steps=tuple(steps),
+        links_made_private=links,
+        de_enrolment=de_enrolment,
     )
 
 
@@ -1016,6 +1386,461 @@ def set_admin(
         raise OpsError(f"{who} ({user_id}) is {state}; nothing to {direction}")
     conn.execute(update(app_user).where(app_user.c.user_id == user_id).values(is_admin=grant))
     return AdminChange(user_id=user_id, email=stored_email, direction=direction)
+
+
+def set_ops(
+    conn: Connection, *, grant: bool, email: str | None = None, sub: str | None = None
+) -> OpsChange:
+    """Grant or revoke the ops role using the administrator-role interlocks.
+
+    Args:
+        conn: Open connection inside the command transaction.
+        grant: Whether to grant rather than revoke the role.
+        email: Stored account address, mutually exclusive with ``sub``.
+        sub: Cognito subject, mutually exclusive with ``email``.
+
+    Returns:
+        The completed role change.
+
+    Raises:
+        OpsError: If the subject cannot receive the requested role change.
+    """
+    row = _resolve_and_lock(conn, email=email, sub=sub)
+    user_id = str(row["user_id"])
+    stored_email: str | None = row["email"]
+    who = stored_email or user_id
+    direction = "grant" if grant else "revoke"
+    if grant and row["org_id"] is None:
+        raise OpsError(
+            f"{who} is in no organisation, so the ops role cannot be granted — "
+            "`user enrol` first. Nothing was written."
+        )
+    if bool(row["is_ops"]) == grant:
+        state = "already holds the ops role" if grant else "does not hold the ops role"
+        raise OpsError(f"{who} ({user_id}) {state}; nothing to {direction}")
+    conn.execute(update(app_user).where(app_user.c.user_id == user_id).values(is_ops=grant))
+    return OpsChange(user_id=user_id, email=stored_email, direction=direction)
+
+
+def move_user(conn: Connection, *, sub: str, org: Organisation) -> Enrolment:
+    """Move an existing stored person to another organisation.
+
+    Args:
+        conn: Open connection inside the command transaction.
+        sub: The Cognito subject of the stored person.
+        org: The destination organisation.
+
+    Returns:
+        The completed enrolment move.
+
+    Raises:
+        OpsError: If no stored person exists for ``sub``.
+    """
+    row = _lock_user(conn, sub)
+    if row is None:
+        raise OpsError(f"no user {sub}")
+    return _enrol(
+        conn,
+        sub=sub,
+        email=row["email"],
+        display_name=row["display_name"],
+        org=org,
+    )
+
+
+def resend_invitation(
+    conn: Connection,
+    cognito: CognitoIdentityProviderClient,
+    *,
+    pool_id: str,
+    sub: str,
+    now: datetime,
+) -> Resend:
+    """Re-send a pending Cognito invitation after its one-hour cooldown.
+
+    Args:
+        conn: Open connection inside the command transaction.
+        cognito: Client bound to the verified user pool.
+        pool_id: The verified Cognito user pool.
+        sub: Cognito subject receiving the invitation.
+        now: The current time, supplied by callers for deterministic tests.
+
+    Returns:
+        The sent invitation record.
+
+    Raises:
+        ResendTooSoon: If the prior invitation is less than an hour old.
+        OpsError: If the person is not eligible for an invitation resend.
+    """
+    row = _lock_user(conn, sub)
+    if row is None or not row["email"]:
+        raise OpsError(f"{sub} has no stored email; nothing was sent")
+    invited_at = row["invited_at"]
+    if invited_at is not None and now - invited_at < timedelta(hours=1):
+        raise ResendTooSoon(retry_after=invited_at + timedelta(hours=1))
+    user = _find_user_by_sub(cognito, pool_id=pool_id, sub=sub)
+    if user is None:
+        raise OpsError(f"no account in the pool for {sub}; nothing was sent")
+    if user.get("UserStatus") != "FORCE_CHANGE_PASSWORD":
+        raise OpsError(
+            f"{row['email']} is {user.get('UserStatus')}, not FORCE_CHANGE_PASSWORD; Cognito "
+            "cannot resend an invitation for a confirmed account. Nothing was sent."
+        )
+    cognito.admin_create_user(
+        UserPoolId=pool_id,
+        Username=user["Username"],
+        MessageAction="RESEND",
+        DesiredDeliveryMediums=["EMAIL"],
+    )
+    conn.execute(update(app_user).where(app_user.c.user_id == sub).values(invited_at=now))
+    return Resend(user_id=sub, email=row["email"], sent_at=now)
+
+
+def set_quota(
+    conn: Connection,
+    *,
+    user_id: str | None = None,
+    org_id: uuid.UUID | None = None,
+    cohort_id: uuid.UUID | None = None,
+    task_quota_per_year: int | None,
+    runs_per_user: int | None,
+) -> QuotaChange:
+    """Set or clear both quota overrides on exactly one user, organisation or cohort.
+
+    Args:
+        conn: Open connection inside the command transaction.
+        user_id: User subject, mutually exclusive with ``org_id``.
+        org_id: Organisation identifier; exactly one of the three is given.
+        cohort_id: Cohort identifier (owner, 2026-11-18).
+        task_quota_per_year: Task quota override; ``None`` inherits.
+        runs_per_user: Simultaneous run override; ``None`` inherits.
+
+    Returns:
+        The previous and requested quota values.
+
+    Raises:
+        OpsError: If selection is invalid, absent, or a quota is negative.
+    """
+    choices = (("user", user_id), ("organisation", org_id), ("cohort", cohort_id))
+    given = [(name, value) for name, value in choices if value is not None]
+    if len(given) != 1:
+        raise OpsError("give exactly one of user_id, org_id or cohort_id")
+    if any(value is not None and value < 0 for value in (task_quota_per_year, runs_per_user)):
+        raise OpsError("quota values cannot be negative")
+    kind, identifier = given[0]
+    table, key = {
+        "user": (app_user, app_user.c.user_id),
+        "organisation": (organisation, organisation.c.org_id),
+        "cohort": (cohort, cohort.c.cohort_id),
+    }[kind]
+    row = (
+        conn.execute(select(table).where(key == identifier).with_for_update())
+        .mappings()
+        .one_or_none()
+    )
+    if row is None:
+        raise NotFound(f"no {kind} {identifier}")
+    conn.execute(
+        update(table)
+        .where(key == identifier)
+        .values(task_quota_per_year=task_quota_per_year, runs_per_user=runs_per_user)
+    )
+    return QuotaChange(
+        who=str(identifier),
+        task_quota_before=row["task_quota_per_year"],
+        runs_before=row["runs_per_user"],
+        task_quota_after=task_quota_per_year,
+        runs_after=runs_per_user,
+    )
+
+
+def _normalise_domain(domain: str) -> str:
+    """Validate and lower-case a domain token."""
+    value = domain.lower()
+    if not value or any(character.isspace() for character in value) or "@" in value:
+        raise OpsError("domain must be non-empty, contain no whitespace, and omit @")
+    return value
+
+
+def add_domain(conn: Connection, *, domain: str, org: Organisation) -> DomainChange:
+    """Map a lower-case email domain to an organisation."""
+    value = _normalise_domain(domain)
+    existing = conn.execute(
+        select(organisation_domain.c.domain).where(organisation_domain.c.domain == value)
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise OpsError(f"domain {value} already belongs to an organisation")
+    conn.execute(
+        insert(organisation_domain).values(domain=value, org_id=org.org_id, created_at=_now())
+    )
+    return DomainChange(domain=value, org=org, added=True)
+
+
+def remove_domain(conn: Connection, *, domain: str) -> DomainChange:
+    """Remove an organisation-domain mapping."""
+    value = _normalise_domain(domain)
+    removed = conn.execute(delete(organisation_domain).where(organisation_domain.c.domain == value))
+    if removed.rowcount == 0:
+        raise OpsError(f"no organisation domain {value}")
+    return DomainChange(domain=value, org=None, added=False)
+
+
+#: The most links one cohort carries; a sanity bound, not a design limit.
+COHORT_LINKS_MAX = 10
+
+
+@dataclass(frozen=True)
+class Cohort(Record):
+    """One cohort, saved, deleted or resolved."""
+
+    cohort_id: uuid.UUID
+    name: str
+
+    def summary(self) -> str:
+        """Render the cohort line."""
+        return f"cohort {self.name!r} ({self.cohort_id})"
+
+
+@dataclass(frozen=True)
+class CohortMembership(Record):
+    """One person added to or removed from a cohort."""
+
+    cohort: Cohort
+    user_id: str
+    added: bool
+    changed: bool
+
+    def summary(self) -> str:
+        """Render the membership change, or say nothing changed."""
+        verb = "added to" if self.added else "removed from"
+        if not self.changed:
+            where = "in" if self.added else "not in"
+            return f"already {where} {self.cohort.name!r}; nothing changed"
+        return f"{verb} {self.cohort.name!r}"
+
+
+def _require_links(links: Sequence[str]) -> list[str]:
+    """Keep non-empty web addresses; refuse anything else."""
+    kept = [link.strip() for link in links if link.strip()]
+    if len(kept) > COHORT_LINKS_MAX:
+        raise OpsError(f"a cohort holds at most {COHORT_LINKS_MAX} links")
+    for link in kept:
+        if not link.startswith(("https://", "http://")) or any(c.isspace() for c in link):
+            raise OpsError(f"links must be web addresses starting with https:// ({link!r})")
+    return kept
+
+
+def resolve_cohort(conn: Connection, cohort_id: uuid.UUID) -> Cohort:
+    """Return one cohort by id.
+
+    Raises:
+        NotFound: If no cohort has that id.
+    """
+    name = conn.execute(
+        select(cohort.c.name).where(cohort.c.cohort_id == cohort_id)
+    ).scalar_one_or_none()
+    if name is None:
+        raise NotFound(f"no cohort {cohort_id}")
+    return Cohort(cohort_id=cohort_id, name=str(name))
+
+
+def save_cohort(
+    conn: Connection,
+    *,
+    cohort_id: uuid.UUID | None,
+    name: str,
+    description: str | None,
+    starts_on: date | None,
+    ends_on: date | None,
+    links: Sequence[str],
+) -> Cohort:
+    """Create a cohort (``cohort_id`` None) or replace an existing one's details.
+
+    Raises:
+        NotFound: If ``cohort_id`` names no cohort.
+        OpsError: On a taken name, an end before the start, or a bad link.
+    """
+    name = name.strip()
+    if not name:
+        raise OpsError("a cohort needs a name")
+    if starts_on is not None and ends_on is not None and ends_on < starts_on:
+        raise OpsError("the end date is before the start date")
+    values = {
+        "name": name,
+        "description": (description or "").strip() or None,
+        "starts_on": starts_on,
+        "ends_on": ends_on,
+        "links": _require_links(links),
+    }
+    taken = conn.execute(
+        select(cohort.c.cohort_id).where(cohort.c.name == name)
+    ).scalar_one_or_none()
+    if taken is not None and taken != cohort_id:
+        raise OpsError(f"a cohort named {name!r} already exists")
+    try:
+        if cohort_id is None:
+            cohort_id = uuid.uuid4()
+            conn.execute(insert(cohort).values(cohort_id=cohort_id, created_at=_now(), **values))
+        else:
+            resolve_cohort(conn, cohort_id)
+            conn.execute(update(cohort).where(cohort.c.cohort_id == cohort_id).values(**values))
+    except IntegrityError as error:  # a second operator won the race to the name
+        raise OpsError(f"a cohort named {name!r} already exists") from error
+    return Cohort(cohort_id=cohort_id, name=name)
+
+
+def delete_cohort(conn: Connection, *, cohort_id: uuid.UUID) -> Cohort:
+    """Delete a cohort and its memberships; the people are untouched."""
+    found = resolve_cohort(conn, cohort_id)
+    conn.execute(delete(cohort).where(cohort.c.cohort_id == cohort_id))
+    return found
+
+
+def add_to_cohort(conn: Connection, *, target: Cohort, user_id: str) -> CohortMembership:
+    """Add one person to a cohort; adding a member again changes nothing.
+
+    Raises:
+        NotFound: If no person has that id.
+    """
+    if _lock_user(conn, user_id) is None:
+        raise NotFound(f"no user {user_id}")
+    # RETURNING, not rowcount: an INSERT's rowcount is -1 through SQLAlchemy here.
+    added = conn.execute(
+        pg_insert(cohort_member)
+        .values(cohort_id=target.cohort_id, user_id=user_id, added_at=_now())
+        .on_conflict_do_nothing()
+        .returning(cohort_member.c.user_id)
+    ).first()
+    return CohortMembership(cohort=target, user_id=user_id, added=True, changed=added is not None)
+
+
+def remove_from_cohort(conn: Connection, *, target: Cohort, user_id: str) -> CohortMembership:
+    """Remove one person from a cohort; removing a non-member changes nothing."""
+    removed = conn.execute(
+        delete(cohort_member).where(
+            cohort_member.c.cohort_id == target.cohort_id, cohort_member.c.user_id == user_id
+        )
+    )
+    return CohortMembership(
+        cohort=target, user_id=user_id, added=False, changed=removed.rowcount == 1
+    )
+
+
+def record_action(
+    conn: Connection, *, actor: str, action: str, target: str | None, outcome: str
+) -> uuid.UUID:
+    """Insert one durable operations action record and return its identifier."""
+    action_id = uuid.uuid4()
+    conn.execute(
+        insert(ops_action).values(
+            action_id=action_id,
+            at=_now(),
+            actor_user_id=actor,
+            action=action,
+            target=target,
+            outcome=outcome,
+        )
+    )
+    return action_id
+
+
+def approve_request(
+    conn: Connection,
+    cognito: CognitoIdentityProviderClient,
+    *,
+    pool_id: str,
+    entry_id: uuid.UUID,
+    org: Organisation,
+    now: datetime,
+) -> Approval:
+    """Enrol one waitlist row and stamp it as approved.
+
+    Args:
+        conn: Open connection inside the command transaction.
+        cognito: Client bound to the verified pool.
+        pool_id: The verified Cognito user pool.
+        entry_id: Waitlist row to approve.
+        org: Organisation receiving the account.
+        now: Timestamp used for the durable request stamp.
+
+    Returns:
+        The stamped request and its enrolment.
+
+    Raises:
+        NotFound: If no request has that id.
+        OpsError: If the request was already approved.
+        EnrolledElsewhere: If the address belongs to another organisation.
+    """
+    row = (
+        conn.execute(
+            select(waitlist_entry).where(waitlist_entry.c.entry_id == entry_id).with_for_update()
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if row is None:
+        raise NotFound(f"no waitlist request {entry_id}")
+    if row["account_created_at"] is not None:
+        raise OpsError("already invited")
+    enrolment = ensure_account_enrolled(
+        conn,
+        cognito,
+        pool_id=pool_id,
+        email=str(row["email"]),
+        display_name=str(row["name"]),
+        org=org,
+    )
+    conn.execute(
+        update(waitlist_entry)
+        .where(waitlist_entry.c.entry_id == entry_id)
+        # Approving a rejected request reverses the decision (owner, 2026-11-18).
+        .values(account_user_id=enrolment.user_id, account_created_at=now, rejected_at=None)
+    )
+    return Approval(entry_id=entry_id, enrolment=enrolment, created_at=now)
+
+
+def reject_request(conn: Connection, *, entry_id: uuid.UUID, now: datetime) -> None:
+    """Mark one waiting request rejected: it leaves the waitlist and no email is sent.
+
+    Raises:
+        NotFound: If no request has that id.
+        OpsError: If it was already invited or rejected.
+    """
+    row = (
+        conn.execute(
+            select(waitlist_entry).where(waitlist_entry.c.entry_id == entry_id).with_for_update()
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if row is None:
+        raise NotFound(f"no waitlist request {entry_id}")
+    if row["account_created_at"] is not None:
+        raise OpsError("already invited")
+    if row["rejected_at"] is not None:
+        raise OpsError("already rejected")
+    conn.execute(
+        update(waitlist_entry).where(waitlist_entry.c.entry_id == entry_id).values(rejected_at=now)
+    )
+
+
+def delete_request(conn: Connection, *, entry_id: uuid.UUID) -> None:
+    """Delete a rejected request for good; the address may ask again later.
+
+    Raises:
+        NotFound: If no request has that id.
+        OpsError: If it is not rejected (only a rejected request is deleted).
+    """
+    rejected_at = conn.execute(
+        select(waitlist_entry.c.rejected_at)
+        .where(waitlist_entry.c.entry_id == entry_id)
+        .with_for_update()
+    ).one_or_none()
+    if rejected_at is None:
+        raise NotFound(f"no waitlist request {entry_id}")
+    if rejected_at[0] is None:
+        raise OpsError("only a rejected request can be deleted")
+    conn.execute(delete(waitlist_entry).where(waitlist_entry.c.entry_id == entry_id))
 
 
 # --------------------------------------------------------------------------
@@ -1398,6 +2223,19 @@ def _find_user_by_email(
     return users[0] if users else None
 
 
+def _find_user_by_sub(
+    cognito: CognitoIdentityProviderClient, *, pool_id: str, sub: str
+) -> UserTypeTypeDef | None:
+    """Return the Cognito user with this subject, or ``None``.
+
+    ``sub`` is unique in a pool, so the match is exact. The returned
+    ``Username`` is what the admin calls address the account by.
+    """
+    response = cognito.list_users(UserPoolId=pool_id, Filter=f'sub = "{sub}"', Limit=1)
+    users = response.get("Users") or []
+    return users[0] if users else None
+
+
 def _sub_of(attributes: Sequence[AttributeTypeTypeDef]) -> str:
     """Pull ``sub`` out of a Cognito attribute list."""
     for attribute in attributes:
@@ -1415,7 +2253,19 @@ def _require_filter_safe(email: str) -> None:
     and because such an address cannot be looked up at all.
     """
     if '"' in email or "\\" in email:
-        raise OpsError(f"refusing an address containing a quote or backslash: {email!r}")
+        raise OpsError(f"refusing a value containing a quote or backslash: {email!r}")
+
+
+def _require_mailable(email: str) -> None:
+    """Refuse an address that could carry markup into the invitation email.
+
+    Cognito substitutes ``{username}`` (the address) into the HTML invitation
+    without escaping, and the public form's pattern admits ``<``, ``>`` and
+    ``&``. Such an address is not deliverable anyway, so refusing costs nothing
+    (review stack, 2026-11-17).
+    """
+    if any(character in email for character in "<>&") or any(c.isspace() for c in email):
+        raise OpsError(f"refusing an address containing markup or whitespace: {email!r}")
 
 
 def _now() -> datetime:

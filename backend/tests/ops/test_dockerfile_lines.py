@@ -34,3 +34,17 @@ def test_dockerfile_makes_app_readable_by_any_user() -> None:
     assert any(
         re.search(r"\bchmod\s+(?:-\S+\s+)*0?755\s+/app\s*$", line) for line in _lines()
     )
+
+
+def test_dockerfile_cmd_has_keepalive_proxy_and_server_header_flags() -> None:
+    # Keep-alive 125 s outlasts the load balancer's 120 s idle time (else 502s).
+    cmd = next(line for line in _lines() if line.startswith("CMD"))
+    assert '"--timeout-keep-alive", "125"' in cmd
+    assert '"--proxy-headers"' in cmd
+    assert '"--no-server-header"' in cmd
+
+
+def test_dockerfile_copies_the_optional_ops_bundle_into_the_runtime_image() -> None:
+    dockerfile = _DOCKERFILE.read_text(encoding="utf-8")
+    assert "RUN mkdir -p /app/ops-ui" in dockerfile
+    assert "COPY --from=builder --chown=app:app /app/ops-ui ./ops-ui" in dockerfile

@@ -34,8 +34,8 @@ Rules:
   spacing, colour within the tokens, and motion. You never change copy or a design
   direction: put those in your report as proposals with the exact wording.
 - The voice is short label, then one plain sentence; no mannered prose, no pills or
-  chips unless the annex has them, nothing animates unless real data is arriving,
-  reduced motion honoured, zero radius, the product's tokens only.
+  chips unless the annex has them, reduced motion honoured, zero radius, the product's
+  tokens only.
 - Look at the live app, not only the code: `make dev`, then Playwright screenshots
   (the repo's runbook: `docs/knowledge/` and the lead's brief say how) at 1280 and
   400 wide, light and dark. One screenshot round per pass; fix what it shows; take
