@@ -37,7 +37,7 @@ export function FailedLine({ message, onRetry }: { message: string; onRetry: () 
   );
 }
 
-/** The toast after a write: its summary (owner, 2026-11-18: no "· recorded"). */
+/** The toast after a write: its summary (no "· recorded"). */
 export function useRecordedToast() {
   const { toast } = useToast();
   return (summary: string) => toast({ title: summary, tone: "default" });
@@ -125,7 +125,7 @@ export interface SearchOption {
 }
 
 /**
- * A searchable dropdown (owner pass, 2026-11-18): the select's trigger, and a
+ * A searchable dropdown: the select's trigger, and a
  * popover with a filter field at its top (focused as it opens; typing
  * narrows the list by name) over the choices. With `create`, when the typed
  * name matches no choice exactly, a last row offers to create it. Enter takes
@@ -390,7 +390,7 @@ function compareValues(a: SortValue, b: SortValue, order: SortOrder): number {
 }
 
 /**
- * Click-to-sort for an ops table (owner, 2026-11-18): the first click on a
+ * Click-to-sort for an ops table: the first click on a
  * column sorts ascending, the next reverses it. Unsorted, rows keep the
  * server's order.
  */

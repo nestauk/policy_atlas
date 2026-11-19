@@ -247,7 +247,7 @@ export function PeopleView() {
       { label: "Set quota…", onSelect: () => navigate(`/people/${person.user_id}/quota`) },
       { label: "Add to cohort…", onSelect: open("cohortAdd") },
       { label: "Remove from cohort…", onSelect: open("cohortRemove"), disabled: person.cohorts.length === 0 },
-      // Only while the invitation is unused (owner, 2026-11-18).
+      // Only while the invitation is unused.
       ...(waitingForSignIn(person)
         ? [
             {
@@ -671,7 +671,7 @@ function MoveDialog({
 /**
  * Offboard, the one red button. One person confirms by typing their address;
  * several (or one with no address) by typing how many, under the list of
- * every name and address (contract B6, revision 3.1). The consequence
+ * every name and address. The consequence
  * sentence is the dialog's description, read before the confirm field.
  */
 function OffboardDialog({
@@ -910,7 +910,7 @@ function waitingForSignIn(person: Person): boolean {
 /**
  * When the person last worked: their latest task's age. Until an invited
  * person first opens the app, the yellow "Invited" and when it was sent
- * instead (owner, 2026-11-18); Resend is in the row menu.
+ * instead; Resend is in the row menu.
  */
 function LastActivity({ person }: { person: Person }) {
   if (waitingForSignIn(person)) {

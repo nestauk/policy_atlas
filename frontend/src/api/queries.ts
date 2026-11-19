@@ -161,7 +161,7 @@ export function useApiClient() {
  * app writes — so paying for a refetch on every navigation would buy
  * nothing. The only path an ops change reaches an open session is a fresh
  * load anyway, which starts a fresh `QueryClient` and re-fetches for free.
- * The one in-session change is `task_quota.used` (task 064a, Q8), which is
+ * The one in-session change is `task_quota.used`, which is
  * why `useCreateTask` invalidates this query on success.
  */
 export function useMe() {

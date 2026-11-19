@@ -39,7 +39,7 @@ type Refusal = { org: string; message: string };
  * organisation (Check). An invited request is on People, never listed here.
  */
 function Status({ request, refusal }: { request: AccessRequest; refusal: Refusal | undefined }) {
-  // Plain words like the Requested column (owner, 2026-11-18): no badges.
+  // Plain words like the Requested column: no badges.
   if (refusal !== undefined || request.status === "check") {
     return <span className="block truncate">Already in {refusal?.org ?? request.note}</span>;
   }
@@ -57,7 +57,7 @@ export function RequestsView() {
   const toast = useRecordedToast();
   const [query, setQuery] = useState("");
   const [approving, setApproving] = useState<AccessRequest | null>(null);
-  // Several waiting requests approved into one organisation at once (owner, 2026-11-18).
+  // Several waiting requests approved into one organisation at once.
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [approvingMany, setApprovingMany] = useState<AccessRequest[] | null>(null);
   const [bulkPending, setBulkPending] = useState(false);
