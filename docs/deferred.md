@@ -684,6 +684,11 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 
 - `core/schema.py`: `toc_proposal`, `task_upload` and `toc_figure` have no `UNIQUE(id, task_id)`.
   Condition: a foreign key needs the pair.
+- `frontend/src/views/toc/`: on the canvas, a link's verdict and its pending, unchecked, suggested
+  and hover-preview states exist only as style classes (`toc-edge--*`, `border-dashed`), and the
+  folded rows of the assumptions table are hidden with a class and not the `hidden` attribute.
+  Assistive technology cannot read these states, and a test can see them only by the class name.
+  Condition: an accessibility pass, or the next change to the canvas.
 
 ### Work to do
 
@@ -1008,6 +1013,18 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   stored ISO date.
 - `planOverlay.ts` lists the overlay keys in three places; a new plan field must go in all three.
   Condition: a fourth list appears; then consolidate.
+- A state that a user perceives is shown only through a style class in five components, so
+  assistive technology cannot read it and a test can see it only by the class name:
+  `AnnotatedProse` (a span is a claim only by its `citation-marker` class, and a gap bullet
+  differs from an evidence bullet only by colour); `RankedBars` on the landscape view (a pending
+  row has only its placeholder bar; the table has `aria-busy`, a row has nothing); `ThemesView`
+  (an excluded option is shown only by grey text); `PartCard` (the settled block is the user's
+  answer only by its side and rule, and the folded stepper is hidden only by classes); `RunTrace`
+  (a step that still gets updates is shown only by its breathing classes). The accessibility
+  target is WCAG (Web Content Accessibility Guidelines) 2.2 AA, which does not allow a state
+  shown by colour alone. The fix for each is an attribute that states the condition (for example
+  `aria-busy`, `hidden`, or a `data-` state attribute), with the test moved to that attribute.
+  Condition: an accessibility pass, or the next change to one of these components.
 
 ### Work to do
 
