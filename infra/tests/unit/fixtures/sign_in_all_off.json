@@ -1,5 +1,29 @@
 {
  "app": {
+  "BackendARecord174E9BB6": {
+   "Properties": {
+    "AliasTarget": {
+     "DNSName": {
+      "Fn::Join": [
+       "",
+       [
+        "dualstack.",
+        {
+         "Ref": "SsmParameterValuepolicyatlasv3sharedalbdnsnameC96584B6F00A464EAD1953AFF4B05118Parameter"
+        }
+       ]
+      ]
+     },
+     "HostedZoneId": {
+      "Ref": "SsmParameterValuepolicyatlasv3sharedalbcanonicalhostedzoneidC96584B6F00A464EAD1953AFF4B05118Parameter"
+     }
+    },
+    "HostedZoneId": "DUMMY",
+    "Name": "api.policyatlas.uk.",
+    "Type": "A"
+   },
+   "Type": "AWS::Route53::RecordSet"
+  },
   "CognitoAuthHostedUiDomain7499E1A5": {
    "Properties": {
     "Domain": "policy-atlas-v3-prod",
@@ -92,6 +116,130 @@
    },
    "Type": "AWS::Cognito::UserPool",
    "UpdateReplacePolicy": "Retain"
+  },
+  "FrontendARecordD81E3E7C": {
+   "Properties": {
+    "AliasTarget": {
+     "DNSName": {
+      "Fn::GetAtt": [
+       "FrontendDistributionE6EAF405",
+       "DomainName"
+      ]
+     },
+     "HostedZoneId": {
+      "Fn::FindInMap": [
+       "AWSCloudFrontPartitionHostedZoneIdMap",
+       {
+        "Ref": "AWS::Partition"
+       },
+       "zoneId"
+      ]
+     }
+    },
+    "HostedZoneId": "DUMMY",
+    "Name": "policyatlas.uk.",
+    "Type": "A"
+   },
+   "Type": "AWS::Route53::RecordSet"
+  },
+  "FrontendARecordWWWBA43DBC0": {
+   "Properties": {
+    "AliasTarget": {
+     "DNSName": {
+      "Fn::GetAtt": [
+       "FrontendDistributionE6EAF405",
+       "DomainName"
+      ]
+     },
+     "HostedZoneId": {
+      "Fn::FindInMap": [
+       "AWSCloudFrontPartitionHostedZoneIdMap",
+       {
+        "Ref": "AWS::Partition"
+       },
+       "zoneId"
+      ]
+     }
+    },
+    "HostedZoneId": "DUMMY",
+    "Name": "www.policyatlas.uk.",
+    "Type": "A"
+   },
+   "Type": "AWS::Route53::RecordSet"
+  },
+  "FrontendAaaaRecord84592BC1": {
+   "Properties": {
+    "AliasTarget": {
+     "DNSName": {
+      "Fn::GetAtt": [
+       "FrontendDistributionE6EAF405",
+       "DomainName"
+      ]
+     },
+     "HostedZoneId": {
+      "Fn::FindInMap": [
+       "AWSCloudFrontPartitionHostedZoneIdMap",
+       {
+        "Ref": "AWS::Partition"
+       },
+       "zoneId"
+      ]
+     }
+    },
+    "HostedZoneId": "DUMMY",
+    "Name": "policyatlas.uk.",
+    "Type": "AAAA"
+   },
+   "Type": "AWS::Route53::RecordSet"
+  },
+  "FrontendAaaaRecordWWW4D751123": {
+   "Properties": {
+    "AliasTarget": {
+     "DNSName": {
+      "Fn::GetAtt": [
+       "FrontendDistributionE6EAF405",
+       "DomainName"
+      ]
+     },
+     "HostedZoneId": {
+      "Fn::FindInMap": [
+       "AWSCloudFrontPartitionHostedZoneIdMap",
+       {
+        "Ref": "AWS::Partition"
+       },
+       "zoneId"
+      ]
+     }
+    },
+    "HostedZoneId": "DUMMY",
+    "Name": "www.policyatlas.uk.",
+    "Type": "AAAA"
+   },
+   "Type": "AWS::Route53::RecordSet"
+  },
+  "OpsAliasRecordA5BB6AAB": {
+   "Properties": {
+    "AliasTarget": {
+     "DNSName": {
+      "Fn::Join": [
+       "",
+       [
+        "dualstack.",
+        {
+         "Ref": "SsmParameterValuepolicyatlasv3sharedalbdnsnameC96584B6F00A464EAD1953AFF4B05118Parameter"
+        }
+       ]
+      ]
+     },
+     "HostedZoneId": {
+      "Ref": "SsmParameterValuepolicyatlasv3sharedalbcanonicalhostedzoneidC96584B6F00A464EAD1953AFF4B05118Parameter"
+     }
+    },
+    "HostedZoneId": "DUMMY",
+    "Name": "ops.policyatlas.uk.",
+    "Type": "A"
+   },
+   "Type": "AWS::Route53::RecordSet"
   },
   "SecurityHeadersPolicy37F9B5C0": {
    "Properties": {

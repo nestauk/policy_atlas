@@ -11,11 +11,12 @@ SIGN_IN_TYPES = (
     "AWS::Cognito::UserPoolDomain",
     "AWS::Cognito::ManagedLoginBranding",
     "AWS::CloudFront::ResponseHeadersPolicy",
+    "AWS::Route53::RecordSet",
 )
 
 
 def _sign_in_resources(app_template: dict, cert_template: dict) -> dict:
-    """Collect what a sign-in change could touch: the pool, client, domains, branding, CSP, cert stack."""
+    """Collect what a sign-in change could touch: the pool, client, domains, branding, CSP, DNS records, cert stack."""
     return {
         "app": {
             logical_id: resource
