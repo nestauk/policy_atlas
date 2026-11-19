@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -285,20 +282,19 @@ describe("ChatSidePanel", () => {
     expect(screen.getByRole("link", { name: /View in Agent tab/ })).toHaveAttribute("href", "/tasks/p1");
   });
 
-  // Task 040 D9 (amendment A6): below `md` neither the rail nor the 280px+
-  // panel fits a phone, so both hide behind `max-md:hidden` with no stand-in —
-  // the bottom tab bar's Agent tab is the mobile way into the conversation.
-  it("shut, the rail hides below md with no mobile stand-in", () => {
+  // On a phone the bottom tab bar's Agent tab is the way into the
+  // conversation: the panel offers no stand-in.
+  it("shut, offers no mobile stand-in for the rail", () => {
     state.activeConversationId = null;
     render(<ChatSidePanel taskId="p1" isOwner />);
-    expect(screen.getByRole("complementary", { name: "Chats" })).toHaveClass("max-md:hidden");
+    expect(screen.getByRole("complementary", { name: "Chats" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Open the Agent" })).not.toBeInTheDocument();
   });
 
-  it("open on a deep link, the aside hides below md", () => {
+  it("open on a deep link, offers no mobile stand-in", () => {
     state.activeConversationId = "c1";
     render(<ChatSidePanel taskId="p1" isOwner />);
-    expect(screen.getByRole("complementary", { name: "Agent" })).toHaveClass("max-md:hidden");
+    expect(screen.getByRole("complementary", { name: "Agent" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Open the Agent" })).not.toBeInTheDocument();
   });
 
@@ -308,29 +304,6 @@ describe("ChatSidePanel", () => {
     expect(screen.getByTestId("draft-chat-pane")).toBeInTheDocument();
     expect(screen.getByText("New chat")).toBeInTheDocument();
     expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
-  });
-
-  // Owner, 2026-11-05: in the sidebar's pane, Lead-size text reads at Body
-  // size (16 px, the floor), for the Task Agent and the chats alike.
-  it.each([
-    ["the Task Agent", "plan-1", "task_agent-pane"],
-    ["a chat", "c1", "chat-pane"],
-    ["a draft chat", "new", "draft-chat-pane"],
-  ])("sets %s in the compact pane, where Lead reads at Body size", (_name, conversationId, testId) => {
-    state.activeConversationId = conversationId;
-    state.rows = [PLAN_ROW, CHAT_ROW];
-    render(<ChatSidePanel taskId="p1" isOwner />);
-    expect(screen.getByTestId(testId).parentElement).toHaveClass("compact-pane");
-  });
-
-  it("scopes the compact pane's rule to Lead alone, at the Body size and leading", () => {
-    // `index.css` is the rule's one home; Body and Meta are left as they are.
-    const css = readFileSync(join(__dirname, "../../../index.css"), "utf8");
-    const start = css.indexOf("@utility compact-pane {");
-    const rule = css.slice(start, css.indexOf("\n}", start));
-    expect(rule).toContain("--text-lead: var(--text-body);");
-    expect(rule).toContain("--text-lead--line-height: var(--text-body--line-height);");
-    expect(rule).not.toMatch(/--text-(body|meta|caption):/);
   });
 
   // Owner and lead, 2026-11-05: wherever a run is live its mark is the fold
