@@ -29,5 +29,5 @@ Then a structural body. Favour headings/lists/tables over prose. Cite the source
 a `# Citations` heading (spec, ADR, code, or test), and link related concepts with markdown links.
 Add a line to [log.md](log.md) when you add or materially change a concept.
 
-`index.md` and `log.md` are reserved filenames (no `type` frontmatter). Run `/okf validate` after
+`index.md` and `log.md` are reserved filenames (no `type` frontmatter). Run `make okf-validate` after
 editing — every other `.md` in the tree must carry a non-empty `type`.

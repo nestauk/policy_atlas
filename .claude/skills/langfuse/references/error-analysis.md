@@ -6,9 +6,6 @@ description: Deep-dive error analysis of an LLM pipeline or AI application using
   into a taxonomy and decide what to prioritise fixing. Also trigger for "review my
   traces", "my outputs look wrong", "help me debug my LLM app", "I want to analyse
   errors", "build a failure taxonomy", or "what's going wrong with my pipeline".
-metadata:
-  required_access:
-    - LANGFUSE_PROJECT_INTERFACE
 ---
 
 # Error Analysis
@@ -44,6 +41,10 @@ The guide describes the process. These notes cover the Langfuse-specific mechani
 Make sure Langfuse credentials are available before starting — a public key (`pk-lf-...`), a secret key (`sk-lf-...`), and the host (e.g. `https://cloud.langfuse.com` for EU, `https://us.cloud.langfuse.com` for US, `https://jp.cloud.langfuse.com` for JP, or a self-hosted URL). If they aren't configured, ask the user to set them — do not ask them to paste secret values into chat.
 
 Verify you can actually reach the user's project before proceeding. If access fails, stop and ask the user to check their credentials and host.
+
+### Representative sample
+
+If the project has Langfuse Topics enabled, draw the sample across its topics and outliers (traces no topic fits), over-representing topics that point to failures, instead of finding candidates by reading through traces.
 
 ### Annotation target: OBSERVATION versus TRACE
 

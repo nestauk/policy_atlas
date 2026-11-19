@@ -11,217 +11,193 @@ description: >
 
 # Task cycle — design phase (steps 1–4)
 
-Prerequisite: [task-cycle spine](../task-cycle/SKILL.md) (tier decided at step 0; Tier 2+
-runs this phase; Tier 0/1 skip it). Templates: `docs/tasks/_templates/`.
+Fixes what one slice builds and how: contract, rubric, plan, ADR when due. Tier 2+ only;
+conversation A; ends at human 🛑s. Read the [task-cycle spine](../task-cycle/SKILL.md)
+first. Templates: `docs/tasks/_templates/`.
 
-## Tools this phase orchestrates
+## Exit condition
 
-- **Clarify an underspecified ask:** `agent-skills:interview-me` — if the *ask itself* is
-  unclear (why / for whom / what "done" means), clarify with the user before writing a
-  contract on guesses.
-- **Refine a spec** (specs are living intent, not golden — `docs/specs/README`):
-  `agent-skills:idea-refine` / `agent-skills:spec`, recorded via
-  `agent-skills:documentation-and-adrs`.
-- **Plan / break down:** `/plan` (read-only), `agent-skills:planning-and-task-breakdown`
-  (only when the slice has no precedent shape and decomposition itself is the hard part).
-- **Seams / interfaces:** `agent-skills:api-and-interface-design`.
-- **ADR:** `agent-skills:documentation-and-adrs`.
-- **Adversarial review (documents):** a **read-only** brief through the `codex-rescue`
-  agent (see § Codex plumbing below). `agent-skills:doubt-driven-development` applies the
-  same fresh-context skepticism to key decisions.
+- [ ] Contract approved; rubric drafted; contract-stage adversarial review folded in (Tier 3+).
+- [ ] Plan confirmed, with executor marks, gate map and plan-stage adversarial review folded in (Tier 3+).
+- [ ] ADR written, if due.
+- [ ] Frontend-heavy slice: design annex and mock frozen before the contract.
+- [ ] All committed on `task/NNN-slug`. Then **stop**: the build runs in a fresh
+      conversation with [`task-cycle-build`](../task-cycle-build/SKILL.md).
 
-## Frontend-heavy slices — design pass before the contract (owner, 2026-11-04)
+## Human approval (🛑)
 
-A slice whose value is what the user sees runs a **design pass before step 1**, because
-looks only settle once they are seen, and a contract that names looks turns every taste
-change into a deviation. The pass, inside conversation A:
+- The contract, before planning (Tier 2+). A material change from its adversarial review
+  reopens this 🛑.
+- The plan, after its adversarial review (Tier 2+).
+- Every spec change (§ Spec refinement).
+- The mock's direction ("direction settled"), and any new dependency.
 
-1. **Ground**: explorers over the surfaces the slice touches (states, copy, tests, the
-   mock API) and the relevant research; conclusions saved under `docs/tasks/NNN/research/`
-   (gitignored).
-2. **Script**: the lead writes `docs/tasks/NNN/design-annex.md` from
-   `docs/tasks/_templates/design-annex.md` — every state, transition and line of copy, in
-   the product voice. The lead owns copy and direction; agents gather facts.
-3. **Mock**: a throwaway page built by a `builder` from the script, published as a private
-   artifact; rounds with the owner until structure, states and copy freeze. The stop rule
-   is the owner's "direction settled", never pixel satisfaction — details change on the
-   real app. Each round edits the script first, then the mock.
-4. **Contract** (step 1) then **pins behaviours, states, interfaces, invariants and measured
-   outcomes, and cites the annex by version. It never names a colour, weight or spacing.**
-   Rubric rows are testable (vitest, the mock journey). Visual decisions live only in the
-   annex, so a later change is an annex edit, not a contract deviation.
+## Forbidden
 
-Every agent that touches the frontend in any phase — grounding, build, polish, review —
-is the pinned **`frontend-designer`** agent (`.claude/agents/frontend-designer.md`), which
-loads all the frontend design skills, `PRODUCT.md` (committed; its § Product Principles
-are the team's six), `DESIGN.md` (committed; the visual system) and the slice's research
-before it starts. Unskilled workers ship correct but
-unpolished surfaces (2026-09-05); a brief to any other agent for frontend work needs a
-reason in the plan.
+- Product code, or rolling into the build in this conversation.
+- Phase state in `AGENTS.md`: it duplicates the branch name and `Status` line and goes stale
+  on `dev` after every merge.
+- Edits to `docs/specs/sources/**` (frozen, ADR 0002).
+- A colour, weight or spacing in a contract.
+- Committing a raw adversarial review record. It stays in the task's gitignored
+  `research/` folder; the findings and their adjudication go into the contract (or plan).
+  Older task folders hold committed `adversarial-review-*.md` files: do not copy that.
 
-Polish is first-class and multi-pass — see task-cycle-build § Step 5b and
-task-cycle-review § Frontend-heavy slices. First slice under this rule: 058.
+## Frontend-heavy slices: design pass before step 1
+
+Looks settle only once seen, and a contract that names looks turns each taste change into
+a deviation. So, in conversation A:
+
+1. **Ground**: explorers cover the touched surfaces (states, copy, tests, the mock API)
+   and the research; conclusions in `docs/tasks/NNN/research/` (gitignored).
+2. **Script**: the lead writes `docs/tasks/NNN/design-annex.md` from the template: every
+   state, transition and line of copy, in the product voice. The lead owns copy and
+   direction; agents gather facts.
+3. **Mock**: a `builder` builds a throwaway page from the script, published as a private
+   artifact. Rounds with the owner run until structure, states and copy freeze. Stop rule:
+   the owner's "direction settled", never pixel satisfaction. Each round edits the script
+   first, then the mock.
+   - Direction open: the `prototype` skill (versions of one UI piece behind a picker). It
+     runs only when called: the owner types `/prototype`, or the brief tells the `builder`
+     to read `~/.claude/skills/prototype/SKILL.md` first.
+   - New frontend dependency needed: `pick-ui-library` (the owner types
+     `/pick-ui-library`, or the agent reads `~/.claude/skills/pick-ui-library/SKILL.md`).
+     The dependency still needs owner approval.
+4. **Contract** **pins behaviours, states, interfaces, invariants and measured outcomes,
+   and cites the annex by version.** Rubric rows are testable (vitest, the mock journey).
+   Visual decisions live only in the annex, so a change is an annex edit.
+
+Every agent that touches the frontend in any phase is the pinned **`frontend-designer`**
+(`.claude/agents/frontend-designer.md`). It loads the frontend design skills, `PRODUCT.md`
+(committed; § Product Principles are the team's six), `DESIGN.md` (committed) and the
+slice's research first, because unskilled workers ship correct but unpolished surfaces. A
+frontend brief to any other agent needs a reason in the plan. Polish passes: task-cycle-build
+§ Step 5b and task-cycle-review § Frontend-heavy slices.
 
 ## Step 1 — Contract
 
-The slice's identity lives in two places and nowhere else: the branch name
-`task/NNN-slug` and the `Status` line at the top of its `contract.md`. Do not write phase
-state into `AGENTS.md` (removed 2026-09-04: it duplicated both and was stale on `dev` after
-every merge). A fresh conversation re-grounds by reading `docs/tasks/<newest>/contract.md`.
+- **Identity** lives only in the branch name `task/NNN-slug` and the `Status` line of its
+  `contract.md`. A fresh conversation re-grounds from `docs/tasks/<newest>/contract.md`.
+- **Read the deferred work for the parts the slice touches**: the matching sections of
+  `docs/deferred.md` (it is ordered by part of the system). State in the contract which
+  entries the slice takes in. An entry is read only when its part is opened, so this is
+  the point where it is picked up or left on purpose.
+- If the request is unclear (why, for whom, what "done" means), load
+  `agent-skills:interview-me` with the Skill tool and clarify with the user before you
+  write the contract.
+- Copy `docs/tasks/_templates/contract.md` → `docs/tasks/NNN-slug/contract.md`. Read the
+  cited specs *in depth*. If one is wrong or incomplete, refine it first (§ Spec refinement).
+- If the contract defines a seam or public interface, load
+  `agent-skills:api-and-interface-design` with the Skill tool first.
 
-Copy `docs/tasks/_templates/contract.md` → `docs/tasks/NNN-slug/contract.md`. Read
-the specs it depends on *in depth*, not headings — if a spec looks wrong or incomplete,
-refine it first (§ Spec refinement).
+**Live-check scope is a contract-time pin.** If acceptance includes a live manual check,
+name its scope. Default: the changed surfaces plus one cheap full-chain smoke. A full live
+e2e is an upgrade the gate approves with its wall-time cost named. Do not inherit the
+previous slice's shape.
 
-**Live-check scope is a contract-time pin** (failure-log, 2026-07-08): when the
-acceptance checks include a live manual check, name what it covers. Default = a live
-run scoped to the slice's changed surfaces plus one cheap full-chain smoke; a full live
-e2e is a deliberate upgrade the gate approves with its wall-time cost named (014's
-inherited "skeleton e2e" spent ~50 min of downstream live chain to evidence surfaces
-needing ~2 min). Don't inherit the previous slice's live-check shape by default.
+**Design docs must be legible cold**, because the human gate and conversation B read them
+without your context:
 
-**Design docs must be legible cold** (2026-08-13): the human gate and conversation B both
-read these files without your context. Five habits, cheap now and expensive to retrofit:
+- **Define jargon once**, in the contract's § Terms: internal labels (`P1`), abbreviations
+  (`PSS`), words in a special sense (grain, round). Rubric and plan point at it.
+- **Map what the slice touches** in the shape that fits (UI: surface → number shown →
+  rendering file → broken / correct-do-not-change). "Do not change" rows weigh the same.
+- **One defect numbering everywhere**: goal, scope, invariants, plan phases and rubric
+  items cite the same ids, so an invariant with no defect shows as a hole.
+- **Split anything that needs two acceptance invariants.** One defect, one cause, one invariant.
+- **Resolve name collisions from the code**: say which is the field and which the label.
 
-- **Define the jargon once, in the contract** — the § Terms stub in the template. One row
-  for each term a cold reader cannot expand: internal labels (`P1`), abbreviations
-  (`PSS`), and any word the slice uses in a special sense (grain, round). The rubric and
-  the plan *point at* that table. They never restate it.
-- **Map what the slice touches, in whatever shape fits it.** For a UI slice that was a
-  table of surface → the number it shows → the file that renders it → broken /
-  correct-do-not-change. The shape is slice-specific; the rule is not. The
-  "do not change" rows carry the same weight as the broken ones.
-- **Number the problems, and use one numbering everywhere.** Goal, deliverable, scope,
-  invariants, plan phases and rubric items all cite the same defect ids. Then any symptom
-  traces to its fix, and an invariant with no defect shows up as a hole.
-- **Split anything that is really two problems.** The tell: it needs two acceptance
-  invariants. One defect, one cause, one invariant.
-- **Resolve name collisions from the code, not by rewording.** When two names in the docs
-  appear to mean one thing, read the source and say which is the field and which is the
-  label. A doc that hedges here teaches the next reader the same confusion.
-
-Prose follows the repo output style (ASD-STE100): short sentences, active voice, plain
-words in place of metaphors — "accepted defect", not "wart" or "blemish".
+Prose is ASD-STE100: short sentences, active voice, plain words ("accepted defect", not "wart").
 
 🛑 **Human approves the contract before planning** (Tier 2+).
 
-**Contract-stage adversarial review** (Tier 3+ standard; Tier 2 on demand): after the
-human approves and before planning, the other family attacks `contract.md` + `rubric.md` —
-a **read-only** brief via `codex-rescue` naming the reading list (contract, rubric, the
-specs they cite, AGENTS.md, `docs/deferred.md`, the previous slice's contract as pattern
-precedent). Targets: unstated assumptions, missed requirements, contradictions with the
-specs, simpler alternatives. Decisions the human settled in review are *context, not
-targets* (challenge only on contradiction). The lead adjudicates findings into the
-contract; a material change reopens the 🛑 for re-approval, minor ones are folded in and
-noted. **Do not commit the review record** (owner, 2026-11-04): the findings and their
-adjudication live in the contract's status line and items; the raw review stays under the
-task's gitignored `research/` folder. (Tasks 026 to 057 committed `adversarial-review-*.md`
-files by copying the previous slice's folder; that was never a rule.) Rationale: in this repo the contract fixes the design (schema, interfaces, tests) —
-attack it at its own gate, not after a plan is built on it.
+**Contract-stage adversarial review** (Tier 3+; Tier 2 on demand), after approval and
+before planning: a **read-only** `codex-rescue` brief (§ Codex plumbing) attacks
+`contract.md` and `rubric.md`. Reading list: contract, rubric, cited specs, AGENTS.md,
+the sections of `docs/deferred.md` for the parts the slice touches, the previous slice's contract as precedent. Targets: unstated
+assumptions, missed requirements, spec contradictions, simpler alternatives. Human-settled
+decisions are *context, not targets* (challenge only on contradiction). The lead folds
+findings into the contract; material changes reopen the 🛑, minor ones are noted. The
+contract fixes the design here (schema, interfaces, tests), so attack it at its own gate.
 
 ## Step 2 — Rubric
 
-Copy `docs/tasks/_templates/rubric.md`. Tier 2+ only. Drafted alongside the contract so
-the step-1 human review and adversarial pass see both.
+Copy `docs/tasks/_templates/rubric.md`. Draft it with the contract, so the step-1 review
+and adversarial review see both.
 
 ## Step 3 — Plan
 
-`/plan` (read-only). Save the accepted plan to `docs/tasks/NNN-slug/plan.md`. For a
-pattern-following slice, the previous slice's `plan.md` is the template — mirror it
-against the **as-built code** (not its own claims; plans drift, code doesn't). The terms
-and surface tables stay in the contract; the plan cites them and reuses its defect
-numbering (§ Design docs must be legible cold).
+- Run `/plan` (read-only); save the accepted plan to `docs/tasks/NNN-slug/plan.md`.
+- If the slice has no precedent shape, load `agent-skills:planning-and-task-breakdown`
+  with the Skill tool first. If the plan defines a seam or public interface, load
+  `agent-skills:api-and-interface-design`.
+- For a pattern-following slice, mirror the previous `plan.md` against the **as-built
+  code**, not the plan's own claims. The plan cites the contract's tables and numbering.
+- **Reuse before new code**: for each new helper, type or module, the plan names the
+  existing one it reuses, or states that none exists. Duplication is one line to prevent
+  here and a cross-module refactor to remove at review.
+- For a key decision at Tier 3+, load `agent-skills:doubt-driven-development` with the
+  Skill tool. For a real design fork, set the options side by side in an **Artifact**.
 
-**Executor routing is a plan-time decision** (failure-log, 2026-07-05). Mark each plan
-task with its executor — `lead` · `fast-worker` · `deep-reasoner` · `codex` — per
-harness.md § Agent-side model routing, so the plan reviewer and the human gate see the
-routing before the build starts. **Default to a delegate; every `lead` mark carries a
-one-line justification the plan gate reviews** (failure-log, 2026-07-05 — the 008 plan
-over-assigned to the lead; the burden sits on keeping work, not on delegating it).
-The ladder (full version in harness.md):
-- Can't write the brief (one concern, its intent, a self-checkable definition of done)?
-  Not delegable — `lead`.
-- Prompt-bearing work, taste-bearing surfaces, adjudication, and seam *design*
-  (signatures, semantics, the brief itself) → `lead`, regardless of budget. The
-  *implementation* of a lead-designed seam against a machine-verifiable done is
-  delegable like any other execution — "seam-bearing" describes the design decision,
-  not the typing.
-- **Judgment-bearing execution** (nontrivial logic, multi-file coherence, unfamiliar
-  APIs) with a machine-verifiable done → `codex` — the **default doer** for complex
-  subtasks: ~Opus-tier capability on the non-Claude budget, and the family-flip review
-  comes built in. (Async fire-and-forget: if the task would need mid-course steering,
-  it fails the brief test — keep it with the lead.)
-- Mechanical transcription of an exact spec (test scaffolding from a precise contract
-  list, sweeps, boilerplate) → `fast-worker` — Codex overpays here and the async
-  round-trip is slower.
-- One-command mechanical edits (`sed`-able renames, count bumps) → `lead` **inline** —
-  delegation costs more than it saves there.
-- Analysis-not-code → `deep-reasoner`; Codex takes the second seat in
-  two-independent-takes.
-Re-deciding routing mid-build is the rationalisation the plan column exists to prevent.
+**Executor routing is a plan-time decision.** Mark each plan task `lead` · `fast-worker` ·
+`deep-reasoner` · `frontend-designer` · `builder` · `codex` (full ladder: harness.md
+§ Agent-side model routing):
 
-**Gate consolidation is likewise a plan-time call** (failure-log, 2026-07-08): the plan
-marks which phase boundaries carry a full `make verify` and which gate on
-`make verify-fast` — consecutive low-risk phases (new files, no schema/reader contact)
-may share a single full-verify gate, argued in the plan and reviewed at the plan 🛑.
-The mandatory full-verify classes (build-open baseline · schema/ingest-adjacent phases ·
-step-6 exit) are untouched; consolidation merges *adjacent* checkpoints, never skips a
-class. 014 ran six full-suite gates (~45 min) where three carried the same signal.
+- Cannot write a self-checkable brief → `lead`.
+- Prompt-bearing work, taste-bearing surfaces, adjudication, seam *design* (signatures,
+  semantics, the brief) → `lead`, regardless of budget. The *implementation* of a
+  lead-designed seam against a machine-verifiable done is delegable.
+- **Judgment-bearing execution** (nontrivial logic, multi-file coherence, unfamiliar APIs)
+  with a machine-verifiable done → `deep-reasoner`, the
+  **default doer**. Mark `codex` only when the build needs a second family's view, with the
+  reason in the plan: the family flip already happens at step 7.
+- Frontend implementation or polish → `frontend-designer`.
+- Mechanical transcription of an exact spec (test scaffolding, sweeps, boilerplate) →
+  `fast-worker`.
+- One-command edits (`sed` renames, count bumps) → `lead` **inline**.
+- Analysis, not code → `deep-reasoner`; Codex takes the second seat in two-independent-takes.
 
-**Plan-phase adversarial review** (Tier 3+ standard; Tier 2 on demand — a loose contract,
-a surprising plan, or reliance on a 🟡/❓ spec area): before the 🛑, the other family
-attacks the drafted plan — a **read-only** `codex-rescue` brief on `plan.md`, with the
-approved contract as *context, not target* (re-attack it only on contradiction). The brief
-names the reading list (contract, plan, the specs they cite, AGENTS.md, `docs/deferred.md`)
-and scopes the targets: plan↔contract/spec fit, sequencing risks, 🟡/❓ items, missed
-requirements, simpler alternatives. If it can't critique from the files alone, the
-artifacts aren't the self-sufficient handoff conversation B needs — fix that first.
-The same rule as step 1: fold the findings into the plan, keep the review record local.
-(Distinct from the high-stakes two-independent-takes rule, which generates alternatives
-*before* the design call; this attacks the chosen plan *after* drafting.)
+Routing is not re-decided mid-build.
 
-For a real design fork, an **Artifact** laying the options out side by side (trade-offs,
-diagrams) beats prose in chat as the decision surface.
+**Gate consolidation is a plan-time decision.** The plan marks which boundaries run full
+`make verify` and which `make verify-fast`. Adjacent low-risk phases (new files, no schema
+or reader contact) may share one full-verify gate, argued in the plan. The mandatory
+classes (build-open baseline · schema/ingest-adjacent phases · step-6 exit) are never skipped.
 
-🛑 **Human confirms the plan** (Tier 2+) — the lead adjudicates adversarial findings into it.
+**Plan-stage adversarial review** (Tier 3+; Tier 2 on demand: a loose contract, a
+surprising plan, a 🟡/❓ spec area), before the 🛑: a **read-only** `codex-rescue` brief on
+`plan.md`, with the contract as *context, not target*. Reading list: contract, plan, cited
+specs, AGENTS.md, the sections of `docs/deferred.md` for the parts the slice touches. Targets: plan↔contract/spec fit, sequencing risks,
+🟡/❓ items, missed requirements, simpler alternatives. If it cannot critique from the files
+alone, the files are not a self-sufficient handoff: fix that first. (Two-independent-takes
+generates options *before* a high-stakes call; this attacks the chosen plan.)
+
+🛑 **Human confirms the plan** (Tier 2+), with the adversarial findings folded in.
 
 ## Step 4 — ADR
 
-Only if a design decision is made or changed (Tier 3–4 by default).
-`docs/adr/NNNN-slug.md`, status Accepted with sign-off date
-(`agent-skills:documentation-and-adrs`).
+Only when a design decision is made or changed (Tier 3–4 by default). Load
+`agent-skills:documentation-and-adrs` with the Skill tool first. `docs/adr/NNNN-slug.md`,
+status Accepted with the sign-off date.
 
 ## Spec refinement (specs are living)
 
-Specs are current best *intent*, not golden (`docs/specs/README`) — refining them is
-**part of the cycle**, not an exception. It fires here (step 1: a spec is wrong or
-incomplete — refine before contracting on it) and at build time (step 5: building reveals
-the design is wrong — the build skill routes back here).
-
-The flow-back, same each time: propose → 🛑 **human decision** → update the spec + status
-markers (+ an ADR if consequential) → add a line to the spec bundle's `log.md` → resume.
-Sources are **frozen** — change the *spec*, not the source (ADR 0002).
+Specs are intent, not golden (`docs/specs/README`). Refinement fires here (a spec is wrong
+before you contract on it) and from the build (building shows the design is wrong). Load
+`agent-skills:idea-refine` and `agent-skills:spec` with the Skill tool; load
+`agent-skills:documentation-and-adrs` to record the change. Flow: propose → 🛑 **human
+decision** → update the spec and status markers (and an ADR if consequential) → a line in
+the bundle's `log.md` → resume. Sources are **frozen**: change the *spec* (ADR 0002).
 
 ## Codex plumbing (document reviews)
 
-`/codex:review` and `/codex:adversarial-review` are **user-typed only** and **diff-shaped**
-— right for step-7 code review, wrong for document reviews. For steps 1/3 the agent routes
-through the `codex-rescue` agent instead — same runtime, auto-applies the GPT-5.4 prompt
-shaping. ⚠️ rescue defaults to **write-capable**: every review brief sent through it must
-state **read-only / critique-only** explicitly. ⚠️ rescue is **async fire-and-forget**:
-its final message is **either the findings or a job id** — check which before doing
-anything else. For a job id, retrieve results with the repo shim:
-`scripts/codex_job.sh wait <job-id> [timeout-s]` (or `status`/`result`) — it only
-resolves the companion-script path (the plugin's `${CLAUDE_PLUGIN_ROOT}` is injected
-solely while its user-typed `/codex:*` commands run; no such variable exists in the
-lead's shell — `$CODEX_PLUGIN_ROOT` never existed at all) and delegates waiting to the
-runtime's **native** `status --wait --timeout-ms`. ⚠️ Do not hand-roll a status poll —
-the runtime has one built in, and a grep-filtered background loop turns a hard error
-into a silent spin-to-timeout (failure-log, 2026-07-07; progress-line pitfall
-2026-07-05).
-
-## Phase exit
-
-Contract approved · rubric drafted · plan confirmed (with executor marks) · ADR written if
-due · everything committed on `task/NNN-slug`. **Stop.** The build runs in a fresh
-conversation with [`task-cycle-build`](../task-cycle-build/SKILL.md).
+- `/codex:review` and `/codex:adversarial-review` are **user-typed only** and
+  **diff-shaped**, so steps 1 and 3 use the `codex-rescue` subagent.
+- ⚠️ It is **write-capable** by default: every brief states **read-only / critique-only**.
+- ⚠️ It is **async**: its final message is **either the findings or a job id**; check
+  which first. For a job id: `scripts/codex_job.sh wait <job-id> [timeout-s]` (or
+  `status`/`result`), the runtime's **native** wait.
+- ⚠️ Do not write your own status poll: a filtered loop can hide a hard error until timeout.
+- **Fallback**: if Codex fails or is not available, a `deep-reasoner` subagent in a fresh
+  context runs the same read-only brief, and the contract's status line records that a
+  Claude reader stood in. A second independent read still finds defects the other lanes miss.

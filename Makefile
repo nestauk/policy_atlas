@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast eval-check okf-validate audit audit-paths prompt-guard eval-search-recall frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test deploy-migration-wait-test waf-report-test infra-setup deploy-check deploy-update deploy-bootstrap
+.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast eval-check okf-validate audit audit-paths prompt-guard eval-search-recall frontend-install openapi-sync drift-check font-guard frontend-verify frontend-verify-fast fe-api-smoke deploy-build-guard-test deploy-migration-wait-test waf-report-test infra-setup deploy-check deploy-update deploy-bootstrap
 
 # Root Makefile (025 A.2 monorepo hoist): the Python project lives in
 # backend/; this Makefile owns the shared db service + the root-level gates
@@ -226,6 +226,12 @@ font-guard:
 # Requires frontend/node_modules (make frontend-install).
 frontend-verify:
 	cd frontend && pnpm typecheck && pnpm lint && pnpm test && pnpm build
+
+# The quick frontend check for a commit between polish rounds: type check, lint and
+# unit tests, without the production build. `make verify-fast` covers the backend
+# only, so a frontend-only commit needs this target to be green.
+frontend-verify-fast:
+	cd frontend && pnpm typecheck && pnpm lint && pnpm test
 
 # Thin browser smoke against the real local API: fresh dev-issuer credentials,
 # real Postgres, real CORS/base URL/auth transport, and the API SSE stream.

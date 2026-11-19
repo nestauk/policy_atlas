@@ -1,11 +1,6 @@
 ---
 name: langfuse-v4-project-migration
 description: Prepare an application and Langfuse project for v4 by upgrading ingestion and API usage, migrating legacy evaluators, and moving exports to the enriched observation schema.
-metadata:
-  required_access:
-    - CODEBASE
-    - LANGFUSE_PROJECT_INTERFACE
-    - LANGFUSE_PROJECT_SCRIPT
 ---
 
 # Langfuse v4 project migration
@@ -14,15 +9,15 @@ metadata:
 
 Fetch only the pages needed for the surfaces found:
 
-- [V4 overview](https://langfuse.com/docs/v4) and [compatibility](https://langfuse.com/docs/compatibility)
+- [V4 upgrade guide](https://langfuse.com/faq/all/upgrade-to-langfuse-v4) and [compatibility](https://langfuse.com/docs/compatibility)
 - [SDK upgrade paths](https://langfuse.com/docs/observability/sdk/upgrade-path)
 - [Custom ingestion migration](https://langfuse.com/integrations/native/opentelemetry/migration-to-v4)
 - [Deprecated API migration](https://langfuse.com/faq/all/deprecated-api-migration)
 - [Evaluator migration](https://langfuse.com/faq/all/llm-as-a-judge-migration)
-- [Evaluation Rules](https://api.reference.langfuse.com/#tag/unstableevaluationrules) and [Evaluators](https://api.reference.langfuse.com/#tag/unstableevaluators) APIs
+- [Evaluation Rules](https://api.reference.langfuse.com/#tag/evaluationrules) and [Evaluators](https://api.reference.langfuse.com/#tag/unstableevaluators) APIs
 - Export migrations: [Blob Storage](https://langfuse.com/docs/api-and-data-platform/features/export-to-blob-storage#upgrade-path), [Mixpanel](https://langfuse.com/integrations/analytics/mixpanel#migrate-export-source), and [PostHog](https://langfuse.com/integrations/analytics/posthog#migrate-export-source)
 
-Discover unstable schemas before use.
+Discover the current schemas before use.
 
 ## Choose the execution mode
 
@@ -40,6 +35,7 @@ Discover unstable schemas before use.
 - For raw `/api/public/ingestion`, use the current Langfuse SDK in Python or JS/TS. For other languages, use the language's native OpenTelemetry API and follow the custom-ingestion guide.
 - When replacing synchronous ingestion, assess buffering, retries, flushing, shutdown, and error propagation. Do not claim identical delivery semantics without verification.
 - For other deprecated APIs, migrate the path, parameters, pagination, filters, field groups, response parsing, and downstream consumer together using the deprecated-API guide.
+- `GET /api/public/traces` is replaced by the per-trace steps in [references/cli.md](cli.md). Group Observations API v2 rows by `traceId` for a full list with name, timestamp, and total cost, and include `usage` in `fields` — the default `core,basic` response has no `totalCost`. Use Metrics API v2 with dimension `traceId` only for the most expensive traces or for known trace IDs.
 - Check self-hosted compatibility before replacing calls; report code targeting a v3 server as blocked on the server upgrade.
 
 ## Migrate evaluators
@@ -50,13 +46,6 @@ Discover unstable schemas before use.
 - Label this a **project-verified contract** only when the rule and representative observations were inspected. Label code-only suggestions **candidate targets**, never project state.
 - Consolidate all required evaluator variables and filter attributes onto the one target observation. Observation evaluators cannot read siblings or children.
 - Create or update the successor disabled, validate it on newly ingested data, obtain approval before enabling it, compare scores and logs, then disable rather than delete the legacy rule.
-
-### Deprecated trace input/output escape hatch
-
-- Default to removing deprecated trace input/output and migrating the evaluator to root-observation input/output.
-- Never add or retain `set_current_trace_io()`, `span.set_trace_io()`, `setActiveTraceIO()`, `span.setTraceIO()`, or equivalent compatibility merely because a legacy rule exists or project access is unavailable.
-- Offer compatibility only when automatic migration is currently impossible or the user explicitly insists on preserving the legacy evaluator unchanged after being warned that trace input/output is deprecated.
-- Even then, require explicit confirmation before changing code, mark the evaluator migration `manual action` or `blocked`, and document the condition for removing the escape hatch. Do not present it as the recommended migration.
 
 ## Migrate exports
 
