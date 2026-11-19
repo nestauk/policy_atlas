@@ -1,6 +1,7 @@
 # Frontend
 
-The Policy Atlas web app: React 19, TypeScript in strict mode, Vite and Tailwind CSS 4. To run
+The Policy Atlas web app and the ops pages: React 19, TypeScript in strict mode, Vite and
+Tailwind CSS 4. To run
 the whole app (API and web app together), use `make dev` from the repository root (see the
 [root README](../README.md)). The visual design rules are in [DESIGN.md](../DESIGN.md).
 
@@ -34,6 +35,8 @@ pnpm test        # vitest run (unit tests)
 pnpm build       # tsc -b && vite build
 pnpm e2e         # Playwright browser tests against mock data
 pnpm gen         # makes src/api/gen/types.ts from openapi.json
+pnpm gen:ops     # makes src/api/gen/types-ops.ts from openapi-ops.json
+pnpm build:ops   # builds the ops pages into ../backend/ops-ui/
 ```
 
 From the root, `make frontend-verify-fast` runs the type check, lint and unit tests, and
@@ -41,6 +44,17 @@ From the root, `make frontend-verify-fast` runs the type check, lint and unit te
 
 The dev server sends `/api/*` to the API on `http://localhost:8000` (`vite.config.ts`). Start
 the API first, or use mock mode.
+
+## The ops pages
+
+The ops pages are a second app in the same project. Operators use them to manage
+organisations, people, quotas, sign-up requests and cohorts. The ops service (a separate
+backend service) serves them (see the [backend README](../backend/README.md)). The entry page
+is `ops.html` and the code is in `src/ops/`. `vite.ops.config.ts` builds them: it uses the main
+Vite settings with a different entry page and output folder. `pnpm build` does not include
+them.
+
+To see the ops pages with mock data: `VITE_MOCK=1 pnpm exec vite --config vite.ops.config.ts`.
 
 ## Mock mode and browser tests
 
@@ -60,6 +74,12 @@ root) runs a separate browser test against the real local API.
 - `VITE_DEV_TOKEN`: a local dev token. `make dev` sets it.
 - `VITE_OPTIONS_SCOPING=1` and `VITE_THEORY_OF_CHANGE=1`: show those Capabilities. `make dev`
   sets both.
+- `VITE_WAF_CAPTCHA_SCRIPT_URL` and `VITE_WAF_CAPTCHA_API_KEY`: the CAPTCHA (a puzzle that
+  shows a person, not a program, is there) on the waitlist form. The firewall (AWS WAF, the
+  Amazon Web Services web application firewall) checks the answer. `scripts/deploy.sh` sets
+  both only when an environment has the CAPTCHA on. With neither set, the form shows no puzzle.
+  Architecture decision record (ADR)
+  [0047](../docs/adr/0047-waf-on-the-load-balancer-and-waitlist-captcha.md) gives the design.
 - `VITE_MOCK=1`: mock mode.
 
 ## Fonts
@@ -82,3 +102,4 @@ fails if a font file is tracked. If you have the files, put them in `public/font
 - `views/`: the pages. `routes.tsx`, `routes/`, `App.tsx` and `main.tsx`: the app shell and
   routing.
 - `mock/`: the mock-mode data and API.
+- `ops/`: the ops pages, with their own API client (`ops/api.ts`), views and mock data.

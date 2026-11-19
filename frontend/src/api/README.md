@@ -20,17 +20,18 @@ The code that talks to the backend web API.
   `useArtefact`, `useEvidence`, `useOptions`, `useToc` and the others).
 - `mutations.ts`: the write hooks (create and update Tasks and Projects, start a run, answer a
   check-in, the Options scoping and Theory of change actions).
-- `gen/`: generated types. Do not edit ([README](gen/README.md)).
+- `gen/`: generated types. Do not edit ([README](gen/README.md)). `gen/types-ops.ts` is for the
+  ops pages, whose client is `src/ops/api.ts`. That client uses `authMiddleware.ts` too.
 
 ## Rules
 
 - The types come from the backend's request and response models
   (`policy_atlas.api.contract`). After a backend contract change, run `make openapi-sync` from
-  the root. `make drift-check` fails if `frontend/openapi.json` or `gen/types.ts` is out of
-  date.
+  the root. `make drift-check` fails if `frontend/openapi.json`, `frontend/openapi-ops.json`,
+  `gen/types.ts` or `gen/types-ops.ts` is out of date.
 - Use `queryKeys` for every query key, so the event-stream refreshes find the right queries.
 
 ## Commands
 
-From `frontend/`: `pnpm test` runs the unit tests, and `pnpm gen` remakes `gen/types.ts` from
-`openapi.json`.
+From `frontend/`: `pnpm test` runs the unit tests. `pnpm gen` remakes `gen/types.ts` from
+`openapi.json`, and `pnpm gen:ops` remakes `gen/types-ops.ts` from `openapi-ops.json`.
