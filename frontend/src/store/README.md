@@ -1,42 +1,43 @@
 # Store
 
-Client-side, event-sourced state over the SSE frame stream (task 025 §4) —
-no framework, a plain reducer:
+The client-side state that the web app builds from the server's event stream (SSE, server-sent
+events), and the state of the chat transcripts. It uses no state library: the run state is a
+plain reducer.
 
-- `types.ts` — `RunStreamState` and its pieces, including presentation-only
-  `liveSections` keyed by artefact display index.
-- `reducer.ts` — `reduceRunStreamFrame(state, frame)`, pure and
-  replay-idempotent: frames below `lastSequence`, or a repeated frame type
-  at the current sequence, are dropped. This permits the intentional
-  `checkin.resolved` + `plan.updated` same-sequence pair while making a
-  replay safe. `artefact.*` frames build the live, non-authoritative section
-  outline; empty completed prose removes that slot rather than faking it.
-  The ephemeral frames are the exception (see below).
-- `useRunStream.tsx` — `RunStreamProvider` owns one SSE connection per open
-  task (mounted from `AppShell`); `useRunStream(taskId)` reads that
-  shared reducer state. Read-model invalidations on `stage.completed` /
-  `run.status` are trailing-debounced so a cold full-history replay does
-  not storm refetches. Leaf tabs (Plan / Results / Sources) must not open
-  their own connections. Invalidation rules: the tracked run's
-  `stage.completed` / `run.status` refresh every query under the task; a
-  child walk's (an option search's) refresh the options query only; an
-  `ingest` tick refreshes the Sources list and the Landscape at most once
-  per 5 s; no other tick refreshes anything.
-- `../api/sse.ts` drops a connection that sends no bytes for 45 s (the
-  server's keep-alives and heartbeats are far more frequent) and reconnects
-  at its cursor, so the reconnecting banner shows.
+## What is in it
 
-**Ephemeral slices (task 058).** Three frame types carry no `sequence`, are
-never replayed and never advance `lastSequence`: `tick` (the latest activity
-per stage, in `liveness`), `artefact.section_delta` (a section's streamed
-`draft`, appended or replaced) and `artefact.section_revising` (the spans of
-that draft being revised). A delta for a section with no skeleton yet waits
-in `pendingDrafts` until the skeleton arrives. `artefact.section_completed`
-is the record: it sets `prose` and clears `draft` and `revising`, so a replay,
-which carries no deltas, rebuilds `prose` alone. A new run clears all three
-slices.
+- `types.ts`: `RunStreamState` and its parts, and `createInitialRunStreamState`.
+- `reducer.ts`: `reduceRunStreamFrame(state, frame)`. It is pure and safe to replay. A frame
+  with a `sequence` below `lastSequence` is dropped. A second frame of the same type at the
+  current sequence is dropped too, so two different frame types from one event both apply.
+  Some frame types are ephemeral (for example `tick` and `artefact.section_delta`): they carry
+  no `sequence`, are never replayed, and change only live display state. A replay therefore
+  rebuilds only the durable state. The comment at the top of `reducer.ts` lists every
+  ephemeral frame type and what it changes.
+- `useRunStream.tsx`: `RunStreamProvider` opens one event-stream connection per open Task. It
+  is mounted in `views/AppShell.tsx`. `useRunStream(taskId)` reads its state. It refreshes the
+  server queries as frames arrive:
+  - `stage.completed` or `run.status` of the tracked run: every query of the Task;
+  - the same frames from an option search (a child walk): the options query only;
+  - an `ingest` tick: the Sources list and the Landscape, at most once every 5 seconds.
+  The first two are grouped in one 300 ms window, so a full replay does not cause a storm of
+  refreshes.
+- `transcript.ts`: the Task Agent transcript, with the local rows that show before the server
+  returns them.
+- `thread.ts`: puts the Task Agent turns, the runs and the steering decisions into one thread.
+- `conversations.ts`: the other chats, their streamed replies and the composer draft.
+- `planEdits.ts`: the unsaved edits to an Evidence search plan, kept per Task while the page
+  is open.
+- `index.ts`: the public exports. Import from `store`, not from the files.
 
-See `src/store/reducer.test.ts` for the replay-idempotence, pending→resolved,
-and tick-transience proofs. `transcript.ts` owns the durable task_agent-turn
-query's local optimistic composer state; `thread.ts` is the pure,
-run-phase-anchored task_agent-thread composition model.
+## Rules
+
+- A view must not open its own event-stream connection. It reads `useRunStream`.
+- Keep the reducer pure. `reducer.test.ts` proves that a replay gives the same state.
+- `../api/sse.ts` drops a connection that sends nothing for 45 seconds and reconnects from its
+  cursor.
+
+## Commands
+
+From `frontend/`: `pnpm test` runs the unit tests, which include this folder's `*.test.ts`
+files.
