@@ -753,7 +753,7 @@ def test_requests_list_shows_the_three_states_and_the_self_signup_block(ops: Har
     created = [item["created_at"] for item in after["items"]]
     assert created == sorted(created)
     signup = after["self_signup"]
-    assert signup["enabled"] is False and signup["max_per_hour"] == 20
+    assert signup["enabled"] is False and signup["max_per_hour"] == 100
     assert domain in signup["domains"]
     assert signup["sent_this_hour"] - before["self_signup"]["sent_this_hour"] == 1
 

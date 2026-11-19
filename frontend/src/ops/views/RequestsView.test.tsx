@@ -17,7 +17,7 @@ describe("Waitlist", () => {
     renderOps("/waitlist");
     expect(await screen.findByRole("heading", { name: "Waitlist" })).toBeInTheDocument();
     expect(screen.getByText(/^Self-signup is on for/)).toHaveTextContent(
-      "Self-signup is on for nesta.org.uk, westbury.gov.uk. Requests from these addresses get an account and an invitation automatically within a minute, up to 20 an hour (2 sent this hour). Other requests wait here until someone approves or rejects them.",
+      "Self-signup is on for nesta.org.uk, westbury.gov.uk. Requests from these addresses get an account and an invitation automatically within a minute, up to 100 an hour (2 sent this hour). Other requests wait here until someone approves or rejects them.",
     );
     expect(within(row("Ana Lopez")).getByText("Waiting")).toBeInTheDocument();
     expect(within(row("Ana Lopez")).getByRole("button", { name: "Approve" })).toBeInTheDocument();

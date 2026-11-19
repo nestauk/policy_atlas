@@ -237,6 +237,6 @@ export function requestFixtures(): Requests {
   ];
   return {
     items,
-    self_signup: { enabled: true, domains: ["nesta.org.uk", "westbury.gov.uk"], sent_this_hour: 2, max_per_hour: 20 },
+    self_signup: { enabled: true, domains: ["nesta.org.uk", "westbury.gov.uk"], sent_this_hour: 2, max_per_hour: 100 },
   };
 }

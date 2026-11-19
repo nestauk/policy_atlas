@@ -135,7 +135,7 @@ surface, so decision 4 and the deferred list are amended below rather than left 
    self-signup flag true, the ops-mode lifespan runs one loop every 60 seconds that turns
    unstamped waitlist rows with a listed domain (exact match on the lower-cased part after `@`,
    no subdomains) into accounts through one idempotent ensure-account command, oldest first,
-   at most `max_per_hour` (20) per hour counted from the audit table. The public
+   at most `max_per_hour` per hour (default 100 since 2026-11-19; was 20) counted from the audit table. The public
    `POST /api/v1/waitlist` route and its response are byte-identical for a listed and an
    unlisted domain, so the form still reveals nothing. The public API never gains a Cognito
    permission.

@@ -187,7 +187,7 @@ def test_ops_container_has_the_complete_least_privilege_environment_and_secret_m
         "APP_ORIGIN": "https://ops.v3.policyatlas.uk",
         "POLICY_ATLAS_SERVICE_ROLE": "ops",
         "POLICY_ATLAS_SELF_SIGNUP": "0",
-        "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR": "20",
+        "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR": "100",
         "OPS_UI_DIR": "/app/ops-ui",
         "RUNS_PER_USER": "3",
         "TASK_QUOTA_PER_YEAR": "50",
