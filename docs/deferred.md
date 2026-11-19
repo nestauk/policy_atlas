@@ -1079,6 +1079,16 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 
 ### Limits in the code
 
+- `runtime/inherit.py`, `options_scoping/longlist/longlist.py`, the label resolver and
+  `api/read_models/repository.py`: only inherit and suggest check again that the owner can still
+  read a linked source Task (`_sources_owner_reads`). The longlist build, the Task Agent context,
+  the label resolver and the option-card read use every link. Material from a source that the owner
+  can no longer read therefore stays in use, and readers of the linking Task see what was built
+  from it. [ADR 0037](adr/0037-options-scoping-task-kind-links-and-baseline-gate.md) and
+  [ADR 0039](adr/0039-options-scoping-longlist-option-searches-and-option-records.md) ask for the
+  check at every build. The fix is the same filter in the four readers, with one test for each that removes
+  the access. Condition: before Options scoping is turned on in production, or before a linking
+  Task is shared more widely than its sources.
 - `api/identity.py`: Tasks from before ownership have `owner_user_id NULL`: the owner-scoped API
   cannot reach them, the admin listing shows them with no owner or organisation, and recovery is a
   manual database UPDATE. Condition: none recorded.
