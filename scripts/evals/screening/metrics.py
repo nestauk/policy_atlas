@@ -37,7 +37,9 @@ def rates_for(model: str) -> tuple[float, float, float] | None:
         The (input, cached input, output) rates per million tokens, or ``None``
         when the model has no rate here.
     """
-    return PRICE_PER_MILLION.get(model.removeprefix("global.openai.").removeprefix("openai/"))
+    return PRICE_PER_MILLION.get(
+        model.removeprefix("global.openai.").removeprefix("openai/")
+    )
 
 
 def cost_usd(
