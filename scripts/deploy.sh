@@ -12,7 +12,7 @@ readonly SERVICE_STOP_TIMEOUT_SECONDS=600
 readonly SERVICE_STOP_POLL_SECONDS=5
 # The migration task is polled every 15 s for at most MIGRATION_WAIT_MAX_S seconds
 # (default 5,400 = 90 minutes). `aws ecs wait tasks-stopped` gave up after about 10
-# minutes, too short for a migration that backfills a large table (task 057).
+# minutes, too short for a migration that backfills a large table.
 readonly MIGRATION_POLL_SECONDS=15
 readonly MIGRATION_WAIT_MAX_S="${MIGRATION_WAIT_MAX_S:-5400}"
 
@@ -385,7 +385,7 @@ bootstrap_postconditions() {
 # operator-run but non-interactive: the IAM/SG diff was reviewed at code level,
 # so --require-approval never keeps the script from hanging on a prompt.
 run_cdk() {
-    # CLI version pinned (review finding, 026 step 7): an unpinned npx cdk
+    # CLI version pinned: an unpinned npx cdk
     # executes whatever npm serves that day with the operator's credentials.
     PATH="$REPO_ROOT/infra/.venv/bin:$PATH" npx cdk@2.1133.0 "$@" --require-approval never
 }
@@ -433,8 +433,7 @@ bootstrap() {
 
 # The template pins DesiredCount=0, but CloudFormation only re-asserts it when
 # the stack actually changes — a no-change deploy (e.g. frontend-only) leaves
-# the scaled-up service running and the stop-wait times out (E.2 finding,
-# 2026-07-28). Explicitly aligning to the template value is idempotent and
+# the scaled-up service running and the stop-wait times out. Explicitly aligning to the template value is idempotent and
 # keeps stop-old-before-migrate deterministic on every path.
 scale_down_service() {
     aws ecs update-service \
@@ -589,7 +588,7 @@ require_production_build_environment() {
 }
 
 # Resolve and validate everything publish_frontend needs. Called from
-# common_tail BEFORE the outage-inducing steps (review finding, 026 step 7): a
+# common_tail BEFORE the outage-inducing steps: a
 # publish-config problem discovered after stop→migrate would strand a stale
 # SPA on a freshly migrated backend.
 resolve_frontend_publish_config() {
@@ -608,7 +607,7 @@ resolve_frontend_publish_config() {
     # Options scoping is built up to the longlist only. Show it on staging for
     # colleagues to test; keep it hidden (listed as planned) in production
     # until shortlist + assessment land. Drop this once the capability is done.
-    # Theory of change (task 054) likewise: on staging only, while the API's
+    # Theory of change likewise: on staging only, while the API's
     # POLICY_ATLAS_THEORY_OF_CHANGE (infra/pa_config.json) is on there too.
     if [[ "$ENV_NAME" == "staging" ]]; then
         export VITE_OPTIONS_SCOPING=1
@@ -706,7 +705,7 @@ if [[ "${PA_DEPLOY_GUARD_ONLY:-}" == "1" ]]; then
     exit 0
 fi
 
-# The same kind of harness for the migration waiter (task 057): runs the real
+# The same kind of harness for the migration waiter: runs the real
 # wait-and-exit-code steps of run_migrations against a task ARN and cluster the
 # caller supplies, so scripts/test_deploy_migration_wait.sh can drive them with a
 # stubbed `aws`. Starts no task.

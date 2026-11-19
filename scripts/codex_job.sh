@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Thin shim for the Codex companion runtime, for the LEAD session's shell.
 #
-# Why (failure-log 2026-07-07): the plugin's /codex:status and /codex:result
+# Why: the plugin's /codex:status and /codex:result
 # commands are user-typed only, and their `${CLAUDE_PLUGIN_ROOT}` is injected
 # only while plugin commands execute — nothing resolves the script in the
 # lead's shell. This shim ONLY resolves the path; waiting is the companion

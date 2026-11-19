@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Check deploy.sh's migration waiter (task 057, G10) against a stubbed `aws`.
+# Check deploy.sh's migration waiter against a stubbed `aws`.
 #
 # deploy.sh polls the migration task with `aws ecs describe-tasks` every 15 s until
 # ECS reports it STOPPED, up to MIGRATION_WAIT_MAX_S seconds, then fails unless the

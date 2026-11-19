@@ -27,7 +27,7 @@ setup:
 	@echo "Test DB ready (policy_atlas_test)."
 	$(MAKE) -C backend setup
 
-# Ops CLI wrappers (owner request, 2026-08-25). The old `staging-user` /
+# Ops CLI wrappers. The old `staging-user` /
 # `prod-user` / `cognito-user` targets stay deleted (they took a password on
 # argv, suppressed the invitation, and left the account unenrolled — pinned by
 # test_the_user_provisioning_make_targets_are_deleted). These wrappers avoid
@@ -119,7 +119,7 @@ build:
 okf-validate:
 	uv run --project backend python scripts/okf_validate.py
 
-# Dependency-vulnerability audit (016 contract rev 2.2) — delegates to backend,
+# Dependency-vulnerability audit — delegates to backend,
 # where the locked dependency set actually lives.
 audit:
 	$(MAKE) -C backend audit
@@ -158,7 +158,7 @@ eval-check:
 	uv run --project backend ruff check scripts/evals/screening
 	uv run --project backend ruff format --check scripts/evals/screening
 
-# Installs frontend dependencies from the committed lockfile (task 025 F.1).
+# Installs frontend dependencies from the committed lockfile.
 # A prerequisite for drift-check (and any other frontend gate) in CI, where
 # node_modules doesn't already exist; separated from drift-check itself so
 # CI can cache/install once and reuse it across steps.
@@ -166,13 +166,13 @@ frontend-install:
 	cd frontend && pnpm install --frozen-lockfile
 
 # Regenerates both committed schema-first artifacts from the Pydantic
-# contract (task 025 F.1): the OpenAPI document, then the TypeScript types
+# contract: the OpenAPI document, then the TypeScript types
 # generated from it. Run this whenever `make drift-check` fails.
 openapi-sync:
 	$(MAKE) -C backend openapi
 	cd frontend && pnpm run gen
 
-# Schema-first drift gate (task 025 F.1): one schema generates both API
+# Schema-first drift gate: one schema generates both API
 # ends, so this fails the build the moment either committed artifact
 # (frontend/openapi.json, frontend/src/api/gen/types.ts) stops matching what
 # the backend contract actually produces. Requires frontend/node_modules
@@ -196,7 +196,7 @@ drift-check:
 	rm -f "$$tmp_types"
 	@echo "drift-check: OK"
 
-# Font-binary guard (task 025, contract strand 7): Averta/Zosia are licensed
+# Font-binary guard: Averta/Zosia are licensed
 # for the web app but their binaries must NEVER be committed to this
 # open-source repo — locally they live untracked and load via @font-face;
 # everything must render on the fallback stack without them. Catches an
@@ -207,7 +207,7 @@ font-guard:
 	fi
 	@echo "font-guard: no font binaries tracked"
 
-# The frontend gate lane (task 025 H): typecheck · lint · vitest · build.
+# The frontend gate lane: typecheck · lint · vitest · build.
 # Requires frontend/node_modules (make frontend-install).
 frontend-verify:
 	cd frontend && pnpm typecheck && pnpm lint && pnpm test && pnpm build
@@ -231,7 +231,7 @@ fe-api-smoke:
 deploy-build-guard-test: deploy-migration-wait-test
 	bash scripts/test_deploy_build_guard.sh
 
-# Checks deploy.sh's migration waiter (task 057) against a stubbed `aws`: polls
+# Checks deploy.sh's migration waiter against a stubbed `aws`: polls
 # until STOPPED, fails loudly on a non-zero exit or after MIGRATION_WAIT_MAX_S.
 deploy-migration-wait-test:
 	bash scripts/test_deploy_migration_wait.sh
