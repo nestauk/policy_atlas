@@ -142,7 +142,7 @@ def main(
     try:
         return _run(args, engine=engine, cognito=cognito, sts=sts, emit=emit, confirm=confirm)
     except OpsError as error:
-        print(f"refused: {error}", file=sys.stderr)
+        print(f"refused: {error}", file=sys.stderr)  # noqa: T201 - command-line output
         return EXIT_REFUSED
 
 
@@ -587,4 +587,4 @@ def _prompt(emit: Callable[[str], None]) -> Callable[[Target], bool]:
 
 
 def _stdout(line: str) -> None:
-    print(line)
+    print(line)  # noqa: T201 - command-line output

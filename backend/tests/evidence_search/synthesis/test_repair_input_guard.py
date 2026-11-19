@@ -182,7 +182,6 @@ def test_synthetic_payload_chars_before_and_after() -> None:
         )
     )
     after = len(build_section_repair_messages({"intent": "x"}, failing=failing)[-1]["content"])
-    print(f"repair message chars before={before} after={after}")
     # Deterministic figures for verification.md (task 056 Phase 4).
     assert (before, after) == (EXPECTED_BEFORE, EXPECTED_AFTER)
 
