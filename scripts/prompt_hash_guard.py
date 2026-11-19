@@ -9,6 +9,17 @@ live) and compares against a committed hash list (`scripts/prompt_hashes.json`):
     python3 scripts/prompt_hash_guard.py           # verify (exit 1 on drift)
     python3 scripts/prompt_hash_guard.py --update  # rewrite the hash list
 
+What is hashed:
+
+- A `.txt` file: its bytes, so any change counts.
+- A `.py` file: its syntax tree (the structure Python parses the code into),
+  not its bytes. Line numbers, formatting and `#` comments are not part of the
+  tree, so editing them does not change the hash. Every string in the code is
+  part of the tree, docstrings included, so a change to any text the model can
+  see (a prompt string, a `Field(description=...)`, a class docstring that
+  becomes a schema description) does change it. The tree is written out in a
+  form that is the same on every supported Python version.
+
 The rule: prompt surfaces change only as named, deliberate slice work. A
 drifted or missing hash means a prompt file changed (or was added/removed)
 without that being the explicit subject of the commit; re-run with --update
@@ -20,6 +31,7 @@ scripts/audit_paths.py).
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import sys
@@ -33,15 +45,15 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 #: Files that carry model-facing prompt text without "prompt" in the name (repo-relative).
 EXTRA_FILES: tuple[str, ...] = (
-    # The intervention record's Field descriptions are the model's schema (task 046, amendment 3).
+    # The intervention record's Field descriptions are the model's schema.
     "backend/src/policy_atlas/evidence_search/extract/interventions_records.py",
-    # The finding records' Field descriptions and their shared texts (R75), and the
-    # grounding judge's field list (R73).
+    # The finding records' Field descriptions and their shared texts, and the
+    # grounding judge's field list.
     "backend/src/policy_atlas/evidence_search/extract/iof_records.py",
     "backend/src/policy_atlas/evidence_search/extract/icf_records.py",
     "backend/src/policy_atlas/evidence_search/extract/finding_references.py",
     "backend/src/policy_atlas/evidence_search/synthesis/grounding_judge.py",
-    # Owner-approved pins (2026-11-01, task 056): these hold model-facing text outside the guard.
+    # These hold model-facing text outside the "prompt" file names.
     # The finding vetters' system and user prompts (IOF and ICF).
     "backend/src/policy_atlas/evidence_search/extract/finding_vetter.py",
     # The reranker's system and user prompts.
@@ -50,7 +62,7 @@ EXTRA_FILES: tuple[str, ...] = (
     "backend/src/policy_atlas/evidence_search/corpus/theme_grouping.py",
     # The facet-group clustering prompts.
     "backend/src/policy_atlas/evidence_search/group/group_clustering.py",
-    # The planner prompt substitutes TIME_BANDS from here (task 058), so a band edit
+    # The planner prompt substitutes TIME_BANDS from here, so a band edit
     # changes the prompt text.
     "backend/src/policy_atlas/runtime/task_plan.py",
 )
@@ -75,7 +87,29 @@ def rel(path: Path) -> str:
     return path.resolve().relative_to(REPO_ROOT).as_posix()
 
 
+def _tree_text(node: object) -> str:
+    """Write a syntax tree out as text, leaving out empty fields.
+
+    `ast.dump` prints empty fields on some Python versions and not on others,
+    so it would give a different hash on each; this form does not.
+    """
+    if isinstance(node, ast.AST):
+        fields = (
+            f"{name}={_tree_text(value)}"
+            for name, value in ast.iter_fields(node)
+            if value is not None and value != []
+        )
+        return f"{type(node).__name__}({', '.join(fields)})"
+    if isinstance(node, list):
+        return "[" + ", ".join(_tree_text(item) for item in node) + "]"
+    return repr(node)
+
+
 def sha256_of(path: Path) -> str:
+    """Hash a pinned file: a `.py` file's syntax tree, any other file's bytes."""
+    if path.suffix == ".py":
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        return hashlib.sha256(_tree_text(tree).encode("utf-8")).hexdigest()
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
