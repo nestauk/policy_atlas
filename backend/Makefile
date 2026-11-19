@@ -80,6 +80,7 @@ build:
 # root); `make drift-check` at root fails CI if it goes stale.
 openapi:
 	uv run python -m policy_atlas.api.export_openapi ../frontend/openapi.json
+	uv run python -m policy_atlas.api.export_openapi ../frontend/openapi-ops.json --mode ops
 
 # Dependency-vulnerability audit (016 contract rev 2.2): PyPA/OSV advisories over
 # the locked dependency set. Audits the synced environment (= the uv.lock closure;

@@ -42,6 +42,19 @@ execution checkpoints (audit plane ≠ telemetry plane).
 is what makes "single writer per task at a time" hold under two writer families that aren't
 otherwise coordinated, not a relaxation of the ordering guarantee. The third family arrived in 045 and
 the bound moved to 32 — any wider fan-out re-checks it.
+**Re-checked 2026-11-16 (task 064a's CI):** the theory-of-change check fan-out (width 6, task 054)
+exhausted the 32 retries twice in eight full runs, once locally and once on a CI runner; the children
+write about a dozen events each in under a second, so the bound is per event lost, not per writer.
+Seam in deferred.md § Security quick wins.
+**A per-task advisory lock in `append` is not a drop-in fix (task 065 review stack, 2026-11-18).**
+`pg_advisory_xact_lock` holds to the end of the **caller's** transaction, and some callers append
+early in long transactions: `assess/screen.py` appends for retracted documents and then runs the
+whole stage-1 LLM screening; `sourcing/acquire.py` appends and then embeds. Every other writer on
+that task, including steering and stop, would wait out the pass. The park and claim paths also
+take the run row and the lock in opposite orders (a deadlock). The lock was built and reverted;
+the fix must first move those appends after the slow work, or allocate the sequence outside the
+caller's transaction. Before adding any lock held to transaction end, trace every caller's
+transaction length.
 
 **The retry is not free** (045 deviation 16, adversarial B8): each collision waits for the
 competing writer's commit, and acquire, screen, classify and appraise append events inside long

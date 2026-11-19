@@ -57,3 +57,9 @@ command makes it redundant.
 - Test lanes that share one Postgres database break migration round-trips. `make test` gives each worker its own copy
   (`backend/tests/conftest.py`); a second suite on the same Postgres still needs its own
   `DATABASE_URL` name.
+- A pytest run outside `make test` must set `DATABASE_URL` to the `*_test` database
+  (`postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas_test`
+  locally) or conftest refuses.
+- A test must build the app with explicit `Settings` (a throwaway key from
+  `dev_issuer.init(tmp_path)`), never `create_app()` bare: bare reads the environment,
+  which locally finds `backend/.dev-issuer` and on CI finds nothing.

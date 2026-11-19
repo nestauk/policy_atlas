@@ -79,3 +79,16 @@ def test_pending_requires_parked_walk_never_a_phantom_card(
             assert len(history.json()["data"]) == 1
     finally:
         _cleanup(engine, task_id)
+
+
+def test_an_expired_confirm_token_is_a_409_not_a_500(tmp_path: Path) -> None:
+    """Task 064a (Q15): ``confirm_expired`` is a contract code, so the user can recompile."""
+    with api_client(tmp_path) as (client, owner, _other):
+        task_id = create_task(client, owner)
+        response = client.post(
+            f"/api/v1/tasks/{task_id}/check-ins/{uuid.uuid4()}/response",
+            headers=owner,
+            json={"kind": "free_text_confirm", "confirm_token": "gone", "apply": True},
+        )
+        assert response.status_code == 409, response.text
+        assert response.json()["error"]["code"] == "confirm_expired"

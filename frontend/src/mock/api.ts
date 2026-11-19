@@ -384,12 +384,6 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       return json({ error: { code: "validation_error", message: "Invalid waitlist body" } }, 422);
     }
     const email = String(body.email).trim().toLowerCase();
-    if (mockWaitlistEmails.has(email)) {
-      return json(
-        { error: { code: "already_registered", message: "This email is already on the waitlist." } },
-        409,
-      );
-    }
     mockWaitlistEmails.add(email);
     return json(
       {

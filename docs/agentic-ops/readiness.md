@@ -26,6 +26,13 @@ hard gates of the [task-cycle](../../.claude/skills/task-cycle/SKILL.md) skill.
   ([ADR 0026](../adr/0026-deployment-architecture.md)).
 - **Auth and tenancy.** OpenID Connect (OIDC) sign-in through Amazon Cognito, and organisations
   as the tenant boundary ([ADR 0033](../adr/0033-organisation-tenancy-and-global-admin-read.md)).
+- **Limits and the firewall.** A run cap and a yearly task quota for each user
+  ([ADR 0045](../adr/0045-per-user-run-cap-task-quota-offboarding.md)). A web application
+  firewall (WAF) on the load balancer, and a CAPTCHA on the waitlist form
+  ([ADR 0047](../adr/0047-waf-on-the-load-balancer-and-waitlist-captcha.md)).
+- **Accounts and operations.** An operations service behind the office allowlist, with its own
+  pages and its own database login, and self-signup for one email domain
+  ([ADR 0046](../adr/0046-ops-service-ops-pages-self-signup-and-ops-database-login.md)).
 - **Command surface.** The root `Makefile` (see [harness.md](harness.md) § Tool layer).
 - **Prompt governance.** The code is the source of truth for prompts. The app never fetches a
   prompt from Langfuse ([ADR 0038](../adr/0038-langfuse-observability-boundaries.md),

@@ -89,6 +89,10 @@ After you pull a change:
   The web app reads `VITE_THEORY_OF_CHANGE=1` and `VITE_OPTIONS_SCOPING=1` when it is built or
   started.
   `make dev` sets all three. `VITE_MOCK=1` runs the web app against mock data, with no API.
+- **Limits.** `RUNS_PER_USER` (default 3) is the number of runs one user can have at the same
+  time. `TASK_QUOTA_PER_YEAR` (default 50) is the number of tasks one user can create in 365
+  days; administrators are exempt. `make dev` sets the quota to 100000, so the local user is
+  never refused.
 - **Uploads.** Uploaded files go to `POLICY_ATLAS_UPLOAD_BUCKET` in the cloud, or to
   `POLICY_ATLAS_UPLOAD_DIR` locally (default `backend/.uploads`, gitignored).
 - **Ingest.** `POLICY_ATLAS_INGEST_MODE` is `in_process` (the default) or `queued`. `queued` also
