@@ -347,7 +347,7 @@ def test_cli_traces_the_revoke_a_de_enrolment_performs(
 ) -> None:
     """``de-enrol`` clears ``is_admin``, and used to do it with no record at all.
 
-    Offboarding is how the support role is most often taken away, so a trace
+    Deactivation is how the support role is most often taken away, so a trace
     that covered only ``admin revoke`` left the common case invisible. One
     mechanism serves both: the record carries the change, the CLI logs it after
     the commit.
@@ -568,10 +568,10 @@ def test_cli_org_domain_add_then_remove(engine: Engine) -> None:
         )
 
 
-def test_cli_user_offboard_says_the_ops_role_was_revoked(
+def test_cli_user_deactivate_says_the_ops_role_was_revoked(
     engine: Engine, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Contract B1: ``user offboard`` clears ``is_ops`` as it clears ``is_admin``, and says so."""
+    """``user deactivate`` clears ``is_ops`` as it clears ``is_admin``, and says so."""
     monkeypatch.setenv("LOG_FORMAT", "json")
     sub, email, _org_id = _seed_person(engine, is_ops=True)
     lines: list[str] = []
@@ -580,7 +580,7 @@ def test_cli_user_offboard_says_the_ops_role_was_revoked(
         expect_sub_lookup(stubber, sub=sub)
         expect_lock_out(stubber, sub=sub)
         status = main(
-            _argv("user", "offboard", "--email", email),
+            _argv("user", "deactivate", "--email", email),
             engine=engine,
             cognito=client,
             sts=FakeSts(),
@@ -588,10 +588,12 @@ def test_cli_user_offboard_says_the_ops_role_was_revoked(
         )
         stubber.assert_no_pending_responses()
     assert status == 0
-    assert any("offboarded" in line and "ops role revoked" in line for line in lines)
+    assert any(
+        "deactivated" in line and "cleared the admin and ops roles" in line for line in lines
+    )
     traced = _traces(capsys.readouterr().out)
     assert [(t["subject"], t["direction"], t["flag"]) for t in traced] == [
         (sub, "revoke", "is_ops")
     ]
     row = _person(engine, sub)
-    assert (row["org_id"], row["is_ops"]) == (None, False)
+    assert (row["org_id"] is not None, row["is_ops"]) == (True, False)  # keeps the organisation

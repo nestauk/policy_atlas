@@ -77,5 +77,23 @@ describe("Organisations", () => {
     await user.click(screen.getByRole("button", { name: "Sort by people" }));
     expect(names()).toEqual(["Nesta", "Policy Lab", "Westbury Council"]);
   });
-});
 
+  it("deletes an empty organisation, and offers no delete for one with people", async () => {
+    const user = userEvent.setup();
+    renderOps("/organisations");
+    await screen.findByRole("heading", { name: "Organisations" });
+    await user.click(screen.getByRole("button", { name: "Actions for Nesta" }));
+    expect(await screen.findByRole("menuitem", { name: /Delete…/ })).toHaveAttribute("aria-disabled", "true");
+    await user.keyboard("{Escape}");
+
+    await user.click(screen.getByRole("button", { name: "Add organisation" }));
+    const add = await screen.findByRole("dialog", { name: "Add organisation" });
+    await user.type(within(add).getByLabelText("Name"), "Empty Org");
+    await user.click(within(add).getByRole("button", { name: "Create" }));
+    await user.click(await screen.findByRole("button", { name: "Actions for Empty Org" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Delete…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Delete Empty Org?" });
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+    expect(await screen.findByText("Deleted Empty Org")).toBeInTheDocument();
+  });
+});

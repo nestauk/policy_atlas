@@ -9,7 +9,7 @@ CloudFormation stacks (groups of cloud resources).
 | Path | What it holds |
 | --- | --- |
 | `app.py` | The CDK entry point. It builds the stacks for one environment |
-| `infra/` | The stack code: network, database, application, certificate and analytics stacks. The application stack runs the API and the ops service (the separate service for operators). `components/` holds the parts the stacks share, for example the load balancer and the firewall (AWS WAF, the web application firewall, in `waf.py`) |
+| `infra/` | The stack code: network, database, application, certificate and analytics stacks. The application stack runs the API and the ops service (the separate service for operators). `components/` holds the parts the stacks share, for example the load balancer, the firewall (AWS WAF, the web application firewall, in `waf.py`) and the website's security headers (`security_headers.py`) |
 | `email/` | The templates for the account emails: the invitation and the verification code. Amazon Cognito (the sign-in service) sends them through Amazon SES (Simple Email Service) when an environment turns email on |
 | `*_config.json` | The committed settings for each environment (`network_config.json`, `db_config.json`, `pa_config.json`, `metabase_config.json`) |
 | `metabase/` | The container image for the Metabase analytics service |

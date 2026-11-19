@@ -32,6 +32,19 @@ class EnrolledElsewhere(OpsError):
         )
 
 
+class Deactivated(OpsError):
+    """Refusal raised when an account is deactivated and the path may not reactivate it.
+
+    Only an operator's "Add person" or "Reactivate" turns a login back on; the
+    waitlist approval and the self-signup sweep refuse (contract 066 B5).
+    """
+
+    def __init__(self, *, email: str) -> None:
+        super().__init__(
+            f"{email} is deactivated. Nothing was written. Reactivate them on People first."
+        )
+
+
 class ResendTooSoon(OpsError):
     """Refusal raised while an invitation's one-hour cooldown is active."""
 

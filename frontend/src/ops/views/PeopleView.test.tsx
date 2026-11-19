@@ -47,7 +47,7 @@ describe("People", () => {
     expect(row("Tom Ellis")).toHaveTextContent("12 of 100");
     // Invited 25 minutes ago and not signed in yet; Priya has signed in.
     expect(row("Tom Ellis")).toHaveTextContent("Invitedsent 25 min ago");
-    expect(row("Priya Shah")).toHaveTextContent("no limit");
+    expect(row("Priya Shah")).toHaveTextContent(/\d+ of ∞/);
     expect(within(row("Priya Shah")).getByText("ADMIN")).toBeInTheDocument();
     expect(within(row("Priya Shah")).getByText("OPS")).toBeInTheDocument();
     expect(within(row("Sam Holt")).getByText("not enrolled")).toBeInTheDocument();
@@ -93,8 +93,9 @@ describe("People", () => {
       "Remove from cohort",
       "Resend invitation",
       "De-enrol",
-      "Offboard",
-      "Select all 6",
+      "Deactivate",
+      "Reactivate",
+      "Select all 6 shown",
       "Clear selection",
     ]) {
       expect(within(bar).getByRole("button", { name })).toBeInTheDocument();
@@ -154,14 +155,14 @@ describe("People", () => {
     expect(await screen.findByText("Moved Sam Holt to Nesta")).toBeInTheDocument();
   });
 
-  it("offboards one person once the typed address matches", async () => {
+  it("deactivates one person once the typed address matches", async () => {
     const user = await openPeople();
     const menu = await rowMenu(user, "Jon Reyes");
-    await user.click(within(menu).getByRole("menuitem", { name: "Offboard…" }));
-    const dialog = await screen.findByRole("dialog", { name: "Offboard Jon Reyes?" });
+    await user.click(within(menu).getByRole("menuitem", { name: "Deactivate…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Deactivate Jon Reyes?" });
     const field = within(dialog).getByLabelText("Type the email to confirm");
     expect(field).toHaveAttribute("placeholder", "jon.reyes@policylab.example");
-    const button = within(dialog).getByRole("button", { name: "Offboard" });
+    const button = within(dialog).getByRole("button", { name: "Deactivate" });
     expect(button).toBeDisabled();
     await user.type(field, "jon.reyes@policylab");
     expect(button).toBeDisabled();
@@ -169,21 +170,21 @@ describe("People", () => {
     expect(button).toBeEnabled();
     expect(within(dialog).getByRole("button", { name: "Keep the account" })).toBeInTheDocument();
     await user.click(button);
-    expect(await screen.findByText(/^Offboarded /)).toBeInTheDocument();
+    expect(await screen.findByText(/^Deactivated /)).toBeInTheDocument();
   });
 
-  it("offboards several by typing the count, under every name and address", async () => {
+  it("deactivates several by typing the count, under every name and address", async () => {
     const user = await openPeople();
     await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
     await user.click(screen.getByRole("checkbox", { name: "Select Mara Okafor" }));
     await user.click(screen.getByRole("checkbox", { name: "Select Sam Holt" }));
-    await user.click(screen.getByRole("button", { name: "Offboard" }));
-    const dialog = await screen.findByRole("dialog", { name: "Offboard 3 people?" });
+    await user.click(screen.getByRole("button", { name: "Deactivate" }));
+    const dialog = await screen.findByRole("dialog", { name: "Deactivate 3 people?" });
     for (const text of ["Tom Ellis", "tom.ellis@nesta.org.uk", "Mara Okafor", "mara.okafor@nesta.org.uk", "Sam Holt"]) {
       expect(dialog).toHaveTextContent(text);
     }
     const field = within(dialog).getByLabelText("Type the number of people to confirm");
-    const button = within(dialog).getByRole("button", { name: "Offboard" });
+    const button = within(dialog).getByRole("button", { name: "Deactivate" });
     await user.type(field, "2");
     expect(button).toBeDisabled();
     await user.clear(field);
@@ -200,6 +201,22 @@ describe("People", () => {
     await user.click(screen.getByRole("button", { name: "Resend invitation" }));
     expect(await screen.findByText("1 done, 1 too soon")).toBeInTheDocument();
     expect(within(row("Tom Ellis")).getByText("Sent less than an hour ago")).toBeInTheDocument();
+  });
+
+  it("shows a failed action in a dialog, with Try again", async () => {
+    const user = await openPeople();
+    opsMock.override = (method, path) =>
+      method === "POST" && path === "/api/v1/ops/people/enrol" ? apiError(500, "internal", "internal server error") : undefined;
+    await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
+    await user.click(screen.getByRole("button", { name: "Move to" }));
+    const move = await screen.findByRole("dialog", { name: "Move Tom Ellis to an organisation" });
+    await user.click(within(move).getByRole("combobox", { name: "Organisation" }));
+    await user.click(await screen.findByRole("option", { name: "Policy Lab" }));
+    await user.click(within(move).getByRole("button", { name: "Move" }));
+    const failed = await screen.findByRole("dialog", { name: "Could not finish the action." });
+    opsMock.override = undefined;
+    await user.click(within(failed).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
   it("says when the list cannot load, with Try again", async () => {
@@ -259,7 +276,7 @@ describe("People, after the review", () => {
     const user = await openPeople();
     const slot = screen.getByRole("table", { name: "People" }).parentElement?.previousElementSibling as HTMLElement;
     // With nothing ticked the room holds only "Select all".
-    expect(within(slot).getByRole("button", { name: "Select all 6" })).toBeInTheDocument();
+    expect(within(slot).getByRole("button", { name: "Select all 6 shown" })).toBeInTheDocument();
     await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
     expect(slot).toContainElement(selectionBar());
   });
@@ -268,7 +285,7 @@ describe("People, after the review", () => {
     const user = userEvent.setup();
     renderOps("/people?org=00000000-0000-4000-8000-00000000000a");
     await screen.findByRole("heading", { name: "People" });
-    expect(screen.getByRole("combobox", { name: "Organisation filter" })).toHaveTextContent("Nesta");
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Organisation filter" })).toHaveTextContent("Nesta"));
     const shown = screen.getAllByRole("checkbox", { name: /^Select (?!everyone)/ }).length;
     await user.click(screen.getByRole("button", { name: `Select all ${shown} shown` }));
     expect(selectionBar()).toHaveTextContent(`${shown} selected`);
@@ -285,11 +302,27 @@ describe("People, after the review", () => {
     expect(link).toHaveAttribute("href", "/people?cohort=00000000-0000-4000-8000-00000000000d");
   });
 
+  it("hides deactivated people until the status filter shows them, then reactivates one", async () => {
+    const user = await openPeople();
+    expect(screen.queryByText("Ada Quinn")).toBeNull();
+    await user.click(screen.getByRole("combobox", { name: "Status filter" }));
+    await user.click(await screen.findByRole("option", { name: "Deactivated" }));
+    expect(row("Ada Quinn")).toHaveTextContent("DEACTIVATED");
+    const menu = await rowMenu(user, "Ada Quinn");
+    expect(within(menu).queryByRole("menuitem", { name: "Deactivate…" })).toBeNull();
+    await user.click(within(menu).getByRole("menuitem", { name: "Reactivate…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Reactivate Ada Quinn?" });
+    expect(dialog).toHaveAccessibleDescription(/^They can sign in again/);
+    await user.click(within(dialog).getByRole("button", { name: "Reactivate" }));
+    expect(await screen.findByText("Reactivated Ada Quinn")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Ada Quinn", { selector: "span[title]" })).toBeNull());
+  });
+
   it("returns focus to the row's menu button when its dialog closes", async () => {
     const user = await openPeople();
     const menu = await rowMenu(user, "Jon Reyes");
-    await user.click(within(menu).getByRole("menuitem", { name: "Offboard…" }));
-    const dialog = await screen.findByRole("dialog", { name: "Offboard Jon Reyes?" });
+    await user.click(within(menu).getByRole("menuitem", { name: "Deactivate…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Deactivate Jon Reyes?" });
     await user.click(within(dialog).getByRole("button", { name: "Keep the account" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Actions for Jon Reyes" })).toHaveFocus());
   });
@@ -309,8 +342,8 @@ describe("People, after the review", () => {
     const user = await openPeople();
     await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
     await user.click(screen.getByRole("checkbox", { name: "Select Jon Reyes" }));
-    await user.click(within(selectionBar()).getByRole("button", { name: "Offboard" }));
-    const dialog = await screen.findByRole("dialog", { name: "Offboard 2 people?" });
+    await user.click(within(selectionBar()).getByRole("button", { name: "Deactivate" }));
+    const dialog = await screen.findByRole("dialog", { name: "Deactivate 2 people?" });
     expect(dialog).toHaveAccessibleDescription(/^This stops them signing in/);
     const sentence = within(dialog).getByText(/^This stops them signing in/);
     const field = within(dialog).getByLabelText("Type the number of people to confirm");

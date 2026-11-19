@@ -211,6 +211,41 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         ops_allowlist_size=OPS_ALLOWLIST_SIZE,
         cross_region_references=True,
     )
+    enforce_config = json.loads(json.dumps(PA_CONFIG))
+    enforce_config["policy_atlas_config"]["csp_mode"] = "enforce"
+    ENFORCE_APP_STACK = PolicyAtlasStack(
+        APP,
+        "PaV3AppStackEnforce",
+        pa_config=enforce_config,
+        certificate=CERT_STACK.certificate,
+        env=ENV,
+        env_name=ENV_NAME,
+        ops_allowlist_size=OPS_ALLOWLIST_SIZE,
+        cross_region_references=True,
+    )
+    coupling_config = json.loads(json.dumps(PA_CONFIG))
+    coupling_config["policy_atlas_config"]["cognito_domain_prefix"] = "pa-csp-coupling-test"
+    COUPLING_APP_STACK = PolicyAtlasStack(
+        APP,
+        "PaV3AppStackCspCoupling",
+        pa_config=coupling_config,
+        certificate=CERT_STACK.certificate,
+        env=ENV,
+        env_name=ENV_NAME,
+        ops_allowlist_size=OPS_ALLOWLIST_SIZE,
+        cross_region_references=True,
+    )
+    prod_config = _load_environments("pa_config.json")["prod"]
+    PROD_APP_STACK = PolicyAtlasStack(
+        APP,
+        "PaV3AppStackProdCsp",
+        pa_config=prod_config,
+        certificate=CERT_STACK.certificate,
+        env=ENV,
+        env_name=ENV_NAME,
+        ops_allowlist_size=OPS_ALLOWLIST_SIZE,
+        cross_region_references=True,
+    )
     ANALYTICS_STACK = PaV3AnalyticsStack(
         APP,
         "PaV3AnalyticsStack",
@@ -233,6 +268,9 @@ OPENAI_APP_TEMPLATE = Template.from_stack(ROUTE_APP_STACKS["openai-direct"]).to_
 IN_PROCESS_APP_TEMPLATE = Template.from_stack(IN_PROCESS_APP_STACK).to_json()
 EMAIL_APP_TEMPLATE = Template.from_stack(EMAIL_APP_STACK).to_json()
 NO_EMAIL_APP_TEMPLATE = Template.from_stack(NO_EMAIL_APP_STACK).to_json()
+ENFORCE_APP_TEMPLATE = Template.from_stack(ENFORCE_APP_STACK).to_json()
+COUPLING_APP_TEMPLATE = Template.from_stack(COUPLING_APP_STACK).to_json()
+PROD_APP_TEMPLATE = Template.from_stack(PROD_APP_STACK).to_json()
 RENDERED_TEMPLATES = {
     stack_name: json.dumps(template, sort_keys=True)
     for stack_name, template in TEMPLATES.items()
@@ -1298,17 +1336,17 @@ def test_cloudfront_uses_oac_with_spa_fallback_and_certificate():
         config["ViewerCertificate"]["AcmCertificateArn"]
     )
     assert all("OriginAccessControlId" in origin for origin in config["Origins"])
-    # Review-stack hardening pin (026 step 7): the managed SecurityHeadersPolicy
-    # (HSTS etc.) on the default and /index.html behaviors.
-    security_headers_policy_id = "67f7725c-6f97-4210-82d7-5512b31e9d03"
-    assert (
-        config["DefaultCacheBehavior"]["ResponseHeadersPolicyId"]
-        == security_headers_policy_id
-    )
+    # Task 064c: both web behaviours use the one custom headers policy.
+    security_headers_policy_id = config["DefaultCacheBehavior"]["ResponseHeadersPolicyId"]
+    assert security_headers_policy_id != "67f7725c-6f97-4210-82d7-5512b31e9d03"
     assert all(
         behavior["ResponseHeadersPolicyId"] == security_headers_policy_id
         for behavior in config["CacheBehaviors"]
     )
+    assert security_headers_policy_id in [
+        {"Ref": logical_id}
+        for logical_id, _ in _resources(app_template, "AWS::CloudFront::ResponseHeadersPolicy")
+    ]
     assert {
         (response["ErrorCode"], response["ResponseCode"], response["ResponsePagePath"])
         for response in config["CustomErrorResponses"]

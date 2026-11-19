@@ -70,7 +70,7 @@ class Settings:
     ingest_queue_url: str | None = None
     service_role: Literal["api", "ops"] = "api"
     self_signup_enabled: bool = False
-    self_signup_max_per_hour: int = 20
+    self_signup_max_per_hour: int = 100
     ops_ui_dir: Path | None = Path("/app/ops-ui")
 
 
@@ -129,7 +129,7 @@ def load_settings() -> Settings:
         service_role=service_role_from_env(),
         self_signup_enabled=_optional("POLICY_ATLAS_SELF_SIGNUP") == "1",
         self_signup_max_per_hour=_positive_int(
-            "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR", default=20
+            "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR", default=100
         ),
         ops_ui_dir=Path(_optional("OPS_UI_DIR") or "/app/ops-ui"),
     )

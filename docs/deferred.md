@@ -1125,12 +1125,15 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   with one-month retention or in the operator's terminal. Options: a log subscription filter to long
   retention, or an `ops_action` row from every CLI command. Condition: none recorded (raised with
   the DPIA, data protection impact assessment).
-- There is no user deletion and no ownership transfer; they ship together. `user offboard` ([ADR
-  0045](adr/0045-per-user-run-cap-task-quota-offboarding.md)) is the removal lever: it disables the
-  Cognito account, revokes its refresh tokens, de-enrols the person and switches off their public
-  task links. Two gaps stay open. An access token already issued works for up to 60 minutes, and an
-  open progress stream stays open until its run ends; a `disabled` check on every request would
-  close this at the cost of one database read per request. Erasure is two-part: the database keeps
+- There is no user deletion and no ownership transfer; they ship together. `user deactivate` ([ADR
+  0045](adr/0045-per-user-run-cap-task-quota-offboarding.md); it replaced `user offboard` in task
+  066) is the removal lever: it disables the Cognito account, revokes its refresh tokens, clears the
+  roles, marks the person deactivated and switches off their public task links. The person keeps
+  their organisation and work (owner ruling, 2026-11-19). Two gaps stay open. An access token
+  already issued works for up to 60 minutes, and since the organisation is kept it can also read
+  the organisation's shared work in that window; an open progress stream stays open until its run
+  ends. A `deactivated_at IS NULL` check where the public API loads the caller would close this at
+  the cost of one database read per request. Erasure is two-part: the database keeps
   `email` and `display_name`, and the Cognito account is disabled, not deleted. Condition: a real
   user asks for erasure, or the 60-minute window becomes unacceptable.
 - The privacy notice disagrees with the product: § 7 promises permanent deletion (database
@@ -1211,7 +1214,7 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   links), CSV (comma-separated values) import of a pilot with cohorts, and onboarding answers. The
   design is in the owner's explainer. Condition: that task starts.
 - **Now** Confirm on staging that `AdminUserGlobalSignOut` succeeds on an account that is already
-  disabled; a rerun of `user offboard` assumes it. Condition: the next staging session.
+  disabled; a rerun of `user deactivate` assumes it. Condition: the next staging session.
 
 ## Infrastructure and deployment
 
@@ -1234,6 +1237,28 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 - The firewall log and its samples hold client addresses for one month in the account; the report
   prints them only with `--addresses`. Redacting `httpRequest.clientIp` would lose the field the
   count week needs. Condition: none recorded.
+- The Content Security Policy allows `'unsafe-inline'` in `style-src`: Radix (dialogs, sheets) adds
+  a `<style>` element whose content changes at run time, and a static CloudFront header cannot carry
+  a nonce (a one-time value per response). Inline styles cannot run code. Condition: a Radix version
+  without run-time `<style>`, or the HTML served by something other than S3 so a nonce is possible.
+- The Content Security Policy has no report collector (`report-to`), so after enforce a violation is
+  seen only if someone opens the browser console. Condition: a violation is missed in production;
+  then `report-to` and a small endpoint that stores the reports.
+- No automated browser check of the Content Security Policy (owner ruling, [ADR
+  0048](adr/0048-content-security-policy-and-security-headers-on-cloudfront.md)). A Playwright test
+  that serves the built app with the real header and fails on any CSP console line would catch a
+  library that breaks the policy; it needs the policy string shared between infra and the frontend
+  test, about half a day. Until then [DEPLOYMENT.md](../infra/DEPLOYMENT.md) § Security headers asks
+  whoever adds a third-party library to rerun the manual pass. Condition: a library change breaks
+  the policy unseen.
+- The ops pages and the API's own responses carry no Content Security Policy: the backend serves
+  both through the load balancer, not CloudFront. The ops host is limited to allowlisted addresses;
+  API responses are JSON, from which no page is built. Condition: the ops pages leave the
+  allowlist; then a small backend middleware that adds the headers on the ops host.
+- Sign-in tokens stay in `sessionStorage` with a 30-day refresh token (owner ruling, ADR 0048). A
+  shorter refresh-token lifetime changes how often people sign in, which is a product decision;
+  moving tokens out of `sessionStorage` is a larger change to the sign-in flow. Condition: a product
+  decision on sign-in frequency.
 
 ### Limits in the code
 
@@ -1263,6 +1288,11 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   The managed rule groups skip the health paths; in block mode only the general rate rule could
   refuse the call, if the runner's address sent over 6,000 requests in 5 minutes. Condition: a
   deploy fails on that check.
+- `infra/infra/components/security_headers.py`: The Content Security Policy's `connect-src` allows
+  every `https://*.awswaf.com` host where the CAPTCHA is on; `script-src` is already narrowed to
+  `https://*.captcha-sdk.awswaf.com`, but nobody has seen which hosts the CAPTCHA script calls.
+  Condition: the staging report-only pass; then list the hosts from the browser's network tab and
+  narrow `connect-src` to them.
 - `scripts/waf_report.sh`: The firewall report reads at most 10,000 matched requests per run (the
   Logs Insights ceiling per query). Condition: a count week reaches it; then page by day.
 
@@ -1276,6 +1306,12 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   deploy and repeat the pass ([DEPLOYMENT.md](../infra/DEPLOYMENT.md) § The firewall). Staging
   first; production's CAPTCHA goes on after the staging live check. Condition: the staging live
   check passes.
+- **Planned** (the Content Security Policy's enforce switch, [ADR
+  0048](adr/0048-content-security-policy-and-security-headers-on-cloudfront.md)) Both environments
+  send the policy in report-only mode (`csp_mode: "report-only"`). After each environment's manual
+  pass, set `csp_mode: "enforce"` in `infra/pa_config.json`, deploy and repeat the pass
+  ([DEPLOYMENT.md](../infra/DEPLOYMENT.md) § Security headers). Staging first. Condition: the staging
+  report-only pass has no unexplained line.
 - **Now** The dead-letter, NAT traffic and writer CPU-credit alarms have no notification action (no
   SNS, Simple Notification Service, topic), and the firewall has no alarms. Add one topic with an
   email subscription, then an alarm on `BlockedRequests` for the general rate rule and the managed

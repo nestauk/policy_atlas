@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 import {
   AuthProvider as OidcLibProvider,
@@ -68,8 +68,14 @@ function OidcAuthAdapter({
   // etc. (and therefore the `AuthApi` object built below) from changing
   // identity on every renewal — consumers like `useRunStream` key effects
   // on the `AuthApi` reference and would otherwise reconnect needlessly.
+  //
+  // A layout effect, not a plain one: children's effects run before this
+  // provider's, so a query a child starts on the render that completes
+  // sign-in would read the old, signed-out `oidc` and go out with no token
+  // (the ops pages' first-load 401, 2026-11-19). Every layout effect runs
+  // before any plain effect, so the ref is current when queries start.
   const oidcRef = useRef(oidc);
-  useEffect(() => {
+  useLayoutEffect(() => {
     oidcRef.current = oidc;
   });
 

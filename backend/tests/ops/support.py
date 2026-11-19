@@ -95,6 +95,15 @@ def expect_lookup(stubber: Stubber, *, email: str, sub: str | None) -> None:
     )
 
 
+def expect_enabled(stubber: Stubber, *, sub: str, enabled: bool = True) -> None:
+    """Queue the ``AdminGetUser`` that reads whether an existing account can sign in."""
+    stubber.add_response(
+        "admin_get_user",
+        {"Username": sub, "Enabled": enabled},
+        {"UserPoolId": POOL_ID, "Username": sub},
+    )
+
+
 def expect_status_lookup(stubber: Stubber, *, email: str, sub: str, status: str) -> None:
     """Queue one ``ListUsers`` by address answering with an account in ``status``.
 
@@ -246,6 +255,6 @@ def expect_resend(stubber: Stubber, *, username: str) -> None:
 
 
 def expect_lock_out(stubber: Stubber, *, sub: str) -> None:
-    """Queue the disable then the global sign-out of ``user offboard``, in that order."""
+    """Queue the disable then the global sign-out of ``user deactivate``, in that order."""
     for operation in ("admin_disable_user", "admin_user_global_sign_out"):
         stubber.add_response(operation, {}, {"UserPoolId": POOL_ID, "Username": sub})

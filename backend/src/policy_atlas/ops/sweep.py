@@ -14,7 +14,7 @@ from policy_atlas.api.deps import Identity
 from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import ops_action, organisation, organisation_domain, waitlist_entry
 from policy_atlas.ops import commands
-from policy_atlas.ops.errors import EnrolledElsewhere, OpsError
+from policy_atlas.ops.errors import Deactivated, EnrolledElsewhere, OpsError
 
 log = structlog.get_logger()
 
@@ -23,7 +23,7 @@ log = structlog.get_logger()
 #: Requests page shows it as "Check" for an operator. ``refused`` is a
 #: deterministic refusal (an address Cognito or the command rejects); retrying it
 #: every minute would only fill ``ops_action``.
-TERMINAL_OUTCOMES: tuple[str, ...] = ("enrolled_elsewhere", "refused")
+TERMINAL_OUTCOMES: tuple[str, ...] = ("enrolled_elsewhere", "refused", "deactivated")
 
 #: Cognito errors worth retrying next tick; any other ``ClientError`` is terminal.
 _TRANSIENT_COGNITO_CODES = frozenset(
@@ -179,6 +179,15 @@ def sweep_once(
                 )
             elsewhere += 1
             log.info("ops.sweep_enrolled_elsewhere", entry_id=target, org=domains[domain].name)
+        except Deactivated:
+            # A deactivated person cannot get back in through the public form
+            # (contract 066 B5): the request waits for an operator.
+            with engine.begin() as conn:
+                commands.record_action(
+                    conn, actor="sweep", action="invite", target=target, outcome="deactivated"
+                )
+            refused += 1
+            log.info("ops.sweep_deactivated", entry_id=target)
         except Exception as error:
             outcome = "failed" if _is_transient(error) else "refused"
             with engine.begin() as conn:

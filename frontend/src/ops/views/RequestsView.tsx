@@ -16,6 +16,7 @@ import {
   DANGER_CLASS,
   Dialog,
   EmptyRows,
+  FailedDialog,
   FailedLine,
   Field,
   Loading,
@@ -357,7 +358,7 @@ export function RequestsView() {
             {rows.length === 0 && <EmptyRows label="No requests yet." />}
           </div>
         )}
-        {retry !== null && <FailedLine message="Could not approve the request." onRetry={retry} />}
+        {retry !== null && <FailedDialog message="Could not finish the action." onRetry={retry} onClose={() => setRetry(null)} />}
       </div>
       {viewing !== null && (
         <Dialog

@@ -25,7 +25,14 @@ from policy_atlas.ops import commands
 from policy_atlas.ops.sweep import SweepReport, sweep_once
 from tests.api.org_support import make_org, ops_enrol
 from tests.helpers import now as real_now
-from tests.ops.support import POOL_ID, cognito, expect_create, expect_lookup, fresh_sub
+from tests.ops.support import (
+    POOL_ID,
+    cognito,
+    expect_create,
+    expect_enabled,
+    expect_lookup,
+    fresh_sub,
+)
 
 _NOW = datetime(2026, 11, 17, 12, 0, tzinfo=UTC)
 
@@ -220,6 +227,7 @@ def test_sweep_enrols_existing_unenrolled_account_without_sending(engine: Engine
     sub = fresh_sub("existing")
     with cognito() as (client, stubber):
         expect_lookup(stubber, email=f"existing@{_DOMAIN}", sub=sub)
+        expect_enabled(stubber, sub=sub)
         assert sweep_once(engine, _identity(client), _settings(), now=_NOW) == SweepReport(
             enrolled=1
         )
@@ -235,6 +243,7 @@ def test_sweep_records_elsewhere_once(engine: Engine) -> None:
         ops_enrol(conn, user_id=sub, org_id=other_org, email=f"elsewhere@{_DOMAIN}")
     with cognito() as (client, stubber), capture_logs() as logs:
         expect_lookup(stubber, email=f"elsewhere@{_DOMAIN}", sub=sub)
+        expect_enabled(stubber, sub=sub)
         assert sweep_once(engine, _identity(client), _settings(), now=_NOW) == SweepReport(
             elsewhere=1
         )
@@ -250,6 +259,30 @@ def test_sweep_records_elsewhere_once(engine: Engine) -> None:
         )
         requests = list_requests(conn, _settings())
     assert next(item for item in requests.items if item.entry_id == entry_id).status == "check"
+
+
+def test_sweep_never_reactivates_a_disabled_account(engine: Engine) -> None:
+    """Task 066 B5: the public form is no way back in; the request waits as "check"."""
+    org_id, _ = _domain(engine)
+    entry_id = _entry(engine, email=f"gone@{_DOMAIN}")
+    sub = fresh_sub("gone")
+    with engine.begin() as conn:
+        ops_enrol(conn, user_id=sub, org_id=org_id, email=f"gone@{_DOMAIN}")
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=f"gone@{_DOMAIN}", sub=sub)
+        expect_enabled(stubber, sub=sub, enabled=False)
+        assert sweep_once(engine, _identity(client), _settings(), now=_NOW) == SweepReport(
+            refused=1
+        )
+        assert sweep_once(engine, _identity(client), _settings(), now=_NOW) == SweepReport()
+        stubber.assert_no_pending_responses()  # no AdminEnableUser, no invitation
+    with engine.connect() as conn:
+        assert conn.execute(
+            select(ops_action.c.outcome).where(ops_action.c.target == str(entry_id))
+        ).scalar_one() == "deactivated"
+        requests = list_requests(conn, _settings())
+    item = next(item for item in requests.items if item.entry_id == entry_id)
+    assert (item.status, item.account_created_at) == ("check", None)
 
 
 def test_sweep_stops_at_the_hourly_invitation_cap(

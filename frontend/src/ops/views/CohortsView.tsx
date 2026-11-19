@@ -31,7 +31,9 @@ import {
 } from "../ui";
 
 /** A cohort's date, "1 Dec 2026", always with its year; read as a local day, not a UTC instant. */
-const day = (value: string) => formatDate(`${value}T00:00:00`, "short", { now: new Date(0) });
+// Non-breaking spaces keep each date whole; the range wraps at the dash
+// instead of running into the Links column.
+const day = (value: string) => formatDate(`${value}T00:00:00`, "short", { now: new Date(0) }).replace(/ /g, "\u00a0");
 
 /** "1 Dec 2026 – 31 Jan 2027", "from 1 Dec 2026", "until 31 Jan 2027", or "—". */
 function dates(cohort: Cohort): string {
@@ -141,7 +143,7 @@ export function CohortsView() {
                     <td className={cn(TD_CLASS, FIGURE_CLASS)}>
                       <Quota value={cohort.runs_per_user} />
                     </td>
-                    <td className={cn(TD_CLASS, "whitespace-nowrap")}>
+                    <td className={TD_CLASS}>
                       <Figures text={dates(cohort)} />
                     </td>
                     <td className={TD_CLASS}>
