@@ -164,7 +164,7 @@ same `curl`, the second pass and the full-chain smoke (one task run with its pro
 - `infra/pa_config.json`: `"csp_mode": "report-only"` in both environments.
 - `infra/tests/unit/test_security_headers.py` (new) and `test_synth.py` (three extra
   whole-stack synths: enforce, coupling, production; the managed-id pin replaced).
-- `infra/DEPLOYMENT.md` § 4 "Security headers"; `docs/deferred.md` § Security headers
+- `infra/DEPLOYMENT.md` § 4 "Security headers"; `docs/deferred.md` § Infrastructure and deployment
   (task 064c seams); the programme map's 064c paragraph; ADR 0048 § As built.
 - **No deviations from the contract or the plan.** One lead addition to the delegated
   build: the whole-stack test for a missing or wrong `csp_mode` (plan P6 asked for it; the
@@ -304,7 +304,7 @@ id" check was replaced by a stronger Ref check.
 
 ## Deferred work
 
-Seams left open → [docs/deferred.md](../../deferred.md) § Security headers (task 064c
-seams): the enforce switch per environment, `'unsafe-inline'` styles, no report collector,
+Seams left open → [docs/deferred.md](../../deferred.md) § Infrastructure and deployment
+(regrouped by part of the system on `dev` in PR #134): the enforce switch per environment, `'unsafe-inline'` styles, no report collector,
 no automated browser check, no CSP on the ops pages or API responses, tokens in
-`sessionStorage` with a 30-day refresh token.
+`sessionStorage` with a 30-day refresh token, and the CAPTCHA's wide `connect-src` source.

@@ -146,7 +146,7 @@ What the reviews found and this PR fixes:
 
 ## Known gaps & deferred seams
 
-`docs/deferred.md` § Security headers: the switch to enforce in each environment; inline
+`docs/deferred.md` § Infrastructure and deployment: the switch to enforce in each environment; inline
 styles; no report collector; no automated browser check; no CSP on the ops pages or the
 API's own responses; tokens in `sessionStorage` with a 30-day refresh token; the CAPTCHA's
 network source still wide.
