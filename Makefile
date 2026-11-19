@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast eval-check okf-validate audit audit-paths prompt-guard eval-search-recall frontend-install openapi-sync drift-check font-guard frontend-verify frontend-verify-fast fe-api-smoke deploy-build-guard-test deploy-migration-wait-test infra-setup deploy-check deploy-update deploy-bootstrap
+.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast eval-check okf-validate audit audit-paths rules-check prompt-guard eval-search-recall frontend-install openapi-sync drift-check font-guard frontend-verify frontend-verify-fast fe-api-smoke deploy-build-guard-test deploy-migration-wait-test infra-setup deploy-check deploy-update deploy-bootstrap
 
 # Root Makefile (025 A.2 monorepo hoist): the Python project lives in
 # backend/; this Makefile owns the shared db service + the root-level gates
@@ -128,6 +128,11 @@ audit:
 # hoisted backend/ path as repo-root-relative instead of backend/-relative.
 audit-paths:
 	uv run --project backend python scripts/audit_paths.py
+
+# Path-scoped rule files (.claude/rules/): fails if a `paths:` pattern matches no
+# tracked file, or a rule names a repository path that no longer exists.
+rules-check:
+	uv run --project backend python scripts/rules_check.py
 
 # Prompt-family content-hash guard: fails if any prompt-bearing
 # module or prompt text file drifted from its committed hash (scripts/prompt_hashes.json) — prompt
