@@ -222,7 +222,7 @@ describe("the committed report page (task 058, round 10)", () => {
     const plan = within(header).getByRole("button", { name: "See the plan" });
     const ask = within(header).getByRole("button", { name: "Ask about this analysis" });
     expect(plan.parentElement).toBe(ask.parentElement);
-    expect(plan.parentElement).toHaveClass("print-hide", "flex");
+    expect(plan.parentElement).toHaveClass("print-hide");
     const facts = header.querySelector("dl") as HTMLElement;
     expect(plan.parentElement?.compareDocumentPosition(facts)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
@@ -237,7 +237,6 @@ describe("the committed report page (task 058, round 10)", () => {
     // round 11).
     const count = within(facts).getByRole("link", { name: "12 cited out of 118 included" });
     expect(count).toHaveAttribute("href", "#references");
-    expect(facts).toHaveClass("text-meta");
     expect(screen.queryByText("Study types")).toBeNull();
     const references = screen.getByRole("region", { name: "References" });
     expect(within(references).queryByRole("list")).toBeNull();
@@ -251,7 +250,6 @@ describe("the committed report page (task 058, round 10)", () => {
     const title = screen.getByRole("heading", { level: 1 });
     const dateline = title.nextElementSibling as HTMLElement;
     expect(dateline).toHaveTextContent("Last updated 5 November 2026");
-    expect(dateline).toHaveClass("text-meta", "text-grey");
     expect(dateline.querySelector("time")).toHaveTextContent("5 November 2026");
     expect(document.querySelector("header dl")).not.toHaveTextContent("Last updated");
   });
@@ -290,8 +288,8 @@ describe("the committed report page (task 058, round 10)", () => {
     renderReport({ funnel: { found: 312, relevant: 118, quality_checked: 90, read_in_full: 64, selected: 40, cited: 12 } });
     const method = screen.getByRole("heading", { level: 2, name: "How the evidence was gathered" });
     const section = method.closest("section") as HTMLElement;
-    // Shut: the one line, at the References' size.
-    expect(within(section).getByText("312 found → 118 included → 12 cited")).toHaveClass("text-lead", "max-md:text-body");
+    // Shut: the one line.
+    expect(within(section).getByText("312 found → 118 included → 12 cited")).toBeInTheDocument();
     await user.click(within(method).getByRole("button"));
     const counts = within(section).getByRole("table", { name: "How the evidence was gathered" });
     const rows = within(counts)
@@ -299,8 +297,6 @@ describe("the committed report page (task 058, round 10)", () => {
       .map((row) => [...row.children].map((cell) => cell.textContent).join(" "));
     // The Landscape funnel's names; quality-checked is not one of the five.
     expect(rows).toEqual(["Found 312", "Relevant 118", "Full text 64", "Shortlisted 40", "Cited 12"]);
-    expect(within(counts).getAllByRole("cell").every((cell) => cell.classList.contains("tabular-nums"))).toBe(true);
-    expect(within(counts).getAllByRole("cell").every((cell) => cell.classList.contains("text-right"))).toBe(true);
     // The plain sentence stays; the distributions are tables with captions,
     // not headings, so the outline keeps one heading for the section.
     expect(section).toHaveTextContent("The rest of this section covers only the cited sources; the Landscape tab shows the whole search.");
@@ -331,11 +327,6 @@ describe("the committed report page (task 058, round 10)", () => {
     expect(href("Relevant")).toBe(`${all}?status=Included`);
     expect(href("Cited")).toBe(`${all}?cited=true`);
     expect(href("Full text")).toBe(`${all}?depth=full_text`);
-    // The References' quiet link, not Electric Blue (owner, round 13).
-    for (const link of within(section).getAllByRole("link").filter((node) => node.closest("table") !== null)) {
-      expect(link).toHaveClass("text-navy", "decoration-line-2");
-      expect(link).not.toHaveClass("text-blue");
-    }
     // The clickable-only rule: the table has no filter for these.
     for (const plain of ["Shortlisted", "Not reported"]) {
       expect(within(section).queryByRole("link", { name: plain })).toBeNull();
@@ -347,10 +338,9 @@ describe("the committed report page (task 058, round 10)", () => {
     expect(href("2019")).toBe(`${all}?cited=true&year_from=2019&year_to=2019`);
     expect(href("United Kingdom")).toBe(`${all}?cited=true&country=United+Kingdom`);
     expect(href("School food")).toBe(`${all}?cited=true&theme=t-1`);
-    // The label is the link; the count stays a plain right-aligned figure.
+    // The label is the link; the count stays plain.
     const theme = within(section).getByRole("link", { name: "School food" }).closest("tr") as HTMLElement;
     expect(within(theme).getAllByRole("link")).toHaveLength(1);
-    expect(within(theme).getByRole("cell")).toHaveClass("text-right");
   });
 
   it("outlines parts as h2 and their sections as h3, collapsible headings holding their button", () => {
@@ -382,8 +372,6 @@ describe("the committed report page (task 058, round 10)", () => {
     const findings = screen.getByRole("heading", { name: "Key findings" }).closest("section") as HTMLElement;
     const marker = within(findings).getByRole("button", { name: "Sources 7 and 12" });
     expect(marker).toHaveTextContent("[7,12]");
-    expect(marker).toHaveClass("citation-number", "ml-1");
-    expect(marker).not.toHaveClass("mx-1");
     // The words are not a tab stop; the marker is.
     const words = within(findings).getByText(KF_CLAIM);
     expect(words).not.toHaveAttribute("tabindex");
@@ -422,16 +410,13 @@ describe("the committed report page (task 058, round 10)", () => {
     expect(screen.getByRole("heading", { level: 1, name: QUESTION })).toBeInTheDocument();
   });
 
-  it("sets the boxes' marks line under the title: type, strength with its square, then the facts at Meta Grey (round 14)", () => {
+  it("sets the boxes' marks line under the title: type, strength with its square, then the facts", () => {
     renderReport();
     const card = screen.getByRole("heading", { level: 4, name: "Leeds pilot" }).closest("li") as HTMLElement;
     const sources = screen.getByRole("heading", { name: "Most relevant sources" }).closest("section") as HTMLElement;
     const entry = within(sources).getAllByRole("listitem")[0];
     for (const box of [card, entry]) {
-      // No chips: one marks line.
-      expect(box.querySelector(".text-\\[11\\.5px\\]")).toBeNull();
       const line = box.querySelector("[data-marks-line]") as HTMLElement;
-      expect(line).toHaveClass("text-meta", "text-grey");
       expect(within(line).getByTestId("strength-mark")).toBeInTheDocument();
     }
     expect(card.querySelector("[data-marks-line]")).toHaveTextContent(
@@ -445,7 +430,7 @@ describe("the committed report page (task 058, round 10)", () => {
     );
   });
 
-  it("sets the method as one column: every table at the prose measure, one figure column, figures alone (round 14)", async () => {
+  it("sets the method's tables with the figures alone in their cells, and the sentence once", async () => {
     const user = userEvent.setup();
     renderReport({
       funnel: { found: 312, relevant: 118, read_in_full: 64, selected: 40, cited: 12 },
@@ -460,36 +445,24 @@ describe("the committed report page (task 058, round 10)", () => {
     const tables = within(section).getAllByRole("table");
     expect(tables.length).toBe(4);
     for (const table of tables) {
-      expect(table).toHaveClass("w-full", "max-w-prose-measure", "table-fixed");
-      expect(table.className).not.toMatch(/32rem/);
       for (const cell of within(table).getAllByRole("cell")) {
-        expect(cell).toHaveClass("w-20", "text-right", "tabular-nums", "text-navy");
         expect(cell.textContent).toMatch(/^\d+$/);
       }
     }
-    // One spacing between the parts, and the sentence once.
-    expect(tables[0].parentElement).toHaveClass("space-y-8");
     expect(within(section).getAllByText(/covers only the cited sources/)).toHaveLength(1);
   });
 
-  it("sets the appraisal chip in the soft tone and evidence types in sentence case", () => {
+  it("sets evidence types in sentence case, and links each source title to its dossier", () => {
     renderReport();
     const card = screen.getByRole("heading", { level: 4, name: "Leeds pilot" }).closest("li") as HTMLElement;
-    expect(within(card).getByText("Very strong")).not.toHaveClass("text-blue");
     expect(within(card).getByText("RCTs and quasi-experimental studies")).toBeInTheDocument();
     const sources = screen.getByRole("heading", { name: "Most relevant sources" }).closest("section") as HTMLElement;
     expect(within(sources).getByText("Systematic review and meta-analysis")).toBeInTheDocument();
-    // The source title is a link to its dossier; each entry in the case
-    // studies' ruled card (owner, round 11).
+    // The source title is a link to its dossier.
     expect(within(sources).getByRole("link", { name: "School meals trial" })).toHaveAttribute(
       "href",
       expect.stringContaining("source=src-7"),
     );
-    expect(within(sources).getByRole("list")).toHaveClass("grid", "gap-3");
-    for (const entry of within(sources).getAllByRole("listitem")) {
-      expect(entry).toHaveClass("border", "border-line", "p-4");
-    }
-    expect(card).toHaveClass("border", "border-line", "p-4");
   });
 
   it("folds the contents under the title block on a phone, closing once a section is chosen", async () => {

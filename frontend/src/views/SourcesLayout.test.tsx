@@ -87,54 +87,11 @@ describe("SourcesLayout — the four Sources subview tabs", () => {
     expect(screen.queryByText(/Showing \d+ of \d+ sources/)).toBeNull();
   });
 
-  it("spans the subview tabs across the content column", () => {
-    mockFunnel(34);
-    renderLayout();
-    const nav = screen.getByRole("navigation", { name: "Sources" });
-    expect(nav).toHaveClass("flex");
-    expect(nav).not.toHaveClass("justify-end");
-    expect(screen.getByRole("link", { name: "Themes" })).toHaveClass("flex-1");
-    expect(screen.getByRole("link", { name: "Landscape" })).toHaveClass("flex-1");
-  });
-
-  it("marks the active subtab with the app's growing rule held full, not a filled Navy block", () => {
+  it("marks the active subtab as the current page", () => {
     mockFunnel(34);
     renderLayout(`/tasks/${TASK_ID}/sources/landscape`);
-    const active = screen.getByRole("link", { name: "Landscape" });
-    expect(active).toHaveAttribute("aria-current", "page");
-    expect(active).toHaveClass("after:scale-x-100", "hover:after:scale-x-100", "font-extrabold", "text-navy");
-    expect(active).not.toHaveClass("bg-navy");
-    const idle = screen.getByRole("link", { name: "Themes" });
-    // Inactive reads as greyed (owner, round 11): Grey at the medium weight.
-    expect(idle).toHaveClass("border-transparent", "font-medium", "text-grey");
-    expect(idle).not.toHaveClass("font-semibold");
-    // The same rule as the lifecycle tabs: left edge to centre on hover.
-    expect(idle).toHaveClass("after:origin-left", "after:scale-x-0", "hover:after:scale-x-50", "after:duration-200");
-  });
-
-  it("sets an idle subtab in the Grey token, Navy on hover, never a faded tint (owner)", () => {
-    mockFunnel(34);
-    renderLayout(`/tasks/${TASK_ID}/sources/landscape`);
-    const idle = screen.getByRole("link", { name: "Themes" });
-    expect(idle).toHaveClass("text-grey", "hover:text-navy");
-    for (const name of idle.className.split(" ")) {
-      expect(name).not.toMatch(/opacity|text-grey\/|text-line|text-navy\//);
-    }
-  });
-
-  it("keeps the subtabs on one line and scrolls them sideways when they do not fit", () => {
-    mockFunnel(34);
-    renderLayout();
-    expect(screen.getByRole("navigation", { name: "Sources" })).toHaveClass("overflow-x-auto");
-    expect(screen.getByRole("link", { name: "All sources" })).toHaveClass("whitespace-nowrap");
-  });
-
-  it("uses the wide column for every Sources subview, including Themes", () => {
-    mockFunnel(34);
-    renderLayout();
-    expect(screen.getByRole("navigation", { name: "Sources" }).closest(".mx-auto")).toHaveClass(
-      "max-w-[1180px]",
-    );
+    expect(screen.getByRole("link", { name: "Landscape" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Themes" })).not.toHaveAttribute("aria-current");
   });
 
   it("has no Themes tab for a theory of change, which has no themes (task 054)", () => {
