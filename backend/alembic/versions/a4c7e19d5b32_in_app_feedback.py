@@ -15,7 +15,7 @@ The value lists below are a frozen copy of the lists in ``core/schema.py`` at
 the time of this revision. A later change to a list needs its own revision.
 
 Revision ID: a4c7e19d5b32
-Revises: f5a1c8e93b27
+Revises: e8f6a4b3c1d0
 Create Date: 2026-11-18 00:00:00.000000
 
 """
@@ -27,7 +27,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "a4c7e19d5b32"
-down_revision: str | Sequence[str] | None = "f5a1c8e93b27"
+down_revision: str | Sequence[str] | None = "e8f6a4b3c1d0"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

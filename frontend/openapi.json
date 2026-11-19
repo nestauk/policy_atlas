@@ -4502,7 +4502,7 @@
         "type": "object"
       },
       "MeOut": {
-        "description": "The authenticated caller's own identity row.\n\nReturned by `GET /api/v1/me`, which also provisions the row on first call\n(contract \u00a7 2). The frontend keys the whole tenancy UI off this shape: a\n`null` organisation hides the scope switcher entirely, which is what makes\nthe slice a dark launch for anyone not yet enrolled.\n\nArgs:\n    user_id: The caller's token subject \u2014 the identity the API keys on.\n    display_name: How the caller is named on screen. Never an address:\n        the ops-set name, or a rendering derived from `user_id` for a\n        caller provisioned by their first `/me` call.\n    email: The caller's own address once ops has resolved it, else\n        `None`. Ops- and admin-facing; never another person's.\n    organisation: The caller's organisation, or `None` when unenrolled.\n    is_admin: Whether the caller holds the read-across-organisations\n        support role. Read-only in every sense: no route and no request\n        body can set it, and no write path consults it.",
+        "description": "The authenticated caller's own identity row.\n\nReturned by `GET /api/v1/me`, which also provisions the row on first call\n(contract \u00a7 2). The frontend keys the whole tenancy UI off this shape: a\n`null` organisation hides the scope switcher entirely, which is what makes\nthe slice a dark launch for anyone not yet enrolled.\n\nArgs:\n    user_id: The caller's token subject \u2014 the identity the API keys on.\n    display_name: How the caller is named on screen. Never an address:\n        the ops-set name, or a rendering derived from `user_id` for a\n        caller provisioned by their first `/me` call.\n    email: The caller's own address once ops has resolved it, else\n        `None`. Ops- and admin-facing; never another person's.\n    organisation: The caller's organisation, or `None` when unenrolled.\n    is_admin: Whether the caller holds the read-across-organisations\n        support role. Read-only in every sense: no route and no request\n        body can set it. The one write path that consults it is task\n        creation, whose quota it exempts (ADR 0045).\n    task_quota: The caller's task quota, or `None` when the caller is\n        exempt (an administrator).",
         "properties": {
           "display_name": {
             "title": "Display Name",
@@ -4527,6 +4527,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/OrganisationRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "task_quota": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskQuotaOut"
               },
               {
                 "type": "null"
@@ -10456,6 +10466,25 @@
         "title": "TaskOut",
         "type": "object"
       },
+      "TaskQuotaOut": {
+        "description": "How many tasks the caller created in the last 365 days, against the limit.\n\nThe frontend shows a banner when ``used >= limit`` (task 064a, Q8).\n\nArgs:\n    used: Tasks the caller created in the last 365 days, archived included.\n    limit: The yearly limit (``settings.task_quota_per_year``).",
+        "properties": {
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "used": {
+            "title": "Used",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "used",
+          "limit"
+        ],
+        "title": "TaskQuotaOut",
+        "type": "object"
+      },
       "TaskUpdate": {
         "additionalProperties": false,
         "description": "Inbound body for `PATCH /api/v1/tasks/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged.\n    question: New evidence question, when changing it. Omit to leave\n        unchanged.\n    project_ids: Projects to assign this task to. Omit to leave\n        membership unchanged; `[]` unassigns every project; a list\n        replaces the set.\n    visibility: How widely to share this task. Owner-only. Omit to\n        leave unchanged; an explicit `null` is refused 422. Cannot be\n        combined with `project_ids` in one body \u2014 see\n        :meth:`reject_visibility_with_project`.\n    is_public: Owner-only public-sharing flag (task 037). Omit to leave\n        unchanged; an explicit `null` is refused 422 \u2014 see\n        :meth:`reject_nulls_without_meaning`.\n\nNote:\n    `name`, `visibility` and `is_public` back NOT NULL columns, so an\n    explicit `null` on any of them is refused rather than treated as\n    \"unchanged\" \u2014 see :meth:`reject_nulls_without_meaning`. `question`\n    and `project_ids` are not: null clears the question, and null on\n    `project_ids` is read as `[]` (unassign every project).",
@@ -15366,7 +15395,7 @@
     },
     "/api/v1/me": {
       "get": {
-        "description": "Return the caller's identity row, provisioning it on first call.\n\nThe insert carries only what the API can know: the subject, and a display\nname derived from it. `email`, `org_id` and `is_admin` are ops-owned and\nare never written here \u2014 not even as explicit NULLs on the conflict path,\nbecause `DO NOTHING` means the statement touches an existing row not at\nall.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The caller's identity, with their organisation resolved by name.",
+        "description": "Return the caller's identity row, provisioning it on first call.\n\nThe insert carries only what the API can know: the subject, and a display\nname derived from it. `email`, `org_id` and `is_admin` are ops-owned and\nare never written here \u2014 not even as explicit NULLs on the conflict path,\nbecause `DO NOTHING` means the statement touches an existing row not at\nall.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n    settings: Application settings (the yearly task quota).\n\nReturns:\n    The caller's identity, with their organisation resolved by name, and\n    their task quota unless they are exempt (task 064a, Q8).",
         "operationId": "get_me_api_v1_me_get",
         "responses": {
           "200": {
@@ -15923,7 +15952,7 @@
         ]
       },
       "post": {
-        "description": "Create one active task owned by the authenticated subject.\n\nStamps the creator's organisation onto the row (contract \u00a7 7) \u2014 NULL when\nthe creator is unenrolled, which leaves the row reachable by its owner\nalone. `visibility` takes the column default `private` (owner amendment\n2026-08-26 \u2014 new work is unshared until its owner deliberately shares it).\n\nTask 044 (C10): projects and Links arrive in the **same** request and are\nwritten in the **same** transaction. The old create-then-patch flow could\nleave a real, unassigned task behind, and \"Starts from\" cannot be built on\na flow with that failure mode \u2014 a scoping task linked to nothing has lost\nthe thing it was created for. So any refusal below rolls the task row back\nwith it.\n\nA theory of change is refused unless the server setting is on (task 054,\nC15), before anything is written.\n\nRaises:\n    HTTPException: 404 when a named source task is not readable by the\n        caller.\n    ApiUnprocessable: 422 ``capability_not_enabled`` for a theory of\n        change while ``POLICY_ATLAS_THEORY_OF_CHANGE`` is off.\n    ApiConflict: 409 ``visibility_conflict``, ``link_source_capability``,\n        ``link_project_mismatch`` or ``link_source_unfinished``.",
+        "description": "Create one active task owned by the authenticated subject.\n\nStamps the creator's organisation onto the row (contract \u00a7 7) \u2014 NULL when\nthe creator is unenrolled, which leaves the row reachable by its owner\nalone. `visibility` takes the column default `private` (owner amendment\n2026-08-26 \u2014 new work is unshared until its owner deliberately shares it).\n\nTask 044 (C10): projects and Links arrive in the **same** request and are\nwritten in the **same** transaction. The old create-then-patch flow could\nleave a real, unassigned task behind, and \"Starts from\" cannot be built on\na flow with that failure mode \u2014 a scoping task linked to nothing has lost\nthe thing it was created for. So any refusal below rolls the task row back\nwith it.\n\nA theory of change is refused unless the server setting is on (task 054,\nC15), before anything is written. So is a create past the caller's\nyearly quota (task 064a, Q8; ADR 0045): administrators are exempt, which\nmakes this route the fifth named reader of the administrator flag.\n\nRaises:\n    HTTPException: 404 when a named source task is not readable by the\n        caller.\n    ApiUnprocessable: 422 ``capability_not_enabled`` for a theory of\n        change while ``POLICY_ATLAS_THEORY_OF_CHANGE`` is off.\n    ApiConflict: 409 ``task_quota``, ``visibility_conflict``,\n        ``link_source_capability``, ``link_project_mismatch`` or\n        ``link_source_unfinished``.",
         "operationId": "create_task_api_v1_tasks_post",
         "requestBody": {
           "content": {
@@ -18414,7 +18443,7 @@
     },
     "/api/v1/tasks/{task_id}/shortlist/suggest": {
       "post": {
-        "description": "Open a shortlist walk that fills the open places (Suggest more; task 055).\n\nThe access check runs in its own short transaction, then the opener takes\nthe dispatch lock and the task row itself (the order ``create_run``\nuses). Refused with 409 ``run_active``, ``capacity``, ``plan_stale`` or\n``nothing_to_propose``, and 404 when the task has no longlist.",
+        "description": "Open a shortlist walk that fills the open places (Suggest more; task 055).\n\nThe access check runs in its own short transaction, then the opener takes\nthe dispatch lock and the task row itself (the order ``create_run``\nuses). Refused with 409 ``run_active``, ``capacity``, ``user_capacity``, ``plan_stale`` or\n``nothing_to_propose``, and 404 when the task has no longlist.",
         "operationId": "post_suggest_more_api_v1_tasks__task_id__shortlist_suggest_post",
         "parameters": [
           {
@@ -20380,7 +20409,7 @@
     },
     "/api/v1/waitlist": {
       "post": {
-        "description": "Record a Request-access signup on the waitlist.\n\nArgs:\n    payload: Validated signup body.\n    conn: Open database connection.\n\nReturns:\n    Minimal acknowledgement of the new row.\n\nRaises:\n    ApiConflict: When the email is already on the waitlist.",
+        "description": "Record a Request-access signup on the waitlist.\n\nArgs:\n    payload: Validated signup body.\n    conn: Open database connection.\n\nReturns:\n    Minimal acknowledgement of the new row.",
         "operationId": "signup_api_v1_waitlist_post",
         "requestBody": {
           "content": {

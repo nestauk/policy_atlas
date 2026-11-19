@@ -31,10 +31,13 @@ from aws_cdk import (
     aws_cloudfront_origins as cloudfront_origins,
     aws_certificatemanager as acm,
     aws_logs as logs,
+    aws_iam as iam,
 )
+from aws_cdk import Fn
 from infra.cognito_auth import CognitoAuth
 from infra.components.ingest_worker import IngestWorker
 from infra.components.shared_alb import import_shared_alb
+from infra.components.waf import ApiFirewall
 
 # How the API reads documents' full text (task 057): "in_process" parses them
 # inside the API task as before; "queued" sends one message per document to
@@ -44,14 +47,21 @@ INGEST_MODES = ("in_process", "queued")
 
 class PolicyAtlasStack(Stack):
     def __init__(self, scope: Stack, id: str, pa_config: dict,
-                 certificate: acm.ICertificate, env_name: str, **kwargs) -> None:
+                 certificate: acm.ICertificate, env_name: str,
+                 ops_allowlist_size: int = 1, **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
 
         pa_app_config = pa_config["policy_atlas_config"]
         domain_name = pa_app_config["domain_name"]
         be_config = pa_app_config["backend"]
+        ops_config = pa_app_config["ops"]
+        self_signup_config = pa_app_config["self_signup"]
+
+        if type(ops_allowlist_size) is not int or not 1 <= ops_allowlist_size <= 8:
+            raise ValueError("ops_allowlist_size must be an integer from 1 to 8")
 
         be_domain = f"{pa_app_config['backend_subdomain']}.{domain_name}"
+        ops_domain = f"{ops_config['subdomain']}.{domain_name}"
 
         vpc = ec2.Vpc.from_lookup(self, "VPC", region=pa_config['aws_region'],
             vpc_name="policy-atlas-v3-vpc-" + env_name)
@@ -65,6 +75,15 @@ class PolicyAtlasStack(Stack):
         shared_alb_sg = shared_alb_imports.security_group
         shared_alb = shared_alb_imports.load_balancer
         shared_listener = shared_alb_imports.listener
+
+        # Task 064b: the firewall in front of the API (ADR 0047). Reads backend.waf
+        # from pa_config.json; nothing from it reaches the container.
+        ApiFirewall(self, "ApiFirewall",
+            load_balancer_arn=shared_alb.load_balancer_arn,
+            api_host=be_domain,
+            domain_name=domain_name,
+            waf_config=be_config.get("waf"),
+        )
 
         # --- Import DB resources from DatabaseStack ---
         db_secret_name = ssm.StringParameter.value_for_string_parameter(self,
@@ -171,6 +190,8 @@ class PolicyAtlasStack(Stack):
             "CognitoAuth",
             domain_name=domain_name,
             domain_prefix=pa_app_config["cognito_domain_prefix"],
+            email=pa_app_config.get("email"),
+            extra_domains=[ops_domain],
         )
         # One image build for three consumers: the API task, the migration
         # task and the ingest function (which starts it with another command).
@@ -220,6 +241,14 @@ class PolicyAtlasStack(Stack):
                 "APP_ORIGIN": f"https://{domain_name}",
                 "PA_BACKEND_MODE": "live",
                 "RUN_EXECUTOR_MAX": str(be_config["run_executor_max"]),
+                "RUNS_PER_USER": str(be_config["runs_per_user"]),
+                "TASK_QUOTA_PER_YEAR": str(be_config["task_quota_per_year"]),
+                # Uvicorn (the web server) takes the client address from the
+                # leftmost X-Forwarded-For entry when the request comes from a
+                # trusted proxy. "*" would trust anyone, letting a client write
+                # that entry; the VPC (private network) range trusts only the
+                # load balancer.
+                "FORWARDED_ALLOW_IPS": vpc.vpc_cidr_block,
                 "DB_POOL_SIZE": str(be_config["db_pool_size"]),
                 "DB_MAX_OVERFLOW": str(be_config["db_max_overflow"]),
                 "LOG_LEVEL": "INFO",
@@ -259,6 +288,19 @@ class PolicyAtlasStack(Stack):
         # (SendMessage, GetQueueAttributes, GetQueueUrl; nothing else).
         ingest.queue.grant_send_messages(be_task_def.task_role)
 
+        ops_db_secret = secretsmanager.Secret(
+            self,
+            "OpsDbSecret",
+            secret_name="policy_atlas_v3/ops_db",
+            description="Credentials for the Policy Atlas ops database login",
+            generate_secret_string=secretsmanager.SecretStringGenerator(
+                secret_string_template='{"username": "pa_ops"}',
+                generate_string_key="password",
+                exclude_punctuation=True,
+                password_length=40,
+            ),
+        )
+
         migration_task_def = ecs.FargateTaskDefinition(
             self, "PolicyAtlasMigrationTaskDef",
             cpu=512,
@@ -267,15 +309,24 @@ class PolicyAtlasStack(Stack):
         )
         migration_task_def.add_container("policy-atlas-migration-container",
             image=backend_image,
-            command=["alembic", "upgrade", "head"],
+            # The login sync is idempotent and re-asserts the previous state on
+            # failure, so it never fails the task after a committed migration:
+            # a public outage must not follow an ops-only step (review stack,
+            # 2026-11-17). deploy.sh checks the secret before starting ops.
+            command=["sh", "-c", "alembic upgrade head && (python -m policy_atlas.ops.db_role sync || echo 'WARN: ops login sync failed; the ops service keeps its previous login')"],
             logging=ecs.LogDrivers.aws_logs(stream_prefix="Migrate",
                                             log_group=shared_log_group),
+            environment={"OPS_DB_SECRET_ARN": ops_db_secret.secret_arn},
             secrets={
                 "DATABASE_URL": ecs.Secret.from_secrets_manager(
                     db_secret, field="db_connection_string"
                 ),
             },
         )
+        migration_task_def.task_role.add_to_principal_policy(iam.PolicyStatement(
+            actions=["secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue"],
+            resources=[ops_db_secret.secret_arn],
+        ))
 
         be_service = ecs.FargateService(self, "PolicyAtlasBackendService",
             cluster=cluster,
@@ -297,7 +348,11 @@ class PolicyAtlasStack(Stack):
             port=be_config["internal_port"],
             protocol=elbv2.ApplicationProtocol.HTTP,
             health_check=elbv2.HealthCheck(
-                path="/readyz",
+                # /healthz only proves the process is up. /readyz also opens a
+                # database connection, so a bad database secret would make the
+                # load balancer kill every task in a loop. deploy.sh checks
+                # /readyz once after the rollout instead.
+                path="/healthz",
                 interval=Duration.seconds(30),
                 timeout=Duration.seconds(5),
                 healthy_threshold_count=2,
@@ -321,6 +376,118 @@ class PolicyAtlasStack(Stack):
             zone=hosted_zone,
             record_name=pa_app_config["backend_subdomain"],
             target=r53.RecordTarget.from_alias(r53_targets.LoadBalancerTarget(shared_alb))
+        )
+
+        # --- Ops service ---
+        # This runs the same image as the public API, but with only the credentials
+        # and permissions needed by the operator-facing application.
+        ops_task_def = ecs.FargateTaskDefinition(
+            self,
+            "PolicyAtlasOpsTaskDef",
+            cpu=ops_config["cpu"],
+            memory_limit_mib=ops_config["memory_limit_mib"],
+            family="policy-atlas-v3-ops",
+        )
+        ops_task_def.add_container(
+            "policy-atlas-ops-container",
+            image=backend_image,
+            cpu=ops_config["cpu"],
+            memory_limit_mib=ops_config["memory_limit_mib"],
+            logging=ecs.LogDrivers.aws_logs(stream_prefix="PolicyAtlasOps", log_group=shared_log_group),
+            environment={
+                "OIDC_ISSUER": auth.issuer,
+                "OIDC_JWKS_URL": auth.jwks_url,
+                "OIDC_CLIENT_ID": auth.client_id_value,
+                "APP_ORIGIN": f"https://{ops_domain}",
+                "POLICY_ATLAS_SERVICE_ROLE": "ops",
+                "POLICY_ATLAS_SELF_SIGNUP": "1" if self_signup_config["enabled"] else "0",
+                "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR": str(self_signup_config["max_per_hour"]),
+                "OPS_UI_DIR": "/app/ops-ui",
+                # The same limits as the API, so the ops pages' resolved
+                # limits agree with /me (review stack, 2026-11-17).
+                "RUNS_PER_USER": str(be_config["runs_per_user"]),
+                "TASK_QUOTA_PER_YEAR": str(be_config["task_quota_per_year"]),
+                "DB_POOL_SIZE": "5",
+                "DB_MAX_OVERFLOW": "5",
+                "FORWARDED_ALLOW_IPS": vpc.vpc_cidr_block,
+                "LOG_LEVEL": "INFO",
+                "LOG_FORMAT": "json",
+                "PA_BACKEND_MODE": "stub",
+            },
+            secrets={"DATABASE_URL": ecs.Secret.from_secrets_manager(
+                ops_db_secret, field="db_connection_string"
+            )},
+            port_mappings=[ecs.PortMapping(
+                container_port=be_config["internal_port"], protocol=ecs.Protocol.TCP
+            )],
+            stop_timeout=Duration.seconds(10),
+        )
+        ops_task_def.task_role.add_to_principal_policy(iam.PolicyStatement(
+            actions=[
+                "cognito-idp:AdminCreateUser", "cognito-idp:AdminGetUser",
+                "cognito-idp:ListUsers", "cognito-idp:AdminDisableUser",
+                "cognito-idp:AdminUserGlobalSignOut",
+            ],
+            resources=[auth.user_pool.user_pool_arn],
+        ))
+        ops_service = ecs.FargateService(
+            self,
+            "PolicyAtlasOpsService",
+            cluster=cluster,
+            task_definition=ops_task_def,
+            service_name="policy-atlas-v3-ops-service",
+            # Template-pinned at zero like the API's: deploy.sh scales it to
+            # ops.desired_count only after the migration, the login sync and
+            # the public service are done (review stack, 2026-11-17).
+            desired_count=0,
+            min_healthy_percent=0,
+            max_healthy_percent=100,
+            circuit_breaker=ecs.DeploymentCircuitBreaker(rollback=True),
+            security_groups=[be_sg],
+            assign_public_ip=False,
+            vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS),
+        )
+        ops_target_group = elbv2.ApplicationTargetGroup(
+            self,
+            "OpsTargetGroup",
+            target_group_name="pa-v3-ops-tg",
+            vpc=vpc,
+            port=be_config["internal_port"],
+            protocol=elbv2.ApplicationProtocol.HTTP,
+            target_type=elbv2.TargetType.IP,
+            health_check=elbv2.HealthCheck(
+                path="/healthz", interval=Duration.seconds(30), timeout=Duration.seconds(5),
+                healthy_threshold_count=2, unhealthy_threshold_count=5,
+                healthy_http_codes="200-399",
+            ),
+            targets=[ops_service.load_balancer_target(
+                container_name="policy-atlas-ops-container",
+                container_port=be_config["internal_port"], protocol=ecs.Protocol.TCP,
+            )],
+        )
+        ops_allowed_cidrs = ssm.StringListParameter.value_for_typed_list_parameter(
+            self, ops_config["allowed_cidrs_parameter_name"]
+        )
+        for rule_index, first_cidr in enumerate(range(0, ops_allowlist_size, 4)):
+            rule_cidrs = [
+                Fn.select(cidr_index, ops_allowed_cidrs)
+                for cidr_index in range(first_cidr, min(first_cidr + 4, ops_allowlist_size))
+            ]
+            shared_listener.add_target_groups(
+                "OpsListenerRule" if rule_index == 0 else f"OpsListenerRule{rule_index + 1}",
+                target_groups=[ops_target_group],
+                priority=30 + rule_index,
+                conditions=[
+                    elbv2.ListenerCondition.host_headers([ops_domain]),
+                    elbv2.ListenerCondition.source_ips(rule_cidrs),
+                ],
+            )
+        r53.ARecord(
+            self,
+            "OpsAliasRecord",
+            zone=hosted_zone,
+            record_name=ops_config["subdomain"],
+            target=r53.RecordTarget.from_alias(r53_targets.LoadBalancerTarget(shared_alb)),
         )
 
         # Frontend DNS (apex A record) moves to CloudFront in Phase B — no
@@ -379,6 +546,7 @@ class PolicyAtlasStack(Stack):
             default_behavior=cloudfront.BehaviorOptions(
                 origin=frontend_origin,
                 cache_policy=cloudfront.CachePolicy.CACHING_OPTIMIZED,
+                viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
                 response_headers_policy=security_headers,
                 function_associations=[www_redirect_association],
             ),
@@ -386,11 +554,15 @@ class PolicyAtlasStack(Stack):
                 "/index.html": cloudfront.BehaviorOptions(
                     origin=frontend_origin,
                     cache_policy=index_html_cache_policy,
+                    viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
                     response_headers_policy=security_headers,
                     function_associations=[www_redirect_association],
                 ),
             },
             certificate=certificate,
+            # Explicit pin of today's default (oldest allowed TLS version, the
+            # encryption protocol for HTTPS) so it cannot drift.
+            minimum_protocol_version=cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
             domain_names=[domain_name, f"www.{domain_name}"],
             default_root_object="index.html",
             error_responses=[
@@ -444,6 +616,23 @@ class PolicyAtlasStack(Stack):
         ssm.StringParameter(self, "MigrationTaskDefArnParameter",
             parameter_name="/policy_atlas_v3/deploy/migration_task_def_arn",
             string_value=migration_task_def.task_definition_arn,
+        )
+
+        ssm.StringParameter(self, "OpsServiceNameParameter",
+            parameter_name="/policy_atlas_v3/deploy/ops_service_name",
+            string_value="policy-atlas-v3-ops-service",
+        )
+        ssm.StringParameter(self, "OpsTargetGroupArnParameter",
+            parameter_name="/policy_atlas_v3/deploy/ops_target_group_arn",
+            string_value=ops_target_group.target_group_arn,
+        )
+        ssm.StringParameter(self, "OpsDbSecretArnParameter",
+            parameter_name="/policy_atlas_v3/deploy/ops_db_secret_arn",
+            string_value=ops_db_secret.secret_arn,
+        )
+        ssm.StringParameter(self, "OpsDomainParameter",
+            parameter_name="/policy_atlas_v3/deploy/ops_domain",
+            string_value=ops_domain,
         )
 
         ssm.StringParameter(self, "FrontendBucketNameParameter",

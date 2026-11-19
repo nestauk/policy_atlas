@@ -158,6 +158,12 @@ def effective_screen_rows(*, run_ids: set[uuid.UUID] | None = None) -> Subquery:
     Consumers should join this selectable instead and then filter its effective
     ``status``/``screen_stage`` columns.
 
+    The window partitions by ``task_id`` as well as scope and snapshot.
+    ``task_id`` is constant within a scope/snapshot partition (``fk_ssr_scope_task``
+    ties each scope to one task), so the ranking is unchanged; it leads the key
+    so PostgreSQL pushes a caller's ``task_id`` filter below the window function
+    (task 064a Q9, review finding H-14).
+
     ``excluded_retracted`` is a terminal effective status like any other
     non-failed status (task 019): it is always a stage-1 row (retraction
     exclusion happens before any stage-2 candidate exists), so it ranks as
@@ -179,6 +185,7 @@ def effective_screen_rows(*, run_ids: set[uuid.UUID] | None = None) -> Subquery:
         func.row_number()
         .over(
             partition_by=(
+                source_screening_result.c.task_id,
                 source_screening_result.c.evidence_scope_id,
                 source_screening_result.c.task_source_snapshot_id,
             ),

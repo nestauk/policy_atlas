@@ -38,4 +38,14 @@ interface ImportMetaEnv {
   readonly VITE_FEEDBACK?: string;
   /** The git tag or commit of this build. Shown in "Report a problem". */
   readonly VITE_PA_VERSION?: string;
+  /**
+   * The firewall's CAPTCHA for the waitlist form: the application integration URL
+   * (the form loads `<url>/jsapi.js`) and the API key. `scripts/deploy.sh` reads both
+   * from the AWS account, only when the firewall's CAPTCHA is on. Both are public by
+   * design (they ship in the browser bundle) and are not secrets. Unset locally, in CI
+   * and in the mock journey, where the form shows no puzzle and sends no token.
+   */
+  readonly VITE_WAF_CAPTCHA_SCRIPT_URL?: string;
+  /** The CAPTCHA API key; see `VITE_WAF_CAPTCHA_SCRIPT_URL`. */
+  readonly VITE_WAF_CAPTCHA_API_KEY?: string;
 }

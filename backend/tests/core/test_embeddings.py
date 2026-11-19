@@ -132,8 +132,8 @@ def test_table_count(conn: Connection) -> None:
     # task 054 iteration 3 adds `toc_figure` (C37); 50 -> 51: increment 2 adds
     # `toc_proposal` (C45); 51 -> 52: increment 5 adds `task_upload` (C8).
     # 52 -> 55: in-app feedback adds `feedback_event`, `missing_paper_resolution`
-    # and `user_profile`.
-    assert len(metadata.tables) == 55
+    # and `user_profile`; 55 -> 59: task 065 adds four ops and cohort tables.
+    assert len(metadata.tables) == 59
 
 
 def test_uq_chunk_embedding_unit_rejects_duplicate(conn: Connection) -> None:

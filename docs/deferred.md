@@ -2299,8 +2299,9 @@ omissions.
   only consumers. Until it lands, `frontend/src/lib/vocabulary.ts` stays the single place
   the mapping is written down.
 - **MFA on the Cognito pool** — the pool is `MfaConfiguration: None` and its password
-  policy restates Cognito's defaults (8 characters, upper/lower/number/symbol; explicit
-  since 2026-10-01, when temporary-password validity went to 30 days). That was proportionate while every account could read only
+  policy is Cognito's defaults with a 12-character minimum (upper/lower/number/symbol;
+  explicit since 2026-10-01, when temporary-password validity went to 30 days; the
+  minimum rose from 8 to 12 in task 064a, Q6, for passwords set from then on). That was proportionate while every account could read only
   its owner's work. 033's `is_admin` (owner call (f)) changes the calculus: an admin
   account reads every row in every organisation, `private` included, behind a password
   alone. **Owner ruling 2026-08-24: recorded as a known accepted risk, not fixed in 033** —
@@ -2312,22 +2313,25 @@ omissions.
 - **Deleting a user from the ops CLI, and ownership transfer — coupled** (owner,
   2026-08-24). 033 creates and enrols Cognito users but does not delete them: a delete
   that cannot reassign the person's work would strand it, and transfer is itself Out, so
-  the two ship together or not at all. Until then **de-enrolment is the only removal
-  lever**, and it carries two consequences whoever offboards a real user must know:
-  **(1) it does not stop them signing in** — the Cognito account survives, so an
-  offboarded person still authenticates and still sees their own work; disabling or
-  deleting the account is a Cognito operation done outside this tooling;   **(2) erasure is
-  two-part** — de-enrolment clears `org_id` and `is_admin` from the application
-  database and keeps `email` and `display_name` so the person stays findable.
-  The address in Cognito is untouched either way, so a genuine erasure
-  request needs the Cognito side handled separately.
+  the two ship together or not at all. Until then the removal lever is **`user offboard`**
+  (task 064a, Q10; ADR 0045 decision 5): it disables the Cognito account, revokes its
+  refresh tokens, de-enrols the person and switches off their public task links. Two
+  consequences remain for whoever offboards a real user: **(1) a window stays open** — an
+  access token already issued is valid for up to 60 minutes, and a progress stream open
+  at that moment stays open until its run ends (a `disabled` check on every request
+  would close it at the price of a database read per request; deferred); **(2) erasure
+  is two-part** — offboarding clears `org_id` and `is_admin` from the application
+  database and keeps `email` and `display_name` so the person stays findable, and the
+  Cognito account is disabled, not deleted, so a genuine erasure request still needs the
+  Cognito side handled separately.
 - **Three standing discrepancies in the published privacy notice** (escalated by 033,
   2026-08-24; the owner ruled that the slice does not edit legal copy, so these are open
   items for whoever owns the notice — the page names a Data Protection Officer):
   **(1) § 7** states that on request personal data "will be permanently deleted from our
   Amazon Aurora PostgreSQL database". No lever in the product does that: de-enrolment
   keeps every Task, query, result and transcript, keeps the `sub`, leaves the Cognito
-  account untouched, and leaves seven days of Aurora backups.
+  account untouched, and leaves the Aurora backups (7 days on staging, 35 on production
+  since task 064a, Q17).
   **(2) § 3** calls the email "the only user-specific identifier we store" — the `sub` is
   one too, and until 033 the database stored no email at all, so the sentence has been
   inaccurate in the other direction.
@@ -2352,7 +2356,9 @@ omissions.
   it is the designated home for admin capability, but it ships **no admin screen**. An
   admin sees the ordinary product, wider. A dashboard, an impersonation tool or an ops
   view is the slice that adds the surface — and the first one to need *per-organisation*
-  admin rather than a global boolean turns this flag into the roles slice.
+  admin rather than a global boolean turns this flag into the roles slice. Task 065 (2026-11-17)
+  adds the ops pages on a separate address-gated service (ADR 0046), so an ops surface now
+  exists; per-organisation roles stay deferred.
 - **What remains of the workspace-cluster IA** — this slice discharged the
   *navigational* half of the IA seam: one lifecycle, a grouping above tasks, and one
   destination per task state. It did **not** re-parent plan, run or artefact onto a
@@ -2443,6 +2449,17 @@ omissions.
   to verified recipients) and the note that the 50/day cap becomes SES's own
   limits. Until then `user create --invite manual` (single-use minted temp
   password, printed once, forced change at first sign-in) is the workaround.
+  **Built by task 065 on 2026-11-17** (the pool sends through SES wherever
+  `email.enabled` is true in `pa_config.json`; both environments switch it on from the
+  staging checks onward); the `--invite manual` path stays as a recorded fallback.
+- **Self-signup domains beyond `nesta.org.uk`.** Task 065 lists one domain. Reopen when a
+  second organisation wants self-signup; adding one is `org domain add`, not a deploy.
+- **Editing the domain table from the ops pages.** Rare, and a tenancy decision, so it is
+  CLI only (`org domain add` / `remove`) for now. Reopen if the edits become routine.
+- **Email sent by the application itself.** Today Cognito is the only sender (invitations).
+  Reopen when the product needs its own mail (notifications, receipts).
+- **The ops action log on the ops pages.** The `ops_action` table is queryable by an
+  operator; a page for it is a later slice. Reopen when operators ask for it.
 - **Membership moves race API row creation** (review finding, 2026-08-25, declined
   as a code fix). `creator_org_id` is a non-locking read, so a task created in
   the window around an enrol/re-enrol/de-enrol can carry the old membership's
@@ -2469,6 +2486,9 @@ omissions.
   email, and a `website` honeypot only. If real spam appears, add a
   CloudFront/WAF rate-based rule on that path — an infra change, no app
   code. Decided 2026-09-03 (036 review): no CAPTCHA, no in-app rate limiter.
+  **Superseded 2026-11-17 by task 064b** (owner ruling, ADR 0047): a WAF
+  rate rule on the path (50 per 5 minutes per address) *and* a CAPTCHA rule,
+  with the puzzle shown in the form. The honeypot stays.
 - **`RunPane`/`JourneyPane` are dead code — DISCHARGED (task 038, V10): deleted** with
   their tests and the orphaned `anim-bar` utility (owner chose delete over re-wire;
   `journey/presentation.ts` stays, `runProgress.ts` imports it). The original entry:
@@ -3651,3 +3671,170 @@ unbuilt increments are in ADR 0042 § Amendment 2026-11-05.
   creation; ES findings reuse; the cross-task duplicate gap; the Miro API; E3, E4, E5, E7, E8;
   removing the build flag; an upload retention rule; J9 (how an older theory signals it may be
   out of date).
+
+## Security quick wins (task 064a seams)
+
+Deferred at the 064a plan gate (owner, 2026-11-16) or found during the build. The
+programme map in `docs/tasks/064-security-hardening/programme.md` carries the later slices
+(WAF and CAPTCHA, CSP, MFA, SES).
+
+- **Spend caps and per-user chat and planner turn limits.** The task quota (Q8) bounds
+  how many tasks a person creates, not what a task costs. A usage table with spend per
+  user is the next step once the quota has run for a while (ADR 0045 § Alternatives).
+- **A quota display beyond the banner.** `GET /me` already returns `task_quota.used` and
+  `limit`; the frontend shows a banner only at the limit. A running count on the new-task
+  page or in the account menu is a small follow-on.
+- **A per-user allowance above 50.** The quota is one number for everyone except
+  administrators. A person who legitimately needs more is handled by an administrator
+  today; a per-user column was ruled out of scope for this slice.
+- **The 60-minute window after `user offboard`.** An access token already issued keeps
+  working until it expires, and an open progress stream outlives it. A `disabled` check
+  on every request would close it at the price of a database read per request.
+- **Resuming after a check-in is uncapped.** The per-user run cap (Q7) applies at the
+  three start surfaces; resuming a paused walk has no capacity check, because the
+  person's decision is already committed when the resume runs (owner item 1, plan gate).
+- **Request body size limits (review finding H-02).** Not in this slice, and
+  **not closable at the load balancer** (task 064b): a web ACL on a load
+  balancer inspects the first 8 KB of a body and no more, so it can only tell
+  "over 8 KB" from "under", and over 8 KB is normal for this API (chat, plan
+  edits, theory-of-change imports). A real size cap belongs in the API process
+  (a body limit in the server or a middleware), a later slice.
+- **Library text inside steering rejections.** `steering.py` wraps pydantic
+  `ValidationError`, `ValueError` and `TypeError` text into `SteeringAdjustmentError`,
+  which `safe_error` (Q3) treats as product-shaped, so that text reaches the event log.
+  It most likely echoes the person's own steering input rather than SQL or host names;
+  left as is, noted by the Q3 build.
+- **`AdminUserGlobalSignOut` on an already disabled account.** The offboard rerun path
+  assumes it succeeds; confirmed on staging at the Q10 live check, not before.
+
+Found by the 064a review stack (2026-11-16) and left as seams:
+
+- **Serving a known key while another thread refreshes.** Once the key cache expires,
+  every authenticated request waits on the refresh lock while one thread fetches the
+  key set (up to the HTTP client's 5-second timeout), once per 30-second window at
+  most. Before 064a each of those requests fetched on its own and a failure signed
+  everyone out, so this is strictly better; serving the stale key during the fetch
+  would remove the wait.
+- **`create_run` drops its reservation after the 10-second wait for the row** whether
+  or not the worker has written it (pre-064a behaviour). A slow insert can let a later
+  start pass both counts. Keeping the reservation until the row is observed or the
+  worker reports failure would close it.
+- **Product exceptions that embed a host name.** `safe_error` (Q3) trusts the
+  `policy_atlas.` namespace; `SearchTransportError` puts the search backend's host in
+  its message. That host is a public API's, not a secret, but the rule is a namespace
+  rule, not a per-class allowlist.
+- **The 409 code lists drifted before 064a.** `web-api.md` omits `link_*`,
+  `nothing_to_propose`, `not_included` and `toc_*`; `errors.ts` lacks `toc_*`. The
+  064a codes are consistent across all three places; the older gaps are not this
+  slice's.
+- **`user_capacity` wording for a collaborator.** The cap is counted on the task's
+  owner (ADR 0045 § As built 1) and the sentence says "you". Write access is
+  owner-only today, so nobody sees the mismatch; revisit if collaborators gain Start.
+- **The quota's two clocks.** `create_task` stamps `created_at` from the API host's
+  clock and the quota counts by the database clock. Both hosts are NTP-synced in one
+  region, so the skew is seconds at a 365-day boundary; a database default would
+  remove it.
+- **The event-log sequence retry is exhausted by a theory-of-change check's fan-out
+  (found by this slice's CI, not caused by it).** `events.append` assigns
+  `max(sequence)+1` per task and retries 32 times on collision (045 sized that as "about
+  the number of writers at once"). A check walk sends six child acquire walks that each
+  write a dozen events in under a second, so the parent's own append can lose more than
+  32 races on a slow runner: seen once locally (`test_judge_commits`, verification run 2)
+  and once on CI (`test_check_steps`, run 43921736642), the dispatch failing with
+  `uq_event_log_task_sequence` after the children finished. `dev`'s last twelve CI runs
+  were green and 064a adds no event writer, so it is a pre-existing ceiling the ToC
+  fan-out (width 6, wider than the longlist's 4) never re-checked. **Still open (task 065 review stack, 2026-11-18, owner).** A
+  transaction-scoped per-task advisory lock before the max read fixed the race, but it is
+  held to the end of the caller's transaction, and a trace of all 88 append sites found
+  three that hold it across slow work or in the wrong order: `assess/screen.py:700`
+  appends for retracted documents and then runs the whole stage-1 LLM screening in the same
+  transaction; `sourcing/acquire.py:886/940/1005` append and then embed (a remote call with
+  backoff); and `runner.py:1939` / `option_search.py:410` take the run row then append,
+  while `continuation.py:464` appends then updates the run row (a possible deadlock). Any
+  steering or stop call on the task would hang behind the first two. The lock was reverted
+  before the PR. The fix (move those appends after the slow work, or allocate the sequence
+  outside the caller's transaction, then add the lock) is its own slice. Until then the
+  theory-of-change tests run with 256 retries through an autouse fixture
+  (`tests/theory_of_change/conftest.py`), so this known ceiling does not fail them.
+
+## Firewall and CAPTCHA (task 064b seams)
+
+Left open by the 064b build (2026-11-17; contract and ADR 0047 for the rulings):
+
+- **The count-to-block switch is a follow-on config change, per environment.** Both
+  environments ship with `waf.mode: count`. After its own count week and the deliberate
+  pass, each is switched by setting `mode: block` in `pa_config.json` and deploying, then
+  repeating the pass at once (`infra/DEPLOYMENT.md` § 4 "The firewall"). Staging first.
+- **Production's CAPTCHA is off until staging has proved the flow.** `waf.captcha: false` in
+  production; turned on by a config change after the staging live check (W5, W6). Until
+  then production's waitlist has the rate rule and the honeypot only.
+- **No alerts on firewall metrics.** There is no alarm topic yet (review finding H-05). When
+  one exists, an alarm on `BlockedRequests` for the general rate rule and the managed groups
+  is the first to add.
+- **The rule exclusion list is hard-coded.** `COMMON_RULES_ALWAYS_COUNTED` in
+  `infra/infra/components/waf.py` holds one name (`SizeRestrictions_BODY`). It becomes a
+  config key only if a count week finds a second name, or production and staging need
+  different lists.
+- **The deploy's readiness check in block mode.** After each deploy the script calls
+  `/readyz` from a GitHub runner address. The managed groups skip the two health paths
+  (owner ruling), so they cannot refuse it; the general rate rule could in theory, if a
+  runner shared an address that sent over 6,000 requests in 5 minutes, which no runner
+  does. Noted so the risk is not read as forgotten.
+- **A person whose browser blocks `awswaf.com` cannot sign up.** The form shows "The
+  sign-up check did not load. Reload the page to try again." and keeps submit disabled.
+  A contact address next to that message is privacy-notice work (Data Protection Officer).
+- **The firewall log and samples hold client addresses.** One month of retention in the
+  account; the report prints them only with `--addresses`. A redaction of
+  `httpRequest.clientIp` in the logging configuration would lose the one field the
+  count week needs to tell one scraper from an office; left as is.
+- **No deploy-time check that the firewall is attached.** After the emergency
+  `disassociate-web-acl`, a deploy does not re-attach the web ACL (CloudFormation
+  updates only changed template resources and does not detect the drift), so the
+  firewall stays off until `associate-web-acl` is run by hand. A postcondition in
+  `deploy.sh` (`aws wafv2 get-web-acl-for-resource` on the load balancer when
+  `waf.enabled`) would fail the deploy loudly instead; a few lines plus a stubbed test.
+- **The report reads at most 10,000 matched requests per run.** Logs Insights' ceiling per
+  query; the count week on this traffic is far below it. Page by day if it is ever hit.
+- **The general rate limit is pinned from a site-wide peak, not a per-address one.**
+  Staging logged the load balancer's address, not the visitor's, until 064a deploys, so
+  Phase 0 took the busiest 5-minute window of all traffic (520 in 14 days) as the bound
+  and set `GENERAL_RATE_LIMIT = 6000`. Once 064a is on staging the per-address query in
+  `docs/tasks/064b-waf-captcha/verification.md` § Phase 0 can re-measure; the constant
+  is one line and a normal deploy.
+
+## Accounts and ops portal (task 065 seams)
+
+- **Cohort follow-ons (owner, 2026-11-18; the next task):** feature versions per organisation
+  or cohort, numbers per person and cohort (with Metabase and PostHog links), CSV import of a
+  pilot with cohorts, onboarding answers. Design: revision-2 explainer, section 7. Cohorts
+  themselves shipped in 065 (contract B14).
+
+Noted by the 065 build (2026-11-17). Self-signup domains beyond `nesta.org.uk`, the domain
+table on the ops pages, application-sent email and the ops action log on the pages are
+recorded above under their own entries.
+
+- **A single-person read route on the ops host.** The quota page finds the person by
+  reading the whole people list and picking one out. Reopen when the list is long enough
+  to slow that page, or when a second page needs one person.
+- **A route that reports the settings defaults.** The pages show "default · n" by
+  inferring it from a person with no override. If nobody has no override, the default is
+  not shown. Reopen when a page must show the default on its own, or when the defaults
+  change often enough that inferring them misleads.
+- **An assign route that accepts either kind of id.** The assign page tries a task id
+  first, then a project id, so a wrong id costs one failed call. Reopen when the extra
+  call shows up as latency or an error in the logs, or when a third kind of id is added.
+- **Owner decision open: should sweep-created accounts take the waitlist row's name?**
+  Contract C3 says yes; the review stack showed anyone can type a colleague's address with
+  any name. The code does (a) (keep C3, never rename an existing account). Options and the
+  recommendation are in `docs/tasks/065-accounts/verification.md` § Owner decisions
+  raised by the stack, item 1. Reopen when the owner rules.
+
+## Ops pages scale (task 065 review stack, 2026-11-18)
+
+- **People list costs about three queries per person.** `list_people` calls
+  `effective_limits` once per person, and each call reads the person's cohorts. Fine at
+  today's size; resolve the limits for the whole list in one or two grouped queries when
+  the list reaches a few hundred people.
+- **Bulk approve and reject send one request per row**, and each one reloads every ops
+  list. Add a server-side bulk route (like `people/*`) or reload once after the loop when
+  operators handle tens of requests at a time.

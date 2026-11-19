@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+import re
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager, suppress
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -13,16 +16,18 @@ import structlog
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.cors import CORSMiddleware
+from starlette.staticfiles import StaticFiles
 
 from policy_atlas.api import continuation
 from policy_atlas.api.auth import JwtAuthenticator
 from policy_atlas.api.contract import ErrorBody, ErrorEnvelope
+from policy_atlas.api.deps import Identity
 from policy_atlas.api.settings import IngestMode, Settings, load_settings
 from policy_atlas.core import tracing
 from policy_atlas.core.logging import configure_logging
@@ -46,8 +51,6 @@ _CONFLICT_CODES = {
     # answer — the two ways out are changing the Project's visibility and
     # leaving the Task out of the Project.
     "visibility_conflict",
-    # Splash waitlist: the email is already on waitlist_entry.
-    "already_registered",
     # Task 044 (C11, C12): a task can only start from a task it shares a
     # project with, and only from one whose latest walk has finished — and
     # only from an Evidence search, whose report is what inheritance reads
@@ -67,9 +70,18 @@ _CONFLICT_CODES = {
     # place or was set aside; a shortlist place for an excluded or merged option.
     "nothing_to_propose",
     "not_included",
+    # Task 064a (Q7): the caller's tasks already hold `runs_per_user` walks.
+    "user_capacity",
+    # Task 064a (Q8): the caller created `task_quota_per_year` tasks in 365 days.
+    "task_quota",
+    # Task 064a (Q15): a free-text preview's confirm token is gone; compile again.
+    "confirm_expired",
+    # Task 065 ops-host command refusals.
+    "ops_refused",
+    "enrolled_elsewhere",
 }
 
-_CAPACITY_CODES = {"chat_capacity"}
+_CAPACITY_CODES = {"chat_capacity", "resend_cooldown"}
 
 #: Task 054 (S14): a readable task that is not a theory of change.
 _NOT_FOUND_CODES = {"toc_not_found"}
@@ -178,12 +190,17 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
     # run before anything below can log.
     configure_logging()
     app_settings = settings if settings is not None else load_settings()
+    lifespan = (
+        _ops_lifespan(app_settings)
+        if app_settings.service_role == "ops"
+        else _lifespan(app_settings)
+    )
     app = FastAPI(
         title="Policy Atlas API",
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
-        lifespan=_lifespan(app_settings),
+        lifespan=lifespan,
         # Every route, including any a later slice adds: the request's log
         # context gains the route template the router just resolved. See
         # `bind_route_template`.
@@ -195,7 +212,9 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         allow_origins=[app_settings.app_origin],
         allow_credentials=False,
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type"],
+        # x-aws-waf-token: the waitlist form's CAPTCHA token (task 064b);
+        # read by the firewall, never by the API.
+        allow_headers=["Authorization", "Content-Type", "x-aws-waf-token"],
     )
     _install_exception_handlers(app)
 
@@ -245,6 +264,10 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         """Defense-in-depth response headers on the JSON API (review finding)."""
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        if app_settings.service_role == "ops":
+            # The ops pages are never embedded; refuse framing (clickjacking).
+            response.headers.setdefault("X-Frame-Options", "DENY")
+            response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
         # Ignored by browsers over plain HTTP (dev); load-bearing behind TLS.
         response.headers.setdefault(
             "Strict-Transport-Security", "max-age=63072000; includeSubDomains"
@@ -252,7 +275,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         return response
 
     @app.get("/healthz")
-    def healthz() -> dict[str, str]:
+    async def healthz() -> dict[str, str]:
         """Report process liveness without touching external dependencies."""
         return {"status": "ok"}
 
@@ -267,6 +290,13 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
             # readiness probe is not an "internal server error" (finding m8).
             raise HTTPException(status_code=503, detail="database is unavailable") from None
         return {"status": "ok"}
+
+    if app_settings.service_role == "ops":
+        from policy_atlas.api.routers.ops import router as ops_router
+
+        app.include_router(ops_router)
+        _mount_ops_ui(app, app_settings.ops_ui_dir)
+        return app
 
     # Imported here so resource routers can use ApiConflict without an import
     # cycle during module initialisation.
@@ -316,6 +346,37 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
     return app
 
 
+def _mount_ops_ui(app: FastAPI, ops_ui_dir: Path | None) -> None:
+    """Mount an operations SPA bundle when its built files are available.
+
+    Args:
+        app: The operations FastAPI application.
+        ops_ui_dir: Directory carrying the built operations UI, if configured.
+    """
+    if ops_ui_dir is None:
+        return
+    index = ops_ui_dir / "index.html"
+    assets = ops_ui_dir / "assets"
+    if assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets), name="ops-assets")
+    if not index.is_file():
+        return
+
+    ui_root = ops_ui_dir.resolve()
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def ops_page(path: str) -> FileResponse:
+        """Serve a bundle file or the SPA entry point for browser routes."""
+        if path.startswith("api/"):
+            raise HTTPException(404)
+        candidate = (ui_root / path).resolve()
+        # Any file inside the bundle (fonts/, brand/, favicon.svg); never a
+        # path that resolves outside it.
+        if candidate.is_relative_to(ui_root) and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(index)
+
+
 async def bind_route_template(request: Request) -> None:
     """Add the matched route's path template to the request's log context.
 
@@ -359,6 +420,7 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
         engine = create_engine(
             settings.database_url,
             pool_pre_ping=True,
+            hide_parameters=True,  # keep bound values (user text) out of error logs
             pool_size=settings.db_pool_size,
             max_overflow=settings.db_max_overflow,
         )
@@ -414,6 +476,89 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
             engine.dispose()
 
     return lifespan
+
+
+def _ops_lifespan(
+    settings: Settings,
+) -> Callable[[FastAPI], AbstractAsyncContextManager[None]]:
+    """Build the isolated operations-service lifespan.
+
+    The operations service owns the identity provider and optional signup sweep,
+    but never starts the API process's executor, continuation drainer, ingest
+    consumer, or startup sweep.
+    """
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        engine = create_engine(
+            settings.database_url,
+            pool_pre_ping=True,
+            pool_size=settings.db_pool_size,
+            max_overflow=settings.db_max_overflow,
+            # A database error's traceback must not carry bound parameters:
+            # on this host they can be email addresses.
+            hide_parameters=True,
+        )
+        http_client = httpx.Client(timeout=httpx.Timeout(5.0), follow_redirects=False)
+        app.state.engine = engine
+        app.state.http_client = http_client
+        app.state.authenticator = JwtAuthenticator(settings, http_client)
+        identity = identity_from_issuer(settings.oidc_issuer)
+        app.state.identity = identity
+        if settings.ops_ui_dir is None or not settings.ops_ui_dir.is_dir():
+            log.info("ops.ui_absent", ops_ui_dir=str(settings.ops_ui_dir))
+        task: asyncio.Task[None] | None = None
+        if settings.self_signup_enabled:
+            task = asyncio.create_task(_sweep_loop(engine, identity, settings))
+            app.state.sweep_task = task
+        try:
+            yield
+        finally:
+            if task is not None:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+            http_client.close()
+            engine.dispose()
+
+    return lifespan
+
+
+def identity_from_issuer(issuer: str) -> Identity:
+    """Build the optional Cognito seam encoded by an OIDC issuer URL.
+
+    Args:
+        issuer: The configured OIDC issuer.
+
+    Returns:
+        A Cognito client and its pool metadata for a Cognito issuer, otherwise
+        an empty identity for the local development issuer.
+    """
+    match = re.fullmatch(
+        r"https://cognito-idp\.([a-z0-9-]+)\.amazonaws\.com/([^/?#]+)", issuer
+    )
+    if match is None:
+        return Identity(None, None, None)
+    region, pool_id = match.groups()
+    import boto3
+
+    return Identity(boto3.client("cognito-idp", region_name=region), pool_id, region)
+
+
+async def _sweep_loop(engine: Engine, identity: Identity, settings: Settings) -> None:
+    """Run the self-signup sweep every minute; a failing tick is logged, never fatal.
+
+    The sweep itself lives in :mod:`policy_atlas.ops.sweep` and takes the clock,
+    so its tests call it directly and never sleep (plan P10).
+    """
+    while True:
+        await asyncio.sleep(60)
+        try:
+            from policy_atlas.ops.sweep import sweep_once
+
+            await asyncio.to_thread(sweep_once, engine, identity, settings)
+        except Exception:
+            log.exception("ops.sweep_failed")
 
 
 def _claim_and_execute(

@@ -16,16 +16,19 @@ upsert that updates; this one only ever creates.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.engine import Connection
 
 from policy_atlas.api.auth import AuthenticatedUser
-from policy_atlas.api.contract import MeOut, OrganisationRef
-from policy_atlas.api.deps import get_conn, get_current_user
+from policy_atlas.api.contract import MeOut, OrganisationRef, TaskQuotaOut
+from policy_atlas.api.deps import get_conn, get_current_user, get_settings
 from policy_atlas.api.identity import provision_user
+from policy_atlas.api.routers.common import effective_limits, tasks_created_since
+from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import app_user, organisation
 
 router = APIRouter(
@@ -39,6 +42,7 @@ router = APIRouter(
 def get_me(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> MeOut:
     """Return the caller's identity row, provisioning it on first call.
 
@@ -51,11 +55,21 @@ def get_me(
     Args:
         user: The authenticated caller.
         conn: Open database connection.
+        settings: Application settings (the yearly task quota).
 
     Returns:
-        The caller's identity, with their organisation resolved by name.
+        The caller's identity, with their organisation resolved by name, and
+        their task quota unless they are exempt (task 064a, Q8).
     """
     provision_user(conn, user.user_id)
+    # The first time the person opens the app (task 065, owner 2026-11-18): the
+    # ops pages tell an invitation still waiting from one used. Later calls
+    # match no row and write nothing.
+    conn.execute(
+        update(app_user)
+        .where(app_user.c.user_id == user.user_id, app_user.c.first_signed_in_at.is_(None))
+        .values(first_signed_in_at=datetime.now(UTC))
+    )
     row = conn.execute(
         select(
             app_user.c.user_id,
@@ -79,10 +93,21 @@ def get_me(
         if row["org_id"] is not None
         else None
     )
+    # Task 065 (B12): the limit is the resolved one (own override, else the
+    # organisation's, else the setting); ``None`` hides the quota band.
+    limits = effective_limits(conn, user.user_id, settings=settings)
     return MeOut(
         user_id=row["user_id"],
         display_name=row["display_name"],
         email=row["email"],
         organisation=org,
         is_admin=row["is_admin"],
+        task_quota=(
+            None
+            if limits.task_quota is None
+            else TaskQuotaOut(
+                used=tasks_created_since(conn, user.user_id, days=365),
+                limit=limits.task_quota,
+            )
+        ),
     )

@@ -55,6 +55,28 @@ from .common import (
     PageMeta,
     StageKey,
 )
+from .ops import (
+    ActionResult,
+    ApproveRequest,
+    BulkCohort,
+    BulkEnrol,
+    BulkOut,
+    BulkQuota,
+    BulkSubjects,
+    CohortOut,
+    CohortRef,
+    CohortSave,
+    LimitsOut,
+    OrganisationCreate,
+    OrganisationOut,
+    PersonCreate,
+    PersonCreatedOut,
+    PersonOut,
+    QuotaSet,
+    RequestOut,
+    RequestsOut,
+    SelfSignupOut,
+)
 from .profile import ProfileJob, ProfileSource, UserProfileIn, UserProfileOut
 from .projects import (
     PROJECT_NAME_MAX,
@@ -246,7 +268,7 @@ from .tasks import (
     TaskStatus,
     TaskUpdate,
 )
-from .tenancy import MeOut, OrganisationRef, Visibility
+from .tenancy import MeOut, OrganisationRef, TaskQuotaOut, Visibility
 from .waitlist import (
     WAITLIST_EMAIL_MAX,
     WAITLIST_NAME_MAX,
@@ -447,6 +469,7 @@ __all__ = [
     "TaskCreate",
     "TaskLinkOut",
     "TaskOut",
+    "TaskQuotaOut",
     "TaskStatus",
     "TaskUpdate",
     "TaskUpdatedFrame",
@@ -494,4 +517,24 @@ __all__ = [
     "WAITLIST_ROLE_MAX",
     "WaitlistSignup",
     "WaitlistSignupOut",
+    "ActionResult",
+    "ApproveRequest",
+    "BulkEnrol",
+    "BulkOut",
+    "BulkCohort",
+    "BulkQuota",
+    "BulkSubjects",
+    "CohortOut",
+    "CohortRef",
+    "CohortSave",
+    "LimitsOut",
+    "OrganisationCreate",
+    "OrganisationOut",
+    "PersonCreate",
+    "PersonCreatedOut",
+    "PersonOut",
+    "QuotaSet",
+    "RequestOut",
+    "RequestsOut",
+    "SelfSignupOut",
 ]

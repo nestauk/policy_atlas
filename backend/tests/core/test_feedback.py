@@ -24,7 +24,7 @@ from tests.conftest import _alembic_cfg
 from tests.feedback_support import FakeLangfuse, seed_component_run
 from tests.helpers import delete_task_data, now, seed_task_and_run, seed_walk
 
-PREVIOUS_REVISION = "f5a1c8e93b27"
+PREVIOUS_REVISION = "e8f6a4b3c1d0"
 
 
 def _user(conn: Connection) -> str:

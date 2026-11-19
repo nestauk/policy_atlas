@@ -33,8 +33,19 @@ are done (spec-prep 2026-06-22; refreshed 2026-07-03); `[ ]` items are open gate
   server source of progress copy, the longlist from the first minute, fifteen owner polish
   rounds across the app; ADR 0044) merged to `dev` on 2026-11-09 (PR #115); 054 (theory of
   change, the third capability, behind the `POLICY_ATLAS_THEORY_OF_CHANGE` setting; ADR 0042)
-  reviewed on `task/054-1-core` as of 2026-11-05 with PR #114 — system live at
-  `v3.policyatlas.uk`; the next slice is the newest `docs/tasks/NNN-*/contract.md` and
+  reviewed on `task/054-1-core` as of 2026-11-05 with PR #114; 064a (security quick wins:
+  seventeen review findings — no locals in error logs, a per-user run cap, a yearly task
+  quota with an administrator exemption, a bounded JWKS refresh, `user offboard`, a
+  task-first screening index, health check on `/healthz`, HTTPS redirect, 12-character
+  passwords, TLS pins, pool deletion protection, 35-day production backups; ADR 0045)
+  reviewed on `task/064a-security-quick-wins` as of 2026-11-16, PR #120 merged 2026-11-18; 064b (the
+  firewall: a WAF web ACL on the shared load balancer with a waitlist rate rule, a general
+  rate rule and AWS's three managed groups in count mode, a CAPTCHA on the waitlist form
+  with its token in `x-aws-waf-token`, a filtered and header-redacted firewall log, a
+  read-only count-week report; ADR 0047) reviewed on `task/064b-waf-captcha`, PR #128 merged
+  2026-11-18; 065 (accounts and ops portal) built, awaiting staging and merge (PR #122) —
+  system live
+  at `v3.policyatlas.uk`; the next slice is the newest `docs/tasks/NNN-*/contract.md` and
   its `task/NNN-slug` branch).
 - [x] Verification plan for first implementation slices — per-task `verification.md` from
   `docs/tasks/_templates/`, gated by the task-cycle review stack.
