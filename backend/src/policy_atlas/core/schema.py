@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — forty-eight tables plus one read view.
+"""SQLAlchemy Core table metadata — fifty tables plus one read view.
 
 No deferred columns (no same_content_as or lineage key).
 """
@@ -13,6 +13,7 @@ from sqlalchemy import (
     CheckConstraint,
     Column,
     ColumnElement,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -105,7 +106,11 @@ organisation = Table(
     Column("org_id", UUID(as_uuid=True), primary_key=True),
     Column("name", Text, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("task_quota_per_year", Integer, nullable=True),
+    Column("runs_per_user", Integer, nullable=True),
     UniqueConstraint("name", name="uq_organisation_name"),
+    CheckConstraint("task_quota_per_year >= 0", name="ck_organisation_task_quota_nonneg"),
+    CheckConstraint("runs_per_user >= 0", name="ck_organisation_runs_nonneg"),
 )
 
 app_user = Table(
@@ -117,6 +122,74 @@ app_user = Table(
     Column("email", Text, nullable=True),  # ops- and admin-facing only
     Column("is_admin", Boolean, nullable=False, server_default=text("false")),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("is_ops", Boolean, nullable=False, server_default=text("false")),
+    Column("invited_at", DateTime(timezone=True), nullable=True),
+    Column("task_quota_per_year", Integer, nullable=True),
+    Column("runs_per_user", Integer, nullable=True),
+    Column("first_signed_in_at", DateTime(timezone=True), nullable=True),
+    CheckConstraint("task_quota_per_year >= 0", name="ck_app_user_task_quota_nonneg"),
+    CheckConstraint("runs_per_user >= 0", name="ck_app_user_runs_nonneg"),
+)
+
+# Durable audit records for writes made through the isolated ops service.
+ops_action = Table(
+    "ops_action",
+    metadata,
+    Column("action_id", UUID(as_uuid=True), primary_key=True),
+    Column("at", DateTime(timezone=True), nullable=False),
+    Column("actor_user_id", Text, nullable=False),
+    Column("action", Text, nullable=False),
+    Column("target", Text, nullable=True),
+    Column("outcome", Text, nullable=False),
+    Index("ix_ops_action_actor_action_at", "actor_user_id", "action", "at"),
+    Index("ix_ops_action_target", "target"),
+)
+
+# Exact, lower-case email domains approved for self-signup to an organisation.
+organisation_domain = Table(
+    "organisation_domain",
+    metadata,
+    Column("domain", Text, primary_key=True),
+    Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("domain = lower(domain)", name="ck_organisation_domain_lower"),
+)
+
+# Named groups of people for pilots and research (task 065, owner 2026-11-18).
+# A label, separate from the organisation: one person may be in several.
+cohort = Table(
+    "cohort",
+    metadata,
+    Column("cohort_id", UUID(as_uuid=True), primary_key=True),
+    Column("name", Text, nullable=False),
+    Column("description", Text, nullable=True),
+    Column("starts_on", Date, nullable=True),
+    Column("ends_on", Date, nullable=True),
+    Column("links", ARRAY(Text), nullable=False, server_default=text("'{}'")),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("task_quota_per_year", Integer, nullable=True),
+    Column("runs_per_user", Integer, nullable=True),
+    UniqueConstraint("name", name="uq_cohort_name"),
+    CheckConstraint("task_quota_per_year >= 0", name="ck_cohort_task_quota_nonneg"),
+    CheckConstraint("runs_per_user >= 0", name="ck_cohort_runs_nonneg"),
+    CheckConstraint(
+        "starts_on IS NULL OR ends_on IS NULL OR ends_on >= starts_on",
+        name="ck_cohort_dates_ordered",
+    ),
+)
+
+cohort_member = Table(
+    "cohort_member",
+    metadata,
+    Column(
+        "cohort_id", UUID(as_uuid=True), ForeignKey("cohort.cohort_id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "user_id", Text, ForeignKey("app_user.user_id", ondelete="CASCADE"), primary_key=True
+    ),
+    Column("added_at", DateTime(timezone=True), nullable=False),
+    Index("ix_cohort_member_user_id", "user_id"),
 )
 
 # Splash-page Request-access intake. No FK to app_user — ops enrolment is the
@@ -130,6 +203,9 @@ waitlist_entry = Table(
     Column("organisation", Text, nullable=True),
     Column("role_or_reason", Text, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("account_user_id", Text, nullable=True),
+    Column("account_created_at", DateTime(timezone=True), nullable=True),
+    Column("rejected_at", DateTime(timezone=True), nullable=True),
     UniqueConstraint("email", name="uq_waitlist_entry_email"),
 )
 
@@ -621,6 +697,12 @@ source_screening_result = Table(
         name="ck_ssr_null_when_failed",
     ),
     Index("ix_ssr_scope_status", "evidence_scope_id", "status"),
+    # Task 064a Q9: matches the effective-screen window's partition key, task
+    # first, so a caller's task filter reads one task's rows (migration b1e7c3a9d5f2).
+    Index(
+        "ix_ssr_task_scope_snapshot",
+        "task_id", "evidence_scope_id", "task_source_snapshot_id",
+    ),
 )
 
 # --- Classification model (task 005) ---

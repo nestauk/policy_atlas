@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Collection
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal, cast
 
@@ -21,14 +22,18 @@ from policy_atlas.api.contract import LatestRun, RunOut, StageKey, TaskLinkOut, 
 from policy_atlas.api.contract.runs import TocWalkKind
 from policy_atlas.api.identity import owner_display_for
 from policy_atlas.api.routers.access import readable_task_leg
+from policy_atlas.api.settings import Settings
 from policy_atlas.api.stage_vocabulary import presentation, stage_for_payload
 from policy_atlas.core.schema import (
     app_user,
     artefact,
     capability_run,
+    cohort,
+    cohort_member,
     event_log,
     evidence_scope,
     longlist_result,
+    organisation,
     project_membership,
     runs,
     task,
@@ -53,6 +58,31 @@ _RESOLVE = object()
 
 #: A walk that is still going: the admission fences and ``active_run`` read these.
 ACTIVE_WALK_STATUSES: tuple[str, ...] = ("running", "paused")
+
+
+LimitKind = Literal["person", "cohort", "organisation", "default", "administrator"]
+
+
+@dataclass(frozen=True)
+class LimitSource:
+    """Where one limit came from: a fixed kind, plus the cohort's or organisation's name."""
+
+    kind: LimitKind
+    name: str | None = None
+
+
+@dataclass(frozen=True)
+class Limits:
+    """Effective task and simultaneous-run limits for one person."""
+
+    task_quota: int | None
+    runs: int | None
+    # Where each limit came from, for the ops pages. Not part of equality:
+    # callers compare the numbers.
+    task_quota_from: LimitSource = field(
+        default_factory=lambda: LimitSource("default"), compare=False
+    )
+    runs_from: LimitSource = field(default_factory=lambda: LimitSource("default"), compare=False)
 
 
 def parentless_walk() -> ColumnElement[bool]:
@@ -94,6 +124,126 @@ def active_parentless_walk(conn: Connection, task_id: uuid.UUID) -> RowMapping |
         .where(parentless_walk())
         .limit(1)
     ).mappings().one_or_none()
+
+
+def tasks_created_since(conn: Connection, user_id: str, *, days: int) -> int:
+    """Count the tasks one person created in the last ``days`` days (task 064a, Q8).
+
+    By the database clock, never the API's. Archived tasks count: archiving
+    does not give a task back to the quota.
+
+    Args:
+        conn: Open database connection.
+        user_id: The person, matched on ``task.owner_user_id``.
+        days: The window's length.
+
+    Returns:
+        How many of the person's task rows were created inside the window.
+    """
+    return int(
+        conn.execute(
+            select(func.count())
+            .select_from(task)
+            .where(task.c.owner_user_id == user_id)
+            .where(created_in_last_days(days))
+        ).scalar_one()
+    )
+
+
+def created_in_last_days(days: int) -> ColumnElement[bool]:
+    """The predicate "this task was created in the last ``days`` days", by the database clock.
+
+    Shared by the quota check and the ops people list (task 065), so the two
+    counts never drift. ``make_interval(years, months, weeks, days)``: the
+    length is a bound parameter, not text spliced into the statement.
+    """
+    return task.c.created_at >= func.now() - func.make_interval(0, 0, 0, days)
+
+
+def effective_limits(conn: Connection, user_id: str, *, settings: Settings) -> Limits:
+    """Resolve one person's limits: their own override, a cohort's, their organisation's, settings.
+
+    Task 065 (B12, plan P7). A stored ``0`` means no limit and comes back as
+    ``None``. An administrator's limits are both ``None`` (the exemptions of
+    task 064a, ADR 0045, moved here from the task-create route and from
+    ``user_at_run_cap``). The task-create check, the run-cap sites and
+    ``/me`` call this and nothing else reads the six override columns. A
+    cohort's number (owner, 2026-11-18) sits between the person's and the
+    organisation's; in several cohorts that set one, the most recently
+    joined wins, per limit.
+
+    Args:
+        conn: Open database connection.
+        user_id: The person's Cognito subject.
+        settings: Application settings providing the default limits.
+
+    Returns:
+        Effective task and run limits, with ``None`` meaning unlimited.
+    """
+    def from_cohort(column: ColumnElement[Any]) -> Any:
+        """The latest-joined cohort that sets this limit: its value and name, as a row."""
+        return (
+            select(column, cohort.c.name)
+            .select_from(
+                cohort_member.join(cohort, cohort.c.cohort_id == cohort_member.c.cohort_id)
+            )
+            .where(cohort_member.c.user_id == user_id, column.is_not(None))
+            # Equal join times (rare: the command stamps each with the clock)
+            # fall back to the cohort id, which never changes, not the name,
+            # which an operator may rename.
+            .order_by(cohort_member.c.added_at.desc(), cohort.c.cohort_id)
+            .limit(1)
+        )
+
+    row = conn.execute(
+        select(
+            app_user.c.is_admin,
+            app_user.c.task_quota_per_year.label("user_task_quota"),
+            app_user.c.runs_per_user.label("user_runs"),
+            organisation.c.name.label("org_name"),
+            organisation.c.task_quota_per_year.label("org_task_quota"),
+            organisation.c.runs_per_user.label("org_runs"),
+        )
+        .select_from(app_user.outerjoin(organisation, organisation.c.org_id == app_user.c.org_id))
+        .where(app_user.c.user_id == user_id)
+    ).mappings().one_or_none()
+    if row is None:
+        default = LimitSource("default")
+        return _limits((settings.task_quota_per_year, default), (settings.runs_per_user, default))
+    if row["is_admin"]:
+        # Administrators are exempt from both limits (owner rulings
+        # 2026-11-16: the task quota in 064a Q8, the run cap in 064a's
+        # review); an override on their row does not pull them back under.
+        admin = LimitSource("administrator")
+        return _limits((0, admin), (0, admin))
+
+    def resolve(own: int | None, cohort_column: ColumnElement[Any], org_value: int | None,
+                default: int) -> tuple[int, LimitSource]:
+        if own is not None:
+            return own, LimitSource("person")
+        found = conn.execute(from_cohort(cohort_column)).one_or_none()
+        if found is not None:
+            return int(found[0]), LimitSource("cohort", str(found[1]))
+        if org_value is not None:
+            return org_value, LimitSource("organisation", str(row["org_name"]))
+        return default, LimitSource("default")
+
+    return _limits(
+        resolve(row["user_task_quota"], cohort.c.task_quota_per_year, row["org_task_quota"],
+                settings.task_quota_per_year),
+        resolve(row["user_runs"], cohort.c.runs_per_user, row["org_runs"],
+                settings.runs_per_user),
+    )
+
+
+def _limits(task_quota: tuple[int, LimitSource], runs: tuple[int, LimitSource]) -> Limits:
+    """Build limits from (value, source) pairs; a stored 0 means no limit."""
+    return Limits(
+        task_quota=None if task_quota[0] == 0 else task_quota[0],
+        runs=None if runs[0] == 0 else runs[0],
+        task_quota_from=task_quota[1],
+        runs_from=runs[1],
+    )
 
 
 def executor_walk() -> ColumnElement[bool]:

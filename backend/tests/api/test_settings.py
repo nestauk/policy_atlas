@@ -97,6 +97,60 @@ def test_db_max_overflow_negative_is_rejected(monkeypatch: pytest.MonkeyPatch) -
         load_settings()
 
 
+@pytest.mark.parametrize(
+    ("value", "expected"), [(None, "api"), ("api", "api"), ("ops", "ops")]
+)
+def test_service_role_defaults_to_api_and_accepts_ops(
+    monkeypatch: pytest.MonkeyPatch, value: str | None, expected: str
+) -> None:
+    """The service role is API by default and accepts the isolated ops process."""
+    _set_required_env(monkeypatch)
+    if value is None:
+        monkeypatch.delenv("POLICY_ATLAS_SERVICE_ROLE", raising=False)
+    else:
+        monkeypatch.setenv("POLICY_ATLAS_SERVICE_ROLE", value)
+
+    assert load_settings().service_role == expected
+
+
+def test_service_role_rejects_unknown_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A typo cannot accidentally create a process with an unclear route table."""
+    _set_required_env(monkeypatch)
+    monkeypatch.setenv("POLICY_ATLAS_SERVICE_ROLE", "worker")
+
+    with pytest.raises(RuntimeError, match="POLICY_ATLAS_SERVICE_ROLE must be api or ops"):
+        load_settings()
+
+
+@pytest.mark.parametrize(("value", "enabled"), [(None, False), ("0", False), ("1", True)])
+def test_self_signup_is_enabled_only_for_one(
+    monkeypatch: pytest.MonkeyPatch, value: str | None, enabled: bool
+) -> None:
+    """The self-signup sweep stays off unless explicitly enabled with `1`."""
+    _set_required_env(monkeypatch)
+    if value is None:
+        monkeypatch.delenv("POLICY_ATLAS_SELF_SIGNUP", raising=False)
+    else:
+        monkeypatch.setenv("POLICY_ATLAS_SELF_SIGNUP", value)
+
+    assert load_settings().self_signup_enabled is enabled
+
+
+def test_self_signup_cap_and_ops_ui_directory_parse(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The sweep cap and operations bundle directory are configurable."""
+    _set_required_env(monkeypatch)
+    ops_ui_dir = tmp_path / "ops-ui"
+    monkeypatch.setenv("POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR", "7")
+    monkeypatch.setenv("OPS_UI_DIR", str(ops_ui_dir))
+
+    settings = load_settings()
+
+    assert settings.self_signup_max_per_hour == 7
+    assert settings.ops_ui_dir == ops_ui_dir
+
+
 def test_lifespan_threads_pool_settings_into_create_engine(
     engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -125,4 +179,9 @@ def test_lifespan_threads_pool_settings_into_create_engine(
         pass
 
     kwargs = captured["kwargs"]
-    assert kwargs == {"pool_pre_ping": True, "pool_size": 7, "max_overflow": 3}
+    assert kwargs == {
+        "pool_pre_ping": True,
+        "hide_parameters": True,
+        "pool_size": 7,
+        "max_overflow": 3,
+    }

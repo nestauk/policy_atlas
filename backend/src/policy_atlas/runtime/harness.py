@@ -134,6 +134,34 @@ from policy_atlas.theory_of_change.draft import toc_draft_scope
 log = structlog.get_logger()
 
 
+def safe_error(exc: BaseException) -> str:
+    """Return the text a failed component may persist to the event log.
+
+    The event log feeds the progress stream, so whatever this returns can
+    reach the user's browser. Messages from third-party libraries (database
+    drivers, HTTP clients, model providers) often hold SQL, host names or
+    provider request ids, so for those only the class name is kept. Our own
+    exceptions (classes defined under ``policy_atlas.``) and any exception
+    carrying a structured ``reason`` code (a string; the task 013 rule) are
+    written to be shown, so they keep their message. The code must be a
+    string because library exceptions carry a ``reason`` too
+    (``urllib.error.URLError``, ``ssl.SSLError``, ``UnicodeDecodeError``)
+    and theirs is an object, not a code. Callers log the full exception
+    server-side with ``exc_info=True`` (review finding M-11).
+
+    Args:
+        exc: The exception a component raised.
+
+    Returns:
+        ``str(exc)`` for a product-shaped exception, otherwise the class name.
+    """
+    if type(exc).__module__.startswith("policy_atlas.") or isinstance(
+        getattr(exc, "reason", None), str
+    ):
+        return str(exc)
+    return type(exc).__name__
+
+
 class HarnessState(TypedDict):
     """Mutable state threaded through the harness graph nodes."""
 
@@ -214,7 +242,8 @@ def _run_scope_component(
     try:
         counts = sources_fn(conn, task_id=task_id, run_id=run_id, context=ctx)
     except Exception as exc:
-        err = str(exc)
+        log.warning("harness.component_failed", component=config.component, exc_info=True)
+        err = safe_error(exc)
         # A structured exception's own reason (e.g. ScreenSupersessionError's
         # "stage2_supersession_collision") must persist alongside the message —
         # the 013 rule: a persisted rejection must persist its reason, or the
@@ -591,10 +620,10 @@ def _run_characterise(state: HarnessState) -> HarnessState:
         )
         return {**state, "error": exc.error}
     except Exception as exc:
-        # str(exc) persists into the event log: provider raise paths inside
-        # characterise_scope must keep reducing errors to exception type names
-        # (never raw response bodies) before they can reach this handler.
-        err = str(exc)
+        # The event log only gets safe_error's text; the full exception goes
+        # to the server log.
+        log.warning("harness.component_failed", component=config.component, exc_info=True)
+        err = safe_error(exc)
         events.append(
             conn, task_id=task_id, run_id=run_id,
             event_type="component.failed",
@@ -671,9 +700,10 @@ def _run_synthesise(state: HarnessState) -> HarnessState:
         )
         return {**state, "error": exc.error}
     except Exception as exc:
-        # Bounded: unexpected exceptions can carry provider/request detail
-        # that must not land in the durable event log verbatim.
-        err = f"{type(exc).__name__}: {str(exc)[:200]}"
+        # Unexpected exceptions can carry provider/request detail that must
+        # not land in the durable event log: safe_error, bounded to 200 chars.
+        log.warning("harness.component_failed", component=config.component, exc_info=True)
+        err = safe_error(exc)[:200]
         events.append(
             conn,
             task_id=task_id,

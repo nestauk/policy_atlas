@@ -824,10 +824,11 @@ def test_no_write_under_the_api_can_set_is_admin() -> None:
     )
 
 
-#: Every code site under `api/` that references `is_admin`, as
-#: `module path -> enclosing scope`. Contract § 3a names **four semantic
-#: readers**; this is what they are in code, and the mapping between the two
-#: lists is deliberate rather than incidental:
+#: Every code site under `api/` that references `is_admin`, or calls
+#: `_is_admin` from outside `access.py`, as `module path -> enclosing scope`.
+#: Contract § 3a names **four semantic readers** and ADR 0045 adds a fifth;
+#: this is what they are in code, and the mapping between the two lists is
+#: deliberate rather than incidental:
 #:
 #: - `routers/access.py::admin_read_leg` — the SQL leg. Serves reader **(i)**
 #:   the row-access helper's admin leg *and* reader **(ii)** the listing scope
@@ -843,12 +844,19 @@ def test_no_write_under_the_api_can_set_is_admin() -> None:
 #:   `get_me` fills in. Named here because an honest closed list enumerates
 #:   what the code *contains*, and pretending a field declaration is invisible
 #:   would make the assertion weaker, not cleaner.
+#: - `routers/common.py::effective_limits` — readers **(v)** and **(vi)**:
+#:   the task-quota exemption and the per-user run-cap exemption. One resolver
+#:   serves every quota and run-start caller.
 #:
-#: A fifth entry is a defect, and the most likely fifth entry is a write path.
+#: Any further entry is a defect and needs its own amendment.
 _IS_ADMIN_READERS = {
     "routers/access.py": {"admin_read_leg", "_is_admin"},
     "routers/me.py": {"get_me"},
     "contract/tenancy.py": {"MeOut"},
+    "routers/common.py": {"effective_limits"},
+    # Task 065: the ops pages list people with both flags; the shape is served
+    # only on the ops host (contract B4).
+    "contract/ops.py": {"PersonOut"},
 }
 
 
@@ -989,7 +997,12 @@ def test_only_the_named_code_sites_read_the_is_admin_flag() -> None:
     actual = {
         str(path.relative_to(root)): scopes
         for path in _api_modules()
-        if (scopes := _scopes_mentioning(path, "is_admin"))
+        if (
+            scopes := _scopes_mentioning(path, "is_admin")
+            # A call to the helper outside its own module reads the flag too
+            # (ADR 0045); inside `access.py` it serves readers (ii) and (iii).
+            | (set() if path.name == "access.py" else _scopes_mentioning(path, "_is_admin"))
+        )
     }
 
     assert actual == _IS_ADMIN_READERS
@@ -1021,4 +1034,42 @@ def test_no_raw_sql_string_reaches_the_is_admin_flag_behind_the_walk() -> None:
         if (scopes := _scopes_with_a_string_containing(path, "is_admin"))
     }
 
-    assert actual == {"routers/me.py": {"get_me"}}
+    assert actual == {
+        "routers/me.py": {"get_me"},
+        # Task 065 (B12): the resolver reads the flag for the quota exemption.
+        "routers/common.py": {"effective_limits"},
+    }
+
+
+#: Task 065 (B1, B9): the closed list of `is_ops` readers, kept the way
+#: `_IS_ADMIN_READERS` is. The ops routes' own dependency reads the flag to
+#: admit a caller, and the people-list shape declares it; nothing else under
+#: `api/` may touch it — no HTTP route sets it (contract B1).
+_IS_OPS_READERS = {
+    "routers/ops.py": {"require_ops"},
+    "contract/ops.py": {"PersonOut"},
+}
+
+
+def test_only_the_named_code_sites_read_the_is_ops_flag() -> None:
+    """Contract B1's reader rule for `is_ops`, asserted against a closed list."""
+    root = Path(policy_atlas.api.__file__).parent
+    actual = {
+        str(path.relative_to(root)): scopes
+        for path in _api_modules()
+        if (scopes := _scopes_mentioning(path, "is_ops"))
+    }
+
+    assert actual == _IS_OPS_READERS
+
+
+def test_no_raw_sql_string_reaches_the_is_ops_flag_behind_the_walk() -> None:
+    """The `is_ops` list a second way: no code string under `api/` contains the name."""
+    root = Path(policy_atlas.api.__file__).parent
+    actual = {
+        str(path.relative_to(root)): scopes
+        for path in _api_modules()
+        if (scopes := _scopes_with_a_string_containing(path, "is_ops"))
+    }
+
+    assert actual == {}
