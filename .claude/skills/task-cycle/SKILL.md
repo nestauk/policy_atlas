@@ -13,26 +13,24 @@ description: >
 
 # Task cycle (spine)
 
-The repeatable spine for landing one implementation slice. It orchestrates the artifacts
-and commands that already exist — it does not replace them. The detail lives in three
-**phase skills**; this file holds only what every phase must respect: the tier gate, the
-conversation map, the hard gates, and the exit criteria.
+The spine for landing one slice. The detail is in three **phase skills**; this file holds
+what every phase respects: the tier, the conversation map, the hard gates, the exit criteria.
 
 | Phase | Skill | Steps | Conversation |
 |---|---|---|---|
 | Design | [`task-cycle-design`](../task-cycle-design/SKILL.md) | 1–4: contract · rubric · plan · ADR | A |
-| Build | [`task-cycle-build`](../task-cycle-build/SKILL.md) | 5–6: implement · verify | B |
+| Build | [`task-cycle-build`](../task-cycle-build/SKILL.md) | 5–6: implement · simplify · verify | B |
 | Review | [`task-cycle-review`](../task-cycle-review/SKILL.md) | 7–10: review stack · PR · merge · close-out | C |
 
-Authoritative boundaries: [AGENTS.md](../../../AGENTS.md). Full rationale:
+Boundaries: [AGENTS.md](../../../AGENTS.md). Rationale:
 [advanced-agentic-engineering-manual.md](../../../docs/agentic-ops/references/advanced-agentic-engineering-manual.md).
-Recurring lessons: [failure-log.md](../../../docs/agentic-ops/failure-log.md) — the phase
-skills encode them; when in doubt, the failure log wins over convenience.
+Recurring lessons: [failure-log.md](../../../docs/agentic-ops/failure-log.md); when in
+doubt, the failure log wins over convenience.
 
-## Step 0 — Pick the risk tier first (the lazy gate)
+## Step 0 — Pick the risk tier first
 
-Decide the tier **before** any ceremony. It sets how much of the cycle applies. Don't run
-the Tier-4 ritual for a docs typo; don't downgrade a gated-surface change to skip approval.
+Decide the tier **before** any ceremony. Do not run the Tier-4 ritual for a docs typo; do
+not downgrade a gated-surface change to skip approval.
 
 | Tier | Example | Cycle steps that apply |
 |---|---|---|
@@ -42,19 +40,17 @@ the Tier-4 ritual for a docs typo; don't downgrade a gated-surface change to ski
 | 3 | auth, PII, schema, runtime egress | + security-auditor lane + adversarial review (contract + plan + code) + human deep review |
 | 4 | scaffold, migration, prod config, public API | + human-approved plan + ADR + rollback plan |
 
-A change touching a **hard gate** (schema · auth · **runtime egress** · deps · CI · prod
-config · public interface · scaffold) is **never below Tier 3** — see Stop conditions.
+A change that touches a **hard gate** (schema · auth · **runtime egress** · deps · CI · prod
+config · public interface · scaffold) is **never below Tier 3**.
 
 *Runtime egress* = the **running product** reaching the outside world (search backends,
-model providers) carrying project data. Agent/dev-time network use — fetching docs, MCP
-servers, recorder scripts, `uv`/Docker installs — is **not** gated and is expected.
+model providers) with project data. Agent and dev-time network use (docs, MCP servers,
+recorder scripts, `uv`/Docker installs) is **not** gated.
 
-## Running it across conversations (and goals)
+## Conversations and goals
 
-State lives in **files, not chat history** — by design — so the cycle splits cleanly
-across fresh conversations. **One phase = one conversation = (at most) one `/goal`.**
-A single goal spanning build *and* review forces same-chat review and makes the author
-the adjudicator — never do it.
+State lives in **files, not chat history**. **One phase = one conversation = (at most) one
+`/goal`.** A goal across build *and* review makes the author the adjudicator: never.
 
 | Conversation | Phase skill | Re-ground by reading | Produces | `/goal` shape (optional) |
 |---|---|---|---|---|
@@ -62,49 +58,42 @@ the adjudicator — never do it.
 | B — build | task-cycle-build | `contract.md`, `plan.md` + specs | code + `verification.md` | "through step 6: verification.md complete, `make verify` green" |
 | C — review | task-cycle-review | the diff, `rubric.md`, `verification.md` | findings → fixes → PR | "review stack run and adjudicated; rubric item 8 holds" |
 
-- **Between phases: start fresh.** The committed artifact is the handoff; re-reading it is
-  lossless, whereas `/compact`'s summary is lossy. **Review requires a fresh conversation**
-  — not just fresh reviewer lanes: the *adjudicator* of findings must not be the chat that
-  wrote the code.
-- **Within a long phase: `/compact`**, not a fresh start. `verify` stays with `implement`.
-- Open each fresh conversation by re-grounding: read the task's artifacts and the specs
-  they cite; a build conversation runs `make verify` first (never build on a red base).
+- **Between phases: start fresh.** The committed artifact is the handoff; `/compact` loses
+  detail. **Review requires a fresh conversation**, not only fresh lanes: the
+  *adjudicator* must not be the chat that wrote the code.
+- **Within a long phase: `/compact`.** Verify stays with implement.
+- A build conversation runs `make verify` first: never build on a red base.
 
 ## Commits
 
-Each phase boundary (and each build sub-phase from the plan) ends with a commit on the
-`task/NNN-slug` branch — that's what turns the artifact into a real handoff. The agent
-prepares and runs commits as defined steps: never on the default branch, never on a red
-gate. The gate is **tiered**: intermediate build sub-phases commit on green
-`make verify-fast`; full `make verify` is mandatory at the build-open baseline, any
-schema/ingest-adjacent phase, and the step-6 exit — task-cycle-build § Step 5 has the
-rule. **commit ≠ push** — pushing and merging stay human; the agent drafts the PR
-and opens it on your go (step 8); the human owns review + merge (step 9).
+Each phase boundary and each plan sub-phase ends with a commit on `task/NNN-slug`: never on
+the default branch, never on a red check. The check is **tiered**: `make verify-fast` for
+intermediate build commits; `make frontend-verify-fast` with it for frontend polish
+commits; full `make verify` at the build-open baseline, at any phase that touches schema
+or ingest code, and at the step-6 exit (rule: task-cycle-build § Step 5). **commit ≠
+push**: pushing and merging stay human. The agent opens the PR on the human's go (step 8);
+the human reviews and merges (step 9).
 
-## Evidence requirements
+## Evidence and exit criteria
 
-- `make verify` green (the `verify` target in the `Makefile` lists every check it runs).
-- `verification.md` complete, including the exact end-to-end command run.
+- `make verify` green (the `Makefile` `verify` target lists its checks).
+- `verification.md` complete, with the exact end-to-end command.
 - Every rubric box checked or explicitly justified.
 
-## Exit criteria
-
-Done **only** when: all rubric boxes hold · PR open with linked evidence · knowledge
-updated. Anything short of this is in progress, not done.
+Done **only** when all rubric boxes hold · PR open with linked evidence · knowledge
+updated. Anything less is in progress.
 
 ## Stop conditions — halt and escalate
 
-- A **hard gate** (schema · auth · runtime egress · deps · CI · prod config · public
-  interface · scaffold) is unapproved. Do **not** scaffold around it. Sign-off first,
-  recorded.
-- Scope would grow past the contract, or a new table/seam beyond the contract is needed.
-- The spec/contract is wrong enough to **block** the slice — halt and run spec refinement
-  (task-cycle-design § Spec refinement); don't silently obey it or deviate. (A *minor*
-  deviation resolvable within the contract's own vocabulary may instead be resolved and
-  flagged in `verification.md` — see task-cycle-build.)
-- The slice tempts **product** egress (a real search backend or model-provider call) when
-  the contract says stub.
-- Turn/token budget spent. Report the blocker; don't push through.
+- A **hard gate** is unapproved. Do **not** scaffold around it; get sign-off and record it.
+- Scope would grow past the contract, or the slice needs a table or seam the contract lacks.
+- The spec or contract is wrong enough to **block** the slice: run spec refinement
+  (task-cycle-design § Spec refinement); do not silently obey or deviate. A *minor*
+  deviation within the contract's vocabulary may be resolved and flagged in
+  `verification.md` (task-cycle-build).
+- The slice tempts **product** egress (a real search or model-provider call) when the
+  contract says stub.
+- Turn or token budget spent. Report the blocker.
 
 ## Anti-rationalisation
 
@@ -120,12 +109,20 @@ updated. Anything short of this is in progress, not done.
 
 ## Scope boundaries
 
-This skill governs landing **one** slice. It does not pick *which* slice (that's the phase
-plan), and it is not a loop — the human steers every 🛑. Promote to a loop only if
-unattended task execution is ever wanted, and never for Tier 3/4 work.
+This skill lands **one** slice. It does not pick the slice (the phase plan does), and it is
+not a loop: the human steers every 🛑. Make it a loop only if unattended execution is ever
+wanted, and never for Tier 3/4.
 
-**Invocation.** Phase skills can auto-trigger from their descriptions, but for a process
-you want reliably applied, invoke explicitly (`/task-cycle-build`, "run the review stack
-for task NNN"). Forgetting on a turn is survivable: the *enforcement* lives in durable
-artifacts (templates, PR template, settings deny rules, AGENTS.md), not in a skill being
-"active". The skills are the glue; those are the gates.
+**Periodic structural review and test prune.** About every five merged slices, a chore
+branch (not a product task) runs both, because a slice review sees one diff and misses
+drift across slices.
+- Structural review: logic in the wrong layer, a copy of an existing helper, a file pushed
+  past 1,000 lines.
+- Test prune: remove or replace tests tied to the implementation or already covered by a
+  boundary test; keep the guards (task-cycle-build § Step 5). A reviewer who did not make
+  the removal confirms it.
+
+**Invocation.** Phase skills trigger from their descriptions; for reliable use, invoke one
+explicitly (`/task-cycle-build`, "run the review stack for task NNN"). The *enforcement*
+lives in durable artifacts (templates, PR template, settings deny rules, AGENTS.md), not in
+an active skill. The skills are the glue; those are the gates.

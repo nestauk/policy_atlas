@@ -248,8 +248,9 @@ or model providers. Agent and developer network use is not gated.
 - **Review stack** (detail in the `task-cycle-review` skill): `contract-verifier`, `/code-review`
   at `medium`, one security lane (`agent-skills:security-auditor` at Tier 3 and up,
   `/security-review` below), the Codex adversarial review, a live-trace content review when the
-  slice has live runs, a design lane for frontend slices, `ponytail-review`, then `/simplify`.
-  Fresh conversation; data files excluded from the diff.
+  slice has live runs, a design lane for frontend slices, and `ponytail-review`. Fresh
+  conversation; data files excluded from the diff. Cleanup is not a review lane: `/simplify`
+  runs at the end of the build (step 5c), so the review reads the simplified code.
 
 ## Observability
 
