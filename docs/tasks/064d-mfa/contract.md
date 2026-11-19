@@ -7,7 +7,7 @@ Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in [docs/specs/](../../
 > (2026-11-19): Cognito managed login with our branding (option B), not a custom sign-in page;
 > the sign-in page stays on the Cognito address for now; an email code at **every** sign-in;
 > the password-reset setting is decided by a test on staging (P0), with operator-only resets as
-> the fallback; staging first. · Contract approved (before planning): _pending_ · Plan approved
+> the fallback; staging first. · Contract approved (before planning): 2026-11-19 · owner (revision 1) · Plan approved
 > (before implementation): _pending_ · ADR: 0049 (to write at step 4).
 
 ## Goal
@@ -73,7 +73,7 @@ Production has them off, and its user pool template is unchanged.
 | Part | Today | After this slice (staging) | Do not change |
 |---|---|---|---|
 | Second factor | none (`MfaConfiguration` OFF) | email code at every sign-in | — |
-| Feature plan | unknown (P0 reads it: U1) | Plus | production: unchanged |
+| Feature plan | Essentials in both (U1) | Plus | production: unchanged |
 | Threat protection | off | audit, then full function (M2) | — |
 | Account recovery | `EMAIL_ONLY` | the P0 result (M3) | — |
 | Sign-in page | classic hosted UI, AWS look | managed login, our logo and colours | the Cognito address; the app's redirect flow |
@@ -223,4 +223,21 @@ rollout or the rollback, and anything that sends a code or a reset to the wrong 
 
 ## P0 results
 
-_To fill after P0 runs._
+**U1** (read-only `describe-user-pool` and `describe-user-pool-domain`, 2026-11-19, by the
+lead):
+
+| | Staging | Production |
+|---|---|---|
+| Feature plan | Essentials | Essentials |
+| MFA | OFF | OFF |
+| SMS configuration | none | none |
+| Recovery | `verified_email` only (`EMAIL_ONLY`) | `verified_email` only (`EMAIL_ONLY`) |
+| Pool email | `DEVELOPER` (our SES) | `COGNITO_DEFAULT` (production `email.enabled` is false) |
+| Hosted page version | 1 (classic) | 1 (classic) |
+| Estimated users | 26 | 100 |
+
+So: both pools already have the plan that email MFA and managed login need; only threat
+protection needs the move to Plus. No SMS configuration exists, so SMS cannot become a factor
+by itself. Production's Plus cost would be about $2 a month at 100 users.
+
+U2 to U6: _to fill after P0 runs._
