@@ -41,7 +41,7 @@ anywhere.
 > **One deploy at a time per environment.** GitHub Actions serializes each
 > environment and never cancels an active deploy. There is no cross-system lock:
 > a local `deploy.sh` can still interleave with Actions, so coordinate local
-> recovery/bootstrap work human-to-human (deferred seam — see `docs/deferred.md`).
+> recovery/bootstrap work human-to-human (deferred: see `docs/deferred.md` § Infrastructure and deployment).
 
 ### GitHub Actions, Environments, and AWS OIDC
 
@@ -349,7 +349,7 @@ synth-time context query and must not run before the VPC exists.
      sign-in, `make user-reissue ENV=<env> EMAIL=<user-email>` mints and prints
      a replacement on the same terms (it refuses any account that has already
      signed in; needs `AdminSetUserPassword`). The durable fix is SES-backed pool email
-     (docs/deferred.md § Organisations — SES entry).
+     (docs/deferred.md § Accounts, organisations and administration).
 
      The invitation goes through the `COGNITO_DEFAULT` sender (the pool has no
      `EmailConfiguration`), which is capped at 50 messages a day and needs a
