@@ -78,17 +78,19 @@ from __future__ import annotations
 import os
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import boto3
 import structlog
 from botocore.exceptions import ClientError
-from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
 from sqlalchemy import desc, or_, select
 from sqlalchemy.engine import Connection, make_url
 
 from policy_atlas.core.schema import app_user
 from policy_atlas.ops.errors import OpsError
+
+if TYPE_CHECKING:
+    from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
 
 log = structlog.get_logger()
 

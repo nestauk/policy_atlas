@@ -172,7 +172,7 @@ def admit_and_mint(
         check_capacity: ``False`` for the unattended follow-on, which runs on
             the worker the baseline already held.
         capacity: The executor's width; required when ``check_capacity``.
-        user_cap: The per-person limit (``settings.runs_per_user``), counted
+        user_cap: The resolved per-person limit, counted
             for the task's owner; required when ``check_capacity``.
         executor: The walk executor to submit to, or ``None`` to submit nothing
             (the follow-on runs the walk inline).
@@ -187,11 +187,10 @@ def admit_and_mint(
 
     Raises:
         LonglistRefused: If the admission or the plan refuses.
-        ValueError: If ``check_capacity`` is on and ``user_cap`` was not given
-            (a wiring mistake, not a refusal to show the user).
     """
-    if check_capacity and user_cap is None:
-        raise ValueError("user_cap is required when check_capacity is true")
+    # ``user_cap`` None means no cap (an administrator, or an override of 0;
+    # task 065, B12). Until 065 it was a wiring error, and the guard that
+    # raised here gave an administrator a 500 on every longlist start.
     with _dispatch_lock:
         with engine.begin() as conn:
             task_row = task_lock(conn, task_id)
@@ -203,12 +202,12 @@ def admit_and_mint(
                 raise LonglistRefused("run_active", "the task already has an active run")
             if check_capacity and executor_full(conn, capacity):
                 raise LonglistRefused("capacity", "the walk executor is at capacity")
-            if check_capacity:
-                assert user_cap is not None  # checked at entry
-                if user_at_run_cap(conn, user_id=task_row["owner_user_id"], cap=user_cap):
-                    raise LonglistRefused(
-                        "user_capacity", f"you already have {user_cap} runs in progress"
-                    )
+            if check_capacity and user_at_run_cap(
+                conn, user_id=task_row["owner_user_id"], cap=user_cap
+            ):
+                raise LonglistRefused(
+                    "user_capacity", f"you already have {user_cap} runs in progress"
+                )
             current = latest_approved_plan_row(conn, task_id)
             if current is None:
                 raise LonglistRefused("no_plan", "the task has no approved plan")
@@ -291,7 +290,7 @@ def open_longlist_walk(
     backends: RunnerBackends,
     executor: ThreadPoolExecutor,
     user_id: str,
-    user_cap: int,
+    user_cap: int | None,
     await_run: bool = True,
 ) -> uuid.UUID:
     """Open the longlist walk on the confirmed plan version.
@@ -310,7 +309,7 @@ def open_longlist_walk(
         backends: The runner backend bundle.
         executor: The walk executor.
         user_id: The user traces are attributed to.
-        user_cap: The per-person limit (``settings.runs_per_user``), for the task's owner.
+        user_cap: The resolved per-person limit for the task's owner.
         await_run: Whether to wait for the walk's row before returning.
 
     Returns:
@@ -456,7 +455,7 @@ def open_shortlist_walk(
     backends: RunnerBackends,
     executor: ThreadPoolExecutor,
     user_id: str,
-    user_cap: int,
+    user_cap: int | None,
     suggest: bool,
 ) -> uuid.UUID:
     """Open a shortlist walk on the current approved plan (task 055, P8).
@@ -472,7 +471,7 @@ def open_shortlist_walk(
         backends: The runner backend bundle.
         executor: The walk executor.
         user_id: The user traces are attributed to.
-        user_cap: The per-person limit (``settings.runs_per_user``), for the task's owner.
+        user_cap: The resolved per-person limit for the task's owner.
         suggest: ``True`` for Suggest more (keep the places, fill up to five
             or one more), which re-proposes instead when the stored
             proposal is stale; ``False`` to release Policy Atlas's picks and

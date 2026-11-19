@@ -5,15 +5,21 @@ The command tree, with every global option before the subcommand::
     python -m policy_atlas.ops --env {staging,prod} [options] <group> <command>
 
       org   create    --name NAME
+      org   quota     --org ORG --tasks-per-year N|inherit --runs N|inherit
+      org   domain add --domain D --org ORG
+      org   domain remove --domain D
       user  create    --email E --display-name D [--org ORG]
       user  enrol     --email E --display-name D --org ORG
       user  resync    --email E
       user  reissue   --email E
       user  de-enrol  (--email E | --sub SUB)
       user  offboard  (--email E | --sub SUB)
+      user  quota     (--email E | --sub SUB) --tasks-per-year N|inherit --runs N|inherit
       rows  assign    (--task ID | --project ID) --org ORG
       admin grant     (--email E | --sub SUB)
       admin revoke    (--email E | --sub SUB)
+      ops   grant     (--email E | --sub SUB)
+      ops   revoke    (--email E | --sub SUB)
 
 Global options: ``--env`` (required), ``--database-url``, ``--expected-account``,
 ``--user-pool-id``, ``--operator``. **There is no ``--yes``**: the only
@@ -56,10 +62,9 @@ import os
 import sys
 import uuid
 from collections.abc import Callable, Sequence
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import structlog
-from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Connection, Engine, make_url
 
@@ -76,6 +81,9 @@ from policy_atlas.ops.environment import (
     verify_environment,
 )
 from policy_atlas.ops.errors import OpsError
+
+if TYPE_CHECKING:
+    from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
 
 log = structlog.get_logger()
 
@@ -218,6 +226,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     org_create = org.add_parser("create", help="create an organisation")
     org_create.add_argument("--name", required=True)
+    org_quota = org.add_parser("quota", help="set organisation quota overrides")
+    org_quota.add_argument("--org", required=True)
+    _quota_args(org_quota)
+    domain = org.add_parser("domain", help="manage self-signup domains").add_subparsers(
+        dest="domain_command", required=True
+    )
+    domain_add = domain.add_parser("add", help="map a domain to an organisation")
+    domain_add.add_argument("--domain", required=True)
+    domain_add.add_argument("--org", required=True)
+    domain_remove = domain.add_parser("remove", help="remove a domain mapping")
+    domain_remove.add_argument("--domain", required=True)
 
     user = groups.add_parser("user", help="people").add_subparsers(dest="command", required=True)
     user_create = user.add_parser(
@@ -277,6 +296,11 @@ def build_parser() -> argparse.ArgumentParser:
     offboard_subject = user_offboard.add_mutually_exclusive_group(required=True)
     offboard_subject.add_argument("--email", type=_email)
     offboard_subject.add_argument("--sub")
+    user_quota = user.add_parser("quota", help="set a person's quota overrides")
+    user_quota_subject = user_quota.add_mutually_exclusive_group(required=True)
+    user_quota_subject.add_argument("--email", type=_email)
+    user_quota_subject.add_argument("--sub")
+    _quota_args(user_quota)
 
     rows = groups.add_parser("rows", help="row assignment").add_subparsers(
         dest="command", required=True
@@ -301,7 +325,37 @@ def build_parser() -> argparse.ArgumentParser:
         subject.add_argument("--email", type=_email)
         subject.add_argument("--sub")
 
+    ops = groups.add_parser("ops", help="the operations role").add_subparsers(
+        dest="command", required=True
+    )
+    for direction in ("grant", "revoke"):
+        subject = (
+            ops.add_parser(direction, help=f"{direction} the operations role")
+            .add_mutually_exclusive_group(required=True)
+        )
+        subject.add_argument("--email", type=_email)
+        subject.add_argument("--sub")
+
     return parser
+
+
+def _quota_value(value: str) -> int | None:
+    """Parse a non-negative override or the explicit inherit sentinel."""
+    if value == "inherit":
+        return None
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("expected a non-negative integer or inherit") from error
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("expected a non-negative integer or inherit")
+    return parsed
+
+
+def _quota_args(parser: argparse.ArgumentParser) -> None:
+    """Add the two required quota override flags to one subcommand."""
+    parser.add_argument("--tasks-per-year", required=True, type=_quota_value)
+    parser.add_argument("--runs", required=True, type=_quota_value)
 
 
 def _run(
@@ -331,6 +385,16 @@ def _run(
             target, conn=conn, cognito=identity, sts=tokens, confirm=ask
         )
         outcome = _dispatch(args, conn=conn, cognito=identity, target=target)
+        if isinstance(outcome, commands.QuotaChange):
+            # A quota change is recorded wherever it is made (task 065, B12):
+            # the operator's verified AWS principal is the actor.
+            commands.record_action(
+                conn,
+                actor=verification.caller_arn,
+                action="org.quota" if args.group == "org" else "person.quota",
+                target=outcome.who,
+                outcome="ok",
+            )
     # Both of these are after the commit, and for the same reason: neither a
     # printed line nor a logged one may claim a write the transaction discarded.
     _trace(outcome, verification=verification, target=target, note=args.operator)
@@ -396,6 +460,7 @@ def _trace(
             operator_note=note,
             subject=change.subject,
             direction=change.direction,
+            flag=change.flag,
             env=target.env,
         )
 
@@ -409,7 +474,20 @@ def _dispatch(
 ) -> Outcome:
     """Route one verified invocation to its command function."""
     if args.group == "org":
-        return commands.create_organisation(conn, name=args.name)
+        if args.command == "create":
+            return commands.create_organisation(conn, name=args.name)
+        if args.command == "quota":
+            org = commands.resolve_organisation(conn, args.org)
+            return commands.set_quota(
+                conn,
+                org_id=org.org_id,
+                task_quota_per_year=args.tasks_per_year,
+                runs_per_user=args.runs,
+            )
+        if args.domain_command == "add":
+            org = commands.resolve_organisation(conn, args.org)
+            return commands.add_domain(conn, domain=args.domain, org=org)
+        return commands.remove_domain(conn, domain=args.domain)
 
     if args.group == "user":
         if args.command == "resync":
@@ -425,6 +503,14 @@ def _dispatch(
         if args.command == "offboard":
             return commands.offboard_user(
                 conn, cognito, pool_id=target.user_pool_id, email=args.email, sub=args.sub
+            )
+        if args.command == "quota":
+            row = commands._resolve_and_lock(conn, email=args.email, sub=args.sub)
+            return commands.set_quota(
+                conn,
+                user_id=str(row["user_id"]),
+                task_quota_per_year=args.tasks_per_year,
+                runs_per_user=args.runs,
             )
         if args.command == "create" and args.org is None:
             return commands.create_user(
@@ -459,6 +545,8 @@ def _dispatch(
         org = commands.resolve_organisation(conn, args.org)
         return commands.assign_rows(conn, org=org, task_id=args.task, project_id=args.project)
 
+    if args.group == "ops":
+        return commands.set_ops(conn, email=args.email, sub=args.sub, grant=args.command == "grant")
     return commands.set_admin(conn, email=args.email, sub=args.sub, grant=args.command == "grant")
 
 

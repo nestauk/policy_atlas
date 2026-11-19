@@ -210,6 +210,41 @@ def test_confirm_baseline_opens_the_longlist_walk_on_the_new_version(
         _cleanup(engine, task_id)
 
 
+def test_an_administrator_with_no_run_cap_confirms_a_baseline(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """A cap of ``None`` (an administrator; task 065) admits the walk, it is not an error.
+
+    Until 065 the admission guard raised ``ValueError`` on a missing cap and an
+    administrator got a 500 on every longlist start (review stack, 2026-11-17).
+    """
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from policy_atlas.core.schema import app_user
+
+    task_id: uuid.UUID | None = None
+    executor = RecordingExecutor()
+    try:
+        with api_client(tmp_path, _overrides(executor)) as (client, owner, _other):
+            task_id, artefact_id = _seed_confirmable(engine, owner)
+            with engine.begin() as conn:
+                owner_sub = conn.execute(
+                    select(task.c.owner_user_id).where(task.c.task_id == task_id)
+                ).scalar_one()
+                conn.execute(
+                    pg_insert(app_user)
+                    .values(
+                        user_id=owner_sub, display_name="Admin", is_admin=True, created_at=now()
+                    )
+                    .on_conflict_do_update(index_elements=["user_id"], set_={"is_admin": True})
+                )
+            response = _confirm(client, owner, task_id, artefact_id)
+        assert response.status_code == 200, response.text
+        assert response.json()["opened_run"]["status"] == "running"
+    finally:
+        _cleanup(engine, task_id)
+
+
 def test_a_second_confirm_while_the_longlist_walk_runs_is_run_active(
     engine: Engine, tmp_path: Path
 ) -> None:
@@ -1086,8 +1121,3 @@ def test_the_opener_counts_reservations_against_the_cap(engine: Engine) -> None:
         for task_id in created:
             _cleanup(engine, task_id)
 
-
-def test_admit_and_mint_fails_loudly_without_a_user_cap(engine: Engine) -> None:
-    """A start surface that forgets ``user_cap`` is a wiring bug, not a 409 to show."""
-    with pytest.raises(ValueError, match="user_cap"):
-        longlist_start.admit_and_mint(engine, task_id=uuid.uuid4(), capacity=99, user_id="dev-user")

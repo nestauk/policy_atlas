@@ -27,7 +27,6 @@ from policy_atlas.api.identity import owner_display_for
 from policy_atlas.api.lifecycle import archive_task, rename_task
 from policy_atlas.api.routers.access import (
     OWNER_EMAIL_MAX,
-    _is_admin,
     accessible_task,
     assignable_project,
     creator_org_id,
@@ -37,6 +36,7 @@ from policy_atlas.api.routers.access import (
     trace_admin_listing,
 )
 from policy_atlas.api.routers.common import (
+    effective_limits,
     links_for_tasks,
     memberships_for_tasks,
     task_out,
@@ -433,13 +433,13 @@ def create_task(
         raise ApiUnprocessable(
             "capability_not_enabled", "theory of change is not enabled on this server"
         )
-    if (
-        not _is_admin(conn, user.user_id)
-        and tasks_created_since(conn, user.user_id, days=365) >= settings.task_quota_per_year
-    ):
+    limits = effective_limits(conn, user.user_id, settings=settings)
+    if limits.task_quota is not None and tasks_created_since(
+        conn, user.user_id, days=365
+    ) >= limits.task_quota:
         raise ApiConflict(
             "task_quota",
-            f"you have reached the limit of {settings.task_quota_per_year} tasks per year",
+            f"you have reached the limit of {limits.task_quota} tasks per year",
         )
     now = datetime.now(UTC)
     task_id = uuid.uuid4()

@@ -5,6 +5,12 @@
             "domain_name": "v3.policyatlas.uk",
             "backend_subdomain": "api",
             "cognito_domain_prefix": "policy-atlas-v3",
+            "email": {
+                "enabled": true,
+                "sender_domain": "v3.policyatlas.uk",
+                "from_address": "no-reply@v3.policyatlas.uk",
+                "from_name": "Policy Atlas"
+            },
             "backend": {
                 "cpu": 2048,
                 "memory_limit_mib": 8192,
@@ -20,6 +26,17 @@
                 "upload_bucket_name": "policy-atlas-v3-staging-uploads",
                 "theory_of_change": true,
                 "waf": {"enabled": true, "mode": "count", "captcha": true}
+            },
+            "ops": {
+                "subdomain": "ops",
+                "cpu": 256,
+                "memory_limit_mib": 512,
+                "desired_count": 1,
+                "allowed_cidrs_parameter_name": "/policy_atlas_v3/ops/allowed_cidrs"
+            },
+            "self_signup": {
+                "enabled": false,
+                "max_per_hour": 20
             }
         },
         "deploy_analytics": true
@@ -30,6 +47,12 @@
             "domain_name": "policyatlas.uk",
             "backend_subdomain": "api",
             "cognito_domain_prefix": "policy-atlas-v3-prod",
+            "email": {
+                "enabled": false,
+                "sender_domain": "policyatlas.uk",
+                "from_address": "no-reply@policyatlas.uk",
+                "from_name": "Policy Atlas"
+            },
             "backend": {
                 "cpu": 2048,
                 "memory_limit_mib": 8192,
@@ -45,6 +68,17 @@
                 "upload_bucket_name": "policy-atlas-v3-prod-uploads",
                 "theory_of_change": false,
                 "waf": {"enabled": true, "mode": "count", "captcha": false}
+            },
+            "ops": {
+                "subdomain": "ops",
+                "cpu": 256,
+                "memory_limit_mib": 512,
+                "desired_count": 0,
+                "allowed_cidrs_parameter_name": "/policy_atlas_v3/ops/allowed_cidrs"
+            },
+            "self_signup": {
+                "enabled": false,
+                "max_per_hour": 5
             }
         },
         "deploy_analytics": true

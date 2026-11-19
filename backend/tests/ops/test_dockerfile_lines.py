@@ -42,3 +42,9 @@ def test_dockerfile_cmd_has_keepalive_proxy_and_server_header_flags() -> None:
     assert '"--timeout-keep-alive", "125"' in cmd
     assert '"--proxy-headers"' in cmd
     assert '"--no-server-header"' in cmd
+
+
+def test_dockerfile_copies_the_optional_ops_bundle_into_the_runtime_image() -> None:
+    dockerfile = _DOCKERFILE.read_text(encoding="utf-8")
+    assert "RUN mkdir -p /app/ops-ui" in dockerfile
+    assert "COPY --from=builder --chown=app:app /app/ops-ui ./ops-ui" in dockerfile

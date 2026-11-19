@@ -359,9 +359,8 @@ synth-time context query and must not run before the VPC exists.
      `PA_OPS_*_PROD` variables and prod-account credentials, not
      `AWS_PROFILE=pa-dev`.
 
-     **When the invitation email is not viable** (the `COGNITO_DEFAULT` sender
-     is `no-reply@verificationemail.com`, which spam filters routinely
-     swallow), add `INVITE=manual` (CLI: `--invite manual`): the email is
+     **When the invitation email does not arrive**, add `INVITE=manual` (CLI:
+     `--invite manual`): the email is
      suppressed and the CLI **mints** a single-use temporary password, printed
      once for out-of-band handover — the person sets their own at first
      sign-in (`FORCE_CHANGE_PASSWORD`, 30-day validity). The CLI still accepts
@@ -369,8 +368,8 @@ synth-time context query and must not run before the VPC exists.
      `AdminCreateUser`. If that password expires or is lost before first
      sign-in, `make user-reissue ENV=<env> EMAIL=<user-email>` mints and prints
      a replacement on the same terms (it refuses any account that has already
-     signed in; needs `AdminSetUserPassword`). The durable fix is SES-backed pool email
-     (docs/deferred.md § Organisations — SES entry).
+     signed in; needs `AdminSetUserPassword`). SES-backed pool email is now in
+     place through task 065; see [Pool email through SES (task 065)](#pool-email-through-ses-task-065).
 
      **Removing a person's access (task 064a, Q10).** `user de-enrol` changes
      the database only: the person's Cognito account still signs in and their
@@ -402,9 +401,10 @@ synth-time context query and must not run before the VPC exists.
      run ends. It needs `AdminDisableUser` and `AdminUserGlobalSignOut` on the
      pool, from the operator's own credentials.
 
-     The invitation goes through the `COGNITO_DEFAULT` sender (the pool has no
-     `EmailConfiguration`), which is capped at 50 messages a day and needs a
-     real deliverable mailbox.
+     With `email.enabled` false the invitation goes through the `COGNITO_DEFAULT`
+     sender, which is capped at 50 messages a day; with it true it goes through
+     SES (see [Pool email through SES (task 065)](#pool-email-through-ses-task-065)).
+     Either way it needs a real deliverable mailbox.
 
 4. **Migration task** — one-shot ECS task running the backend image
    (`alembic upgrade head`), invoked with a fail-loud wait on the task's exit
@@ -453,6 +453,89 @@ secret's value into the new secret (`aws secretsmanager put-secret-value`)
 before the service first starts against the restored database, then delete the
 orphaned secret. With no data source connected yet, a lost key costs only the
 re-entry of source credentials.
+
+### Pool email through SES (task 065)
+
+Check production access before enabling the sender:
+
+```bash
+aws sesv2 get-account --region eu-west-2
+```
+
+Confirm `ProductionAccessEnabled` is true. Verify the SES identity first,
+then obtain production access, set `email.enabled` to true in
+`pa_config.json`, and deploy. The daily sending limit is SES's own
+`SendQuota`, returned by the same command. Use `--invite manual` only as
+the fallback when an invitation email does not arrive.
+
+### The ops service (task 065)
+
+The ops service is a second ECS (Elastic Container Service) service built from
+the same image as the API. It serves the ops pages and the `/api/v1/ops/*`
+routes, and nothing else. The load balancer lets in only allowlisted addresses.
+
+**The ops address.** `https://ops.<domain>`, from `ops.subdomain` in
+`pa_config.json` (staging: `https://ops.v3.policyatlas.uk`).
+
+**The allowlist parameter.** `/policy_atlas_v3/ops/allowed_cidrs` in Parameter
+Store (the AWS settings store). A CIDR (Classless Inter-Domain Routing) range is
+an address block such as `203.0.113.0/24`. The parameter is a `StringList` of up
+to 8 IPv4 CIDRs, checked by the same validator as Metabase's. Create it by hand
+before the first deploy; the deploy fails loudly if it is missing or invalid.
+
+**The ops database secret.** `policy_atlas_v3/ops_db` in Secrets Manager.
+CDK (Cloud Development Kit) generates it with the username `pa_ops` and a random
+password. The migration task writes `db_connection_string` into it after every
+migration, so the ops service always logs in as the restricted `pa_ops`
+database role.
+
+**First-deploy order.**
+
+1. Create the allowlist parameter.
+2. Deploy with `ops.desired_count` set to 0. The service exists but runs no
+   tasks.
+3. Grant the first ops role from your machine:
+
+   ```bash
+   uv run python -m policy_atlas.ops --env staging ops grant --email <email>
+   ```
+
+   Only the CLI can grant `is_ops`; no web page can.
+4. Set `ops.desired_count` to 1 and deploy again.
+
+   The committed staging config already has `desired_count` 1. On an
+   environment where the ops service has never run, set it to 0 for step 2,
+   then back to 1.
+
+**Self-signup.** `self_signup.enabled` in `pa_config.json` is false by default
+(`max_per_hour` caps the invitations the sweep sends, and its failed attempts, per hour; an enrolment of an existing account sends nothing and is not capped). Before switching it on, make sure the
+Nesta organisation exists and has its domain:
+
+```bash
+uv run python -m policy_atlas.ops --env staging org create --name Nesta
+uv run python -m policy_atlas.ops --env staging org domain add --domain nesta.org.uk --org Nesta
+```
+
+Then set `enabled` to true and deploy. On production, do this only after the
+WAF (web application firewall) rate rule from task 064b is live.
+
+**Rollback, one step at a time.**
+
+- Email (SES): set `email.enabled` to false and deploy. The pool goes back to
+  the default sender and templates.
+- Ops service: set `ops.desired_count` to 0 and deploy. If the schema must go
+  too, stop both services first, then run `alembic downgrade b1e7c3a9d5f2` (the
+  revision before task 065). It removes all three 065 migrations, newest first:
+  the first-sign-in and rejected-request columns, the cohort tables, then
+  `is_ops`, `invited_at`, the four quota columns, `ops_action`, the domain table,
+  the waitlist stamp columns, the trigger and the `pa_ops` role. The public API
+  reads the quota and cohort tables and writes the first-sign-in column, so it
+  must be stopped, and the API image you start afterwards must be one from
+  before task 065.
+- Self-signup: set `self_signup.enabled` to false and deploy. The sweep stops.
+  Its schema is removed only by the full downgrade above.
+
+A rollback never drops a table while a service that reads it is running.
 
 ## 4. Steady-state deploys + the deploy invariant
 

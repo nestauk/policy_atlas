@@ -208,3 +208,44 @@ def expect_environment(
 def fresh_sub(label: str = "ops") -> str:
     """Mint a subject unique across the shared test database."""
     return f"{label}-{uuid.uuid4()}"
+
+
+def expect_sub_lookup(stubber: Stubber, *, sub: str, status: str | None = None) -> None:
+    """Queue one ``ListUsers`` by subject, answering with the account (and its status).
+
+    ``Username`` is the subject, as in a pool whose sign-in alias is the email;
+    the resend addresses the account by it.
+    """
+    user: dict[str, Any] = {"Username": sub, "Attributes": [{"Name": "sub", "Value": sub}]}
+    if status is not None:
+        user["UserStatus"] = status
+    stubber.add_response(
+        "list_users",
+        {"Users": [user]},
+        {"UserPoolId": POOL_ID, "Filter": f'sub = "{sub}"', "Limit": 1},
+    )
+
+
+def expect_resend(stubber: Stubber, *, username: str) -> None:
+    """Queue the ``AdminCreateUser`` of a resent invitation (task 065, B4).
+
+    ``MessageAction: RESEND`` and ``DesiredDeliveryMediums: ["EMAIL"]`` are
+    exact-matched, and so is the ABSENCE of ``UserAttributes`` and of any
+    password parameter: a resend that re-created the account fails here.
+    """
+    stubber.add_response(
+        "admin_create_user",
+        {"User": {"Username": username}},
+        {
+            "UserPoolId": POOL_ID,
+            "Username": username,
+            "MessageAction": "RESEND",
+            "DesiredDeliveryMediums": ["EMAIL"],
+        },
+    )
+
+
+def expect_lock_out(stubber: Stubber, *, sub: str) -> None:
+    """Queue the disable then the global sign-out of ``user offboard``, in that order."""
+    for operation in ("admin_disable_user", "admin_user_global_sign_out"):
+        stubber.add_response(operation, {}, {"UserPoolId": POOL_ID, "Username": sub})

@@ -13,6 +13,7 @@ and seed through ``org_support.seeded``.
 from __future__ import annotations
 
 import uuid
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -23,13 +24,15 @@ from structlog.testing import capture_logs
 
 from policy_atlas.core.schema import (
     app_user,
+    ops_action,
     organisation,
+    organisation_domain,
     project,
     project_membership,
     task,
 )
 from policy_atlas.ops import commands
-from policy_atlas.ops.errors import OpsError
+from policy_atlas.ops.errors import EnrolledElsewhere, OpsError, ResendTooSoon
 from tests.api.org_support import (
     make_org,
     make_project,
@@ -46,7 +49,9 @@ from tests.ops.support import (
     expect_create_manual,
     expect_lookup,
     expect_reissue,
+    expect_resend,
     expect_status_lookup,
+    expect_sub_lookup,
     fresh_sub,
 )
 
@@ -1315,3 +1320,499 @@ def test_cli_user_offboard_reaches_the_command_and_traces_the_revoke(
     with seeded(engine) as check:
         assert _is_public(check, public) is False
         assert _user_row(check, sub).org_id is None
+
+
+# --- task 065: the ensure-account command (B4, B9, § Terms) --------------------
+#
+# The same Stubber discipline as `user create`: `expect_create` pins
+# `DesiredDeliveryMediums=["EMAIL"]`, and an empty queue is the proof that no
+# second invitation went out.
+
+
+def _row(conn: Connection, sub: str) -> Any:
+    """The whole ``app_user`` row, for the columns task 065 added."""
+    return conn.execute(select(app_user).where(app_user.c.user_id == sub)).mappings().one_or_none()
+
+
+def _set_flags(conn: Connection, sub: str, **flags: Any) -> None:
+    conn.execute(update(app_user).where(app_user.c.user_id == sub).values(**flags))
+
+
+def test_ensure_account_creates_sends_and_enrols_an_address_the_pool_does_not_know(
+    conn: Connection,
+) -> None:
+    """Branch one: no account, so create it (emailed invitation), enrol, stamp ``invited_at``."""
+    org = _org(conn)
+    email = unique_email("ensure-new")
+    sub = fresh_sub()
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=None)
+        expect_create(stubber, email=email, sub=sub)
+        enrolment = commands.ensure_account_enrolled(
+            conn, client, pool_id=POOL_ID, email=email, display_name="New", org=org
+        )
+        stubber.assert_no_pending_responses()
+    assert (enrolment.user_id, enrolment.created, enrolment.invitation_sent) == (sub, True, True)
+    row = _row(conn, sub)
+    assert (row["org_id"], row["email"], row["display_name"]) == (org.org_id, email, "New")
+    assert row["invited_at"] is not None
+
+
+@pytest.mark.parametrize("stored", [False, True])
+def test_ensure_account_enrols_an_existing_unenrolled_account_without_a_send(
+    conn: Connection, stored: bool
+) -> None:
+    """Branch two: the pool knows the address; nothing is created and nothing is sent.
+
+    ``stored`` covers both unenrolled shapes: no ``app_user`` row at all, and a
+    row with no organisation (``user create`` without ``--org``, or a de-enrolment).
+    """
+    org = _org(conn)
+    email = unique_email("ensure-existing")
+    sub = fresh_sub()
+    if stored:
+        ops_enrol(conn, user_id=sub, org_id=None, email=email, display_name="Old Name")
+    task_id = make_task(conn, owner_user_id=sub, visibility="org")
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=sub)
+        enrolment = commands.ensure_account_enrolled(
+            conn, client, pool_id=POOL_ID, email=email, display_name="Ensured", org=org
+        )
+        stubber.assert_no_pending_responses()
+    assert enrolment.invitation_sent is False
+    assert enrolment.created is (not stored)
+    assert enrolment.tasks_moved == 1
+    row = _row(conn, sub)
+    # A stored row keeps its name: the name offered may come from the public
+    # form, and a stranger must never rename a colleague (review stack).
+    expected_name = "Old Name" if stored else "Ensured"
+    assert (row["org_id"], row["display_name"], row["invited_at"]) == (
+        org.org_id, expected_name, None,
+    )
+    assert _task_row(conn, task_id)[:2] == (org.org_id, "private")
+
+
+def test_ensure_account_is_a_no_op_for_a_person_already_in_the_organisation(
+    conn: Connection,
+) -> None:
+    """Branch three (same organisation): idempotent — no send, no move, no re-privatising."""
+    org = _org(conn)
+    email = unique_email("ensure-same")
+    sub = fresh_sub()
+    ops_enrol(conn, user_id=sub, org_id=org.org_id, email=email, display_name="Kept Name")
+    shared = make_task(conn, owner_user_id=sub, org_id=org.org_id, visibility="org")
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=sub)
+        enrolment = commands.ensure_account_enrolled(
+            conn, client, pool_id=POOL_ID, email=email, display_name="Other Name", org=org
+        )
+        stubber.assert_no_pending_responses()
+    assert (enrolment.user_id, enrolment.created, enrolment.invitation_sent) == (sub, False, False)
+    assert (enrolment.tasks_moved, enrolment.projects_moved) == (0, 0)
+    row = _row(conn, sub)
+    assert (row["org_id"], row["display_name"], row["invited_at"]) == (
+        org.org_id,
+        "Kept Name",
+        None,
+    )
+    # A row the person deliberately shared stays shared: nothing moved.
+    assert _task_row(conn, shared)[:2] == (org.org_id, "org")
+
+
+def test_ensure_account_refuses_a_person_enrolled_elsewhere_and_names_the_organisation(
+    conn: Connection,
+) -> None:
+    """Branch three (another organisation): refuse, name where they are, write nothing."""
+    first = _org(conn, "First")
+    second = _org(conn, "Second")
+    email = unique_email("ensure-elsewhere")
+    sub = fresh_sub()
+    ops_enrol(conn, user_id=sub, org_id=first.org_id, email=email)
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=sub)
+        with pytest.raises(EnrolledElsewhere) as refusal:
+            commands.ensure_account_enrolled(
+                conn, client, pool_id=POOL_ID, email=email, display_name="X", org=second
+            )
+        stubber.assert_no_pending_responses()
+    assert (refusal.value.sub, refusal.value.org_id, refusal.value.org_name) == (
+        sub,
+        first.org_id,
+        first.name,
+    )
+    assert first.name in str(refusal.value)
+    assert isinstance(refusal.value, OpsError)
+    assert _row(conn, sub)["org_id"] == first.org_id
+
+
+def test_ensure_account_retry_after_a_database_failure_enrols_without_a_second_send(
+    conn: Connection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Contract § Terms: "a retry after Cognito created, database write failed lands on branch two".
+
+    First call: ``AdminCreateUser`` succeeds, then the row move fails and the
+    transaction rolls back — the account is real, the database knows nothing.
+    Second call: the lookup finds the account, and the person is enrolled with
+    **no** second ``AdminCreateUser`` (the queue holds only the lookup).
+    """
+    org = _org(conn)
+    email = unique_email("ensure-retry")
+    sub = fresh_sub()
+
+    def failing_stamp(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError("injected database failure after the Cognito create")
+
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=None)
+        expect_create(stubber, email=email, sub=sub)
+        with monkeypatch.context() as patched:
+            patched.setattr(commands, "_stamp_owned_rows", failing_stamp)
+            with conn.begin_nested() as savepoint:
+                with pytest.raises(RuntimeError, match="injected"):
+                    commands.ensure_account_enrolled(
+                        conn, client, pool_id=POOL_ID, email=email, display_name="R", org=org
+                    )
+                savepoint.rollback()
+        stubber.assert_no_pending_responses()
+        assert _row(conn, sub) is None
+
+        expect_lookup(stubber, email=email, sub=sub)
+        retried = commands.ensure_account_enrolled(
+            conn, client, pool_id=POOL_ID, email=email, display_name="R", org=org
+        )
+        stubber.assert_no_pending_responses()
+
+    assert (retried.user_id, retried.created, retried.invitation_sent) == (sub, True, False)
+    assert _row(conn, sub)["org_id"] == org.org_id
+
+
+# --- task 065: resend invitation (B4) -----------------------------------------
+
+
+def test_resend_refuses_inside_the_hour_and_says_when_to_retry(conn: Connection) -> None:
+    """The queue is empty: a refusal that came after the send would raise on the lookup."""
+    sub = fresh_sub()
+    email = unique_email("resend-soon")
+    ops_enrol(conn, user_id=sub, org_id=_org(conn).org_id, email=email)
+    moment = now()
+    sent = moment - timedelta(minutes=30)
+    _set_flags(conn, sub, invited_at=sent)
+    with cognito() as (client, stubber):
+        with pytest.raises(ResendTooSoon) as refusal:
+            commands.resend_invitation(conn, client, pool_id=POOL_ID, sub=sub, now=moment)
+        stubber.assert_no_pending_responses()
+    assert refusal.value.retry_after == sent + timedelta(hours=1)
+    assert isinstance(refusal.value, OpsError)
+    assert _row(conn, sub)["invited_at"] == sent
+
+
+@pytest.mark.parametrize("hours_ago", [None, 2])
+def test_resend_after_the_hour_sends_with_message_action_resend_and_stamps_invited_at(
+    conn: Connection, hours_ago: int | None
+) -> None:
+    """``support.expect_resend`` pins ``MessageAction=RESEND`` on the wire.
+
+    ``None`` is a person never invited through this path (``user create`` from
+    the CLI stamps nothing); two hours is a cooldown that has lapsed.
+    """
+    sub = fresh_sub()
+    email = unique_email("resend-ok")
+    ops_enrol(conn, user_id=sub, org_id=_org(conn).org_id, email=email)
+    moment = now()
+    if hours_ago is not None:
+        _set_flags(conn, sub, invited_at=moment - timedelta(hours=hours_ago))
+    with cognito() as (client, stubber):
+        expect_sub_lookup(stubber, sub=sub, status="FORCE_CHANGE_PASSWORD")
+        expect_resend(stubber, username=sub)
+        resend = commands.resend_invitation(conn, client, pool_id=POOL_ID, sub=sub, now=moment)
+        stubber.assert_no_pending_responses()
+    assert (resend.user_id, resend.email, resend.sent_at) == (sub, email, moment)
+    assert email in resend.summary()
+    assert _row(conn, sub)["invited_at"] == moment
+
+
+def test_resend_refuses_a_confirmed_account(conn: Connection) -> None:
+    """Cognito cannot resend to an account past its first sign-in; nothing is sent or stamped."""
+    sub = fresh_sub()
+    ops_enrol(conn, user_id=sub, org_id=_org(conn).org_id, email=unique_email("resend-done"))
+    with cognito() as (client, stubber):
+        expect_sub_lookup(stubber, sub=sub, status="CONFIRMED")
+        with pytest.raises(OpsError, match="CONFIRMED"):
+            commands.resend_invitation(conn, client, pool_id=POOL_ID, sub=sub, now=now())
+        stubber.assert_no_pending_responses()
+    assert _row(conn, sub)["invited_at"] is None
+
+
+# --- task 065: move, ops role, quotas, domains, the action record -------------
+
+
+def test_move_user_re_enrols_a_stored_person_elsewhere_and_privatises_their_rows(
+    conn: Connection,
+) -> None:
+    first = _org(conn, "First")
+    second = _org(conn, "Second")
+    sub = fresh_sub()
+    email = unique_email("mover")
+    ops_enrol(conn, user_id=sub, org_id=first.org_id, email=email, display_name="Mover")
+    task_id = make_task(conn, owner_user_id=sub, org_id=first.org_id, visibility="org")
+
+    moved = commands.move_user(conn, sub=sub, org=second)
+
+    assert (moved.user_id, moved.email, moved.org, moved.created) == (sub, email, second, False)
+    assert moved.tasks_moved == 1
+    row = _row(conn, sub)
+    assert (row["org_id"], row["email"], row["display_name"]) == (second.org_id, email, "Mover")
+    assert _task_row(conn, task_id)[:2] == (second.org_id, "private")
+
+
+def test_move_user_refuses_an_unknown_subject(conn: Connection) -> None:
+    with pytest.raises(OpsError, match="no user"):
+        commands.move_user(conn, sub=fresh_sub(), org=_org(conn))
+
+
+def test_ops_grant_and_revoke_write_the_flag_and_carry_an_is_ops_trace(
+    conn: Connection,
+) -> None:
+    """Contract B1: mirrors ``admin grant``/``revoke``, trace included, logging nothing."""
+    org = _org(conn)
+    sub = fresh_sub()
+    email = unique_email("ops-role")
+    ops_enrol(conn, user_id=sub, org_id=org.org_id, email=email)
+
+    with capture_logs() as logs:
+        granted = commands.set_ops(conn, email=email, grant=True)
+        assert (_row(conn, sub)["is_ops"], _row(conn, sub)["is_admin"]) == (True, False)
+        revoked = commands.set_ops(conn, sub=sub, grant=False)
+
+    assert [line["event"] for line in logs] == []
+    assert [(c.subject, c.direction, c.flag) for c in granted.admin_changes()] == [
+        (sub, "grant", "is_ops")
+    ]
+    assert [(c.subject, c.direction, c.flag) for c in revoked.admin_changes()] == [
+        (sub, "revoke", "is_ops")
+    ]
+    assert _row(conn, sub)["is_ops"] is False
+
+
+def test_ops_grant_refuses_a_subject_in_no_organisation(conn: Connection) -> None:
+    sub = fresh_sub()
+    email = unique_email("ops-orphan")
+    ops_enrol(conn, user_id=sub, org_id=None, email=email)
+    with pytest.raises(OpsError, match="no organisation"):
+        commands.set_ops(conn, email=email, grant=True)
+    with pytest.raises(OpsError, match="no organisation"):
+        commands.set_ops(conn, sub=sub, grant=True)
+    assert _row(conn, sub)["is_ops"] is False
+
+
+def test_ops_grant_and_revoke_refuse_when_nothing_would_change(conn: Connection) -> None:
+    org = _org(conn)
+    sub = fresh_sub()
+    email = unique_email("ops-twice")
+    ops_enrol(conn, user_id=sub, org_id=org.org_id, email=email)
+    with pytest.raises(OpsError, match="does not hold the ops role"):
+        commands.set_ops(conn, email=email, grant=False)
+    _set_flags(conn, sub, is_ops=True)
+    with pytest.raises(OpsError, match="already holds the ops role"):
+        commands.set_ops(conn, email=email, grant=True)
+    with pytest.raises(OpsError, match="no user with the address"):
+        commands.set_ops(conn, email=unique_email("nobody"), grant=True)
+
+
+def test_ops_revoke_still_reaches_a_subject_in_no_organisation(conn: Connection) -> None:
+    """Taking the role away is never the blocked direction (as for ``admin revoke``)."""
+    sub = fresh_sub()
+    ops_enrol(conn, user_id=sub, org_id=None, email=None)
+    _set_flags(conn, sub, is_ops=True)
+    revoked = commands.set_ops(conn, sub=sub, grant=False)
+    assert revoked.direction == "revoke"
+    assert _row(conn, sub)["is_ops"] is False
+
+
+def test_de_enrol_clears_the_ops_role_and_traces_it_with_the_flag(conn: Connection) -> None:
+    """Contract B1: de-enrol clears both flags; each cleared flag is one trace line."""
+    org = _org(conn)
+    both, ops_only = fresh_sub(), fresh_sub()
+    ops_enrol(conn, user_id=both, org_id=org.org_id, email=unique_email("both"), is_admin=True)
+    _set_flags(conn, both, is_ops=True)
+    # Holds the ops role with no organisation: still something to clear.
+    ops_enrol(conn, user_id=ops_only, org_id=None, email=unique_email("ops-only"))
+    _set_flags(conn, ops_only, is_ops=True)
+
+    both_left = commands.de_enrol_user(conn, sub=both)
+    ops_left = commands.de_enrol_user(conn, sub=ops_only)
+
+    assert (both_left.admin_revoked, both_left.ops_revoked) == (True, True)
+    assert [(c.subject, c.direction, c.flag) for c in both_left.admin_changes()] == [
+        (both, "revoke", "is_admin"),
+        (both, "revoke", "is_ops"),
+    ]
+    assert "support role revoked" in both_left.summary()
+    assert "ops role revoked" in both_left.summary()
+    assert (ops_left.admin_revoked, ops_left.ops_revoked) == (False, True)
+    assert [(c.flag) for c in ops_left.admin_changes()] == ["is_ops"]
+    for sub in (both, ops_only):
+        row = _row(conn, sub)
+        assert (row["org_id"], row["is_admin"], row["is_ops"]) == (None, False, False)
+    with pytest.raises(OpsError, match="nothing to do"):
+        commands.de_enrol_user(conn, sub=ops_only)
+
+
+def test_offboard_de_enrols_a_person_who_only_holds_the_ops_role(conn: Connection) -> None:
+    """``offboard`` used to skip de-enrol for a row with no organisation; the ops role counts."""
+    sub = fresh_sub()
+    ops_enrol(conn, user_id=sub, org_id=None, email=unique_email("ops-out"))
+    _set_flags(conn, sub, is_ops=True)
+    with cognito() as (client, stubber):
+        _expect_lookup_by_sub(stubber, sub=sub)
+        _expect_lock_out(stubber, sub=sub)
+        result = commands.offboard_user(conn, client, pool_id=POOL_ID, sub=sub)
+        stubber.assert_no_pending_responses()
+    assert result.de_enrolment is not None
+    assert result.de_enrolment.ops_revoked is True
+    assert "ops role revoked" in result.summary()
+    assert [(c.subject, c.direction, c.flag) for c in result.admin_changes()] == [
+        (sub, "revoke", "is_ops")
+    ]
+    assert _row(conn, sub)["is_ops"] is False
+
+
+def test_set_quota_writes_both_overrides_on_a_person_and_none_clears_them(
+    conn: Connection,
+) -> None:
+    sub = fresh_sub()
+    ops_enrol(conn, user_id=sub, org_id=_org(conn).org_id, email=unique_email("quota"))
+
+    first = commands.set_quota(conn, user_id=sub, task_quota_per_year=100, runs_per_user=0)
+    row = _row(conn, sub)
+    assert (row["task_quota_per_year"], row["runs_per_user"]) == (100, 0)
+    assert first.summary() == (
+        f"quota for {sub}: tasks per year inherit → 100, simultaneous tasks inherit → 0"
+    )
+
+    cleared = commands.set_quota(conn, user_id=sub, task_quota_per_year=None, runs_per_user=None)
+    row = _row(conn, sub)
+    assert (row["task_quota_per_year"], row["runs_per_user"]) == (None, None)
+    assert "tasks per year 100 → inherit, simultaneous tasks 0 → inherit" in cleared.summary()
+
+
+def test_set_quota_writes_both_overrides_on_an_organisation(conn: Connection) -> None:
+    org = _org(conn)
+    change = commands.set_quota(conn, org_id=org.org_id, task_quota_per_year=20, runs_per_user=5)
+    stored = conn.execute(
+        select(organisation.c.task_quota_per_year, organisation.c.runs_per_user).where(
+            organisation.c.org_id == org.org_id
+        )
+    ).one()
+    assert tuple(stored) == (20, 5)
+    assert (change.who, change.task_quota_before, change.runs_before) == (
+        str(org.org_id),
+        None,
+        None,
+    )
+    commands.set_quota(conn, org_id=org.org_id, task_quota_per_year=None, runs_per_user=5)
+    assert conn.execute(
+        select(organisation.c.task_quota_per_year).where(organisation.c.org_id == org.org_id)
+    ).scalar_one() is None
+
+
+def test_set_quota_refuses_a_negative_value_a_missing_row_and_a_bad_selector(
+    conn: Connection,
+) -> None:
+    sub = fresh_sub()
+    ops_enrol(conn, user_id=sub, org_id=None, email=unique_email("quota-bad"))
+    with pytest.raises(OpsError, match="negative"):
+        commands.set_quota(conn, user_id=sub, task_quota_per_year=-1, runs_per_user=None)
+    with pytest.raises(OpsError, match="negative"):
+        commands.set_quota(conn, user_id=sub, task_quota_per_year=None, runs_per_user=-3)
+    assert _row(conn, sub)["task_quota_per_year"] is None
+    with pytest.raises(OpsError, match="no user"):
+        commands.set_quota(conn, user_id=fresh_sub(), task_quota_per_year=1, runs_per_user=1)
+    with pytest.raises(OpsError, match="no organisation"):
+        commands.set_quota(conn, org_id=uuid.uuid4(), task_quota_per_year=1, runs_per_user=1)
+    with pytest.raises(OpsError, match="exactly one"):
+        commands.set_quota(conn, task_quota_per_year=1, runs_per_user=1)
+    with pytest.raises(OpsError, match="exactly one"):
+        commands.set_quota(
+            conn, user_id=sub, org_id=uuid.uuid4(), task_quota_per_year=1, runs_per_user=1
+        )
+
+
+def _domain(label: str = "Team") -> str:
+    """A suite-unique domain, mixed-case on purpose (the table stores lower-case)."""
+    return f"{label}-{uuid.uuid4()}.Example.Test"
+
+
+def test_domain_add_lower_cases_and_remove_deletes_whatever_the_case_typed(
+    conn: Connection,
+) -> None:
+    org = _org(conn)
+    typed = _domain()
+    added = commands.add_domain(conn, domain=typed, org=org)
+    assert (added.domain, added.added, added.org) == (typed.lower(), True, org)
+    assert typed.lower() in added.summary()
+    assert org.name in added.summary()
+    stored = conn.execute(
+        select(organisation_domain.c.org_id).where(organisation_domain.c.domain == typed.lower())
+    ).scalar_one()
+    assert stored == org.org_id
+
+    removed = commands.remove_domain(conn, domain=typed.upper())
+    assert (removed.domain, removed.added, removed.org) == (typed.lower(), False, None)
+    assert "removed domain" in removed.summary()
+    assert (
+        conn.execute(
+            select(organisation_domain.c.domain).where(
+                organisation_domain.c.domain == typed.lower()
+            )
+        ).scalar_one_or_none()
+        is None
+    )
+    with pytest.raises(OpsError, match="no organisation domain"):
+        commands.remove_domain(conn, domain=typed)
+
+
+def test_domain_add_refuses_a_duplicate_even_for_another_organisation(conn: Connection) -> None:
+    first, second = _org(conn, "First"), _org(conn, "Second")
+    typed = _domain()
+    commands.add_domain(conn, domain=typed, org=first)
+    with pytest.raises(OpsError, match="already belongs"):
+        commands.add_domain(conn, domain=typed.upper(), org=second)
+    with pytest.raises(OpsError, match="already belongs"):
+        commands.add_domain(conn, domain=typed, org=first)
+
+
+@pytest.mark.parametrize("bad", ["", " ", "nes ta.org.uk", "a@example.test", "@example.test"])
+def test_domain_commands_refuse_an_empty_blank_or_address_shaped_value(
+    conn: Connection, bad: str
+) -> None:
+    org = _org(conn)
+    with pytest.raises(OpsError, match="domain must be"):
+        commands.add_domain(conn, domain=bad, org=org)
+    with pytest.raises(OpsError, match="domain must be"):
+        commands.remove_domain(conn, domain=bad)
+
+
+def test_record_action_inserts_one_row_and_returns_its_id(conn: Connection) -> None:
+    actor = fresh_sub("actor")
+    action_id = commands.record_action(
+        conn, actor=actor, action="quota.set", target="someone", outcome="ok"
+    )
+    rows = conn.execute(select(ops_action).where(ops_action.c.actor_user_id == actor)).mappings()
+    (stored,) = rows.all()
+    assert (stored["action_id"], stored["action"], stored["target"], stored["outcome"]) == (
+        action_id,
+        "quota.set",
+        "someone",
+        "ok",
+    )
+    assert stored["at"] is not None
+    # `target` is optional: an organisation-wide action has none.
+    second = commands.record_action(conn, actor=actor, action="org.list", target=None, outcome="ok")
+    assert second != action_id
+    assert (
+        conn.execute(
+            select(ops_action.c.target).where(ops_action.c.action_id == second)
+        ).scalar_one()
+        is None
+    )

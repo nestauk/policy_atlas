@@ -63,6 +63,8 @@ def test_the_upgrade_rebuilds_an_index_a_crash_left_invalid(engine: Engine) -> N
     """A CONCURRENTLY build that crashed leaves an invalid index; the rerun replaces it."""
     cfg = _alembic_cfg()
     try:
+        # Task 065 added a revision after this one (see above).
+        command.downgrade(cfg, REVISION)
         command.upgrade(cfg, REVISION)
         with engine.connect() as conn:
             conn.execute(

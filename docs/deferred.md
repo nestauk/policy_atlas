@@ -2356,7 +2356,9 @@ omissions.
   it is the designated home for admin capability, but it ships **no admin screen**. An
   admin sees the ordinary product, wider. A dashboard, an impersonation tool or an ops
   view is the slice that adds the surface — and the first one to need *per-organisation*
-  admin rather than a global boolean turns this flag into the roles slice.
+  admin rather than a global boolean turns this flag into the roles slice. Task 065 (2026-11-17)
+  adds the ops pages on a separate address-gated service (ADR 0046), so an ops surface now
+  exists; per-organisation roles stay deferred.
 - **What remains of the workspace-cluster IA** — this slice discharged the
   *navigational* half of the IA seam: one lifecycle, a grouping above tasks, and one
   destination per task state. It did **not** re-parent plan, run or artefact onto a
@@ -2447,6 +2449,17 @@ omissions.
   to verified recipients) and the note that the 50/day cap becomes SES's own
   limits. Until then `user create --invite manual` (single-use minted temp
   password, printed once, forced change at first sign-in) is the workaround.
+  **Built by task 065 on 2026-11-17** (the pool sends through SES wherever
+  `email.enabled` is true in `pa_config.json`; both environments switch it on from the
+  staging checks onward); the `--invite manual` path stays as a recorded fallback.
+- **Self-signup domains beyond `nesta.org.uk`.** Task 065 lists one domain. Reopen when a
+  second organisation wants self-signup; adding one is `org domain add`, not a deploy.
+- **Editing the domain table from the ops pages.** Rare, and a tenancy decision, so it is
+  CLI only (`org domain add` / `remove`) for now. Reopen if the edits become routine.
+- **Email sent by the application itself.** Today Cognito is the only sender (invitations).
+  Reopen when the product needs its own mail (notifications, receipts).
+- **The ops action log on the ops pages.** The `ops_action` table is queryable by an
+  operator; a page for it is a later slice. Reopen when operators ask for it.
 - **Membership moves race API row creation** (review finding, 2026-08-25, declined
   as a code fix). `creator_org_id` is a non-locking read, so a task created in
   the window around an enrol/re-enrol/de-enrol can carry the old membership's
@@ -3730,9 +3743,19 @@ Found by the 064a review stack (2026-11-16) and left as seams:
   and once on CI (`test_check_steps`, run 43921736642), the dispatch failing with
   `uq_event_log_task_sequence` after the children finished. `dev`'s last twelve CI runs
   were green and 064a adds no event writer, so it is a pre-existing ceiling the ToC
-  fan-out (width 6, wider than the longlist's 4) never re-checked. Fix in a follow-on:
-  take `pg_advisory_xact_lock(hashtext(task_id))` around the read-and-insert in
-  `append`, or the per-walk sequence already deferred under § Options scoping longlist.
+  fan-out (width 6, wider than the longlist's 4) never re-checked. **Still open (task 065 review stack, 2026-11-18, owner).** A
+  transaction-scoped per-task advisory lock before the max read fixed the race, but it is
+  held to the end of the caller's transaction, and a trace of all 88 append sites found
+  three that hold it across slow work or in the wrong order: `assess/screen.py:700`
+  appends for retracted documents and then runs the whole stage-1 LLM screening in the same
+  transaction; `sourcing/acquire.py:886/940/1005` append and then embed (a remote call with
+  backoff); and `runner.py:1939` / `option_search.py:410` take the run row then append,
+  while `continuation.py:464` appends then updates the run row (a possible deadlock). Any
+  steering or stop call on the task would hang behind the first two. The lock was reverted
+  before the PR. The fix (move those appends after the slow work, or allocate the sequence
+  outside the caller's transaction, then add the lock) is its own slice. Until then the
+  theory-of-change tests run with 256 retries through an autouse fixture
+  (`tests/theory_of_change/conftest.py`), so this known ceiling does not fail them.
 
 ## Firewall and CAPTCHA (task 064b seams)
 
@@ -3778,3 +3801,40 @@ Left open by the 064b build (2026-11-17; contract and ADR 0047 for the rulings):
   and set `GENERAL_RATE_LIMIT = 6000`. Once 064a is on staging the per-address query in
   `docs/tasks/064b-waf-captcha/verification.md` § Phase 0 can re-measure; the constant
   is one line and a normal deploy.
+
+## Accounts and ops portal (task 065 seams)
+
+- **Cohort follow-ons (owner, 2026-11-18; the next task):** feature versions per organisation
+  or cohort, numbers per person and cohort (with Metabase and PostHog links), CSV import of a
+  pilot with cohorts, onboarding answers. Design: revision-2 explainer, section 7. Cohorts
+  themselves shipped in 065 (contract B14).
+
+Noted by the 065 build (2026-11-17). Self-signup domains beyond `nesta.org.uk`, the domain
+table on the ops pages, application-sent email and the ops action log on the pages are
+recorded above under their own entries.
+
+- **A single-person read route on the ops host.** The quota page finds the person by
+  reading the whole people list and picking one out. Reopen when the list is long enough
+  to slow that page, or when a second page needs one person.
+- **A route that reports the settings defaults.** The pages show "default · n" by
+  inferring it from a person with no override. If nobody has no override, the default is
+  not shown. Reopen when a page must show the default on its own, or when the defaults
+  change often enough that inferring them misleads.
+- **An assign route that accepts either kind of id.** The assign page tries a task id
+  first, then a project id, so a wrong id costs one failed call. Reopen when the extra
+  call shows up as latency or an error in the logs, or when a third kind of id is added.
+- **Owner decision open: should sweep-created accounts take the waitlist row's name?**
+  Contract C3 says yes; the review stack showed anyone can type a colleague's address with
+  any name. The code does (a) (keep C3, never rename an existing account). Options and the
+  recommendation are in `docs/tasks/065-accounts/verification.md` § Owner decisions
+  raised by the stack, item 1. Reopen when the owner rules.
+
+## Ops pages scale (task 065 review stack, 2026-11-18)
+
+- **People list costs about three queries per person.** `list_people` calls
+  `effective_limits` once per person, and each call reads the person's cohorts. Fine at
+  today's size; resolve the limits for the whole list in one or two grouped queries when
+  the list reaches a few hundred people.
+- **Bulk approve and reject send one request per row**, and each one reloads every ops
+  list. Add a server-side bulk route (like `people/*`) or reload once after the loop when
+  operators handle tens of requests at a time.

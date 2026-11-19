@@ -25,6 +25,7 @@ from infra.components.nesta_ssm_endpoints import (
 )
 from infra.database_stack import DatabaseStack
 from infra.cert_stack import PaV3CertStack
+import infra.cognito_auth as cognito_auth
 from infra.cognito_auth import CognitoAuth
 from infra.analytics_stack import PaV3AnalyticsStack
 from infra.network_stack import NetworkStack
@@ -94,6 +95,7 @@ PA_CONFIG = _load_config("pa_config.json")
 METABASE_CONFIG = _load_config("metabase_config.json")
 # Five CIDRs exercise the split: one full rule of four and a second rule of one.
 ANALYTICS_ALLOWLIST_SIZE = 5
+OPS_ALLOWLIST_SIZE = 5
 APP = cdk.App(context={"aws:cdk:bundling-stacks": []})
 ENV = Environment(account=DUMMY_ACCOUNT, region=NETWORK_CONFIG["aws_region"])
 CERT_ENV = Environment(account=DUMMY_ACCOUNT, region="us-east-1")
@@ -148,6 +150,7 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         certificate=CERT_STACK.certificate,
         env=ENV,
         env_name=ENV_NAME,
+        ops_allowlist_size=OPS_ALLOWLIST_SIZE,
         cross_region_references=True,
     )
     # The same app stack pinned to each model route, to show the Bedrock key is
@@ -165,6 +168,7 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
             certificate=CERT_STACK.certificate,
             env=ENV,
             env_name=ENV_NAME,
+            ops_allowlist_size=OPS_ALLOWLIST_SIZE,
             cross_region_references=True,
         )
     # The same app stack with the other ingest mode (task 057), so the API
@@ -178,6 +182,33 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         certificate=CERT_STACK.certificate,
         env=ENV,
         env_name=ENV_NAME,
+        ops_allowlist_size=OPS_ALLOWLIST_SIZE,
+        cross_region_references=True,
+    )
+    email_config = json.loads(json.dumps(PA_CONFIG))
+    email_config["policy_atlas_config"]["email"]["enabled"] = True
+    EMAIL_APP_STACK = PolicyAtlasStack(
+        APP,
+        "PaV3AppStackEmail",
+        pa_config=email_config,
+        certificate=CERT_STACK.certificate,
+        env=ENV,
+        env_name=ENV_NAME,
+        ops_allowlist_size=OPS_ALLOWLIST_SIZE,
+        cross_region_references=True,
+    )
+    # The email-off case on its own, whatever the committed environment says
+    # (staging turned SES on, owner 2026-11-18).
+    no_email_config = json.loads(json.dumps(PA_CONFIG))
+    no_email_config["policy_atlas_config"]["email"]["enabled"] = False
+    NO_EMAIL_APP_STACK = PolicyAtlasStack(
+        APP,
+        "PaV3AppStackNoEmail",
+        pa_config=no_email_config,
+        certificate=CERT_STACK.certificate,
+        env=ENV,
+        env_name=ENV_NAME,
+        ops_allowlist_size=OPS_ALLOWLIST_SIZE,
         cross_region_references=True,
     )
     ANALYTICS_STACK = PaV3AnalyticsStack(
@@ -200,6 +231,8 @@ TEMPLATES = {
 BEDROCK_APP_TEMPLATE = Template.from_stack(ROUTE_APP_STACKS["bedrock"]).to_json()
 OPENAI_APP_TEMPLATE = Template.from_stack(ROUTE_APP_STACKS["openai-direct"]).to_json()
 IN_PROCESS_APP_TEMPLATE = Template.from_stack(IN_PROCESS_APP_STACK).to_json()
+EMAIL_APP_TEMPLATE = Template.from_stack(EMAIL_APP_STACK).to_json()
+NO_EMAIL_APP_TEMPLATE = Template.from_stack(NO_EMAIL_APP_STACK).to_json()
 RENDERED_TEMPLATES = {
     stack_name: json.dumps(template, sort_keys=True)
     for stack_name, template in TEMPLATES.items()
@@ -452,15 +485,12 @@ def test_metabase_hostname_health_check_and_dns_are_pinned():
         "Default": "/policy_atlas_v3/metabase/allowed_cidrs",
     }
 
-    app_listener_rules = _resources(
-        TEMPLATES["app"], "AWS::ElasticLoadBalancingV2::ListenerRule"
+    app_listener_rules = _resources(TEMPLATES["app"], "AWS::ElasticLoadBalancingV2::ListenerRule")
+    api_rule = next(
+        rule for _, rule in app_listener_rules
+        if rule["Properties"]["Priority"] == 10
     )
-    assert app_listener_rules
-    assert all(
-        condition["Field"] != "source-ip"
-        for _, rule in app_listener_rules
-        for condition in rule["Properties"]["Conditions"]
-    )
+    assert all(condition["Field"] != "source-ip" for condition in api_rule["Properties"]["Conditions"])
 
     _, record = _resources(analytics, "AWS::Route53::RecordSet")[0]
     assert record["Properties"]["Name"] == "metabase.v3.policyatlas.uk."
@@ -1066,6 +1096,89 @@ def test_cognito_user_pool_is_operator_managed_and_retained():
     }
 
 
+def test_cognito_default_email_has_no_ses_configuration_or_templates():
+    _, user_pool = _resources(NO_EMAIL_APP_TEMPLATE, "AWS::Cognito::UserPool")[0]
+    properties = user_pool["Properties"]
+    assert "EmailConfiguration" not in properties
+    assert "InviteMessageTemplate" not in properties["AdminCreateUserConfig"]
+    # CDK emits Cognito's built-in verification-code default because this pool
+    # auto-verifies email. The branded body is absent until SES is enabled.
+    verification = properties["VerificationMessageTemplate"]
+    assert verification["EmailSubject"] == "Verify your new account"
+    assert verification["EmailMessage"] == "The verification code to your new account is {####}"
+    assert "LambdaConfig" not in properties
+
+
+def test_cognito_ses_email_renders_branded_templates():
+    _, user_pool = _resources(EMAIL_APP_TEMPLATE, "AWS::Cognito::UserPool")[0]
+    properties = user_pool["Properties"]
+    email_configuration = properties["EmailConfiguration"]
+    assert email_configuration["EmailSendingAccount"] == "DEVELOPER"
+    assert email_configuration["From"] == "Policy Atlas <no-reply@v3.policyatlas.uk>"
+    source_arn = email_configuration["SourceArn"]
+    assert "Fn::Join" in source_arn
+    source_arn_json = json.dumps(source_arn)
+    for expected in (
+        ":ses:eu-west-2:111111111111:identity/v3.policyatlas.uk",
+        "AWS::Partition",
+    ):
+        assert expected in source_arn_json
+
+    invitation = properties["AdminCreateUserConfig"]["InviteMessageTemplate"]
+    assert invitation["EmailSubject"] == "Your Policy Atlas account"
+    for expected in (
+        "{username}",
+        "{####}",
+        "https://v3.policyatlas.uk",
+        "https://v3.policyatlas.uk/brand/email-logo.png",
+    ):
+        assert expected in invitation["EmailMessage"]
+    assert "__SIGN_IN_URL__" not in invitation["EmailMessage"]
+    assert "__LOGO_URL__" not in invitation["EmailMessage"]
+
+    verification = properties["VerificationMessageTemplate"]
+    assert verification["EmailSubject"] == "Your Policy Atlas verification code"
+    assert "{####}" in verification["EmailMessage"]
+    assert verification["DefaultEmailOption"] == "CONFIRM_WITH_CODE"
+    assert "LambdaConfig" not in properties
+
+
+def test_cognito_email_creates_no_ses_identity_or_dkim_record():
+    templates = [
+        json.loads(template_path.read_text())
+        for template_path in Path(ASSEMBLY.directory).rglob("*.template.json")
+    ]
+    for template in templates:
+        for resource in template.get("Resources", {}).values():
+            assert resource["Type"] != "AWS::SES::EmailIdentity"
+            if resource["Type"] == "AWS::Route53::RecordSet":
+                assert "_domainkey" not in json.dumps(resource["Properties"]["Name"])
+
+
+def test_cognito_email_template_requires_code_placeholder(tmp_path, monkeypatch):
+    (tmp_path / "invitation.subject.txt").write_text("Invitation")
+    (tmp_path / "invitation.html").write_text("Welcome {username}")
+    (tmp_path / "verification.subject.txt").write_text("Verification")
+    (tmp_path / "verification.html").write_text("Verification")
+    monkeypatch.setattr(cognito_auth, "EMAIL_DIRECTORY", tmp_path)
+
+    app = cdk.App()
+    stack = cdk.Stack(app, "InvalidEmailTemplateStack")
+    with pytest.raises(ValueError, match=r"invitation.html.*\{####\}"):
+        CognitoAuth(
+            stack,
+            "CognitoAuth",
+            domain_name="policy.example.test",
+            domain_prefix="invalid-email-template-test",
+            email={
+                "enabled": True,
+                "sender_domain": "policy.example.test",
+                "from_address": "no-reply@policy.example.test",
+                "from_name": "Policy Atlas",
+            },
+        )
+
+
 def test_cognito_password_policy_keeps_default_rules_with_30_day_temporary_passwords():
     _, user_pool = _resources(TEMPLATES["app"], "AWS::Cognito::UserPool")[0]
     assert user_pool["Properties"]["DeletionProtection"] == "ACTIVE"
@@ -1082,7 +1195,10 @@ def test_cognito_password_policy_keeps_default_rules_with_30_day_temporary_passw
 def test_cognito_spa_client_is_public_code_flow_with_exact_redirects():
     _, client = _resources(TEMPLATES["app"], "AWS::Cognito::UserPoolClient")[0]
     properties = client["Properties"]
-    urls = ["https://v3.policyatlas.uk", "https://v3.policyatlas.uk/"]
+    urls = [
+        "https://v3.policyatlas.uk", "https://v3.policyatlas.uk/",
+        "https://ops.v3.policyatlas.uk", "https://ops.v3.policyatlas.uk/",
+    ]
     assert properties["GenerateSecret"] is False
     assert properties["AllowedOAuthFlowsUserPoolClient"] is True
     assert properties["AllowedOAuthFlows"] == ["code"]
@@ -1099,6 +1215,50 @@ def test_cognito_spa_client_is_public_code_flow_with_exact_redirects():
         "RefreshToken": "minutes",
     }
     assert properties["PreventUserExistenceErrors"] == "ENABLED"
+
+
+def test_ops_service_hostname_allowlist_and_dns_are_pinned():
+    app = TEMPLATES["app"]
+    listener_rules = sorted(
+        [rule for _, rule in _resources(app, "AWS::ElasticLoadBalancingV2::ListenerRule")
+         if rule["Properties"]["Priority"] >= 30],
+        key=lambda rule: rule["Properties"]["Priority"],
+    )
+    assert [rule["Properties"]["Priority"] for rule in listener_rules] == [30, 31]
+    references = set()
+    positions = []
+    for rule in listener_rules:
+        conditions = rule["Properties"]["Conditions"]
+        assert conditions[0] == {
+            "Field": "host-header",
+            "HostHeaderConfig": {"Values": ["ops.v3.policyatlas.uk"]},
+        }
+        assert conditions[1]["Field"] == "source-ip"
+        for value in conditions[1]["SourceIpConfig"]["Values"]:
+            position, reference = value["Fn::Select"]
+            positions.append(position)
+            references.add(reference["Ref"])
+    assert positions == list(range(OPS_ALLOWLIST_SIZE))
+    assert len(references) == 1
+    assert app["Parameters"][references.pop()] == {
+        "Type": "AWS::SSM::Parameter::Value<List<String>>",
+        "Default": "/policy_atlas_v3/ops/allowed_cidrs",
+    }
+    ops_record = next(
+        resource for _, resource in _resources(app, "AWS::Route53::RecordSet")
+        if resource["Properties"]["Name"] == "ops.v3.policyatlas.uk."
+    )
+    assert ops_record["Properties"]["Type"] == "A"
+
+
+@pytest.mark.parametrize("allowlist_size", [0, 9, "5"])
+def test_ops_rejects_an_allowlist_size_outside_the_cap(allowlist_size):
+    with pytest.raises(ValueError, match="ops_allowlist_size"):
+        PolicyAtlasStack(
+            cdk.App(), "InvalidOpsAllowlist", pa_config=PA_CONFIG,
+            certificate=CERT_STACK.certificate, env=ENV, env_name=ENV_NAME,
+            ops_allowlist_size=allowlist_size,
+        )
 
 
 def test_cognito_hosted_ui_uses_the_fixed_prefix():
@@ -1224,7 +1384,25 @@ def test_auth_and_deploy_ssm_exports_are_present():
         "/policy_atlas_v3/deploy/frontend_bucket_name",
         "/policy_atlas_v3/deploy/fonts_bucket_name",
         "/policy_atlas_v3/deploy/distribution_id",
+        "/policy_atlas_v3/deploy/ops_service_name",
+        "/policy_atlas_v3/deploy/ops_target_group_arn",
+        "/policy_atlas_v3/deploy/ops_db_secret_arn",
+        "/policy_atlas_v3/deploy/ops_domain",
     } <= parameter_names
+
+
+def test_ops_database_secret_has_only_the_generated_password_shape():
+    _, secret = next(
+        item for item in _resources(TEMPLATES["app"], "AWS::SecretsManager::Secret")
+        if item[1]["Properties"].get("Name") == "policy_atlas_v3/ops_db"
+    )
+    generator = secret["Properties"]["GenerateSecretString"]
+    assert generator == {
+        "ExcludePunctuation": True,
+        "GenerateStringKey": "password",
+        "PasswordLength": 40,
+        "SecretStringTemplate": '{"username": "pa_ops"}',
+    }
 
 
 def test_www_requests_are_redirected_to_the_apex():

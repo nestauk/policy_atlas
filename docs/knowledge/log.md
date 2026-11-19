@@ -1,5 +1,14 @@
 # Knowledge update log
 
+## 2026-11-18 (task 065, delta review stack)
+
+Added: [sqlalchemy-core-insert-rowcount-is-not-a-signal](sqlalchemy-core-insert-rowcount-is-not-a-signal.md)
+(from the stack's pa_ops write test). Folded: the reverted per-task advisory lock and its
+caller trace into [event-log-sequence](event-log-sequence.md). Declined: the in-place
+migration edits (an owner ruling for migrations that never left local databases, not a
+general rule) and the build-guard harness failure (a rebase merge slip, fixed and recorded in
+verification.md).
+
 ## 2026-11-17 (task 064b, review stack)
 * **New**: [cdk-any-typed-property-takes-cloudformation-dict](cdk-any-typed-property-takes-cloudformation-dict.md)
   — the logging filter rendered camelCase through an `Any`-typed L1 property; synth and the
@@ -17,6 +26,18 @@
   background-runner incidents (harness, not product; `make verify` already names the fix),
   the agent definition that lists skills not installed (an agentic-ops fix, noted in the PR),
   the Playwright script stub for placement screenshots (a trick, not an invariant).
+
+## 2026-11-17 (task 065, durable records)
+* **New**: [alembic-stamp-back-without-downgrade-breaks-later-migration-tests](alembic-stamp-back-without-downgrade-breaks-later-migration-tests.md)
+* **New**: [committed-test-rows-need-unique-subjects-and-cleanup](committed-test-rows-need-unique-subjects-and-cleanup.md)
+* **New**: [cognito-invitation-templates-need-ses-sender](cognito-invitation-templates-need-ses-sender.md)
+* **New**: [yield-dependency-order-sets-teardown-order](yield-dependency-order-sets-teardown-order.md)
+* **New**: [sqlalchemy-url-str-hides-password](sqlalchemy-url-str-hides-password.md)
+* **New**: [postgres-collation-order-is-not-python-sorted](postgres-collation-order-is-not-python-sorted.md)
+* **New**: [before-update-trigger-does-not-guard-insert](before-update-trigger-does-not-guard-insert.md)
+* **New**: [retry-sweeps-need-terminal-refusals-and-counted-failures](retry-sweeps-need-terminal-refusals-and-counted-failures.md)
+* **Update**: [delegated-executor-practices](delegated-executor-practices.md) — Codex cannot reach Docker either.
+* **Update**: [parallel-agent-test-databases](parallel-agent-test-databases.md) — a worktree has no `backend/.env`; set `COMPOSE_PROJECT_NAME=policy_atlas`.
 
 ## 2026-11-09 (task 058, review stack)
 * **New**: [route-step-needs-three-rows](route-step-needs-three-rows.md) — the streamed
