@@ -89,6 +89,18 @@ Built as decided, with no deviation. The component is
 `infra/infra/components/security_headers.py`: a pure function `content_security_policy`
 returns the CSP string, and the construct `SecurityHeaders` creates the policy
 `policy-atlas-v3-security-headers` and refuses an unknown `csp_mode` or a string over 1,783
-characters. The staging CSP is 457 characters and production's 422. The synth tests in
-`infra/tests/unit/test_security_headers.py` pin both environments' strings literally, so
-any change to a source shows as a failed test.
+characters. The synth tests in `infra/tests/unit/test_security_headers.py` pin both
+environments' strings literally, so any change to a source shows as a failed test.
+
+Two changes from decision 2, made in the review stack (owner ruling, 2026-11-19):
+
+- `frame-src` also lists `'self'`. The sign-in library's hidden frame opens the Cognito
+  hosted domain, which sends the frame back to our own address; without `'self'` an
+  enforced policy blocks that last step, so the fallback named in decision 2 could not work.
+- `script-src` lists `https://*.captcha-sdk.awswaf.com` instead of `https://*.awswaf.com`.
+  The CAPTCHA script loads from `<id>.<region>.captcha-sdk.awswaf.com` (read from the
+  staging account on 2026-11-19), and the narrower source stops a page from loading scripts
+  from other AWS customers' `awswaf.com` hosts. `connect-src` keeps `https://*.awswaf.com`,
+  because the hosts the CAPTCHA script calls are known only after the staging pass.
+
+The staging CSP is 476 characters and production's 429.

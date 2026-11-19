@@ -78,14 +78,15 @@ So the name `policy-atlas-v3-security-headers` is free in both accounts.
     `ContentSecurityPolicy` in the security headers, custom header with override on).
   - S4: the S1 test pins the `Permissions-Policy` custom header, its value and override.
 - **The literal CSP strings** (written out in the test):
-  - Staging (457 characters): `default-src 'self'; script-src 'self' https://*.awswaf.com;
-    style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self';
-    connect-src 'self' https://api.v3.policyatlas.uk https://cognito-idp.eu-west-2.amazonaws.com
+  - Staging (476 characters, after the review-stack changes below): `default-src 'self';
+    script-src 'self' https://*.captcha-sdk.awswaf.com; style-src 'self' 'unsafe-inline';
+    img-src 'self' data: blob:; font-src 'self'; connect-src 'self'
+    https://api.v3.policyatlas.uk https://cognito-idp.eu-west-2.amazonaws.com
     https://policy-atlas-v3.auth.eu-west-2.amazoncognito.com https://*.awswaf.com; frame-src
-    https://policy-atlas-v3.auth.eu-west-2.amazoncognito.com; frame-ancestors 'self';
+    'self' https://policy-atlas-v3.auth.eu-west-2.amazoncognito.com; frame-ancestors 'self';
     form-action 'self'; object-src 'none'; base-uri 'self'`
-  - Production (422 characters): the same without the two `https://*.awswaf.com` sources,
-    with `https://api.policyatlas.uk` and the `policy-atlas-v3-prod` hosted domain.
+  - Production (429 characters): the same without the two CAPTCHA sources, with
+    `https://api.policyatlas.uk` and the `policy-atlas-v3-prod` hosted domain.
 - **AI evals:** none (no inference).
 - **Manual / browser:** none yet. The live checks run on staging after merge and deploy
   (below).
@@ -145,7 +146,7 @@ same `curl`, the second pass and the full-chain smoke (one task run with its pro
 | Staging report-only: `curl` on `/`, `/index.html`, `/tasks/x` | pending (after merge and deploy) |
 | Staging report-only manual pass (deliberate violation first) | pending |
 | Sources added after the pass | pending |
-| Staging enforce: `curl`, second pass with zero CSP lines | pending |
+| Staging enforce: `curl`, second pass with zero CSP lines apart from the deliberate `fetch` refusal | pending |
 | Staging full-chain smoke after enforce | pending |
 | Production report-only: `curl` | pending (with the release) |
 | Production enforce: config change, `curl`, short pass | pending (after staging enforce) |
@@ -220,6 +221,86 @@ user data.
   - A CSP built from config must use a plain string for the Cognito hosted domain (from
     `cognito_domain_prefix`), not `CognitoAuth.hosted_domain`, which is a deploy-time token
     the tests cannot compare. The coupling test is what keeps the two in step.
+
+## Review findings (step 7, 2026-11-19)
+
+Scope: `git diff ee1de99d..HEAD` (the slice; the 064a and 064b commits below it are
+reviewed in their own PRs). Fresh conversation; the lead adjudicated.
+
+| Lane | Reviewer | Result |
+|---|---|---|
+| Base gate | `make verify` before the lanes | pass (exit 0; frontend 1,998, infra 134) |
+| Contract verifier | `contract-verifier` agent (Claude) | rubric 1, 3, 4, 5, 8, 9 pass; 2, 7, 10 pending by design; 1 medium, 1 low, 1 note |
+| Security | `deep-reasoner` agent, security brief (Claude) | no critical, high or medium; 2 low |
+| Adversarial | Codex (`codex-rescue`, read-only) | 2 medium; no finding on doc claims, Cognito coupling, mode switch, policy name |
+| Code review | `/code-review medium` (Claude) | 9 findings |
+
+Adopted (fixed in this stack):
+
+1. **`frame-src` had no `'self'`** (security L2 and `/code-review` 1; two lanes). The
+   hidden sign-in frame opens the Cognito domain, which sends it back to our own address;
+   an enforced policy blocked that last step, so the fallback the contract names could not
+   work. Owner ruling: add `'self'`. Fixed in `security_headers.py`, the test strings, the
+   coupling test, DEPLOYMENT.md, the programme map and ADR 0048 § As built.
+2. **`script-src` allowed every `*.awswaf.com` host** (security L1). Owner ruling: narrow
+   now. The staging account's integration address (read 2026-11-19, read-only) is
+   `<id>.eu-west-2.captcha-sdk.awswaf.com`, so `script-src` lists
+   `https://*.captcha-sdk.awswaf.com`. `connect-src` keeps `https://*.awswaf.com` until the
+   staging pass shows the SDK's hosts (new seam in `docs/deferred.md`). A new assertion in
+   the S1 test pins the `script-src` source to `backend.waf.captcha`.
+3. **The runbook said the next deploy undoes a console edit** (contract verifier, medium;
+   the lead had the same doubt). CloudFormation rewrites a resource only when its template
+   changes, so a console edit can survive unrelated deploys. DEPLOYMENT.md § Adding a source
+   and § Rollback now say so.
+4. **The enforce pass asked for a refusal and for zero CSP lines** (Codex, medium). Now
+   "zero CSP lines apart from the deliberate `fetch` refusal", in DEPLOYMENT.md and the
+   live-check table above. Contract S6 has the same wording; the contract is left as
+   approved and this note is the correction.
+5. **The bad-mode test left half-built stacks in the shared test app** (Codex medium and
+   `/code-review` 7; both families; the build flagged it). It now builds a fresh app and
+   certificate stack per case. Its comment no longer says it reads `pa_config.json`.
+6. **Production was not pinned to the custom policy** (contract verifier, low). The S1 test
+   now checks, for both environments, that the behaviours reference the custom policy
+   resource, instead of only "not the managed id".
+7. **The docstring said report-only "records" violations** (`/code-review` 5). It now says
+   the browser console shows them and there is no report collector.
+
+Declined, with reasons:
+
+- **HSTS `includeSubDomains` covers staging and any future name** (`/code-review` 2). Ruled
+  at the contract gate after the DNS inventory; the security lane found no record the
+  inventory missed; DEPLOYMENT.md warns against a plain-HTTP subdomain.
+- **The CAPTCHA may need image, worker or WebAssembly sources** (`/code-review` 3). Already a
+  known unverified item; the report-only pass is the check and adding a source is in scope.
+- **The fixed policy name blocks a second stack in one account** (`/code-review` 4). Each
+  environment has its own account; Codex confirmed a `csp_mode` switch is an in-place
+  update, so the name never collides with itself.
+- **Three extra whole-stack synths slow the tests** (`/code-review` 6). The infra suite runs
+  in about 5 seconds; the whole-stack path is what the coupling and production checks need.
+- **The Cognito domain is built by hand, not taken from `CognitoAuth`** (`/code-review` 8).
+  `CognitoAuth.hosted_domain` is a deploy-time token the tests cannot compare; the coupling
+  test keeps the two in step (Codex agreed).
+- **The S1 test repeats a check in `test_synth.py`** (`/code-review` 9). The `test_synth.py`
+  check is the replacement for the old pin (rubric 5); the S1 test covers production too.
+  Small duplication, kept.
+- **`test_s2_csp_sources_are_complete_and_safe` checks only the test's constants** (contract
+  verifier, note). The S1 test's equality check ties them to the real output.
+
+After the fixes: `make -C infra test` 134 passed; `ruff check` clean on the changed files;
+`make okf-validate` 222 concepts, 0 violations. `make verify`: the first run failed one
+backend test, `test_judge_commits.py::test_the_judge_writes_one_change_event_per_step`
+(`links > 1`), a timing-sensitive theory-of-change test this slice does not touch; the
+full backend suite then passed alone (4,831 passed, 1 skipped), and the next `make verify`
+passed (exit 0; frontend 1,998, infra 134). The dry run above was taken before the review-stack changes; they
+change only the policy's header values, so the same two slice lines are expected.
+
+`/simplify` not run: `/code-review` ran its reuse, simplification and efficiency angles on
+the same diff (findings 6, 8 and 9 above, all adjudicated), and a second same-family pass
+adds little (task-cycle-review § Step 7).
+
+Fake-done check on the fixes: no test deleted, skipped or loosened; the coupling test's
+`frame-src` assertion was updated to the new value, not removed; the old "not the managed
+id" check was replaced by a stronger Ref check.
 
 ## Deferred work
 

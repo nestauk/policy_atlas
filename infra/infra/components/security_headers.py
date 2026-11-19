@@ -37,11 +37,14 @@ def content_security_policy(
     Returns:
         The complete CSP header value in the contract's directive order.
     """
+    # The CAPTCHA script comes from <id>.<region>.captcha-sdk.awswaf.com (read
+    # from staging 2026-11-19); its own network calls may use other awswaf.com hosts.
+    waf_script_source = " https://*.captcha-sdk.awswaf.com" if waf_captcha else ""
     waf_source = " https://*.awswaf.com" if waf_captcha else ""
     cognito_issuer = f"https://cognito-idp.{cognito_region}.amazonaws.com"
     return "; ".join((
         "default-src 'self'",
-        f"script-src 'self'{waf_source}",
+        f"script-src 'self'{waf_script_source}",
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data: blob:",
         "font-src 'self'",
@@ -49,7 +52,8 @@ def content_security_policy(
             f"connect-src 'self' {api_origin} {cognito_issuer} "
             f"{cognito_hosted_domain}{waf_source}"
         ),
-        f"frame-src {cognito_hosted_domain}",
+        # 'self': the sign-in library's hidden frame ends on our own address.
+        f"frame-src 'self' {cognito_hosted_domain}",
         "frame-ancestors 'self'",
         "form-action 'self'",
         "object-src 'none'",
@@ -63,7 +67,8 @@ class SecurityHeaders(Construct):
     Args:
         scope: The parent construct, normally the application stack.
         id: The construct id.
-        csp_mode: ``"report-only"`` records policy violations; ``"enforce"`` blocks them.
+        csp_mode: ``"report-only"`` only reports violations in the browser
+            console (there is no report collector); ``"enforce"`` blocks them.
         api_origin: The HTTPS origin of the application's API.
         cognito_region: AWS region containing the Cognito user pool.
         cognito_hosted_domain: The HTTPS Cognito hosted sign-in domain.

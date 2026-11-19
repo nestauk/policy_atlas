@@ -1,5 +1,17 @@
 # Knowledge update log
 
+## 2026-11-19 (task 064c, review stack)
+* **New**: [cloudfront-csp-from-config-pitfalls](cloudfront-csp-from-config-pitfalls.md)
+  — `frame-src` without `'self'` blocked the sign-in frame's return hop (security lane and
+  `/code-review`); plain config strings and a coupling test instead of CDK tokens, and the
+  managed policy's uneven override flags (build candidates); the CAPTCHA script host read
+  from staging (review stack).
+* **Changed**: [noop-deploys-dont-reassert-template-pins](noop-deploys-dont-reassert-template-pins.md)
+  — a console edit survives unchanged deploys (contract verifier; the runbook had said the
+  next deploy undoes it). Declined: the shared test database (already in
+  [testing-database](testing-database.md) § cross-checkout variant); the `cdk diff`
+  image-hash lines (normal deploy noise, recorded in the task's verification.md).
+
 ## 2026-11-18 (task 065, delta review stack)
 
 Added: [sqlalchemy-core-insert-rowcount-is-not-a-signal](sqlalchemy-core-insert-rowcount-is-not-a-signal.md)

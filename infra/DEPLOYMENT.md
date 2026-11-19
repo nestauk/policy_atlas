@@ -1024,12 +1024,12 @@ app's own host.
 | Directive | Sources | Where each source comes from |
 | --- | --- | --- |
 | `default-src` | `'self'` | Anything not listed below. |
-| `script-src` | `'self'`, plus `https://*.awswaf.com` when the CAPTCHA is on | The app bundle; the WAF CAPTCHA script (`backend.waf.captcha`). Never `'unsafe-inline'` or `'unsafe-eval'`. |
+| `script-src` | `'self'`, plus `https://*.captcha-sdk.awswaf.com` when the CAPTCHA is on | The app bundle; the WAF CAPTCHA script, which loads from `<id>.<region>.captcha-sdk.awswaf.com` (`backend.waf.captcha`). Never `'unsafe-inline'` or `'unsafe-eval'`. |
 | `style-src` | `'self' 'unsafe-inline'` | The app CSS; Radix (dialogs, sheets) adds a `<style>` element at run time. Inline styles cannot run code. |
 | `img-src` | `'self' data: blob:` | Upload previews (`blob:`) and theory-of-change image exports (`data:`). |
 | `font-src` | `'self'` | The self-hosted fonts under `/fonts/`. |
 | `connect-src` | `'self'`, `https://<backend_subdomain>.<domain_name>`, `https://cognito-idp.<aws_region>.amazonaws.com`, `https://<cognito_domain_prefix>.auth.<aws_region>.amazoncognito.com`, plus `https://*.awswaf.com` when the CAPTCHA is on | The API (including the progress stream); the Cognito sign-in settings; the Cognito token exchange and refresh; the CAPTCHA's own calls. |
-| `frame-src` | the Cognito hosted domain | The sign-in library's hidden-frame fallback. |
+| `frame-src` | `'self'`, the Cognito hosted domain | The sign-in library's hidden-frame fallback: the frame opens the Cognito domain, which sends it back to our own address. |
 | `frame-ancestors` | `'self'` | Who may show our page in a frame (same as `X-Frame-Options`). |
 | `form-action` | `'self'` | Where a form may post. |
 | `object-src` | `'none'` | No plug-ins. |
@@ -1084,16 +1084,19 @@ done
 
 **Switching to enforce.** After a report-only pass with no unexplained line,
 set `csp_mode` to `"enforce"` for that environment, merge and deploy the
-normal way, run the `curl` check, and repeat the manual pass at once: it must
-show zero CSP lines. Staging leads by one release: staging enforces before
+normal way, run the `curl` check, and repeat the manual pass at once: apart
+from the refusal of the deliberate `fetch` in step 1, it must show zero CSP
+lines. Staging leads by one release: staging enforces before
 production does.
 
 **Adding a source.** When a pass shows a real need (for example the CAPTCHA
 script loading an image from `awswaf.com`), add the source in
 `security_headers.py`, update its literal expected string in
 `infra/tests/unit/test_security_headers.py`, and deploy. Never edit the policy
-in the CloudFront console as a fix: the next deploy puts the code's version
-back. Never add `'unsafe-inline'` or `'unsafe-eval'` to `script-src`; a
+in the CloudFront console as a fix. CloudFormation rewrites the policy only
+when the code's version of it changes, so a console edit can stay in place,
+unseen, through many deploys, and then disappear at an unrelated policy
+change. Never add `'unsafe-inline'` or `'unsafe-eval'` to `script-src`; a
 library that needs either is a design question, not a header change.
 
 **Rollback.** Set `csp_mode` back to `"report-only"` and deploy. CloudFormation
@@ -1101,8 +1104,9 @@ updates the policy in place; CloudFront applies it within minutes, and
 `index.html` has a 60-second cache. For an emergency that cannot wait for a
 deploy, edit the policy in the CloudFront console (Policies → Response headers
 → `policy-atlas-v3-security-headers`): move the CSP out of the security headers
-or delete it. The next deploy restores the code's version, so make the config
-change too. A full revert of the 064c change restores the managed policy. The
+or delete it. Then make the config change and deploy at once: that deploy
+changes the policy, so it puts the code's version back. A deploy that does not
+change the policy leaves a console edit in place. A full revert of the 064c change restores the managed policy. The
 HSTS subdomain setting stays in browsers that saw it (above).
 
 **Cost.** Nil. Response headers policies are free (20 custom policies per

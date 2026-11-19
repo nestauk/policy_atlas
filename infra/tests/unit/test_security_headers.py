@@ -12,15 +12,17 @@ from infra.components.security_headers import (
     SecurityHeaders,
     content_security_policy,
 )
+from infra.cert_stack import PaV3CertStack
 from infra.policy_atlas_stack import PolicyAtlasStack
 from tests.unit.test_synth import (
-    CERT_STACK,
+    CERT_ENV,
     COUPLING_APP_TEMPLATE,
     DUMMY_IMAGE,
     ENFORCE_APP_TEMPLATE,
     ENV,
     ENV_NAME,
     INFRA_ROOT,
+    NETWORK_CONFIG,
     PA_CONFIG,
     PROD_APP_TEMPLATE,
     TEMPLATES,
@@ -29,12 +31,12 @@ from tests.unit.test_synth import (
 )
 
 STAGING_CSP = (
-    "default-src 'self'; script-src 'self' https://*.awswaf.com; "
+    "default-src 'self'; script-src 'self' https://*.captcha-sdk.awswaf.com; "
     "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; "
     "connect-src 'self' https://api.v3.policyatlas.uk "
     "https://cognito-idp.eu-west-2.amazonaws.com "
     "https://policy-atlas-v3.auth.eu-west-2.amazoncognito.com https://*.awswaf.com; "
-    "frame-src https://policy-atlas-v3.auth.eu-west-2.amazoncognito.com; "
+    "frame-src 'self' https://policy-atlas-v3.auth.eu-west-2.amazoncognito.com; "
     "frame-ancestors 'self'; form-action 'self'; object-src 'none'; base-uri 'self'"
 )
 PROD_CSP = (
@@ -42,7 +44,7 @@ PROD_CSP = (
     "img-src 'self' data: blob:; font-src 'self'; connect-src 'self' "
     "https://api.policyatlas.uk https://cognito-idp.eu-west-2.amazonaws.com "
     "https://policy-atlas-v3-prod.auth.eu-west-2.amazoncognito.com; "
-    "frame-src https://policy-atlas-v3-prod.auth.eu-west-2.amazoncognito.com; "
+    "frame-src 'self' https://policy-atlas-v3-prod.auth.eu-west-2.amazoncognito.com; "
     "frame-ancestors 'self'; form-action 'self'; object-src 'none'; base-uri 'self'"
 )
 
@@ -96,7 +98,10 @@ def test_s1_to_s4_report_only_properties_match_each_environment_config():
         _, distribution = _resources(template, "AWS::CloudFront::Distribution")[0]
         distribution_config = distribution["Properties"]["DistributionConfig"]
         response_policy_id = distribution_config["DefaultCacheBehavior"]["ResponseHeadersPolicyId"]
-        assert response_policy_id != "67f7725c-6f97-4210-82d7-5512b31e9d03"
+        assert response_policy_id in [
+            {"Ref": logical_id}
+            for logical_id, _ in _resources(template, "AWS::CloudFront::ResponseHeadersPolicy")
+        ]
         assert all(
             behavior["ResponseHeadersPolicyId"] == response_policy_id
             for behavior in distribution_config["CacheBehaviors"]
@@ -127,6 +132,7 @@ def test_s1_to_s4_report_only_properties_match_each_environment_config():
         }
         assert "ContentSecurityPolicy" not in security
         assert ("https://*.awswaf.com" in csp) is waf_captcha
+        assert ("https://*.captcha-sdk.awswaf.com" in csp.split("; ")[1]) is waf_captcha
 
 
 def test_s3_enforce_uses_the_built_in_csp_header_only():
@@ -152,7 +158,8 @@ def test_s3_rejects_missing_or_unknown_modes():
 
 @pytest.mark.parametrize("mode", [None, "Enforce"])
 def test_s3_whole_stack_rejects_missing_or_unknown_mode_from_config(mode):
-    # The value travels the real path: pa_config.json -> PolicyAtlasStack -> SecurityHeaders.
+    # The value travels the real path: the config dict -> PolicyAtlasStack -> SecurityHeaders.
+    # A fresh app, so the half-built stack never joins the shared test app.
     config = json.loads(json.dumps(PA_CONFIG))
     if mode is None:
         del config["policy_atlas_config"]["csp_mode"]
@@ -161,11 +168,19 @@ def test_s3_whole_stack_rejects_missing_or_unknown_mode_from_config(mode):
     with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE), patch(
         "aws_cdk.aws_ecr_assets.DockerImageAsset", side_effect=_stub_backend_image_asset
     ), pytest.raises(ValueError, match="csp_mode"):
+        app = cdk.App(context={"aws:cdk:bundling-stacks": []})
+        cert_stack = PaV3CertStack(
+            app,
+            "PaV3CertStack",
+            network_config=NETWORK_CONFIG,
+            env=CERT_ENV,
+            cross_region_references=True,
+        )
         PolicyAtlasStack(
-            CERT_STACK.node.scope,
-            f"PaV3AppStackBadCspMode{mode}",
+            app,
+            "PaV3AppStack",
             pa_config=config,
-            certificate=CERT_STACK.certificate,
+            certificate=cert_stack.certificate,
             env=ENV,
             env_name=ENV_NAME,
             cross_region_references=True,
@@ -184,7 +199,7 @@ def test_s2_function_adds_waf_source_only_when_captcha_is_enabled():
         "cognito_hosted_domain": "https://sign-in.example.test",
     }
     assert "https://*.awswaf.com" in content_security_policy(**common, waf_captcha=True)
-    assert "https://*.awswaf.com" not in content_security_policy(**common, waf_captcha=False)
+    assert "awswaf.com" not in content_security_policy(**common, waf_captcha=False)
 
 
 def test_s2_cognito_domain_config_couples_the_user_pool_and_csp():
@@ -194,4 +209,4 @@ def test_s2_cognito_domain_config_couples_the_user_pool_and_csp():
     csp = _custom_headers(policy)["Content-Security-Policy-Report-Only"]["Value"]
     hosted_domain = "https://pa-csp-coupling-test.auth.eu-west-2.amazoncognito.com"
     assert hosted_domain in csp.split("connect-src ", maxsplit=1)[1]
-    assert f"frame-src {hosted_domain}" in csp
+    assert f"frame-src 'self' {hosted_domain}" in csp

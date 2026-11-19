@@ -226,12 +226,12 @@ ADR 0047. The sketch below is kept to the contract's shape.
 - A custom `ResponseHeadersPolicy` replacing the managed `SECURITY_HEADERS`, keeping its
   headers and adding CSP, `Permissions-Policy` and `includeSubDomains` on HSTS.
 - Sources (as built, task 064c): `default-src 'self'`; `script-src 'self'` plus
-  `https://*.awswaf.com` when the CAPTCHA is on; `style-src 'self' 'unsafe-inline'` (Radix
+  `https://*.captcha-sdk.awswaf.com` when the CAPTCHA is on; `style-src 'self' 'unsafe-inline'` (Radix
   adds a `<style>` element at run time; accepted defect); `img-src 'self' data: blob:`
   (upload previews and theory-of-change exports); `font-src 'self'`; `connect-src 'self'`,
   the API origin, the Cognito issuer and hosted domain, plus `https://*.awswaf.com` when the
-  CAPTCHA is on; `frame-src` the Cognito hosted domain (the sign-in library's hidden-frame
-  fallback); `frame-ancestors 'self'` (same as today's `X-Frame-Options: SAMEORIGIN`);
+  CAPTCHA is on; `frame-src 'self'` and the Cognito hosted domain (the sign-in library's
+  hidden-frame fallback, which ends on our own address); `frame-ancestors 'self'` (same as today's `X-Frame-Options: SAMEORIGIN`);
   `form-action 'self'`; `object-src 'none'`; `base-uri 'self'`. The 065 ops pages are served
   by the backend, not CloudFront, so this policy does not reach them (a deferred seam).
 - Built in CDK from `pa_config.json` values, never hand-written. A per-env key `csp_mode`
