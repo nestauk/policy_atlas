@@ -57,7 +57,7 @@ implementation lands — see the flow-back in [README](README).
 - Capability specs (instances of the framework):
   - [capabilities/evidence-search/](capabilities/evidence-search/) — the first v3.0 capability.
   - [capabilities/options-scoping/](capabilities/options-scoping/) — the second: options scoping, reusing Evidence search machinery in its own pipeline ([capability](capabilities/options-scoping/capability.md) · [components](capabilities/options-scoping/components.md) · [trust rules](capabilities/options-scoping/trust.md)).
-  - [capabilities/theory-of-change/](capabilities/theory-of-change/) — the third, **draft for owner review** (task 054): a causal chain on a canvas, each link checked against evidence with the Evidence search spine, plus a stress test ([capability](capabilities/theory-of-change/capability.md) · [components](capabilities/theory-of-change/components.md)).
+  - [capabilities/theory-of-change/](capabilities/theory-of-change/) — the third: a causal chain on a canvas, each link checked against evidence with the Evidence search spine, plus a stress test ([capability](capabilities/theory-of-change/capability.md) · [components](capabilities/theory-of-change/components.md)).
 
 ## What to read for a task
 
