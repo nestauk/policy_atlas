@@ -145,6 +145,8 @@ if [[ "$off_output" != *"VITE_WAF_CAPTCHA_SCRIPT_URL="$'\n'* || "$off_output" ==
 fi
 
 echo "deploy-build-guard-test: PASS"
+# The ops checks below use the stub on PATH; the exported function would shadow it.
+unset -f aws
 
 work_dir="$(mktemp -d "${TMPDIR:-/tmp}/policy-atlas-deploy-order.XXXXXX")"
 trap 'rm -rf "$work_dir"' EXIT
@@ -154,6 +156,11 @@ mkdir -p "$stub_dir"
 cat >"$stub_dir/aws" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+
+if [[ "$1 $2" == "wafv2 list-api-keys" ]]; then
+  printf '%s\n' '{"ApplicationIntegrationURL":"https://captcha.example.aws/","APIKeySummaries":[{"TokenDomains":["v3.policyatlas.uk"],"APIKey":"staging-key"}]}'
+  exit 0
+fi
 
 if [[ "$1" == "ssm" && "$2" == "get-parameter" ]]; then
   name=""
