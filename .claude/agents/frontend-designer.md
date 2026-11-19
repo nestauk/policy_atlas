@@ -20,11 +20,9 @@ Before you read or change any code, load the craft, in this order, with the Read
 tool: `~/.claude/skills/impeccable/SKILL.md` (and the references it names),
 `~/.claude/skills/design-taste-frontend/SKILL.md`,
 `~/.claude/skills/emil-design-eng/SKILL.md`,
-`~/.claude/skills/high-end-visual-design/SKILL.md`,
-`~/.claude/skills/apple-design/SKILL.md`, `~/.claude/skills/minimalist-ui/SKILL.md`,
+`~/.claude/skills/apple-design/SKILL.md`,
 `~/.claude/skills/animate/SKILL.md`, `~/.claude/skills/review-animations/SKILL.md`,
-`~/.claude/skills/find-animation-opportunities/SKILL.md`,
-`~/.claude/skills/redesign-existing-projects/SKILL.md`, and the `frontend-design`
+`~/.claude/skills/find-animation-opportunities/SKILL.md`, and the `frontend-design`
 plugin skill under `~/.claude/plugins/cache/claude-plugins-official/frontend-design/`.
 Then the product: `PRODUCT.md` (its § Product Principles first), `DESIGN.md` (the
 visual system), and the slice's `docs/tasks/NNN/design-annex.md` plus any research
