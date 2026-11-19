@@ -267,6 +267,7 @@ verify:
 	$(MAKE) eval-check
 	$(MAKE) -C infra test
 	$(MAKE) audit-paths
+	$(MAKE) rules-check
 	$(MAKE) prompt-guard
 	$(MAKE) font-guard
 	$(MAKE) drift-check

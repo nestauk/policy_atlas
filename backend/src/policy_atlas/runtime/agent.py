@@ -294,7 +294,7 @@ class StdConsole:
         Args:
             message: The text to print.
         """
-        print(_strip_control(message))
+        print(_strip_control(message))  # noqa: T201 - command-line output
 
 
 @dataclass
