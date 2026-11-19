@@ -19,6 +19,3 @@ Use your own judgement for everything else. Remove a line when a test enforces i
 - Retries stack: `core/tracing.py` sends each call up to `MODEL_CALL_ATTEMPTS` times, and
   `runtime/runner.py` reruns a failed model-bearing component once. A retry added inside a
   step multiplies with both, so its cost and wait are the product, not one call.
-- Stored extraction findings are reused when the fingerprint in `evidence_search/extract/`
-  matches. The fingerprints hold each extract step's model but not the extractors' own
-  reasoning effort, so changing that effort in `model_routes.toml` reuses the old findings.
