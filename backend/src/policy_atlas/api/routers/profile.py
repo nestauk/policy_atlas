@@ -82,9 +82,9 @@ def save_profile(
     ``completed_at`` keeps the time of the first completion. A later edit
     replaces the answers and leaves that time unchanged.
 
-    The profile is mirrored to PostHog person properties: ``department``,
-    ``team_type``, ``primary_job`` and ``source``. Each is a code. The typed
-    department name (``department_other``) is free text and is not sent.
+    The profile is mirrored to PostHog person properties: ``jobs`` and
+    ``source``. Each holds codes. The workplace (``department``) and the
+    ``role`` are free text and are not sent.
 
     Args:
         payload: The validated answers.
@@ -116,9 +116,7 @@ def save_profile(
         event="onboarding_completed" if first_completion else PERSON_PROPERTIES_EVENT,
         user_id=user.user_id,
         properties={"source": profile.source} if first_completion else None,
-        person_properties=profile.model_dump(
-            include={"department", "team_type", "primary_job", "source"}
-        ),
+        person_properties=profile.model_dump(include={"jobs", "source"}),
     )
     return profile
 

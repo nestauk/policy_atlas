@@ -55,7 +55,7 @@ from .common import (
     PageMeta,
     StageKey,
 )
-from .profile import ProfileJob, ProfileSource, TeamType, UserProfileIn, UserProfileOut
+from .profile import ProfileJob, ProfileSource, UserProfileIn, UserProfileOut
 from .projects import (
     PROJECT_NAME_MAX,
     ProjectArchiveOut,
@@ -488,7 +488,6 @@ __all__ = [
     "ProfileJob",
     "UserProfileOut",
     "ProfileSource",
-    "TeamType",
     "WAITLIST_EMAIL_MAX",
     "WAITLIST_NAME_MAX",
     "WAITLIST_ORG_MAX",

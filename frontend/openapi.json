@@ -14318,28 +14318,34 @@
       },
       "UserProfileIn": {
         "additionalProperties": false,
-        "description": "Inbound body for ``PUT /api/v1/me/profile``.\n\nThe first two questions (department with team type, and the main use) are\nrequired. All other fields are optional.",
+        "description": "Inbound body for ``PUT /api/v1/me/profile``.\n\nThe first three questions (the workplace, the role and the uses) are\nrequired. ``panel_opt_in`` is optional.",
         "properties": {
           "department": {
-            "description": "A department code, or 'other'. A code, never free text.",
-            "maxLength": 64,
+            "description": "Where the user works, as typed. Free text.",
+            "maxLength": 200,
             "minLength": 1,
-            "pattern": "^[a-z0-9_]+$",
             "title": "Department",
             "type": "string"
           },
-          "department_other": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The department name that the user typed, when the code is 'other'.",
-            "title": "Department Other"
+          "jobs": {
+            "description": "The uses that the user picked. One or more.",
+            "items": {
+              "enum": [
+                "j1",
+                "j2",
+                "j3",
+                "j4",
+                "j5",
+                "j6",
+                "j7",
+                "other"
+              ],
+              "type": "string"
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Jobs",
+            "type": "array"
           },
           "panel_opt_in": {
             "anyOf": [
@@ -14352,57 +14358,18 @@
             ],
             "title": "Panel Opt In"
           },
-          "primary_job": {
-            "enum": [
-              "j1",
-              "j2",
-              "j3",
-              "j4",
-              "j5",
-              "j6",
-              "j7",
-              "other"
-            ],
-            "title": "Primary Job",
-            "type": "string"
-          },
-          "secondary_job": {
-            "anyOf": [
-              {
-                "enum": [
-                  "j1",
-                  "j2",
-                  "j3",
-                  "j4",
-                  "j5",
-                  "j6",
-                  "j7",
-                  "other"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Secondary Job"
-          },
-          "team_type": {
-            "enum": [
-              "policy",
-              "analysis_evidence",
-              "strategy_finance",
-              "private_office",
-              "other"
-            ],
-            "title": "Team Type",
+          "role": {
+            "description": "The user's role, as typed. Free text.",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Role",
             "type": "string"
           }
         },
         "required": [
           "department",
-          "team_type",
-          "primary_job"
+          "role",
+          "jobs"
         ],
         "title": "UserProfileIn",
         "type": "object"
@@ -14433,16 +14400,29 @@
             ],
             "title": "Department"
           },
-          "department_other": {
+          "jobs": {
             "anyOf": [
               {
-                "type": "string"
+                "items": {
+                  "enum": [
+                    "j1",
+                    "j2",
+                    "j3",
+                    "j4",
+                    "j5",
+                    "j6",
+                    "j7",
+                    "other"
+                  ],
+                  "type": "string"
+                },
+                "type": "array"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Department Other"
+            "title": "Jobs"
           },
           "panel_opt_in": {
             "anyOf": [
@@ -14455,47 +14435,16 @@
             ],
             "title": "Panel Opt In"
           },
-          "primary_job": {
+          "role": {
             "anyOf": [
               {
-                "enum": [
-                  "j1",
-                  "j2",
-                  "j3",
-                  "j4",
-                  "j5",
-                  "j6",
-                  "j7",
-                  "other"
-                ],
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Primary Job"
-          },
-          "secondary_job": {
-            "anyOf": [
-              {
-                "enum": [
-                  "j1",
-                  "j2",
-                  "j3",
-                  "j4",
-                  "j5",
-                  "j6",
-                  "j7",
-                  "other"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Secondary Job"
+            "title": "Role"
           },
           "skipped_once_at": {
             "anyOf": [
@@ -14524,24 +14473,6 @@
               }
             ],
             "title": "Source"
-          },
-          "team_type": {
-            "anyOf": [
-              {
-                "enum": [
-                  "policy",
-                  "analysis_evidence",
-                  "strategy_finance",
-                  "private_office",
-                  "other"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Team Type"
           }
         },
         "title": "UserProfileOut",
@@ -15487,7 +15418,7 @@
         ]
       },
       "put": {
-        "description": "Complete the caller's profile, or edit a completed one.\n\n``completed_at`` keeps the time of the first completion. A later edit\nreplaces the answers and leaves that time unchanged.\n\nThe profile is mirrored to PostHog person properties: ``department``,\n``team_type``, ``primary_job`` and ``source``. Each is a code. The typed\ndepartment name (``department_other``) is free text and is not sent.\n\nArgs:\n    payload: The validated answers.\n    user: The authenticated caller.\n    conn: Open database connection.\n    analytics: The PostHog sender, or ``None`` when analytics is off.\n\nReturns:\n    The stored profile.",
+        "description": "Complete the caller's profile, or edit a completed one.\n\n``completed_at`` keeps the time of the first completion. A later edit\nreplaces the answers and leaves that time unchanged.\n\nThe profile is mirrored to PostHog person properties: ``jobs`` and\n``source``. Each holds codes. The workplace (``department``) and the\n``role`` are free text and are not sent.\n\nArgs:\n    payload: The validated answers.\n    user: The authenticated caller.\n    conn: Open database connection.\n    analytics: The PostHog sender, or ``None`` when analytics is off.\n\nReturns:\n    The stored profile.",
         "operationId": "save_profile_api_v1_me_profile_put",
         "requestBody": {
           "content": {

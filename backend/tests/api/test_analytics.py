@@ -220,18 +220,13 @@ def test_feedback_submitted_has_the_kind_and_the_surface_and_no_free_text(
 def test_onboarding_events_and_the_person_properties(tmp_path: Path, engine: Engine) -> None:
     """Skip once, complete once, then an edit only updates the person properties."""
     del engine
-    answers = {
-        "department": "other",
-        "department_other": FREE_TEXT,
-        "team_type": "policy",
-        "primary_job": "j2",
-    }
-    person = {"department": "other", "team_type": "policy", "primary_job": "j2", "source": None}
+    answers = {"department": FREE_TEXT, "role": FREE_TEXT, "jobs": ["j2"]}
+    person = {"jobs": ["j2"], "source": None}
     with analytics_client(tmp_path, "onboarding", "analytics") as (client, owner, sent):
         client.post("/api/v1/me/profile/skip", headers=owner)
         client.post("/api/v1/me/profile/skip", headers=owner)
         client.put("/api/v1/me/profile", headers=owner, json=answers)
-        client.put("/api/v1/me/profile", headers=owner, json={**answers, "primary_job": "j5"})
+        client.put("/api/v1/me/profile", headers=owner, json={**answers, "jobs": ["j5", "j2"]})
 
         assert [event["event"] for event in sent] == [
             "onboarding_skipped",
@@ -239,8 +234,8 @@ def test_onboarding_events_and_the_person_properties(tmp_path: Path, engine: Eng
             "$set",
         ]
         assert sent[1]["properties"] == {"source": None, "$geoip_disable": True, "$set": person}
-        assert sent[2]["properties"]["$set"] == {**person, "primary_job": "j5"}
-        # The typed department name is free text.
+        assert sent[2]["properties"]["$set"] == {**person, "jobs": ["j5", "j2"]}
+        # The typed workplace and role are free text.
         assert FREE_TEXT not in str(sent)
 
 

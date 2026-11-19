@@ -2274,13 +2274,6 @@ MISSING_PAPER_FAILURE_STAGES: tuple[str, ...] = (
     "acquired_only",
     "not_retrieved",
 )
-PROFILE_TEAM_TYPES: tuple[str, ...] = (
-    "policy",
-    "analysis_evidence",
-    "strategy_finance",
-    "private_office",
-    "other",
-)
 #: Stable codes for the "main use" answers. The labels (J1 to J7) will change
 #: after user testing; they live in one frontend file and are not stored.
 PROFILE_JOBS: tuple[str, ...] = ("j1", "j2", "j3", "j4", "j5", "j6", "j7", "other")
@@ -2383,26 +2376,27 @@ user_profile = Table(
     "user_profile",
     metadata,
     Column("user_id", Text, ForeignKey("app_user.user_id"), primary_key=True),
-    # A department code from the API contract, or "other".
+    # Where the user works and the user's role: free text, as typed.
     Column("department", Text, nullable=True),
-    # What the user typed when the department is "other".
-    Column("department_other", Text, nullable=True),
-    Column("team_type", Text, nullable=True),
-    Column("primary_job", Text, nullable=True),
-    Column("secondary_job", Text, nullable=True),
+    Column("role", Text, nullable=True),
+    # The uses that the user picked: one or more codes from PROFILE_JOBS.
+    Column("jobs", ARRAY(Text), nullable=True),
     Column("panel_opt_in", Boolean, nullable=True),
     # How the user arrived. Nothing in the app knows this; ops supply it.
     Column("source", Text, nullable=True),
     Column("completed_at", DateTime(timezone=True), nullable=True),
     Column("skipped_once_at", DateTime(timezone=True), nullable=True),
-    CheckConstraint(_in_list("team_type", PROFILE_TEAM_TYPES), name="ck_user_profile_team_type"),
-    CheckConstraint(_in_list("primary_job", PROFILE_JOBS), name="ck_user_profile_primary_job"),
-    CheckConstraint(_in_list("secondary_job", PROFILE_JOBS), name="ck_user_profile_secondary_job"),
-    CheckConstraint(_in_list("source", PROFILE_SOURCES), name="ck_user_profile_source"),
-    # The first two questions are required to complete the profile.
     CheckConstraint(
-        "completed_at IS NULL OR "
-        "(department IS NOT NULL AND team_type IS NOT NULL AND primary_job IS NOT NULL)",
+        f"jobs <@ ARRAY[{', '.join(repr(job) for job in PROFILE_JOBS)}]::text[]",
+        name="ck_user_profile_jobs",
+    ),
+    CheckConstraint(_in_list("source", PROFILE_SOURCES), name="ck_user_profile_source"),
+    # The first three questions are required to complete the profile. A CHECK
+    # passes on NULL, so `jobs IS NOT NULL` is necessary: cardinality(NULL)
+    # is NULL, not 0.
+    CheckConstraint(
+        "completed_at IS NULL OR (department IS NOT NULL AND role IS NOT NULL "
+        "AND jobs IS NOT NULL AND cardinality(jobs) > 0)",
         name="ck_user_profile_completed_has_answers",
     ),
 )

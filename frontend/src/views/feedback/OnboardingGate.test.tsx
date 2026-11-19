@@ -23,9 +23,6 @@ vi.mock("../../api/feedback", () => ({
   useSkipProfile: () => ({ mutate: state.skip, isPending: false }),
   useSaveProfile: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }));
-vi.mock("../../api/queries", () => ({
-  useMe: () => ({ data: { email: "ada@education.gov.uk" } }),
-}));
 vi.mock("../../auth", () => ({
   useAuth: () => ({ user: { sub: "ada" }, signOut: state.signOut }),
 }));

@@ -1,28 +1,20 @@
 /**
  * The onboarding profile form (in-app feedback, element F).
  *
- * Three questions. The first two are required: where the user works
- * (department and team type) and the main use of Policy Atlas. The same form
+ * Four questions. The first three are required: where the user works, the
+ * user's role, and the uses of Policy Atlas (one or more). The same form
  * edits a completed profile from the account menu.
  */
 import { useId, useState, type FormEvent } from "react";
 
 import { useSaveProfile, type UserProfile } from "../../api/feedback";
-import {
-  DEPARTMENTS,
-  JOB_LABELS,
-  OTHER_DEPARTMENT,
-  TEAM_TYPE_LABELS,
-  departmentForEmail,
-  type ProfileJob,
-  type TeamType,
-} from "../../lib/onboardingOptions";
+import { JOB_LABELS, type ProfileJob } from "../../lib/onboardingOptions";
 import { Button } from "../../ui/brand/Button";
-import { Select } from "../../ui/brand/Select";
 import { ChoiceChip } from "../../ui/feedback/ChoiceChip";
 
-const TEAM_TYPES = Object.keys(TEAM_TYPE_LABELS) as TeamType[];
 const JOBS = Object.keys(JOB_LABELS) as ProfileJob[];
+/** The API's limit for a typed answer (`PROFILE_TEXT_MAX` in the contract). */
+const TEXT_MAX = 200;
 
 const QUESTION_CLASS = "text-body font-bold text-navy";
 const FIELD_CLASS =
@@ -30,12 +22,59 @@ const FIELD_CLASS =
 const ERROR_CLASS = "mt-2 text-meta text-red";
 
 /**
+ * One required question with a typed answer.
+ *
+ * Args:
+ *   question: The question, which is also the label of the input.
+ *   value: The typed answer.
+ *   onChange: Called with the new answer.
+ *   autoComplete: The browser's autofill hint for the input.
+ *   error: The message to show when the answer is missing. Undefined: none.
+ */
+function TextQuestion({
+  question,
+  value,
+  onChange,
+  autoComplete,
+  error,
+}: {
+  question: string;
+  value: string;
+  onChange: (value: string) => void;
+  autoComplete: string;
+  error?: string;
+}) {
+  const id = useId();
+  return (
+    <div>
+      <label htmlFor={id} className={`block ${QUESTION_CLASS}`}>
+        {question}
+      </label>
+      <input
+        id={id}
+        type="text"
+        value={value}
+        maxLength={TEXT_MAX}
+        autoComplete={autoComplete}
+        aria-invalid={error !== undefined}
+        onChange={(event) => onChange(event.target.value)}
+        className={`mt-3 ${FIELD_CLASS}`}
+      />
+      {error !== undefined && (
+        <p role="alert" className={ERROR_CLASS}>
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
  * The profile form.
  *
  * Args:
  *   profile: The stored profile, to fill the form for an edit. Undefined or
- *     not completed: the form starts empty, with the department prefilled.
- *   email: The user's email address, for the department prefill.
+ *     not completed: the form starts empty.
  *   submitLabel: The words on the submit button.
  *   onSkip: "Skip for now". Omitted: the form offers no skip.
  *   skipping: True while the skip is being recorded.
@@ -43,102 +82,60 @@ const ERROR_CLASS = "mt-2 text-meta text-red";
  */
 export function ProfileForm({
   profile,
-  email,
   submitLabel,
   onSkip,
   skipping = false,
   onSaved,
 }: {
   profile?: UserProfile;
-  email?: string | null;
   submitLabel: string;
   onSkip?: () => void;
   skipping?: boolean;
   onSaved?: () => void;
 }) {
   const save = useSaveProfile();
-  const uid = useId();
-  const [department, setDepartment] = useState(profile?.department ?? departmentForEmail(email));
-  const [departmentOther, setDepartmentOther] = useState(profile?.department_other ?? "");
-  const [teamType, setTeamType] = useState<TeamType | null>(profile?.team_type ?? null);
-  const [primaryJob, setPrimaryJob] = useState<ProfileJob | null>(profile?.primary_job ?? null);
-  const [secondaryJob, setSecondaryJob] = useState<ProfileJob | "">(profile?.secondary_job ?? "");
-  const [secondOpen, setSecondOpen] = useState(profile?.secondary_job != null);
+  const [department, setDepartment] = useState(profile?.department ?? "");
+  const [role, setRole] = useState(profile?.role ?? "");
+  const [jobs, setJobs] = useState<ProfileJob[]>(profile?.jobs ?? []);
   const [panelOptIn, setPanelOptIn] = useState<boolean | null>(profile?.panel_opt_in ?? null);
   const [attempted, setAttempted] = useState(false);
 
-  const workMissing = department === "" || teamType === null;
-  const jobMissing = primaryJob === null;
+  const departmentMissing = department.trim() === "";
+  const roleMissing = role.trim() === "";
+  const jobsMissing = jobs.length === 0;
   const busy = save.isPending || skipping;
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
     setAttempted(true);
-    if (workMissing || jobMissing) return;
+    if (departmentMissing || roleMissing || jobsMissing) return;
     save.mutate(
-      {
-        department,
-        department_other:
-          department === OTHER_DEPARTMENT && departmentOther.trim() !== ""
-            ? departmentOther.trim()
-            : null,
-        team_type: teamType,
-        primary_job: primaryJob,
-        secondary_job: secondOpen && secondaryJob !== "" ? secondaryJob : null,
-        panel_opt_in: panelOptIn,
-      },
+      { department: department.trim(), role: role.trim(), jobs, panel_opt_in: panelOptIn },
       { onSuccess: onSaved },
     );
   };
 
   return (
     <form onSubmit={onSubmit} noValidate className="flex flex-col gap-8">
-      <fieldset className="flex flex-col gap-3">
-        <legend className={QUESTION_CLASS}>Where do you work?</legend>
-        <Select
-          label="Department"
-          value={department}
-          options={DEPARTMENTS}
-          onChange={setDepartment}
-          placeholder="Choose your department"
-          className="mt-3 min-h-11 w-full"
-        />
-        {department === OTHER_DEPARTMENT && (
-          <div>
-            <label htmlFor={`${uid}-other`} className="text-meta font-semibold text-navy">
-              Department or organisation <span className="font-normal text-grey">(optional)</span>
-            </label>
-            <input
-              id={`${uid}-other`}
-              type="text"
-              value={departmentOther}
-              maxLength={200}
-              onChange={(event) => setDepartmentOther(event.target.value)}
-              className={`mt-1.5 ${FIELD_CLASS}`}
-            />
-          </div>
-        )}
-        <div role="group" aria-label="Team type" className="flex flex-wrap gap-2">
-          {TEAM_TYPES.map((value) => (
-            <ChoiceChip
-              key={value}
-              selected={teamType === value}
-              onClick={() => setTeamType(value)}
-            >
-              {TEAM_TYPE_LABELS[value]}
-            </ChoiceChip>
-          ))}
-        </div>
-        {attempted && workMissing && (
-          <p role="alert" className={ERROR_CLASS}>
-            Choose your department and your team type.
-          </p>
-        )}
-      </fieldset>
+      <TextQuestion
+        question="Where do you work?"
+        value={department}
+        onChange={setDepartment}
+        autoComplete="organization"
+        error={attempted && departmentMissing ? "Enter where you work." : undefined}
+      />
+
+      <TextQuestion
+        question="What is your role?"
+        value={role}
+        onChange={setRole}
+        autoComplete="organization-title"
+        error={attempted && roleMissing ? "Enter your role." : undefined}
+      />
 
       <fieldset>
         <legend className={QUESTION_CLASS}>
-          What will you mainly use Policy Atlas for? (pick one)
+          What will you mainly use Policy Atlas for? (pick all that apply)
         </legend>
         <div className="mt-3 flex flex-col">
           {JOBS.map((value) => (
@@ -147,51 +144,31 @@ export function ProfileForm({
               className="flex min-h-11 cursor-pointer items-center gap-3 text-body text-navy"
             >
               <input
-                type="radio"
-                name={`${uid}-primary-job`}
-                checked={primaryJob === value}
-                onChange={() => {
-                  setPrimaryJob(value);
-                  if (secondaryJob === value) setSecondaryJob("");
-                }}
+                type="checkbox"
+                checked={jobs.includes(value)}
+                onChange={() =>
+                  setJobs((picked) =>
+                    picked.includes(value)
+                      ? picked.filter((job) => job !== value)
+                      : [...picked, value],
+                  )
+                }
                 className="size-4 shrink-0 accent-navy"
               />
               {JOB_LABELS[value]}
             </label>
           ))}
         </div>
-        {attempted && jobMissing && (
+        {attempted && jobsMissing && (
           <p role="alert" className={ERROR_CLASS}>
-            Choose your main use.
+            Choose one use or more.
           </p>
-        )}
-        {secondOpen ? (
-          <Select
-            label="Second use"
-            value={secondaryJob}
-            options={JOBS.filter((value) => value !== primaryJob).map((value) => ({
-              value,
-              label: JOB_LABELS[value],
-            }))}
-            onChange={setSecondaryJob}
-            placeholder="Choose a second use"
-            className="mt-3 min-h-11 w-full"
-          />
-        ) : (
-          <Button
-            variant="secondary"
-            size="sm"
-            className="mt-2 min-h-11"
-            onClick={() => setSecondOpen(true)}
-          >
-            + add a second use
-          </Button>
         )}
       </fieldset>
 
       <fieldset>
         <legend className={QUESTION_CLASS}>
-          Would you take part in a 45-minute hands-on session with the team?{" "}
+          Can we contact you to take part in a 30 minute user research session?{" "}
           <span className="font-normal text-grey">(optional)</span>
         </legend>
         <div className="mt-3 flex flex-wrap gap-2">

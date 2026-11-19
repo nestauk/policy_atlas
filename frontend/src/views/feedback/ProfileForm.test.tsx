@@ -13,78 +13,56 @@ beforeEach(() => {
 });
 
 describe("ProfileForm", () => {
-  it("requires the first two questions and saves nothing without them", async () => {
+  it("requires the first three questions and saves nothing without them", async () => {
     const user = userEvent.setup();
     render(<ProfileForm submitLabel="Continue" />);
 
+    await user.type(screen.getByLabelText("Where do you work?"), "   ");
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
-    expect(screen.getByText("Choose your department and your team type.")).toBeInTheDocument();
-    expect(screen.getByText("Choose your main use.")).toBeInTheDocument();
+    expect(screen.getByText("Enter where you work.")).toBeInTheDocument();
+    expect(screen.getByText("Enter your role.")).toBeInTheDocument();
+    expect(screen.getByText("Choose one use or more.")).toBeInTheDocument();
     expect(saveState.mutate).not.toHaveBeenCalled();
   });
 
-  it("prefills the department from the email domain and saves the answers", async () => {
+  it("saves the typed answers and each use that is picked", async () => {
     const user = userEvent.setup();
-    render(<ProfileForm email="ada@education.gov.uk" submitLabel="Continue" />);
+    render(<ProfileForm submitLabel="Continue" />);
 
-    expect(screen.getByRole("combobox", { name: "Department" })).toHaveTextContent(
-      "Department for Education",
-    );
-    await user.click(screen.getByRole("button", { name: "Analysis / evidence" }));
-    await user.click(screen.getByRole("radio", { name: "Test claims in a policy proposal" }));
+    await user.type(screen.getByLabelText("Where do you work?"), " Nesta ");
+    await user.type(screen.getByLabelText("What is your role?"), "Data scientist");
+    await user.click(screen.getByRole("checkbox", { name: "Test claims in a policy proposal" }));
+    await user.click(screen.getByRole("checkbox", { name: "Something else" }));
+    await user.click(screen.getByRole("checkbox", { name: "Build or defend a spending bid" }));
+    // A second click removes a use.
+    await user.click(screen.getByRole("checkbox", { name: "Something else" }));
     await user.click(screen.getByRole("button", { name: "Yes, contact me" }));
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
-    expect(screen.getByRole("button", { name: "Analysis / evidence" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
     expect(saveState.mutate.mock.calls[0][0]).toEqual({
-      department: "dfe",
-      department_other: null,
-      team_type: "analysis_evidence",
-      primary_job: "j3",
-      secondary_job: null,
+      department: "Nesta",
+      role: "Data scientist",
+      jobs: ["j3", "j1"],
       panel_opt_in: true,
     });
   });
 
-  it("defaults an unknown domain to Other and takes the typed department", async () => {
+  it("asks to contact the user for a research session, and the answer is optional", async () => {
     const user = userEvent.setup();
-    render(<ProfileForm email="ada@nesta.org.uk" submitLabel="Continue" />);
-
-    await user.type(screen.getByLabelText(/Department or organisation/), " Nesta ");
-    await user.click(screen.getByRole("button", { name: "Policy" }));
-    await user.click(screen.getByRole("radio", { name: "Something else" }));
-    await user.click(screen.getByRole("button", { name: "Continue" }));
-
-    expect(saveState.mutate.mock.calls[0][0]).toMatchObject({
-      department: "other",
-      department_other: "Nesta",
-      panel_opt_in: null,
-    });
-  });
-
-  it("offers a second use that is not the main use", async () => {
-    const user = userEvent.setup();
-    render(<ProfileForm email="ada@dwp.gov.uk" submitLabel="Continue" />);
-
-    await user.click(screen.getByRole("button", { name: "Policy" }));
-    await user.click(screen.getByRole("radio", { name: "Build or defend a spending bid" }));
-    await user.click(screen.getByRole("button", { name: "+ add a second use" }));
-    await user.click(screen.getByRole("combobox", { name: "Second use" }));
+    render(<ProfileForm submitLabel="Continue" />);
 
     expect(
-      screen.queryByRole("option", { name: "Build or defend a spending bid" }),
-    ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("option", { name: "Get up to speed on a new policy area" }));
+      screen.getByRole("group", {
+        name: /Can we contact you to take part in a 30 minute user research session\?/,
+      }),
+    ).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Where do you work?"), "HM Treasury");
+    await user.type(screen.getByLabelText("What is your role?"), "Economist");
+    await user.click(screen.getByRole("checkbox", { name: "Something else" }));
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
-    expect(saveState.mutate.mock.calls[0][0]).toMatchObject({
-      primary_job: "j1",
-      secondary_job: "j7",
-    });
+    expect(saveState.mutate.mock.calls[0][0]).toMatchObject({ panel_opt_in: null });
   });
 
   it("offers Skip for now only when a skip is allowed", async () => {
@@ -105,23 +83,20 @@ describe("ProfileForm", () => {
       <ProfileForm
         submitLabel="Save"
         profile={{
-          department: "hmt",
-          team_type: "strategy_finance",
-          primary_job: "j2",
-          secondary_job: "j4",
+          department: "HM Treasury",
+          role: "Economist",
+          jobs: ["j2", "j4"],
           panel_opt_in: false,
           completed_at: "2026-11-18T09:05:00Z",
         }}
       />,
     );
 
-    expect(screen.getByRole("combobox", { name: "Department" })).toHaveTextContent("HM Treasury");
+    expect(screen.getByLabelText("Where do you work?")).toHaveValue("HM Treasury");
+    expect(screen.getByLabelText("What is your role?")).toHaveValue("Economist");
     expect(
-      screen.getByRole("radio", { name: "Pressure-test someone else's bid or numbers" }),
-    ).toBeChecked();
-    expect(screen.getByRole("combobox", { name: "Second use" })).toHaveTextContent(
-      "Turn evidence into briefing, fast",
-    );
+      screen.getAllByRole("checkbox", { checked: true }).map((box) => box.parentElement?.textContent),
+    ).toEqual(["Pressure-test someone else's bid or numbers", "Turn evidence into briefing, fast"]);
     expect(screen.getByRole("button", { name: "Not now" })).toHaveAttribute("aria-pressed", "true");
   });
 });

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { departmentForEmail } from "./onboardingOptions";
 import { forgetSkipped, markSkipped, profileGate, skippedThisSession } from "./profileGate";
 
 const NEW = { completed_at: null, skipped_once_at: null };
@@ -40,23 +39,5 @@ describe("the skip of this login", () => {
 
     forgetSkipped();
     expect(skippedThisSession("ada")).toBe(false);
-  });
-});
-
-describe("departmentForEmail", () => {
-  it("maps a known government domain, and its subdomains, to the department", () => {
-    expect(departmentForEmail("ada@education.gov.uk")).toBe("dfe");
-    expect(departmentForEmail("Ada@Digital.Education.GOV.UK")).toBe("dfe");
-    expect(departmentForEmail("ada@hmtreasury.gov.uk")).toBe("hmt");
-  });
-
-  it("defaults an unknown domain to Other", () => {
-    expect(departmentForEmail("ada@nesta.org.uk")).toBe("other");
-    expect(departmentForEmail("ada@noteducation.gov.uk")).toBe("other");
-  });
-
-  it("prefills nothing when there is no email address", () => {
-    expect(departmentForEmail(null)).toBe("");
-    expect(departmentForEmail("not-an-email")).toBe("");
   });
 });

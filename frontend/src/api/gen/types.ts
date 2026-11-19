@@ -350,9 +350,9 @@ export interface paths {
          *     ``completed_at`` keeps the time of the first completion. A later edit
          *     replaces the answers and leaves that time unchanged.
          *
-         *     The profile is mirrored to PostHog person properties: ``department``,
-         *     ``team_type``, ``primary_job`` and ``source``. Each is a code. The typed
-         *     department name (``department_other``) is free text and is not sent.
+         *     The profile is mirrored to PostHog person properties: ``jobs`` and
+         *     ``source``. Each holds codes. The workplace (``department``) and the
+         *     ``role`` are free text and are not sent.
          *
          *     Args:
          *         payload: The validated answers.
@@ -9028,34 +9028,27 @@ export interface components {
          * UserProfileIn
          * @description Inbound body for ``PUT /api/v1/me/profile``.
          *
-         *     The first two questions (department with team type, and the main use) are
-         *     required. All other fields are optional.
+         *     The first three questions (the workplace, the role and the uses) are
+         *     required. ``panel_opt_in`` is optional.
          */
         UserProfileIn: {
             /**
              * Department
-             * @description A department code, or 'other'. A code, never free text.
+             * @description Where the user works, as typed. Free text.
              */
             department: string;
             /**
-             * Department Other
-             * @description The department name that the user typed, when the code is 'other'.
+             * Jobs
+             * @description The uses that the user picked. One or more.
              */
-            department_other?: string | null;
+            jobs: ("j1" | "j2" | "j3" | "j4" | "j5" | "j6" | "j7" | "other")[];
             /** Panel Opt In */
             panel_opt_in?: boolean | null;
             /**
-             * Primary Job
-             * @enum {string}
+             * Role
+             * @description The user's role, as typed. Free text.
              */
-            primary_job: "j1" | "j2" | "j3" | "j4" | "j5" | "j6" | "j7" | "other";
-            /** Secondary Job */
-            secondary_job?: ("j1" | "j2" | "j3" | "j4" | "j5" | "j6" | "j7" | "other") | null;
-            /**
-             * Team Type
-             * @enum {string}
-             */
-            team_type: "policy" | "analysis_evidence" | "strategy_finance" | "private_office" | "other";
+            role: string;
         };
         /**
          * UserProfileOut
@@ -9066,20 +9059,16 @@ export interface components {
             completed_at?: string | null;
             /** Department */
             department?: string | null;
-            /** Department Other */
-            department_other?: string | null;
+            /** Jobs */
+            jobs?: ("j1" | "j2" | "j3" | "j4" | "j5" | "j6" | "j7" | "other")[] | null;
             /** Panel Opt In */
             panel_opt_in?: boolean | null;
-            /** Primary Job */
-            primary_job?: ("j1" | "j2" | "j3" | "j4" | "j5" | "j6" | "j7" | "other") | null;
-            /** Secondary Job */
-            secondary_job?: ("j1" | "j2" | "j3" | "j4" | "j5" | "j6" | "j7" | "other") | null;
+            /** Role */
+            role?: string | null;
             /** Skipped Once At */
             skipped_once_at?: string | null;
             /** Source */
             source?: ("signup" | "migration" | "waitlist") | null;
-            /** Team Type */
-            team_type?: ("policy" | "analysis_evidence" | "strategy_finance" | "private_office" | "other") | null;
         };
         /** ValidationError */
         ValidationError: {

@@ -9,7 +9,6 @@ import { useState, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
 
 import { useProfile, useSkipProfile } from "../../api/feedback";
-import { useMe } from "../../api/queries";
 import { useAuth } from "../../auth";
 import { feedbackEnabled } from "../../lib/feedback";
 import { forgetSkipped, markSkipped, profileGate, skippedThisSession } from "../../lib/profileGate";
@@ -37,7 +36,6 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
 function ActiveGate({ children }: { children: ReactNode }) {
   const auth = useAuth();
   const location = useLocation();
-  const me = useMe();
   const profile = useProfile();
   const skip = useSkipProfile();
   const userId = auth.user?.sub ?? "";
@@ -76,7 +74,7 @@ function ActiveGate({ children }: { children: ReactNode }) {
         <Card className="p-6 md:p-8">
           <h1 className="text-title font-extrabold text-navy">Before you start</h1>
           <p className="mt-2 mb-8 text-body text-grey">
-            Three short questions help us to understand who uses Policy Atlas and for what
+            Four short questions help us to understand who uses Policy Atlas and for what
             work. Read the{" "}
             <Link to="/privacy" className={PROSE_LINK_CLASS}>
               privacy notice
@@ -84,7 +82,6 @@ function ActiveGate({ children }: { children: ReactNode }) {
             .
           </p>
           <ProfileForm
-            email={me.data?.email}
             submitLabel="Continue"
             onSkip={gate === "ask" ? onSkip : undefined}
             skipping={skip.isPending}

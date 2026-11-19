@@ -11,9 +11,9 @@ from tests.api.resource_support import api_client
 ONBOARDING = frozenset({"onboarding"})
 URL = "/api/v1/me/profile"
 ANSWERS = {
-    "department": "dfe",
-    "team_type": "analysis_evidence",
-    "primary_job": "j3",
+    "department": "Department for Education",
+    "role": "Policy adviser",
+    "jobs": ["j3"],
 }
 
 
@@ -48,10 +48,9 @@ def test_completing_the_profile_stores_the_answers(tmp_path: Path, engine: Engin
     del engine
     with api_client(tmp_path, feedback_elements=ONBOARDING) as (client, owner, other):
         body = {
-            **ANSWERS,
-            "department": "other",
-            "department_other": "Office for Examples",
-            "secondary_job": "j7",
+            "department": "  Office for Examples ",
+            "role": "Analyst",
+            "jobs": ["j3", "j7", "j3"],
             "panel_opt_in": True,
         }
 
@@ -59,7 +58,12 @@ def test_completing_the_profile_stores_the_answers(tmp_path: Path, engine: Engin
 
         assert saved.status_code == 200, saved.text
         profile = client.get(URL, headers=owner).json()
-        assert {key: profile[key] for key in body} == body
+        # The typed answers lose the outer spaces; a repeated use is stored once.
+        assert {key: profile[key] for key in body} == {
+            **body,
+            "department": "Office for Examples",
+            "jobs": ["j3", "j7"],
+        }
         assert profile["completed_at"] is not None
         assert profile["skipped_once_at"] is None
         assert profile["source"] is None
@@ -67,17 +71,18 @@ def test_completing_the_profile_stores_the_answers(tmp_path: Path, engine: Engin
         assert client.get(URL, headers=other).json()["completed_at"] is None
 
 
-def test_the_first_two_questions_are_required(tmp_path: Path, engine: Engine) -> None:
-    """Department, team type and the main use are required; codes are closed lists."""
+def test_the_first_three_questions_are_required(tmp_path: Path, engine: Engine) -> None:
+    """The workplace, the role and one use are required; the uses are a closed list."""
     del engine
     with api_client(tmp_path, feedback_elements=ONBOARDING) as (client, owner, _other):
         for missing in ANSWERS:
             body = {key: value for key, value in ANSWERS.items() if key != missing}
             assert client.put(URL, headers=owner, json=body).status_code == 422, missing
         for field, value in (
-            ("primary_job", "j9"),
-            ("team_type", "marketing"),
-            ("department", "Department for Education"),
+            ("jobs", ["j9"]),
+            ("jobs", []),
+            ("department", "   "),
+            ("role", "x" * 201),
         ):
             response = client.put(URL, headers=owner, json={**ANSWERS, field: value})
             assert response.status_code == 422, field
@@ -107,7 +112,7 @@ def test_a_skip_then_a_completion_keeps_both_times(tmp_path: Path, engine: Engin
 
         assert completed["skipped_once_at"] == skipped["skipped_once_at"]
         assert completed["completed_at"] is not None
-        assert completed["primary_job"] == "j3"
+        assert completed["jobs"] == ["j3"]
 
 
 def test_an_edit_replaces_the_answers_and_keeps_the_completion_time(
@@ -116,10 +121,9 @@ def test_an_edit_replaces_the_answers_and_keeps_the_completion_time(
     """The profile is editable afterwards; ``completed_at`` is the first completion."""
     del engine
     with api_client(tmp_path, feedback_elements=ONBOARDING) as (client, owner, _other):
-        first = client.put(URL, headers=owner, json={**ANSWERS, "secondary_job": "j1"}).json()
+        first = client.put(URL, headers=owner, json={**ANSWERS, "jobs": ["j3", "j1"]}).json()
 
-        edited = client.put(URL, headers=owner, json={**ANSWERS, "primary_job": "j5"}).json()
+        edited = client.put(URL, headers=owner, json={**ANSWERS, "jobs": ["j5"]}).json()
 
-        assert edited["primary_job"] == "j5"
-        assert edited["secondary_job"] is None
+        assert edited["jobs"] == ["j5"]
         assert edited["completed_at"] == first["completed_at"]

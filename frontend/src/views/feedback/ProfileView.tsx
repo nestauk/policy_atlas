@@ -7,7 +7,6 @@
 import { useState } from "react";
 
 import { useProfile } from "../../api/feedback";
-import { useMe } from "../../api/queries";
 import { feedbackEnabled } from "../../lib/feedback";
 import { useDocumentTitle } from "../../lib/title";
 import { Card } from "../../ui/brand/Card";
@@ -23,7 +22,6 @@ export function ProfileView() {
 /** The page with the element on. */
 function ProfilePage() {
   useDocumentTitle("Your profile");
-  const me = useMe();
   const profile = useProfile();
   const [saved, setSaved] = useState(false);
   return (
@@ -35,7 +33,6 @@ function ProfilePage() {
           <ProfileForm
             key={JSON.stringify(profile.data)}
             profile={profile.data}
-            email={me.data?.email}
             submitLabel="Save"
             onSaved={() => setSaved(true)}
           />
