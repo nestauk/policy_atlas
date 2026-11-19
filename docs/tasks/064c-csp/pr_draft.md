@@ -62,20 +62,20 @@ Nothing is blocked by this PR. The order after it, each step a one-line config c
 
 ## Size of the diff
 
-5 commits; 16 files. Most of the lines are docs (task records, the deployment guide, the
-decision record).
+8 commits; 19 files, +1,648 / −20 lines against `dev`. Most of the lines are docs (task
+records, the deployment guide, the decision record).
 
 | what | files | added | removed |
 |---|---:|---:|---:|
-| infrastructure code and config (`infra/infra`, `infra/pa_config.json`) | 3 | about 175 | 3 |
-| infrastructure tests (`infra/tests`) | 2 | about 260 | 7 |
-| docs (task records, decision record, deployment guide, knowledge, deferred) | 11 | the rest | |
+| infrastructure code and config (`infra/infra`, `infra/pa_config.json`) | 3 | 172 | 3 |
+| infrastructure tests (`infra/tests`) | 2 | 257 | 7 |
+| docs (task records, decision record, deployment guide, knowledge, deferred) | 14 | 1,219 | 10 |
 
 ## Proof it works
 
 Evidence: `docs/tasks/064c-csp/verification.md`.
 
-- **`make verify`** passes, and so do the infrastructure tests (`make -C infra test`, 134)
+- **`make verify`** passes, and so do the infrastructure tests (`make -C infra test`, 148)
   and the dependency check (`make audit`).
 - One test per problem reads the generated AWS template for both environments: both cache
   rules use the new policy; the five old headers and their flags are exact; the CSP equals a
