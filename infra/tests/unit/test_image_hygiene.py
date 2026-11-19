@@ -11,7 +11,7 @@ BACKEND_ROOT = REPO_ROOT / "backend"
 DOCKERIGNORE_PATH = BACKEND_ROOT / ".dockerignore"
 DOCKERFILE_PATH = BACKEND_ROOT / "Dockerfile"
 # The deploy script creates this image input immediately before Docker builds.
-# Task 065 B3 intentionally keeps it out of Git while retaining it in Docker context.
+# Intentionally kept out of Git while retained in Docker context.
 _DELIBERATE_IMAGE_INPUTS = {"ops-ui/"}
 
 

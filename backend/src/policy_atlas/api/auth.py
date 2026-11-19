@@ -148,7 +148,7 @@ class JwksProvider:
                 continue
         if not keys and self._keys:
             # A list with no usable RSA key is a failed refresh too: keep the
-            # working set rather than sign everyone out (review stack).
+            # working set rather than sign everyone out.
             log.error("auth.jwks_refresh_failed", error_class="NoUsableKeys")
             return
         self._keys = keys

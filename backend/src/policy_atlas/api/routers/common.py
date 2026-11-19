@@ -211,9 +211,8 @@ def effective_limits(conn: Connection, user_id: str, *, settings: Settings) -> L
         default = LimitSource("default")
         return _limits((settings.task_quota_per_year, default), (settings.runs_per_user, default))
     if row["is_admin"]:
-        # Administrators are exempt from both limits (owner rulings
-        # 2026-11-16: the task quota in 064a Q8, the run cap in 064a's
-        # review); an override on their row does not pull them back under.
+        # Administrators are exempt from both limits; an override on their row
+        # does not pull them back under.
         admin = LimitSource("administrator")
         return _limits((0, admin), (0, admin))
 

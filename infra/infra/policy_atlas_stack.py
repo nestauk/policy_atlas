@@ -76,7 +76,7 @@ class PolicyAtlasStack(Stack):
         shared_alb = shared_alb_imports.load_balancer
         shared_listener = shared_alb_imports.listener
 
-        # Task 064b: the firewall in front of the API (ADR 0047). Reads backend.waf
+        # The firewall in front of the API (ADR 0047). Reads backend.waf
         # from pa_config.json; nothing from it reaches the container.
         ApiFirewall(self, "ApiFirewall",
             load_balancer_arn=shared_alb.load_balancer_arn,
@@ -293,8 +293,8 @@ class PolicyAtlasStack(Stack):
             image=backend_image,
             # The login sync is idempotent and re-asserts the previous state on
             # failure, so it never fails the task after a committed migration:
-            # a public outage must not follow an ops-only step (review stack,
-            # 2026-11-17). deploy.sh checks the secret before starting ops.
+            # a public outage must not follow an ops-only step.
+            # deploy.sh checks the secret before starting ops.
             command=["sh", "-c", "alembic upgrade head && (python -m policy_atlas.ops.db_role sync || echo 'WARN: ops login sync failed; the ops service keeps its previous login')"],
             logging=ecs.LogDrivers.aws_logs(stream_prefix="Migrate",
                                             log_group=shared_log_group),
@@ -386,7 +386,7 @@ class PolicyAtlasStack(Stack):
                 "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR": str(self_signup_config["max_per_hour"]),
                 "OPS_UI_DIR": "/app/ops-ui",
                 # The same limits as the API, so the ops pages' resolved
-                # limits agree with /me (review stack, 2026-11-17).
+                # limits agree with /me.
                 "RUNS_PER_USER": str(be_config["runs_per_user"]),
                 "TASK_QUOTA_PER_YEAR": str(be_config["task_quota_per_year"]),
                 "DB_POOL_SIZE": "5",
@@ -420,7 +420,7 @@ class PolicyAtlasStack(Stack):
             service_name="policy-atlas-v3-ops-service",
             # Template-pinned at zero like the API's: deploy.sh scales it to
             # ops.desired_count only after the migration, the login sync and
-            # the public service are done (review stack, 2026-11-17).
+            # the public service are done.
             desired_count=0,
             min_healthy_percent=0,
             max_healthy_percent=100,

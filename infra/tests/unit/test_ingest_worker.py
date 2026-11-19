@@ -137,7 +137,7 @@ def test_ingest_function_uses_the_same_backend_image_as_the_api_and_migration():
         json.dumps(resource["Properties"]["ContainerDefinitions"][0]["Image"])
         for _, resource in _resources(APP, "AWS::ECS::TaskDefinition")
     ]
-    # The API, the migration task and the ops service (task 065) share the one image.
+    # The API, the migration task and the ops service share the one image.
     assert len(task_images) == 3
     assert all(function_tag in image for image in task_images)
 

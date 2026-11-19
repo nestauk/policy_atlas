@@ -188,9 +188,9 @@ def admit_and_mint(
     Raises:
         LonglistRefused: If the admission or the plan refuses.
     """
-    # ``user_cap`` None means no cap (an administrator, or an override of 0;
-    # task 065, B12). Until 065 it was a wiring error, and the guard that
-    # raised here gave an administrator a 500 on every longlist start.
+    # ``user_cap`` None means no cap (an administrator, or an override of 0),
+    # not a wiring error: a guard that raised here would give an
+    # administrator a 500 on every longlist start.
     with _dispatch_lock:
         with engine.begin() as conn:
             task_row = task_lock(conn, task_id)

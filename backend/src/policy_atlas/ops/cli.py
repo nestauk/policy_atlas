@@ -386,7 +386,7 @@ def _run(
         )
         outcome = _dispatch(args, conn=conn, cognito=identity, target=target)
         if isinstance(outcome, commands.QuotaChange):
-            # A quota change is recorded wherever it is made (task 065, B12):
+            # A quota change is recorded wherever it is made:
             # the operator's verified AWS principal is the actor.
             commands.record_action(
                 conn,

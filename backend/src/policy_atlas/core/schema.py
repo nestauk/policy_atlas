@@ -155,7 +155,7 @@ organisation_domain = Table(
     CheckConstraint("domain = lower(domain)", name="ck_organisation_domain_lower"),
 )
 
-# Named groups of people for pilots and research (task 065, owner 2026-11-18).
+# Named groups of people for pilots and research.
 # A label, separate from the organisation: one person may be in several.
 cohort = Table(
     "cohort",
@@ -696,7 +696,7 @@ source_screening_result = Table(
         name="ck_ssr_null_when_failed",
     ),
     Index("ix_ssr_scope_status", "evidence_scope_id", "status"),
-    # Task 064a Q9: matches the effective-screen window's partition key, task
+    # Matches the effective-screen window's partition key, task
     # first, so a caller's task filter reads one task's rows (migration b1e7c3a9d5f2).
     Index(
         "ix_ssr_task_scope_snapshot",

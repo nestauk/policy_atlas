@@ -21,8 +21,7 @@ def configure_logging() -> None:
         # Structured traceback (a JSON-serializable list of frames) so
         # log.error(..., exc_info=True) renders the exception in JSON output.
         # show_locals=False: the default dumps every frame's local variables,
-        # which carried user text and secret prefixes into CloudWatch (review
-        # finding H-06).
+        # which carried user text and secret prefixes into CloudWatch.
         processors.append(
             structlog.processors.ExceptionRenderer(
                 structlog.tracebacks.ExceptionDictTransformer(show_locals=False)

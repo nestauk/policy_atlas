@@ -69,13 +69,13 @@ _CONFLICT_CODES = {
     # place or was set aside; a shortlist place for an excluded or merged option.
     "nothing_to_propose",
     "not_included",
-    # Task 064a (Q7): the caller's tasks already hold `runs_per_user` walks.
+    # The caller's tasks already hold `runs_per_user` walks.
     "user_capacity",
-    # Task 064a (Q8): the caller created `task_quota_per_year` tasks in 365 days.
+    # The caller created `task_quota_per_year` tasks in 365 days.
     "task_quota",
-    # Task 064a (Q15): a free-text preview's confirm token is gone; compile again.
+    # A free-text preview's confirm token is gone; compile again.
     "confirm_expired",
-    # Task 065 ops-host command refusals.
+    # Ops-host command refusals.
     "ops_refused",
     "enrolled_elsewhere",
 }
@@ -211,7 +211,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         allow_origins=[app_settings.app_origin],
         allow_credentials=False,
         allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-        # x-aws-waf-token: the waitlist form's CAPTCHA token (task 064b);
+        # x-aws-waf-token: the waitlist form's CAPTCHA token;
         # read by the firewall, never by the API.
         allow_headers=["Authorization", "Content-Type", "x-aws-waf-token"],
     )

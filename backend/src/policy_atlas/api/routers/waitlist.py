@@ -43,7 +43,7 @@ def signup(
         return WaitlistSignupOut(entry_id=entry_id, email=payload.email, created_at=created_at)
 
     # A duplicate gets the same 201 and writes nothing, so the endpoint cannot
-    # be used to test whether an address is registered (review finding M-30).
+    # be used to test whether an address is registered.
     conn.execute(
         pg_insert(waitlist_entry)
         .values(

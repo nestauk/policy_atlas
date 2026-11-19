@@ -198,7 +198,7 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         cross_region_references=True,
     )
     # The email-off case on its own, whatever the committed environment says
-    # (staging turned SES on, owner 2026-11-18).
+    # (staging turned SES on).
     no_email_config = json.loads(json.dumps(PA_CONFIG))
     no_email_config["policy_atlas_config"]["email"]["enabled"] = False
     NO_EMAIL_APP_STACK = PolicyAtlasStack(

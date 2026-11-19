@@ -783,7 +783,7 @@ def ensure_account_enrolled(
     if existing["org_id"] is None:
         # An account that exists keeps its stored name: the name offered here
         # may come from the public form (the sweep), and a stranger must not be
-        # able to rename a colleague (review stack, 2026-11-17).
+        # able to rename a colleague.
         return _enrol(
             conn, sub=sub, email=email, display_name=existing["display_name"], org=org
         )
@@ -1270,8 +1270,7 @@ def offboard_user(
     if user is None:
         # The account was deleted from the pool earlier (by hand, or the pool
         # was replaced) but the row remains: nothing to disable, and the
-        # database half must still run or their public links stay live
-        # (review stack, 2026-11-16).
+        # database half must still run or their public links stay live.
         steps = ["no Cognito account in the pool (deleted earlier): nothing to disable"]
     else:
         username = user["Username"]
@@ -1792,7 +1791,7 @@ def approve_request(
     conn.execute(
         update(waitlist_entry)
         .where(waitlist_entry.c.entry_id == entry_id)
-        # Approving a rejected request reverses the decision (owner, 2026-11-18).
+        # Approving a rejected request reverses the decision.
         .values(account_user_id=enrolment.user_id, account_created_at=now, rejected_at=None)
     )
     return Approval(entry_id=entry_id, enrolment=enrolment, created_at=now)

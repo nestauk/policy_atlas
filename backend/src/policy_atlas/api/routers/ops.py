@@ -529,7 +529,7 @@ def resend_people(
     )
     cooling = [item for item in result.results if item.outcome == "too_soon"]
     if len(cooling) == len(result.results):
-        # Contract B4: one person inside the hour is a 429; the message
+        # One person inside the hour is a 429; the message
         # carries the retry time (the envelope handler builds the response,
         # so a header set here would not reach the client).
         raise ApiCapacity("resend_cooldown", cooling[0].message)
@@ -601,13 +601,13 @@ def list_requests(
     rejected: bool = False,
 ) -> RequestsOut:
     """List waitlist rows still waiting for a decision, and the rejected ones when asked."""
-    # Only requests still waiting for a decision (owner, 2026-11-18): an
+    # Only requests still waiting for a decision: an
     # invited person is on People, a rejected request is gone.
     rows = conn.execute(
         select(waitlist_entry)
         .where(
             waitlist_entry.c.account_created_at.is_(None),
-            # Rejected rows are kept as a record and shown on request (owner, 2026-11-18).
+            # Rejected rows are kept as a record and shown on request.
             true() if rejected else waitlist_entry.c.rejected_at.is_(None),
         )
         .order_by(waitlist_entry.c.created_at, waitlist_entry.c.entry_id)

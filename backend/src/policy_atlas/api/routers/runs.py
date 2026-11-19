@@ -244,7 +244,7 @@ def _dispatch_run(
         log.exception("api.run_dispatch_failed", task_id=str(task_id))
         # Only the id this dispatch minted, never a lookup by task: the
         # reservation is dropped once the row exists, and another surface can
-        # start a walk on the task in that gap (task 064a, Q14).
+        # start a walk on the task in that gap.
         if capability_run_id is not None:
             continuation.mark_interrupted_best_effort(
                 engine, task_id=task_id, capability_run_id=capability_run_id
@@ -265,8 +265,8 @@ def _dispatch_run(
             if queued is None:
                 _dispatching_tasks.discard(task_id)
             else:
-                # This walk's reservation was given back when its row appeared
-                # (review stack, 2026-11-16); the chained check has its own
+                # This walk's reservation was given back when its row appeared;
+                # the chained check has its own
                 # pre-insert window, so reserve again and release on its row.
                 _dispatching_tasks.add(task_id)
     if queued is not None:
@@ -678,6 +678,6 @@ def start_toc_check(
         )
     # Give the reservation back once the row exists, as the other start
     # surfaces do; held for the whole check it counted twice against both
-    # caps (review stack, 2026-11-16).
+    # caps.
     release_when_open(engine, task_id=task_id, capability_run_id=walk_id)
     return walk_id
