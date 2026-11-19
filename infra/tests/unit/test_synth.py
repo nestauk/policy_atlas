@@ -1137,7 +1137,7 @@ def test_cognito_ses_email_renders_branded_templates():
     assert "__LOGO_URL__" not in invitation["EmailMessage"]
 
     verification = properties["VerificationMessageTemplate"]
-    assert verification["EmailSubject"] == "Reset your Policy Atlas password"
+    assert verification["EmailSubject"] == "Your Policy Atlas verification code"
     assert "{####}" in verification["EmailMessage"]
     assert verification["DefaultEmailOption"] == "CONFIRM_WITH_CODE"
     assert "LambdaConfig" not in properties

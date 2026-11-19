@@ -288,11 +288,12 @@ is accepted and is now part of the script:
   wordmark. Invitation: "…helps policy teams put evidence at the heart of policymaking.", "You
   set your own password the first time you sign in.", "The account won't be activated until
   you sign in with these details."; footer ends "This message was sent automatically."
-- The code email is the password reset: subject "Reset your Policy Atlas password", heading
-  "Reset your password", "Enter this code on the Policy Atlas sign-in page to set a new
-  password. (If you were asked to confirm your email address, enter it there instead.)",
-  "If you did not ask to reset your password, you can ignore this message. Your password has
-  not changed." The logo is served from the product host (`/brand/email-logo.png`).
+- The code email serves both cases Cognito uses it for, a password reset (almost every send:
+  accounts are created with the email verified) and confirming an email address (owner,
+  2026-11-19): subject "Your Policy Atlas verification code", heading "Your verification
+  code", "Enter this code on the Policy Atlas sign-in page to reset your password or verify
+  your email.", "If you did not ask for this code, you can ignore this message. Your account
+  has not changed." The logo is served from the product host (`/brand/email-logo.png`).
 - Open: a help address in the footer waits for the owner's choice (a Nesta group address
   now, or `help@policyatlas.uk`, which needs mail receiving on the domain).
 - People's Flags column and the person popup show "ADMIN" and "OPS" in capitals (owner, 2026-11-18).
