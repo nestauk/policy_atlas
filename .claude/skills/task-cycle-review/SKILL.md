@@ -32,16 +32,10 @@ executor wrote — Claude lanes anchor the Codex-written surfaces, the Codex adv
 pass anchors the Claude-written ones (lead prompts included); without the provenance
 map, a same-family read of same-family code passes as heterogeneous when it isn't.
 
-**Token economy:** the budget is a
-**cost proxy, split by model class** (a flat ceiling misreads a cheap finder fan-out
-as an overrun): a routine slice review lands **≤250K reasoning-class subagent tokens**
-(contract-verifier · security · Codex adversarial · session-model verifiers) **and
-≤500K fast-worker tokens** (finder/verifier fan-out). The Tier-3 baseline is **three
-lanes** — contract-verifier · one security lane · the heterogeneous pair (Codex
-adversarial + `/code-review` at **`medium`** as the Claude half) — no duplicate lanes,
-no second Claude defect pass (two same-family reads of one diff add ~nothing).
-`/code-review high` is an order of magnitude costlier than `medium`; reserve `high` for
-explicit user opt-in.
+**Lanes:** the Tier-3 baseline is **three lanes** — contract-verifier · one security
+lane · the heterogeneous pair (Codex adversarial + `/code-review` at **`medium`** as the
+Claude half) — no duplicate lanes, no second Claude defect pass (two same-family reads
+of one diff add ~nothing). Reserve `/code-review high` for explicit user opt-in.
 
 **Per-angle diff scoping:** the diff is the dominant finder cost
 and a naive fan-out pays it once per angle. When dispatching `/code-review` finder angles, hand each angle a
@@ -74,7 +68,7 @@ The lanes:
   `agent-skills:code-reviewer` subagent — **not** the agent that wrote the code. (Not
   `/codex:review` — the native diff pass takes no custom instructions, so it can't carry
   the rubric checklist.)
-- **`/code-review`** — always, at `medium` (see economy above). This **is** the Claude
+- **`/code-review`** — always, at `medium`. This **is** the Claude
   half of the Tier-3 heterogeneous pair — do not also run an `agent-skills:code-reviewer`
   subagent on the same diff.
 - **One security lane** — always (data/provenance product; Tier 0 docs-only may skip):
