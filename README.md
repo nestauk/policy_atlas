@@ -10,6 +10,11 @@ Capabilities: Evidence search, Options scoping and Theory of change. The web app
 scoping and Theory of change only when their feature flags are set (see
 [environment.md](docs/agentic-ops/environment.md)).
 
+A second, separate service, the operations service (the ops service), gives operators their own pages to manage
+organisations, people, quotas, sign-up requests and cohorts. It runs from the same code with
+its own database login. Architecture decision record (ADR)
+[0046](docs/adr/0046-ops-service-ops-pages-self-signup-and-ops-database-login.md) gives the design.
+
 The product intent is in [docs/specs/](docs/specs/index.md). The product words are defined in
 [vocabulary.md](docs/specs/vocabulary.md). The users and the product principles are in
 [PRODUCT.md](PRODUCT.md). The visual design system is in [DESIGN.md](DESIGN.md).
@@ -18,8 +23,8 @@ The product intent is in [docs/specs/](docs/specs/index.md). The product words a
 
 | Folder | What it holds |
 | --- | --- |
-| [backend/](backend/README.md) | The Python application: the web API, the Capabilities, the database schema and migrations, and the tests |
-| [frontend/](frontend/README.md) | The web app (React, TypeScript, Vite and Tailwind CSS) |
+| [backend/](backend/README.md) | The Python application: the web API, the operations service, the Capabilities, the database schema and migrations, and the tests |
+| [frontend/](frontend/README.md) | The web app and the operations pages (React, TypeScript, Vite and Tailwind CSS) |
 | [infra/](infra/README.md) | The Amazon Web Services (AWS) infrastructure, written with the AWS Cloud Development Kit (CDK) |
 | `scripts/` | Repository checks, deploy scripts, operations scripts, and the evaluation scripts under `scripts/evals/` |
 | `docs/` | Specs, architecture decision records (ADRs) in `docs/adr/`, task records in `docs/tasks/`, the verified-facts bundle in `docs/knowledge/`, and the agent process docs in `docs/agentic-ops/` |
@@ -50,8 +55,8 @@ make dev-seed                          # optional: adds a sample organisation an
 `backend/.env`, the API uses stub (fake) model and search backends, so a run costs nothing. To
 use real models and real search, set the keys that `backend/.env.example` describes.
 
-[environment.md](docs/agentic-ops/environment.md) has the details: every environment variable,
-what to do after you pull a change, the test databases, and the known problems (for example,
+[environment.md](docs/agentic-ops/environment.md) has the details: the local environment
+variables, what to do after you pull a change, the test databases, and the known problems (for example,
 how to run in a git worktree).
 
 ## Run the checks
