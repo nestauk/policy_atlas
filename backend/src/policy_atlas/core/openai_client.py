@@ -27,7 +27,7 @@ from policy_atlas.core.usage import (
     usage_metadata,
 )
 
-#: How a call site uses the provider's prompt cache (task 056, contract D3).
+#: How a call site uses the provider's prompt cache.
 #:
 #: In plain terms, the provider can store the start (the "prefix") of a prompt and
 #: bill it far more cheaply when a later call starts with the same text:

@@ -54,7 +54,7 @@ DEFAULT_WEIGHTS: dict[str, float] = {
     "origin": 0.15,
 }
 BOOST_CLAMP = (0.1, 10.0)
-# Directive input caps (review finding, security lane): the directive is untrusted
+# Directive input caps (security lane): the directive is untrusted
 # scope-context JSONB — bound every string and collection so a malformed or hostile
 # directive fails closed at parse time, never late at the DB or in O(n²) matching.
 # DIRECTIVE_STRING_MAX lives in schema.py (shared with the grouping directive).
@@ -81,7 +81,7 @@ _DIRECTIVE_KEYS = {
 }
 _BOOST_KEYS = {"match", "weight"}
 _REASON_ORDER = ("must_include", "breadth_floor", "ranked")
-# D6/D7 (024 steering surface): bounded list sizes for the new directive keys.
+# Steering surface: bounded list sizes for the directive keys.
 STRATA_SCOPE_LIST_MAX = 20
 EXCLUDE_IDS_MAX = 50
 
@@ -334,9 +334,9 @@ def _parse_match(match: Any) -> dict[str, Any]:
     if is_column:
         if keys not in ({"column", "equals"}, {"column", "in"}):
             _fail("selection directive column match has invalid keys")
-        # Unknown columns are legal and match nothing (contract decision 4:
-        # "unknown columns/tags referenced by a directive are flagged in the
-        # rationale, never fatal") — they surface via unmatched_boosts.
+        # Unknown columns are legal and match nothing (unknown columns/tags
+        # referenced by a directive are flagged in the rationale, never fatal) —
+        # they surface via unmatched_boosts.
         column = _string_value(match["column"], field="boost column")
         if "equals" in match:
             return {
@@ -484,7 +484,7 @@ def _parse_directive(raw: Any) -> tuple[SelectionDirective, str]:
         exclude_ids = tuple(parsed_exclude)
 
     if set(exclude_ids) & set(must_include_ids):
-        # D7: exclude_ids is the complement of must_include_ids — the same id
+        # exclude_ids is the complement of must_include_ids — the same id
         # in both is a contradictory directive, refused rather than silently
         # resolved in either direction.
         _fail("selection directive exclude_ids conflicts with must_include_ids")
@@ -779,7 +779,7 @@ def _allocate(
         if remaining_budget == 0:
             break
         if stratum.name in scoped_out_names:
-            # D6: a scoped-out stratum gets no breadth-floor slot — its
+            # A scoped-out stratum gets no breadth-floor slot — its
             # non-must-include candidates are ineligible for ranking, never
             # silently competed for budget.
             continue
@@ -871,7 +871,7 @@ def _rerank_infos(
 ) -> tuple[dict[uuid.UUID, _RankInfo], _RerankStats, dict[str, int]]:
     baseline = math.ceil(len(contested_ids) / RERANK_BATCH_SIZE)
     maximum = baseline * (1 + RERANK_RETRY_CAP)
-    # Contract decision 10: judging degrades to title-only where the envelope
+    # Judging degrades to title-only where the envelope
     # did — counted here so the degradation is flagged, never silent.
     title_only_count = sum(
         1
@@ -892,7 +892,7 @@ def _rerank_infos(
     submitted: list[tuple[list[uuid.UUID], Future[Any]]] = []
     usage_totals = UsageAccumulator()
 
-    # Task 058, N2: one count per batch, on the pool's own future; the serial
+    # One count per batch, on the pool's own future; the serial
     # retry below never publishes.
     done = 0
     lock = threading.Lock()
@@ -1133,7 +1133,7 @@ def _flags(
         flags["must_include_conflict"] = must_include_out_of_scope
 
     if must_include_stratum_scoped_out:
-        # D6: a must_include doc whose stratum was scoped out by strata_scope
+        # A must_include doc whose stratum was scoped out by strata_scope
         # is still selected (must-include always wins) — the conflict is
         # flagged here, never silently dropped.
         flags["must_include_stratum_scoped_out"] = list(must_include_stratum_scoped_out)
@@ -1244,7 +1244,7 @@ def select_documents(
     selectable_ids = set(stratum_by_doc)
     not_in_characterisation = len(set(candidate_by_id) - selectable_ids)
 
-    # D6: resolve strata_scope against the strata actually present.
+    # Resolve strata_scope against the strata actually present.
     scoped_out_names, unmatched_strata_scope = _resolve_strata_scope(
         directive.strata_scope, ordered_strata
     )
@@ -1265,7 +1265,7 @@ def select_documents(
         if tss_id in selectable_ids:
             selected_must_by_stratum[stratum_by_doc[tss_id]].add(tss_id)
 
-    # D6: a must-include doc in a scoped-out stratum is still selected — the
+    # A must-include doc in a scoped-out stratum is still selected — the
     # conflict is flagged, never silently dropped (see _flags below).
     must_include_stratum_scoped_out = [
         stratum.name
@@ -1287,8 +1287,8 @@ def select_documents(
         ]
         for stratum in ordered_strata
     }
-    # Contested = some rankable docs selected, some not (contract decision 10:
-    # allocation < stratum size) — a floor-only slot is still a real choice the
+    # Contested = some rankable docs selected, some not (allocation <
+    # stratum size) — a floor-only slot is still a real choice the
     # ranker must order; wholly-selected and zero-slot strata get no calls.
     contested_strata = {
         stratum.name
@@ -1357,7 +1357,7 @@ def select_documents(
         unselected_count = len(stratum.candidate_ids) - len(selected_by_stratum[stratum.name])
         if unselected_count:
             if stratum.name in scoped_out_names:
-                # D6: the true reason non-must-include docs in a scoped-out
+                # The true reason non-must-include docs in a scoped-out
                 # stratum were excluded is the scope, not a ranking/budget cut.
                 reason_class = "stratum_scoped_out"
             else:
@@ -1609,7 +1609,7 @@ def _summary(
 ) -> dict[str, Any]:
     return {
         "strata": outcome.strata,
-        # Task 058, N2: the integer the done row shows.
+        # The integer the done row shows.
         "selected_count": len(outcome.selected),
         "selected": {
             "count": len(outcome.selected),
@@ -1655,7 +1655,7 @@ def _empty_summary(
     if strategy == "llm_rerank_v1":
         # Same provenance shape as a ranked run — an empty scope spends zero
         # calls but readers (e.g. the skeleton's rerank-fired check) still see
-        # the call-budget keys (review finding: KeyError on the live path).
+        # the call-budget keys (KeyError on the live path).
         provenance.update({
             "prompt_version": PROMPT_VERSION,
             "model": RERANK_MODEL,
@@ -1721,7 +1721,7 @@ def select_scope(
         for source in candidates
         if source.primary_evidence_type != NON_EVIDENCE_TYPE
     ]
-    # D7: exclude_ids removes named docs from the selectable pool before strata
+    # exclude_ids removes named docs from the selectable pool before strata
     # are even loaded (_load_strata filters candidate_ids to eligible_ids, so
     # an excluded doc drops out of every stratum too) — the complement of
     # must_include_ids (contradiction already fail-closed at parse time).

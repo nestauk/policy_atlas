@@ -379,7 +379,7 @@ class StubICFExtractionBackend:
         return ICFExtractionResponse(findings=[]), None
 
 
-# --- The intervention profile (task 045, ADR 0039 decision 6) ----------------
+# --- The intervention profile (ADR 0039 decision 6) ----------------
 
 _INTERVENTIONS_RECORD_DEFAULTS: dict[str, Any] = {
     "design_features": [],
@@ -392,7 +392,7 @@ _INTERVENTIONS_RECORD_DEFAULTS: dict[str, Any] = {
     "study_geography": None,
     "study_country": None,
     "study_design": None,
-    # The plan-relative tags (task 046, S4): a sentinel record may omit them;
+    # The plan-relative tags: a sentinel record may omit them;
     # absent is "not tagged", the context-free value.
     "unit_tag": None,
     "outcome_tag": None,

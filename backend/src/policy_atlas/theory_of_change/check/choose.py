@@ -236,7 +236,7 @@ def toc_choose_scope(
         new_hash = item_hash(new_link, graph.boxes[link.source].text, graph.boxes[link.target].text)
         reason = f"Added a condition the evidence recorded: {condition}"
         # kept_by = choose: the condition came from evidence already judged, so
-        # the link stays checked, not pending (C19).
+        # the link stays checked, not pending.
         if store.update(
             conn,
             log_,
@@ -261,7 +261,7 @@ def toc_choose_scope(
     store.record(conn, task_id=task_id, run_id=run_id, step="toc_choose", log=log_, changes=changes)
     summary = {
         "called_model": called,
-        # The done row's "kept" (task 054, S2): the pathways still kept after this step.
+        # The done row's "kept": the pathways still kept after this step.
         "kept": len(kept_paths) - set_aside,
         "set_aside": set_aside,
         "conditions_added": conditions_added,
@@ -294,7 +294,7 @@ def _pick_critical(
     choice = critical_link(graph, verdicts)
     if marked and str(marked[0].link_id) == choice:
         return False
-    # Unmark first: at most one critical link per task (W10).
+    # Unmark first: at most one critical link per task.
     for row in marked:
         store.update(
             conn,

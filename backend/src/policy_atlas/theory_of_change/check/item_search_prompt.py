@@ -7,7 +7,7 @@ conditions, for and against. Each entry is at most 200 characters (the
 guidance channel's limit).
 """
 
-#: The second search for a step the first left thin (C44, owner 2026-11-06):
+#: The second search for a step the first left thin:
 #: the same five calls, in the words of the research that would test the step.
 REFORMULATE_GUIDANCE: tuple[str, ...] = (
     "Earlier searches used the step's own words and found no study that tests it. "

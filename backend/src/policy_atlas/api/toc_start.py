@@ -69,7 +69,7 @@ from policy_atlas.theory_of_change.store import has_graph
 
 log = structlog.get_logger()
 
-#: J3: the Task Agent's line when a draft lands with no check after it (an
+#: The Task Agent's line when a draft lands with no check after it (an
 #: uploaded theory whose reading could not be found). Not posted when the
 #: check follows the draft by itself (decision 13).
 DRAFT_LANDED_MESSAGE = (
@@ -77,7 +77,7 @@ DRAFT_LANDED_MESSAGE = (
     "and policy documents; you can read it while the check runs."
 )
 
-#: J7: the line that ends the check's message.
+#: The line that ends the check's message.
 STRESS_TEST_MESSAGE = (
     "When you are ready, ask in the chat what would make the critical connection fail here."
 )
@@ -310,7 +310,7 @@ def run_toc_sequence(
     """
     walk_id = first_outcome.capability_run_id
     if walk_id is not None and first_outcome.status == "aborted":
-        # The user's Stop (C48): say what stays and how to go on.
+        # The user's Stop: say what stays and how to go on.
         post_agent_message(engine, task_id=task_id, text=STOPPED_MESSAGE)
         return None
     if walk_id is not None and first_outcome.status in _ENDED_BADLY:
@@ -327,7 +327,7 @@ def run_toc_sequence(
     if kind != TOC_WALK_DRAFT:
         return None
     if context.get(TOC_REVIEW_FIRST_KEY):
-        # An uploaded theory (increment 5): the user checks the reading first.
+        # An uploaded theory: the user checks the reading first.
         post_agent_message(engine, task_id=task_id, text=_review_text(engine, task_id))
         return None
     with engine.connect() as conn:
@@ -345,7 +345,7 @@ def run_toc_sequence(
         engine,
         task_id=task_id,
         evidence_scope_id=admitted.evidence_scope_id,
-        # Validated through the registry: a ToC plan is always unattended (C12).
+        # Validated through the registry: a ToC plan is always unattended.
         plan=validate_plan(THEORY_OF_CHANGE, admitted.plan_row["payload"]),
         plan_id=admitted.plan_row["plan_id"],
         plan_version=admitted.plan_row["version"],
@@ -429,7 +429,7 @@ def post_agent_message(
         )
 
 
-#: A check asked for while another walk runs waits as this event (task 054, round 5).
+#: A check asked for while another walk runs waits as this event.
 TOC_CHECK_QUEUED_EVENT = "toc.check_queued"
 #: Which queued checks a walk took, or Stop cleared: ``{"sequences": [...]}``.
 TOC_CHECK_DEQUEUED_EVENT = "toc.check_dequeued"
@@ -546,7 +546,7 @@ def take_queued_check(
     return scope_id, dict(plan_row), user_id
 
 
-#: Posted when the user stops a check (C48).
+#: Posted when the user stops a check.
 STOPPED_MESSAGE = (
     "The check stopped. What it finished stays on the canvas. Connections it did not "
     "reach show Needs evidence: use Find evidence in the toolbar to check them."

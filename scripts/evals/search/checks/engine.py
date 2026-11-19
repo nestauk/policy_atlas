@@ -280,7 +280,7 @@ class _RecordingBackend:
         self._inner = inner
         self._calls = calls
         self._langfuse_client = langfuse_client
-        # The search's legs and seed calls run concurrently (task 051); the
+        # The search's legs and seed calls run concurrently; the
         # list is a diagnostic log in completion order. One lock is shared by
         # every wrapper that appends to the same list (``run_one_query``).
         self._lock = lock if lock is not None else threading.Lock()

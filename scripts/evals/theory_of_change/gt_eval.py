@@ -123,7 +123,7 @@ def gt_weak_edges(gt: dict[str, Any]) -> list[int]:
 # --- 2. the layers ------------------------------------------------------------------
 
 #: Our layers mapped to the protocol's canonical layers (failure outcomes are left out).
-#: The step-1 build had one ``outcome`` layer; C34 split it into short and long term.
+#: Older builds have one ``outcome`` layer; newer builds split it into short and long term.
 PA_LAYER = {
     "input": "input/activity",
     "output": "output",
@@ -170,8 +170,8 @@ def layers_agree(gt: str, pa: str) -> bool:
 #: Step-1 build: two grades per link; the lower one counts.
 WEAK_GRADES = ("weak", "none")
 STRENGTH = {"strong": 3, "medium": 2, "weak": 1, "none": 0}
-#: Current build (C36): one verdict per link. Weak mirrors the published "Some" and
-#: "Limited" ratings (lead decision, 2026-10-28); the leaning verdicts (2026-10-30)
+#: Current build: one verdict per link. Weak mirrors the published "Some" and
+#: "Limited" ratings; the leaning verdicts
 #: are "Some" at best, so they count as weak too.
 WEAK_VERDICTS = (
     "leaning_supports",
@@ -837,7 +837,7 @@ def extras(d: Path, rec: dict[str, Any]) -> dict[str, Any]:
         "kept_pathways": sum(p["status"] == "kept" for p in toc["pathways"]),
         "verdicts": dict(verdicts),
         "confidence": toc.get("confidence"),
-        # None on builds before C37, whose evidence has no figures field.
+        # None on older builds, whose evidence has no figures field.
         "figures": len(figs)
         if any("figures" in x for x in ev.get("links", []) + ev.get("boxes", []))
         else None,
@@ -941,7 +941,7 @@ class Models:
             label=label,
             max_completion_tokens=4000,
             model=model,
-            # As before task 056: Terra at "none", the provider default elsewhere.
+            # Terra at "none", the provider default elsewhere.
             reasoning_effort="none" if "terra" in model else "medium",
             prompt_cache="off",
             timeout_s=300.0,

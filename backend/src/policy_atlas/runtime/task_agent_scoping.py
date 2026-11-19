@@ -78,7 +78,7 @@ if TYPE_CHECKING:
 log = structlog.get_logger()
 
 #: The scoping Task Agent's model — the strongest tier ("frontier"), apart from the
-#: Evidence search Task Agent's. Model from the route file (task 053).
+#: Evidence search Task Agent's. Model from the route file.
 TASK_AGENT_SCOPING_MODEL = route().model_for("task_agent_scoping_turn")
 
 #: The code-authored line the prompt reads as data when nothing has run yet.
@@ -711,7 +711,7 @@ OPTIONS_SCOPING_TASK_AGENT = TaskAgentProfile(
     stub_turn=_stub_turn,
     # Closed per capability: a scoping card keyed 'thoroughness' would render
     # an Evidence search control on a plan that has no such dial. The last two
-    # ids are ones the planner proposes (task 058, N18).
+    # ids are ones the planner proposes.
     part_ids=frozenset(
         {
             "question",

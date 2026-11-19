@@ -244,7 +244,7 @@ def toc_merge_scope(
         raise RuntimeError("toc_merge: the merge call failed")
     log_ = store.ChangeLog()
     changes: list[store.Change] = []
-    # Box folds first (C29): the pathway decisions were made on the folded boxes.
+    # Box folds first: the pathway decisions were made on the folded boxes.
     folded: dict[str, str] = {}
     box_folds = refused = 0
     for wire in response.box_merges:

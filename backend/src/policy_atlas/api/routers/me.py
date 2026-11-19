@@ -80,7 +80,7 @@ def get_me(
         )
         .where(app_user.c.user_id == user.user_id)
     ).mappings().one()
-    # Reader (iv) of contract § 3a's closed list of `is_admin` readers: the
+    # One of the closed list of `is_admin` readers: the
     # caller's own row, projected back to the caller. Nothing here decides
     # access; the frontend uses it to say plainly that a wider list spans
     # organisations.

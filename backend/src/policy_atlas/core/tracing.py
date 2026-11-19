@@ -40,9 +40,8 @@ _ObservationType = Literal["embedding", "generation", "span", "tool"]
 log = structlog.get_logger()
 
 #: Attempts per model call under :func:`traced_attempts`: the call and two retries
-#: (task 057, D12; raised from one retry on 2026-11-03 after the fixed-question runs lost
-#: a whole run to two consecutive stalls on one step, measured at 4 to 6% stalls per
-#: call on Bedrock; three attempts is what the SDK gave before this task, now traced).
+#: (one retry is too few: two consecutive stalls on one step can lose a whole run, and
+#: stalls measured 4 to 6% per call on Bedrock).
 #: The OpenAI clients never retry on their own (``max_retries=0``).
 MODEL_CALL_ATTEMPTS = 3
 #: The longest wait before the retry that a provider's ``Retry-After`` header can ask for.
@@ -214,7 +213,7 @@ def _retryable(exc: BaseException) -> bool:
     botocore equivalents count too: a throttle or not-ready error code, a read
     or connect timeout and an unreachable endpoint.
     """
-    # task 057 review: code-review 1 - the bedrock-claude backend runs botocore
+    # The bedrock-claude backend runs botocore
     # with max_attempts=1, so its passing failures must be retried here.
     if isinstance(exc, botocore.exceptions.ClientError):
         return exc.response.get("Error", {}).get("Code") in _RETRYABLE_BOTOCORE_CODES
@@ -250,7 +249,7 @@ def _retry_wait_s(exc: BaseException) -> float:
 
 def _verb(step: str) -> str | None:
     # The word list is a leaf module; imported here so the core package does
-    # not load the API package at import time (task 058, N1).
+    # not load the API package at import time.
     from policy_atlas.api.stage_vocabulary import STEP_VERBS
 
     return STEP_VERBS.get(step)

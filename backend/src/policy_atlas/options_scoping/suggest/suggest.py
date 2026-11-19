@@ -72,7 +72,7 @@ log = structlog.get_logger()
 EntrantOrigin = Literal["added_by_you", "from_evidence_search", "suggested"]
 
 #: Entrant order in ``entrants``: the user's own, then the report's, then the
-#: model's — the order the option-search cap keeps (A16: the user's and the
+#: model's — the order the option-search cap keeps (the user's and the
 #: report's are never dropped).
 ENTRANT_ORDER: tuple[EntrantOrigin, ...] = ("added_by_you", "from_evidence_search", "suggested")
 

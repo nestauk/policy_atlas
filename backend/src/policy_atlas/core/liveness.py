@@ -70,7 +70,7 @@ HEARTBEAT_SECONDS = 10.0
 MEMORY_TTL_SECONDS = 600.0
 #: The remembered section draft keeps at most this many characters (the stream is not cut).
 DRAFT_MAX_CHARS = 20_000
-#: Longest model query shown in an activity line (task 058, N3).
+#: Longest model query shown in an activity line.
 ACTIVITY_QUERY_MAX = 120
 #: Longest query a ``search.query`` message carries. The Search queries table
 #: shows whole queries, so this is wider than the activity line's bound; it
@@ -81,9 +81,9 @@ type TickSource = Literal["loop", "hook"]
 #: One source as the page names it: ``(source_id, title)``.
 type SourceRef = tuple[str, str]
 type DeltaMode = Literal["append", "replace"]
-#: The stages that publish the names their clustering found (rounds 9 and 11).
+#: The stages that publish the names their clustering found.
 type ThemesStage = Literal["characterise", "longlist", "theme"]
-#: A stage's memory is kept per walk too (round 11): a longlist walk's own
+#: A stage's memory is kept per walk too: a longlist walk's own
 #: search and its option searches' searches are all ``acquire``.
 type _StageKey = tuple[str | None, uuid.UUID | None]
 type Schedule = Callable[[float, Callable[[], None]], None]
@@ -235,7 +235,7 @@ class SourceNote:
 
 #: What a search query is: a written topic query, a meaning-based
 #: (semantic) query, a pass following citations, or a pass looking up works
-#: by id (task 058, round 9).
+#: by id.
 type SearchQueryKind = Literal["topic", "semantic", "citations", "lookup"]
 
 
@@ -284,7 +284,7 @@ class ThemesFound:
     stage: ThemesStage = "characterise"
 
 
-#: One sketched box: ``(key, layer, text)``, the model's draft key (task 054, S12).
+#: One sketched box: ``(key, layer, text)``, the model's draft key.
 type SketchBox = tuple[str, str, str]
 #: One sketched connection: ``(key, source, target)``, its ends as draft box keys.
 type SketchLink = tuple[str, str, str]
@@ -381,18 +381,18 @@ class _TaskMemory:
     stages: dict[_StageKey, _StageMemory] = field(default_factory=dict)
     draft: _Draft | None = None
     pending_delta: _PendingDelta | None = None
-    #: The run's source notes so far, in the order written (round 8).
+    #: The run's source notes so far, in the order written.
     source_notes: list[SourceNote] = field(default_factory=list)
     source_notes_at: float = 0.0
     #: The run's search queries so far, keyed by (backend, query, kind), in
-    #: the order first sent; each holds its latest message (round 9).
+    #: the order first sent; each holds its latest message.
     search_queries: dict[tuple[str, str, str], SearchQuery] = field(default_factory=dict)
     search_queries_at: float = 0.0
-    #: The names each clustering stage found, once found, by stage (rounds 9
-    #: and 11), in the order first found.
+    #: The names each clustering stage found, once found, by stage, in the
+    #: order first found.
     themes: dict[str, ThemesFound] = field(default_factory=dict)
     themes_at: float = 0.0
-    #: The theory of change's draft so far, while it is written (task 054, S12).
+    #: The theory of change's draft so far, while it is written.
     sketch: TocSketch | None = None
     sketch_at: float = 0.0
     #: Stages the run has ended: a late tick for one is ignored, so it cannot
@@ -591,7 +591,7 @@ class TickHub:
             now = self._clock()
             memory = self._tasks.setdefault(task_id, _TaskMemory())
             if key in memory.ended_stages:
-                # A late callback after the stage ended (task 058 review).
+                # A late callback after the stage ended.
                 return
             entry = memory.stages.setdefault(key, _StageMemory())
             if done is not None and total is not None:
@@ -978,7 +978,7 @@ class TickHub:
             if memory is not None:
                 # A held append still goes out: the client's draft then holds
                 # every word the writer streamed before the completed section
-                # replaces it (task 058, N7).
+                # replaces it.
                 if memory.pending_delta is not None:
                     self._emit_pending_delta(task_id, memory)
                 memory.draft = None

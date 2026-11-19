@@ -64,18 +64,18 @@ from policy_atlas.runtime.scoping_plan import RISK_APPETITE_LABELS, ScopingPlan
 
 log = structlog.get_logger()
 
-#: The places a proposal fills to (S6).
+#: The places a proposal fills to.
 PLACES_TARGET = 5
 
 #: The ceiling on the whole request, system prompt included, in characters
-#: (about 100k tokens on the judgment model; A13, PG2). Over it, document
+#: (about 100k tokens on the judgment model). Over it, document
 #: lines are cut; still over with none left, the proposal fails.
 SHORTLIST_INPUT_CHARS_MAX = 400_000
 
-#: The baseline text the proposal reads, at most (PG2).
+#: The baseline text the proposal reads, at most.
 SHORTLIST_BASELINE_MAX_CHARS = 20_000
 
-#: The proposal's event: the record of each proposal (A7). Read back as the
+#: The proposal's event: the record of each proposal. Read back as the
 #: previous proposal by the next one (a Rebuild inserts a fresh longlist row).
 SHORTLIST_PROPOSED = "shortlist.proposed"
 
@@ -379,7 +379,7 @@ def shortlist_scope(
             cards_cut_note=cards_cut_note,
         )
 
-    # The fixed parts first (PR20): everything but the cards, with the longest
+    # The fixed parts first: everything but the cards, with the longest
     # cut note the cards could need; what is left is the cards' budget.
     fixed_chars = _input_chars(messages_for("", "", ""))
     longest_note = len(_cards_cut_note(lines_total - 1, lines_total)) if lines_total else 0
@@ -435,7 +435,7 @@ def shortlist_scope(
 
     picks = [(candidate_ids[pick.option_id], pick.reason.strip()) for pick in wire.picks]
 
-    # Lock late (PR25): the newest row, re-checked, then the one write.
+    # Lock late: the newest row, re-checked, then the one write.
     newest = conn.execute(
         select(longlist_result.c.longlist_result_id)
         .where(longlist_result.c.task_id == task_id)
@@ -473,7 +473,7 @@ def shortlist_scope(
         raise ShortlistFailure("shortlist: places changed")
 
     now = datetime.now(UTC)
-    # The places a re-proposal clears, for the note's changes (round 14).
+    # The places a re-proposal clears, for the note's changes.
     cleared_places = (
         []
         if suggest
@@ -522,7 +522,7 @@ def shortlist_scope(
         )
         .values(shortlist={"provenance": provenance})
     )
-    # The note, from its one writer (owner, 2026-11-08): the places as they
+    # The note, from its one writer: the places as they
     # now stand and this proposal's changes. A failed note leaves the picks.
     picked = {row.option_id for row, _ in picks}
     changes: list[dict[str, object]] = [

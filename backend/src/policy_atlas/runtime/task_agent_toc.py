@@ -84,9 +84,9 @@ class TocInputs:
     theory_state: str
     has_draft: bool
     approved: TocPlan | None
-    #: Once a draft exists: its boxes, links, verdicts and pathways by code (C46).
+    #: Once a draft exists: its boxes, links, verdicts and pathways by code.
     theory_outline: str = ""
-    #: Before a draft: the user's uploaded diagram, as read (increment 5).
+    #: Before a draft: the user's uploaded diagram, as read.
     imported: dict[str, Any] | None = None
     #: Before a draft: the theory the user drew on the canvas, as text.
     sketch: str | None = None
@@ -316,7 +316,7 @@ def build_toc_plan(draft: TocPlanDraftWire, inputs: TocInputs, turn_index: int) 
         else {"published_after": DEFAULT_PUBLISHED_AFTER}
     )
     if inputs.imported is not None:
-        # The uploaded diagram is the user's theory, word for word (increment 5).
+        # The uploaded diagram is the user's theory, word for word.
         values |= {
             "entry_point": "existing_theory",
             "existing_theory_text": inputs.imported["text"],

@@ -62,7 +62,7 @@ from policy_atlas.options_scoping.text import clean_text
 
 #: The groups after the countries, in the card's order, by the top level
 #: they hold: the documents with no one country (PA4-3), each named for what
-#: it is (owner, task 058, round 12; it replaced one "No single place").
+#: it is.
 NO_COUNTRY_GROUPS: tuple[tuple[str, str], ...] = (
     (MULTIPLE_COUNTRIES, "Several countries"),
     (NOT_STATED, "Place not stated"),
@@ -534,7 +534,7 @@ def call_input(
                     "study_geography": doc.study_geography,
                     "tier": doc.tier,
                     # The plain type word the template uses, never the
-                    # classifier's label (loop 26L, round 1).
+                    # classifier's label (loop 26L).
                     "evidence_type": type_word(doc.evidence_type),
                     "year": doc.year,
                 }
@@ -562,7 +562,7 @@ def call_input(
     }
 
 
-# --- the template (C7) ----------------------------------------------------------------
+# --- the template ----------------------------------------------------------------
 
 
 def plural(word: str) -> str:
@@ -610,7 +610,7 @@ def _most_common(values: Iterable[str | None]) -> str | None:
 #: The words that open the qualifying clause of a plan's target unit; the
 #: head noun phrase is the text before the first of them ("Children aged 4
 #: to 11" from "Children aged 4 to 11 living in the most deprived fifth of
-#: areas"; loop 26L, round 2).
+#: areas").
 _HEAD_CUTS: tuple[str, ...] = (
     " living ",
     " who ",
@@ -689,7 +689,7 @@ def template_sentence(group: PlaceGroup, *, target_unit: str | None = None) -> s
     )
     kind = first.tried_on_kind if first is not None else None
     if kind and target_unit and _norm(kind) == _norm(target_unit):
-        # The plan's words, cut to their head (loop 26L, round 2).
+        # The plan's words, cut to their head (loop 26L).
         kind = head_phrase(kind)
     kind = _mid_sentence(kind)
     detail = first.place_detail if first is not None else None
@@ -704,7 +704,7 @@ def template_sentence(group: PlaceGroup, *, target_unit: str | None = None) -> s
     return f"{programme}: {sentence}." if programme else f"{sentence}."
 
 
-# --- the trace check (S31; PA4-8; C2, C3) -----------------------------------------------
+# --- the trace check (PA4-8) -----------------------------------------------
 
 
 def _norm(text: str) -> str:

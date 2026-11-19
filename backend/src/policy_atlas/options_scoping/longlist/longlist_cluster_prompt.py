@@ -127,7 +127,7 @@ class OptionAssignmentWire(BaseModel):
         description="The unit's short id (u1, u2, ...), copied exactly from the batch."
     )
     # ``reason`` comes before the label on purpose: the model names the kind
-    # of action first and chooses the label from it (046 round 3).
+    # of action first and chooses the label from it.
     reason: str = Field(
         description=(
             "Written FIRST: one short sentence naming the kind of action the "

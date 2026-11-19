@@ -536,7 +536,7 @@ def run_first_assignment_round(
     submitted: list[tuple[int, list[ClusterUnit], Future[Any]]] = []
     usage_totals = UsageAccumulator()
 
-    # Task 058, N2: one count per batch, on the pool's own future; repair
+    # One count per batch, on the pool's own future; repair
     # calls after this round never publish.
     done = 0
     lock = threading.Lock()

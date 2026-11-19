@@ -79,16 +79,16 @@ from policy_atlas.theory_of_change.seminal import SEMINAL_ORIGIN, fetch_seminal_
 
 log = structlog.get_logger()
 
-#: Documents judged per link (C5): an item search keeps 10 (C27), so a link
+#: Documents judged per link: an item search keeps 10, so a link
 #: with its own search skips the rerank.
 JUDGE_TOP_K = 10
 
 
-#: Pick calls in flight at once (C28).
+#: Pick calls in flight at once.
 PICK_WORKERS = 16
 
 
-#: The link search's result lists, ``(backend, query origin)``, in turn order (C27).
+#: The link search's result lists, ``(backend, query origin)``, in turn order.
 LINK_LISTS: tuple[tuple[str, str], ...] = (
     ("openalex", "semantic"),
     ("openalex", "semantic_place"),
@@ -98,14 +98,14 @@ LINK_LISTS: tuple[tuple[str, str], ...] = (
 )
 
 
-#: The reasons ``toc_select`` records on the documents it screens in and out (C27).
+#: The reasons ``toc_select`` records on the documents it screens in and out.
 SELECTED_REASON = "selected_by_link_search"
 
 
 NOT_SELECTED_REASON = "not_selected_by_link_search"
 
 
-#: The event ``toc_select`` writes with each link's picked documents; the judge reads it (C31).
+#: The event ``toc_select`` writes with each link's picked documents; the judge reads it.
 PICKED_EVENT = "toc_select.picked"
 
 
@@ -390,8 +390,8 @@ def toc_select_scope(
         SEMINAL_ORIGIN, []
     )
     targets = set(candidates) if only is None else only & set(candidates)
-    # A named check (C40): studies the user added are picked as given (C42); Check
-    # again also re-judges the documents already judged for the link (C43).
+    # A named check: studies the user added are picked as given; Check
+    # again also re-judges the documents already judged for the link.
     studies = (
         _studies_by_link(conn, task_id, context.context.get(TOC_STUDIES_KEY) or {})
         if only is None
@@ -405,7 +405,7 @@ def toc_select_scope(
     for key in [*studies, *again]:
         candidates.setdefault(key, [])
         targets.add(key)
-    # Find more evidence (C44): the documents already judged for a link make way for new ones.
+    # Find more evidence: the documents already judged for a link make way for new ones.
     exclude_judged = exclude_judged or (
         only is None and context.context.get(TOC_CHECK_MODE_KEY) == "find_more"
     )
@@ -424,12 +424,12 @@ def toc_select_scope(
         if exclude_judged
         else {}
     )
-    # The shared pool (C31): the walk's other documents closest to each link.
+    # The shared pool: the walk's other documents closest to each link.
     walk_pool = list({c.tss_id: c for docs in candidates.values() for c in docs}.values())
     vectors = _document_vectors(conn, [c.tss_id for c in walk_pool]) if texts else {}
     shared = 0
     seminal_offered = 0
-    # Find more evidence (C44) picks, and so judges, more documents per link.
+    # Find more evidence picks, and so judges, more documents per link.
     n = documents_per_link(context.context)
     for key in list(texts):
         own = candidates[key]
@@ -458,7 +458,7 @@ def toc_select_scope(
             lambda: backend.pick(item_text=texts[key], candidates=shown, n=n),
         )
 
-    # The live count (task 054, A4): "n of M read · R relevant", over the
+    # The live count: "n of M read · R relevant", over the
     # documents the links choose from. A link with no call keeps them all at
     # once; a called link counts when its pick lands. The done row's counts
     # are the screen's own.
@@ -590,7 +590,7 @@ def _studies_by_link(
     }
 
 
-#: The user's decisions on a judged document that carry to a new wording (C43).
+#: The user's decisions on a judged document that carry to a new wording.
 _CARRIED = (
     "excluded_by",
     "excluded_at",
@@ -902,7 +902,7 @@ def _document_vectors(
         .where(chunk_embedding.c.unit_policy == UNIT_POLICY)
         .where(chunk_embedding.c.embedding.is_not(None))
     ):
-        # The pgvector column (task 057 dropped the JSON copy); its type reads a list of floats.
+        # The pgvector column; its type reads a list of floats.
         out.setdefault(row.task_source_snapshot_id, []).append(validate_vector(row.embedding))
     return out
 

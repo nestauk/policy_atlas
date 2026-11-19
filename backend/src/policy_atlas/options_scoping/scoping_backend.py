@@ -160,7 +160,7 @@ from policy_atlas.runtime.agent_backend import _as_queue, _next
 
 #: The two models the run summaries stamp ("discovery" and "assignment" in each
 #: component's provenance). They are stamps only: every call site is its own
-#: step in the route file (task 056) and ``_call`` looks its model and effort
+#: step in the route file and ``_call`` looks its model and effort
 #: up from the step, so these two just name the discover and assign steps.
 LONGLIST_JUDGMENT_MODEL = route().model_for("longlist_discover")
 LONGLIST_ASSIGNMENT_MODEL = route().model_for("longlist_assign")
@@ -502,7 +502,7 @@ class OpenAILonglistBackend:
         langfuse_client: Langfuse | None = None,
         session_id: uuid.UUID | None = None,
     ) -> None:
-        # Each step's request timeout (60 s today, task 056) lives in the route file.
+        # Each step's request timeout (60 s today) lives in the route file.
         self._client = resolve_openai_client(api_key, backend_name="OpenAILonglistBackend")
         self._langfuse_client = langfuse_client
         self._session_id = session_id

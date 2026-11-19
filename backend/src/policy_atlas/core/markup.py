@@ -127,7 +127,7 @@ _HTML_TAGS = frozenset(
 _IMG_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 _LINK_RE = re.compile(r"\[([^\]]*)\]\((?:[^()\s]|\([^()]*\))*\)")
 _BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
-# task 057 review: contract verifier 5 - a one-letter name takes free-text
+# A one-letter name takes free-text
 # "attributes" only when they carry ``=``, so ``a<b and c>d`` stays whole. Known
 # remaining loss: ``<b disabled>`` (a bare-word attribute) is kept as text.
 _TAG_RE = re.compile(
@@ -138,17 +138,16 @@ _TAG_RE = re.compile(
     + r")(?:\s+[^<>=]*=[^<>]*)?\s*)/?>",
     re.IGNORECASE,
 )
-# task 057 review: Codex 12 - an escaped marker (``\*``) neither opens nor closes
+# An escaped marker (``\*``) neither opens nor closes
 # emphasis, so ``\*literal\*`` keeps its stars (rule 8 unescapes them).
 _EMPH_RE = re.compile(
     r"(?<![A-Za-z0-9])(?<!\\)(\*{1,3}|_{1,3})(?=\S)(.+?)(?<=\S)(?<!\\)\1(?![A-Za-z0-9])"
 )
 # Stray ``**`` after a digit is a significance star in a statistics table (``0.50**``),
-# not a lost emphasis marker, so it stays (owner ruling 2026-11-03: the rule must not
-# delete content).
+# not a lost emphasis marker, so it stays: the rule must not delete content.
 _STRAY_EMPH_RE = re.compile(
     r"(?<![0-9*\\])\*\*+|(?<![A-Za-z0-9\\])__+|(?<!\\)__+(?![A-Za-z0-9])"
-)  # task 057 review: Codex 12 - not after a backslash either
+)  # Not after a backslash either
 _CODE_RE = re.compile(r"`([^`]*)`")
 _ESC_RE = re.compile(r"\\([\\`*_{}\[\]()#+\-.!|>~])")
 

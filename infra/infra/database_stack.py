@@ -20,8 +20,8 @@ from .components.nesta_ssm_endpoints import SsmConnectivity
 
 WRITER_INSTANCE_IDENTIFIER = "policy-atlas-v3-db-writer"
 # A burstable (t3) writer earns CPU credits while idle and spends them when
-# busy; at zero it is throttled to its baseline. Task 057 adds up to 20 ingest
-# functions writing at once, so warn while credits remain (credits, not %).
+# busy; at zero it is throttled to its baseline. Up to 20 ingest
+# functions write at once, so warn while credits remain (credits, not %).
 WRITER_CPU_CREDIT_ALARM_THRESHOLD = 50
 
 

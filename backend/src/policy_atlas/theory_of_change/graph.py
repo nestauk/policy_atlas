@@ -20,7 +20,7 @@ from typing import Literal
 Layer = Literal["input", "output", "outcome_short", "outcome_long", "impact", "failure_outcome"]
 LinkState = Literal["unchecked", "checking", "checked", "pending", "kept", "no_change"]
 
-#: The layers a step may lead to from each layer (C34). Any of these may also
+#: The layers a step may lead to from each layer. Any of these may also
 #: lead to a failure outcome; nothing leads on from an impact or a failure outcome.
 NEXT_LAYERS: dict[str, frozenset[str]] = {
     "input": frozenset({"output"}),
@@ -29,7 +29,7 @@ NEXT_LAYERS: dict[str, frozenset[str]] = {
     "outcome_long": frozenset({"outcome_long", "impact"}),
 }
 
-#: The limits on kept pathways (C6).
+#: The limits on kept pathways.
 MAX_SUCCESS_PATHWAYS = 6
 MAX_FAILURE_PATHWAYS = 3
 

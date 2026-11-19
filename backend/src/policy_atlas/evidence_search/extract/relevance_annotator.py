@@ -44,7 +44,7 @@ from policy_atlas.evidence_search.extract.relevance_prompt import (
 )
 from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 
-# Model from the route file (task 053); see core/model_routes.py.
+# Model from the route file; see core/model_routes.py.
 RELEVANCE_ANNOTATOR_MODEL = route().model_for("extract_annotate_relevance")
 # Effort per the vetter precedent (xhigh exhausts completion caps on 5.4-mini
 # judgment calls); the route file says high for this step.

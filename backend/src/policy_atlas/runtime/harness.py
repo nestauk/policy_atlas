@@ -167,7 +167,7 @@ class HarnessState(TypedDict):
     summary: dict[str, Any] | None
     progress_emitter: ProgressEmitter | None
     error: str | None
-    #: The public stage the runner stamped on this run (task 054, S1), or None.
+    #: The public stage the runner stamped on this run, or None.
     stage: StageKey | None
 
 
@@ -460,10 +460,10 @@ def _inherit_sources(
 
 
 #: The options-scoping nodes: the step and the state key of its backend.
-#: ``inherit`` (task 045, S6) completes even when a link cannot be read, its
+#: ``inherit`` completes even when a link cannot be read, its
 #: ``degrades_walk`` flag making a degraded walk; ``option_profile`` is a
 #: spine step (a failure fails the walk); ``theme`` is not (a failure
-#: degrades the walk), nor is ``shortlist`` (task 055). ``constrain``,
+#: degrades the walk), nor is ``shortlist``. ``constrain``,
 #: ``option_profile``, ``theme`` and ``shortlist`` ride the longlist backend.
 _BackendKey = Literal["suggest_backend", "longlist_backend"]
 _SCOPING_STEPS: dict[str, tuple[Callable[..., dict[str, Any]], _BackendKey | None]] = {
@@ -488,9 +488,9 @@ def _scoping_node(name: str) -> Any:
     return run
 
 
-#: The theory-of-change steps (task 054), each ``(conn, *, task_id, run_id,
+#: The theory-of-change steps, each ``(conn, *, task_id, run_id,
 #: context, backend)`` on the ToC backend, like the scoping steps;
-#: ``toc_select`` makes one small pick call per link (C28).
+#: ``toc_select`` makes one small pick call per link.
 _TOC_STEPS: dict[str, Callable[..., dict[str, Any]]] = {
     "toc_draft": toc_draft_scope,
     "toc_select": selecting.toc_select_scope,
@@ -511,20 +511,20 @@ def _toc_node(name: str) -> Any:
         step = _TOC_STEPS[name]  # read at run time, so a test can swap a step
         kwargs: dict[str, Any] = {"backend": state["toc_backend"]}
         if name in ("toc_select", "toc_search_new"):
-            # The shared pool: the walk's documents closest to each link (C31).
+            # The shared pool: the walk's documents closest to each link.
             kwargs["embedder"] = state["embedding_backend"]
         if name == "toc_select":
             # The seminal works lookup reuses the item searches' OpenAlex backend.
             kwargs["searchers"] = state["search_backends"]
         if name in ("toc_judge", "toc_search_again"):
             # Judge reranks each link's candidates with select's rerank backend
-            # (C5), and picks a searchless link's documents by embedding (C27).
+            # , and picks a searchless link's documents by embedding.
             kwargs["ranker"] = state["ranking_backend"]
             kwargs["embedder"] = state["embedding_backend"]
-            # Each link's judgements commit as it is judged (task 054, S8).
+            # Each link's judgements commit as it is judged.
             kwargs["connect"] = state["ingest_connect"]
         if name == "toc_report":
-            # The report's live frames (task 054's 058 alignment, S6).
+            # The report's live frames.
             kwargs["progress"] = state["progress_emitter"]
         return _run_scope_component(state, ScopeContext, functools.partial(step, **kwargs))
 
@@ -1071,7 +1071,7 @@ def run_harness(
     bound = stage if stage is not None else STAGE_BY_REGISTRY.get(
         registry_component_for(config.component)
     )
-    # The walk this component run belongs to, so its ticks name it (round 11):
+    # The walk this component run belongs to, so its ticks name it:
     # a longlist walk's option searches run the same stages as the walk.
     walk_id = conn.execute(
         select(runs.c.capability_run_id).where(runs.c.run_id == run_id)

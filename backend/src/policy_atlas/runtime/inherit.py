@@ -297,7 +297,7 @@ def _compose_coverage_sentence(stop_condition: str, adequacy_verdict: str) -> st
     return f"{stop_sentence} {adequacy}"
 
 
-# --- The document part of inherit (task 045, S6) -------------------------------
+# --- The document part of inherit -------------------------------
 
 
 class InheritLinkError(Exception):
@@ -415,7 +415,7 @@ def _inherit_one_link(
                     "task_source_snapshot_id": uuid.uuid4(),
                     "task_id": task_id,
                     "source_snapshot_id": row.source_snapshot_id,
-                    # Origin unchanged (A3): the row is inherited because this
+                    # Origin unchanged: the row is inherited because this
                     # step created it, not because of an origin value.
                     "origin": row.origin,
                     "run_id": run_id,
@@ -495,8 +495,7 @@ def inherit_documents(
     for link in links:
         try:
             # A link grants no read (ADR 0037): the owner must still read the
-            # source at every build, not only when the link was made (owner,
-            # 2026-09-24, task 045 review S1: "Recheck access only").
+            # source at every build, not only when the link was made.
             if link.source_task_id not in readable:
                 raise InheritLinkError("source not readable by the task owner")
             with conn.begin_nested():

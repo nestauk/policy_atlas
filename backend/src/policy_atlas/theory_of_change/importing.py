@@ -37,7 +37,7 @@ from policy_atlas.theory_of_change.import_prompt import ImportResponse
 log = structlog.get_logger()
 
 IMPORT_EVENT = "toc.import"
-#: PDF pages read (C8).
+#: PDF pages read.
 MAX_PAGES = 10
 #: PDF rendering resolution: legible box text without huge images.
 PDF_DPI = 150

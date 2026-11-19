@@ -94,7 +94,7 @@ MAX_ROUNDS = 2
 WORKERS = 8
 LIGHT_N = 10
 
-#: Web pages whose appraisal counts like a paper's (owner ruling 2026-10-27). A host
+#: Web pages whose appraisal counts like a paper's. A host
 #: matches a domain when it equals it or ends with "." + domain. Edit freely.
 TRUSTED_WEB_DOMAINS: tuple[str, ...] = (
     "gov.uk",  # every subdomain: ons.gov.uk, the Evaluation Task Force registry, ...
@@ -865,7 +865,7 @@ def pick_rule(lists: list[list[Doc]], n: int, rule: str) -> list[Doc]:
     raise ValueError(rule)
 
 
-#: Sites the round-2 web search may use (owner, 2026-10-27): government (the Evaluation
+#: Sites the round-2 web search may use: government (the Evaluation
 #: Task Force pages included), the two advertising regulators and the What Works Centres.
 R2_WEB_DOMAINS = [
     "gov.uk",

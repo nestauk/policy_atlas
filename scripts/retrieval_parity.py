@@ -155,8 +155,8 @@ def main() -> int:
         "selected_tss_ids": {uuid.UUID(value) for value in spec.get("selected_tss_ids", [])},
         "extra_scope_ids": [uuid.UUID(value) for value in spec.get("extra_scope_ids", [])],
     }
-    # The SQL retriever reads through a connection factory; the Python retriever
-    # before task 057 has no such argument, so the script runs at both commits.
+    # The SQL retriever reads through a connection factory; the older Python
+    # retriever has no such argument, so the script runs against either version.
     if "connect" in inspect.signature(build_retrieval_scope).parameters:
         scope_kwargs["connect"] = engine.connect
     with engine.connect() as conn:

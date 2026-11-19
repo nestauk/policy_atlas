@@ -174,20 +174,20 @@ DISCOVERY_RETRY_CAP = 1
 ASSIGNMENT_REPAIR_CAP = 1
 MAX_CONCURRENT_BATCHES = 4
 
-#: The list's target size and hard ceiling, seeds included (task 046, R1).
+#: The list's target size and hard ceiling, seeds included.
 LONGLIST_TARGET_SIZE = 20
 LONGLIST_HARD_CEILING = 25
 
-#: Thinning (task 046, S10): records kept per document, at most.
+#: Thinning: records kept per document, at most.
 RECORDS_PER_DOCUMENT_MAX = 8
-#: The corpus digest's names, at most (task 046, S8).
+#: The corpus digest's names, at most.
 DIGEST_NAMES_MAX = 400
 
 #: A unit payload's free-text bound (the quote, a claim, each reference).
 UNIT_TEXT_MAX = 240
 UNIT_FEATURES_MAX = 8
 
-#: Seeds are offered in entrant order, then the clustered options (D14).
+#: Seeds are offered in entrant order, then the clustered options.
 _SEED_ORIGIN_ORDER = ("added_by_you", "from_evidence_search", "suggested", "clustered")
 
 #: The reader's word for a seed's origin, as the discovery prompt reads it.
@@ -246,7 +246,7 @@ class _Unit:
     outcome: str | None
     study_geography: str | None
     payload: dict[str, object]
-    # The record's three tags (task 046), ``None`` when the record was written
+    # The record's three tags, ``None`` when the record was written
     # under another tagging context than the current plan's (S3 a).
     unit_tag: str | None = None
     outcome_tag: str | None = None
@@ -863,7 +863,7 @@ def _seeds(conn: Connection, *, task_id: uuid.UUID) -> list[_Seed]:
                 description=description,
                 design_features=features,
                 origin=row.origin,
-                # A user's shortlist place is never folded either (O1).
+                # A user's shortlist place is never folded either.
                 user_held=merge_protected(row),
                 name=row.name,
                 outcomes=outcomes,
@@ -1659,7 +1659,7 @@ def longlist_scope(
         LonglistFailure: If clustering fails or the exhaustiveness invariant
             (units = memberships + unclustered + not an option) breaks.
     """
-    # The stage line while the discovery call runs (task 058, N24): the
+    # The stage line while the discovery call runs: the
     # loop's own words, which the wrapper's verb never overwrites.
     liveness.publish_progress(activity=activity("longlist.clustering"))
     plan, plan_version = walk_plan(
@@ -1712,7 +1712,7 @@ def longlist_scope(
     placements = _placements(units, clustering, clustering_backend.answers)
     answers: dict[str, _Answer] = dict(clustering_backend.answers)
 
-    # 2. The residual pass (R9): the unclustered units only, every option on
+    # 2. The residual pass: the unclustered units only, every option on
     # the list as a seed that cannot be folded, at most once.
     residual_units = [unit for unit in units if _unclustered(placements[unit.unit_id])]
     room = max(LONGLIST_HARD_CEILING - len(options), 0)
@@ -1802,7 +1802,7 @@ def longlist_scope(
             f"unclustered={len(unclustered)} not_an_option={len(not_an_option)}"
         )
 
-    # 4. Outcomes at mint time (S11): a discovered option's are the plan
+    # 4. Outcomes at mint time: a discovered option's are the plan
     # outcomes its members' tags name; a seed keeps its design's.
     plan_outcomes = [outcome.text for outcome in plan.outcomes]
     for o in options:
@@ -1812,15 +1812,15 @@ def longlist_scope(
         o.design_features = list(o.design.design_features)
         o.outcomes = list(o.design.outcomes_served)
 
-    # Themes are the ``theme`` component's, after ``constrain`` (task 046,
-    # R28): this row is written with none.
+    # Themes are the ``theme`` component's, after ``constrain``:
+    # this row is written with none.
     usage = UsageAccumulator()
     if clustering is not None:
         usage.add_payload(clustering.usage_totals)
     if residual_clustering is not None:
         usage.add_payload(residual_clustering.usage_totals)
 
-    # 5. Typing is the ``option_profile`` component's, after this one (S20).
+    # 5. Typing is the ``option_profile`` component's, after this one.
 
     # 6. Coverage (deterministic).
     label_ids = {u.label_tss_id for u in units if u.label_tss_id is not None}
@@ -1840,7 +1840,7 @@ def longlist_scope(
         into = target_ids[fold.into_label]
         fold_rows.append((fold.seed.option_id, into))
         folded.setdefault(into, []).append(FoldedSeed(name=fold.seed.name, documents=0))
-    # The plan's Where leads the signal's countries (task 046, amendment 4, S29).
+    # The plan's Where leads the signal's countries.
     where_resolved = resolve_country(plan.where.text)
     where_country = where_resolved[1] if where_resolved is not None else None
     coverage = {

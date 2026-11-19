@@ -43,15 +43,15 @@ from policy_atlas.theory_of_change.graph import (
 log = structlog.get_logger()
 
 
-#: The fixed sentence for a question no document spoke to (C20).
+#: The fixed sentence for a question no document spoke to.
 NO_EVIDENCE_SENTENCE = "No evidence was found in the documents read."
 
 
-#: The fixed sentence that replaces a link sentence whose citations fail (C20).
+#: The fixed sentence that replaces a link sentence whose citations fail.
 UNSETTLED_SENTENCE = "The documents read do not settle this step."
 
 
-#: The fixed box description that replaces one whose citations fail (C20).
+#: The fixed box description that replaces one whose citations fail.
 BOX_FALLBACK_DESCRIPTION = "A step in the theory."
 
 
@@ -120,7 +120,7 @@ def toc_summarise_scope(
             item is not None
             and item.sentence
             and item.sentence.strip()
-            # Every cited document is one the item may cite (C20).
+            # Every cited document is one the item may cite.
             and set(item.cites) <= allowed[key]
         ):
             sentence = item.sentence.strip()

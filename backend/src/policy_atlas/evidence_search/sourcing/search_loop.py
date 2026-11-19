@@ -67,7 +67,7 @@ QueryOrigin = Literal[
     "landmark",
     "suggestion_doi",
     "suggestion_title",
-    "seminal",  # a work the theory-of-change check's documents cite most (task 054)
+    "seminal",  # a work the theory-of-change check's documents cite most
 ]
 CallVerb = Literal[
     "search",
@@ -80,7 +80,7 @@ CallVerb = Literal[
 ]
 CallStatus = Literal["ok", "error"]
 
-# No wall clock at any depth (task 030): a time budget over an ordered fan-out
+# No wall clock at any depth: a time budget over an ordered fan-out
 # truncates the tail — a specific set of queries and providers, not a random
 # sample — and its breach once cost the entire Overton leg while the run still
 # reported 'adequate'. Volume is bounded at acquisition instead (the two caps
@@ -114,7 +114,7 @@ DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
         "policy_cap": 200,
         "call_budget": {"openalex": 45, "overton": 30},
     },
-    # The theory-of-change link search (task 054, C27, C31): two OpenAlex
+    # The theory-of-change link search: two OpenAlex
     # semantic calls and one Overton call on the first line of the intent (the
     # link sentence), and one generated keyword query with the review and trial
     # clauses; every distinct result kept. See ``_link_pools``.
@@ -125,7 +125,7 @@ DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
     },
 }
 
-#: The place suffix of the link depth's second OpenAlex call (C27).
+#: The place suffix of the link depth's second OpenAlex call.
 LINK_PLACE_SUFFIX = " in the United Kingdom"
 
 
@@ -593,7 +593,7 @@ def parse_reformulate(context: dict[str, Any]) -> bool:
     return value
 
 
-#: Ceiling on the link depth's result multiplier (C44): the five calls never
+#: Ceiling on the link depth's result multiplier: the five calls never
 #: ask for more than four times their usual results.
 LINK_SCALE_MAX = 4
 
@@ -625,8 +625,8 @@ def parse_link_scale(context: dict[str, Any]) -> int:
 
 #: Ceiling on a directive-supplied per-backend record cap: the deepest rung's
 #: own cap. A plan may ask for *less* volume than its depth rung buys — the
-#: options-scoping baseline does (a narrow question about the status quo, task
-#: 044 D7) — but never for more than the deepest rung is budgeted for.
+#: options-scoping baseline does (a narrow question about the status quo)
+#: — but never for more than the deepest rung is budgeted for.
 RECORD_CAP_MAX = DEPTH_CONSTANTS["deep"]["papers_cap"]
 
 
@@ -1057,10 +1057,10 @@ def _overton_country(record: dict[str, Any]) -> str | None:
     return source.get("country") if isinstance(source, dict) else None
 
 
-#: The activity line names the query out at about this many characters (round 9).
+#: The activity line names the query out at about this many characters.
 QUERY_LINE_CHARS = 60
 
-#: The calls the page sees one by one, by verb, and what each is (round 9).
+#: The calls the page sees one by one, by verb, and what each is.
 #: Citation chasing and id lookups are shown as one entry per pass instead.
 _LIVE_QUERY_KIND: dict[str, liveness.SearchQueryKind] = {
     "search": "topic",
@@ -1780,7 +1780,7 @@ def _link_pools(
         if backend.name == "openalex":
             extended = cast(acquire.ExtendedSearchBackend, backend)
             wire, local_filters, keep, _ = _semantic_scope(variants["openalex"])
-            # The results each call keeps (C27): 20 by meaning, 10 by meaning and place.
+            # The results each call keeps: 20 by meaning, 10 by meaning and place.
             semantic_calls: list[tuple[str, int, QueryOrigin]] = [
                 (text, 20 * scale, "semantic"),
                 (text + LINK_PLACE_SUFFIX, 10 * scale, "semantic_place"),
@@ -1941,7 +1941,7 @@ def _overton_leg(
     return search.entries([c.record for c in ranked], "overton"), summary
 
 
-#: The context key of a search that only looks up given DOIs (task 054, C42: a
+#: The context key of a search that only looks up given DOIs (a
 #: study the user adds to a theory-of-change link).
 USER_DOIS_KEY = "lookup_dois"
 
@@ -2054,10 +2054,10 @@ def run_search(
     link_scale = parse_link_scale(context.context)
     reformulate = parse_reformulate(context.context)
     started = time.monotonic()
-    # Task 058, round 9: the line appears at once, while the queries are
+    # The line appears at once, while the queries are
     # written, then counts what the queries find as each comes back.
     # Option searches (options scoping's targeted scopes) publish no query
-    # frames: only the run the user started shows its queries (round 9).
+    # frames: only the run the user started shows its queries.
     live = _LiveSearch(round_index, publish_queries=not _is_option_search(conn, context.scope_id))
     live.writing_queries()
 
@@ -2072,7 +2072,7 @@ def run_search(
     except Exception:
         if depth != "link":
             raise
-        # The link search still runs its searches by meaning (C31).
+        # The link search still runs its searches by meaning.
         log.warning("search.link_keyword_generation_failed", scope_id=str(context.scope_id))
     else:
         usage_totals.add(usage)
@@ -2080,7 +2080,7 @@ def run_search(
         queries_dropped = len(wire.queries) - len(queries)
     live.started()
 
-    # The two legs run side by side (plan S13): one pass state per backend, so
+    # The two legs run side by side: one pass state per backend, so
     # each has a single writer; the legs never touch the database connection;
     # they are merged in backend-list order below, so the events, counts and
     # pool order are the same as a sequential run.
@@ -2124,7 +2124,7 @@ def run_search(
                 pools[name], summaries[name] = outcome
     if depth == "link":
         # The link sentence is the intent's first line (``item_text``). A
-        # reformulated search (C44) searches by meaning on the generated
+        # reformulated search searches by meaning on the generated
         # research-style paraphrase instead, when the writer gave one.
         sentence = context.intent.strip().splitlines()[0]
         reformulated = reformulate and bool(paraphrases)
@@ -2156,7 +2156,7 @@ def run_search(
         pools=pools,
         # The cap cuts the ranked list; records the ranking left out never fill it.
         # A directive `record_cap` (the options-scoping baseline, longlist and
-        # option searches, task 044 D7) is one fixed target for both backends.
+        # option searches) is one fixed target for both backends.
         caps={
             "openalex": min(record_cap or constants["papers_cap"], ranked_count.get("openalex", 0)),
             "overton": min(record_cap or constants["policy_cap"], ranked_count.get("overton", 0)),

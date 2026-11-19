@@ -129,7 +129,7 @@ def use_settings(
         label = f"{system_prompt.stem}@{digest}"
     product_backend.SCREEN_MODEL = model
     product_backend.SCREEN_FULL_MODEL = (
-        model  # task 056: the full-text stage is its own step
+        model  # The full-text stage is its own step
     )
     product_backend.parse_structured = _PRODUCTION["parse"]
     if effort is not None:

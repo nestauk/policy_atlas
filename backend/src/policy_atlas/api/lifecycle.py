@@ -15,7 +15,7 @@ from policy_atlas.core.schema import task
 
 log = structlog.get_logger()
 
-# --- Lifecycle event vocabulary, both generations (task 038, contract V1) ---
+# --- Lifecycle event vocabulary, both generations ---
 #
 # New writes emit `task.*`. `event_log` is append-only, so rows written before
 # the slice still say `project.*` and every reader must accept both — this is

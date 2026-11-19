@@ -56,11 +56,11 @@ from policy_atlas.theory_of_change.graph import (
 
 log = structlog.get_logger()
 
-#: Box origins that mean the user wrote the box (C29).
+#: Box origins that mean the user wrote the box.
 _USER_ORIGINS = frozenset({"user", "imported"})
 
 
-#: Classify's evidence type for a modelling study (W15).
+#: Classify's evidence type for a modelling study.
 MODELLING_TYPE = "Modelling & Simulation"
 
 
@@ -294,7 +294,7 @@ def links_to_check(graph: Graph, named: list[str] | None = None) -> tuple[list[s
     return ordered[:TOC_LINK_CAP], max(0, len(ordered) - TOC_LINK_CAP)
 
 
-#: The search and judgements on the whole programme (red team, 2026-11-03): one
+#: The search and judgements on the whole programme (red team): one
 #: more item search in a full check, its documents judged in the same pool as the
 #: connections' and stored as one event, never as a connection's evidence.
 PROGRAMME_KEY = "programme"

@@ -195,7 +195,7 @@ def _graded_conversation(
     """
     own_grade = and_(
         # The task must still be reachable by the caller: de-enrolment is a
-        # revocation event (contract § 5), so a creator's chat on a task
+        # revocation event, so a creator's chat on a task
         # they can no longer read dies with the org leg. own_estate, not the
         # full read grade — the admin read arrives as its own leg below.
         own_estate(task, user_id),
@@ -231,7 +231,7 @@ def _graded_conversation(
     if for_update:
         # of=conversation: the statement joins task, and a bare FOR UPDATE
         # would lock the owner's task row on a creator's archive path —
-        # the exact lock contract § 4 forbids on colleague chat paths.
+        # the exact lock colleague chat paths must never take.
         statement = statement.with_for_update(of=conversation)
     row = conn.execute(statement).mappings().one_or_none()
     if row is None:
@@ -307,7 +307,7 @@ def _chat_turn_out(row: RowMapping) -> ChatTurnOut:
         created_at=row["created_at"],
         completed_at=row["completed_at"],
         claims=claims if isinstance(claims, list) else [],
-        # Read-time label mapping (task 029 delta-review): the persisted
+        # Read-time label mapping: the persisted
         # payload carries appraisal_score, never a label — apply_appraisal_labels
         # derives appraisal_label fresh on every read.
         citations=apply_appraisal_labels(citations) if isinstance(citations, list) else [],
@@ -490,7 +490,7 @@ def update_conversation(
     changes = payload.model_dump(exclude_unset=True)
     if "title" in changes and changes["title"] is None:
         # Unlike entry_artefact_id, title has no clearable meaning — a chat's
-        # title is only ever replaced, never cleared (rev 3 contract).
+        # title is only ever replaced, never cleared.
         raise HTTPException(status_code=422, detail="title cannot be cleared")
     entry_artefact_id = changes.get("entry_artefact_id")
     if entry_artefact_id is not None:
@@ -638,7 +638,7 @@ def _turn_out(result: ChatTurnResult) -> ChatTurnOut:
         created_at=result.created_at,
         completed_at=result.completed_at,
         claims=claims if isinstance(claims, list) else [],
-        # Read-time label mapping (task 029 delta-review): see _chat_turn_out.
+        # Read-time label mapping: see _chat_turn_out.
         citations=apply_appraisal_labels(citations) if isinstance(citations, list) else [],
         enrichment=payload.get("enrichment")
         if isinstance(payload.get("enrichment"), dict)
@@ -718,11 +718,9 @@ async def create_chat_turn_stream(
         if row is None:
             raise HTTPException(status_code=404, detail="resource not found")
         task_id = row
-        # The pending-row pre-check that used to live here read before the
-        # task row lock's serialization point (TOCTOU) and duplicated a
-        # check `_phase_one_turn` already makes correctly inside that lock —
-        # dropped in favour of the single locked-and-swept check (security
-        # review, 2026-08-11).
+        # No pending-row pre-check here: it would read before the task row
+        # lock's serialization point (TOCTOU) and duplicate the locked-and-swept
+        # check `_phase_one_turn` already makes inside that lock.
         try:
             phase_one = _phase_one_turn(
                 conn,
@@ -739,7 +737,7 @@ async def create_chat_turn_stream(
             # Registered inside the still-open reservation transaction: a
             # saturated cancel registry raises here and rolls the pending row
             # back with it, instead of leaving an orphaned reservation for the
-            # TTL to expire (security review, 2026-08-11).
+            # TTL to expire (security review).
             cancel_event = _register_cancel(phase_one)
 
     if isinstance(phase_one, ChatTurnResult):
@@ -762,7 +760,7 @@ async def create_chat_turn_stream(
     stream_open.set()
     stream_lock = threading.Lock()
     if first_turn:
-        # Round 14: the reservation titled the chat with a cut of the
+        # The reservation titled the chat with a cut of the
         # message; the chat_title step's line replaces it, off this request,
         # and the stream says so while it is open (`conversation.titled`).
         message = body.message
@@ -822,7 +820,7 @@ async def create_chat_turn_stream(
             # the non-blocking conversation lock) — that path never touches
             # the row, so CAS it closed ourselves. Guarded on our own turn_id
             # and "pending" so a normal post-try failure (which already
-            # marked the row failed) is left alone (code review, 2026-08-11).
+            # marked the row failed) is left alone (code review).
             code = exc.code if isinstance(exc, (ApiConflict, ApiCapacity)) else "chat_turn_failed"
             with engine.begin() as conn:
                 conn.execute(
@@ -847,8 +845,7 @@ async def create_chat_turn_stream(
                 stream_open.clear()
                 events.put(None)
 
-        # Kept outside the try/except/finally above (contract-verifier
-        # finding, 2026-08-11): a thread-start failure here must only be
+        # Kept outside the try/except/finally above: a thread-start failure here must only be
         # logged, never surface as a second terminal event after completed
         # has already been enqueued.
         if completed_result is not None:

@@ -60,7 +60,7 @@ from policy_atlas.runtime.task_plan import TaskPlan, registry_component_for, tim
 
 log = structlog.get_logger()
 
-# Model from the route file (task 053); see core/model_routes.py.
+# Model from the route file; see core/model_routes.py.
 TASK_AGENT_MODEL = route().model_for("task_agent_turn")
 
 # The Task Agent turn as emitted by any backend; the wire model IS the turn
@@ -196,7 +196,7 @@ def _scrub_turn[W: (PlannerTurnWire, ScopingTurnWire)](turn: W) -> W:
     updates["plan_draft"] = type(turn.plan_draft).model_validate(
         _scrub_nul(turn.plan_draft.model_dump())
     )
-    part = getattr(turn, "part", None)  # a theory-of-change turn has no part (task 054)
+    part = getattr(turn, "part", None)  # a theory-of-change turn has no part
     if part is not None:
         # Postgres JSONB rejects \u0000; an unscrubbed part would wedge the
         # phase-two transcript write instead of degrading (review 028, security
@@ -334,7 +334,7 @@ class OpenAITaskAgentBackend:
                     },
                 )
             except Exception as exc:
-                # Task 058 review: the same failures traced_attempts retries.
+                # The same failures traced_attempts retries.
                 if attempt == 2 or started or not tracing._retryable(exc):
                     raise
                 wait_s = tracing._retry_wait_s(exc)
@@ -696,7 +696,7 @@ def draft_from_plan(plan: TaskPlan) -> PlanDraft:
     for step in compose_plan(EVIDENCE_SEARCH, plan).steps:
         registry_component = registry_component_for(step.component)
         # Ingest is unmapped from public acquire so Searching is not overwritten
-        # by full-text fetch (033 S5). Skip any registry component with no
+        # by full-text fetch. Skip any registry component with no
         # public stage rather than crashing the draft projection.
         stage = STAGE_BY_REGISTRY.get(registry_component)
         if stage is None:

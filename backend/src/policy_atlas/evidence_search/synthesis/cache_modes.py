@@ -18,8 +18,8 @@ from policy_atlas.core.openai_client import PromptCache
 
 __all__ = ["CACHE_MODES", "PromptCache", "cache_mode_for"]
 
-# Picked by the lead on 2026-11-02 from the measurement in
-# experiments/cache-modes-per-site-2026-11-02-tables.txt (task 056). The rule:
+# Picked from the measurement in
+# experiments/cache-modes-per-site-2026-11-02-tables.txt. The rule:
 # one-shot sites (one request, no growing conversation) use "breakpoint", which
 # stores and reuses only the system message, so it is never worse than "off" or
 # "auto". Conversation sites (chat and the agent turns, where each request starts
@@ -54,7 +54,7 @@ CACHE_MODES: dict[str, PromptCache] = {
     "synthesise_write_artefact_summary": "breakpoint",
     "synthesise_judge_summary": "breakpoint",
     "synthesise_section_turn": "auto",
-    # The streamed final turn (task 058, D1): its own cache lineage, at the measured cost.
+    # The streamed final turn: its own cache lineage, at the measured cost.
     "synthesise_section_emit": "auto",
     "synthesise_write_key_findings": "breakpoint",
     "synthesise_write_case_studies": "breakpoint",
@@ -89,7 +89,7 @@ CACHE_MODES: dict[str, PromptCache] = {
     "option_profile_setting": "breakpoint",
     "option_profile_fold": "breakpoint",
     "option_profile_place_sentences": "breakpoint",
-    # Theory of change (task 054): one-shot calls, and the planner's conversation.
+    # Theory of change: one-shot calls, and the planner's conversation.
     "task_agent_toc": "auto",
     "toc_draft": "breakpoint",
     "toc_merge": "breakpoint",

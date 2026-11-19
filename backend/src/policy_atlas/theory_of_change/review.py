@@ -36,7 +36,7 @@ from policy_atlas.theory_of_change.draft import plan_data, with_clarifications
 
 log = structlog.get_logger()
 
-#: Edits since the last review after which the Task Agent suggests one (C45).
+#: Edits since the last review after which the Task Agent suggests one.
 REVIEW_AFTER_EDITS = 5
 
 

@@ -23,7 +23,7 @@ from policy_atlas.evidence_search.extract.finding_references import (
 from policy_atlas.evidence_search.extract.iof_records import IOFAnchor, IOFAnchorWire
 
 # Fingerprint components for the independent ICF extraction profile.
-# icf_v2 (task 022): the strictly source-named `context_label` rider — nothing
+# icf_v2: the strictly source-named `context_label` rider — nothing
 # else rides the bump; icf_v1 rows read "not recorded under icf_v1" via
 # field_coverage key absence, no backfill.
 PROFILE_ID = "eb_icf_base_v1"

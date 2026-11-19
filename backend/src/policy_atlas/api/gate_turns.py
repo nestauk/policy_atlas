@@ -45,7 +45,7 @@ CHANGE_PLAN = "change_plan"
 #: decision must read the same however it was taken, so it is never a model's
 #: sentence.
 CONFIRM_REPLY = "Plan confirmed. Building the longlist now."
-#: The confirm reply when the longlist walk could not be opened (F12): the
+#: The confirm reply when the longlist walk could not be opened: the
 #: decision stands, and the plan's Build longlist starts the walk later.
 CONFIRM_NOT_STARTED_REPLY = (
     "Plan confirmed, but the longlist did not start: use Build longlist on the plan to start it."
@@ -57,7 +57,7 @@ CHANGE_REPLY = "The run has stopped so you can change the plan."
 ALREADY_ANSWERED_REPLY = "This check-in was already answered."
 
 #: What the product says when the sort cannot tell. It names what is available
-#: rather than guessing, and it is honest about what is not (D10).
+#: rather than guessing, and it is honest about what is not.
 ASK_BACK_REPLY = (
     "I could not tell whether that is a question about the baseline or a "
     "decision. You can ask about the baseline, confirm the plan and build the "

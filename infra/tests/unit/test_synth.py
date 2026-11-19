@@ -150,7 +150,7 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
         cross_region_references=True,
     )
     # The same app stack pinned to each model route, to show the Bedrock key is
-    # wired only on a Bedrock route (task 053), whatever route the shipped
+    # wired only on a Bedrock route, whatever route the shipped
     # config has. Not part of TEMPLATES: the namespacing and rendering checks
     # below stay about the shipped staging config.
     ROUTE_APP_STACKS = {}
@@ -166,7 +166,7 @@ with patch("aws_cdk.aws_ecs.ContainerImage.from_asset", return_value=DUMMY_IMAGE
             env_name=ENV_NAME,
             cross_region_references=True,
         )
-    # The same app stack with the other ingest mode (task 057), so the API
+    # The same app stack with the other ingest mode, so the API
     # task's environment is checked for both values whatever the config says.
     in_process_config = json.loads(json.dumps(PA_CONFIG))
     in_process_config["policy_atlas_config"]["backend"]["ingest_mode"] = "in_process"
@@ -1048,8 +1048,7 @@ def test_cognito_spa_client_is_public_code_flow_with_exact_redirects():
     assert properties["AllowedOAuthScopes"] == ["openid", "email", "profile"]
     assert properties["CallbackURLs"] == urls
     assert properties["LogoutURLs"] == urls
-    # Review-stack pins (026 step 7; refresh length is the owner's call —
-    # 30 d kept, 2026-07-28): explicit token validities and no
+    # Pins explicit token validities (refresh length 30 d) and no
     # user-enumeration oracle.
     assert properties["AccessTokenValidity"] == 60
     assert properties["RefreshTokenValidity"] == 43200  # 30 d, rendered in minutes
@@ -1144,7 +1143,7 @@ def test_frontend_apex_and_www_have_a_and_aaaa_cloudfront_aliases():
 
 def test_frontend_and_fonts_buckets_are_private_and_fonts_are_destroyed():
     buckets = _resources(TEMPLATES["app"], "AWS::S3::Bucket")
-    # Frontend, fonts, and users' uploads (task 054 increment 5; its own test in
+    # Frontend, fonts, and users' uploads (its own test in
     # test_service_wiring checks it is retained, encrypted and HTTPS only).
     assert len(buckets) == 3
     assert all(

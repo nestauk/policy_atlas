@@ -71,17 +71,17 @@ from policy_atlas.core.schema import app_user, conversation, project, task
 log = structlog.get_logger()
 
 # The 404 body every failed read grade produces. Byte-identical to the string
-# ``common``'s owner-only helpers raise, so the cutover in phase 4 cannot
-# change what a probing caller observes.
+# ``common``'s owner-only helpers raise, so a probing caller observes the same
+# body from either.
 NOT_FOUND_DETAIL = "resource not found"
 
 # The 403 body. 403 was pre-reserved by ``web-api.md`` § Auth boundary for
-# "role failures within an owned scope"; contract § 8 spends the reservation
+# "role failures within an owned scope"; this body spends the reservation
 # on ``forbidden``.
 FORBIDDEN_DETAIL = "action is not permitted"
 
-# The 422 body a non-admin gets for passing ``owner_email``. Contract § 8 is
-# explicit that this is **422 ``validation_error``**, the code the existing
+# The 422 body a non-admin gets for passing ``owner_email``. This is
+# **422 ``validation_error``**, the code the existing
 # envelope map already assigns to "your parameter is wrong" — not 403, and
 # not a third semantic invented for one filter.
 OWNER_EMAIL_DETAIL = "owner_email is available to administrators only"
@@ -118,7 +118,7 @@ _OWN_LEG = "own_leg_matched"
 
 #: Label for :func:`admin_read_leg` selected beside the row, where a query
 #: must classify which leg served it (the public-leg helper needs owner vs
-#: admin vs public — contract 037 D4 orders the graded legs first).
+#: admin vs public — the graded legs come first).
 _ADMIN_LEG = "admin_leg_matched"
 
 
@@ -866,7 +866,7 @@ def _resolve(
         # Lock through the owner leg alone: `FOR UPDATE` is bounded by
         # `owner_user_id = :caller`, so the statement can only ever lock a row
         # the caller owns and a colleague can never block the owner's own
-        # rename, archive or run-start (contract § 4). A miss here — not the
+        # rename, archive or run-start. A miss here — not the
         # owner, or no such row — locks nothing and costs one round trip on
         # the refusal path; the unlocked read below tells 404 from 403.
         owned = conn.execute(
@@ -998,7 +998,7 @@ def readable_or_public_task(
         raise HTTPException(status_code=404, detail=NOT_FOUND_DETAIL)
     if row[_OWN_LEG]:
         return Access(row=row, is_owner=row["owner_user_id"] == user_id)
-    # Graded legs first (contract D4): an entitled admin keeps today's full
+    # Graded legs first: an entitled admin keeps today's full
     # read — and its trace — even when the row happens to be public.
     if row[_ADMIN_LEG]:
         trace_admin_read(kind="task", row_id=str(task_id), user_id=user_id)

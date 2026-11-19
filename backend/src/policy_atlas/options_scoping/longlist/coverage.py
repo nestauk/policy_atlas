@@ -75,10 +75,10 @@ NOT_RATED = "not rated"
 #: membership, so it has no bucket).
 ROLE_BUCKETS: tuple[str, ...] = ("evaluated", "described", "recommended", "mentioned")
 
-#: At most this many *tried on* units per option (AM20).
+#: At most this many *tried on* units per option.
 TRIED_ON_MAX = 8
 
-#: The two folded facets and the record field each folds (R54, R55).
+#: The two folded facets and the record field each folds.
 FOLD_FIELDS: dict[str, str] = {"tried_on": "unit", "measures": "outcome"}
 
 #: The outcome tag of a record whose outcome is not a plan outcome.
@@ -284,8 +284,7 @@ class _Tally:
         )
 
 
-#: Country adjectives read as a leading country word in a programme name
-#: (task 046, amendment 4, R88; S33).
+#: Country adjectives read as a leading country word in a programme name.
 COUNTRY_ADJECTIVES: tuple[str, ...] = (
     "british", "english", "scottish", "welsh", "irish", "american", "australian",
     "canadian", "dutch", "german", "french", "spanish", "swedish", "danish",
@@ -694,7 +693,7 @@ def option_coverage(
                 other_kinds.show(kind_key, kind)
                 if not _untagged(m):
                     continue
-                # A4: a record tagged other (or not tagged) whose kind is a
+                # A record tagged other (or not tagged) whose kind is a
                 # plan outcome counts on that outcome's row; any other kind
                 # counts under ``other``.
                 if kind_key in outcome_documents:
@@ -715,8 +714,7 @@ def option_coverage(
         abstract_only += int(all(m.basis == "abstract_only" for m in doc_members))
         if evaluated:
             # The evaluated country is read from the evaluating members only: a
-            # describing record of the same document names no evaluated place
-            # (review of task 046, 2026-10-12).
+            # describing record of the same document names no evaluated place.
             evaluated_top, _ = document_where(
                 (m.study_country, m.study_geography) for m in evaluated
             )
@@ -779,7 +777,7 @@ def option_coverage(
                 for outcome in plan_outcomes
             ],
             # Each Measures kind that is not a plan outcome, counting only
-            # records tagged other or not tagged (A4).
+            # records tagged other or not tagged.
             "other": [
                 {
                     "kind": kind,

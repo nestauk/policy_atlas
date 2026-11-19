@@ -68,7 +68,7 @@ __all__ = [
 
 # --- Class 1: S0 select signals -------------------------------------------
 #
-# Already built (task 017/study S0): `steering.steer_point_triggers` reads
+# `steering.steer_point_triggers` reads
 # `selection_result.flags` and maps them to the deepening-selection triggers.
 # Re-exported here, never duplicated — the deepening-selection pause keeps
 # its own existing call site; this alias is for callers that want the whole
@@ -78,7 +78,7 @@ s0_select_triggers = steer_point_triggers
 # --- Module constants (thresholds; never plan content) --------------------
 
 #: Class 2 (P1 coverage, after acquire): the two `search_coverage_record`
-#: stop conditions that fire the floor unconditionally (contract decision 8).
+#: stop conditions that fire the floor unconditionally.
 P1_STOP_CONDITIONS: tuple[str, ...] = ("re_searched_still_thin", "error")
 
 #: Class 3 (P2 pre-select): screened-relevant count floor.
@@ -574,7 +574,7 @@ FloorBoundary = Literal[
 ]
 
 #: The non-lattice after_component boundaries that carry their own floor trigger
-#: classes (FIX 1 / contract decision 8). Maps a composed-step component to the
+#: classes (FIX 1). Maps a composed-step component to the
 #: :data:`FloorBoundary` whose classes fire at its after_component boundary, so
 #: the runner can read the floor at boundaries the lattice does not cover.
 #: ``acquire`` is excluded (P1's lattice read covers it);

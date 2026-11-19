@@ -132,7 +132,7 @@ def build_baseline_bundle(
     }
 
 
-# Screen words for the one dial (A8: never the internal key on a rendered card).
+# Screen words for the one dial (never the internal key on a rendered card).
 DEPTH_LABEL: dict[str, str] = {"rapid": "Rapid scoping", "standard": "Standard scoping"}
 
 

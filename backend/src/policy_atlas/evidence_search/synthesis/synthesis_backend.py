@@ -133,8 +133,8 @@ log = structlog.get_logger()
 
 # The contracted model floor (the 009 nano lesson is binding); section/prose
 # quality on real corpora is eval territory, not asserted by the build.
-# Models from the route file (task 053); see core/model_routes.py. Every call
-# site below is its own step (task 056): its own model and its own effort.
+# Models from the route file; see core/model_routes.py. Every call
+# site below is its own step: its own model and its own effort.
 # ``SYNTHESIS_MODEL`` is the section-turn step's model, the one the run's
 # provenance stamps as "the synthesis model".
 SYNTHESIS_MODEL = route().model_for("synthesise_section_turn")
@@ -183,12 +183,13 @@ def _cache_messages(step: str, messages: list[Any]) -> list[Any]:
         return with_system_breakpoint(messages)
     return messages
 
-# Read-path ceiling for section titles (artefacts minted before task 034); the
+# Read-path ceiling for section titles (artefacts minted before the 60-character
+# proposal bound); the
 # proposal bounds the prompt states live in section_prompt.py.
 SECTION_TITLE_MAX = 200
 
 # Forbidden generic section titles — the 012 label set, shared verbatim
-# (contract rev 8 M5), plus the section-shaped catch-alls of the same kind.
+# , plus the section-shaped catch-alls of the same kind.
 FORBIDDEN_SECTION_TITLES = FORBIDDEN_GROUP_LABELS | frozenset(
     {"overview", "introduction", "conclusion", "summary", "findings", "background"}
 )
@@ -971,7 +972,7 @@ class OpenAISynthesisBackend:
         self._langfuse_client = langfuse_client
         self._turn_count = 0
         self._lock = Lock()
-        # Streamed final turns that fell back to the forced tool call (task 058, N6).
+        # Streamed final turns that fell back to the forced tool call.
         self.stream_fallbacks = 0
 
     @property
@@ -1172,7 +1173,7 @@ class OpenAISynthesisBackend:
         force_emit: bool,
         tools: list[dict[str, Any]] | None = None,
     ) -> UsageResult[SectionTurn]:
-        # Task 056 D10: every turn sends the same five tools and parallel tool
+        # Every turn sends the same five tools and parallel tool
         # calls, so the request prefix matches the cache; tool_choice alone
         # differs (allowed_tools over the four section tools, or emit_section
         # by name on the forced final turn). ``tools`` defaults to the full
@@ -1231,7 +1232,7 @@ class OpenAISynthesisBackend:
         message_tool_calls = response.choices[0].message.tool_calls or []
         if not message_tool_calls:
             # A bare reply with no tool call means the writer is ready to write
-            # (owner, 2026-11-05): the loop runs the write turn next.
+            # The loop runs the write turn next.
             return _ready_turn()
 
         if len(message_tool_calls) == 1:
@@ -1390,7 +1391,7 @@ class OpenAISynthesisBackend:
         # Deltas are addressed to the page's section index (key findings first
         # at 0), which the seed carries as ``display_index``; the loop's own
         # ``section_index`` is one lower for a body section when the report
-        # has key findings (task 058; owner round 5).
+        # has key findings.
         index = int(seed.get("display_index", seed["section_index"]))
         metadata = {
             "step": step,
@@ -1464,7 +1465,7 @@ class OpenAISynthesisBackend:
                 with self._lock:
                     self.stream_fallbacks += 1
                 result = self.section_turn(seed, transcript, force_emit=True)
-                # Task 058 review: the fallback's prose reaches the page at once, not at
+                # The fallback's prose reaches the page at once, not at
                 # ``section_completed`` after the claim checks and the repair.
                 section = result[0]["claims"]
                 if section is not None and section.prose:
@@ -1478,7 +1479,7 @@ class OpenAISynthesisBackend:
         tools: list[dict[str, Any]] | None = None,
     ) -> tuple[SectionRepairWire, Any, int]:
         """Send the repair request; return the repairs, usage and ignored-call count."""
-        # Task 056 D10: the same five tools and parallel tool calls as the
+        # The same five tools and parallel tool calls as the
         # section turns, so the repair reads the section's cached prefix;
         # emit_repairs is forced by name.
         completions: Any = self._client.chat.completions

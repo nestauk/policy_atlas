@@ -24,14 +24,14 @@ CLAIM_THEME_FACETS = frozenset(
     ("barrier_theme", "enabler_theme", "mechanism_theme")
 )
 
-# Scale guard — fail closed (contract rev 1.3): above the cap the component
+# Scale guard — fail closed: above the cap the component
 # fails structurally before any call; the large-corpus algorithm is a recorded
 # eval-gated seam, never a degraded sample/assign pass grown here. Raised in
 # 018's standard-depth regrade: demo-validated at 280 live distinct values;
 # the eval slice owns final calibration.
 FACET_VALUE_CAP = 400
 
-# Per-string bound on prompt input (012 review, security lane): value surfaces
+# Per-string bound on prompt input (security lane): value surfaces
 # and counterparts are unbounded upstream wire text — an oversize string fails
 # the component closed before any call, mirroring the FACET_VALUE_CAP posture.
 VALUE_SURFACE_MAX = 500
@@ -49,9 +49,9 @@ FORBIDDEN_GROUP_LABELS = frozenset(
      "uncategorised", "uncategorized"}
 )
 
-# D8 (024 steering surface): grouping.granularity — multiplier on the derived
-# group_max_labels ceiling. "standard" and absent are byte-identical to
-# as-built (guard test pins this).
+# Steering surface: grouping.granularity — multiplier on the derived
+# group_max_labels ceiling. "standard" and absent leave the ceiling unchanged
+# (guard test pins this).
 GRANULARITY_VALUES = ("coarser", "standard", "finer")
 GRANULARITY_MULTIPLIERS: dict[str, float] = {"coarser": 0.5, "standard": 1.0, "finer": 2.0}
 
@@ -167,7 +167,7 @@ def parse_grouping_directive(
 
     unknown_keys = set(directive) - {"facet", "facets", "granularity", "guidance"}
     if unknown_keys:
-        # Bounded echo (012 review, security lane): keys are untrusted JSONB text
+        # Bounded echo (security lane): keys are untrusted JSONB text
         # and the message lands in the component.failed event payload.
         shown = sorted(repr(key)[:DIRECTIVE_STRING_MAX] for key in unknown_keys)[:5]
         raise FacetDirectiveError(f"grouping directive has unknown keys: {shown}")

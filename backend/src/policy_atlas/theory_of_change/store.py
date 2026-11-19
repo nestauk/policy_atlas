@@ -35,11 +35,11 @@ from policy_atlas.core.schema import (
 from policy_atlas.theory_of_change.draft_prompt import DraftResponse
 from policy_atlas.theory_of_change.graph import Box, Graph, Link, Pathway
 
-#: The event every graph write records (History; C1).
+#: The event every graph write records (History).
 TOC_CHANGED_EVENT = "toc.changed"
 
 #: Marks a ``toc.changed`` event that only moved boxes: it leaves the report
-#: current (task 054, S9).
+#: current.
 LAYOUT_KEY = "layout"
 
 _PRIMARY_KEY: dict[str, str] = {
@@ -157,7 +157,7 @@ def link_from_row(row: Row[Any]) -> Link:
     )
 
 
-#: The letter that starts a box's code, by layer (C35). Links use ``#``.
+#: The letter that starts a box's code, by layer. Links use ``#``.
 CODE_PREFIX: dict[str, str] = {
     "input": "A",
     "output": "P",

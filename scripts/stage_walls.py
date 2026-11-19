@@ -760,7 +760,7 @@ def format_markdown(report: dict[str, Any]) -> str:
     return "\n".join(md) + "\n"
 
 
-# --- Stream capture (task 058, N25) ---------------------------------------------
+# --- Stream capture ---------------------------------------------
 
 SILENT_GAP_S = 30.0
 TERMINAL_STATUSES = frozenset({"succeeded", "degraded", "failed", "aborted", "interrupted"})

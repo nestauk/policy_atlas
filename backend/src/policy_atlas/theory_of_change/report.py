@@ -82,7 +82,7 @@ ROW_SOURCES = 3
 WEAKEST_LINKS = 3
 #: What a row says when the model gave it no reason.
 ROW_FALLBACK = "See the evidence on this link."
-#: Until the accountability ceiling can be moved (increment 2), it sits after outputs.
+#: Until the accountability ceiling can be moved, it sits after outputs.
 DIRECTLY_INFLUENCED = "outputs"
 #: Words of a source's quote the model sees as its finding.
 FINDING_WORDS = 30
@@ -252,7 +252,7 @@ class TextChecker:
             return ""
 
         text = _CITE.sub(cite, text)
-        # Tidy what a removal leaves: "(S1 → )" → "(S1)", "()" → "".
+        # Tidy what a removal leaves: "(S1 → )" → "", "()" → "".
         text = re.sub(r"\s*→\s*\)", ")", re.sub(r"\(\s*→\s*", "(", text))
         text = _EMPTY_BRACKETS.sub("", text)
         return re.sub(r"\s+([.,;:])", r"\1", re.sub(r"\s{2,}", " ", text)).strip()
@@ -499,7 +499,7 @@ def _source_entry(
         "evidence_id": evidence_id,
         "quote": quote,
         "finding": " ".join((quote or "").split()[:FINDING_WORDS]),
-        # The short name a pending [n] shows while the report is written (S5).
+        # The short name a pending [n] shows while the report is written.
         "label": f"{_who(authors, organisation)} {year}"
         if authors and year
         else title or venue or "",
@@ -736,8 +736,8 @@ def toc_report_scope(
             )
         whole = {"verdict": VERDICT_LABELS[programme_verdict], "documents": listed}
 
-    # Routes found in the evidence that an as-drawn diagram does not show (owner,
-    # 2026-11-04): their documents are numbered after the others, code "expand".
+    # Routes found in the evidence that an as-drawn diagram does not show:
+    # their documents are numbered after the others, code "expand".
     expandable = found_routes(conn, task_id)
     documents = {item["tss"] for way in expandable for item in way["documents"]}
     metadata.update(_metadata(conn, task_id, documents - set(metadata)))
@@ -802,7 +802,7 @@ def toc_report_scope(
     if whole is not None:
         theory["whole_programme"] = whole
         # Every step on the routes holds, but the whole programme's evaluations do not
-        # find the effect (owner, 2026-11-04): the report must say so, and why.
+        # find the effect: the report must say so, and why.
         if steps_hold_but_programme_does_not(
             [fact_of[key].verdict for key in on_success if key in fact_of], programme_verdict
         ):
@@ -858,9 +858,9 @@ def toc_report_scope(
 
     response: ReportResponse | None
     if streams_to_page(conn, task_id=task_id, context=context):
-        # A first report streams to the page, field by field (S4 to S6). The
+        # A first report streams to the page, field by field. The
         # answer is the same as the ordinary call's, and the code below edits
-        # it exactly as before (A12).
+        # it exactly as before.
         frames = ReportFrames(
             emitter=progress,
             parts=report_layout(
@@ -875,7 +875,7 @@ def toc_report_scope(
         response = write_streamed(backend, inputs, frames, usage, ask)
     else:
         # An update, or a check while a report stands: the old report stays on
-        # the page until the new one is stored, so nothing streams (S7b).
+        # the page until the new one is stored, so nothing streams.
         response = ask()
     if response is None:
         raise RuntimeError("toc_report: the report call failed")
@@ -961,7 +961,7 @@ def toc_report_scope(
         "how_it_could_fail": check(response.how_it_could_fail, every_code),
         "assumptions": assumptions,
         "tests": tests,
-        # One bullet per supporting activity, citing what bears on it (owner, 2026-11-04).
+        # One bullet per supporting activity, citing what bears on it.
         "supporting_activities": [
             check(text, [*every_code, PROGRAMME_CODE])
             for text in response.supporting_activities[: len(supporting)]

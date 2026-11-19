@@ -42,6 +42,6 @@ def configure_logging() -> None:
         logger_factory=structlog.PrintLoggerFactory(),
         # No cache_logger_on_first_use: a cached module-level logger ignores
         # later reconfiguration, which breaks structlog.testing.capture_logs
-        # for every test that runs after anything calls create_app (033).
+        # for every test that runs after anything calls create_app.
         cache_logger_on_first_use=False,
     )

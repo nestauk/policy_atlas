@@ -57,10 +57,10 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.evidence_search.assess.appraise import DEFAULT_RUBRIC_VERSION
 
-#: Rubric versions whose scores an inherited appraisal may carry as current. Task 056
-#: bumped the version to add the Unrated state; the 1 to 5 scores did not change, so
-#: rows scored under the previous version are not stale (the lead's call, 2026-11-02;
-#: without it every linked Evidence search task would re-classify every document).
+#: Rubric versions whose scores an inherited appraisal may carry as current. The
+#: current version adds the Unrated state; the 1 to 5 scores are the same, so
+#: rows scored under ``v2-hierarchy-v1`` are not stale (without this every
+#: linked Evidence search task would re-classify every document).
 COMPATIBLE_RUBRIC_VERSIONS: frozenset[str] = frozenset({"v2-hierarchy-v1", DEFAULT_RUBRIC_VERSION})
 
 #: Where a document's labels came from.

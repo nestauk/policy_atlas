@@ -79,7 +79,7 @@ AUTHORITY_LABELS: dict[str, str] = {
     "unclear": "Unclear who can act",
 }
 
-#: The maturity rung's words (contract § Terms).
+#: The maturity rung's words.
 RUNG_WORDS: dict[str, str] = {
     "proposal_only": "Proposed, not yet implemented",
     "described": "Implemented, not yet evaluated",

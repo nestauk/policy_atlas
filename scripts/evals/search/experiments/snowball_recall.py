@@ -400,7 +400,7 @@ def generated_queries(
                 },
             ],
             model=model,
-            reasoning_effort="medium",  # task 056: every call states its effort
+            reasoning_effort="medium",  # Every call states its effort
             response_format=ConceptBlocksWire,
             prompt_version="openalex_concepts_exp",
             usage_event="search_generation.queries.usage",

@@ -39,7 +39,7 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.runtime.chat_prompt import CHAT_FRAME_ARTEFACT_BUDGET, CHAT_WINDOW_CEILING
 
-_FIELD_MAX = 4_000          # generous per-field bound (M10: bounds payloads, not content)
+_FIELD_MAX = 4_000          # generous per-field bound (bounds payloads, not content)
 _QUOTE_MAX = 400
 
 
@@ -243,7 +243,7 @@ def assemble_chat_frame(
         )
         citable.update(ref.chunk_id for ref in frame_citations)
 
-        # Budget rule (contract §5): the entry-context/latest artefact keeps
+        # Budget rule: the entry-context/latest artefact keeps
         # its full body; other artefacts degrade to key findings + section
         # titles once the frame budget is spent — full prose stays
         # tool-fetchable.

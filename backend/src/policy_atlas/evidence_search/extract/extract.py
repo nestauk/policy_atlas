@@ -153,7 +153,7 @@ WINDOW_OVERLAP_CHUNKS = 1
 OVERSIZE_SUBSEGMENT_OVERLAP = 1_000
 OVERSIZE_POLICY = "char_split_v1"
 EXTRACT_RETRY_CAP = 1
-#: Extraction and vetter calls in flight at once; 8, not 4 (task 056, owner 2026-11-02),
+#: Extraction and vetter calls in flight at once; 8, not 4,
 #: so a request stalled at the provider holds an eighth of the pool, not a quarter.
 MAX_CONCURRENT_EXTRACT = 8
 EXTRACTION_PROFILE = PROFILE_ID
@@ -161,19 +161,19 @@ EXTRACTION_PROFILE = PROFILE_ID
 #: grammar; ``task_plan.EXTRACT_PROFILE_IDS`` pins it at import).
 KNOWN_PROFILE_IDS = (PROFILE_ID, ICF_PROFILE_ID)
 #: Every profile ``extract_scope`` runs, in run order. The intervention profile
-#: (task 045) is reachable only through the ``profiles`` kwarg — the
+#: is reachable only through the ``profiles`` kwarg — the
 #: ``extract_interventions`` component — never through the ES directive, whose
 #: IOF-mandatory rule stands (plan P9).
 ALL_PROFILE_IDS = (*KNOWN_PROFILE_IDS, INTERVENTIONS_PROFILE_ID)
 
-# D3 (024 steering surface): extraction.refresh — memo-bypass class vocabulary.
+# Steering surface: extraction.refresh — memo-bypass class vocabulary.
 # "abstract_only" and "all" force a fresh extraction attempt for their class
 # even where a durable memo hit exists; "failed" needs no bypass code of its
 # own — MEMO_STATUSES already excludes extraction_failed rows from the memo
 # lookup, so a previously-failed document is always re-attempted regardless.
 EXTRACTION_REFRESH_VALUES: tuple[str, ...] = ("abstract_only", "failed", "all")
 
-# 018 C5 finding vetter: component.completed payload record cap (flag-not-drop —
+# Finding vetter: component.completed payload record cap (flag-not-drop —
 # every flagged finding is counted; only the displayed record list is capped).
 VETTED_OUT_RECORDS_CAP = 50
 
@@ -371,7 +371,7 @@ class _Doc:
     # Provenance class.
     reused: bool = False
     extractable: bool = False  # basis-ok, memo-miss: needs calls
-    # D3 (024 steering surface): set when extractable because refresh bypassed
+    # Set when extractable because refresh bypassed
     # an existing memo hit — the write path must stamp this doc's fresh row
     # with the refresh-tagged fingerprint (never the base one), or it would
     # collide with the surviving base-fingerprint row on
@@ -393,7 +393,7 @@ class _Doc:
     dedup_collapsed: int = 0
     quote_unverified: int = 0
 
-    # Finding vetter (018 C5) — flag-not-drop accounting for this document.
+    # Finding vetter — flag-not-drop accounting for this document.
     vetted_out_count: int = 0
     vetted_out_records: list[dict[str, Any]] = field(default_factory=list)
     vetting_failed: bool = False
@@ -781,7 +781,7 @@ def _apply_memo(
             .where(source_extraction_record.c.extraction_fingerprint == fingerprint)
             .where(source_extraction_record.c.status.in_(MEMO_STATUSES))
             .where(source_extraction_record.c.source_snapshot_id.in_(basis_snapshots))
-            # Deterministic pick when refresh (D3) has produced more than one
+            # Deterministic pick when refresh has produced more than one
             # successful row for the same fingerprint + snapshot: the most
             # recent row is always the effective memo hit.
             .order_by(source_extraction_record.c.created_at.desc())
@@ -880,7 +880,7 @@ def _run_windows(
     errors: dict[tuple[int, int], Exception] = {}
     usage_totals = UsageAccumulator()
 
-    # Task 058, N2: one count per window, on the pool's own future; the serial
+    # One count per window, on the pool's own future; the serial
     # retry below never publishes. The interventions profile counts abstracts
     # (one window each); the findings profile counts windows.
     if liveness.current_stage() == "extract_interventions":
@@ -1059,7 +1059,7 @@ def _process_doc(
     doc.quote_unverified = quote_unverified
 
 
-# --- Finding vetter (018 C5) --------------------------------------------------
+# --- Finding vetter --------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -1720,7 +1720,7 @@ def _build_summary(
             }
         )
 
-    # Task 058, N2: the integers the done row shows.
+    # The integers the done row shows.
     finding_count = sum(
         doc.finding_count
         for run in profile_runs
@@ -1747,9 +1747,9 @@ def _build_summary(
         },
         "selection_run_id": str(selection_run_id) if selection_run_id is not None else None,
         "flags": flags,
-        # D3 (024 steering surface): the executed refresh value is echoed
+        # The executed refresh value is echoed
         # verbatim, scope-wide (it applies identically across every requested
-        # profile's memo bypass) — None when absent, byte-identical to as-built.
+        # profile's memo bypass) — None when absent.
         "provenance": {"profiles": provenance_profiles, "pass_count": 1, "refresh": refresh},
         "profiles": summary_profiles,
         "usage_totals": usage_accumulator.payload(),
@@ -1821,7 +1821,7 @@ def _interventions_profile(
     interventions_backend: InterventionsBackend,
     interventions_context: TaggingContext | None = None,
 ) -> ExtractionProfileBundle:
-    # The tagging context (task 046, S4) is bound into this bundle's own
+    # The tagging context is bound into this bundle's own
     # fingerprint and backend seams, so ``_run_profile`` carries it to the memo
     # key and every call without the shared pipeline — or the IOF and ICF
     # bundles — knowing it exists.
@@ -1912,7 +1912,7 @@ def _parse_extraction_directive(raw: Any) -> tuple[tuple[str, ...], str | None]:
         raise ExtractError(
             f"extraction directive contains unknown keys: {sorted(unknown)}"
         )
-    # B2′ (024): validate relevance_emphasis fail-closed here so the steering
+    # Validate relevance_emphasis fail-closed here so the steering
     # extract branch (which routes through this parser) rejects a malformed
     # emphasis. The VALUE is read separately by the harness via
     # `parse_relevance_emphasis` — this function's 2-tuple return is frozen for
@@ -2024,7 +2024,7 @@ def _run_profile(
     fingerprint, components = profile.fingerprint(
         profile.backend.mode, finding_vetter_active
     )
-    # D3: a refreshed doc's fresh write must never collide with the surviving
+    # A refreshed doc's fresh write must never collide with the surviving
     # base-fingerprint row for the same snapshot (uq_ser_memo) — refresh
     # enters a SEPARATE write-only fingerprint, never the query fingerprint
     # (memo lookups always use the base fingerprint, so future non-refresh
@@ -2090,7 +2090,7 @@ def _run_profile(
     )
 
 
-# --- Relevance annotator (B2′ / ADR 0023) -----------------------------------
+# --- Relevance annotator (ADR 0023) -----------------------------------
 
 
 def _relevance_record_ids(
@@ -2330,7 +2330,7 @@ def extract_scope(
     )
     selection_free = context.selection_run_id is None
     if selection_free:
-        # D24: no select run. Only the abstract-basis intervention profile
+        # No select run. Only the abstract-basis intervention profile
         # runs here — IOF/ICF depend on select's full-text basis decision.
         if tuple(profiles) != (INTERVENTIONS_PROFILE_ID,):
             raise ExtractError(
@@ -2357,7 +2357,7 @@ def extract_scope(
     )
     title_only = 0
     if selection_free:
-        # S10 (task 046): a title with no abstract is too thin to profile.
+        # A title with no abstract is too thin to profile.
         # Dropped here — before basis resolution and the memo — so it costs
         # no call and writes no extraction record row; the summary counts it.
         profiled = [doc for doc in docs if not _is_title_only(doc)]
@@ -2387,14 +2387,14 @@ def extract_scope(
     )
     if selection_free:
         summary["counts"]["title_only"] = title_only
-        # S4 (task 046): outcome tags that matched no plan outcome, even
+        # Outcome tags that matched no plan outcome, even
         # folded, and were set to ``other`` — counted on this run's calls.
         summary["counts"]["outcome_tag_repairs"] = sum(
             profile.backend.outcome_tag_repairs
             for profile in profile_bundles
             if isinstance(profile.backend, InterventionsWindowAdapter)
         )
-    # B2′ (ADR 0023): the sibling relevance annotator runs post-vetting,
+    # ADR 0023: the sibling relevance annotator runs post-vetting,
     # post-write (it reads the persisted finding rows) and pre-roll-up. Gated on
     # steering — only when emphasis is present AND a backend is wired — and
     # fail-open by construction, so it never fails the extraction and never

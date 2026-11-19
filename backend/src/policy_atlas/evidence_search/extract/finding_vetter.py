@@ -48,7 +48,7 @@ from policy_atlas.evidence_search.synthesis.cache_modes import PromptCache, cach
 
 FINDING_VETTER_PROMPT_VERSION = "extract_finding_vetter_v3"
 FINDING_VETTER_MODEL = route().model_for("extract_vet_iof_findings")
-# Effort lives in the route file (per the 018 C2 classify A/B evidence: xhigh
+# Effort lives in the route file (per the classify A/B evidence: xhigh
 # exhausts completion caps on 5.4-mini judgment calls, so the step says high).
 FINDING_VETTER_EFFORT = route().effort_for("extract_vet_iof_findings")
 # Sized for reasoning + output together (reasoning-model-output-cap concept):

@@ -320,8 +320,8 @@ def _resolve_citation_sources(
                     }
         resolved_tss_ids = {uuid.UUID(fact["source_id"]) for fact in facts.values()}
         if resolved_tss_ids:
-            # Narrowed to the tss ids already resolved above (task 029
-            # delta-review) — cost proportional to citations, not to the
+            # Narrowed to the tss ids already resolved above
+            # — cost proportional to citations, not to the
             # whole task's appraisal/classification set.
             labels = labels_for_snapshots(conn, task_id=task_id, tss_ids=resolved_tss_ids)
 
@@ -337,7 +337,7 @@ def _resolve_citation_sources(
             label = labels.get(uuid.UUID(source_id))
             if label is not None and label.unrated:
                 # No score to persist: the flag persists instead, and
-                # apply_appraisal_labels reads it as "Unrated" (task 056).
+                # apply_appraisal_labels reads it as "Unrated".
                 merged["appraisal_unrated"] = True
             elif label is not None and label.quality_score is not None:
                 # The score, not the label, persists (evidence_search.assess.appraise's
@@ -515,7 +515,7 @@ def answer_over_scope(
 
         # The turn's span. The model calls themselves are generations opened
         # inside the chat backend (tool turn and final parse, one traced
-        # retry each; the prose stream is exempt, task 057 D12) and nest here,
+        # retry each; the prose stream is exempt) and nest here,
         # so tokens and cost are recorded once, on those.
         response, usage = tracing.traced_call(
             backends.langfuse,

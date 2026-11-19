@@ -41,29 +41,28 @@ _CONFLICT_CODES = {
     # 028 strand 3: the approved plan predates the newest completed task_agent
     # turn — review the demoted draft, re-approve, then start.
     "plan_stale",
-    # Task 033 § 6 (i.5): a task in a project carries that project's
+    # A task in a project carries that project's
     # visibility, so setting the task's own visibility has no honest
     # answer — the two ways out are changing the Project's visibility and
     # leaving the Task out of the Project.
     "visibility_conflict",
     # Splash waitlist: the email is already on waitlist_entry.
     "already_registered",
-    # Task 044 (C11, C12): a task can only start from a task it shares a
+    # A task can only start from a task it shares a
     # project with, and only from one whose latest walk has finished — and
-    # only from an Evidence search, whose report is what inheritance reads
-    # (S6, X4).
+    # only from an Evidence search, whose report is what inheritance reads.
     "link_project_mismatch",
     "link_source_unfinished",
     "link_source_capability",
-    # Task 054 (C10, C41): an edit made against an old revision, two boxes
+    # An edit made against an old revision, two boxes
     # already connected, an Undo already applied.
     "toc_stale_revision",
     "toc_duplicate",
     "toc_already_undone",
     "toc_not_running",
-    # Task 054: the plan is fixed once the theory is drafted (plan edits, uploads).
+    # The plan is fixed once the theory is drafted (plan edits, uploads).
     "toc_plan_fixed",
-    # Task 055 (P9): Suggest more when every included option already holds a
+    # Suggest more when every included option already holds a
     # place or was set aside; a shortlist place for an excluded or merged option.
     "nothing_to_propose",
     "not_included",
@@ -71,14 +70,14 @@ _CONFLICT_CODES = {
 
 _CAPACITY_CODES = {"chat_capacity"}
 
-#: Task 054 (S14): a readable task that is not a theory of change.
+#: A readable task that is not a theory of change.
 _NOT_FOUND_CODES = {"toc_not_found"}
 
-#: Task 054 (C15): a capability this deployment has switched off.
+#: A capability this deployment has switched off.
 _UNPROCESSABLE_CODES = {
     "capability_not_enabled",
     "toc_invalid",
-    # Task 054 increment 5 (C8): a refused upload, or an image that is no theory.
+    # A refused upload, or an image that is no theory.
     "upload_type",
     "upload_size",
     "upload_not_theory",
@@ -264,7 +263,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
                 conn.exec_driver_sql("SELECT 1")
         except SQLAlchemyError:
             # Mapped to code "unavailable" by the envelope handler — a DB-down
-            # readiness probe is not an "internal server error" (finding m8).
+            # readiness probe is not an "internal server error".
             raise HTTPException(status_code=503, detail="database is unavailable") from None
         return {"status": "ok"}
 
@@ -480,7 +479,7 @@ def _install_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(EditRefused)
     async def edit_refused_handler(_: Request, exc: EditRefused) -> JSONResponse:
-        # A theory-of-change edit that cannot apply (task 054, C10).
+        # A theory-of-change edit that cannot apply.
         if exc.status == 404:
             return _error_response(404, "toc_not_found", exc.message)
         if exc.status == 422:
@@ -506,13 +505,13 @@ def _install_exception_handlers(app: FastAPI) -> None:
             # byte-identical (BOLA pin) — never pass router detail through.
             return _error_response(404, "not_found", "resource not found")
         # Router-authored 400/422 details are user-actionable ("change_mode
-        # requires a supported new_mode") — surfacing them was the point of
-        # raising with a message (review finding m2, 2026-07-21).
+        # requires a supported new_mode") — surfacing them is the point of
+        # raising with a message.
         detail = exc.detail if isinstance(exc.detail, str) and exc.detail else None
         if exc.status_code == 400:
             return _error_response(400, "malformed", detail or "malformed request")
         if exc.status_code == 403:
-            # Task 033 § 8 spends the 403 that web-api.md § Auth boundary
+            # This spends the 403 that web-api.md § Auth boundary
             # pre-reserved: the row is readable, the action is not. Distinct
             # from 404 by design — hiding a colleague's row from a colleague
             # who can already see it would be theatre.

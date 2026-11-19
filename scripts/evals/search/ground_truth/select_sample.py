@@ -73,7 +73,7 @@ from typing import Any
 from fetch_helpers import GROUND_TRUTH_DIR, REFERENCE_COLUMNS, REVIEW_COLUMNS
 
 QUOTAS = {"campbell": 30, "3ie": 30, "sr4all": 30, "yef": 10}
-# The cheap sample, chosen by hand from the hundred (owner, 2026-10-05): health and social
+# The cheap sample, chosen by hand from the hundred: health and social
 # care, schools, home energy, jobs, nutrition, civic education, violence, learning loss,
 # adolescent drug use, child sleep and obesity. With the four hand-made reviews copied in at
 # upload, the mini dataset holds fifteen items.

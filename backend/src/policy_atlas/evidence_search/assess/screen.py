@@ -48,19 +48,19 @@ ScreenStatus = Literal["relevant", "not_relevant", "failed", "excluded_retracted
 ScreenBasis = Literal["title_abstract", "title_only", "full_text"]
 
 SCREEN_RETRY_CAP = 1
-# 48 (task 057, N10d; was 12): E8 measured the stage-1 set wall 14.4 -> 4.8 s at 48
+# 48: measured the stage-1 set wall 14.4 -> 4.8 s at 48 (against 12)
 # on Bedrock with no 429s. Stage 2 stays at 4 (not measured).
 MAX_CONCURRENT_STAGE1 = 48
 MAX_CONCURRENT_STAGE2 = 4
 
-# Screening-directive criteria list cap (contract decision 2 rev 2.5, plan rev
-# 2 finding 3): a plan-visible screening criteria list is small, so this
+# Screening-directive criteria list cap:
+# a plan-visible screening criteria list is small, so this
 # mirrors — but is deliberately smaller than — the selection directive's
 # DIRECTIVE_LIST_MAX discipline (select.py/synthesis_tools.py, 200).
 CRITERIA_LIST_MAX = 50
 
-# Per-criterion length cap (task 039 bug 2): live check found the shared
-# DIRECTIVE_STRING_MAX (200) too short for real screening rules. Screening
+# Per-criterion length cap: the shared
+# DIRECTIVE_STRING_MAX (200) is too short for real screening rules. Screening
 # criteria are their own decision surface, so they get their own — larger —
 # cap rather than widening DIRECTIVE_STRING_MAX for every other directive
 # string that reuses it.
@@ -540,7 +540,7 @@ def _run_stage1_calls(
     errors: dict[tuple[int, int], Exception] = {}
     usage_totals = UsageAccumulator()
 
-    # Task 058, N2: documents screened so far (first reads only) and the
+    # Documents screened so far (first reads only) and the
     # relevant ones so far (either read). Counted on the future the pool
     # waits on, never in the serial retry below.
     progress_lock = threading.Lock()
@@ -1176,7 +1176,7 @@ def _run_stage2_reps(
     errors: dict[int, Exception] = {}
     usage_totals = UsageAccumulator()
 
-    # Task 058, N2: one count per document, on the pool's own future; the
+    # One count per document, on the pool's own future; the
     # serial retry below never publishes.
     done = 0
     lock = threading.Lock()

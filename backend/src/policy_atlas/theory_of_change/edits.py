@@ -752,11 +752,11 @@ def undo(conn: Connection, *, task_id: uuid.UUID, actor: str, event_id: uuid.UUI
                 continue
             values = _typed(table, entry["row"])
             if table is toc_link and values.get("critical") and _has_critical(conn, task_id):
-                values["critical"] = False  # at most one critical link (W10): the newer mark stays
+                values["critical"] = False  # at most one critical link: the newer mark stays
             conn.execute(table.insert().values(**values))
             if name in store._PRIMARY_KEY:
                 log.created.append({"table": name, "id": str(values[store._PRIMARY_KEY[name]])})
-    # Rows that lose the critical mark go back first: at most one link is critical (W10).
+    # Rows that lose the critical mark go back first: at most one link is critical.
     changed = [
         entry
         for key, entry in first.items()
@@ -798,7 +798,7 @@ def undo(conn: Connection, *, task_id: uuid.UUID, actor: str, event_id: uuid.UUI
         changes=[f"Undid: {', '.join(payload.get('changes') or ['an edit'])}"],
         actor=actor,
         undoes=str(event_id),
-        # Undoing a move moves boxes only (task 054, S9).
+        # Undoing a move moves boxes only.
         layout=bool(payload.get(store.LAYOUT_KEY)),
     )
     return skipped

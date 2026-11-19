@@ -8,7 +8,7 @@ from math import isfinite
 from pathlib import Path
 from typing import Literal
 
-#: Where full-text ingestion runs (task 057): ``in_process`` on the API's own
+#: Where full-text ingestion runs: ``in_process`` on the API's own
 #: threads (the default), or ``queued`` through the cloud queue and function.
 IngestMode = Literal["in_process", "queued"]
 
@@ -68,8 +68,7 @@ def load_settings() -> Settings:
     # Pure os.environ by design: the DEV entry point loads backend/.env via
     # `uv run --env-file` (backend Makefile `dev` target). Loading .env here
     # would leak a developer's live keys into every test process that builds
-    # an app (live-check finding, 2026-07-21: it flipped the CLI pin test
-    # into live mode under socket-deny).
+    # an app.
     issuer = _required("OIDC_ISSUER")
     client_id = _required("OIDC_CLIENT_ID")
     app_origin = _required("APP_ORIGIN")

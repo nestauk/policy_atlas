@@ -73,7 +73,7 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.ops.errors import OpsError
 
-#: The visibility every moved row arrives at. Owner call (j): **no operator
+#: The visibility every moved row arrives at. **No operator
 #: action can expose a row.** Enrolment and ``rows assign`` stamp the
 #: organisation *and* privatise, so the person opts each row into their
 #: organisation deliberately, and neither a re-enrolment nor an operator
@@ -84,7 +84,7 @@ _PRIVATE = "private"
 
 # --------------------------------------------------------------------------
 # Records. Each carries its own operator-facing sentence: the CLI's safety UX
-# is these strings (plan phase 9b), and keeping them beside the counts they
+# is these strings, and keeping them beside the counts they
 # describe is what stops a caller inventing a second wording for the same
 # outcome. Code words throughout ("task", "project") — they match the
 # flags the operator just typed, and the rename slice that follows 033 covers
@@ -159,12 +159,12 @@ class Enrolment(Record):
     created: bool
     tasks_moved: int
     projects_moved: int
-    #: Set only by `user create --invite manual` (owner amendment 2026-08-26).
+    #: Set only by `user create --invite manual`.
     #: Rendered ONCE in the summary for out-of-band handover; never logged —
     #: `summary()` output goes to the operator's stdout, not through structlog.
     temporary_password: str | None = None
     #: Cross-owner membership links cut because the rows moved organisation
-    #: (colleague assignment, owner ruling 2026-08-27).
+    #: (colleague assignment).
     memberships_severed: int = 0
 
     def summary(self) -> str:
@@ -230,7 +230,7 @@ class DeEnrolment(Record):
     projects_cleared: int
     admin_revoked: bool
     #: Cross-owner membership links cut because the rows left the organisation
-    #: (colleague assignment, owner ruling 2026-08-27).
+    #: (colleague assignment).
     memberships_severed: int = 0
 
     def summary(self) -> str:
@@ -813,7 +813,7 @@ def _enrol(
             f"changed in Cognito, or this is the wrong person. Run "
             f"`user resync --email {email}` first if the address changed."
         )
-    # ON CONFLICT DO UPDATE: ops enrolment clobbers deliberately (contract § 2),
+    # ON CONFLICT DO UPDATE: ops enrolment clobbers deliberately,
     # unlike `/me`'s DO NOTHING. `is_admin` is deliberately NOT in the SET list —
     # enrolment is not a place to grant or drop the support role, and leaving it
     # out is also what keeps `user enrol` off the admin-resurrection path.
@@ -1104,8 +1104,8 @@ def assign_rows(
         if not member_of:
             privatised = row.org_id != org.org_id
             moving = update(task).where(task.c.task_id == task_id)
-            # Two literal `.values()` calls rather than a built dict: rubric 24
-            # bars the blind splat on the API's patch, and the same discipline
+            # Two literal `.values()` calls rather than a built dict: the API
+            # bars the blind splat on its patch, and the same discipline
             # belongs on the operator writer of the same two columns.
             if privatised:
                 conn.execute(
@@ -1161,11 +1161,11 @@ def assign_rows(
     member_rows = task.c.task_id.in_(
         select(project_membership.c.task_id).where(project_membership.c.project_id.in_(component))
     )
-    # A cross-organisation move privatises everything it carries (owner call
-    # (j)). A same-organisation assignment moves nobody's audience, so the
+    # A cross-organisation move privatises everything it carries.
+    # A same-organisation assignment moves nobody's audience, so the
     # projects keep their visibility and each member is **recomputed** to
     # the derived value — org-visible iff any project it is in is
-    # org-visible (owner ruling 2026-08-27) — which is the i.4 self-heal for
+    # org-visible — which is the self-heal for
     # a member that ever slipped out of step.
     # No status filter on members: archived tasks follow too, for the
     # reason the API cascade documents — an archived task is still

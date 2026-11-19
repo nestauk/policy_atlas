@@ -83,7 +83,7 @@ class InvalidResponseError(ValueError):
 
 
 #: What the options-scoping baseline gate says to anything but its own two
-#: options. It names them rather than describing the refusal (X3).
+#: options. It names them rather than describing the refusal.
 _GATE_OPTIONS_ONLY = (
     "this check-in offers Confirm plan and build longlist, or Change the plan"
 )
@@ -222,7 +222,7 @@ def answer_check_in(
         # the plan" ends it and leaves the plan ``approved`` so it can be
         # edited. The generic ``abort`` is neither — it abandons the plan —
         # and reaching it here would hand the user a plan they were invited to
-        # change and cannot (X3). So at this one pause the universal floor is
+        # change and cannot. So at this one pause the universal floor is
         # closed and only the offered ids are answers.
         at_baseline_gate = _is_baseline_gate(pause.payload)
         if kind == "abort":
@@ -835,7 +835,7 @@ def _persist_intent(
     kind, value = intent
     chosen = {"option_id": option_id} if option_id is not None else None
     if kind == "abort":
-        # Task 058 review: the abort chosen from a card option names it too.
+        # The abort chosen from a card option names it too.
         return _persist_abort(
             conn, task_id=task_id, pause=pause, state=state, actor=actor, extra=chosen
         )
@@ -1190,8 +1190,8 @@ def _persist_fanout(
             action=action,
             user_text=user_text,
         )
-        # The parked walk's intent record picks its chain (task 045, S1;
-        # task 046, AM4: its context too); _with_plan holds no connection,
+        # The parked walk's intent record picks its chain (and its
+        # context too); _with_plan holds no connection,
         # so both are read here.
         purpose, scope_context = intent_record(
             conn, task_id=task_id, walk_id=pause.capability_run_id
@@ -1220,7 +1220,7 @@ def _persist_fanout(
             )
             # current_state, not state: after a preceding adjustment fragment the
             # decision must record the post-amendment plan identity or SSE derives
-            # the wrong plan.updated version (review finding m1, 2026-07-21).
+            # the wrong plan.updated version.
             decision_id = _append_decision(
                 conn,
                 task_id=task_id,
@@ -1391,7 +1391,7 @@ def _theme_renames(params: Any, pause_payload: dict[str, Any]) -> list[tuple[str
         if not isinstance(theme_id, str) or not isinstance(name, str) or not name.strip():
             raise InvalidResponseError("each rename requires theme_id and a non-empty name")
         # The same bounds every other user-supplied directive text carries
-        # (review 028, security lane): the name persists into the
+        # (security lane): the name persists into the
         # characterisation payload and renders task-wide.
         if len(name.strip()) > 200 or has_control_character(name):
             raise InvalidResponseError("theme names must be bounded plain text")

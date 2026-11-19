@@ -53,7 +53,7 @@ EVIDENCE_SEARCH = "evidence_search"
 #: The options-scoping capability key.
 OPTIONS_SCOPING = "options_scoping"
 
-#: The theory-of-change capability key (task 054).
+#: The theory-of-change capability key.
 THEORY_OF_CHANGE = "theory_of_change"
 
 #: Any capability's plan model. The runner and the continuation reducer are
@@ -137,12 +137,11 @@ class TaskAgentProfile:
         Callable[[Engine, uuid.UUID, Any, Any], tuple[AnyPlan, str | None]] | None
     ) = None
     #: ``(engine, task_id, turn, user_id)`` → a note added to the reply, after any
-    #: turn: the theory of change stores proposed edits and clarifications here
-    #: (task 054, C46, C49).
+    #: turn: the theory of change stores proposed edits and clarifications here.
     after_turn: Callable[[Engine, uuid.UUID, Any, str], str | None] | None = None
     #: ``(reply, note)`` → the reply with ``after_approve``'s note; default: the
     #: note after the reply. The theory of change drops "start it" sentences
-    #: when the note warns the plan may not work (task 054, red team).
+    #: when the note warns the plan may not work (red team).
     merge_note: Callable[[str, str], str] | None = None
 
 
@@ -195,7 +194,7 @@ def _toc_task_agent() -> TaskAgentProfile:
     return TOC_TASK_AGENT
 
 
-#: The registry: Evidence search, options scoping (task 044), theory of change (task 054).
+#: The registry: Evidence search, options scoping, theory of change.
 CAPABILITIES: dict[str, CapabilitySpec] = {
     EVIDENCE_SEARCH: CapabilitySpec(
         plan_model=TaskPlan,
@@ -207,16 +206,16 @@ CAPABILITIES: dict[str, CapabilitySpec] = {
         plan_model=ScopingPlan,
         compose=compose_scoping,
         # The gate is registered here as *data* — the point exists on the
-        # scoping chain and nowhere else (A2), so an Evidence search walk can
+        # scoping chain and nowhere else, so an Evidence search walk can
         # never resolve it. Its options, card, unattended recording and
-        # end-walk disposition are phase 5.2.
+        # end-walk disposition live in the runner.
         lattice={BASELINE_CONFIRM: PausePoint("after_component", "synthesise")},
         load_task_agent=_options_scoping_task_agent,
     ),
     THEORY_OF_CHANGE: CapabilitySpec(
         plan_model=TocPlan,
         compose=compose_toc,
-        # Empty: a theory-of-change walk never pauses (C12).
+        # Empty: a theory-of-change walk never pauses.
         lattice={},
         load_task_agent=_toc_task_agent,
     ),

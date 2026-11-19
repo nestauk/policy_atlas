@@ -81,18 +81,18 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger()
 
-#: The stage key both barriers emit under (Phase 4.4 maps it to a frame).
+#: The stage key both barriers emit under (``api.stage_vocabulary`` maps it to a frame).
 OPTION_SEARCHES_STAGE = "option_searches"
 
-#: The stage a theory-of-change check walk's item searches run under (task 054, S3).
+#: The stage a theory-of-change check walk's item searches run under (S3).
 TOC_ITEM_SEARCHES_STAGE = "toc_item_searches"
 
 #: The stage of the second fan-out: item searches for the kept links discovery
-#: added, which had no search of their own (task 054, C32).
+#: added, which had no search of their own.
 TOC_NEW_LINK_SEARCHES_STAGE = "toc_new_link_searches"
 
 #: The stage of the third fan-out: one reformulated search per link the judge
-#: left with too little evidence (task 054, C44).
+#: left with too little evidence.
 TOC_RETRY_SEARCHES_STAGE = "toc_retry_searches"
 
 #: How long the longlist walk waits for its option searches, counted from the
@@ -121,7 +121,7 @@ _FINISHED = frozenset({"succeeded", "degraded"})
 # join abandoned before it opened its row never starts.
 _futures: dict[uuid.UUID, Future[None]] = {}
 _abandoned: set[uuid.UUID] = set()
-# The fan-out's progress polls, one per longlist walk (task 058, round 12):
+# The fan-out's progress polls, one per longlist walk:
 # the thread and the event that stops it.
 _progress_polls: dict[uuid.UUID, tuple[threading.Thread, threading.Event]] = {}
 _handles_lock = threading.Lock()
@@ -183,7 +183,7 @@ def run_option_search(
     """
     scope_context: dict[str, Any] = {"capability": OPTIONS_SCOPING, "option_id": str(option_id)}
     if parent_capability_run_id is not None:
-        # A longlist walk's option search only acquires (task 046, AM4): the
+        # A longlist walk's option search only acquires: the
         # composer reads this key; the parent's one screen judges the pool.
         scope_context[ACQUIRE_ONLY_KEY] = True
     child_id = run_child_search(
@@ -652,7 +652,7 @@ def dispatch_option_searches(
     with engine.connect() as conn:
         already = dispatched_children(conn, task_id=task_id, parent_id=parent_id)
         if already is not None:
-            # Task 058 review: a walk resumed past its join republished the
+            # A walk resumed past its join republished the
             # finished stage's count, which the hub then kept for ten minutes.
             # Once the stage's completion is written there is nothing to show.
             joined = conn.execute(
@@ -905,7 +905,7 @@ def join_option_searches(
     pending: list[uuid.UUID] = list(child_ids)
     sources = 0
     # The progress poll started at the fan-out ends here: from now on this
-    # loop publishes the same line (task 058, round 12).
+    # loop publishes the same line.
     _stop_progress_poll(parent_id)
     while True:
         statuses, sources = _publish_progress(
@@ -934,7 +934,7 @@ def join_option_searches(
             payload={
                 "component": stage,
                 # The walk this stage belongs to: the event has no component
-                # run to name it (task 058, round 11).
+                # run to name it.
                 "capability_run_id": str(parent_id),
                 "total": outcome.total,
                 "finished": outcome.finished,

@@ -70,8 +70,8 @@ log = structlog.get_logger()
 #: Engine policy for the theme clustering.
 THEME_ASSIGNMENT_BATCH_SIZE = 40
 
-#: The theme ceiling ``clamp(ceil(n / 3), 3, 12)`` over n options (lead call:
-#: about three options a theme, characterise's 3..12 theme bounds).
+#: The theme ceiling ``clamp(ceil(n / 3), 3, 12)`` over n options
+#: (about three options a theme, characterise's 3..12 theme bounds).
 THEME_CEILING_DIVISOR, THEME_CEILING_MIN, THEME_CEILING_MAX = 3, 3, 12
 
 # Fixed namespace for content-keyed theme identity — never rotate:

@@ -308,7 +308,7 @@ def after_cutoff(doc: dict[str, Any], cutoff: str | None) -> bool:
     return bool(cutoff) and (doc.get("published_on") or "")[:10] > cutoff
 
 
-CACHE_VERSION = "v2"  # bumped 2026-10-08: exclusions and date fences applied at build
+CACHE_VERSION = "v2"  # v2: exclusions and date fences applied at build
 
 
 def cached_build(key: str, **kwargs: Any) -> dict[str, Any]:

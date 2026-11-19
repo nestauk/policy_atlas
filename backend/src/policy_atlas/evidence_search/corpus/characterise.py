@@ -55,11 +55,11 @@ log = structlog.get_logger()
 
 _UNKNOWN_EVIDENCE_TYPE = "Unknown / Insufficient information"
 
-# Fixed namespace for content-keyed theme identity (task 028 pin 7) — never
+# Fixed namespace for content-keyed theme identity — never
 # rotate: theme_id = uuid5(ns, f"{task_id}:{theme_name}").
 _THEME_ID_NAMESPACE = uuid.UUID("6f1cb1e2-9a4e-4b0d-8c6f-028028028028")
 
-# D9/B5 (024 steering surface): characterise's first directive parser.
+# Characterise's first directive parser.
 # ``themes``: fewer|standard|more scales the derived theme-count bounds;
 # "standard"/absent is byte-identical to as-built (guard-tested).
 # ``guidance``: the shared Family B channel shape, into the theme-DISCOVERY
@@ -177,7 +177,7 @@ class ScreenedSource:
     primary_evidence_type: str | None
     quality_score: int | None
     rubric_version: str | None
-    #: True for an Unrated appraisal: a row with no score (task 056, D7).
+    #: True for an Unrated appraisal: a row with no score.
     unrated: bool = False
 
 
@@ -295,8 +295,8 @@ def _base_counts(conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID) -
     )
     screened_in = status_counts.get("relevant", 0)
     not_relevant = status_counts.get("not_relevant", 0)
-    # excluded_retracted (task 019): a distinct, visible effective status —
-    # never folded into not_relevant (don't-flatten-status, owner decision).
+    # excluded_retracted: a distinct, visible effective status —
+    # never folded into not_relevant (don't-flatten-status).
     excluded_retracted = status_counts.get("excluded_retracted", 0)
     return {
         "screened_in": screened_in,
@@ -325,7 +325,7 @@ def screened_sources(
     Returns:
         Screened-in sources enriched with classification and appraisal fields.
     """
-    # select is stage-3 of the screening cascade (contract rev 1.10): the
+    # select is stage-3 of the screening cascade: the
     # candidate set, status and confidence all come from the one effective row
     # per (scope, tss) — never a raw source_screening_result join, which would
     # leak in demoted docs and double-read confirmed ones.
@@ -490,7 +490,7 @@ def _metadata_value(source: ScreenedSource, key: str) -> Any:
 
 def _quality_value(source: ScreenedSource) -> str:
     if source.unrated:
-        # Its own bucket, never folded into "unappraised" (task 056, D7).
+        # Its own bucket, never folded into "unappraised".
         return f"{UNRATED_LABEL} ({source.rubric_version})"
     if source.quality_score is None:
         return "unappraised"
@@ -704,7 +704,7 @@ def _grouping_provenance(
         "discovery_rejections": discovery_rejections,
         "repair_calls_used": repair_calls_used,
         "backend_mode": backend.mode,
-        # D9/B5 (024 steering surface): executed themes bound directive and
+        # Executed themes bound directive and
         # guidance, echoed verbatim — "standard"/absent are byte-identical to
         # as-built.
         "themes": themes,
@@ -775,7 +775,7 @@ def _summary(
     unclustered_ids = theme_payload["unclustered_ids"]
     return {
         "coverage": coverage,
-        # Task 058, N2: the integer the done row shows.
+        # The integer the done row shows.
         "theme_count": len(theme_payload["themes"]),
         "themes": [
             {

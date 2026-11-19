@@ -167,38 +167,37 @@ from policy_atlas.runtime.scoping_plan import PROFILE_LINE_KEYS
 
 log = structlog.get_logger()
 
-#: Typing batches in flight at once (task 046, S12).
+#: Typing batches in flight at once.
 TYPING_MAX_CONCURRENT = 4
 #: The ten profile calls and the two folding calls in flight at once: all
-#: of them (R37; task 046, amendment 3, S21).
+#: of them.
 OPTION_PROFILE_MAX_CONCURRENT = 12
-#: Member records each option carries into the profile calls (S16).
+#: Member records each option carries into the profile calls.
 OPTION_PROFILE_RECORDS_MAX = 5
-#: Design features each of those records carries (S16).
+#: Design features each of those records carries.
 OPTION_PROFILE_RECORD_FEATURES_MAX = 3
-#: The record's intervention text, cut to this many characters (S16).
+#: The record's intervention text, cut to this many characters.
 OPTION_PROFILE_INTERVENTION_MAX = 100
-#: The order the records are taken in (S16); a role not listed sorts last.
+#: The order the records are taken in; a role not listed sorts last.
 OPTION_PROFILE_ROLE_ORDER: tuple[str, ...] = ("evaluated", "described", "recommended", "mentioned")
 #: The membership kind whose unit is an intervention profile record.
 _PROFILE_UNIT_KIND = "interventions"
 #: The name of the ambition call and of the setting call, as a failure names them.
 _AMBITION_CALL = "ambition"
 _SETTING_CALL = "setting"
-#: The kinds a folding answer should hold at most (the prompt's ceiling, A6);
+#: The kinds a folding answer should hold at most (the prompt's ceiling);
 #: more is kept and logged, never invalid.
 FOLDING_KINDS_MAX = 12
 #: A folding answer is a catch-all when one kind holds more than this share
 #: of the list's words on a list of at least :data:`FOLDING_CATCH_ALL_MIN_WORDS`
-#: words (task 046, amendment 4, round 9 of the folding loop; the fault
-#: amendment 3 recorded): the call is tried once more, and the retry's answer
+#: words: the call is tried once more, and the retry's answer
 #: is kept either way (a catch-all is a quality fault, never a failed step).
 FOLDING_CATCH_ALL_SHARE = 0.5
 FOLDING_CATCH_ALL_MIN_WORDS = 20
-#: The coverage keys the folding maps recompute and merge (S21, S24).
+#: The coverage keys the folding maps recompute and merge.
 FOLDED_COVERAGE_KEYS: tuple[str, ...] = ("outcome_counts",)
-#: The coverage key the place sentences are merged under (task 046, amendment
-#: 4, R80; S31): ``[{place, sentence, generated, where}]`` in the card's order.
+#: The coverage key the place sentences are merged under:
+#: ``[{place, sentence, generated, where}]`` in the card's order.
 #: Written by the second wave only; ``membership.coverage`` never computes it,
 #: so constrain's merge recompute carries it through.
 PLACE_SENTENCES_KEY = "place_sentences"
@@ -222,7 +221,7 @@ class _ProfiledOption:
     design_features: list[str]
     #: The option carries a typing already (its columns hold one).
     typed_before: bool
-    #: The design version the profile is keyed under (S17).
+    #: The design version the profile is keyed under.
     design_version: int
 
 
@@ -276,7 +275,7 @@ def _validated_typing(wire: Any) -> _Typing | None:
         if key in LEVER_TYPE_KEYS and key != primary and key not in secondary:
             secondary.append(key)
     runner_up = wire.runner_up_lever_type if wire.runner_up_lever_type in LEVER_TYPE_KEYS else None
-    # R29: the reader's sentence for the lever type; a blank one is not
+    # The reader's sentence for the lever type; a blank one is not
     # shown, and never makes the typing invalid.
     lever_reason = (wire.lever_reason or "").strip() or None
     return _Typing(
@@ -308,7 +307,7 @@ def _type_options(
     answered: set[uuid.UUID] = set()
     failed_batches = 0
 
-    # Task 058, N2: one count per typing batch, on the pool's own future.
+    # One count per typing batch, on the pool's own future.
     typing_done = 0
     typing_lock = threading.Lock()
     typing_total = len(batches)
@@ -474,7 +473,7 @@ class _Setting:
 
     main: str | None
     second: str | None
-    #: Whom the option acts on directly (task 058, round 12, owner): the
+    #: Whom the option acts on directly: the
     #: model's words, lower case, at most :data:`ACTS_ON_MAX`.
     acts_on: tuple[str, ...] = ()
 
@@ -870,9 +869,9 @@ def _checked_folds(
             kinds=len(response.kinds),
             max_kinds=FOLDING_KINDS_MAX,
         )
-    # A kind joined by slashes is cut at the first slash (task 046, amendment
-    # 4, round 7 of the folding loop: the mini model answers a cap with
-    # "obesity / overweight / BMI"); the first member names the kind.
+    # A kind joined by slashes is cut at the first slash (the mini model can
+    # answer a cap with "obesity / overweight / BMI"); the first member names
+    # the kind.
     kinds = [" ".join(kind.split(" / ")[0].split(" /")[0].split()) for kind in response.kinds]
     if facet == "measures":
         for position, returned in enumerate(kinds):
@@ -1002,7 +1001,7 @@ def option_profile_scope(
     payload, short_ids = _profile_payload(options, records)
     impact_payload = _potential_impact_payload(payload, short_ids, result_row.coverage)
     impact_plan = {**plan_data, "where": plan.where.text}
-    # The folding calls read the distinct words of every member (S21).
+    # The folding calls read the distinct words of every member.
     membership = read_membership(
         conn,
         task_id=task_id,
@@ -1053,7 +1052,7 @@ def option_profile_scope(
             )
             for name, call, check, final_check in fold_calls
         ]
-        # Typing (S12): batches in parallel; a kept typing carries forward.
+        # Typing: batches in parallel; a kept typing carries forward.
         typings, kept_typings, typing_stats = _type_options(
             backend, options, usage, plan=plan_data, baseline=baseline
         )
@@ -1080,7 +1079,7 @@ def option_profile_scope(
     }
     catch_all = {facet: bool(value.get("catch_all")) for facet, value in by_facet.items()}
 
-    # The second wave (S31): the place sentences, once the folds are known
+    # The second wave: the place sentences, once the folds are known
     # and before any write. It never fails the step.
     resolved_where = resolve_country(plan.where.text)
     where_country = resolved_where[1] if resolved_where is not None else None
@@ -1124,7 +1123,7 @@ def option_profile_scope(
             "updated_at": now,
         }
         typing = typings.get(o.option_id)
-        if typing is not None:  # else kept: the lever columns stay as they are (S12)
+        if typing is not None:  # else kept: the lever columns stay as they are
             values.update(
                 primary_lever_type=typing.primary,
                 secondary_lever_types=typing.secondary,
@@ -1393,7 +1392,7 @@ def _place_sentence_wave(
     def _place_ids(o: _ProfiledOption) -> frozenset[str]:
         return frozenset(group.place_id for group in groups[str(o.option_id)])
 
-    # Task 058, N2: one count per option with documents, on the pool's own
+    # One count per option with documents, on the pool's own
     # future. Retries happen inside ``call_with_retry`` and never move it.
     places_done = 0
     places_lock = threading.Lock()
@@ -1456,8 +1455,8 @@ def _place_sentence_wave(
             sentence = (answered or {}).get(group.place_id, "").strip()
             generated = False
             # Why the template stands, kept with the entry so that a card's
-            # sentence can be diagnosed without the log (review of task 046,
-            # 2026-10-12): "call", "missing", "length" or the trace rule.
+            # sentence can be diagnosed without the log: "call", "missing",
+            # "length" or the trace rule.
             reason: str | None = (
                 "call" if outcome is not None and outcome.value is None else "missing"
             )

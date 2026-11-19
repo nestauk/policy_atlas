@@ -55,7 +55,7 @@ _NO_RUN_ID_INVARIANT = (
     "emitted before the first component run exists (event_log.run_id is NOT NULL)"
 )
 
-# --- Stored-actor compatibility (task 038, contract A5) --------------------
+# --- Stored-actor compatibility --------------------
 # `event_log` is append-only: decisions written before the slice still say
 # `orchestrator` where the persona is now named `agent`. Nothing rewrites the
 # stored payloads, so every projection of a stored `decided_by`/`authored_by`

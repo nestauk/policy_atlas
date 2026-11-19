@@ -618,7 +618,7 @@ def _doc_metadata(
         result[str(row.task_source_snapshot_id)] = {
             "title": title,
             "evidence_type": row.primary_evidence_type,
-            # "4", or "Unrated" for an appraisal with no score (task 056).
+            # "4", or "Unrated" for an appraisal with no score.
             "quality_tier": appraisal_tier(row.quality_score, unrated=bool(row.unrated)),
             "full_text_status": row.full_text_status,
         }
@@ -636,8 +636,7 @@ def _full_text_status_counts(
     if not tss_ids:
         return {}
     ids = [uuid.UUID(tss_id) for tss_id in tss_ids]
-    # task 057 review (Codex 9, deviation 10): not_ready / send_failed /
-    # worker_error rows are not access failures.
+    # not_ready / send_failed / worker_error rows are not access failures.
     status = case(
         (
             task_source_snapshot.c.full_text_error.in_(sorted(NOT_READ_YET_REASONS)),

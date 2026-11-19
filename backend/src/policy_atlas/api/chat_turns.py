@@ -29,9 +29,7 @@ log = structlog.get_logger()
 
 _PENDING_TTL = timedelta(minutes=10)
 #: How many pending chat turns one *acting user* may hold at once, across
-#: every conversation they created. Task 033 re-keyed the subject of this cap
-#: from the task owner to the acting user; the bound and the scope (per
-#: user, global across their tasks) are unchanged.
+#: every conversation they created.
 _USER_PENDING_CAP = 2
 _TURN_LOCKS_MAX = 256
 _turn_locks_guard = threading.Lock()
@@ -309,8 +307,8 @@ def _phase_one_turn(
     ).scalar_one_or_none()
     if pending is not None:
         raise ApiConflict("chat_turn_in_progress", "a chat turn is already running")
-    # Re-keyed from the task owner to the acting user (task 033, contract
-    # § 4), in the same edit as the sweeper above — re-keying either alone is
+    # Re-keyed from the task owner to the acting user,
+    # in the same edit as the sweeper above — re-keying either alone is
     # the defect the contract names. Scope is deliberately unchanged: still
     # one bound over *all* of the counted subject's pending turns, across
     # every task, not a per-task or per-conversation allowance.
@@ -512,7 +510,7 @@ def run_chat_turn(
             )
             # The generation half — frame, scoped readers, tool loop, citation
             # floor and citation-source resolution — is the shared answer core
-            # (task 044): a Task Agent turn held at a scoping walk's baseline
+            # A Task Agent turn held at a scoping walk's baseline
             # gate answers the same way, over that walk's pinned scope. What
             # stays here is everything durable: the reservation, the
             # single-flight locks, the eligibility fences, the streamed
@@ -563,7 +561,7 @@ def run_chat_turn(
                         # in-process check but before this commit. Its partial
                         # is already persisted (the cancel path wrote it) — the
                         # terminal state stays cancelled, never overwritten to
-                        # completed (security review, 2026-08-11).
+                        # completed (security review).
                         return _row_result(row, replayed=False)
                     raise RuntimeError("chat turn was not open at terminal commit")
                 row = (
@@ -581,7 +579,7 @@ def run_chat_turn(
                 "chat_turn_failed", task_id=str(task_id), conversation_id=str(conversation_id)
             )
             with engine.begin() as conn:
-                # Narrowed to "pending" only (security review, 2026-08-11): a
+                # Narrowed to "pending" only (security review): a
                 # late failure must not overwrite a durable cancel that landed
                 # first; an already-failed row leaves this a no-op.
                 conn.execute(

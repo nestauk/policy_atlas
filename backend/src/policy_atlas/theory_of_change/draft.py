@@ -127,7 +127,7 @@ def walk_toc_plan(
     )
 
 
-#: The event a clarification to the plan is stored as (C49).
+#: The event a clarification to the plan is stored as.
 TOC_CLARIFICATION_EVENT = "toc.clarification"
 
 
@@ -213,7 +213,7 @@ def draft_problems(draft: DraftResponse, *, as_drawn: bool = False) -> list[str]
     ``as_drawn``: the user's diagram kept as given, checked by the lighter rules.
     """
     problems = check_graph(draft_graph(draft), as_drawn=as_drawn)
-    # The user's own steps keep their shape (owner, 2026-11-04): a step they drew
+    # The user's own steps keep their shape: a step they drew
     # from an input straight to an outcome is theirs to keep, not a reason to redraft.
     theirs = {link.key for link in draft.links if link.from_user_theory}
     problems = [
@@ -476,7 +476,7 @@ def suggest_the_rest(
     def op(**values: object) -> EditOpWire:
         return EditOpWire.of(**{"reason": COMPLETES, **values})
 
-    # One route at a time (owner, 2026-11-04): each route's new boxes, its new
+    # One route at a time: each route's new boxes, its new
     # links, then the pathway, tagged r1, r2 ... A box or link two routes share
     # goes with the first; accepting the second brings it along.
     box_of = {box.key: box for box in draft.boxes}
@@ -581,7 +581,7 @@ def toc_draft_scope(
             if part
         )
     # Drawn live only when the draft becomes the canvas as written: the user's own
-    # boxes or diagram keep their place, and the draft only fills them in (S12).
+    # boxes or diagram keep their place, and the draft only fills them in.
     sketch = SketchFrames() if not sketched and not as_drawn(plan) else None
 
     def ask(problems: list[str] | None = None) -> UsageResult[DraftResponse]:
@@ -611,8 +611,7 @@ def toc_draft_scope(
                 sketch.reset()
             raise DraftFailure("the draft failed its structure checks: " + "; ".join(problems))
     # An uploaded diagram: the canvas starts with the user's own boxes and arrows;
-    # what the draft added to complete the theory waits as one suggestion
-    # (owner, 2026-11-04).
+    # what the draft added to complete the theory waits as one suggestion.
     if sketched_links:
         kept, ids = adopt_sketch(
             conn,

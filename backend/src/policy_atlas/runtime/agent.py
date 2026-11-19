@@ -118,7 +118,7 @@ MAX_TASK_AGENT_TURNS = 10
 # intent-sized first-turn cap would land on a mid-conversation turn.
 assert (MAX_TASK_AGENT_TURNS - 1) * 2 + 1 <= PLANNER_HISTORY_TURNS_MAX
 
-# Exit codes. No token/cost surface — time only (contract decision 11).
+# Exit codes. No token/cost surface — time only.
 EXIT_SUCCESS = 0
 EXIT_RUN_FAILED = 2
 EXIT_ABORTED = 3
@@ -134,8 +134,8 @@ _EXIT_BY_STATUS: dict[str, int] = {
 
 _STEERING_MODES = frozenset({"frequent", "moderate", "minimal", "unattended"})
 
-# The delegation-posture labels (contract § Modes as delegation postures; annex
-# § the target-shape mode table). The mode is a delegation posture — "when
+# The delegation-posture labels.
+# The mode is a delegation posture — "when
 # should I come back to you?" — and moves who decides, never what is decided or
 # recorded. Plan values are unchanged; these are presentation only.
 _MODE_ORDER: tuple[str, ...] = ("frequent", "moderate", "minimal", "unattended")
@@ -149,7 +149,7 @@ _DEFAULT_MODE = "moderate"
 
 # Canonical-option ids that the always-present console frame already covers
 # (Continue / Change steering mode / Abort). They are dropped from the numbered
-# canonical block so the generic non-lattice floor (finding M6) and any
+# canonical block so the generic non-lattice floor and any
 # point-local continue/abort are not rendered twice. Filtering is display-only —
 # the durable pause payload carries the full option list unchanged.
 _FRAME_OPTION_IDS: frozenset[str] = frozenset({"continue", "change_mode", "abort"})
@@ -442,7 +442,7 @@ class CliIO:
                 continue
             if not raw:
                 continue
-            # Free prose → the router (contract decision 3). The runner compiles
+            # Free prose → the router. The runner compiles
             # it, re-validates author-blind, confirms, and applies — or degrades
             # to this menu with an honest note appended to the render.
             return FreeText(raw)
@@ -680,9 +680,9 @@ def build_plan(
                     rule["delta"] = raw
     # Constant capability, not a lookup: the input is a ``PlanDraftWire``, the
     # Evidence search Task Agent's own draft shape, so this function is
-    # Evidence search by its argument type. The scoping draft gets its own
-    # builder in phase 3. Routed through the registry all the same, so the
-    # single validation seam holds (C9).
+    # Evidence search by its argument type. The scoping draft has its own
+    # builder. Routed through the registry all the same, so the
+    # single validation seam holds.
     return expect_task_plan(validate_plan(EVIDENCE_SEARCH, data))
 
 
@@ -854,11 +854,11 @@ def live_task_agent_and_backends(
         ),
         document_fetcher=fetcher,
         langfuse_client=langfuse_client,
-        # The options-scoping suggest step's judgment call (task 045, S10).
+        # The options-scoping suggest step's judgment call.
         suggest=OpenAIAgentBackend(langfuse_client=langfuse_client),
-        # The options-scoping longlist step's calls (task 045, S8).
+        # The options-scoping longlist step's calls.
         longlist=OpenAILonglistBackend(langfuse_client=langfuse_client),
-        # Every theory-of-change step's calls (task 054).
+        # Every theory-of-change step's calls.
         toc=OpenAITocBackend(langfuse_client=langfuse_client),
     )
     task_agent = OpenAITaskAgentBackend(langfuse_client=langfuse_client)
@@ -980,7 +980,7 @@ def persist_approved_plan(
     if isinstance(plan, ScopingPlan):
         scope_fields = _scoping_scope_fields(plan)
     elif isinstance(plan, TocPlan):
-        # A theory of change starts with its draft walk (task 054, S3).
+        # A theory of change starts with its draft walk (S3).
         scope_fields = {
             "intent": plan.question,
             "context": {
@@ -1186,7 +1186,7 @@ def main(
         default_agent = StubAgentBackend()
     task_agent = task_agent if task_agent is not None else default_task_agent
     if backends is None:
-        # The full-text ingest queue for POLICY_ATLAS_INGEST_MODE (task 057);
+        # The full-text ingest queue for POLICY_ATLAS_INGEST_MODE;
         # a caller's own bundle without one gets the in-process queue from run_plan.
         ingest_mode = ingest_mode_from_env()
         backends = with_ingest_queue(

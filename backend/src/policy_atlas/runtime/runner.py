@@ -193,15 +193,15 @@ LLM_BEARING_COMPONENTS = frozenset(
         "extract_interventions",
         "group",
         "synthesise",
-        # Task 045: suggest makes one judgment-model call; inherit makes none.
+        # Suggest makes one judgment-model call; inherit makes none.
         "suggest",
         "longlist",
         "constrain",
-        # Task 046: theme makes the discovery and assignment calls over options.
+        # Theme makes the discovery and assignment calls over options.
         "theme",
-        # Task 046 (R37): option_profile makes the lever-typing calls.
+        # option_profile makes the lever-typing calls.
         "option_profile",
-        # Task 054: every theory-of-change step makes model calls.
+        # Every theory-of-change step makes model calls.
         "toc_draft",
         "toc_select",
         "toc_search_new",
@@ -212,21 +212,21 @@ LLM_BEARING_COMPONENTS = frozenset(
         "toc_choose",
         "toc_summarise",
         "toc_report",
-        # Task 055: shortlist makes the one proposal call (and its re-ask).
+        # Shortlist makes the one proposal call (and its re-ask).
         "shortlist",
     }
 )
 SPINE_COMPONENTS = frozenset(SPINE)
 
 #: A completed component's summary key asking the runner to end the walk
-#: ``degraded`` (task 045): the step's work stands, but part of it could not
-#: be done — ``inherit`` with a link it could not read (owner: "inherit
-#: non-spine": the walk continues without that link's documents, the link
+#: ``degraded``: the step's work stands, but part of it could not
+#: be done — ``inherit`` with a link it could not read (the walk
+#: continues without that link's documents, the link
 #: named). No Evidence search component writes it.
 DEGRADES_WALK_KEY = "degrades_walk"
 
 #: The per-step directive keys ``leg_directive`` writes the resolver's skip
-#: list under (task 045, S6), by chain component.
+#: list under, by chain component.
 _SKIP_DIRECTIVE_KEYS: dict[str, str] = {"classify": "classify", "appraise": "appraisal"}
 DISCRETIONARY_REQUIREMENTS = {
     "select": "characterise",
@@ -257,12 +257,11 @@ class _ReplacementRerun:
     reference_rule: str | None
 
 
-# Contract decision 7: the three reference-moving replacement re-runs. Old result
+# The three reference-moving replacement re-runs. Old result
 # rows persist immutably; the walk's reference moves — the new run id replaces the
-# old in ``successful_runs`` so every downstream component references it. Only the
-# select (deepening-selection) steer point ENTERS this from a wired pause today;
-# P2 (re-characterise) and P4 (re-group) steer points land in Phase 4. The
-# machinery is component-generic so those can call it without change.
+# old in ``successful_runs`` so every downstream component references it. The
+# select (deepening-selection), P2 (re-characterise) and P4 (re-group) steer
+# points enter this; the machinery is component-generic.
 REPLACEMENT_RERUNS: dict[str, _ReplacementRerun] = {
     "select": _ReplacementRerun(
         context_key="selection",
@@ -284,7 +283,7 @@ REPLACEMENT_RERUNS: dict[str, _ReplacementRerun] = {
     ),
 }
 
-# Run-scoped replacement components (Task 15b): re-running any of these
+# Run-scoped replacement components: re-running any of these
 # ADDITIVELY (a segment re-walk) is semantically wrong — their outputs are
 # referenced downstream by one run id. A before_component segment re-entry is
 # therefore only offered when none of these has completed (P2 qualifies — only
@@ -520,13 +519,13 @@ class _SteeringState:
     plan_row_id: uuid.UUID | None
     chain: ComposedChain
     pause_points: set[PausePoint]
-    # Pending commit-layer overlays (task 024, 15c): per not-yet-run component,
+    # Pending commit-layer overlays (15c): per not-yet-run component,
     # a directive delta that validates but has no plan-field mapping (appraise
     # rubric, characterise themes/guidance, synthesise sections/boosts). Merged
     # over the component's composed directive when it executes so the run
     # actually consumes it; carried forward across plan-version transitions.
     pending_overlays: dict[str, dict[str, Any]] = field(default_factory=dict)
-    # The walk's capability (task 044). Carried on the state because the
+    # The walk's capability. Carried on the state because the
     # boundary code needs the task's LATTICE, not just its chain: without it
     # every ``lattice_name_for``/``lattice_policy`` call in the loop falls back
     # to the Evidence search table and a scoping walk never reaches its gate.
@@ -534,7 +533,7 @@ class _SteeringState:
     # ``_open_capability_run``, the resumed state, or the state being amended);
     # the default keeps the Evidence search test constructions unchanged.
     capability: str = EVIDENCE_SEARCH
-    # The walk to open after this one ends (task 045, A2), set by the
+    # The walk to open after this one ends, set by the
     # unattended baseline gate when it records the standing default and read
     # once, by the final ``_finish_run``. Never set on an Evidence search walk.
     follow_on: str | None = None
@@ -566,7 +565,7 @@ class _PauseApplied:
     changed: bool = False
     # A triggered replacement re-run: ``{"component": str, "directive": dict}``.
     rerun: dict[str, Any] | None = None
-    # A triggered additive segment re-entry (contract decision 7a):
+    # A triggered additive segment re-entry:
     # ``{"segment_start": str, "boundary_component": str, "directive_deltas":
     # dict}``.
     segment_reentry: dict[str, Any] | None = None
@@ -954,8 +953,8 @@ def _run_plan_impl(
             parent_capability_run_id=parent_capability_run_id,
         )
         # An option search its parent abandoned before this row existed ends
-        # here, ``interrupted``, instead of running a walk nobody reads (task
-        # 045, S2). The outcome is for the pool worker, which discards it.
+        # here, ``interrupted``, instead of running a walk nobody reads.
+        # The outcome is for the pool worker, which discards it.
         if parent_capability_run_id is not None and option_search.end_if_abandoned(
             engine, task_id=task_id, child_id=capability_run_id
         ):
@@ -965,10 +964,9 @@ def _run_plan_impl(
                 flagged_events=[],
                 capability_run_id=capability_run_id,
             )
-        # The intent record's purpose picks the chain (task 045): a scoping
+        # The intent record's purpose picks the chain: a scoping
         # walk under a longlist or targeted record composes that chain; the
-        # record's context marks a longlist walk's option search acquire-only
-        # (task 046, AM4).
+        # record's context marks a longlist walk's option search acquire-only.
         initial_chain = compose_plan(
             capability, plan, purpose=purpose, context=scope_context
         )
@@ -1022,19 +1020,19 @@ def _run_plan_impl(
             purpose = purpose_of_scope(
                 conn, task_id=task_id, evidence_scope_id=evidence_scope_id
             )
-    # The option searches' barriers (task 045, S2; task 046, S2): a longlist
+    # The option searches' barriers: a longlist
     # walk dispatches its option searches after ``suggest`` and joins them
     # before ``screen_abstract``. ``None`` until the fan-out has run (or been found to have
     # run, on a resumed walk).
     option_search_children: list[uuid.UUID] | None = None
     option_searches_joined = False
-    # A theory-of-change check walk's item searches (task 054, S3): the same
+    # A theory-of-change check walk's item searches (S3): the same
     # two barriers, dispatched before the first step and joined before
     # ``toc_select``. A ToC walk never pauses, so never resumes.
     toc_check = (
         purpose == TOC_PURPOSE
         and scope_context.get(TOC_WALK_KEY) == TOC_WALK_CHECK
-        # Updating the report searches nothing (C45).
+        # Updating the report searches nothing.
         and scope_context.get(TOC_CHECK_MODE_KEY) != "report"
     )
     toc_children: list[uuid.UUID] | None = None
@@ -1078,8 +1076,7 @@ def _run_plan_impl(
             flagged_events=flagged_events,
             # Snapshot, don't let the reducer re-derive: completed_components
             # drives remaining_steps (what re-executes after a park) — it gets
-            # the same read-back treatment as step_outcomes/flagged_events
-            # (G2 pattern; review finding adv-m4, 2026-07-21).
+            # the same read-back treatment as step_outcomes/flagged_events.
             completed_components=completed_components,
         )
 
@@ -1187,7 +1184,7 @@ def _run_plan_impl(
 
     while remaining_steps:
         step = remaining_steps.pop(0)
-        # The user stopped a theory-of-change walk (task 054, C48): end it before the
+        # The user stopped a theory-of-change walk: end it before the
         # next step; what finished stays.
         if purpose == TOC_PURPOSE and toc_stop_requested(
             engine, task_id=task_id, capability_run_id=capability_run_id
@@ -1212,7 +1209,7 @@ def _run_plan_impl(
                     links=scope_context.get(TOC_LINKS_KEY),
                     dois=scope_context.get(TOC_STUDIES_KEY),
                     scale=link_scale_for(scope_context),
-                    # Find more evidence searches in new words (C44).
+                    # Find more evidence searches in new words.
                     reformulate=scope_context.get(TOC_CHECK_MODE_KEY) == "find_more",
                 )
             if step.component == "toc_select" and not toc_joined:
@@ -1231,7 +1228,7 @@ def _run_plan_impl(
                         option_search.TOC_ITEM_SEARCHES_STAGE,
                         f"{joined.failed} of {joined.total} item searches did not finish",
                     )
-            # The second fan-out (C32): after merge, the kept links discovery
+            # The second fan-out: after merge, the kept links discovery
             # added get their own item search, dispatched and joined before
             # ``toc_search_new`` picks their documents.
             if step.component == "toc_search_new" and not toc_new_joined:
@@ -1268,7 +1265,7 @@ def _run_plan_impl(
                             stage,
                             f"{joined.failed} of {joined.total} new-link searches did not finish",
                         )
-            # The third fan-out (C44): after the judge, a link left with too
+            # The third fan-out: after the judge, a link left with too
             # little evidence gets one reformulated search, dispatched and joined
             # before ``toc_search_again`` picks and judges its new documents.
             if step.component == "toc_search_again" and not toc_retry_joined:
@@ -1327,7 +1324,7 @@ def _run_plan_impl(
                     session_id=session_id,
                 )
             # The join, before ``screen_abstract`` runs and outside any
-            # transaction (task 046, S2): the option searches only acquire,
+            # transaction: the option searches only acquire,
             # so the longlist scope's one screen — whose stage-1 load is
             # task-wide — judges their documents with the broad search's.
             # A child that failed (or was cut off by the timeout) is a
@@ -1397,7 +1394,7 @@ def _run_plan_impl(
                 )
             # P2/P4 re-runs steered at a before_component boundary execute here,
             # then the walk falls through to run the pending step referencing the
-            # re-run's new run id (Task 15b). A replacement re-run re-threads the
+            # re-run's new run id. A replacement re-run re-threads the
             # reference and does not re-present; an additive P2 segment re-entry
             # re-walks acquire→last-completed and re-presents the SAME boundary
             # once (one cycle). The plan payload carries forward, so the pending
@@ -1541,7 +1538,7 @@ def _run_plan_impl(
             evidence_scope_id=evidence_scope_id,
         )
         # Fold a pending commit-layer overlay into this first-run directive so the
-        # component consumes it (task 024, 15c). One-shot: re-runs (replacement /
+        # component consumes it (15c). One-shot: re-runs (replacement /
         # segment re-walk) drive their own directive path and never come here.
         overlay = steering_state.pending_overlays.get(step.component)
         if overlay:
@@ -1769,7 +1766,7 @@ def _run_plan_impl(
             completed_components=completed_components,
         )
 
-        # The step's own spine flag when its chain declares one (task 045);
+        # The step's own spine flag when its chain declares one;
         # the Evidence search spine set otherwise, so ES chains are unchanged.
         if step.is_spine:
             summary_status: RunPlanStatus = "failed"
@@ -1889,7 +1886,7 @@ def run_plan(
         )
     except Exception:
         # A longlist walk that raised after its fan-out leaves no child
-        # running behind it (task 045, S2); the raise itself is unchanged.
+        # running behind it; the raise itself is unchanged.
         walk_id = park_context.get("capability_run_id")
         if walk_id is not None:
             try:
@@ -2016,7 +2013,7 @@ def _handle_after_component_boundary(
     )
     # Unattended = discretion-is-the-mode: at every lattice boundary the walk
     # never pauses — a pinned standing rule decides, else the discretion floor
-    # (Task 12). Reuses the lattice detection; select's P3 replacement re-run and
+    # . Reuses the lattice detection; select's P3 replacement re-run and
     # additive segment re-entry are applied through the same machinery a pause
     # would use.
     name = lattice_name_for(point, state.lattice)
@@ -2056,7 +2053,7 @@ def _handle_after_component_boundary(
     )
     # The deepening-selection (P3) steer point only offers its bundle/re-run when
     # select actually produced a persisted selection; a failed select degrades to
-    # a generic check-in pause (the pre-024 behaviour). The finding-groups point
+    # a generic check-in pause. The finding-groups point
     # degrades the same way when group has no persisted run to re-run.
     if steer_point_name == DEEPENING_SELECTION and selection_run_id is None:
         steer_point_name = None
@@ -2075,7 +2072,7 @@ def _handle_after_component_boundary(
     # to the run it is about; a skipped component has no run of its own, so it
     # falls back to the most-recent attempted run id.
     event_run_id = boundary_run_id if boundary_run_id is not None else most_recent_attempted_run_id
-    # Gated watch invocation (Task 14): the watch observes EVERY attended boundary
+    # Gated watch invocation: the watch observes EVERY attended boundary
     # — authoring at a decision-point pause, triaging an anomalous/trigger-fired
     # boundary, or emitting a deterministic clean_boundary event. No agent =
     # no watch = today's behaviour (no judgement events).
@@ -2139,7 +2136,7 @@ def _handle_after_component_boundary(
     rerun_component = _after_boundary_rerun_component(
         steer_point_name, selection_run_id=selection_run_id, successful_runs=successful_runs
     )
-    # Additive segment re-entry (contract decision 7a) is offered at an
+    # Additive segment re-entry is offered at an
     # after_component boundary once acquire has run; the caller withholds it on
     # the single re-presentation after a re-walk (one cycle per boundary).
     segment_reentry_allowed = (
@@ -2801,7 +2798,7 @@ def _handle_pause(
         )
     # One pause event per presentation; the re-prompt loop below marks each
     # rejected retry with steering.rejected rather than a fresh pause.
-    # The deterministic render rides the payload verbatim (task 025): it is the
+    # The deterministic render rides the payload verbatim: it is the
     # check-in content of record, and the web API must serve exactly what the
     # runner presented — never a re-derivation.
     steering_events.emit_standalone(
@@ -2827,7 +2824,7 @@ def _handle_pause(
             return _PauseApplied(state=state)
         if isinstance(response, FreeText):
             # Free text at a pause → compile through the router, validate
-            # author-blind, confirm, apply (contract decision 3). A backend
+            # author-blind, confirm, apply. A backend
             # error, an all-refused compile, or an unconfirmed fan-out all
             # degrade to re-presenting the canonical menu with an honest line
             # (watch discipline 5).
@@ -3776,10 +3773,10 @@ def _apply_runner_adjustment(
             adjustment=adjustment,
             completed_components=completed_components,
         )
-        # The decision commits on the plan-version transaction (finding m1). The
+        # The decision commits on the plan-version transaction. The
         # base carries the version decided-over (pre-adjustment), matching pause.
         # A router fan-out overrides interpreted_action with the whole fan-out and
-        # threads the verbatim utterance as user_text (contract decision 3).
+        # threads the verbatim utterance as user_text.
         decision = steering_events.decision_payload(
             base,
             decided_by=decided_by,
@@ -3804,12 +3801,12 @@ def _apply_runner_adjustment(
             payload=decision,
         )
     # Constant capability: this is the Evidence search steering router's own
-    # amendment path, typed on ``TaskPlan`` and untouched by task 044 (C1).
+    # amendment path, typed on ``TaskPlan``.
     amended_chain = compose_plan(EVIDENCE_SEARCH, amended_plan)
     # Commit-layer deltas for not-yet-run components have no plan-field mapping
     # (validated + recorded above, but the payload carries them forward
     # unchanged): stash them as a pending overlay so the component actually
-    # consumes them when it runs (task 024, 15c). Merge-over on repeat adjustments.
+    # consumes them when it runs (15c). Merge-over on repeat adjustments.
     new_overlays = _extend_overlays(state.pending_overlays, adjustment.directive_deltas)
     return _SteeringState(
         plan=amended_plan,
@@ -4196,7 +4193,7 @@ def _run_segment_reentry(
     """
     components = state.chain.components
     end_idx = components.index(boundary_component)
-    # Invariant (contract decision 7a, downstream-invalidation guard): a boundary
+    # Invariant (downstream-invalidation guard): a boundary
     # pause means nothing beyond it ran, so no completed component may sit after
     # the boundary. Assert rather than handle.
     for component in completed_components:
@@ -4318,7 +4315,7 @@ def _run_segment_reentry(
         )
         if step.is_spine:
             # Spine failure ends the run (run_plan's spine-failure semantics);
-            # the same per-step rule as the main loop (task 045).
+            # the same per-step rule as the main loop.
             return _SegmentReentryResult(
                 last_check_in_payload=last_check_in_payload,
                 most_recent_attempted_run_id=most_recent_attempted_run_id,
@@ -4666,7 +4663,7 @@ def _resolve_unattended_boundary(
     if name == BASELINE_CONFIRM:
         # The scoping gate is decided by its own declared rule and nothing else:
         # its standing default carries no option and no delta, so none of the
-        # Evidence search apply machinery below can read it (D11, A9).
+        # Evidence search apply machinery below can read it.
         return _resolve_baseline_gate_unattended(
             engine,
             point=point,
@@ -4685,7 +4682,7 @@ def _resolve_unattended_boundary(
         # on this branch (a pinned rule is resolved above), pinning the authority
         # order structurally: declared rules > agent. The runner pre-fetches
         # the bundle/header/digest so the watch decides over the same option-complete
-        # state a pause shows (Task 14); the deterministic floor ignores them.
+        # state a pause shows; the deterministic floor ignores them.
         bundle = _build_bundle(
             engine,
             name=name,
@@ -4823,7 +4820,7 @@ def _resolve_baseline_gate_unattended(
     )
     if rule is not None:
         # The standing default stands in for "Confirm plan and build
-        # longlist" (task 045, A2): the second walk opens once this one has
+        # longlist": the second walk opens once this one has
         # ended, from the worker that ran it. An IO that merely cannot pause
         # (no rule declared) confirmed nothing, so opens nothing.
         state.follow_on = LONGLIST_PURPOSE
@@ -5156,7 +5153,7 @@ def _watch_observe_boundary(
         # The agent watch (triage, authored options, the router) is an Evidence
         # search surface: it reads the ES plan's components and budget. A
         # scoping walk's pauses are structural — the floor triggers and the
-        # baseline gate — so the watch is not consulted (task 044). Found live:
+        # baseline gate — so the watch is not consulted. Found live:
         # a continued scoping walk crashed here on a triggered boundary.
         _emit_judgement_routed(
             engine,
@@ -5323,7 +5320,7 @@ def _validated_authored_options(
         elif isinstance(raw.get("endorses_option_id"), str) and raw.get("endorses_option_id"):
             # An endorsement picks an existing canonical option; its own
             # component/delta are discarded at projection, so none is required
-            # (review 028 C4 — requiring one made honest endorsements
+            # (requiring one would make honest endorsements
             # unserialisable). Strip any padding so nothing unvalidated rides
             # into the durable pause payload.
             raw["component"] = None
@@ -5372,7 +5369,7 @@ def _watch_header(state: _SteeringState) -> dict[str, Any]:
     """The orienting header the watch decides against (data, never instructions)."""
     # Every plan model carries question, steering_mode and steer_point_defaults;
     # only the Evidence search plan has discretionary components (a scoping walk
-    # runs a fixed chain). Task 044: a scoping walk paused on the structural
+    # runs a fixed chain). A scoping walk paused on the structural
     # floor reaches this header when it is continued.
     plan = state.plan
     components = list(plan.components) if isinstance(plan, TaskPlan) else []
@@ -5397,7 +5394,7 @@ def _watch_digest(
             {
                 "boundary": entry["payload"].get("boundary"),
                 "component": entry["payload"].get("component"),
-                # Pre-038 rows carry the old actor word (task 038, A5).
+                # Rows written before the orchestrator-to-agent rename carry the old actor word.
                 "decided_by": steering_events.canonical_actor(entry["payload"].get("decided_by")),
                 "response": entry["payload"].get("response"),
             }
@@ -5581,7 +5578,7 @@ def _apply_watch_delta(
     # A watch-authored delta is single-nested in the component's own grammar
     # ({"selection": ...} / {"characterise": ...} / {"grouping": ...}); it is a
     # replacement re-run when it targets the point's re-run component's context
-    # key (select at P3, characterise at P2, group at P4 — Task 15b).
+    # key (select at P3, characterise at P2, group at P4).
     watch_replacement = rerun_component is not None and keys == {
         REPLACEMENT_RERUNS[rerun_component].context_key
     }
@@ -5709,7 +5706,7 @@ def _open_capability_run(
         context (task 046, AM4: it marks an acquire-only option search).
     """
     with engine.begin() as conn:
-        # A run's start is work on the task (task 058, round 10); first in the
+        # A run's start is work on the task; first in the
         # transaction, as in ``_finish_run``.
         if parent_capability_run_id is None:
             touch_task(conn, task_id)
@@ -5780,11 +5777,11 @@ def _finish_run(
     if purpose in (LONGLIST_PURPOSE, TOC_PURPOSE):
         # Every end of a longlist walk — the spine failed, an abort, or the
         # walk's own finish — ends the option searches the join never waited
-        # for, before the walk itself (task 045, S2). After a join, a no-op.
-        # A theory-of-change check walk's item searches end the same way (054).
+        # for, before the walk itself. After a join, a no-op.
+        # A theory-of-change check walk's item searches end the same way.
         option_search.abandon_children(engine, task_id=task_id, parent_id=capability_run_id)
     with engine.begin() as conn:
-        # A run's end is work on the task (task 058, round 10). First in the
+        # A run's end is work on the task. First in the
         # transaction, before the walk row is locked: the API takes the task
         # row before run rows, and one order means no deadlock. Only a walk
         # the user started: an option search ends inside its parent's run.
@@ -5811,8 +5808,8 @@ def _finish_run(
             .with_for_update(of=capability_run)
         ).one_or_none()
         is_child = walk is not None and walk.parent_capability_run_id is not None
-        # The verb *add*'s option search has no parent by design (task 045,
-        # S11) but is still an option search: the thread the user is watching
+        # The verb *add*'s option search has no parent by design
+        # but is still an option search: the thread the user is watching
         # is the longlist's, and its end must not close it either (P3).
         is_option_search = walk is not None and walk.purpose == TARGETED_PURPOSE
         if (
@@ -5821,7 +5818,7 @@ def _finish_run(
             and walk.status not in ("running", "paused")
         ):
             # The parent's join (or its end) cut this option search off and
-            # counted it failed (task 045, S2); its late finish keeps that
+            # counted it failed; its late finish keeps that
             # record and appends no second terminal event.
             log.info(
                 "runner.child_finished_after_interrupt",
@@ -5840,7 +5837,7 @@ def _finish_run(
                 "status": status,
             }
             if purpose == TOC_PURPOSE and not is_child:
-                # The run-level cost line (task 054, C30): tokens per step, US dollars.
+                # The run-level cost line: tokens per step, US dollars.
                 finished["cost"] = walk_cost(conn, task_id=task_id, walk_id=capability_run_id)
                 log.info(
                     "toc_check.cost",
@@ -5857,9 +5854,9 @@ def _finish_run(
         # A completed run closes its task_agent conversation atomically with the
         # terminal status + run.finished event (029 strand 2): a crash can
         # never leave a succeeded run with an active task_agent conversation.
-        # A child walk never does (task 045, P3): the thread the user is
+        # A child walk never does (P3): the thread the user is
         # watching belongs to its parent. Nor does any option search.
-        # Nor does a theory-of-change walk (054, S7): the thread stays open
+        # Nor does a theory-of-change walk: the thread stays open
         # through the check and after it.
         if (
             status in ("succeeded", "degraded")
@@ -5901,7 +5898,7 @@ def _reference_kwargs(
     if component == "extract":
         return {"selection_run_id": successful_runs["select"]}
     if component == "extract_interventions":
-        # The selection-free path (task 045, D24): the intervention profile
+        # The selection-free path: the intervention profile
         # reads the scope's whole screened-in set, so no select run is looked
         # up — the reason it is a component and not a directive on extract.
         return {}
@@ -6036,7 +6033,7 @@ def _run_step_attempt(
                 "plan_id": str(plan_id),
                 "plan_version": plan_version,
                 # The Langfuse session key, persisted so a DB row joins
-                # straight to its trace session (018 A2; None on session-less
+                # straight to its trace session (None on session-less
                 # paths, e.g. replay drivers).
                 "session_id": str(session_id) if session_id is not None else None,
                 **stamp,
@@ -6134,8 +6131,7 @@ def _run_step_attempt(
                     ),
                     progress_emitter=(
                         ProgressEmitter(engine, task_id=task_id, run_id=run_id)
-                        # The ToC report streams to the page too (task 054's
-                        # 058 alignment, S6).
+                        # The ToC report streams to the page too.
                         if registry_component in ("synthesise", "toc_report")
                         else None
                     ),
@@ -6161,7 +6157,7 @@ def _run_step_attempt(
                     # failure must not fail the run) but inside its run span, so
                     # the summaries trace as the tail of the run, not as root
                     # traces of their own.
-                    # Bound to the task, the stage and the walk (round 14): the
+                    # Bound to the task, the stage and the walk: the
                     # harness's binding has ended by now, and without this the
                     # pass's lines reach nobody.
                     with task_liveness(
@@ -6476,7 +6472,7 @@ def _plan_compiled_payload(
         payload["reference_rule"] = step.reference_rule
     for key, value in reference_kwargs.items():
         payload[key] = str(value)
-    # Provenance echo (task 024, 15c): when a pending commit-layer overlay was
+    # Provenance echo (15c): when a pending commit-layer overlay was
     # merged into the executed directive, record it so replay shows the merge.
     if overlay:
         payload["pending_overlay"] = overlay

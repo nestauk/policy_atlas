@@ -4,7 +4,7 @@
 # * Security groups: backend containers
 # * DB security group ingress rule so backend can reach RDS (port 5432)
 # * Listener rule on the shared ALB for host-header routing
-# * The queued document-ingest worker (task 057): queue, dead-letter queue,
+# * The queued document-ingest worker: queue, dead-letter queue,
 #   Lambda function and its dead-letter alarm (components/ingest_worker.py)
 #
 # Pre-requisites (deployed separately):
@@ -36,7 +36,7 @@ from infra.cognito_auth import CognitoAuth
 from infra.components.ingest_worker import IngestWorker
 from infra.components.shared_alb import import_shared_alb
 
-# How the API reads documents' full text (task 057): "in_process" parses them
+# How the API reads documents' full text: "in_process" parses them
 # inside the API task as before; "queued" sends one message per document to
 # the ingest function. Set per environment in pa_config.json.
 INGEST_MODES = ("in_process", "queued")
@@ -89,7 +89,7 @@ class PolicyAtlasStack(Stack):
         )
 
         # Which AI models the backend uses: a route name from the backend's
-        # committed file backend/src/policy_atlas/model_routes.toml (task 053).
+        # committed file backend/src/policy_atlas/model_routes.toml.
         # "openai-direct" calls OpenAI with OPENAI_API_KEY; a "bedrock-*" route
         # calls Amazon Bedrock with AWS_BEARER_TOKEN_BEDROCK. The Bedrock key is
         # only passed when a Bedrock route is chosen, because ECS refuses to start
@@ -97,7 +97,7 @@ class PolicyAtlasStack(Stack):
         # field to the app secret first, then switch the route in pa_config.json.
         model_route = be_config.get("model_route", "openai-direct")
         ingest_mode = be_config.get("ingest_mode")
-        # Task 054 (C15): the API creates theory-of-change tasks only where this
+        # The API creates theory-of-change tasks only where this
         # is "1". On in staging for colleagues to try; off in production until
         # the capability is complete.
         theory_of_change = "1" if be_config.get("theory_of_change") else "0"
@@ -174,9 +174,9 @@ class PolicyAtlasStack(Stack):
             model_route=model_route,
         )
 
-        # Files users give a task (task 054 increment 5; one bucket for every
-        # capability, owner 2026-11-03). Private, encrypted, HTTPS only, and kept
-        # if the stack is ever deleted: they are users' work. Only the backend
+        # Files users give a task (one bucket for every capability). Private,
+        # encrypted, HTTPS only, and kept if the stack is ever deleted: they are
+        # users' work. Only the backend
         # reads it; the browser never does.
         uploads_bucket = s3.Bucket(self, "UploadsBucket",
             bucket_name=be_config["upload_bucket_name"],

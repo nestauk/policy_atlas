@@ -24,8 +24,8 @@ from policy_atlas.runtime.agent_prompt import _SHARED_PREAMBLE
 CHAT_PROMPT_VERSION = "chat_v1"
 CHAT_MODEL = route().model_for("chat")
 
-# Input-side caps at prompt assembly (M10 discipline: a bound, not a filter).
-CHAT_MESSAGE_MAX = 10_000          # contract §1: user_message cap
+# Input-side caps at prompt assembly (a bound, not a filter).
+CHAT_MESSAGE_MAX = 10_000          # user_message cap
 CHAT_WINDOW_CEILING = 32_000       # plan pin: whole thread, oldest-first truncation
 CHAT_FRAME_ARTEFACT_BUDGET = 40_000  # plan pin: non-entry artefact degradation threshold
 CHAT_MAX_OUTPUT_TOKENS = 4_096     # plan pin: generated-answer ceiling

@@ -70,9 +70,7 @@ def _check_in(row: dict[str, Any], *, decided: bool) -> CheckInOut:
         boundary=boundary,
         component=payload.get("component") if isinstance(payload.get("component"), str) else None,
         # The public presentation key, never the raw component name — the raw
-        # name leaked internal vocabulary onto the check-in card (review
-        # finding MAJOR-1, 2026-07-21; the field's contract always said
-        # "presentation stage key").
+        # name would leak internal vocabulary onto the check-in card.
         stage=stage_for_payload(payload),
         render=_render(payload),
         options=options,
@@ -93,8 +91,9 @@ def _check_in(row: dict[str, Any], *, decided: bool) -> CheckInOut:
 def _task_bundle(payload: dict[str, Any]) -> dict[str, Any] | None:
     """Project only the owner-approved display fields from a durable bundle."""
     bundle = payload.get("bundle")
-    # Pause records are never rewritten, so a pre-038 record still carries
-    # the old P2 steer-point id (task 038, contract A3).
+    # Pause records are never rewritten, so a record written before the
+    # Evidence Base to Evidence search rename still carries the old P2
+    # steer-point id.
     point = canonical_steer_point(payload.get("steer_point"))
     if not isinstance(bundle, dict) or not isinstance(point, str):
         return None

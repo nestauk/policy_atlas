@@ -76,7 +76,7 @@ log = structlog.get_logger()
 
 #: When this process started. A longlist intent record with no walk row yet is
 #: a walk still queued on this process's executor only if it was minted after
-#: this moment: a queue does not survive a restart (B3).
+#: this moment: a queue does not survive a restart.
 _PROCESS_STARTED = datetime.now(UTC)
 
 

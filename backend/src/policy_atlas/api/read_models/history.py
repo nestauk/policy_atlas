@@ -56,7 +56,7 @@ _SINGULAR = {
     "abstracts": "abstract",
     "places": "place",
     "queries": "query",
-    # Task 054: the theory of change's done counts.
+    # The theory of change's done counts.
     "boxes": "box",
     "connections": "connection",
     "pathways": "pathway",
@@ -308,7 +308,7 @@ def lifecycle_sentence(kind: str, payload: Mapping[str, Any], actor: Actor) -> s
         return f"{actor.subject} renamed the task."
     project_name = payload.get("project_name")
     if kind == "archived" and isinstance(project_name, str) and project_name.strip():
-        # Round 14: archived with its project, the task in no other one.
+        # Archived with its project, the task in no other one.
         return (
             f"{actor.subject} archived the project “{project_name.strip()}”, "
             "and this task with it."
@@ -335,7 +335,7 @@ def option_sentence(verb: str, name: str, reason: object, actor: Actor) -> str:
     """
     subject = actor.subject
     if verb == "gave a reason":
-        # A reason after the person's own exclusion (round 13): its own line.
+        # A reason after the person's own exclusion: its own line.
         words = str(reason or "").strip()
         return f"{subject} gave a reason for setting aside \u201c{name}\u201d: {words}"
     if verb == "shortlisted":

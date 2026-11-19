@@ -207,16 +207,16 @@ def exclude_option(
     """
     admit_longlist_action(conn, task_id=task_id)
     row = _locked_option(conn, task_id=task_id, option_id=option_id)
-    # A reason is optional on the button and the verb alike (owner, 2026-09-24):
+    # A reason is optional on the button and the verb alike:
     # a blank one is recorded empty, never invented.
     text = clean_text(reason)
     already_mine = _excluded_by(conn, task_id=task_id, row=row) == actor
     if already_mine and not text:
-        # Excluding again with no reason changes nothing (round 13): the
+        # Excluding again with no reason changes nothing: the
         # standing exclusion and its reason are kept, and History stays as it is.
         return
     if already_mine:
-        # Round 13 (lead): a reason after the user's own exclusion fills the
+        # A reason after the user's own exclusion fills the
         # reason in; the exclusion stands, and History says so once.
         conn.execute(
             option.update()

@@ -129,7 +129,7 @@ def _run_depth(
 ) -> Any:
     """One dataset run: the chosen reviews at one depth, pipeline constants untouched."""
     constants = DEPTH_CONSTANTS[depth]
-    screen = True  # every depth screens once (task 051)
+    screen = True  # every depth screens once
     prompt_version, prompt_sha = _prompt_identity(GENERATION_BACKEND)
     # Flat and stringly: Langfuse coerces metadata values to strings anyway.
     meta = {

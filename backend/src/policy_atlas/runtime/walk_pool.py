@@ -29,7 +29,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from policy_atlas.evidence_search.assess.classify import MAX_CONCURRENT_CLASSIFY
 
-# INGEST_SLOTS lives beside the parse worker it bounds (task 057: the cloud
+# INGEST_SLOTS lives beside the parse worker it bounds (the cloud
 # function's handler must not import the runtime); re-exported here.
 from policy_atlas.evidence_search.sourcing.ingest_full_text import INGEST_SLOTS as INGEST_SLOTS
 from policy_atlas.runtime.scoping_plan import OPTION_SEARCH_WIDTH
@@ -55,7 +55,7 @@ def option_search_pool() -> ThreadPoolExecutor:
     )
 
 
-#: Item searches in flight at once across a theory-of-change check walk (🟡, C2).
+#: Item searches in flight at once across a theory-of-change check walk (🟡).
 TOC_ITEM_WIDTH = 8
 
 

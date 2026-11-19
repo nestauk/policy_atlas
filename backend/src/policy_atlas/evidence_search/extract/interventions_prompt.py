@@ -51,7 +51,7 @@ PROMPT_VERSION = "extract_interventions_v4"
 
 # The small model, as the contract's model route states: about 3,000 prompt
 # tokens per document, one call per screened-in document. From the route file
-# (task 053); see core/model_routes.py.
+# ; see core/model_routes.py.
 INTERVENTIONS_MODEL = route().model_for("extract_interventions")
 INTERVENTIONS_EFFORT = route().effort_for("extract_interventions")
 # A reasoning model: the cap covers reasoning and output. An abstract yields a
@@ -148,7 +148,7 @@ EXAMPLE_RESPONSE = InterventionsResponse(
     covers_no_intervention=False,
 )
 
-# A second, shorter example (task 046, amendment 4, R87, round 3): the place
+# A second, shorter example: the place
 # is stated through a hospital trust's name; the record carries the town.
 EXAMPLE_2_TITLE = (
     "Family-integrated care on a neonatal unit: a before-and-after evaluation "

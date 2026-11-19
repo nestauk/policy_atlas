@@ -46,7 +46,7 @@ REASONING_EFFORTS = ("none", "low", "medium", "high", "xhigh")
 ROUTE_ENV = "POLICY_ATLAS_MODEL_ROUTE"
 OVERLAY_ENV = "POLICY_ATLAS_MODEL_ROUTE_FILE"
 
-#: Per-step model variables retired by task 053. They used to override one
+#: Retired per-step model variables. They used to override one
 #: step's model each; the route file is now the only mechanism. Setting one is
 #: logged once and ignored, never silently honoured.
 RETIRED_ENV = (
@@ -58,7 +58,7 @@ RETIRED_ENV = (
     "POLICY_ATLAS_MRS_NOTE_MODEL",
     "POLICY_ATLAS_FULL_REPORT_INTRO_MODEL",
     "POLICY_ATLAS_RELEVANCE_MODEL",
-    # Options scoping (tasks 044 to 046), retired when that branch merged into 053.
+    # Options scoping.
     "POLICY_ATLAS_TASK_AGENT_MODEL",
     "POLICY_ATLAS_TASK_AGENT_SCOPING_MODEL",
     "POLICY_ATLAS_LONGLIST_JUDGMENT_MODEL",
@@ -107,7 +107,7 @@ class StepException:
     first_content_s: float | None = None
 
 
-#: Embedding requests the stage may keep in flight at most (task 057, D6), when a
+#: Embedding requests the stage may keep in flight at most, when a
 #: route's ``[routes.<name>.embeddings]`` table does not set ``pool_cap``.
 DEFAULT_EMBEDDING_POOL_CAP = 8
 

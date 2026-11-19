@@ -111,8 +111,8 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger()
 
-# Model from the route file (task 053); see core/model_routes.py. route/decide are
-# judgment-class, triage is mini-class (contract decision 3 of task 024).
+# Model from the route file; see core/model_routes.py. route/decide are
+# judgment-class, triage is mini-class.
 # ``AGENT_MODEL`` is the decide step's model (the one the discretion profile
 # stamps); each call site below is its own step with its own model and effort.
 AGENT_MODEL = route().model_for("agent_decide")
@@ -141,11 +141,11 @@ def _warn_stale_agent_env(environ: Mapping[str, str]) -> list[str]:
 _warn_stale_agent_env(os.environ)
 
 # Fallback deliberation loop cap (internal constant + telemetry, never plan content
-# — costs are dev-side only, contract decision 3). At most this many
+# — costs are dev-side only). At most this many
 # lookup/query_findings round-trips answer a decide's 'insufficient'.
 WATCH_FALLBACK_TOOL_CALLS = 2
 # The hard-coded read-tool allowlist for the deliberation loop: NEVER ``retrieve``,
-# NEVER ``search`` (contract decision 3). An insufficient naming anything else is
+# NEVER ``search``. An insufficient naming anything else is
 # rejected and biases to escalate.
 WATCH_READ_TOOLS: tuple[str, ...] = ("lookup", "query_findings")
 
@@ -791,7 +791,7 @@ class StubAgentBackend:
         self._option_design_queue = _as_queue(option_design_responses)
         self._suggest_queue = _as_queue(suggest_responses)
         self._title_queue: list[str] = _as_queue(title_responses)
-        #: ``(kind, text)`` per title call (round 14).
+        #: ``(kind, text)`` per title call.
         self.title_calls: list[tuple[str, str]] = []
         self.route_calls = 0
         self.triage_calls = 0
@@ -935,7 +935,7 @@ def _next[T](queue: list[T], default: Callable[[], T]) -> T:
     return queue.pop(0)
 
 
-# --- Structurally-gated invocation classifier (contract decision 3) --------
+# --- Structurally-gated invocation classifier --------
 
 BoundaryClass = str  # "clean_boundary" | "triage" | "decision_point"
 

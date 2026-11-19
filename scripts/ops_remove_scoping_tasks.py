@@ -100,9 +100,9 @@ RESULT_TABLES: tuple[str, ...] = (
 #: - ``runs`` FKs to ``capability_run`` (``runs.capability_run_id``), and
 #:   ``artefact`` also FKs to ``capability_run`` — both precede it.
 #: - ``capability_run`` FKs to ``evidence_scope``, so it precedes it. Its
-#:   self-FK (``parent_capability_run_id``, task 045) is satisfied inside one
+#:   self-FK (``parent_capability_run_id``) is satisfied inside one
 #:   statement: a parent and its children always share a ``task_id``.
-#: - The task 045 option records lead: ``option_membership`` and
+#: - The option records lead: ``option_membership`` and
 #:   ``option_relation`` FK to ``option``; ``option`` FKs to ``runs`` (and is
 #:   named by ``task_link.option_id``, whose rows are already gone);
 #:   ``longlist_result`` FKs to ``runs`` and ``evidence_scope``;

@@ -119,28 +119,28 @@ _install_deterministic_column_boxes()
 
 FETCH_BYTE_CAP = 100 * 1024 * 1024  # generous guard, never a scissor (decision 6)
 PARSE_TIMEOUT_SECONDS = 120.0  # hard per-document parse timeout; worker is terminated
-# (120s: user-set 2026-07-05 — generous for a 200+-page report; fan-out absorbs the tail)
+# (120s: generous for a 200+-page report; fan-out absorbs the tail)
 THIN_TEXT_MIN_CHARS = 200  # below this, parsed text is a failure, never "ok" (decision 7)
 # Parse workers are separate processes doing CPU-bound work, so the width follows
-# the cores: 4 on the 2-vCPU staging task, up to 8 on a developer machine
-# (task 044 phase 8, owner 2026-09-17). In process (task 057) the ingest threads
-# are ``ingest_queue.IN_PROCESS_INGEST_THREADS`` (10, owner 2026-11-04); this
+# the cores: 4 on the 2-vCPU staging task, up to 8 on a developer machine.
+# In process the ingest threads
+# are ``ingest_queue.IN_PROCESS_INGEST_THREADS`` (10); this
 # count still bounds the parse step through ``INGEST_SLOTS``.
 DEFAULT_MAX_WORKERS = max(4, min(8, os.cpu_count() or 4))
-#: Live parse-job worker processes across every walk in the process (task 045,
-#: S2). Defined here, beside the width it is sized from, so the cloud function's
+#: Live parse-job worker processes across every walk in the process.
+#: Defined here, beside the width it is sized from, so the cloud function's
 #: handler takes it without importing the runtime (``runtime.walk_pool``
-#: re-exports it), task 057.
+#: re-exports it).
 INGEST_SLOTS = threading.BoundedSemaphore(DEFAULT_MAX_WORKERS)
 # How often the stage reads the documents' statuses while they are being ingested.
 STAGE_POLL_SECONDS = 3.0
-# Task 057 (N2, D4): the per-document deadline, as a ``time.monotonic()`` value, for
+# The per-document deadline, as a ``time.monotonic()`` value, for
 # the fetcher's waits (set by ``ingest_document`` around its fetches; None in
 # process). No wait or parse is started that would end within the margin of it.
 FETCH_DEADLINE: ContextVar[float | None] = ContextVar("fetch_deadline", default=None)
 DEADLINE_MARGIN_S = 5.0
 
-# Parse profile v2 (task 057, N7/D8): the same parsers and cuts as v1, with the markup
+# Parse profile v2: the same parsers and cuts as v1, with the markup
 # rule (``core.markup.strip_markup``) applied to every chunk's text and heading. The v1
 # names stay on the snapshots parsed under v1; the parser no longer stamps them.
 PDF_PARSE_PROFILE = "pymupdf4llm_v2"
@@ -150,7 +150,7 @@ PDF_SEGMENTATION_POLICY = "pymupdf4llm_struct_v2"
 HTML_SEGMENTATION_POLICY = "trafilatura_para_v2"
 PLAIN_SEGMENTATION_POLICY = "plain_para_v2"
 
-# Europe PMC JATS XML (task 056, N10/S7). The live fetcher never labels a body
+# Europe PMC JATS XML. The live fetcher never labels a body
 # with an XML type (it sniffs PDF / HTML / plain), so only the Europe PMC
 # candidate reaches the JATS branch of ``parse_and_segment``.
 EUROPE_PMC_XML_CONTENT_TYPE = "application/xml"
@@ -158,7 +158,7 @@ _JATS_CONTENT_TYPES = frozenset({"application/xml", "text/xml"})
 # Which route served an ingested document (stored as ``source_kind`` on the
 # full-text snapshot's metadata; counted as ``by_route`` in the run summary).
 ROUTE_EUROPE_PMC_XML = "europe_pmc_xml"
-# Europe PMC full-text XML endpoint (task 056 S7, egress approved 2026-11-01): the only
+# Europe PMC full-text XML endpoint: the only
 # thing sent is the PubMed Central id, in the path.
 EUROPE_PMC_HOST = "www.ebi.ac.uk"
 EUROPE_PMC_FULL_TEXT_URL = (
@@ -168,15 +168,15 @@ EUROPE_PMC_FULL_TEXT_URL = (
 # the "PMC" prefix (e.g. ``https://www.ncbi.nlm.nih.gov/pmc/articles/5264339``).
 _PMCID_LOOSE_RE = re.compile(r"(?:^|/)(?:PMC)?([0-9]{1,12})/?$", re.IGNORECASE)
 
-# Closed failure-reason vocabulary (contract decision 3). Presence on failure is
+# Closed failure-reason vocabulary. Presence on failure is
 # CHECK-enforced (ck_tss_full_text_error_presence); the values are code-enforced so
 # the list can grow at the live seam without a migration.
 #
-# Task 057 adds two reasons the stage writes, never the per-document function, and
+# Two reasons are written by the stage, never the per-document function, and
 # neither is an access failure: ``not_ready`` (the document was still being read
 # when the stage stopped waiting; the next run tries it again) and ``send_failed``
-# (the queue refused the message). ``worker_error`` (task 057 review, Codex 8 /
-# security 3) is written by the cloud handler on its last delivery: the function
+# (the queue refused the message). ``worker_error``
+# is written by the cloud handler on its last delivery: the function
 # failed outside the per-document vocabulary; not an access failure.
 FAILURE_REASONS = (
     "no_url", "paywall", "not_found", "too_large", "timeout",
@@ -184,13 +184,13 @@ FAILURE_REASONS = (
     "blocked", "blocked_by_host", "fetch_error", "unsupported_type",
     "not_ready", "send_failed", "worker_error",
 )
-# task 057 review (Codex 9, deviation 10): the reasons that mean "not read yet"
+# The reasons that mean "not read yet"
 # (the document was never judged), not "could not be read"; one shared set.
 NOT_READ_YET_REASONS = frozenset({"not_ready", "send_failed", "worker_error"})
 
 # Base content types that are never parseable text; anything here fails fast with
-# a reason-coded outcome instead of being chunked as text (prod incident 2026-08-19:
-# a JPEG routed to the plain path and its NUL bytes killed the whole run at INSERT).
+# a reason-coded outcome instead of being chunked as text (a JPEG routed to the
+# plain path would carry NUL bytes into the INSERT and kill the whole run).
 _NON_TEXT_TYPE_PREFIXES = ("image/", "audio/", "video/", "font/", "model/")
 
 # A short page telling the client to enable JavaScript or cookies is the host
@@ -553,7 +553,7 @@ def candidate_urls(metadata: dict[str, Any]) -> list[str]:
         raw = [fields.get("pdf_url"), fields.get("document_url")]
     else:
         # An unmapped backend would otherwise masquerade as a per-document no_url
-        # data problem — surface the wiring gap loudly (review finding).
+        # data problem — surface the wiring gap loudly.
         log.warning("fulltext.unknown_backend", backend=backend)
         raw = []
     urls: list[str] = []
@@ -820,8 +820,8 @@ def _parse_pdf(body: bytes) -> dict[str, Any]:
         (int(pg.get("metadata", {}).get("page", i + 1)), str(pg.get("text", "")))
         for i, pg in enumerate(page_dicts)
     ]
-    # \w is Unicode-aware: a text layer in any script counts (review finding — the
-    # previous ASCII-only class misread e.g. CJK/Arabic PDFs as no_text_layer).
+    # \w is Unicode-aware: a text layer in any script counts (an ASCII-only
+    # class would misread e.g. CJK/Arabic PDFs as no_text_layer).
     if not any(re.search(r"\w", text) for _, text in pages):
         return {"status": "error", "reason": "no_text_layer"}
     chunks = _segment_markdown_pages(pages)
@@ -990,7 +990,7 @@ def _worker_entry(
     thin_min: int,
 ) -> None:
     """Worker-process entrypoint: parse, send the result, exit. Top-level so it pickles."""
-    # task 057 review (security 1): the worker denies itself sockets before
+    # The worker denies itself sockets before
     # parsing; the result pipe is already open, so nothing needs one after this.
     # (This assignment only takes sockets away; the module's no-network-client
     # guard forbids constructing one, not naming the module.)
@@ -1402,7 +1402,7 @@ def _close_queued(
                 task_source_snapshot.update()
                 .where(task_source_snapshot.c.task_source_snapshot_id.in_(tss_ids))
                 .where(task_source_snapshot.c.full_text_status == "queued")
-                # task 057 review (Codex 1 / security 8): only this run's rows.
+                # Only this run's rows.
                 .where(task_source_snapshot.c.ingested_by_run_id == run_id)
                 .values(
                     full_text_snapshot_id=None,
@@ -1553,7 +1553,7 @@ class _StageEmbedder:
             "embedded": sum(p["embedded"] for p in passes),
             "already_embedded": final["already_embedded"] - sum(p["embedded"] for p in earlier),
             "failed": final["failed"],
-            # task 057 review: chunks the pool gave up for throttling this pass (no
+            # Chunks the pool gave up for throttling this pass (no
             # vector written; the next run picks them up), kept apart from failures.
             "deferred": final["deferred"],
             "skipped_no_units": final["skipped_no_units"],
@@ -1750,7 +1750,7 @@ def _run_stage(
                         full_text_snapshot_id=None,
                         full_text_status="queued",
                         full_text_error=None,
-                        # task 057 review (Codex 1 / security 8): stamp the run
+                        # Stamp the run
                         # that queued the row; the guarded writes require it.
                         ingested_by_run_id=run_id,
                     )
@@ -1792,7 +1792,7 @@ def _run_stage(
         if isinstance(queue, LocalQueueClient) and queue.inline:
             do_send()
         else:
-            # task 057 review (code-review 3): carry the caller's contextvars
+            # Carry the caller's contextvars
             # (structlog run binding, Langfuse propagation) onto the sender.
             sender = threading.Thread(
                 target=contextvars.copy_context().run,

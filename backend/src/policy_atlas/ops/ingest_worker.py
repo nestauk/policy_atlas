@@ -222,7 +222,7 @@ def _redact_urls_in(value: Any) -> Any:
         return _URL_RE.sub(_redact_match, value)
     if isinstance(value, list):
         return [_redact_urls_in(item) for item in value]
-    if isinstance(value, dict):  # task 057 review (security 3): nested values too
+    if isinstance(value, dict):  # nested values too
         return {key: _redact_urls_in(item) for key, item in value.items()}
     return value
 
@@ -266,7 +266,7 @@ def _worker(
             raise RuntimeError(f"{DB_SECRET_ARN_ENV} is not set")
         url = database_url_from_secret(secrets(), secret_arn)
         # No pool: one invocation at a time per container, connections closed
-        # on return (contract N5).
+        # on return.
         _WORKER = _Worker(engine=create_engine(url, poolclass=NullPool), fetcher=fetcher())
         log.info("ingest_worker.cold_start")
     return _WORKER
@@ -303,7 +303,7 @@ def _ingest(
     worker: _Worker, *, tss_id: uuid.UUID, run_id: uuid.UUID, deadline: float, attempt: int
 ) -> DocumentOutcome:
     """Run ``ingest_document`` for one message (it recovers a pruned store hit itself)."""
-    # task 057 review (Codex 7 / code-review 2): the prune-race recovery moved
+    # The prune-race recovery moved
     # into ``ingest_document``, so both ingest modes share it.
     return ingest_document(
         worker.engine.begin,
@@ -358,10 +358,10 @@ def handler(event: Mapping[str, Any], context: LambdaContext) -> BatchResponse:
                     worker, tss_id=tss_id, run_id=run_id, deadline=deadline, attempt=attempt
                 )
             except Exception as exc:
-                # task 057 review (Codex 8 / security 3): never let an unexpected
+                # Never let an unexpected
                 # error's text (SQL, parameters, URLs) reach the logs, and on the
                 # last delivery (the queue's maxReceiveCount is 2) write a
-                # reason-coded status before giving up (contract N2).
+                # reason-coded status before giving up.
                 if attempt < 2:
                     log.error("ingest_worker.error", error_type=type(exc).__name__)
                     return retry_record

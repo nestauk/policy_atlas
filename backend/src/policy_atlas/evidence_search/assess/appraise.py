@@ -26,7 +26,7 @@ from policy_atlas.core.schema import (
 from policy_atlas.evidence_search.assess.classify import SKIP_TSS_KEY, parse_skip_ids
 from policy_atlas.evidence_search.assess.screen import effective_screen_rows
 
-# v1 -> v2 (task 056, D7): the two unscored types now get an Unrated row instead of
+# v1 -> v2: the two unscored types now get an Unrated row instead of
 # no row. The scores themselves did not change; the bump records that the rubric's
 # reach did. v1 scores stay valid (labels.py COMPATIBLE_RUBRIC_VERSIONS), so nothing
 # is re-appraised.
@@ -35,7 +35,7 @@ DEFAULT_RUBRIC_VERSION = "v2-hierarchy-v2"
 # The v3.0 default rubric: primary_evidence_type → quality_score (5 = strongest),
 # v2's expert-calibrated five-point evidence-hierarchy rating carried forward.
 # Types absent from it (Other/Non-evidence, Unknown) are never scored: since task
-# 056 (D7) they are appraised as Unrated — a row with no score and
+# 056 they are appraised as Unrated — a row with no score and
 # ``unrated = true`` — so they are citable and shown as "Unrated". Keys come from
 # EVIDENCE_TYPES (schema.py); a test enforces the domain is exactly EVIDENCE_TYPES
 # minus the two Unrated types.
@@ -60,9 +60,9 @@ SCORE_LABELS: dict[int, str] = {
     1: "Weak",
 }
 
-# The reader-facing label of an Unrated appraisal (task 056, D7). Kept apart from
+# The reader-facing label of an Unrated appraisal. Kept apart from
 # SCORE_LABELS because an Unrated row has no score, and a dict keyed by score cannot
-# hold a "no score" key (wording deviation from the contract, owner 2026-11-01).
+# hold a "no score" key (wording deviation from the contract).
 UNRATED_LABEL = "Unrated"
 
 _NON_EVIDENCE_TYPE = "Other (Non-evidence documents)"
@@ -371,8 +371,8 @@ def appraise_sources(
     ).scalar_one()
 
     # The write path is effective-grained too: a doc classified before a
-    # stage-2 demotion must not gain an appraisal on a rerun (014 review
-    # finding). The exclusion is counted below (skipped_demoted), never silent.
+    # stage-2 demotion must not gain an appraisal on a rerun.
+    # The exclusion is counted below (skipped_demoted), never silent.
     appraisable_rows = conn.execute(
         select(
             task_source_snapshot.c.task_source_snapshot_id,
@@ -406,7 +406,7 @@ def appraise_sources(
             )
         )
     ).fetchall()
-    # Task 045: documents whose tier the label resolver already answers from a
+    # Documents whose tier the label resolver already answers from a
     # linked task are left alone and counted (``resolved_elsewhere``).
     resolved_elsewhere = sum(1 for row in appraisable_rows if row[0] in skip)
     if skip:

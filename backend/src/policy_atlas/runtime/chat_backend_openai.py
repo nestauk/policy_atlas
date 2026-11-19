@@ -134,7 +134,7 @@ class OpenAIChatBackend(ChatBackend):
     ) -> UsageResult[ChatTurn]:
         completions: Any = self._client.chat.completions
         # The reasoning-effort pin the chat model needs (Terra refuses function
-        # tools without it, H3 live check 2026-08-11) comes from the route file.
+        # tools without it) comes from the route file.
         response = completions.create(
             **_chat_kwargs(),
             messages=messages,
@@ -178,7 +178,7 @@ class OpenAIChatBackend(ChatBackend):
         completions: Any = self._client.chat.completions
         # The prose stream is schema-free, and the system prompt describes the
         # structured answer shape — without this steering the model appends
-        # the citations/claims JSON as text (owner live check, 2026-08-11).
+        # the citations/claims JSON as text.
         prose_messages = [
             *messages,
             {

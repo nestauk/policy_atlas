@@ -125,9 +125,9 @@ SCOPING = "options_scoping/scoping_backend.py"
 TOC = "theory_of_change/backend.py"
 TASK_AGENT_TOC = "runtime/task_agent_toc.py"
 
-# Every traced model call site, read from the code on 2026-11-03 (task 057 Phase 0).
+# Every traced model call site, read from the code on 2026-11-03.
 # Module paths are under backend/src/policy_atlas; the timeout is the one passed to
-# resolve_openai_client for the client the call uses. Phase 1 reuses this table.
+# resolve_openai_client for the client the call uses.
 SITES: tuple[Site, ...] = (
     # --- Evidence search: assess ---
     Site("classify:document", "classify_document", 60, CLASSIFY),
@@ -164,9 +164,9 @@ SITES: tuple[Site, ...] = (
     Site("synthesise:write_artefact_summary", "synthesise_write_artefact_summary", 120, SYNTH),
     Site("synthesise:judge_summary", "synthesise_judge_summary", 120, SYNTH),
     Site("synthesise:section_turn", "synthesise_section_turn", 120, SYNTH),
-    # the claim repair shares the section-turn step (route file comment, D10)
+    # the claim repair shares the section-turn step (route file comment)
     Site("synthesise:repair_claims", "synthesise_section_turn", 120, SYNTH),
-    # the streamed final turn (task 058, D1): one generation, no retry loop
+    # the streamed final turn: one generation, no retry loop
     Site("synthesise:section_emit", "synthesise_section_emit", 120, SYNTH),
     Site("synthesise:write_key_findings", "synthesise_write_key_findings", 120, SYNTH),
     Site("synthesise:write_case_studies", "synthesise_write_case_studies", 120, SYNTH),
@@ -185,7 +185,7 @@ SITES: tuple[Site, ...] = (
     Site("agent:longlist_sort", "agent_longlist_sort", 60, AGENT),
     Site("agent:option_design", "agent_option_design", 60, AGENT),
     Site("agent:suggest", "agent_suggest", 60, AGENT),
-    # round 14: the two title calls (runtime/agent_backend.py write_title)
+    # The two title calls (runtime/agent_backend.py write_title)
     Site("task_agent:title", "task_title", 20, AGENT),
     Site("chat:title", "chat_title", 20, AGENT),
     Site("task_agent:turn", "task_agent_turn", 60, TASK_AGENT),
@@ -201,7 +201,7 @@ SITES: tuple[Site, ...] = (
     Site("longlist:distinct", "longlist_distinct", 60, SCOPING),
     Site("longlist:authority", "longlist_authority", 60, SCOPING),
     Site("longlist:shortlist", "longlist_shortlist", 60, SCOPING),
-    # round 14: the shortlist note's one writer (scoping_backend.py shortlist_note)
+    # The shortlist note's one writer (scoping_backend.py shortlist_note)
     Site("shortlist:note", "shortlist_note", 30, SCOPING),
     Site("option_profile:line", "option_profile_line", 60, SCOPING),
     Site("option_profile:potential_impact", "option_profile_potential_impact", 60, SCOPING),
@@ -209,7 +209,7 @@ SITES: tuple[Site, ...] = (
     Site("option_profile:setting", "option_profile_setting", 60, SCOPING),
     Site("option_profile:fold", "option_profile_fold", 60, SCOPING),
     Site("option_profile:place_sentences", "option_profile_place_sentences", 60, SCOPING),
-    # --- Theory of change (task 054): one client, the timeout read from the route file;
+    # --- Theory of change: one client, the timeout read from the route file;
     # the observation is built as f"toc:{step without toc_}" in backend.py ---
     Site("toc:draft", "toc_draft", 300, TOC),
     Site("toc:discover", "toc_discover", 300, TOC),
