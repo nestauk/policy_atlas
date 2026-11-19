@@ -106,6 +106,12 @@ class PolicyAtlasStack(Stack):
         # means every element is off. scripts/deploy.sh reads the same value
         # for the frontend build (VITE_FEEDBACK), so the two sides agree.
         feedback = be_config.get("feedback", "")
+        # Product analytics (backend/src/policy_atlas/api/analytics.py): the
+        # PostHog project key and host. A project key is write-only and not a
+        # secret (PostHog puts it in browser code), so it is a plain value.
+        # Empty means analytics is off, whatever "feedback" names.
+        posthog_api_key = be_config.get("posthog_api_key", "")
+        posthog_host = be_config.get("posthog_host", "")
         # The git tag or commit of this deploy (scripts/deploy.sh passes it as
         # CDK context). Stored on each feedback event. Empty when not given.
         pa_version = self.node.try_get_context("pa_version") or ""
@@ -225,6 +231,8 @@ class PolicyAtlasStack(Stack):
                 "POLICY_ATLAS_UPLOAD_BUCKET": uploads_bucket.bucket_name,
                 "POLICY_ATLAS_THEORY_OF_CHANGE": theory_of_change,
                 "POLICY_ATLAS_FEEDBACK": feedback,
+                "POSTHOG_API_KEY": posthog_api_key,
+                "POSTHOG_HOST": posthog_host,
                 "POLICY_ATLAS_VERSION": pa_version,
                 "POLICY_ATLAS_INGEST_MODE": ingest_mode,
                 "POLICY_ATLAS_INGEST_QUEUE_URL": ingest.queue.queue_url,

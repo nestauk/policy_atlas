@@ -17,6 +17,39 @@
         "title": "AbortResponse",
         "type": "object"
       },
+      "AnalyticsEventIn": {
+        "additionalProperties": false,
+        "description": "One page event. No free text: an event name and an optional task id.",
+        "properties": {
+          "event": {
+            "enum": [
+              "planner_opened",
+              "report_opened",
+              "report_exported",
+              "sources_tab_opened"
+            ],
+            "title": "Event",
+            "type": "string"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          }
+        },
+        "required": [
+          "event"
+        ],
+        "title": "AnalyticsEventIn",
+        "type": "object"
+      },
       "AnswerPayloadOut": {
         "description": "The cited half of one grounded answer, shared by every turn that has one.\n\nThese are the citation fields ``ChatTurnOut`` has always carried, named\nonce so a Task Agent turn that answers from the evidence (task 044) can\ncarry the same shape instead of a second, drifting copy. Every field keeps\nits chat default, so a turn with no answer serialises exactly as before.\n\nArgs:\n    claims: Structured claims backing the prose.\n    citations: Resolved citations, each with its read-time source facts.\n    enrichment: Downstream enrichment status for those citations.\n    warning_not_evidence_checked: Whether the evidence check could not run.\n    handoff: The handoff hint, when the answer held no evidence.\n    stopped_before_evidence_check: Whether the answer was stopped early.",
         "properties": {
@@ -14737,6 +14770,46 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/analytics/events": {
+      "post": {
+        "description": "Forward one page event to PostHog for the caller.\n\nArgs:\n    body: The event name and the task that was open, if any.\n    user: The authenticated caller, who is the person in PostHog.\n    sender: The PostHog sender, or ``None`` when no project key is set.\n\nReturns:\n    An empty 204 response. The event is sent on a worker thread.",
+        "operationId": "relay_event_api_v1_analytics_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyticsEventIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Relay Event",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
     "/api/v1/conversations/{conversation_id}": {
       "get": {
         "description": "Resolve an active or closed conversation deep link under its grade.",
@@ -15195,7 +15268,7 @@
         ]
       },
       "post": {
-        "description": "Store one feedback record, then mirror it as a Langfuse score.\n\nFor a toggle kind, a second submit for the same target replaces the first:\nthe earlier record is retracted and its score is deleted.\n\nA missing-paper report is resolved on a worker thread. The request waits\nfor the answer up to :data:`RESOLVE_BUDGET_S`; after that the response has\na pending resolution, and ``GET /api/v1/feedback/{id}`` has the answer\nwhen the resolver is done.\n\nArgs:\n    body: The validated record of one kind.\n    user: The authenticated caller.\n    engine: The process engine. The route owns its transaction, so that\n        the mirror runs after the commit.\n    settings: The application settings (feature flags, version).\n    langfuse: The Langfuse client, or ``None`` when tracing is off.\n    lookup: The OpenAlex lookups for a missing paper, or ``None``.\n\nReturns:\n    The stored record.\n\nRaises:\n    HTTPException: 404 when the element is off, or when the task, the\n        report or the document is absent or not readable by the caller.\n        422 for an override of a document that was not screened out.",
+        "description": "Store one feedback record, then mirror it as a Langfuse score.\n\nFor a toggle kind, a second submit for the same target replaces the first:\nthe earlier record is retracted and its score is deleted.\n\nA missing-paper report is resolved on a worker thread. The request waits\nfor the answer up to :data:`RESOLVE_BUDGET_S`; after that the response has\na pending resolution, and ``GET /api/v1/feedback/{id}`` has the answer\nwhen the resolver is done.\n\nArgs:\n    body: The validated record of one kind.\n    user: The authenticated caller.\n    engine: The process engine. The route owns its transaction, so that\n        the mirror runs after the commit.\n    settings: The application settings (feature flags, version).\n    langfuse: The Langfuse client, or ``None`` when tracing is off.\n    lookup: The OpenAlex lookups for a missing paper, or ``None``.\n    analytics: The PostHog sender, or ``None`` when analytics is off.\n\nReturns:\n    The stored record.\n\nRaises:\n    HTTPException: 404 when the element is off, or when the task, the\n        report or the document is absent or not readable by the caller.\n        422 for an override of a document that was not screened out.",
         "operationId": "submit_feedback_api_v1_feedback_post",
         "requestBody": {
           "content": {
@@ -15414,7 +15487,7 @@
         ]
       },
       "put": {
-        "description": "Complete the caller's profile, or edit a completed one.\n\n``completed_at`` keeps the time of the first completion. A later edit\nreplaces the answers and leaves that time unchanged.\n\nArgs:\n    payload: The validated answers.\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The stored profile.",
+        "description": "Complete the caller's profile, or edit a completed one.\n\n``completed_at`` keeps the time of the first completion. A later edit\nreplaces the answers and leaves that time unchanged.\n\nThe profile is mirrored to PostHog person properties: ``department``,\n``team_type``, ``primary_job`` and ``source``. Each is a code. The typed\ndepartment name (``department_other``) is free text and is not sent.\n\nArgs:\n    payload: The validated answers.\n    user: The authenticated caller.\n    conn: Open database connection.\n    analytics: The PostHog sender, or ``None`` when analytics is off.\n\nReturns:\n    The stored profile.",
         "operationId": "save_profile_api_v1_me_profile_put",
         "requestBody": {
           "content": {
@@ -15461,7 +15534,7 @@
     },
     "/api/v1/me/profile/skip": {
       "post": {
-        "description": "Record the caller's one \"Skip for now\".\n\nOnly the first skip is recorded: a second call changes nothing, so\n``skipped_once_at`` always holds the time of the first skip. The frontend\noffers no skip when this time is set (``frontend/src/lib/profileGate.ts``).\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The stored profile.",
+        "description": "Record the caller's one \"Skip for now\".\n\nOnly the first skip is recorded: a second call changes nothing, so\n``skipped_once_at`` always holds the time of the first skip. The frontend\noffers no skip when this time is set (``frontend/src/lib/profileGate.ts``).\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n    analytics: The PostHog sender, or ``None`` when analytics is off.\n\nReturns:\n    The stored profile.",
         "operationId": "skip_profile_api_v1_me_profile_skip_post",
         "responses": {
           "200": {

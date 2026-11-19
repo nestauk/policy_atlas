@@ -14,7 +14,9 @@ export type FeedbackElement =
   | "use_intent"
   | "claim_flag"
   | "problem_report"
-  | "onboarding";
+  | "onboarding"
+  // Product analytics: page events go to the API's relay, not to PostHog.
+  | "analytics";
 
 /**
  * Whether a feedback element is on in this build.

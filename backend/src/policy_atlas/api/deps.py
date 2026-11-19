@@ -12,6 +12,7 @@ from fastapi import HTTPException, Request
 from langfuse import Langfuse
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.analytics import Sender, posthog_sender_from_env
 from policy_atlas.api.auth import get_current_user, get_optional_user
 from policy_atlas.api.settings import IngestMode, Settings
 from policy_atlas.api.titles import TitleWriter
@@ -126,6 +127,16 @@ def get_langfuse_client() -> Langfuse | None:
         this seam with a fake client to assert the score call.
     """
     return tracing.get_langfuse()
+
+
+def get_analytics_sender() -> Sender | None:
+    """Return the function that sends analytics events to PostHog.
+
+    Returns:
+        The sender, or None when analytics is off. Tests override this seam
+        with a function that records each event.
+    """
+    return posthog_sender_from_env()
 
 
 def get_paper_lookup() -> OpenAlexLiveBackend | None:
@@ -311,6 +322,7 @@ def get_grounding_judge_backend() -> GroundingJudgeBackend:
 
 
 __all__ = [
+    "get_analytics_sender",
     "get_conn",
     "get_chat_backend",
     "get_chat_embedding_backend",

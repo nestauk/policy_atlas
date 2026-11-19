@@ -5,6 +5,7 @@
  * feedback element stays one small unit behind its feature flag.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
 
 import type { components, paths } from "./gen/types";
 import { useApiClient } from "./queries";
@@ -187,4 +188,31 @@ export function useRetractFeedback(taskId: string, kind: FeedbackKind) {
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: feedbackKey(taskId, kind) }),
   });
+}
+
+/** A page event that the frontend sends to the analytics relay. */
+export type AnalyticsEvent =
+  paths["/api/v1/analytics/events"]["post"]["requestBody"]["content"]["application/json"]["event"];
+
+/**
+ * `POST /api/v1/analytics/events`: send one page event to the relay.
+ *
+ * The browser has no PostHog script. The API adds the user and forwards the
+ * event; it takes an event name and a task id, and no free text. A failure is
+ * ignored: analytics must not disturb the page.
+ *
+ * Returns:
+ *   A function that sends one event. Call it only where the `analytics`
+ *   element is on.
+ */
+export function useTrackEvent() {
+  const client = useApiClient();
+  return useCallback(
+    (event: AnalyticsEvent, taskId?: string) => {
+      void client
+        .POST("/api/v1/analytics/events", { body: { event, task_id: taskId ?? null } })
+        .catch(() => undefined);
+    },
+    [client],
+  );
 }

@@ -80,6 +80,7 @@ import {
   FlaggableSource,
 } from "./feedback/ClaimFlag";
 import { MissingPaperCard } from "./feedback/MissingPaper";
+import { TrackAction, TrackEvent } from "./feedback/TrackEvent";
 import { UseIntentCard } from "./feedback/UseIntentCard";
 import { feedbackEnabled } from "../lib/feedback";
 import {
@@ -3918,6 +3919,8 @@ function ArtefactReport() {
       <ReportPage entries={outlineEntries}>
         {[
           <div key="notice">
+            {/* In-app feedback analytics: `report_opened`, signed-in readers only. */}
+            {!isPublicView && <TrackEvent event="report_opened" taskId={taskId} />}
             {rerunLive && rerunStartedAt !== undefined && (
               <RerunNotice taskId={taskId} artefactId={data.artefact_id} runStartedAt={rerunStartedAt} />
             )}
@@ -3929,7 +3932,16 @@ function ArtefactReport() {
                   surfaces; the Result's heading says what the reader is
                   looking at (owner ruling 2026-09-18). */}
               <span className={arriving}>
-                <ArtefactDownload artefact={data} question={baseline ? null : question} />
+                {/* In-app feedback analytics: `report_exported`. */}
+                <TrackAction event="report_exported" taskId={taskId}>
+                  {(onExport) => (
+                    <ArtefactDownload
+                      artefact={data}
+                      question={baseline ? null : question}
+                      onExport={onExport}
+                    />
+                  )}
+                </TrackAction>
               </span>
             </ReportKindRow>
             {/* A report's title is its question, live and committed, so the

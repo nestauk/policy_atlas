@@ -35,6 +35,8 @@ for _egress_key in (
     "LANGFUSE_BASE_URL",
     "OVERTON_API_KEY",
     "OPENALEX_API_KEY",
+    "POSTHOG_API_KEY",
+    "POSTHOG_HOST",
 ):
     os.environ.pop(_egress_key, None)
 

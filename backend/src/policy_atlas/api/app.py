@@ -270,6 +270,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
 
     # Imported here so resource routers can use ApiConflict without an import
     # cycle during module initialisation.
+    from policy_atlas.api.routers.analytics import router as analytics_router
     from policy_atlas.api.routers.check_ins import router as check_ins_router
     from policy_atlas.api.routers.conversations import router as conversations_router
     from policy_atlas.api.routers.conversations import (
@@ -295,6 +296,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         me_router,
         profile_router,
         feedback_router,
+        analytics_router,
         tasks_router,
         tasks_public_read_router,
         projects_router,

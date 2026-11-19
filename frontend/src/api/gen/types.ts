@@ -4,6 +4,34 @@
  */
 
 export interface paths {
+    "/api/v1/analytics/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Relay Event
+         * @description Forward one page event to PostHog for the caller.
+         *
+         *     Args:
+         *         body: The event name and the task that was open, if any.
+         *         user: The authenticated caller, who is the person in PostHog.
+         *         sender: The PostHog sender, or ``None`` when no project key is set.
+         *
+         *     Returns:
+         *         An empty 204 response. The event is sent on a worker thread.
+         */
+        post: operations["relay_event_api_v1_analytics_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/conversations/{conversation_id}": {
         parameters: {
             query?: never;
@@ -193,6 +221,7 @@ export interface paths {
          *         settings: The application settings (feature flags, version).
          *         langfuse: The Langfuse client, or ``None`` when tracing is off.
          *         lookup: The OpenAlex lookups for a missing paper, or ``None``.
+         *         analytics: The PostHog sender, or ``None`` when analytics is off.
          *
          *     Returns:
          *         The stored record.
@@ -321,10 +350,15 @@ export interface paths {
          *     ``completed_at`` keeps the time of the first completion. A later edit
          *     replaces the answers and leaves that time unchanged.
          *
+         *     The profile is mirrored to PostHog person properties: ``department``,
+         *     ``team_type``, ``primary_job`` and ``source``. Each is a code. The typed
+         *     department name (``department_other``) is free text and is not sent.
+         *
          *     Args:
          *         payload: The validated answers.
          *         user: The authenticated caller.
          *         conn: Open database connection.
+         *         analytics: The PostHog sender, or ``None`` when analytics is off.
          *
          *     Returns:
          *         The stored profile.
@@ -357,6 +391,7 @@ export interface paths {
          *     Args:
          *         user: The authenticated caller.
          *         conn: Open database connection.
+         *         analytics: The PostHog sender, or ``None`` when analytics is off.
          *
          *     Returns:
          *         The stored profile.
@@ -2084,6 +2119,19 @@ export interface components {
              * @enum {string}
              */
             kind: "abort";
+        };
+        /**
+         * AnalyticsEventIn
+         * @description One page event. No free text: an event name and an optional task id.
+         */
+        AnalyticsEventIn: {
+            /**
+             * Event
+             * @enum {string}
+             */
+            event: "planner_opened" | "report_opened" | "report_exported" | "sources_tab_opened";
+            /** Task Id */
+            task_id?: string | null;
         };
         /**
          * AnswerPayloadOut
@@ -9165,6 +9213,37 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    relay_event_api_v1_analytics_events_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalyticsEventIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_conversation_api_v1_conversations__conversation_id__get: {
         parameters: {
             query?: never;

@@ -4,6 +4,8 @@ import { useFunnel, useTask } from "../api/queries";
 import { cn } from "../ui/brand/cn";
 import { SOURCES_LABELS } from "../lib/vocabulary";
 import { WIDE_PAGE_CLASS } from "./listPageChrome";
+import { TrackEvent } from "./feedback/TrackEvent";
+import { usePublicView } from "./publicView";
 import { isToc } from "./scopingActivity";
 import { ThemesView } from "./ThemesView";
 import { GROWING_RULE_ACTIVE_CLASS, GROWING_RULE_CLASS } from "../ui/brand/Nav";
@@ -33,6 +35,7 @@ export function SourcesIndex() {
  */
 export function SourcesLayout() {
   const { taskId = "" } = useParams();
+  const isPublicView = usePublicView();
   const funnel = useFunnel(taskId);
   const task = useTask(taskId);
   const base = `/tasks/${taskId}/sources`;
@@ -47,6 +50,8 @@ export function SourcesLayout() {
 
   return (
     <div className={`${WIDE_PAGE_CLASS} min-h-full py-8`}>
+      {/* In-app feedback analytics: `sources_tab_opened`, signed-in readers only. */}
+      {!isPublicView && <TrackEvent event="sources_tab_opened" taskId={taskId} />}
       <div className="bg-paper">
         {/* DESIGN.md § Navigation: Meta Grey at the medium weight, the active tab
             Extrabold Navy over the growing 3px Electric Blue rule, a Line

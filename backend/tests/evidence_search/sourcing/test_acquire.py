@@ -1165,6 +1165,10 @@ def test_acquire_module_has_no_http_client() -> None:
     verification is the contract-approved auth boundary) and ``api/app.py``
     owns the process-singleton HTTP client in the lifespan — both are
     auth-plane egress to the identity provider, never search/model egress.
+    In-app feedback extension (approved by Rosie Oxbury, 2026-11-19):
+    ``api/analytics.py`` sends product analytics events to PostHog. It sends a
+    user id, an event name from a closed list and closed fields only, and
+    only when a PostHog key, an https host and the ``analytics`` flag are set.
     Every other module stays HTTP-import-free (``urllib.parse`` is pure URL
     parsing, not a client, and stays allowed), ``acquire.py`` must never
     import its live module, and ``ingest_full_text.py`` must never import
@@ -1175,7 +1179,11 @@ def test_acquire_module_has_no_http_client() -> None:
         r"^\s*(import|from)\s+(urllib(?!\.parse\b)|requests|httpx|aiohttp|http\.client|socket)\b",
         re.MULTILINE,
     )
-    api_http_homes = (src_dir / "api" / "auth.py", src_dir / "api" / "app.py")
+    api_http_homes = (
+        src_dir / "api" / "auth.py",
+        src_dir / "api" / "app.py",
+        src_dir / "api" / "analytics.py",
+    )
     # task 057 review (security 1): ingest_full_text.py names ``socket`` only to
     # replace ``socket.socket`` with a refuser inside the parse worker; its own
     # guard (test_ingest_module_has_no_http_client) forbids constructing one.

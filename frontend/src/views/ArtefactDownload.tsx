@@ -14,25 +14,36 @@ import {
 export function ArtefactDownload({
   artefact,
   question = null,
+  onExport,
 }: {
   artefact: Parameters<typeof artefactMarkdown>[0];
   /** The task's question, the page's title; null keeps the artefact's own. */
   question?: string | null;
+  /** Called when the reader exports the report in either format. */
+  onExport?: () => void;
 }) {
   return (
     <DownloadMenu
       items={[
         // Expand handlers on sections listen for `beforeprint` and flushSync
         // their open state; print then captures the full report.
-        { label: "PDF", onSelect: () => window.print() },
+        {
+          label: "PDF",
+          onSelect: () => {
+            onExport?.();
+            window.print();
+          },
+        },
         {
           label: "Markdown",
-          onSelect: () =>
+          onSelect: () => {
+            onExport?.();
             triggerTextDownload(
               downloadFilename(artefact.title, "md"),
               artefactMarkdown(artefact, question),
               "text/markdown",
-            ),
+            );
+          },
         },
       ]}
     />

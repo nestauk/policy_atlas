@@ -23,6 +23,8 @@ FEEDBACK_ELEMENTS = frozenset(
         "claim_flag",
         "problem_report",
         "onboarding",
+        # Product analytics events to PostHog (policy_atlas.api.analytics).
+        "analytics",
     }
 )
 

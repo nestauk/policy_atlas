@@ -17,7 +17,9 @@
                 "db_max_overflow": 10,
                 "upload_bucket_name": "policy-atlas-v3-staging-uploads",
                 "theory_of_change": true,
-                "feedback": ""
+                "feedback": "",
+                "posthog_api_key": "",
+                "posthog_host": ""
             }
         },
         "deploy_analytics": true
@@ -40,7 +42,9 @@
                 "db_max_overflow": 10,
                 "upload_bucket_name": "policy-atlas-v3-prod-uploads",
                 "theory_of_change": false,
-                "feedback": ""
+                "feedback": "",
+                "posthog_api_key": "",
+                "posthog_host": ""
             }
         },
         "deploy_analytics": true

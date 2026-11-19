@@ -25,6 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
 
+from policy_atlas.api.analytics import Sender, capture
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract.feedback import (
     CitationFlagIn,
@@ -40,6 +41,7 @@ from policy_atlas.api.contract.feedback import (
     UseIntentIn,
 )
 from policy_atlas.api.deps import (
+    get_analytics_sender,
     get_current_user,
     get_engine,
     get_langfuse_client,
@@ -517,6 +519,7 @@ def submit_feedback(
     settings: Annotated[Settings, Depends(get_settings)],
     langfuse: Annotated[Langfuse | None, Depends(get_langfuse_client)],
     lookup: Annotated[PaperLookup | None, Depends(get_paper_lookup)],
+    analytics: Annotated[Sender | None, Depends(get_analytics_sender)],
 ) -> FeedbackOut:
     """Store one feedback record, then mirror it as a Langfuse score.
 
@@ -536,6 +539,7 @@ def submit_feedback(
         settings: The application settings (feature flags, version).
         langfuse: The Langfuse client, or ``None`` when tracing is off.
         lookup: The OpenAlex lookups for a missing paper, or ``None``.
+        analytics: The PostHog sender, or ``None`` when analytics is off.
 
     Returns:
         The stored record.
@@ -581,6 +585,13 @@ def submit_feedback(
             if attempt == SUBMIT_ATTEMPTS - 1:
                 raise
 
+    # PostHog gets the kind and the surface only. No payload, so no free text.
+    capture(
+        analytics,
+        event="feedback_submitted",
+        user_id=user.user_id,
+        properties={"kind": body.kind, "surface": body.surface},
+    )
     if recorded.replaced_id is not None:
         tracing.delete_feedback_score(langfuse, recorded.replaced_id)
     if prepared.score_value is not None:

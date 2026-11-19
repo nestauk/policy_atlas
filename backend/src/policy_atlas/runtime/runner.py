@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import SQLAlchemyError
 
+from policy_atlas.api.analytics import capture_run_finished, posthog_sender_from_env
 from policy_atlas.api.contract import StageKey
 from policy_atlas.api.lifecycle import touch_task
 from policy_atlas.core import events, tracing
@@ -5870,6 +5871,16 @@ def _finish_run(
         ):
             close_task_agent_conversation(conn, task_id=task_id, closed_at=ended_at)
     tick_hub.end_run(task_id, capability_run_id)
+    # In-app feedback analytics: a run that the user started has ended. Not a
+    # child walk and not an option search, which end inside their parent's run.
+    if (
+        walk_scope is not None
+        and walk_scope.parent_capability_run_id is None
+        and purpose != TARGETED_PURPOSE
+    ):
+        capture_run_finished(
+            engine, posthog_sender_from_env(), task_id=task_id, status=status
+        )
     collation = render_collation(flagged_events)
     log.info("runner.collation", render=collation)
     _log_run_summary(outcomes, status=status)
