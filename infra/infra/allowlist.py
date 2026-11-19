@@ -28,7 +28,7 @@ CIDRS_PER_LISTENER_RULE = 4
 EXPECTED_VALUE_ENVIRONMENT_VARIABLE = "METABASE_ALLOWLIST_VALUE"
 
 
-def parse_allowlist(raw_value: str) -> list[ipaddress.IPv4Network]:
+def parse_allowlist(raw_value: str, *, label: str = "Metabase") -> list[ipaddress.IPv4Network]:
     """Parse the comma-separated allowlist into canonical IPv4 networks.
 
     Args:
@@ -46,41 +46,41 @@ def parse_allowlist(raw_value: str) -> list[ipaddress.IPv4Network]:
     entries = raw_value.split(",") if raw_value else []
     if not 1 <= len(entries) <= MAX_ALLOWLIST_ENTRIES:
         raise ValueError(
-            f"Metabase allowlist must contain one to {MAX_ALLOWLIST_ENTRIES} CIDRs"
+            f"{label} allowlist must contain one to {MAX_ALLOWLIST_ENTRIES} CIDRs"
         )
 
     networks: list[ipaddress.IPv4Network] = []
     for position, entry in enumerate(entries, start=1):
         if entry != entry.strip() or not entry:
             raise ValueError(
-                f"Metabase allowlist entry {position} is empty or contains whitespace"
+                f"{label} allowlist entry {position} is empty or contains whitespace"
             )
         try:
             network = ipaddress.ip_network(entry, strict=True)
         except ValueError as error:
             raise ValueError(
-                f"Metabase allowlist entry {position} is not a canonical CIDR"
+                f"{label} allowlist entry {position} is not a canonical CIDR"
             ) from error
         if isinstance(network, ipaddress.IPv6Network):
             raise ValueError(
-                f"Metabase allowlist entry {position} is IPv6; the shared ALB is "
+                f"{label} allowlist entry {position} is IPv6; the shared ALB is "
                 "IPv4-only, so IPv6 entries can never match a client"
             )
         if network.prefixlen == 0:
             raise ValueError(
-                f"Metabase allowlist entry {position} is a universal CIDR, which "
+                f"{label} allowlist entry {position} is a universal CIDR, which "
                 "does not form an IP allowlist"
             )
         if network.network_address == ipaddress.IPv4Address("255.255.255.255"):
             raise ValueError(
-                f"Metabase allowlist entry {position} is the broadcast address, "
+                f"{label} allowlist entry {position} is the broadcast address, "
                 "which is not valid for an ALB rule"
             )
         networks.append(network)
     return networks
 
 
-def validate_parameter_payload(payload: object) -> int:
+def validate_parameter_payload(payload: object, *, label: str = "Metabase") -> int:
     """Validate an AWS SSM ``get-parameter`` response payload.
 
     Args:
@@ -96,12 +96,12 @@ def validate_parameter_payload(payload: object) -> int:
     if not isinstance(payload, dict):
         raise ValueError("SSM parameter payload must be an object")
     if payload.get("Type") != "StringList":
-        raise ValueError("Metabase allowlist parameter must use type StringList")
+        raise ValueError(f"{label} allowlist parameter must use type StringList")
 
     raw_value = payload.get("Value")
     if not isinstance(raw_value, str):
-        raise ValueError("Metabase allowlist parameter value must be a string")
-    return len(parse_allowlist(raw_value))
+        raise ValueError(f"{label} allowlist parameter value must be a string")
+    return len(parse_allowlist(raw_value, label=label))
 
 
 def _condition_values(condition: dict, config_key: str) -> list[str]:
@@ -112,7 +112,9 @@ def _condition_values(condition: dict, config_key: str) -> list[str]:
     return [str(value) for value in values] if isinstance(values, list) else []
 
 
-def metabase_rule_source_cidrs(rules: object, host: str) -> set[str]:
+def metabase_rule_source_cidrs(
+    rules: object, host: str, *, label: str = "Metabase"
+) -> set[str]:
     """Return the ``source-ip`` values of every listener rule for ``host``.
 
     Args:
@@ -144,7 +146,7 @@ def metabase_rule_source_cidrs(rules: object, host: str) -> set[str]:
         ):
             matching_rules.append(rule)
     if not matching_rules:
-        raise ValueError("found no listener rule for the Metabase hostname")
+        raise ValueError(f"found no listener rule for the {label} hostname")
 
     source_cidrs: set[str] = set()
     for rule in matching_rules:
@@ -155,14 +157,16 @@ def metabase_rule_source_cidrs(rules: object, host: str) -> set[str]:
         ]
         if len(source_conditions) != 1:
             raise ValueError(
-                f"the Metabase listener rule at priority {rule.get('Priority')} "
+                f"the {label} listener rule at priority {rule.get('Priority')} "
                 "has no single source-ip condition"
             )
         source_cidrs |= set(_condition_values(source_conditions[0], "SourceIpConfig"))
     return source_cidrs
 
 
-def verify_listener_rule(rules: object, host: str, expected_value: str) -> None:
+def verify_listener_rule(
+    rules: object, host: str, expected_value: str, *, label: str = "Metabase"
+) -> None:
     """Check that the live Metabase listener rules match the SSM allowlist.
 
     Args:
@@ -175,16 +179,16 @@ def verify_listener_rule(rules: object, host: str, expected_value: str) -> None:
             set differs from the allowlist. The message reports counts, never
             addresses.
     """
-    expected = {str(network) for network in parse_allowlist(expected_value)}
+    expected = {str(network) for network in parse_allowlist(expected_value, label=label)}
     applied = set()
-    for value in metabase_rule_source_cidrs(rules, host):
+    for value in metabase_rule_source_cidrs(rules, host, label=label):
         try:
             applied.add(str(ipaddress.ip_network(value, strict=False)))
         except ValueError:
             applied.add(value)
     if applied != expected:
         raise ValueError(
-            "the Metabase listener rules do not match the SSM allowlist: "
+            f"the {label} listener rules do not match the SSM allowlist: "
             f"{len(applied)} CIDR(s) applied, {len(expected)} allowlisted, "
             f"{len(applied ^ expected)} differ; redeploy the analytics stack"
         )
@@ -194,14 +198,16 @@ def _main(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.set_defaults(command="validate")
     subcommands = parser.add_subparsers(dest="command")
-    subcommands.add_parser("validate", help="validate a get-parameter payload")
-    subcommands.add_parser(
+    validate = subcommands.add_parser("validate", help="validate a get-parameter payload")
+    size = subcommands.add_parser(
         "size", help="validate a get-parameter payload and print its CIDR count"
     )
     verify = subcommands.add_parser(
         "verify-rule", help="compare the live listener rule with the allowlist"
     )
-    verify.add_argument("--host", required=True, help="Metabase hostname")
+    verify.add_argument("--host", required=True, help="allowlisted hostname")
+    for command in (validate, size, verify):
+        command.add_argument("--label", default="Metabase", help="allowlist label for messages")
     arguments = parser.parse_args(argv)
 
     try:
@@ -211,11 +217,14 @@ def _main(argv: list[str]) -> None:
                 raise ValueError(
                     f"{EXPECTED_VALUE_ENVIRONMENT_VARIABLE} must carry the SSM value"
                 )
-            verify_listener_rule(json.load(sys.stdin), arguments.host, expected_value)
+            verify_listener_rule(
+                json.load(sys.stdin), arguments.host, expected_value,
+                label=arguments.label,
+            )
         elif arguments.command == "size":
-            print(validate_parameter_payload(json.load(sys.stdin)))
+            print(validate_parameter_payload(json.load(sys.stdin), label=arguments.label))
         else:
-            validate_parameter_payload(json.load(sys.stdin))
+            validate_parameter_payload(json.load(sys.stdin), label=arguments.label)
     except (json.JSONDecodeError, ValueError) as error:
         raise SystemExit(str(error)) from error
 

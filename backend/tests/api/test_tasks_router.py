@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import cast
 
+import pytest
+from fastapi.testclient import TestClient
+from httpx import Response
+from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
-from policy_atlas.core.schema import capability_run, evidence_scope
+from policy_atlas.core.schema import capability_run, evidence_scope, task
+from tests.api.org_support import ops_enrol, seeded, tenancy_client
 from tests.api.resource_support import api_client, create_task
-from tests.helpers import seed_run, seed_screening_result, seed_source
+from tests.helpers import delete_task_data, seed_run, seed_screening_result, seed_source
 
 
 def test_tasks_create_list_get_archive_and_owner_404(engine: Engine, tmp_path: Path) -> None:
@@ -249,3 +255,84 @@ def test_rename_and_membership_while_run_is_active_leave_the_run_running(
         fetched = client.get(f"/api/v1/tasks/{task_id}", headers=owner)
         assert fetched.status_code == 200
         assert fetched.json()["latest_run"]["status"] == "running"
+
+
+# --- task 064a (Q8): the yearly task quota ------------------------------------------
+
+
+def _owned_tasks(
+    engine: Engine, owner: str, count: int, *, days_ago: int = 0, archived: bool = False
+) -> None:
+    """Insert ``count`` task rows for ``owner``, created ``days_ago`` days back."""
+    if not count:
+        return
+    created = datetime.now(UTC) - timedelta(days=days_ago)
+    with seeded(engine) as conn:
+        conn.execute(
+            task.insert(),
+            [
+                {
+                    "task_id": uuid.uuid4(),
+                    "name": "Quota",
+                    "status": "archived" if archived else "active",
+                    "owner_user_id": owner,
+                    "created_at": created,
+                    "updated_at": created,
+                    "archived_at": created if archived else None,
+                }
+                for _ in range(count)
+            ],
+        )
+
+
+def _drop_owned(engine: Engine, owner: str) -> None:
+    with engine.begin() as conn:
+        for task_id in conn.execute(
+            select(task.c.task_id).where(task.c.owner_user_id == owner)
+        ).scalars():
+            delete_task_data(conn, task_id)
+
+
+def _create(client: TestClient, headers: dict[str, str]) -> Response:
+    return cast(
+        Response,
+        client.post("/api/v1/tasks", headers=headers, json={"name": "N", "question": "Q?"}),
+    )
+
+
+@pytest.mark.parametrize(
+    ("recent", "old", "archived", "admitted"),
+    [
+        (50, 0, 0, False),  # at the default quota of 50
+        (49, 1, 0, True),  # a task 366 days old has left the window
+        (49, 0, 1, False),  # archiving does not give a task back
+    ],
+)
+def test_the_fifty_first_task_in_a_year_is_refused(
+    engine: Engine, tmp_path: Path, recent: int, old: int, archived: int, admitted: bool
+) -> None:
+    with tenancy_client(tmp_path, count=1) as (client, (caller,)):
+        try:
+            _owned_tasks(engine, caller.user_id, recent)
+            _owned_tasks(engine, caller.user_id, old, days_ago=366)
+            _owned_tasks(engine, caller.user_id, archived, archived=True)
+            response = _create(client, caller.headers)
+            if admitted:
+                assert response.status_code == 201, response.text
+            else:
+                assert response.status_code == 409, response.text
+                assert response.json()["error"]["code"] == "task_quota"
+        finally:
+            _drop_owned(engine, caller.user_id)
+
+
+def test_an_administrator_has_no_task_quota(engine: Engine, tmp_path: Path) -> None:
+    with tenancy_client(tmp_path, count=1) as (client, (admin,)):
+        try:
+            with seeded(engine) as conn:
+                ops_enrol(conn, user_id=admin.user_id, is_admin=True)
+            _owned_tasks(engine, admin.user_id, 50)
+            response = _create(client, admin.headers)
+            assert response.status_code == 201, response.text
+        finally:
+            _drop_owned(engine, admin.user_id)
