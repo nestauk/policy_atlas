@@ -16,9 +16,8 @@ export const PLAN_EXIT_MS = 200;
 
 const PlanPanelContext = createContext<PlanPanel | null>(null);
 
-/** The plan panel's state: open, and leaving the way it came (owner,
- *  2026-11-09: the plan opened with motion and closed with a cut, unlike the
- *  citation and document sheets). Asked to close, it stays mounted with
+/** The plan panel's state: open, and leaving the way it came (with motion,
+ *  like the citation and document sheets). Asked to close, it stays mounted with
  *  `closing` set for `PLAN_EXIT_MS` so the document and the scrim over a tab
  *  can play their exits, then closes. Under reduced motion it closes at
  *  once. An open during the exit cancels it. */
@@ -50,7 +49,7 @@ function usePlanPanelState(): PlanPanel {
 /**
  * Whether the plan document is open, shared by the task shell so the "Plan"
  * control in the task nav, the Agent tab's "Review the plan" and the
- * sidebar's plan links all open the same side panel (task 058, N15).
+ * sidebar's plan links all open the same side panel.
  */
 export function PlanPanelProvider({ children }: { children: ReactNode }) {
   const panel = usePlanPanelState();

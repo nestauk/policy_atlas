@@ -19,7 +19,7 @@ import { evidenceTypeLabel } from "../ui/brand/evidence";
 import { formatCount } from "../lib/format";
 
 /* ---------------------------------------------------------------------------
- * Landscape charts (task 058, landscape polish; lead rulings 2026-11-05).
+ * Landscape charts.
  *
  * The funnel, evidence types, geographies and finding groups are ranked bars
  * drawn as a real HTML table (`RankedBars`): labels wrap instead of clipping
@@ -44,7 +44,7 @@ export type RankedRow = {
   /** Where the row leads: All sources (or Findings) filtered to its value.
    *  Absent on rows that lead nowhere (folded tails, "Not reported", a
    *  funnel stage the table cannot filter to), which then take no hover
-   *  either (owner, consistency pass; the funnel links since round 11). */
+   *  either. */
   href?: string;
 };
 
@@ -154,14 +154,14 @@ export function RankedBars({ caption, rows, busy = false }: { caption: string; r
 /* ------------------------------------------------------------------------- */
 
 /** The funnel's source stages in the run's own order (it fetches the full
- *  texts, then shortlists: owner, landscape polish), each with the run
+ *  texts, then shortlists), each with the run
  *  stages that fill it. "Full text" counts the sources whose full text was
- *  obtained; the word "read" is kept for steps where a model reads (owner). Every row counts sources, so the bars only shrink (Findings, a count
- *  of findings, left the funnel: lead ruling, landscape polish). */
+ *  obtained; the word "read" is kept for steps where a model reads. Every row counts sources, so the bars only shrink (Findings, a count
+ *  of findings, is not in the funnel). */
 const FUNNEL_STAGES = [
   { key: "found", label: "Found", stages: ["acquire"] },
   { key: "relevant", label: "Relevant", stages: ["screen"] },
-  // Round 13 (owner): the count is of appraisal results, so the row says
+  // The count is of appraisal results, so the row says
   // what was done; the full texts' row says they were accessed (the table's
   // Status words are unchanged).
   { key: "quality_checked", label: "Appraised", stages: ["classify", "appraise"] },
@@ -232,7 +232,7 @@ function byCountThenLabel(a: [string, number], b: [string, number]): number {
 
 /**
  * The evidence-type rows in a fixed order, so rows never swap while the
- * classifier fills them, each label in sentence case (round 10; the key keeps
+ * classifier fills them, each label in sentence case (the key keeps
  * the classifier's value for the link). The seven substantive types always stand (a zero
  * reads "0", no bar); a label outside the vocabulary follows them, largest
  * first; Other and Unknown come last in Grey, only when non-zero. While
@@ -398,9 +398,8 @@ const spanOf = (a: number, b: number): Span => ({ from: Math.min(a, b), to: Math
 
 /**
  * Publication years as upright columns in Navy, every year of the range
- * shown even at zero, with explicit year labels (task 058, landscape
- * polish). A column with sources leads to All sources for that year, and a
- * range of years can be chosen at once (owner, round 10):
+ * shown even at zero, with explicit year labels. A column with sources leads to All sources for that year, and a
+ * range of years can be chosen at once:
  *
  * - Pointer: press and drag across the columns. The covered columns turn
  *   Electric Blue as the pointer moves and a small Meta label above them
@@ -659,7 +658,7 @@ export function LandscapeSection({
   figure?: string | null;
   /** A control at the heading row's right end (the List / Map switch). */
   control?: ReactNode;
-  /** An `InfoHint` beside the heading: what the section counts (round 13). */
+  /** An `InfoHint` beside the heading: what the section counts. */
   hint?: ReactNode;
   children: ReactNode;
 }) {

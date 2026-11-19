@@ -38,7 +38,7 @@ import { DisclosureChevron } from "../../ui/brand/Disclosure";
  *  button in kind. */
 
 /**
- * Every line of the card shares one line box (owner, round 8: equal row
+ * Every line of the card shares one line box (equal row
  * heights): the Body line height, 1.55rem, whatever the line's text size, so
  * the top line, a done row and a step to come stand the same height and the
  * marks sit at the same place on each.
@@ -66,7 +66,7 @@ const MARK_REACH = "h-[calc(0.5rem+0.5lh)]";
 const WORDS_INDENT = "ml-[22px]";
 
 /**
- * The card reads as a table (owner, round 8): the words on the left, then
+ * The card reads as a table: the words on the left, then
  * the counts and times right-aligned in one column, then the links
  * right-aligned in the last. The same template on the top line and on every
  * row, so the columns line up down the card. Once the card is narrower than
@@ -78,14 +78,13 @@ const TABLE_ROW =
 
 /** The right group (counts and time, then the link): two of the table's
  *  columns when wide; narrow, right-aligned on the row's right edge as the
- *  wide table is (owner, round 14), on the label's line or the line under
+ *  wide table is, on the label's line or the line under
  *  it, the link wrapping to its own line at the right edge when the two do
  *  not fit. */
 const RIGHT_GROUP = "flex min-w-0 flex-1 flex-wrap items-baseline justify-end gap-x-1.5 @lg:contents";
 
 /** The separator between items. A no-break space binds each "·" to the word
- *  before it, so a separator never starts a line; the line breaks after it
- *  (lead, 2026-11-05). */
+ *  before it, so a separator never starts a line; the line breaks after it.*/
 const SEP = " · ";
 
 /** Server words with their separators bound the same way. */
@@ -157,8 +156,8 @@ function NarrowSeparator() {
 }
 
 /**
- * One plan step on the spine (the running card's body, owner 2026-11-05,
- * round 6; laid out as a table in round 8): its mark on the hairline, a
+ * One plan step on the spine (the running card's body, laid out as a
+ * table): its mark on the hairline, a
  * hairline rule above it from the second row on, its label on the left and
  * its counts, time and link on the right. The step in progress adds the
  * writer's section and what the model is doing now under its label; that
@@ -181,7 +180,7 @@ function SpineRow({
   last: boolean;
   /** True when the step finished while this trace was on screen: it keeps
    *  its place, its counts and time fade in and its square eases to green
-   *  (lead, round 9: a row that shrank as it landed and rose too read as a
+   *  (a row that shrank as it landed and rose too would read as a
    *  jump). */
   landed: boolean;
   paused: boolean;
@@ -193,7 +192,7 @@ function SpineRow({
   const progress = row.state === "progress";
   // The step in progress takes the blue square, breathing while updates
   // arrive (DESIGN.md: it holds still 1.5 s after the last); the top line's
-  // fold mark is the block's one turning mark (lead, round 6). Paused, the
+  // fold mark is the block's one turning mark. Paused, the
   // square is orange.
   const tick = progress ? rowLiveness(row, liveness) : undefined;
   const fresh = useFreshness(tick?.occurredAt);
@@ -233,7 +232,7 @@ function SpineRow({
         <div className={TABLE_ROW}>
           {/* A finished step's counts take their own line under the label
               when narrow; the step in progress keeps its clock on the
-              label's line (polish round 1). */}
+              label's line. */}
           <p
             className={cn(
               "min-w-0 text-body",
@@ -248,8 +247,8 @@ function SpineRow({
         </div>
         {section && <p className={cn("text-body text-navy", LINE)}>{bound(scrub(section))}</p>}
         {activity && (
-          // What the model is doing now breathes with the step's square
-          // (owner, round 8): opacity only, still under reduced motion.
+          // What the model is doing now breathes with the step's square:
+          // opacity only, still under reduced motion.
           <p data-testid="row-activity" className={cn("text-meta text-grey", LINE, breathing && "anim-breathe-soft")}>
             <Figures text={bound(scrub(activity))} />
           </p>
@@ -286,7 +285,7 @@ function isStateWord(words: string): boolean {
 }
 
 /**
- * The card's top line (owner, rounds 7 and 8): the mark, the state word in
+ * The card's top line: the mark, the state word in
  * the label style and what it says, the run's time right-aligned in the
  * table's time column, and the link in its last column. One line box with
  * the rows, so the card reads as a table.
@@ -340,11 +339,11 @@ function TopLine({
 }
 
 /**
- * The run trace (task 058; annex § The run trace, owner 2026-11-05): the one
+ * The run trace: the one
  * place a run's progress shows, at the run's place in the Task Agent thread,
  * in the Agent tab and the sidebar alike.
  *
- * It is one card through the whole run (owner, round 8: the ended state is
+ * It is one card through the whole run (the ended state is
  * the same card). Live, its top line is the turning fold mark, "Running" in
  * the label style and the run's elapsed time at the right; under it one row
  * per plan step in plan order, each with its mark on a hairline spine, its
@@ -375,12 +374,12 @@ type TraceProps = {
   /** Milliseconds spent paused in earlier check-ins, left out of the timer. */
   pausedMs?: number;
   hasFindings: boolean;
-  /** The task's capability: the finished words follow the walk kind (task 045). */
+  /** The task's capability: the finished words follow the walk kind. */
   capability?: string | null;
   /** The run's own purpose (`RunOut.purpose`): an added option's search
-   *  reads as its own kind, not the baseline (task 045, A7). */
+   *  reads as its own kind, not the baseline. */
   purpose?: string | null;
-  /** A theory of change's walk kind (`RunOut.toc_walk`, task 054): its
+  /** A theory of change's walk kind (`RunOut.toc_walk`): its
    *  finish words and its rows' links follow it. */
   tocWalk?: string | null;
   /** The owner is told a paused run waits on them. */
@@ -393,12 +392,12 @@ type TraceProps = {
   /** Opens the plan document, from the foot of the list. */
   onSeePlan?: () => void;
   /** The run stream is connected: the live mark turns only while it is, and
-   *  holds still when the connection is down (lead ruling). */
+   *  holds still when the connection is down. */
   streamOpen?: boolean;
 };
 
 /**
- * The card both a followed run and a past run draw (owner, round 11: the
+ * The card both a followed run and a past run draw (the
  * past run is the ended card, not a copy of it). `past` marks a run the
  * stream is not following: no landmark (the thread's one "Analysis run"
  * region is the run the stream follows) and no live region (nothing about
@@ -454,8 +453,8 @@ function TraceCard({
     ended !== null
       ? ended.words
       : traceWords(row, rowDetail(tick), paused ? "paused" : stalled ? "stalled" : "live", isOwner, ownerName);
-  // Live, the top line reads "Running": the step's words live on its row
-  // (lead, round 6). Paused, it keeps its words. A screen reader hears
+  // Live, the top line reads "Running": the step's words live on its row.
+  // Paused, it keeps its words. A screen reader hears
   // `words` either way.
   const [head = "", ...restParts] = scrub(words).split(" · ");
   const label = ended !== null ? scrub(ended.words) : paused ? head : RUNNING_WORD;
@@ -532,8 +531,8 @@ function TraceCard({
           labelKey={ended !== null ? "ended" : paused ? "paused" : "running"}
           rise={ended !== null || paused}
         />
-        {/* Ended, the steps fold behind one quiet control under the words
-            (owner, round 8). It stays where it is when the rows open below
+        {/* Ended, the steps fold behind one quiet control under the words.
+            It stays where it is when the rows open below
             it, so the pointer that opened them can close them. */}
         {foldable && (
           <button
@@ -578,8 +577,8 @@ function useLandedRows(rows: CardRow[]): ReadonlySet<string> {
 
 /**
  * A past run in the thread (one the stream is not following): the same card
- * as a run that ended in front of you (owner, round 8), drawn by the same
- * code (owner, round 11). Its top line is its mark, the words its own walk
+ * as a run that ended in front of you, drawn by the same
+ * code. Its top line is its mark, the words its own walk
  * ended with ("Report ready", "The baseline is ready", "Stopped") in the
  * label style, its wall time and the link that walk ended with ("Read it →"
  * to the report, the baseline or the longlist; none after a stop or a
@@ -595,8 +594,8 @@ export function PastRunLine({
   hasFindings = false,
 }: {
   run: TaskAgentThreadRun;
-  /** A theory of change's draft that this check followed by itself (task
-   *  054, S10): one card for the two, its rows first and its start the
+  /** A theory of change's draft that this check followed by itself:
+   *  one card for the two, its rows first and its start the
    *  card's start. */
   leadRun?: TaskAgentThreadRun | null;
   taskId: string;

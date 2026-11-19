@@ -6,12 +6,12 @@ import { cn } from "./cn";
 export const BULLET_ITEM_CLASS = "flex items-baseline gap-2";
 
 /** The report's 6 px Electric Blue square, its middle on the text's x-height
- *  at any size (owner, round 11): baseline alignment puts its bottom edge on
+ *  at any size: baseline alignment puts its bottom edge on
  *  the baseline, then it rises by half an `ex` less half its height. */
 export const BULLET_MARK_CLASS = "relative bottom-[calc(0.5ex_-_3px)] size-1.5 shrink-0";
 
 /**
- * The report's bulleted list, shared (round 12, owner: the option card reads
+ * The report's bulleted list, shared (the option card reads
  * as a mini report): an Electric Blue square before each item, items 12 px
  * apart, no browser marker. `data-bullet` prints the square as a border,
  * since print drops backgrounds (`index.css`).

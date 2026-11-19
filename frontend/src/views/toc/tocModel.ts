@@ -2,7 +2,7 @@ import type { LiveSketch } from "../../store";
 import type { BoxLayer, Origin, Support, TocBox, TocDocument, TocFigure, TocGraph, TocLink, TocPathway, Verdict } from "./types";
 
 /*
- * Pure helpers for the theory-of-change Result page (task 054): wording,
+ * Pure helpers for the theory-of-change Result page: wording,
  * which pathways are shown, the canvas layout and the Assumptions grouping.
  * No React here, so the layout and the grouping are unit-tested directly.
  */
@@ -19,7 +19,7 @@ export const VERDICT_LABEL: Record<Verdict, string> = {
 /** The legend's order: supports to against, then not enough evidence. */
 export const VERDICTS: readonly Verdict[] = ["supported", "leaning_supports", "not_sure_mixed", "leaning_against", "against", "not_sure_insufficient"];
 
-/** What makes a connection critical: the rule in the backend's `critical_link` (C6, C36). */
+/** What makes a connection critical: the rule in the backend's `critical_link`. */
 export const CRITICAL_DEFINITION =
   "The step on the routes to the impact with the weakest evidence. None is marked when every step is supported.";
 
@@ -39,7 +39,7 @@ export function linkTip(link: TocLink): string {
   return `${critical}${VERDICT_LABEL[link.verdict]}`;
 }
 
-/** The evidence balance's four columns, left to right (C36). */
+/** The evidence balance's four columns, left to right. */
 const BALANCE: readonly Exclude<Support, "not_about">[] = ["refutes", "mixed", "weak", "strong"];
 
 /** Each column's documents, heaviest first; documents not about the step are left out. */
@@ -50,7 +50,7 @@ export function evidenceBalance<T extends Pick<TocDocument, "support" | "weight"
   }));
 }
 
-/** Figures that say the same thing, shown as one line (C37). */
+/** Figures that say the same thing, shown as one line. */
 interface FigureGroup {
   key: string;
   figures: TocFigure[];
@@ -123,7 +123,7 @@ export function keptPathways(graph: Pick<TocGraph, "pathways">): TocPathway[] {
   return [...kept.filter((p) => p.kind === "success"), ...kept.filter((p) => p.kind === "failure")];
 }
 
-/** The pathway id of the links on no pathway (the user's, until the review places them, C41). */
+/** The pathway id of the links on no pathway (the user's, until the review places them). */
 const UNASSIGNED = "__unassigned";
 
 /** Links on no pathway at all, kept or set aside: the ones the user added. */
@@ -186,7 +186,7 @@ interface PlacedBox {
   y: number;
   /** True for a box that sits only on failure pathways (under the line). */
   failure: boolean;
-  /** True when the user moved it: its connections run as curves (C47). */
+  /** True when the user moved it: its connections run as curves. */
   moved?: boolean;
 }
 
@@ -201,7 +201,7 @@ interface TocLayout {
   headings: ColumnHeading[];
   /** The y of the "If it goes wrong" line, or null when nothing sits under it. */
   lineY: number | null;
-  /** The x of the accountability ceiling: the dashed line after the outputs (C35). */
+  /** The x of the accountability ceiling: the dashed line after the outputs. */
   ceilingX: number;
   width: number;
   /** The y just below the lowest box. */
@@ -317,7 +317,7 @@ export function layoutToc(graph: Pick<TocGraph, "boxes" | "links" | "pathways">)
     }
     successRowCount = Math.max(successRowCount, next);
   }
-  // Boxes with no connection at all (just added, C41): the next free row in their layer's column.
+  // Boxes with no connection at all (just added): the next free row in their layer's column.
   const linked = new Set(graph.links.flatMap((link) => [link.source_box_id, link.target_box_id]));
   for (const box of graph.boxes) {
     if (linked.has(box.box_id) || column.has(box.box_id)) continue;
@@ -368,7 +368,7 @@ export function layoutToc(graph: Pick<TocGraph, "boxes" | "links" | "pathways">)
     { label: "Long-term outcomes", x: longColumn * COL_STEP },
     { label: "Impact", x: impactColumn * COL_STEP },
   ];
-  // A box the user moved keeps its place (C47); the rest stay where the layout put them.
+  // A box the user moved keeps its place; the rest stay where the layout put them.
   const moved = new Map(graph.boxes.filter((box) => box.position != null).map((box) => [box.box_id, box.position as { x: number; y: number }]));
   const shown = placed.map((box) => {
     const at = moved.get(box.id);
@@ -468,7 +468,7 @@ export function pathwayTitles(graph: Pick<TocGraph, "pathways">): Map<string, st
 export const SKETCH = "sketch:";
 
 /**
- * The first draft while it is written (`toc.sketch`, task 054, S12) as a
+ * The first draft while it is written (`toc.sketch`) as a
  * graph the canvas can lay out, so the sketch takes the same columns and
  * rows the stored graph will. A connection that ends in an outcome if it
  * goes wrong goes on a failure pathway, as the draft's own pathways put it,

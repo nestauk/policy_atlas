@@ -16,12 +16,11 @@ export const LIFECYCLE_PAGE_CLASS = `mx-auto w-full px-6 max-md:px-4 ${READING_C
 export const WIDE_PAGE_CLASS = `mx-auto w-full px-6 max-md:px-4 ${PAGE_COLUMN_MAX_W}`;
 
 /*
- * One row recipe for the task list and the project list (task 058, lists
- * polish and round 10), so the two lists read as one family and every
+ * One row recipe for the task list and the project list, so the two lists read as one family and every
  * column lines up page to page.
  *
  * md and up: one 56 px line (14 px padding around a 28 px line box). The
- * task's name takes every pixel the other columns leave (round 12). The task
+ * task's name takes every pixel the other columns leave. The task
  * list's columns are one grid on the list, not on each row: every row is a
  * subgrid of it (`taskListGridClass` on the `ul`, `taskListItemClass` on the
  * `li`, the row's own `md:grid-cols-subgrid`), so the capability, status and
@@ -33,25 +32,20 @@ export const WIDE_PAGE_CLASS = `mx-auto w-full px-6 max-md:px-4 ${PAGE_COLUMN_MA
  * 5.5rem), so a project row's task count and date end exactly under a task
  * row's source count and date.
  *
- * Round 12's cause (owner: the gap between status and owner "is making the
- * task names cramped"): the status column was a fixed 11.5rem, sized for
- * "Paused · waiting on <first name>", and the owner a fixed 8rem with its
- * name right-aligned, so a "Complete" row by "You" left ~230 px of white
- * between the two words while the name was cut short.
  * The project rows below keep their own fixed grid (one row per grid); their
  * owner cell takes the same `rowOwnerCellClass`.
  *
  * Below md: two fixed lines, 84 px every row. Line 1 is the name alone
  * (24 px, truncated, never wrapped); line 2 (28 px) leads with the status
  * word and its live step, then the project, with the date at the right.
- * The capability, the owner and the source count drop on phones (lead
- * rulings P3, round 10); they stay on the task's own pages. The list is not
+ * The capability, the owner and the source count drop on phones;
+ * they stay on the task's own pages. The list is not
  * a grid there; each row is its own two-track grid.
  *
  * Press: the row deepens to Blue Tint the instant it is pressed and eases
- * back over the hover's 150 ms when released (round 10).
+ * back over the hover's 150 ms when released.
  *
- * The row's menu (round 12): every row keeps 48 px of right padding, where
+ * The row's menu: every row keeps 48 px of right padding, where
  * its owner's 40 px menu control sits as a sibling of the link
  * (`ListRowMenu`), so every row's columns line up whether or not it has the
  * control. The hover wash is the item's (`group` on the `li`), so pointing
@@ -66,13 +60,13 @@ const ROW_BASE =
 /** The task list's `ul`: from md up, the one grid every row is a subgrid
  *  of; its tracks are name, kind, status, sources, date. The date track is
  *  8.5rem because a subgrid's padding sits in its edge tracks: the row's
- *  48 px right padding (the room for the row's menu control, round 12)
+ *  48 px right padding (the room for the row's menu control)
  *  plus the date's 5.5rem. (Literal class strings:
  *  Tailwind finds classes by scanning the source.) */
 export const taskListGridClass =
   "md:grid md:grid-cols-[minmax(0,1fr)_auto_auto_5.5rem_8.5rem] md:gap-x-4";
 
-/** The same grid with the owner (task 033 phase 10b) before the count. */
+/** The same grid with the owner before the count. */
 export const taskListGridClassWithOwner =
   "md:grid md:grid-cols-[minmax(0,1fr)_auto_auto_auto_5.5rem_8.5rem] md:gap-x-4";
 
@@ -101,14 +95,14 @@ export const projectListRowGridClassWithOwner = `${ROW_BASE} grid-cols-[minmax(0
 /** A row's name cell: the whole first line below md (`max-md:col-span-2`). */
 export const rowNameCellClass = "min-w-0 truncate text-body leading-7 max-md:leading-6";
 
-/** A right-aligned cell (owner, count, date) on the 28 px line, at Meta.
+/** A right-aligned cell (count, date) on the 28 px line, at Meta.
  *  Set its digits with `Figures`, not `tabular-nums` on the cell: Averta's
  *  tabular feature widens the space too ("46  sources", "Ada  Lovelace"). */
 export const rowFigureCellClass = "truncate text-right text-meta leading-7 text-grey";
 
 /**
  * A row's accessible name: its visible strings in reading order, joined by
- * " · " (lead ruling 1, round 10), skipping any the row does not show.
+ * " · ", skipping any the row does not show.
  *
  * Args:
  *   parts: The strings, title first; null, undefined and "" are dropped.
@@ -122,18 +116,17 @@ export function rowAccessibleName(parts: readonly (string | null | undefined)[])
 
 
 /**
- * Whether a list page shows the `owner_display` column (task 033 phase
- * 10b, contract § 11 / rubric 41; round 10).
+ * Whether a list page shows the `owner_display` column.
  *
- * The dark-launch invariant (rubric 14) is the anchor: an unenrolled caller
+ * The dark-launch invariant is the anchor: an unenrolled caller
  * never has the switcher, and can never be handed a row they don't own (no
  * organisation means no colleague's row is reachable), so `hasSwitcher`
  * false and `rows.some(is_owner === false)` false always travel together for
  * that caller — the column stays off, byte-identical to today.
  *
- * On Mine, active or archived, the column is off (lead ruling P6, round
- * 10): it would say the reader's own name on every row. It shows on
- * Organisation, active or archived (round 11), and on a Project, where every
+ * On Mine, active or archived, the column is off:
+ * it would say the reader's own name on every row. It shows on
+ * Organisation, active or archived, and on a Project, where every
  * row renders it (the reader's own rows read "You") — a column that appears
  * on some rows and not others reads as broken alignment, not as a
  * considered omission.

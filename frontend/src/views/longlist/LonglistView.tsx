@@ -75,7 +75,7 @@ const GROUP_BY: { key: GroupBy; label: string }[] = [
   { key: "lever", label: "Lever" },
 ];
 
-/** The "i" beside Group by (round 12, owner): the two definitions, one line
+/** The "i" beside Group by: the two definitions, one line
  *  each, nothing else. */
 export const GROUP_BY_INFO_LABEL = "What a theme and a lever are";
 export const GROUP_BY_INFO = [
@@ -110,7 +110,7 @@ function subscribeWide(onChange: () => void): () => void {
 }
 
 /** Whether the screen is `md` or wider; true where the media query cannot be
- *  asked (tests). The grid is offered only there (round 10, finding 13). */
+ *  asked (tests). The grid is offered only there. */
 function useWideScreen(): boolean {
   return useSyncExternalStore(
     subscribeWide,
@@ -139,12 +139,12 @@ function arrivalKeys(layout: BuildingLayout): Set<string> {
 }
 
 /**
- * A group of options on the list (round 11, review findings 3, 11 and 13): a
+ * A group of options on the list: a
  * theme, a lever type or the excluded options. Its heading is the Label
  * style (uppercase, tracked, Grey) holding the disclosure button (the
  * report's pattern, so it stays in the outline): the name on the left, and
  * at the line's right the count in Meta Grey, then the chevron with "Show"
- * or "Hide" on the page's one right edge (round 12) at every width; under it one Body Grey
+ * or "Hide" on the page's one right edge at every width; under it one Body Grey
  * line, the group's description, open or shut (ruling 1: a collapsed header
  * carries its one-line takeaway); then the rows, 16 px apart. Opens when the
  * contents or a link points at it, and for print.
@@ -169,14 +169,14 @@ function GroupSection({
   description: string;
   defaultOpen: boolean;
   className?: string;
-  /** The group's own control, its first line while open (round 13, owner):
+  /** The group's own control, its first line while open:
    *  "Exclude this theme" / "Exclude this lever", or "Include again". */
   action?: GroupAction;
   /** The group's rows; none for a group all set aside. */
   children?: ReactNode;
   /** Told when the group opens or shuts, so the page's Show all knows. */
   onOpenChange?: (open: boolean) => void;
-  /** 3 for a group inside Excluded (round 13, owner). */
+  /** 3 for a group inside Excluded. */
   level?: 2 | 3;
   /** The name in Grey, for a group excluded whole. */
   muted?: boolean;
@@ -187,8 +187,8 @@ function GroupSection({
   useOpenWhenNavigated(id, setOpen);
   useExpandForPrint(setOpen);
   // The group's own control, on the description's line at its right edge,
-  // over the rows' shortlist toggles, while the group is open (round 13,
-  // owner): the words, then the glyph at the row toggle's size, centred in
+  // over the rows' shortlist toggles, while the group is open:
+  // the words, then the glyph at the row toggle's size, centred in
   // the toggle's 40 px width so the glyphs make one column. Its hit area is
   // its own line, clear of the heading's Show / Hide.
   const control =
@@ -212,11 +212,11 @@ function GroupSection({
           className="group flex min-h-10 w-full cursor-pointer items-baseline gap-4 py-2 text-left"
         >
           {/* The name on the left; the count, then the chevron with Show or
-              Hide, at the line's right (round 12, owner: every count and
+              Hide, at the line's right (every count and
               control on the page on one right edge), so a shut group reads
               as one line at every width. The button resets text-transform
               (Tailwind's preflight), so the title carries the Label's
-              uppercase itself. The name in Navy (round 12, owner). */}
+              uppercase itself. The name in Navy. */}
           <GroupName title={title} className={cn("min-w-0 flex-1", muted && "text-grey")} />
           {count !== "" && " "}
           {count !== "" && <GroupCount count={count} className="shrink-0 text-right" />}
@@ -250,8 +250,8 @@ function MetaField({ last, children }: { last: boolean; children: ReactNode }) {
 
 /**
  * One option row, the same from the first row of the build to the finished
- * list (round 10, finding 2), and as light as a scanning list needs (round
- * 11, review findings 4, 6, 12 and 14): the name, its one-sentence
+ * list, and as light as a scanning list needs:
+ * the name, its one-sentence
  * description (ruling 8), one Meta Grey line (the lever, or the theme under
  * a lever heading; the evidence's first part; "No in-scope evidence"), and
  * the exclusion for an excluded option (ruling 4: the constraint it broke).
@@ -284,7 +284,7 @@ function OptionRow({
   /** Which of its parts arrive now (they fade in). */
   lands: (part: "meta" | "lever" | "short") => boolean;
   /** False under an excluded group's heading, which already names the
-   *  theme or lever (round 15, lead). */
+   *  theme or lever. */
   phrase?: boolean;
 }) {
   const summary = row.summary;
@@ -327,8 +327,7 @@ function OptionRow({
             </p>
           )}
           {/* Who excluded it, one short phrase at the meta line's size and
-              colour; the constraint and any reason are the card's (round 15,
-              owner). */}
+              colour; the constraint and any reason are the card's.*/}
           {exclusion !== null && phrase && (
             <p className="mt-0.5 max-w-[44em] text-meta text-grey">{exclusionPhrase(exclusion, who)}</p>
           )}
@@ -337,7 +336,7 @@ function OptionRow({
           {status !== null && (
             <span className="inline-flex min-h-8 items-center gap-2 whitespace-nowrap">
               {/* A live search breathes its 6 px blue square; the one turning
-                  mark on the screen is the status bar's (round 10, D3). */}
+                  mark on the screen is the status bar's. */}
               {(status.kind === "searching" || status.kind === "assigning") && <StatusMark tone="running" breathing />}
               {status.kind === "failed" && <StatusMark tone="failed" />}
               <span className={cn(status.kind === "failed" && "font-semibold text-red")}>
@@ -345,8 +344,7 @@ function OptionRow({
               </span>
             </span>
           )}
-          {/* Include again on the action column, like a group's Exclude
-              (round 13, owner). */}
+          {/* Include again on the action column, like a group's Exclude.*/}
           {excluded && controls !== null && !publicView && (
             <EdgeAction
               label="Include again"
@@ -382,7 +380,7 @@ type Section = { key: string; title: string | null; description: string; rows: B
 
 /** The excluded rows, those set aside with a whole theme or lever grouped
  *  by the reason the group's Exclude recorded ("with the theme <name>"),
- *  and the rest excluded one by one (round 13, owner). */
+ *  and the rest excluded one by one. */
 function groupExcluded(rows: readonly BuildingRow[]): {
   groups: { key: string; title: string; rows: BuildingRow[] }[];
   single: BuildingRow[];
@@ -404,23 +402,22 @@ function groupExcluded(rows: readonly BuildingRow[]): {
   return { groups: [...groups.values()], single };
 }
 
-/** A group heading's own action (round 13, owner): Exclude every included
+/** A group heading's own action: Exclude every included
  *  option in it (with the reason step), or Include again those set aside. */
 type GroupAction = { label: string; include: boolean; tooltip?: string; disabled: boolean; run: (reason: string) => void };
 
 /**
- * The longlist, from the first row of its build to the finished list (task
- * 058, N24 and round 10; contract deliverable 9 for the finished list), on
+ * The longlist, from the first row of its build to the finished list, on
  * the report's page chrome (EB-modified: `ReportPage`, `SectionDisclosure`).
  *
- * One page and one row anatomy all the way (round 10, finding 2). The title
+ * One page and one row anatomy all the way. The title
  * is "Longlist" with the plan's question under it. While a walk builds the
  * list (`longlist` not passed) rows come from the options read as soon as
  * suggest has written them, each with its own search, and from clustering on
  * the longlist read fills them in place in waves (the evidence line, the
  * lever, exclusions, themes, shortlist marks); rows move into their themes
  * rather than blinking out. No stage line: the run status bar above says
- * what the walk is doing (round 10, D3). Once the walk ends the same page
+ * what the walk is doing. Once the walk ends the same page
  * gains its controls: the counts' link to the excluded options, Group by,
  * List or Grid (from `md` up), Show all, each row's toggle and actions, and
  * Add an option. The grid widens the paper.
@@ -436,7 +433,7 @@ type GroupAction = { label: string; include: boolean; tooltip?: string; disabled
 export function Longlist({ taskId, longlist: finished }: { taskId: string; longlist?: LonglistOut }) {
   const building = finished === undefined;
   const task = useTask(taskId);
-  // The public link reads the list; it adds nothing (round 12). The plan is
+  // The public link reads the list; it adds nothing. The plan is
   // an owner-only read: asking for it without a sign-in sends the reader to
   // sign in, so the public link never asks.
   const publicView = usePublicView();
@@ -447,7 +444,7 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
   const stream = useRunStream(taskId);
   const addOption = useAddOption(taskId);
   const wide = useWideScreen();
-  // A Result-tab switch opens the page at its top, focus on the title (round 13, owner).
+  // A Result-tab switch opens the page at its top, focus on the title.
   const titleRef = useRef<HTMLHeadingElement>(null);
   useOpenAtTop(titleRef, "longlist");
 
@@ -455,10 +452,9 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
   const [gridLine, setGridLine] = useState<GridLine>("ambition");
   const [chosenGroupBy, setGroupBy] = useState<GroupBy>("theme");
   const [showExcludedInGrid, setShowExcludedInGrid] = useState(false);
-  // "Show all" / "Hide all" (the report's words, round 10): the sections
+  // "Show all" / "Hide all" (the report's words): the sections
   // remount open or shut on a press. The finished list opens with its
-  // groups shut, each heading with its count (round 12, owner, D1: "the
-  // groups should be collapsed by default"); while the walk builds it the
+  // groups shut, each heading with its count; while the walk builds it the
   // groups stay open, since rows moving into their themes are the news, and
   // the walk's end leaves them as the reader has them.
   const [allOpen, setAllOpen] = useState({ open: building, revision: 0 });
@@ -475,8 +471,8 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
 
   const longlist = finished ?? longlistRead.data ?? null;
   const optionRows = options.data?.options;
-  // The names the walk's clustering steps publish before they commit
-  // (round 11); a finished list reads only its reads.
+  // The names the walk's clustering steps publish before they commit;
+  // a finished list reads only its reads.
   const published = liveNamesOf(stream);
   const live = useMemo(
     () => (building ? { options: published.options, themes: published.themes } : NO_LIVE_NAMES),
@@ -494,7 +490,7 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
       excluded: listed(layout.excluded),
     };
   }, [optionRows, longlist, building, live, who]);
-  // Only a regroup moves the rows (round 13, owner): the build's theme wave,
+  // Only a regroup moves the rows: the build's theme wave,
   // a new grouping, a whole theme or lever excluded or included again. A
   // shortlist toggle or one option excluded or included again updates in
   // place.
@@ -571,22 +567,22 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
     },
   ];
   // A theme the theming step has named shows its heading before any option
-  // is in it (round 11).
+  // is in it.
   const sections = (groupBy === "theme" ? layout.groups : byLever)
     .filter((group) => group.rows.length > 0 || group.named === true)
     .map((group, index) => ({ ...group, id: group.title === null ? "options" : sectionAnchor(group.title, index) }));
   const titled = sections.some((section) => section.title !== null);
   const excludedRows = layout.excluded;
-  // The lever types no included option uses, said plainly (round 13, owner).
+  // The lever types no included option uses, said plainly.
   const uncovered = longlist === null || building ? [] : uncoveredLevers(leverTypes, longlist.options ?? []).map(capitalise);
-  // In the lever grouping, the last heading names them (round 13, owner).
+  // In the lever grouping, the last heading names them.
   const uncoveredGroup =
     uncovered.length === 0 ? null : (
-      // The grid's foot, the same component (round 13, owner).
+      // The grid's foot, the same component.
       <NoOptionsFoot names={uncovered} className="mb-8" />
     );
 
-  // Whole groups (round 13, owner): a theme or lever heading excludes every
+  // Whole groups: a theme or lever heading excludes every
   // included option in it, or includes again a group all set aside. Not on
   // the public link, nor while the list is built.
   const groupKind: "theme" | "lever" = groupBy === "theme" ? "theme" : "lever";
@@ -604,11 +600,11 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
       run: (words) => actions.excludeGroup(ids, groupExclusionReason(groupKind, name, words)),
     };
   };
-  // Excluded with a whole theme or lever (round 13, owner): grouped under
+  // Excluded with a whole theme or lever: grouped under
   // Excluded by the reason the group's Exclude recorded, before the options
   // excluded one by one.
   const excludedGroups = groupExcluded(excludedRows);
-  // An excluded group keeps its one-line description (round 13, owner).
+  // An excluded group keeps its one-line description.
   const excludedGroupDescription = (key: string, title: string): string => {
     if (key.startsWith("theme:")) {
       const theme = (longlist?.themes ?? []).find((entry) => entry.name.trim() === title);
@@ -620,7 +616,7 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
 
   // A new grouping, or Show all / Hide all, remounts the sections.
   const sectionKey = (key: string) => `${groupBy}-${allOpen.revision}-${key}`;
-  // One row for both states (round 13, owner): an excluded row's grey line
+  // One row for both states: an excluded row's grey line
   // is the included row's, the grouping saying what it says for both.
   const rowTheme = (row: BuildingRow) => (groupBy === "theme" ? null : (themeOfOption.get(row.id) ?? null));
 
@@ -641,10 +637,9 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
   // The public link has no plan; the longlist read carries its question.
   const question = scrub(longlistTitle(plan.data?.scoping ?? longlist, task.data?.name));
   const counts = longlist === null ? null : countsParts(longlist.counts, leverCount(longlist.options));
-  // The shortlist the reader is assembling, said in the count line (round
-  // 11, review finding 2).
+  // The shortlist the reader is assembling, said in the count line.
   const shortlisted = includedRows.filter((row) => row.shortlisted).length;
-  // "Hide all" once every group is open, however it was opened (round 13).
+  // "Hide all" once every group is open, however it was opened.
   const everyOpen =
     sections.some((section) => section.title !== null) &&
     sections.every((section) => section.title === null || (groupOpen[section.key] ?? allOpen.open));
@@ -667,12 +662,12 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
   );
 
   return (
-    // No contents sidebar (round 12, owner): the list and the grid take the
+    // No contents sidebar: the list and the grid take the
     // page's full content column, not the report's reading measure; a link
     // to a group still opens it (`useOpenWhenNavigated`).
     <ReportPage className="longlist-paper md:max-w-[1180px]">
       {/* The first screen is the title, the question, one count line and the
-          options (round 11, review finding 1). */}
+          options. */}
       <header className="mb-4">
         <h1 ref={titleRef} tabIndex={-1} className={cn(REPORT_TITLE_CLASS, "outline-none")}>
           Longlist
@@ -682,12 +677,12 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
         )}
       </header>
 
-      {/* One row of view controls (round 11, review finding 10): Group by on
+      {/* One row of view controls: Group by on
           the left; the list or grid switch on the right; a Line
-          hairline above and below it, 12 px inside each (round 12, owner). */}
-      {/* Between two Line hairlines (round 12, owner): the controls row,
+          hairline above and below it, 12 px inside each. */}
+      {/* Between two Line hairlines: the controls row,
           then the count line with Show all at its right edge on the
-          headings' Show / Hide edge (round 13, owner; no Show all in the
+          headings' Show / Hide edge (no Show all in the
           grid). */}
       {(!building || counts !== null || (mode === "list" && titled)) && (
         <div data-testid="longlist-controls-block" className="mb-6 space-y-3 border-y border-line py-3">
@@ -696,14 +691,14 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
               data-testid="longlist-controls"
               className="print-hide flex min-h-10 flex-wrap items-center justify-between gap-x-6 gap-y-2"
             >
-              {/* Round 13 (owner): Group by (list) or Columns (grid) on the
+              {/* Group by (list) or Columns (grid) on the
                   left, Show all with Group by; View as and the List / Grid switch
                   on the right edge in both views, so it never moves. */}
               {mode === "list" ? (
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                   <span className="text-meta font-semibold text-grey">Group by</span>
                   <OutlineSwitch label="Group by" choices={GROUP_BY} value={groupBy} onChange={setGroupBy} />
-                  {/* What a theme and a lever are (round 12, owner); no intro
+                  {/* What a theme and a lever are; no intro
                       sentence on the page. */}
                   <span className="-ml-2">
                     <InfoHint label={GROUP_BY_INFO_LABEL} note={GROUP_BY_INFO} />
@@ -733,7 +728,7 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
               )}
               {wide && (
                 <div className="ml-auto flex items-center gap-3">
-                  {/* Its label before it (round 13, owner). */}
+                  {/* Its label before it. */}
                   <span className="text-meta text-grey">View as</span>
                   <OutlineSwitch label="View as" choices={MODES} value={mode} onChange={setMode} />
                 </div>
@@ -809,9 +804,9 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
           ),
         )
       )}
-      {/* The lever types no option uses, the last lever heading (round 13). */}
+      {/* The lever types no option uses, the last lever heading. */}
       {mode === "list" && groupBy === "lever" && uncoveredGroup}
-      {/* Excluded is a section, not a group (round 13, owner): its heading
+      {/* Excluded is a section, not a group: its heading
           at the page's section size with the description under it, below a
           Line hairline across the list 32 px either side; inside it only
           groups, shut by default: each theme or lever excluded whole, then
@@ -876,16 +871,14 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
           )}
         </section>
       )}
-      {/* How the list was read, at its foot rather than over it (round 11,
-          review finding 22). */}
+      {/* How the list was read, at its foot rather than over it.*/}
 
       {!building && !publicView && (
         <form id={ADD_OPTION_ANCHOR} onSubmit={handleAddOption} className="print-hide mt-8 border-t border-line pt-6">
           <label htmlFor="longlist-add-option" className={`block ${REPORT_SECTION_HEADING_CLASS}`}>
             Add an option
           </label>
-          {/* The field takes the row up to the prose measure, Add after it
-              (round 13, owner). */}
+          {/* The field takes the row up to the prose measure, Add after it.*/}
           <div className="mt-3 flex max-w-prose-measure items-center gap-2">
             <input
               id="longlist-add-option"
@@ -920,8 +913,8 @@ export function Longlist({ taskId, longlist: finished }: { taskId: string; longl
   );
 }
 
-/** The longlist while a walk builds it (task 058, N24; annex scene 15). */
+/** The longlist while a walk builds it. */
 export const LonglistBuilding = Longlist;
 
-/** The finished longlist (contract deliverable 9). */
+/** The finished longlist. */
 export const LonglistView = Longlist;

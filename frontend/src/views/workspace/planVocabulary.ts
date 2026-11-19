@@ -115,7 +115,7 @@ export const STEERING_MODE_LABEL: Record<string, string> = {
 
 /**
  * The parts the planner builds a plan from, per capability, in the order it
- * asks them, with the stepper's name for each (task 058, N18; annex block H).
+ * asks them, with the stepper's name for each.
  * `optional` parts are asked only in some conversations (the scoping
  * planner asks "Who can act" only below national level), so they count as a
  * step only once the transcript carries one.
@@ -188,15 +188,15 @@ export function scopeChips(constraints?: ScopeConstraints | null): string[] {
   return chips;
 }
 
-// --- Options-scoping plan vocabulary (task 044, D5/D6/A8/C18) -------------
+// --- Options-scoping plan vocabulary ---------------------------------------
 //
-// The scoping plan document mirrors the ES document's shape (§ Plan
-// document, contract deliverable 5) but every one of these words is new —
+// The scoping plan document mirrors the ES document's shape
+// but every one of these words is new —
 // there is no ES precedent to reuse, so they are pinned here rather than
 // left to drift between the fixture, the tests and the component.
 
 /** Screen words for a plan field's origin tag — every scoping field carries
- *  one (contract § Terms, "origin tag"). Unknown origin → omitted, the same
+ *  one. Unknown origin → omitted, the same
  *  fail-soft rule `vocabLabel` uses elsewhere on this page. */
 export const TAG_ORIGIN_LABEL: Record<string, string> = {
   from_your_question: "from your question",
@@ -204,21 +204,21 @@ export const TAG_ORIGIN_LABEL: Record<string, string> = {
   your_call: "your choice",
 };
 
-/** The scoping plan card's summary line (annex, rulings during the build:
- *  "Scoping plan · <time band>"), the band left out while the draft has
+/** The scoping plan card's summary line
+ *  ("Scoping plan · <time band>"), the band left out while the draft has
  *  none. The Evidence search card's "Search plan · …" is its sibling. */
 export function scopingPlanSummary(scoping: { time_band?: string | null } | null | undefined): string {
   const band = scoping?.time_band?.trim() ?? "";
   return band === "" ? "Scoping plan" : `Scoping plan · ${band}`;
 }
 
-/** Depth screen labels — never the internal `rapid | standard` key (A8). */
+/** Depth screen labels — never the internal `rapid | standard` key. */
 export const SCOPING_DEPTH_LABEL: Record<string, string> = {
   rapid: "Rapid scoping",
   standard: "Standard scoping",
 };
 
-/** The shortlist's risk appetite (task 055, A25): how far it may reach beyond
+/** The shortlist's risk appetite: how far it may reach beyond
  *  options already tried elsewhere. The backend holds the same three answers
  *  (`RISK_APPETITE_LABELS` in `scoping_plan.py`); a test pins the key set to
  *  the generated enum. */
@@ -251,8 +251,7 @@ export const CONSTRAINT_CHECKED_AT_LABEL: Record<string, string> = {
   retrieval: "Retrieval",
 };
 
-/** The fixed "What happens" sentence per constraint kind (contract § Terms,
- *  "constraint kind"). One sentence per kind, never composed from parts, so
+/** The fixed "What happens" sentence per constraint kind. One sentence per kind, never composed from parts, so
  *  it reads the same on every plan. */
 const CONSTRAINT_KIND_EFFECT: Record<ScopingConstraint["kind"], string> = {
   boundary: "Options that conflict are excluded, with the reason shown. You can include them again.",
@@ -264,14 +263,14 @@ const CONSTRAINT_KIND_EFFECT: Record<ScopingConstraint["kind"], string> = {
 };
 
 /** The consideration sentences that replace the generic one for two profile
- *  lines (R34). */
+ *  lines. */
 const CONSIDERATION_ASPECT_EFFECT: Record<string, string> = {
   who_decides: "Each option on the longlist is labelled by who can adopt it. It excludes nothing.",
   transferability: "Kept for the assessment. It excludes nothing.",
 };
 
-/** The profile lines' screen names (R36): the nine on the card, Potential
- *  impact last (task 055), then transferability. Reused by later phases. */
+/** The profile lines' screen names: the nine on the card, Potential
+ *  impact last, then transferability. Reused by later phases. */
 export const PROFILE_LINE_LABELS: Record<string, string> = {
   cost: "Cost",
   time_to_set_up: "Time to set up",
@@ -297,8 +296,8 @@ export function constraintKindLines(constraint: ScopingConstraint): string[] {
   return constraint.hard ? [first, STATED_LIMIT_LABEL] : [first];
 }
 
-/** The "What happens" sentence for a code-minted default constraint (task
- *  045, D22), replacing its kind's sentence: the transferability preference
+/** The "What happens" sentence for a code-minted default constraint,
+ *  replacing its kind's sentence: the transferability preference
  *  gets no reasoned guess before assessment, so the preference sentence
  *  ("a labelled guess") would be wrong for it. */
 const DEFAULT_CONSTRAINT_EFFECT: Record<string, string> = {
@@ -306,12 +305,12 @@ const DEFAULT_CONSTRAINT_EFFECT: Record<string, string> = {
     "Read at assessment for whether each option's evidence carries to your Where. No guess before then.",
 };
 
-/** The rider shown beside a default constraint's text (task 045, D22). */
+/** The rider shown beside a default constraint's text. */
 export const DEFAULT_CONSTRAINT_RIDER: Record<string, string> = {
   transferability: "checked at assessment · assumed",
 };
 
-/** "Options you already have in mind" (task 045, D19). */
+/** "Options you already have in mind". */
 export const YOUR_OPTIONS_TITLE = "Options you already have in mind";
 export const YOUR_OPTIONS_NONE = "None";
 export const YOUR_OPTIONS_DESIGN_LABEL = "Proposed design";
@@ -319,7 +318,7 @@ export const YOUR_OPTIONS_DESIGN_PENDING = "No design yet";
 export const YOUR_OPTIONS_ASSUMED_TAG = "assumed";
 
 /** One constraint row's "What happens" text, plus the not-yet-applied
- *  language rider when the constraint names languages (C8). */
+ *  language rider when the constraint names languages. */
 export function constraintEffectLines(constraint: ScopingConstraint): string[] {
   const defaultEffect =
     constraint.default != null ? DEFAULT_CONSTRAINT_EFFECT[constraint.default] : undefined;

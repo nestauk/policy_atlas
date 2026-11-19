@@ -104,13 +104,13 @@ interface BoxData extends Record<string, unknown> {
   box: TocBox;
   dim: boolean;
   selected: boolean;
-  /** A box the user added that no check has found evidence for yet (C41). */
+  /** A box the user added that no check has found evidence for yet. */
   needsEvidence: boolean;
   /** The source picked in Connect mode. */
   connecting: boolean;
   /** Part of a hovered suggestion: drawn faded. */
   ghost: boolean;
-  /** The first draft while it is written: no codes, not a control (S12). */
+  /** The first draft while it is written: no codes, not a control. */
   live: boolean;
   /** The box the draft is writing: a blue border, breathing. */
   newest: boolean;
@@ -122,15 +122,15 @@ interface BoxData extends Record<string, unknown> {
 interface EdgeData extends Record<string, unknown> {
   /** Columns from source to target; 0 inside one column. */
   span: number;
-  /** A box at either end was moved: a right-angle route with rounded corners, side to side (C47). */
+  /** A box at either end was moved: a right-angle route with rounded corners, side to side. */
   curved: boolean;
-  /** Something waits for the user here: new evidence, or an edit's evidence to review (C43, C44). */
+  /** Something waits for the user here: new evidence, or an edit's evidence to review. */
   attention: boolean;
   verdict: Verdict;
   pending: boolean;
-  /** No check has looked at it yet: a still grey line (C41, C48). */
+  /** No check has looked at it yet: a still grey line. */
   unchecked: boolean;
-  /** An uploaded theory waiting for review: a connection Policy Atlas suggested (increment 5). */
+  /** An uploaded theory waiting for review: a connection Policy Atlas suggested. */
   suggested: boolean;
   /** An uploaded theory waiting for review: a connection from the user's own diagram, not yet checked. */
   drawn: boolean;
@@ -139,7 +139,7 @@ interface EdgeData extends Record<string, unknown> {
   critical: boolean;
   selected: boolean;
   tip: string;
-  /** The sketch's connections: still Line 2, no verdict and no dot (S12). */
+  /** The sketch's connections: still Line 2, no verdict and no dot. */
   live: boolean;
   arriving: boolean;
 }
@@ -192,7 +192,7 @@ function BoxView({ data }: NodeProps<BoxNode>) {
     <div
       title={tip === "" ? undefined : scrub(tip)}
       className={[
-        // Rounded corners stay (owner, contract W2); the paper weight and the
+        // Rounded corners stay; the paper weight and the
         // Line 2 hairline are the cards' (DESIGN.md § Elevation).
         "relative flex items-center rounded-lg border bg-paper px-3.5 text-meta font-semibold leading-snug text-navy shadow-paper",
         data.live ? "cursor-default" : "cursor-pointer",
@@ -222,7 +222,7 @@ function LabelView({ data }: NodeProps<LabelNode>) {
 
 /**
  * The two dividers, edge to edge of the view however it pans: the "If it goes
- * wrong" line and the dashed accountability ceiling (C35). Drawn as two
+ * wrong" line and the dashed accountability ceiling. Drawn as two
  * screen-sized lines that follow the viewport, not as nodes: a node long
  * enough to reach past any pan made every pan and zoom slow.
  */
@@ -299,7 +299,7 @@ const CONTROL_GLYPH_CLASS = "fill-none!";
 const nodeTypes = { box: BoxView, label: LabelView };
 const edgeTypes = { toc: TocEdgeView };
 
-/** What the canvas needs to edit (C41, C47). */
+/** What the canvas needs to edit. */
 interface CanvasEditing {
   /** "connect": the next two box clicks make a connection. */
   mode: "view" | "connect";
@@ -419,12 +419,12 @@ export function TocCanvas({
   /** A box or connection to centre on, from the report. */
   focus: { target: Selection; count: number } | null;
   onSelect: (selection: Selection | null) => void;
-  /** Editing controls for an editor (C41, C47); null keeps the canvas read-only. */
+  /** Editing controls for an editor; null keeps the canvas read-only. */
   editing: CanvasEditing | null;
-  /** A hovered suggestion's route, drawn faded (owner, 2026-11-04). */
+  /** A hovered suggestion's route, drawn faded. */
   preview: Preview | null;
   /**
-   * The first draft while it is written (`toc.sketch`, S12): the graph is
+   * The first draft while it is written (`toc.sketch`): the graph is
    * the sketch, drawn in the stored graph's columns, read-only, the box
    * being written breathing blue. `enterAll`: the sketch first showed
    * on this page (not on opening it), so its first box rises in too.
@@ -544,7 +544,7 @@ export function TocCanvas({
       return labelNode(`col-${index}`, place.x, place.y, { text: heading.label });
     }),
     ...(glidedLineY === null ? [] : [labelNode("line-label", 0, glidedLineY + 10, { text: "If it goes wrong" })]),
-    // The accountability ceiling (C35): what the programme directly influences, and what it contributes to.
+    // The accountability ceiling: what the programme directly influences, and what it contributes to.
     labelNode("ceiling-left", layout.ceilingX - 8 - LABEL_W, ceilingLabelY, { text: "Directly influenced", alignRight: true }, true),
     labelNode("ceiling-right", layout.ceilingX + 8, ceilingLabelY, { text: "Contributes to" }, true),
     ...layout.boxes.flatMap((placed): BoxNode[] => {
@@ -572,7 +572,7 @@ export function TocCanvas({
           },
           draggable: editing !== null && !connecting && !isLive,
           connectable: false,
-          // The sketch is not a control: no focus, no click (S12).
+          // The sketch is not a control: no focus, no click.
           ...(isLive ? { selectable: false, focusable: false } : {}),
         },
       ];

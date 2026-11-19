@@ -19,7 +19,7 @@ export function ReconnectingBanner({
 }
 
 /**
- * The reconnecting line (task 058, owner round 11): it takes the run status
+ * The reconnecting line: it takes the run status
  * bar's frame, so it starts after the rail and never runs under it: one line
  * at Meta size with the bar's 10 px vertical padding, its words where the
  * bar's words start (after the mark's column), on the Yellow Tint with a

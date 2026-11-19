@@ -22,21 +22,21 @@ function raise(error: unknown, status?: number): never {
 }
 
 /**
- * Start a task from a question (plan D4).
+ * Start a task from a question.
  *
- * ONE create call (task 044, C10): the kind of work, the project and the
+ * ONE create call: the kind of work, the project and the
  * tasks it starts from all travel in the body and are written in one
  * transaction, so a create either lands whole or not at all. The separate
  * PATCH this used to make could fail after the task existed, leaving a real
  * but unassigned task — and "Starts from" cannot be built on a flow with
  * that failure mode.
  *
- * The opening task_agent turn is not posted here (task 058, N9): the New Task
+ * The opening task_agent turn is not posted here: the New Task
  * screen navigates to the Agent tab at once, and the tab streams the opening
  * turn with the words the person typed, so the planner's reply arrives where
  * they are looking instead of behind a blocked submit button.
  *
- * The task's name is derived from the question here (D5). The task_agent's own
+ * The task's name is derived from the question here. The task_agent's own
  * `plan.title` is deliberately not written back — that would be new
  * behaviour — so a task shows its derived name until renamed.
  */
@@ -75,7 +75,7 @@ export function useCreateTask() {
   });
 }
 
-/** A short display name from the question (plan D5): no trailing question
+/** A short display name from the question: no trailing question
  *  mark, and clipped on a word boundary rather than mid-word. */
 export function taskNameFromQuestion(question: string, max = 80): string {
   const cleaned = question.trim().replace(/\s+/g, " ").replace(/\?+$/, "").trim();
@@ -104,7 +104,7 @@ export function useUpdateTask(taskId: string) {
   const client = useApiClient();
   const queryClient = useQueryClient();
   return useMutation({
-    // `visibility` (task 033 phase 10b): owner-only, and refused 422 combined
+    // `visibility`: owner-only, and refused 422 combined
     // with `project_ids` in one body — see `TaskUpdate`'s own docstring.
     mutationFn: async (body: components["schemas"]["TaskUpdate"]) => {
       const { data, error, response } = await client.PATCH("/api/v1/tasks/{task_id}", {
@@ -116,8 +116,8 @@ export function useUpdateTask(taskId: string) {
     },
     // The bare "tasks" root covers BOTH this task's detail key and the
     // tasks-list key (["tasks", "list", …]) — a rename must refresh the
-    // landing card, not just the workspace header (F.2 finding, 2026-07-29).
-    // "projects" is invalidated too (task 033 phase 10a): `visibility` and
+    // landing card, not just the workspace header (F.2 finding).
+    // "projects" is invalidated too: `visibility` and
     // `project_ids` are both patchable here, and either can change a
     // project's derived `task_count` or member visibility — a cross-family
     // effect from a task-family mutation, the same class of bug the
@@ -151,7 +151,7 @@ export function useArchiveTask(taskId: string) {
   });
 }
 
-/** `POST /api/v1/projects/{id}/archive` (task 058, rounds 11 and 14): the
+/** `POST /api/v1/projects/{id}/archive`: the
  *  owner archives a project. It leaves the default Projects list and is
  *  listed under `status: "archived"`. In the same call the server archives
  *  each of the caller's own active tasks in it that is in no other active
@@ -179,10 +179,8 @@ export function useArchiveProject(projectId: string) {
 
 /**
  * `PATCH /api/v1/projects/{id}` — rename, re-describe, or (supplying
- * `visibility`) run the server's i.4 visibility cascade onto every member
- * task in one transaction (contract § 6). No component calls this yet —
- * the visibility control lands in phase 10b/10c — but the cache wiring is
- * data-layer work: a cascade rewrites rows in the *task* family from a
+ * `visibility`) run the server's visibility cascade onto every member
+ * task in one transaction. A cascade rewrites rows in the *task* family from a
  * *project* mutation, so both families are invalidated by prefix (not the
  * exact filtered key) so every `scope` variant currently cached is covered,
  * or a card would keep showing the pre-cascade visibility until an
@@ -207,7 +205,7 @@ export function useUpdateProject(projectId: string) {
   });
 }
 
-/** One event of the planner's turn stream (task 058, N9). */
+/** One event of the planner's turn stream. */
 export type TaskAgentStreamEvent =
   | components["schemas"]["TaskAgentProgressEvent"]
   | components["schemas"]["TaskAgentDeltaEvent"]
@@ -291,8 +289,8 @@ export async function consumeTaskAgentStream(
   return terminal;
 }
 
-/** `POST .../task-agent-turns` — one real task_agent turn, streamed (task
- *  058, N9): a `progress` line, the reply in `delta` pieces, then exactly one
+/** `POST .../task-agent-turns` — one real task_agent turn, streamed:
+ *  a `progress` line, the reply in `delta` pieces, then exactly one
  *  `completed` (the stored turn) or `failed`. `clientTurnId` is minted by the
  *  caller per logical turn (one per submitted message, not per send attempt)
  *  so that retrying the same submission reuses the id rather than minting a
@@ -378,7 +376,7 @@ export function useStartRun(taskId: string) {
 }
 
 /** `POST .../plan/confirm-baseline` — record that a plan version was
- *  confirmed against its baseline (task 044, S4): a plan-scoped record, not a
+ *  confirmed against its baseline: a plan-scoped record, not a
  *  steering decision, so it works whether or not a walk is active for it to
  *  hang on. Idempotent on the same `(artefact_id, plan_version)` pair. */
 export function useConfirmBaseline(taskId: string) {
@@ -400,7 +398,7 @@ export function useConfirmBaseline(taskId: string) {
   });
 }
 
-// --- Longlist (task 045 phase 6.2) --------------------------------------
+// --- Longlist --------------------------------------
 
 /** Invalidate the longlist, every option card and the task itself (an add
  *  writes the header counts and can change `TaskOut.active_run`). */
@@ -525,7 +523,7 @@ export function useAnswerCheckIn(taskId: string) {
 
 type Schemas = components["schemas"];
 
-/** One edit to a theory of change (task 054, C41, C47, C40). */
+/** One edit to a theory of change. */
 export type TocEdit =
   | { kind: "createBox"; body: Schemas["TocBoxCreate"] }
   | { kind: "patchBox"; boxId: string; body: Schemas["TocBoxPatch"] }
@@ -548,7 +546,7 @@ export type TocEdit =
   | { kind: "dismiss"; proposalId: string }
   | { kind: "updateReport"; proposalId?: string };
 
-/** The opening words of the message an upload sends (task 054, increment 5): its bubble shows the file. */
+/** The opening words of the message an upload sends: its bubble shows the file. */
 export const UPLOAD_MESSAGE = "I've uploaded my own theory of change";
 
 /** The message an upload sends to start the planner: the file's name, then the user's note. */
@@ -560,7 +558,7 @@ export function uploadMessage(name: string, note: string): string {
 export const tocUploadKey = (taskId: string) => ["toc-upload", taskId] as const;
 
 /**
- * `POST .../toc/uploads` — the user's own theory diagram (task 054, increment 5):
+ * `POST .../toc/uploads` — the user's own theory diagram:
  * stored, then read by the model (about half a minute).
  * Upload the user's diagram, then send the message that starts the planner.
  * Both happen in one job, so they finish even if the chat closes meanwhile

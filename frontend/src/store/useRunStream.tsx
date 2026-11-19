@@ -24,7 +24,7 @@ export const RUN_STREAM_INVALIDATE_DEBOUNCE_MS = 300;
 /**
  * Trailing window for refreshing the Sources list and the Landscape while
  * the full texts are read: at most one refresh per window, however many
- * `ingest` ticks arrive (task 058, N16).
+ * `ingest` ticks arrive.
  */
 export const INGEST_REFRESH_THROTTLE_MS = 5_000;
 
@@ -45,7 +45,7 @@ const RunStreamContext = createContext<RunStreamContextValue | null>(null);
  *   taskId: The open task. Changing it resets the reducer and opens a
  *     fresh connection for the new task.
  *   connect: Whether to open the SSE connection at all. `false` for the
- *     public task view (task 037): the events route is not on the public
+ *     public task view: the events route is not on the public
  *     read surface, so the provider stays mounted (the views' `useRunStream`
  *     calls keep working) but holds the idle initial state and never
  *     issues a request.
@@ -100,12 +100,12 @@ export function useRunStream(taskId: string): RunStreamState {
  * - the tracked run's `stage.completed` / `run.status`: every query under the
  *   task, debounced so a cold full-history replay is one refresh;
  * - a child walk's (an option search's) `stage.completed` / `run.status`:
- *   the options query only, in the same debounce window (task 058, N23);
+ *   the options query only, in the same debounce window;
  * - a `task.updated` frame (a rename, by the user or by Policy Atlas): the
  *   task and the task lists, debounced the same way, so a model-written
  *   name shows as it lands rather than at the next refresh;
  * - an `ingest` tick: the Sources list and the Landscape, at most once per
- *   `INGEST_REFRESH_THROTTLE_MS` (task 058, N16). No other tick refreshes
+ *   `INGEST_REFRESH_THROTTLE_MS`. No other tick refreshes
  *   anything.
  *
  * A fresh mount always starts from `cursor=0` — the reducer's replay

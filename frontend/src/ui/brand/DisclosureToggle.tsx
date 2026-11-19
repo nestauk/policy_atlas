@@ -4,7 +4,7 @@ import { cn } from "./cn";
 import { DisclosureChevron } from "./Disclosure";
 
 /**
- * A disclosure's control in words (DESIGN.md § Disclosure; task 054 phase 7):
+ * A disclosure's control in words (DESIGN.md § Disclosure):
  * the rotating chevron, then the words as a quiet control, Grey Semibold over
  * a Line 2 underline that turns Navy with the chevron on hover. The words are
  * the surface's ("Show all 6 connections" / "Hide", "Where this came from");

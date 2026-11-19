@@ -18,7 +18,7 @@ type LifecycleBarItem = {
   /** Rendered beside the label when the tab wants attention (a pending check-in). */
   marker?: ReactNode;
   /** When the link opens on a subview (Sources during a run), or the tab
-   *  owns more than its own path (Result and the option cards, round 14),
+   *  owns more than its own path (Result and the option cards),
    *  the tab reads as current anywhere under this path or these paths. */
   activePrefix?: string | readonly string[];
 };
@@ -32,7 +32,7 @@ type LifecycleBarItem = {
  * `aria-disabled` so it reads as unavailable rather than broken.
  */
 /**
- * Mobile placement of the same tabs (040 D2): a bar pinned under the content,
+ * Mobile placement of the same tabs: a bar pinned under the content,
  * horizontally scrollable when the viewport is too narrow. Hidden from `md`
  * up, where LifecycleBar sits in the task NavBar instead.
  */
@@ -49,7 +49,7 @@ export function LifecycleBottomBar({
   return (
     <nav
       aria-label="Task stages"
-      // Its own View Transition layer, held still (round 13, owner).
+      // Its own View Transition layer, held still.
       className="print-hide shrink-0 border-t border-line bg-paper md:hidden [view-transition-name:task-stages] [view-transition-class:shell-chrome]"
     >
       <div className="overflow-x-auto px-4 pt-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">

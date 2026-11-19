@@ -4,8 +4,8 @@ import { TONE_HEX, TONE_VAR, type ToneColour } from "./evidence";
 import { ToneSquare } from "./EvidenceMarks";
 
 /*
- * The theory of change's verdict tones (task 054, 058 alignment phase 7;
- * owner 2026-11-09, decision 7: the shared tones everywhere). A connection's
+ * The theory of change's verdict tones (the shared tones everywhere). A
+ * connection's
  * verdict, a document's support and the theory's overall verdict take the
  * palette's green, yellow and red tone squares, as an evidence strength does;
  * "Not enough evidence" takes a Line 2 grey square (§ 8), the canvas line's
@@ -84,7 +84,7 @@ export function VerdictSquare({ colour, className }: { colour: ToneColour; class
 export const VERDICT_RULE_BLOCK_CLASS = "relative pl-3.5";
 
 /**
- * A verdict's rule (owner, 2026-11-10): a 2 px line in the verdict's tone
+ * A verdict's rule: a 2 px line in the verdict's tone
  * down the left of the block that states it, where the verdict leads a block
  * of its own (the report's verdict line) in place of the square. The word
  * stays beside it. Decorative; `data-tone` names its colour. The block takes

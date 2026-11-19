@@ -28,7 +28,7 @@ export function writeStored(key: string, value: string): void {
   }
 }
 
-/** The reader's last choice, per browser. Shut by default (owner, 2026-09-05):
+/** The reader's last choice, per browser. Shut by default:
  *  the conversation gets the screen until the reader asks for the list. */
 function readInitialOpen(): boolean {
   return readStored(STORAGE_KEY) === "open";
@@ -38,8 +38,8 @@ function storeOpen(open: boolean) {
   writeStored(STORAGE_KEY, open ? "open" : "shut");
 }
 
-/** The Agent tab's left column: every conversation in the Task (038 V8,
- *  owner ruling 2026-09-05), collapsible to a slim rail.
+/** The Agent tab's left column: every conversation in the Task,
+ *  collapsible to a slim rail.
  *
  * Selection is the route's own `?chat=` param, which the other tabs' overlay
  * shares — so a chat opened here is the chat that opens there. The Task
@@ -93,7 +93,7 @@ export function ConversationSidebar({
   const newChatTitle = chatsEnabled ? COPY.newChat : COPY.newChatUnavailable;
 
   // The open sidebar's toggle: the same close-sidebar glyph and tooltip as
-  // the overlay's close button on the other tabs (owner, 2026-09-05). The
+  // the overlay's close button on the other tabs. The
   // shut state is the shared rail, whose toggle carries the open glyph.
   const toggleButton = (
     <TooltipProvider delayDuration={RAIL_TOOLTIP_DELAY_MS}>

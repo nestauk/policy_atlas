@@ -17,7 +17,7 @@ import { cn } from "../ui/brand/cn";
  */
 
 /** The paper: reading column, white, hairline ring, the Card's navy ambient
- *  shadow (task 058, N8); flat on small screens. */
+ *  shadow; flat on small screens. */
 export const REPORT_PAGE_CLASS =
   `artefact-page anim-rise my-8 min-w-0 ${READING_COLUMN_MAX_W} flex-1 bg-paper px-10 py-9 shadow-paper ring-1 ring-line ` +
   "max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0";
@@ -27,7 +27,7 @@ export const REPORT_PAGE_CLASS =
  * block: after the first `<header>` child, or first when there is none.
  * Every page that shares `ReportPage` heads itself with a `<header>`, so
  * the contents land under the title on all of them without each page
- * placing it (task 058, round 10, D3).
+ * placing it.
  */
 function withMobileContents(children: ReactNode, entries: SidebarEntry[]): ReactNode {
   const nodes = Children.toArray(children);
@@ -43,7 +43,7 @@ function withMobileContents(children: ReactNode, entries: SidebarEntry[]): React
  * `contents="within"` keeps the sidebar off the paper's side: the page sets
  * it inside the paper with `ContentsBeside`, next to the part it reads
  * beside, so a wide page's canvas and tables keep the paper's whole width
- * (the theory of change; owner, 2026-11-10). The phone's disclosure is the
+ * (the theory of change). The phone's disclosure is the
  * same either way.
  */
 export function ReportPage({
@@ -105,22 +105,22 @@ export function ReportKindRow({ kind, tag, children }: { kind: string; tag?: Rea
 export const REPORT_TITLE_CLASS =
   "mt-1 text-display font-extrabold tracking-[-0.5px] text-navy max-md:text-title";
 
-/** The report's date on its own line under the title, Meta Grey (owner,
- *  round 11: "Last updated 5 November 2026" left the facts line). */
+/** The report's date on its own line under the title, Meta Grey ("Last
+ *  updated 5 November 2026", not in the facts line). */
 export const REPORT_DATELINE_CLASS = "mt-1 text-meta text-grey";
 
 /** The title's actions on one line ("See the plan", "Ask about this
- *  analysis"), before the facts line (round 10, finding 9). */
+ *  analysis"), before the facts line. */
 export const REPORT_ACTIONS_CLASS = "print-hide mt-2 flex flex-wrap items-baseline gap-x-5 gap-y-1";
 
 export type ReportFact = [label: string, value: string, href: string | null];
 
 /**
- * The report's facts under its title (round 10, finding 2): one line of
+ * The report's facts under its title: one line of
  * label and value pairs at Meta size, the label in Grey and the value in
  * Navy, wrapping onto a second line on a phone. A value with somewhere to
- * go is a link: a route, or a part of this page ("#references", owner,
- * round 11), which opens that part as the contents do. Not a row of tiles
+ * go is a link: a route, or a part of this page ("#references"),
+ * which opens that part as the contents do. Not a row of tiles
  * (DESIGN.md: no KPI tiles).
  */
 export function ReportFacts({ facts }: { facts: ReportFact[] }) {

@@ -13,7 +13,7 @@ type ConversationListPage = components["schemas"]["Page_ConversationListItemOut_
  *  when the task has no task_agent-conversation row yet. */
 export const TASK_AGENT_TAB_ID = "task_agent";
 
-/** URL token for a chat that does not exist yet (`?chat=new`, 038 V8): the
+/** URL token for a chat that does not exist yet (`?chat=new`): the
  *  reader sees an empty chat and a composer, and the row is created on the
  *  first message — never before, so an abandoned "New chat" leaves nothing
  *  behind. */
@@ -48,8 +48,8 @@ export function recentChats(
 /** The Task Agent: a Task's primary chat.
  *
  * The `kind = task_agent` conversation — the open one, or, once a run has
- * closed that lineage, the most recently closed one (contract 038 § Terms).
- * Exactly one row is ever the Task Agent (invariant I8 / fold A10); older
+ * closed that lineage, the most recently closed one.
+ * Exactly one row is ever the Task Agent; older
  * closed lineages are "Earlier plan" and are never pinned. No new state:
  * this is a selection rule over the rows the listing already returns.
  *
@@ -115,7 +115,7 @@ export function useActiveConversation() {
   return { activeConversationId, draftEntryArtefactId, setActiveConversation, openDraftChat };
 }
 
-/** Small client-side mutations kept outside the read-only G1 stream store.
+/** Small client-side mutations kept outside the read-only stream store.
  *
  * Args:
  *   taskId: Project whose conversation lists need invalidation.

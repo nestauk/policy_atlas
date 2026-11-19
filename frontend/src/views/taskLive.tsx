@@ -21,8 +21,8 @@ export interface Landing {
 }
 
 /** Marks the shell shows: the Result tab's dot (a section or the report is
- *  ready), and the unseen finish. The Sources tab has no mark (owner, round
- *  8: it was not useful). */
+ *  ready), and the unseen finish. The Sources tab has no mark (it is not
+ *  useful there). */
 export interface Marks {
   result: boolean;
   /** The run finished and the user has not looked at the Result tab since. */
@@ -45,7 +45,7 @@ export function sameLanding(a: Landing, b: Landing): boolean {
 }
 
 /**
- * The marks after something new lands (task 058, N14): the Result tab gets a
+ * The marks after something new lands: the Result tab gets a
  * dot when a section or the report lands while the user is on another tab;
  * the finish is unseen unless the user is looking at the Result tab. A new
  * run clears the finish.
@@ -110,8 +110,8 @@ const RegisterTraceContext = createContext<RegisterTrace | null>(null);
 const MountedTracesContext = createContext(0);
 
 /** Called by every run trace while it is mounted, so the run status bar can keep
- *  its own live region quiet then: one change is announced once (task 058,
- *  owner round 7). A no-op outside the signed-in task shell. */
+ *  its own live region quiet then: one change is announced once.
+ *  A no-op outside the signed-in task shell. */
 export function useRegisterTrace(): void {
   const register = useContext(RegisterTraceContext);
   useEffect(() => (register === null ? undefined : register()), [register]);
@@ -128,7 +128,7 @@ export function useTaskLive(): TaskLive | null {
 }
 
 /**
- * The live layer of the signed-in task shell (task 058, N12, N14): reads the
+ * The live layer of the signed-in task shell: reads the
  * one run stream and works out the tab dots and the unseen finish, which the
  * lifecycle tabs and the browser title read. Mounted inside
  * `RunStreamProvider`; the public task shell has no stream and no live layer.

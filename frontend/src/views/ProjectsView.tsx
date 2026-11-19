@@ -56,31 +56,31 @@ import { ListFootRow, ShowMore } from "../ui/brand/list/ListFoot";
  */
 /** A project's own task list asks for the server's largest page (200,
  *  `PAGE_SIZE_MAX`, web-api.md § Pagination) rather than the default, with
- *  "Show more" past it (round 10). */
+ *  "Show more" past it. */
 const PROJECT_TASKS_PAGE_SIZE = 200;
 
 export function ProjectsView() {
   useDocumentTitle(PROJECT.many);
   const me = useMe();
-  // Hidden entirely with no organisation (rubric 14's dark-launch invariant):
+  // Hidden entirely with no organisation:
   // an unenrolled caller's page — including its queries — stays unchanged.
   const hasSwitcher = me.data?.organisation != null;
   const [scope, setScope] = useState<Scope>("mine");
-  // The Archived toggle (owner, round 11), as on Tasks: the archived
+  // The Archived toggle, as on Tasks: the archived
   // projects of the open scope. Off, the queries are as before.
   const [archived, setArchived] = useState(false);
   const archivedFilter = archived ? { status: "archived" as const } : {};
-  // Paged by the server, 20 a page (round 12); "Show more" asks for the
+  // Paged by the server, 20 a page; "Show more" asks for the
   // next page of the list on screen, as on Tasks.
   const projects = useProjectsPaged(
     hasSwitcher ? { scope, ...archivedFilter } : archived ? archivedFilter : undefined,
   );
   // The server orders the projects by their last activity
-  // (`last_activity_at`, round 12) and the page keeps its order, so a page
+  // (`last_activity_at`) and the page keeps its order, so a page
   // that arrives with "Show more" lands below the rows already shown.
   const { rows, more } = pagedProjects(projects);
   const [creating, setCreating] = useState(false);
-  // An archived row folds away where it stood (owner, round 12).
+  // An archived row folds away where it stood.
   const { shown, depart } = useDepartingRows(rows, (project) => project.project_id);
   // After "Show more", focus moves to the first project that arrived (as on
   // Tasks), found by id: a project already listed is dropped from the new
@@ -104,10 +104,10 @@ export function ProjectsView() {
       <PageHeader
         title={PROJECT.many}
         actions={
-          // The header keeps only the primary (owner, round 11). It stays
+          // The header keeps only the primary. It stays
           // in its slot while the form is open, disabled, so the header
           // does not reflow; the form's Create is the shared name field's
-          // outline Create (round 13).
+          // outline Create.
           <PagePrimary onClick={() => setCreating(true)} disabled={creating}>
             New {PROJECT.lower}
           </PagePrimary>
@@ -135,8 +135,8 @@ export function ProjectsView() {
         }
       />
 
-      {/* The New project form is the one name field and Create (round 13;
-          the picker's "New project…" uses the same): a label over it. */}
+      {/* The New project form is the one name field and Create
+          (the picker's "New project…" uses the same): a label over it. */}
       {creating && (
         <Card className="mt-4 max-w-md p-5">
           <label className="mb-3 block text-meta font-semibold text-navy" htmlFor="new-project-name">
@@ -152,7 +152,7 @@ export function ProjectsView() {
       )}
 
       <div className="mt-4">
-        {/* With the archive open, the list says what it is (owner, round 11). */}
+        {/* With the archive open, the list says what it is. */}
         {archived && <h2 className={ARCHIVED_HEADING_CLASS}>Archived</h2>}
         {projects.isPending && <ListSkeleton label={`Loading ${PROJECT.lowerMany}`} />}
 
@@ -202,8 +202,8 @@ export function ProjectsView() {
           </div>
         )}
 
-        {/* The list's foot: "Show more" while the server holds more (round
-            12), the archived toggle at the right (round 11). */}
+        {/* The list's foot: "Show more" while the server holds more,
+            the archived toggle at the right. */}
         <ListFootRow
           start={
             rows.length > 0 && more.hasMore && !more.error ? (
@@ -226,7 +226,7 @@ export function ProjectsView() {
 type ProjectRow = components["schemas"]["ProjectOut"];
 
 /**
- * One project row with its menu (owner, round 12): the row's link, and
+ * One project row with its menu: the row's link, and
  * beside it, for the project's owner only, the control that opens Rename
  * and Archive. Rename turns the row into the name's field; Archive, once
  * confirmed, folds the row away (`onArchived`). An archived project offers
@@ -280,7 +280,7 @@ function ProjectRowWithMenu({
     <>
       <Link
         to={`/projects/${project.project_id}`}
-        // Its content in order, as the task rows (round 10).
+        // Its content in order, as the task rows.
         aria-label={rowAccessibleName([
           scrub(project.name),
           showOwner && owner !== TENANCY_COPY.ownerlessRow ? owner : null,
@@ -373,7 +373,7 @@ function pagedProjects(result: ReturnType<typeof useProjectsPaged>): {
  */
 function listedProject(client: QueryClient, projectId: string): ProjectRow | undefined {
   // Both shapes share the key's head: a picker's one page (`useProjects`)
-  // and the Projects page's pages (`useProjectsPaged`, round 12).
+  // and the Projects page's pages (`useProjectsPaged`).
   const lists = client.getQueriesData<{ data: ProjectRow[] } | { pages: { data: ProjectRow[] }[] }>({
     queryKey: queryKeys.projects().slice(0, 2),
   });
@@ -395,14 +395,14 @@ export function ProjectDetailView() {
   const project = useProject(projectId);
   const queryClient = useQueryClient();
   const shown = project.data ?? listedProject(queryClient, projectId);
-  // Server-side `project_id` filter (task 033 phase 10a) — this used to
+  // Server-side `project_id` filter — this used to
   // filter the global 50-row tasks page client-side, silently
   // under-reporting once a project's membership (or the caller's visible
   // estate) grew past that page. `page_size` is raised to the same 200-row
   // server-max convention as the overview page above: without it this call
   // still falls back to the 50-row default and a project with 51+ tasks
   // would silently truncate.
-  // Past the 200-row page, "Show more" asks for the next (round 10).
+  // Past the 200-row page, "Show more" asks for the next.
   const tasksQuery = useTasksPaged({
     project_id: projectId,
     page_size: PROJECT_TASKS_PAGE_SIZE,
@@ -441,7 +441,7 @@ export function ProjectDetailView() {
         context={<PageBackLink to="/projects">← {PROJECT.many}</PageBackLink>}
         // From the Projects list's cache when we came from there; otherwise
         // empty while the project loads, keeping its line box.
-        // The name with its menu, Rename and Archive (owner, round 11).
+        // The name with its menu, Rename and Archive.
         title={
           shown === undefined ? (
             ""
@@ -461,7 +461,7 @@ export function ProjectDetailView() {
             <p className="max-w-prose text-body text-grey">{scrub(shown.description)}</p>
           ) : null
         }
-        // The magnifier, then Make private (round 11: the header keeps
+        // The magnifier, then Make private (the header keeps
         // only the primary).
         aside={
           <div className="flex items-center gap-x-2">

@@ -30,16 +30,14 @@ function loadedEmpty(query: TasksPages): boolean {
 export function TasksListView() {
   useDocumentTitle(TASK.many);
   const me = useMe();
-  // Hidden entirely with no organisation (rubric 14's dark-launch invariant,
-  // a merge gate): an unenrolled caller's list stays byte-identical to
-  // today, including the query itself — no `scope` param is sent.
+  // Hidden entirely with no organisation: an unenrolled caller's list
+  // carries no organisation controls, and its query sends no `scope` param.
   const hasSwitcher = me.data?.organisation != null;
   // `chosen` is the caller's own pick; until they pick, the page opens on
   // Mine, or on Organisation when Mine is empty and colleagues have tasks
-  // (lead ruling, 2026-11-05: the owner's point was that colleagues' tasks
-  // were unreachable from an empty Mine).
+  // (so colleagues' tasks are reachable from an empty Mine).
   const [chosen, setChosen] = useState<Scope | null>(null);
-  // Archived is not a scope (owner, round 11): a toggle that lists the
+  // Archived is not a scope: a toggle that lists the
   // archived tasks of the open scope, the reader's on Mine, the
   // organisation's on Organisation. The scope is kept across it.
   const [archived, setArchived] = useState(false);
@@ -57,7 +55,7 @@ export function TasksListView() {
     ? { scope: "all" as const, status: "archived" as const }
     : undefined;
   // Each list is paged by the server (50 a page, `has_more`); "Show more"
-  // asks for the next page of the list on screen (round 10).
+  // asks for the next page of the list on screen.
   const ownTasks = useTasksPaged(mineQuery);
   // The reader's archive is always asked for: the first-run redirect below
   // must not send a reader whose tasks are all archived to /new.
@@ -112,11 +110,11 @@ export function TasksListView() {
     <main className={PAGE_COLUMN_CLASS}>
       <PageHeader
         title={TASK.many}
-        // The header keeps only the primary (owner, round 11).
+        // The header keeps only the primary.
         actions={<PagePrimary to={newTaskHref()}>{COPY.newTask}</PagePrimary>}
         filters={hasSwitcher ? <ScopeSwitcher scope={scope} onChange={setChosen} /> : null}
-        // The row's right end: the admin's note, then the magnifier
-        // (owner, round 11). The magnifier's 40 px box carries 12 px of air
+        // The row's right end: the admin's note, then the magnifier.
+        // The magnifier's 40 px box carries 12 px of air
         // each side of its glyph, so an 8 px gap reads as 20 px, and -mr-3
         // sets the glyph on the column's edge, under the primary's.
         aside={
@@ -132,7 +130,7 @@ export function TasksListView() {
       />
 
       <div className="mt-4">
-        {/* With the archive open, the list says what it is (owner, round 11). */}
+        {/* With the archive open, the list says what it is. */}
         {archived && <h2 className={ARCHIVED_HEADING_CLASS}>Archived</h2>}
         <TaskListPanel
           rows={rows}

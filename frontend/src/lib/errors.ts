@@ -33,15 +33,15 @@ export const conflictSentences: Record<ConflictCode, string> = {
   no_completed_run: `This ${TASK.lower} needs a completed run before you can chat about the evidence.`,
   chat_turn_in_progress: "A chat turn is already running. Refresh to see it finish.",
   chat_capacity: "Chat is at capacity right now. Try again shortly.",
-  // Task 033 i.5, contract § 11 (lead-owned, binding): a Task's own
+  // A Task's own
   // visibility can't diverge from the Project it belongs to.
   visibility_conflict:
     `This ${TASK.one} is in a ${PROJECT.one}. Change the ${PROJECT.one}'s visibility, or leave the ${TASK.one} out of the ${PROJECT.one}.`,
-  // Task 044 (C11, C12): the two rules a Link must satisfy when it is written.
+  // The two rules a Link must satisfy when it is written.
   link_project_mismatch: `That Evidence search is in a different ${PROJECT.one}. Put both in the same ${PROJECT.one} first.`,
   link_source_unfinished: "That Evidence search has not finished a run yet. Wait for it, then try again.",
   link_source_capability: "A task can only start from an Evidence search task.",
-  // Task 055: the shortlist's refusals.
+  // The shortlist's refusals.
   nothing_to_propose: "Every included option already has a place or was set aside. There is nothing left to propose.",
   not_included: "Only an included option can be on the shortlist.",
 };
@@ -60,7 +60,7 @@ export function isConflictCode(code: string | undefined | null): code is Conflic
 }
 
 /** Suggest more's own words for a shared code: there, `plan_stale` means
- *  the longlist predates a changed plan input (task 055). */
+ *  the longlist predates a changed plan input. */
 export const suggestConflictSentences: Partial<Record<ConflictCode, string>> = {
   plan_stale: "The plan has changed since the longlist was built. Rebuild the longlist first.",
 };

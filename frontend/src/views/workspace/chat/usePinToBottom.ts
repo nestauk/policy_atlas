@@ -6,7 +6,7 @@ import { afterEasedHeights } from "../../streamPacing";
 /** A reader this close to the end still counts as "at the end". */
 const PINNED_WITHIN = 120;
 
-/** Keep a transcript's scroll region at its end (038 V8, owner 2026-09-05).
+/** Keep a transcript's scroll region at its end.
  *
  * A freshly opened transcript starts at its end; new content keeps it there
  * while the reader is near the end; a reader who has scrolled up is left

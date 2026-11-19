@@ -28,7 +28,7 @@ import { UndoToast, useTocEditor, type Editor } from "./toc/Editing";
 const PAGE_SIZE = 200;
 
 /** The list's frame: Paper, a Line 2 hairline. Nothing inside needs
- *  clipping, so a row's focus ring shows whole (H9). */
+ *  clipping, so a row's focus ring shows whole. */
 const FRAME_CLASS = "border border-line-2 bg-paper";
 
 /**
@@ -41,7 +41,7 @@ const ROW_GRID =
   "grid-cols-[3.5rem_minmax(0,1fr)_auto] [grid-template-areas:'time_text_mark'] " +
   "max-md:grid-cols-[minmax(0,1fr)_auto] max-md:gap-y-1 max-md:[grid-template-areas:'time_mark'_'text_text']";
 
-/** Detail and steps start under the sentence, not under the time (H10). */
+/** Detail and steps start under the sentence, not under the time. */
 const SENTENCE_INDENT = "md:pl-[5.5rem]";
 
 /** A run's steps hang on a Line 2 hairline spine in the sentence column
@@ -63,8 +63,8 @@ const DISCLOSURE_CLASS =
  * began the work and the conversation that shaped the plan. Both are merged
  * in here, so they appear above the run events rather than nowhere. Rows are
  * grouped by day, each run folds to its outcome line, and every sentence
- * names who acted (round 10). A theory of change's edits are merged in too,
- * with Undo for an editor (task 054).
+ * names who acted. A theory of change's edits are merged in too,
+ * with Undo for an editor.
  */
 export function HistoryView() {
   const { taskId = "" } = useParams();
@@ -80,7 +80,7 @@ export function HistoryView() {
   useDocumentTitle(task.data?.name, LIFECYCLE_LABELS.history);
   const headingId = useId();
 
-  // Rows only once both reads have landed (H8): a half list beside the
+  // Rows only once both reads have landed: a half list beside the
   // skeleton, or a partial list under an error, would present part of the
   // record as the whole of it.
   const isError = decisions.isError || turns.isError;
@@ -198,7 +198,7 @@ function Sentence({
 /**
  * One recorded event. A row with something behind it (the Task Agent's reply,
  * a step's counts) is a disclosure; a row without is plain text in its list
- * item, not a disabled button (H9).
+ * item, not a disabled button.
  */
 function EntryRow({ entry, step = false, editor }: { entry: HistoryEntry; step?: boolean; editor?: Editor }) {
   const [open, setOpen] = useState(false);
@@ -214,7 +214,7 @@ function EntryRow({ entry, step = false, editor }: { entry: HistoryEntry; step?:
       <div className={cn(ROW_GRID, padding)}>
         <RowTime at={entry.at} className={timeClass} />
         <Sentence item={entry} className={textClass} />
-        {/* A theory-of-change edit the reader may undo (task 054). */}
+        {/* A theory-of-change edit the reader may undo. */}
         {editor !== undefined && entry.undoEventId !== undefined && (
           <button
             type="button"
@@ -259,7 +259,7 @@ function EntryRow({ entry, step = false, editor }: { entry: HistoryEntry; step?:
 /**
  * One run, folded to its outcome and time, its steps behind "Show steps"
  * with the conversation surfaces' chevron: the run trace's ended card's
- * vocabulary (H7). The steps open by their height and opacity over 200 ms,
+ * vocabulary. The steps open by their height and opacity over 200 ms,
  * the chevron's time; a cut under reduced motion.
  */
 function RunRow({ run }: { run: HistoryRun }) {
@@ -297,7 +297,7 @@ function RunRow({ run }: { run: HistoryRun }) {
 }
 
 /**
- * The history loading (H8): the list's own shape, a day heading's bar over
+ * The history loading: the list's own shape, a day heading's bar over
  * the frame and five 48 px rows, each a time bar and a sentence bar, so the
  * rows arrive into it. The bars breathe, and hold still under reduced motion.
  */

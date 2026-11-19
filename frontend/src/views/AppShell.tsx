@@ -37,13 +37,13 @@ import { NameMenu, useAddToProjectStep } from "./NameMenu";
 import { useForgetReportExpandOnLeave } from "./ArtefactOutline";
 
 /**
- * The task header's left side (task 058, owner rounds 11 and 12): the name at
+ * The task header's left side: the name at
  * the Heading size (Lead below `md`) with the owner's menu (Rename, Add to
  * project, Archive; the rows' menu shares the last two)
  * behind the chevron on its baseline, and the capability on its own short
- * line under it in Meta Grey ("Options scoping", "Evidence search"; task 044,
- * X12: a colleague can tell the two kinds apart without opening the plan). Rename and archive are owner-only
- * (task 033 phase 10c, contract § 11 / rubric 37), so a colleague sees no
+ * line under it in Meta Grey ("Options scoping", "Evidence search": a
+ * colleague can tell the two kinds apart without opening the plan). Rename and archive are owner-only,
+ * so a colleague sees no
  * chevron at all. Visibility lives on the Share page.
  */
 function TaskName({
@@ -55,7 +55,7 @@ function TaskName({
 }: {
   taskId: string;
   name: string;
-  /** The task's projects, for the menu's "Add to project" (round 12). */
+  /** The task's projects, for the menu's "Add to project". */
   projectIds: readonly string[] | null | undefined;
   capability: string | null | undefined;
   isOwner: boolean;
@@ -63,7 +63,7 @@ function TaskName({
   const update = useUpdateTask(taskId);
   const archive = useArchiveTask(taskId);
   const toast = useToast();
-  // The same "Add to project" as a task row's menu (owner, round 12).
+  // The same "Add to project" as a task row's menu.
   const addToProject = useAddToProjectStep(taskId, projectIds);
   return (
     <NameMenu
@@ -99,7 +99,7 @@ function TaskName({
 }
 
 /**
- * The short line under the task's name (owner, round 14): the capability,
+ * The short line under the task's name: the capability,
  * then "· in <project>" when the task belongs to one, the name linking to
  * the project; with several, the first and "and N more". A project the
  * reader cannot read (or still loading) is left out rather than guessed.
@@ -133,7 +133,7 @@ function TaskKindLine({
 
 /**
  * Account menu: a user icon in the global bar, identity above Sign out
- * inside the popover (task 033 phase 10b, contract § 11 / rubric 41).
+ * inside the popover.
  *
  * Renders exactly what `/me` returns: `display_name` (ops already falls it
  * back to the `sub` rendering for an unenrolled caller — nothing here
@@ -175,7 +175,7 @@ function AccountMenu({ signOut }: { signOut: () => void }) {
           </svg>
         </button>
       </PopoverTrigger>
-      {/* The account menu (task 058 consistency pass, lead rulings): the
+      {/* The account menu: the
           popover's tokens (Paper, Line 2 hairline, the overlay lift), as wide
           as its content and at least 240 px, right-aligned under the button.
           Who you are first, a hairline, then the items as 40 px Meta rows
@@ -231,7 +231,7 @@ function AccountMenu({ signOut }: { signOut: () => void }) {
 
 type LifecycleItems = Parameters<typeof LifecycleBar>[0]["items"];
 
-/** The lifecycle tabs with the live layer's new-content dots (task 058, N14),
+/** The lifecycle tabs with the live layer's new-content dots,
  *  in either placement. */
 function TaskTabs({
   items,
@@ -243,7 +243,7 @@ function TaskTabs({
   placement: "nav" | "bottom";
   lead?: ReactNode;
   /** The Sources tab opens on the step that has landed during an Evidence
-   *  search run (annex, owner round after the trace, item 8). */
+   *  search run. */
   evidenceSearch: boolean;
 }) {
   const live = useTaskLive();
@@ -259,8 +259,8 @@ function TaskTabs({
 /** The plan document over a non-Agent tab (the Agent tab mounts its own,
  *  with the plan's edits). Read-only here: edits and starts belong to the
  *  Agent tab. It lies over the right of the page with the overlay lift, the
- *  full height of the viewport as the sheets are (owner, 2026-11-09: it
- *  stopped at the task header), so the report under it keeps its width;
+ *  full height of the viewport as the sheets are, so the report under it
+ *  keeps its width;
  *  below `md` it covers the page. */
 function ShellPlanPanel({ taskId }: { taskId: string }) {
   const plan = usePlanPanel();
@@ -269,8 +269,8 @@ function ShellPlanPanel({ taskId }: { taskId: string }) {
   if (!plan.open) return null;
   return (
     <>
-    {/* Over a tab the plan dims the page with the sheets' scrim (owner,
-        round 14); a press on it is a press outside the plan, which closes
+    {/* Over a tab the plan dims the page with the sheets' scrim;
+        a press on it is a press outside the plan, which closes
         it, and the scrim fades out with the plan as a sheet's does. The
         Agent tab's plan sits beside the thread with no scrim. */}
     <div
@@ -299,7 +299,7 @@ function ShellPlanPanel({ taskId }: { taskId: string }) {
 export function AppShell() {
   const { taskId } = useParams();
   // A reader who leaves the task and comes back gets a fresh collapsed
-  // report; moving between its tabs keeps what they opened (round 12).
+  // report; moving between its tabs keeps what they opened.
   useForgetReportExpandOnLeave(taskId);
   const location = useLocation();
   const auth = useAuth();
@@ -308,19 +308,19 @@ export function AppShell() {
   // polling covers a reconnect gap so lifecycle locking stays honest.
   const task = useTask(taskId ?? "", { pollWhileRunning: true });
   const base = taskId === undefined ? null : `/tasks/${taskId}`;
-  // Public-leg access (task 037): a signed-in outsider reading a public Task
+  // Public-leg access: a signed-in outsider reading a public Task
   // gets the same two-tab view as an anonymous visitor — no chat, no SSE,
   // no Plan/Share/History (their URLs redirect in LifecycleRoute).
   const publicAccess = task.data?.access === "public";
-  // Review fix (task 037): `publicAccess` reads false while the task
+  // Review fix: `publicAccess` reads false while the task
   // query is still pending — same as a graded reader — so a cold visit to
   // a public Task briefly opened the run stream and mounted the chat panel
   // before access was known. Both gate on the query having resolved.
   const taskResolved = task.data !== undefined;
-  // Browser alerts when a task's work finishes, on any page (owner, 2026-11-04).
+  // Browser alerts when a task's work finishes, on any page.
   useFinishAlerts();
   const inWorkspace = base !== null && location.pathname === base;
-  // Every task tab but Agent (038 V8, owner ruling 2026-09-05): the Agent
+  // Every task tab but Agent: the Agent
   // tab lists the same conversations in its own sidebar and shows the
   // selected one in its main column, so the overlay would be a second copy.
   const showChatPanel = base !== null && !inWorkspace && taskResolved && !publicAccess;
@@ -343,14 +343,14 @@ export function AppShell() {
   // truth) — the nav badge and title marker exist precisely to be seen from
   // everywhere else.
   //
-  // Owner-scoped (task 033 phase 10b, contract § 11 / rubric 38): steering
+  // Owner-scoped: steering
   // is owner-only, so a colleague reading an org-shared Task must never be
   // told a check-in is "waiting on you" — this used to poll and show for
   // every viewer. `task.data?.is_owner` gates both the poll (cheapest
   // honest rule: don't even ask) and, transitively through `hasPendingCheckIn`
   // below, the nav badge, the lifecycle-tab marker and the cross-tab banner.
   const isOwner = task.data?.is_owner === true;
-  // Task 044 (A17): a scoping task's Result tab unlocks on its baseline, not
+  // A scoping task's Result tab unlocks on its baseline, not
   // on the walk's ending (`ArtefactView` shares the read's cache entry).
   const tabOptions = useTabOptions(taskId ?? "");
   const pendingCheckIns = useCheckIns(taskId ?? "", "pending", {
@@ -360,11 +360,10 @@ export function AppShell() {
   const hasPendingCheckIn =
     base !== null && !inWorkspace && isOwner && (pendingCheckIns.data?.data.length ?? 0) > 0;
   // The live layer (tab dots, the title's finish, the reconnecting banner)
-  // belongs to the signed-in shell only; the public task shell has no stream
-  // (task 058, N12).
+  // belongs to the signed-in shell only; the public task shell has no stream.
   const liveShell = base !== null && taskResolved && !publicAccess;
 
-  // A lifecycle tab opens at its top (owner, round 14; `lib/openAtTop`'s
+  // A lifecycle tab opens at its top (`lib/openAtTop`'s
   // rule): the tabs share one scrolling pane, which would otherwise keep the
   // last tab's offset. Only when the tab changes (a Sources subtab or the
   // Result tab's view keeps its place) and never over a link's own `#hash`.
@@ -386,7 +385,7 @@ export function AppShell() {
     return () => document.documentElement.classList.remove("overflow-hidden");
   }, [base]);
 
-  // One tab list, two placements (040 D2): in the task NavBar from `md` up,
+  // One tab list, two placements: in the task NavBar from `md` up,
   // in a bottom bar below it — computed once so the marker logic stays single.
   const lifecycleItems =
     base === null
@@ -418,7 +417,7 @@ export function AppShell() {
       )}
     >
       {/* Its own View Transition layer, held still above the page, so a
-          longlist regroup never draws over it (round 13, owner). */}
+          longlist regroup never draws over it. */}
       <NavBar aria-label="App" className="shrink-0 [view-transition-name:app-nav] [view-transition-class:shell-chrome]">
         <NavHomeLink />
         {/* Below md the link group wraps to its own second row (order-last +
@@ -478,8 +477,8 @@ export function AppShell() {
         </NavBar>
       )}
       <SensitiveInfoBanner />
-      {/* The Agent overlay beside every task view outside the Agent tab
-          (029 rev 3.4, 038 V8): the Agent tab hosts the conversation list
+      {/* The Agent overlay beside every task view outside the Agent tab:
+          the Agent tab hosts the conversation list
           and the conversation itself, so the panel mounts everywhere else. */}
       <div
         className={cn(
@@ -498,14 +497,14 @@ export function AppShell() {
           </ErrorBoundary>
         )}
         {/* The page's column: the run status bar on top, then the routed view.
-            The status bar starts after the rail (owner, round 8: it no longer
-            runs under the sidebar to the window's left edge); below md the
+            The status bar starts after the rail (it does not
+            run under the sidebar to the window's left edge); below md the
             rail hides and the column is the full width. */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          {/* The run status bar under the tabs on every tab but Agent (task 058,
-              owner rounds 7 and 8): it opens the Task Agent. While the live
-              stream reconnects its frame carries the reconnecting line
-              (owner, round 11), so the line never runs under the rail. */}
+          {/* The run status bar under the tabs on every tab but Agent:
+              it opens the Task Agent. While the live
+              stream reconnects its frame carries the reconnecting line,
+              so the line never runs under the rail. */}
           {liveShell && <RunStatusBar />}
           <div
             ref={scrollPane}
@@ -553,7 +552,7 @@ export function AppShell() {
               // Task (the events route is not on the public surface) — for
               // entitled readers it flips true and stays there. Before that
               // resolution, access is unknown, so this must not connect
-              // either (review fix, task 037).
+              // either.
               <RunStreamProvider taskId={taskId} connect={taskResolved && !publicAccess}>
                 <TaskLiveProvider
                   taskId={taskId}

@@ -15,7 +15,7 @@ export const queryKeys = {
   me: () => ["me"] as const,
   taskRoot: (taskId: string) => ["tasks", taskId] as const,
   // `scope` and `project_id` are embedded via the whole `query` object, so
-  // they participate in the key automatically (task 033 phase 10a) — every
+  // they participate in the key automatically — every
   // distinct filter combination, including the switcher's future `scope`,
   // gets its own cache entry rather than silently serving another scope's
   // rows.
@@ -63,10 +63,9 @@ export const queryKeys = {
   tocProposals: (taskId: string) => ["tasks", taskId, "toc", "proposals"] as const,
 };
 
-/** `GET /api/v1/tasks` filters (task 033 phase 10a adds `scope` and
- *  `project_id`). `scope` defaults server-side to `all`; the frontend
- *  passes it explicitly only where a caller needs something other than that
- *  default (the phase 10b switcher), so day-one behaviour is unchanged. */
+/** `GET /api/v1/tasks` filters. `scope` defaults server-side to `all`; the
+ *  frontend passes it explicitly only where a caller needs something other
+ *  than that default. */
 interface TasksQuery {
   status?: "active" | "archived" | "all";
   scope?: "all" | "mine";
@@ -75,9 +74,8 @@ interface TasksQuery {
   page_size?: number;
 }
 
-/** `GET /api/v1/projects` filters (task 033 phase 10a adds `scope`; task
- *  058 round 11 adds `status`: `active`, the server's default, hides archived
- *  projects; `archived` lists only those; `all` both). */
+/** `GET /api/v1/projects` filters (`status`: `active`, the server's default,
+ *  hides archived projects; `archived` lists only those; `all` both). */
 interface ProjectsQuery {
   scope?: "all" | "mine";
   status?: "active" | "archived" | "all";
@@ -120,16 +118,16 @@ export interface EvidenceQuery extends PageQuery {
   year_to?: number;
   /** Publisher country as the Landscape chart's row shows it (any spelling:
    *  "United Kingdom", "GB" and "UK" name the same sources); "Not reported"
-   *  keeps the sources with none (task 058, round 10). */
+   *  keeps the sources with none. */
   country?: string;
   /** A coverage row's `query_id` (`CoverageQueryOut` / `CoveragePassOut`):
    *  only the sources that search or pass returned; an empty page for a
-   *  search from before the ids were kept (task 058, round 12). */
+   *  search from before the ids were kept. */
   query?: number;
-  /** The read depth the Status column shows (task 058, round 13). */
+  /** The read depth the Status column shows. */
   depth?: "full_text" | "abstract" | "title";
   /** `true`: the documents the appraise stage scored, the funnel's
-   *  quality-checked row (task 058, round 13). */
+   *  quality-checked row. */
   appraised?: boolean;
 }
 
@@ -154,7 +152,7 @@ export function useApiClient() {
 }
 
 /**
- * `GET /api/v1/me` — the caller's own identity row (task 033), provisioned
+ * `GET /api/v1/me` — the caller's own identity row, provisioned
  * on first call. Keys the whole tenancy UI: a `null` `organisation` hides
  * the scope switcher and every org-scoped affordance.
  *
@@ -186,8 +184,8 @@ export function useMe() {
  *  while the tab is visible. */
 /**
  * The page size a one-page list read asks for when its caller names none: the
- * server's cap. The Tasks and Projects lists page at 20 by default (task 058,
- * round 12), so a picker or a name lookup that reads one page would otherwise
+ * server's cap. The Tasks and Projects lists page at 20 by default,
+ * so a picker or a name lookup that reads one page would otherwise
  * stop at the first 20 rows without saying so.
  */
 export const WHOLE_LIST_PAGE_SIZE = 200;
@@ -206,7 +204,7 @@ export function useTasks(query?: TasksQuery, options?: { enabled?: boolean; back
     },
     refetchInterval: (activeQuery) => {
       // A scoping task can be busy while its `latest_run` is finished (an
-      // option search runs under `active_run` only — task 045, S15).
+      // option search runs under `active_run` only).
       const hasActiveRun = activeQuery.state.data?.data.some(isRunActive);
       return hasActiveRun ? 15_000 : false;
     },
@@ -216,8 +214,8 @@ export function useTasks(query?: TasksQuery, options?: { enabled?: boolean; back
 }
 
 /**
- * `GET /api/v1/tasks`, a page at a time, for a list with "Show more" (task
- * 058, round 10). The server keeps 20 a page (round 12) and says `has_more`;
+ * `GET /api/v1/tasks`, a page at a time, for a list with "Show more".
+ * The server keeps 20 a page and says `has_more`;
  * the next page is asked for only when it does. `data.pages` holds the pages
  * in order.
  */
@@ -265,7 +263,7 @@ export function useProjects(query?: ProjectsQuery) {
 
 /**
  * `GET /api/v1/projects`, a page at a time, for the Projects list with "Show
- * more" (task 058, round 12): 20 a page by default, the next page asked for
+ * more": 20 a page by default, the next page asked for
  * only while `has_more`. `data.pages` holds the pages in order, as
  * {@link useTasksPaged}.
  */
@@ -321,7 +319,7 @@ export function useTask(taskId: string, options?: { pollWhileRunning?: boolean }
       return data;
     },
     enabled: Boolean(taskId),
-    // A 4xx (an anonymous 404 on a private/unknown Task, task 037) means the
+    // A 4xx (an anonymous 404 on a private/unknown Task) means the
     // same thing on every attempt — retrying it just holds the caller
     // (PublicTaskShell's stash-and-splash fallback) for ~7s across the
     // default 3 retries before landing where it was always going to land.
@@ -366,7 +364,7 @@ export function useCheckIns(
   });
 }
 
-// --- Read-model hooks (task 025 §6) -----------------------------------
+// --- Read-model hooks -----------------------------------
 //
 // These resources landed in the generated contract mid-build (a backend
 // slice building `policy_atlas.api.read_models` concurrently with this
@@ -448,8 +446,8 @@ export function useFindings(taskId: string, query?: FindingsQuery) {
 
 /** `GET /api/v1/tasks/{task_id}/sources/{source_id}/records` — on an
  *  options-scoping task, the document's intervention profile records under
- *  the options, one per (option, record); one option's only with `optionId`
- *  (task 046, amendment 3, R67). Enable it only on a scoping task. */
+ *  the options, one per (option, record); one option's only with `optionId`.
+ * Enable it only on a scoping task. */
 export function useSourceRecords(
   taskId: string,
   sourceId: string | null,
@@ -533,7 +531,7 @@ export function useTaskAgentTurns(taskId: string, query?: PageQuery) {
 
 /** `GET /api/v1/tasks/{task_id}/conversations` — the task chat and
  * task_agent-conversation library. `options.enabled` lets the public task view
- * (task 037) keep the hook mounted without issuing the non-public request. */
+ * keep the hook mounted without issuing the non-public request. */
 export function useConversations(
   taskId: string,
   query?: ConversationQuery,
@@ -626,7 +624,7 @@ export function usePlan(taskId: string) {
 
 /** `GET /api/v1/tasks/{task_id}/runs` — paginated run blocks for the
  * task_agent-thread composition model. */
-/** `parentless` (task 045, A13) keeps only the task's own walks — no
+/** `parentless` keeps only the task's own walks — no
  *  option searches, no child walks. */
 interface RunsQuery extends PageQuery {
   parentless?: boolean;
@@ -662,7 +660,7 @@ export function useArtefact(taskId: string) {
       );
       // No artefact yet is a normal pre-synthesis state, not an error — a
       // thrown 404 here retries four times and holds a blank skeleton for
-      // ~10s on a fresh task (owner feedback, 2026-07-29).
+      // ~10s on a fresh task.
       if (response.status === 404) return null;
       if (error) throw error;
       return data ?? null;
@@ -707,10 +705,10 @@ export function useGroups(taskId: string) {
   });
 }
 
-// --- Longlist (task 045 phase 6.2) --------------------------------------
+// --- Longlist --------------------------------------
 
 /** `GET /api/v1/tasks/{task_id}/options/{option_id}` — one option's card,
- *  assembled (D15). A 404 is treated as absence, not an error. */
+ *  assembled. A 404 is treated as absence, not an error. */
 export function useOption(taskId: string, optionId: string) {
   const client = useApiClient();
   return useQuery({
@@ -730,10 +728,10 @@ export function useOption(taskId: string, optionId: string) {
 
 /** `GET /api/v1/tasks/{task_id}/options` — every option row of a scoping
  *  task with its own search's status, served from the end of the suggest
- *  stage while the longlist is still being built (task 058, N22). An empty
+ *  stage while the longlist is still being built. An empty
  *  list before suggest; a 404 is treated as absence. Keyed
  *  `["tasks", id, "options"]`: the run stream refreshes that prefix on a
- *  child walk's frames (N23), and the whole task on the walk's own. */
+ *  child walk's frames, and the whole task on the walk's own. */
 export function useOptions(taskId: string, options?: { enabled?: boolean }) {
   const client = useApiClient();
   return useQuery({
@@ -751,7 +749,7 @@ export function useOptions(taskId: string, options?: { enabled?: boolean }) {
 }
 
 /** `GET /api/v1/tasks/{task_id}/longlist` — an options-scoping task's
- *  longlist (task 045), or `null` while none exists. The `useArtefact`
+ *  longlist, or `null` while none exists. The `useArtefact`
  *  shape: a 404 is the normal pre-longlist state, not an error. Keyed under
  *  the task root so the run stream's invalidation refreshes it. */
 export function useLonglist(taskId: string) {
@@ -849,8 +847,8 @@ export function useTocUploads(taskId: string, enabled: boolean) {
   });
 }
 
-/** `GET .../toc/uploads/{upload_id}` — the user's original diagram as a file
- *  (task 054, increment 5): fetched with the user's login, never public. */
+/** `GET .../toc/uploads/{upload_id}` — the user's original diagram as a file:
+ * fetched with the user's login, never public. */
 export function useTocUploadFile(taskId: string, uploadId: string | null | undefined) {
   const client = useApiClient();
   return useQuery({
@@ -868,7 +866,7 @@ export function useTocUploadFile(taskId: string, uploadId: string | null | undef
   });
 }
 
-/** `GET /api/v1/tasks/{task_id}/toc/history` — who changed what (task 054, C41). Editors only. */
+/** `GET /api/v1/tasks/{task_id}/toc/history` — who changed what. Editors only. */
 export function useTocHistory(taskId: string, enabled: boolean) {
   const client = useApiClient();
   return useQuery({
@@ -884,7 +882,7 @@ export function useTocHistory(taskId: string, enabled: boolean) {
   });
 }
 
-/** `GET /api/v1/tasks/{task_id}/toc/proposals` — open suggestions (task 054, C45, C46). Editors only.
+/** `GET /api/v1/tasks/{task_id}/toc/proposals` — open suggestions. Editors only.
  *  Polled while a review is expected, so its card appears without a reload. */
 export function useTocProposals(taskId: string, enabled: boolean, polling: boolean) {
   const client = useApiClient();

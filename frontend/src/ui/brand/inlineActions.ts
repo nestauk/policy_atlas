@@ -1,5 +1,5 @@
 /*
- * The three inline-action styles (task 058 consistency pass; DESIGN.md
+ * The three inline-action styles (DESIGN.md
  * § Buttons, Inline actions). An action that reads as words, not as a
  * button, takes one of these and nothing else. Each sets no size, so it
  * takes the size of the line it sits in (Meta in a card, Body in prose)

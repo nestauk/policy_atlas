@@ -7,7 +7,7 @@ import { LINK_CLASS } from "../../ui/brand/inlineActions";
 /**
  * Chat text with each box and connection code (S3, #5) as a link that opens
  * the Result tab with that box or connection selected, as a code in the
- * report does (round 6). "Result tab" links there too. Only codes the theory
+ * report does. "Result tab" links there too. Only codes the theory
  * has are linked, so ordinary words are never caught.
  */
 export function TocCodeText({ text, taskId, codes }: { text: string; taskId: string; codes: ReadonlySet<string> }): ReactNode {

@@ -3,7 +3,7 @@ import { cn } from "./cn";
 import { readDepthColour, strengthTierColour, strengthTierName, toneSquareClass, type ReadDepth, type ToneColour } from "./evidence";
 
 /**
- * The 6 px tone square (round 12): the palette's green, yellow or red,
+ * The 6 px tone square: the palette's green, yellow or red,
  * always before the word that says the same thing. Decorative to assistive
  * technology; `data-tone` names its colour. Spacing belongs to the surface
  * (a flex gap, or the Sources table's inline margin through `className`).
@@ -50,7 +50,7 @@ export function StrengthMark({
  * A read depth as the Sources table, the dossier and chat write it: its
  * tone square (green full text, yellow abstract, red neither), then the
  * word. With `href` (the document's own address, once the text was
- * collected; round 12, and the dossier too on 2026-11-09) the word is the
+ * collected) the word is the
  * link to it, opening in a new tab as the report's addresses do. The table
  * builds its own hover around the same square for the other depths.
  */

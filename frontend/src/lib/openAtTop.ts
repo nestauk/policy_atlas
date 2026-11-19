@@ -1,8 +1,8 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
 
 /**
- * Opens a page at its top with focus on its title (round 12, the option
- * card; round 13, owner: the Result tab's Longlist and Shortlist too). The
+ * Opens a page at its top with focus on its title (the option card, the
+ * Result tab's Longlist and Shortlist). The
  * app's scrolling pane keeps the last page's offset across a route change,
  * so a page reached from the foot of another opened at its foot. Once per
  * `key` (the option, the view), so a later render (a dossier over the card,

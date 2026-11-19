@@ -5,9 +5,9 @@ import { cn } from "./cn";
 import { CAPTION_LABEL_CLASS } from "./label";
 
 /*
- * The sortable table header (task 058, round 10; moved here from the Sources
- * view in task 054 phase 7 so the theory of change's assumptions table sorts
- * with the same arrow). DESIGN.md § Tables: headers are the Label style at
+ * The sortable table header (shared, so the Sources view and the theory of
+ * change's assumptions table sort with the same arrow). DESIGN.md § Tables:
+ * headers are the Label style at
  * Caption size, one line, bottom-aligned; a sortable header always keeps its
  * arrow's slot, so labels share one baseline.
  */
@@ -59,7 +59,7 @@ export function SortableColumnHeader<K extends string>({
   hint,
 }: {
   column: { key: K; label: string };
-  /** A legend shown on hover and focus (the strength's tones, round 12). */
+  /** A legend shown on hover and focus (the strength's tones). */
   hint?: ReactNode;
   activeSort: K | null;
   activeOrder: SortOrder | null;

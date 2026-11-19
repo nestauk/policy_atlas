@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { cn } from "./cn";
 
 /**
- * The app's checkbox (owner, round 13; first used by the New page's "Evidence
+ * The app's checkbox (first used by the New page's "Evidence
  * search to start from"): a 16 px square box in the plan card radio's
  * language, Navy at 40 % when empty, Navy filled with a white tick when
  * checked, Line 2 when disabled; square, as everything but the radio is.

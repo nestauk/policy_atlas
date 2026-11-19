@@ -31,7 +31,7 @@ export function SensitiveInfoBanner() {
   return (
     <div
       role="status"
-      // A screen warning, not part of a printed report (round 10, finding 3).
+      // A screen warning, not part of a printed report.
       className="print-hide flex shrink-0 items-center justify-between gap-3 bg-red px-5 py-1.5 text-body text-white"
     >
       <p>Do not enter sensitive or confidential information.</p>

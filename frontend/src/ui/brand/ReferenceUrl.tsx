@@ -6,7 +6,7 @@ const REFERENCE_URL_CLASS =
   "text-grey underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 hover:text-navy hover:decoration-navy";
 
 /**
- * A reference's web address (task 058, consolidation batch B): the last part
+ * A reference's web address (consolidation batch B): the last part
  * of the reference line, shown without its scheme ("doi.org/10.1000/x") and
  * opening in a new tab. The report's References and the source dossier use
  * it. Nothing renders for an address that is not http or https.

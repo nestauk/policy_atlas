@@ -36,11 +36,11 @@ const CHANGE_MODE_VALUES = ["frequent", "moderate", "minimal", "unattended"] as 
 type ChangeModeValue = (typeof CHANGE_MODE_VALUES)[number];
 
 /** The stages whose check-in is about what the search found: its facts line
- *  links to the Sources tab (annex scene 12). */
+ *  links to the Sources tab. */
 const SOURCES_CHECK_IN_STAGES = new Set(["acquire", "screen"]);
 
-/** The baseline gate's question, its card's title (round 10, C9: the gate
- *  reads as this week's check-ins do, the question as the title). The
+/** The baseline gate's question, its card's title (the gate
+ *  reads as the other check-ins do, the question as the title). The
  *  backend's render leads with the same words
  *  (`runtime/baseline_gate.GATE_HEADING`), so the card and the content of
  *  record say the same thing. */
@@ -50,7 +50,7 @@ export const BASELINE_GATE_QUESTION = "Does the plan still look right now you ha
 export const BASELINE_GATE_SETTLED_LABEL = "Baseline";
 
 /**
- * The gate's one facts line (round 10, finding 8): the settings the walk ran
+ * The gate's one facts line: the settings the walk ran
  * from, in the plan document's order, each value as the bundle gives it, the
  * outcomes as a count ("2 outcomes").
  */
@@ -70,8 +70,8 @@ export function baselineGateFacts(bundle: Record<string, unknown> | null): strin
 }
 
 /**
- * The gate once decided, in the settled part card's language (round 10,
- * finding 8): the user's side of the thread (Blue Wash, a Blue Tint border,
+ * The gate once decided, in the settled part card's language:
+ * the user's side of the thread (Blue Wash, a Blue Tint border,
  * the 32 px indent) with the 2 px Green rule on its right edge, the grey
  * label "Baseline" and the chosen option in deep green bold. The decision is
  * said once: this card replaces the user bubble and the "recorded · plan
@@ -93,7 +93,7 @@ export function SettledGateCard({ label }: { label: string }) {
 }
 
 /** The waiting-on-you card: the one orange rule, and one 900 ms orange ring
- *  that blooms 150 ms after it arrives (task 058, D15; round 9; reduce
+ *  that blooms 150 ms after it arrives (reduced
  *  motion honoured by `anim-glow`). */
 const WAITING_CARD_CLASS = "anim-glow border-l-2 border-l-orange";
 
@@ -103,8 +103,8 @@ const WAITING_CARD_CLASS = "anim-glow border-l-2 border-l-orange";
  * free text goes through the router confirm gate — the compiled deltas
  * render before anything applies (the 024 fidelity mitigation).
  *
- * `isOwner` (task 033 phase 10c, contract § 11 / rubric 37): steering is
- * owner-only (the same invariant Phase 10b gave the check-in banner), so a
+ * `isOwner`: steering is
+ * owner-only (the same invariant as the check-in banner), so a
  * non-owner never gets this card at all — hidden entirely, matching
  * `VisibilityControl`'s idiom, rather than a read-only render of a form
  * whose every control is a mutation.
@@ -114,13 +114,12 @@ type CheckInCardProps = {
   checkIn: CheckInOut;
   stages: StageEntry[];
   isOwner: boolean;
-  /** The sidebar's reduced-width card: no facts line (annex scene 13). */
+  /** The sidebar's reduced-width card: no facts line. */
   compact?: boolean;
 };
 
 /**
- * The check-in card's motion (task 058, round 9; the animation sweep's
- * entry 3 and the lead's ruling on it). It rises in when it arrives after
+ * The check-in card's motion. It rises in when it arrives after
  * the thread's first paint, its ring blooming once it has landed. It settles
  * the moment the user chooses, as the part cards do: its contents fade out
  * over 150 ms while its box eases to nothing over 300 ms on the strong
@@ -327,16 +326,16 @@ function CheckInCardBody({
       </p>
     );
 
-  // The options-scoping baseline gate (task 044, D12) is a decision, not a
+  // The options-scoping baseline gate is a decision, not a
   // steer: two server-supplied options end the walk one way or the other,
   // neither carries a delta, and there is nothing here to compile free text
   // into. Its card is the gate's own read — the settings the walk ran from,
-  // risk appetite included (N19) — over
+  // risk appetite included — over
   // the same `sendOption` path every other option uses. Questions about the
   // baseline go to the Task Agent composer, which stays open at this pause.
-  // Since round 10 (finding 8) it reads as the other check-ins: the question
+  // It reads as the other check-ins: the question
   // as the title, one facts line with the way to the baseline, no labels;
-  // no key assumption (round 12, owner).
+  // no key assumption.
   if (checkIn.kind === BASELINE_GATE_KIND) {
     const facts = baselineGateFacts(bundleRecord);
     return (
@@ -381,7 +380,7 @@ function CheckInCardBody({
 
   const headline = checkInHeadline(checkIn.render, checkIn.stage, stages);
   const triggerLines = triggerCopy(checkIn.triggers);
-  // One radio list (annex scene 12): the steering's suggested option first
+  // One radio list: the steering's suggested option first
   // with its `why` under it, then the rest in the server's order. The stop
   // option is the card's one "Stop the run" link, and the edit_sections
   // channel is the bundle's own row editing, so neither is a choice here.
