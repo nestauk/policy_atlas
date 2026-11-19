@@ -23,7 +23,7 @@ One item in the ground truth is one review:
 | Source | What one item is | Is the target clean? |
 |---|---|---|
 | **Hand-made** (4 reviews: parental leave, loneliness, adverse childhood experiences, social care) | One review. A person removed the off-topic citations in the [labelling repo](https://github.com/nestauk/policy_atlas_gt_labelling). | Yes |
-| **3ie** evidence gap maps (development interventions in low- and middle-income countries) | One intervention row of a map | Yes. Screeners coded each study as on topic. |
+| **3ie** (the International Initiative for Impact Evaluation) evidence gap maps (development interventions in low- and middle-income countries) | One intervention row of a map | Yes. Screeners coded each study as on topic. |
 | **YEF** (Youth Endowment Fund) evidence and gap map (preventing youth violence) | One strand of the map, for example mentoring | Yes, as above |
 | **Campbell** Systematic Reviews (a social-policy review journal, read through OpenAlex) | One published review | No. See "Limits" below. |
 | **SR4ALL** (a public corpus of 300,000 systematic reviews) | One social-science review | No. See "Limits" below. |
@@ -58,7 +58,7 @@ Then it rotates across topics so that no single subject fills the sample. The sa
 ### Limits
 
 - **Only scholarly recall.** All targets are matched by DOI. A government report without a DOI cannot be found, so it is not counted.
-- **Campbell and SR4ALL targets are not labelled.** A reference list mixes the studies a review is about with background and methods citations. We decided (2026-10-05) not to label them. So a perfect search probably scores only about **50%** on these rows (verificaiton needed). The `target_labelled` column (`yes` / `no`) tells you which rows have this ceiling. Do not compare the two kinds directly.
+- **Campbell and SR4ALL targets are not labelled.** A reference list mixes the studies a review is about with background and methods citations, and nobody has removed the background citations. So a perfect search probably scores only about **50%** on these rows (an estimate that has not been checked). The `target_labelled` column (`yes` / `no`) tells you which rows have this ceiling. Do not compare the two kinds directly.
 - **Campbell and SR4ALL lists are shorter than the published ones.** We take the reference lists from OpenAlex, which keeps only the citations it could link to a record in its index. For example, our target for the review of people aged 80 and over has 95 of its 117 references. Most of the missing 22 have no DOI (statistics, government plans, software). A few are papers that OpenAlex did not link. Sometimes OpenAlex keeps a different DOI for the same paper, or links the wrong record, such as a correction notice instead of the paper. A search that finds the correct paper then counts as a miss.
 - **Small reviews are noisy.** With 20 references, one found study changes recall by 5 percentage points.
 
@@ -68,14 +68,15 @@ There are three kinds of run. Each answers a different question.
 
 ### Production runs: how good is the real pipeline?
 
-`checks/production_recall.py` runs the search exactly as the app does, at each depth:
+`checks/production_recall.py` runs the search exactly as the app does, at each depth. At every depth there is one search pass (a language model writes the queries for OpenAlex and Overton), then one screening pass by a language model. The depths differ only in how many results the pass keeps:
 
-| Depth | What runs | Scores |
-|---|---|---|
-| `rapid` | One search round. A language model writes queries for OpenAlex and Overton. No screening. | Search recall |
-| `standard`, `deep` | Search, then screen the new results with a language model, then search again (reformulated queries, citation snowballing and so on) until the depth's round limit, or until screening finds few new studies | Search recall and screen recall |
+| Depth | Papers kept (`papers_cap`) | Policy documents kept (`policy_cap`) |
+|---|---:|---:|
+| `rapid` | 100 | 50 |
+| `standard` | 200 | 100 |
+| `deep` | 400 | 200 |
 
-**Search recall** is measured on everything the search kept. **Screen recall** is measured on what the screening step kept as relevant.
+`DEPTH_CONSTANTS` in the product code (`backend/src/policy_atlas/evidence_search/sourcing/search_loop.py`) holds these numbers. Both scores are measured at every depth. **Search recall** is measured on everything the search kept. **Screen recall** is measured on what the screening step kept as relevant.
 
 Nothing is saved to the database. Each run is rolled back.
 
@@ -92,20 +93,24 @@ A production recall of, say, 6% means nothing alone. The baselines give a number
 
 Each arm is scored at several caps (the first 50, 100, 200 and 1,000 results).
 
-**How to compare**: put a baseline row next to a production row with a similar number of kept results (`n_candidates_kept`). For example, `rapid` keeps up to 50 per service, so compare it with the baselines at cap 50 and 100. 
+**How to compare**: put a baseline row next to a production row with a similar number of kept results (`n_candidates_kept`). For example, `rapid` keeps up to 100 papers, so compare it with the baselines at cap 100.
 
 ### Record-cap sweep: an experiment
 
 `experiments/sweep_record_cap.py` asks a research question: does recall go up if the search keeps more results? It runs a `rapid` search many times. Each time it changes:
 
 - the cap on results kept from each service (50, 100, 250, 500, 1,000, 2,000), and
-- the query-writing method: `shared` (v3, one prompt writes queries for both services) or `per-provider` (v2, one prompt per service).
+- the query-writing method: `shared` (one prompt writes queries for both services, as the app does) or `per-provider` (one prompt per service).
 
 Keeping more results costs more later: every kept result is screened and stored for the synthesis step.
 
 ### Experiments
 
-Search R&D experiments that are not part of the measured baselines or the production runs live in [results/analyses/2026-10-06-search-experiments.md](results/analyses/2026-10-06-search-experiments.md), one section per experiment script, with the dated results in `docs/tasks/047-search-rnd/notes.md`. As of 2026-10-06 the best measured configuration there (generated queries plus semantic search as seeds, a reference-frequency snowball, forward citation chasing, specificity ranking) reaches about 22% recall at 200 candidates on the mini set, against 3% for a plain OpenAlex search; see the file for the numbers and the caveats. The Overton side (what carries over, how the two sources share one cap, the date-order finding) is in [results/analyses/2026-10-07-overton-experiments.md](results/analyses/2026-10-07-overton-experiments.md), with notes in `docs/tasks/049-improve-overton-search/notes.md`. The design experiments that settled the task 051 proposal (cap curve on Luna, screened seeds, reformulation, the policy-document cap) are in [results/analyses/2026-10-09-design-experiments.md](results/analyses/2026-10-09-design-experiments.md), notes in `docs/tasks/051-improve-production-search-screen/notes.md`.
+The search research experiments, which are not part of the baselines or the production runs, are written up in `results/analyses/`, one file per group of experiments, with the numbers and their caveats:
+
+- [search-experiments](results/analyses/2026-10-06-search-experiments.md): seeds, citation snowballing, forward citation chasing and ranking;
+- [overton-experiments](results/analyses/2026-10-07-overton-experiments.md): the Overton (policy document) side;
+- [design-experiments](results/analyses/2026-10-09-design-experiments.md): the result caps, screened seeds, query reformulation and the policy-document cap.
 
 ### Cost
 
@@ -125,24 +130,29 @@ scripts/evals/search/
 │   ├── getters/            get_campbell.py, get_3ie.py, get_yef.py, get_sr4all.py
 │   ├── fetch_helpers.py    shared code for the getters
 │   ├── select_sample.py    quality check, makes the mini and full samples
-│   ├── upload.py           CSV files -> Langfuse dataset
-│   └── policy_gt_specific.csv  15 topic-specific gov.uk documents and questions (task 049, policy-side ground truth; not in git, from S3)
+│   ├── upload.py           CSV (comma-separated values) files -> Langfuse dataset
+│   └── policy_gt_specific.csv  15 topic-specific gov.uk documents and questions (the policy-side ground truth; not in git, from the bucket)
 ├── checks/                 measures the app as built (the numbers in results/history.md)
 │   ├── production_recall.py  the real pipeline at each depth
 │   ├── baseline_recall.py    one plain search per service, no language model
 │   ├── engine.py           runs one intent through the real search (no command line)
 │   └── inspect_run.py      tables of one run's raw output (no command line)
-├── experiments/            research scripts; each has a write-up under results/analyses/
-│   ├── snowball_recall.py  citation snowball, forward chasing, semantic seeds (2026-10-06 write-up)
+├── experiments/            research scripts; most have a write-up under results/analyses/
+│   ├── snowball_recall.py  citation snowball, forward chasing, semantic seeds (search-experiments write-up)
 │   ├── pool_rerank.py      re-ranking a larger pool before the cut (same write-up)
-│   ├── sweep_record_cap.py does recall rise with the record cap? (task 046)
-│   ├── overton_recall.py   Overton probes (2026-10-07 write-up)
+│   ├── sweep_record_cap.py does recall rise with the record cap?
+│   ├── overton_recall.py   Overton probes (overton-experiments write-up)
 │   ├── merge_rank.py       OpenAlex + Overton merged ranking (same write-up)
 │   ├── title_match.py      what the DOI-only metric hides (same write-up)
 │   ├── policy_rank.py      key policy documents from Overton's citation graph (same write-up)
 │   ├── policy_gt.py        a policy-side ground truth from gov.uk documents (same write-up)
-│   ├── screened_seeds.py   seeds screened with the production code path, snowball rebuilt (2026-10-09 write-up)
-│   └── reformulate_gain.py the production reformulate call against a bigger snowball (same write-up)
+│   ├── screened_seeds.py   seeds screened with the production code path, snowball rebuilt (design-experiments write-up)
+│   ├── reformulate_gain.py the production reformulate call against a bigger snowball (same write-up)
+│   ├── rank_mix_probe.py   other orderings of the paper pool on one question
+│   ├── mix_screen_probe.py how each part of the ranked pool fares at screening, on one question
+│   ├── export_test_fixtures.py writes backend test fixtures from recorded experiment data
+│   └── manual/             notes from manual question runs
+├── prompts/                prompt variants for the query-writing experiments
 ├── tests                   self-checks, no network and no database
 ├── input/                  the 4 hand-made reviews as CSV (git-ignored; from the labelling repo)
 └── results/                outputs (git-ignored, except history.md and analyses/)
@@ -150,11 +160,11 @@ scripts/evals/search/
     ├── analyses/           dated analyses and the search experiments write-up (tracked)
     ├── cache/              raw baseline results, one JSON file per arm and review
     ├── snowball/           snowball scores, ranked candidates, manual-question exports; pool/ for the re-rank experiment
-    ├── overton/            scores of the Overton probes (overton_recall.py); merge/, policy/, policy_gt*/ for the other 049 scripts
-    └── ground_truth/       fetched collections and the two samples (not in git, from S3)
+    ├── overton/            scores of the Overton probes (overton_recall.py); merge/, policy/, policy_gt*/ for the other Overton scripts
+    └── ground_truth/       fetched collections and the two samples (not in git, from the bucket)
 ```
 
-`../sync_s3.py` (shared with the screening eval) copies the ground-truth files between S3 and these folders.
+`../sync_s3.py` (shared with the screening eval) copies the ground-truth files between the Amazon S3 (Simple Storage Service) bucket and these folders. The bucket is named by `BUCKET` in `scripts/evals/sync_s3.py`; below it is `<bucket>`.
 
 Each script starts with `import _bootstrap`. This short file lets the script import its neighbours, so you can run any script directly.
 
@@ -178,13 +188,13 @@ The measuring scripts read the ground truth from Langfuse, not from the CSV file
 
 | Copy | Where | What |
 | --- | --- | --- |
-| Master | `s3://discovery-policy-atlas/eval/datasets/search/ground_truth/` | The fetched collections and the two samples as CSV, about 30 MB |
-| Master | `s3://discovery-policy-atlas/eval/datasets/search/policy_gt/` | The policy-side ground truth (`policy_gt_specific.csv` and its targets) |
+| Master | `<bucket>/eval/datasets/search/ground_truth/` | The fetched collections and the two samples as CSV, about 30 MB |
+| Master | `<bucket>/eval/datasets/search/policy_gt/` | The policy-side ground truth (`policy_gt_specific.csv` and its targets) |
 | Working | `results/ground_truth/` and `ground_truth/policy_gt_specific*`, not in git | What `sync_s3.py search download` fetched |
 | Langfuse | `retrieval-ground-truth`, `-mini`, `-full` | What the measuring scripts read: one item per review (1.2 MB for the 100) |
-| Runs | `s3://discovery-policy-atlas/eval/results/search/<folder>/` | Run folders uploaded with `sync_s3.py search upload` |
+| Runs | `<bucket>/eval/results/search/<folder>/` | Run folders uploaded with `sync_s3.py search upload` |
 
-The 1.6 GB SR4ALL source file is not on S3: download it by its DOI (step 1 below). The Langfuse datasets are not versioned, so after `upload.py` changes one, note it in `history.md`.
+The 1.6 GB SR4ALL source file is not in the bucket: download it by its DOI (step 1 below). The Langfuse datasets are not versioned, so after `upload.py` changes one, note it in `history.md`.
 
 ```
 # fetch the ground-truth files; after a new fetch or sample, push them back
@@ -194,11 +204,11 @@ uv run --project backend python scripts/evals/sync_s3.py search upload-datasets
 
 ## Commands
 
-All commands run from the repository root. 
+All commands run from the repository root.
 
-Keys go in `backend/.env`: Langfuse keys, `SEMANTIC_SCHOLAR_API_KEY` and `CONSENSUS_API_KEY`, and the language-model key the route names (`OPENAI_API_KEY` on the default route). 
+Keys go in `backend/.env`: the Langfuse keys, the search keys (`OPENALEX_API_KEY`, `OVERTON_API_KEY`), `SEMANTIC_SCHOLAR_API_KEY` and `CONSENSUS_API_KEY` for the baselines, and the language-model key the route names (`OPENAI_API_KEY` on the default route).
 
-**Models and routes (task 053).** The scripts run with `--env-file backend/.env`, so they use the same model route as the app: `POLICY_ATLAS_MODEL_ROUTE` unset means OpenAI directly, `bedrock` means Amazon Bedrock, and `POLICY_ATLAS_MODEL_ROUTE_FILE` can add an experimental route (see `backend/.env.example`). The key is the one the route names: `OPENAI_API_KEY` on the default route, `AWS_BEARER_TOKEN_BEDROCK` on Bedrock. A `--model` flag overrides the route's choice for that run only; on a Bedrock route it must be a Bedrock model id (for example `global.openai.gpt-5.6-luna`), because the route also sets the address the request goes to.
+**Models and routes.** The scripts run with `--env-file backend/.env`, so they use the same model route as the app: `POLICY_ATLAS_MODEL_ROUTE` unset means OpenAI directly, `bedrock` means Amazon Bedrock, and `POLICY_ATLAS_MODEL_ROUTE_FILE` can add an experimental route (see `backend/.env.example`). The key is the one the route names: `OPENAI_API_KEY` on the default route, `AWS_BEARER_TOKEN_BEDROCK` on Bedrock. A `--model` flag overrides the route's choice for that run only; on a Bedrock route it must be a Bedrock model id (for example `global.openai.gpt-6-luna`), because the route also sets the address the request goes to.
 
 
 Most scripts have `--dry-run` (do everything, upload nothing) and `--reviews` (run only some reviews). Use `--help` to see all options.
@@ -252,7 +262,7 @@ Before you read recall, check `n_failed_calls`. If it is above 0, a service call
 ### 3. Record the results
 
 ```
-uv run --project backend --env-file backend/.env python scripts/evals/search/history.py --since 2026-10-01
+uv run --project backend --env-file backend/.env python scripts/evals/search/history.py --since <YYYY-MM-DD>
 ```
 
 This prints one markdown row per run. Copy the rows that matter into `results/history.md` and add a note: what changed, and anything that affects how to read the number.
