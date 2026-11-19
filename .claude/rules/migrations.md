@@ -21,3 +21,6 @@ Use your own judgement for everything else. Remove a line when a test enforces i
 - A migration test commits or rolls back its seed rows before alembic changes the schema
   on another connection. An open transaction on a seeded table blocks the change with no
   error, and the suite hangs.
+- `command.stamp` changes the recorded revision, not the tables. A migration test that
+  stamps back without downgrading first leaves the two out of step, and later migration
+  tests on the same worker fail, though only once a newer revision lands.
