@@ -74,6 +74,38 @@ def test_cors_health_validation_and_opaque_errors(engine: Engine, tmp_path: Path
         assert "intentional test error" not in failure.text
 
 
+def test_cors_preflight_allows_the_waf_captcha_token_header_with_content_type(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """The waitlist form sends the firewall's CAPTCHA token in this header.
+
+    The browser's preflight (the permission check it sends first) must see the header
+    allowed next to Content-Type, or the form cannot submit.
+    """
+    del engine
+    settings = Settings(
+        "http://dev-issuer.local",
+        "cors-test",
+        None,
+        init(tmp_path / "issuer"),
+        "http://app.example.test",
+        os.environ["DATABASE_URL"],
+    )
+    with _client(settings) as client:
+        preflight = client.options(
+            "/api/v1/waitlist",
+            headers={
+                "Origin": settings.app_origin,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type,x-aws-waf-token",
+            },
+        )
+    assert preflight.status_code == 200
+    reply = preflight.headers["access-control-allow-headers"]
+    allowed = {h.strip() for h in reply.lower().split(",")}
+    assert {"content-type", "x-aws-waf-token"} <= allowed
+
+
 @contextmanager
 def _client(settings: Settings) -> Iterator[TestClient]:
     """Run a small D.3-like protected surface with the real application lifespan."""
@@ -107,3 +139,21 @@ def _assert_unauthenticated(response: Any) -> None:
     assert response.status_code == 401
     assert response.headers["WWW-Authenticate"] == "Bearer"
     assert response.json()["error"]["code"] == "unauthenticated"
+
+
+def test_healthz_is_async_so_it_needs_no_pool_thread(tmp_path: Path) -> None:
+    import inspect
+
+    # Explicit settings with a throwaway key: `create_app()` with none reads the
+    # environment, which on CI has no dev-issuer key file (PR #120's first run).
+    settings = Settings(
+        "http://dev-issuer.local",
+        "healthz-test",
+        None,
+        init(tmp_path / "issuer"),
+        "http://app.example.test",
+        "postgresql+psycopg://unused/unused",
+    )
+    app = create_app(settings=settings)
+    routes = [r for r in app.routes if getattr(r, "path", "") == "/healthz"]
+    assert inspect.iscoroutinefunction(routes[0].endpoint)  # type: ignore[attr-defined]

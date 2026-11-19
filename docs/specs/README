@@ -56,5 +56,5 @@ timestamp: 2026-06-22       # recommended — date of last meaningful change
 ```
 
 Link related concepts and cite source sections in the body. `index.md` and `log.md` are reserved
-(no `type`); add a line to [log.md](log.md) on a material change. Run `/okf validate` after editing —
+(no `type`); add a line to [log.md](log.md) on a material change. Run `make okf-validate` after editing —
 every other `.md` in the tree (including under `sources/`) needs a non-empty `type`.

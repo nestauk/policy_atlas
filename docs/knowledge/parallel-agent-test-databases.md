@@ -30,3 +30,5 @@ Task 057's build ran nine agent databases beside the gate; the review ran three.
 `localhost` refusal and the missing extension each cost an agent a round. The HEAD gate's
 one failure at the review was a 60 s token on a walk that took longer than that at a load
 average of 170.
+
+In a git worktree (065) there is no `backend/.env`, and `docker compose` cannot find the shared database by itself. Run make targets with `COMPOSE_PROJECT_NAME=policy_atlas`.

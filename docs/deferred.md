@@ -34,8 +34,8 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 - [Data model](#data-model): Tables, keys, migrations and stored history (`core/schema.py`, `backend/alembic/`).
 - [API (application programming interface)](#api-application-programming-interface): Routes, read models, live streams and locks (`api/`).
 - [Frontend](#frontend): Views and shared components (`frontend/src/`).
-- [Accounts, organisations and administration](#accounts-organisations-and-administration): Cognito, organisations, the admin read and the ops CLI (`api/auth.py`, `ops/`).
-- [Infrastructure and deployment](#infrastructure-and-deployment): AWS stacks, deploys, alarms, analytics and operations (`infra/`, `infra/DEPLOYMENT.md`).
+- [Accounts, organisations and administration](#accounts-organisations-and-administration): Cognito, organisations, quotas, the admin read, the ops CLI and the ops service with its pages (`api/auth.py`, `ops/`, `api/routers/ops.py`, `frontend/src/ops/`).
+- [Infrastructure and deployment](#infrastructure-and-deployment): AWS stacks, the firewall, deploys, alarms, analytics and operations (`infra/`, `scripts/deploy.sh`, `infra/DEPLOYMENT.md`).
 - [Observability (Langfuse)](#observability-langfuse): Traces, scores, costs and trace access (`core/tracing.py`, `core/usage.py`, `scripts/` cost tools).
 - [Evaluations](#evaluations): Eval datasets, scripts and measures (`scripts/evals/`).
 - [Test suite](#test-suite): Backend and frontend tests (`backend/tests/`, `frontend/src/**/*.test.*`).
@@ -764,6 +764,10 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   `search_live.py` and `search_loop.py`, `planning.py`, `agent.py`, `scopeChips` and the
   `planner_v11` rule (a re-pin). Stored plans with the field then fail validation unless tolerated.
   Condition: the APO test ends.
+- `runtime/steering.py`: `SteeringAdjustmentError` wraps pydantic `ValidationError`, `ValueError`
+  and `TypeError` text, and `safe_error` treats it as product text, so library wording reaches the
+  event log. It most likely echoes the person's own steering input, not SQL or host names.
+  Condition: none recorded.
 
 ### Work to do
 
@@ -830,9 +834,10 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 - `runtime/harness.py`: `run_harness`'s generic component handler appends the failure event on the
   component's own transaction, so a database error reads as an aborted transaction. The runner path
   rolls back first. Condition: none recorded.
-- `core/events.py`: Every child walk appends to the task's one event-log sequence; four walks at
-  once contend (retry cap raised from 5 to 32). Condition: contention errors appear; then a per-walk
-  sequence.
+- `runtime/harness.py`: `safe_error` trusts every exception class under the `policy_atlas.`
+  namespace. `SearchTransportError` puts the search backend's host name in its message; that host is
+  a public API's, not a secret, but the rule is by namespace, not by class. Condition: a product
+  exception carries a secret.
 - `runtime/runner.py`: A model-calling step that fails can cost four calls: the component re-asks
   once, then the runner retries once. Condition: none recorded; the lever is a per-step "no runner
   retry" flag.
@@ -848,6 +853,16 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 
 ### Work to do
 
+- **Planned** (its own slice: event-log sequence allocation) `core/events.py` gives each append
+  `max(sequence)+1` per task and retries 32 times on a collision. A theory of change check sends six
+  child walks that each write about a dozen events in under a second, so the parent's append can
+  lose more than 32 races on a slow runner (`uq_event_log_task_sequence`, seen locally and on CI).
+  A per-task advisory lock was built and reverted: it holds to the end of the caller's transaction,
+  and some callers append and then do slow work (`assess/screen.py`, `sourcing/acquire.py`) or take
+  the run row and the lock in opposite orders (`runner.py`, `option_search.py` against
+  `continuation.py`). The fix moves those appends, or allocates the sequence outside the caller's
+  transaction, before any lock; a per-walk sequence is the other option. Until then the theory of
+  change tests use 256 retries (`tests/theory_of_change/conftest.py`). Condition: the slice starts.
 - **Now** `run_harness(provider=…)` has no component readers. Its removal waited for the Bedrock
   route, which has shipped. Condition: the next cleanup chore.
 
@@ -934,6 +949,9 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 - The chat pending cap is per acting user, so an organisation of N members can drive 2N chat turns
   at once on one task. Condition: the scaling task.
 - Per-component progress is not durable: ticks are ephemeral by design. Condition: none recorded.
+- Resuming a paused walk after a check-in has no per-user run-cap check. The cap applies at the
+  three start surfaces, and the person's decision is already committed when the resume runs.
+  Condition: none recorded.
 
 ### Limits in the code
 
@@ -965,6 +983,17 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 - `api/contract/check_ins.py`: `CheckInOut.bundle` is an open `dict`, so the generated client has no
   shape and `CheckInBundle.tsx` parses by hand. Condition: the bundle grammar settles; then a
   discriminated union per point.
+- `api/app.py`: The API has no request body size limit. The firewall cannot
+  add one: a web ACL on a load balancer reads only the first 8 KB of a body, and bodies over 8 KB
+  are normal here (chat, plan edits, theory of change imports). Condition: a later security slice;
+  then a limit in the server or a middleware.
+- `api/routers/runs.py`: `create_run` drops its launch reservation after the 10-second wait for the
+  run row, whether or not the worker has written it, so a slow insert can let a later start pass
+  both capacity counts. Condition: none recorded; the fix keeps the reservation until the row shows
+  or the worker reports a failure.
+- `api/routers/runs.py, api/longlist_start.py`: The `user_capacity` refusal says "you", but the cap
+  counts the task's owner ([ADR 0045](adr/0045-per-user-run-cap-task-quota-offboarding.md) § As
+  built). Only the owner can start a run today. Condition: collaborators gain Start.
 - `api/contract/tasks.py`: `TaskCreate.from_task_ids` allows ten links; each linked report can add
   up to 60,000 characters to every Task Agent turn. Condition: a real task needs more links; measure
   the prompt size.
@@ -985,6 +1014,9 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 - **Now** The projects list computes last activity three times (a correlated subquery, then
   `_task_counts` twice). Use one grouped CTE (common table expression). Condition: the next cleanup
   chore.
+- **Now** The 409 (conflict) code lists drifted: [web-api.md](specs/system/web-api.md) omits
+  `link_*`, `nothing_to_propose`, `not_included` and `toc_*`, and `frontend/src/lib/errors.ts` lacks
+  `toc_*`. Add them (the spec edit goes to the owner). Condition: the next cleanup chore.
 - **Now** `ReferenceOut` has no `source_id`, so the References list opens dossiers by title and can
   miss. Add the field at the read model and run `make openapi-sync`. Condition: the next cleanup
   chore.
@@ -999,9 +1031,11 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   dossier. Condition: readers ask for them.
 - Shortlist view: the route can turn a pick into "Added by you", but the view offers only Remove on
   a pick. A "Keep" control would expose it. Condition: an owner design call.
-- No leave-and-return telemetry (PostHog is the later answer) and no notification channel (email
-  through SES, Simple Email Service): see [ADR
-  0044](adr/0044-live-activity-streamed-sections-one-copy-source.md). Condition: a later task.
+- No leave-and-return telemetry (PostHog is the later answer) and no notification channel: the
+  application sends no email of its own, and Cognito, through SES (Simple Email Service), sends only
+  invitations and codes. See [ADR
+  0044](adr/0044-live-activity-streamed-sections-one-copy-source.md). Condition: a later task, or
+  the product needs its own mail (notifications, receipts).
 
 ### Limits in the code
 
@@ -1028,6 +1062,10 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   shown by colour alone. The fix for each is an attribute that states the condition (for example
   `aria-busy`, `hidden`, or a `data-` state attribute), with the test moved to that attribute.
   Condition: an accessibility pass, or the next change to one of these components.
+- `frontend/src/views/splash/WaitlistForm.tsx`: A person whose browser blocks `awswaf.com` cannot
+  join the waitlist: the form says "The sign-up check did not load" and keeps submit disabled.
+  Condition: the privacy notice gains a contact address to show next to that message (Data
+  Protection Officer work).
 
 ### Work to do
 
@@ -1037,6 +1075,9 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 - **Now** Re-run defect (seen once, not re-checked): after a re-run fails, the Result tab no longer
   reaches the earlier run's good artefact, which is intact in the database. Serve the last succeeded
   artefact when the latest run failed. Condition: the next cleanup chore.
+- **Now** `GET /me` returns `task_quota.used` and `limit`, but the frontend shows only a banner at
+  the limit (`QuotaBanner.tsx`). Add a running count on the new-task page or in the account menu.
+  Condition: the next cleanup chore.
 - **Now** Result outline: the publisher-country list cuts to the top 8 (`ArtefactOutline.tsx`), so
   the bars can sum below the total and "Not reported" takes a slot. Add a "+N more" row. Condition:
   the next cleanup chore.
@@ -1077,25 +1118,41 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 
 ### Decisions put off
 
-- The Cognito pool has no MFA (multi-factor authentication), so an admin account reads every
-  organisation's rows behind a password alone. An accepted risk ([ADR
-  0033](adr/0033-organisation-tenancy-and-global-admin-read.md)); MFA for `is_admin` holders alone
-  is possible. Condition: before the first real organisation is enrolled in production.
-- The admin audit trail has no durable sink: the in-app admin trace has one-month log retention, and
-  ops CLI privilege changes print only to the operator's terminal (`rows assign` prints nothing).
-  Options: a log subscription filter to long retention, and an `ops_audit` table. Condition: none
-  recorded (raised with the DPIA, data protection impact assessment).
-- There is no user deletion and no ownership transfer; they ship together. De-enrolment is the only
-  lever: the person can still sign in, and erasure needs the Cognito side handled apart. Condition:
-  a real user is offboarded or asks for erasure.
-- The privacy notice disagrees with the product: § 7 promises permanent deletion, § 3 calls the
-  email the only identifier (the `sub` is one too), and § 6 does not mention the admin read.
-  Condition: the notice's owner reviews it.
-- Invitations go out from Cognito's default sender (spam-prone, 50 a day). The fix is an SES (Simple
-  Email Service) domain identity, the pool's `EmailConfiguration` and SES production access. `user
-  create --invite manual` is the workaround. Condition: none recorded.
-- There is no admin screen: `app_user.is_admin` is a global read grade. Condition: a dashboard or
-  ops view is wanted; per-organisation admin turns this into a roles slice.
+- Part of the admin audit trail has no durable sink. Writes through the ops pages and the
+  self-signup sweep, and quota changes from the ops CLI, leave an `ops_action` row ([ADR
+  0046](adr/0046-ops-service-ops-pages-self-signup-and-ops-database-login.md)). Other ops CLI
+  changes (`admin grant`, enrol, `rows assign`) and the in-app admin read trace exist only in logs
+  with one-month retention or in the operator's terminal. Options: a log subscription filter to long
+  retention, or an `ops_action` row from every CLI command. Condition: none recorded (raised with
+  the DPIA, data protection impact assessment).
+- There is no user deletion and no ownership transfer; they ship together. `user offboard` ([ADR
+  0045](adr/0045-per-user-run-cap-task-quota-offboarding.md)) is the removal lever: it disables the
+  Cognito account, revokes its refresh tokens, de-enrols the person and switches off their public
+  task links. Two gaps stay open. An access token already issued works for up to 60 minutes, and an
+  open progress stream stays open until its run ends; a `disabled` check on every request would
+  close this at the cost of one database read per request. Erasure is two-part: the database keeps
+  `email` and `display_name`, and the Cognito account is disabled, not deleted. Condition: a real
+  user asks for erasure, or the 60-minute window becomes unacceptable.
+- The privacy notice disagrees with the product: § 7 promises permanent deletion (database
+  backups stay 7 days on staging and 35 days on production), § 3 calls the email the only
+  identifier (the `sub` is one too), and § 6 does not mention the admin read. Condition: the
+  notice's owner reviews it; privacy notice, erasure and data export are later work in the
+  [security programme](tasks/064-security-hardening/programme.md).
+- `app_user.is_admin` is a global read grade, and there are no per-organisation roles. The ops
+  pages, on their own address-gated service ([ADR
+  0046](adr/0046-ops-service-ops-pages-self-signup-and-ops-database-login.md)), are the operations
+  surface; they give no per-organisation powers. Condition: the first need for per-organisation
+  admin; that is a roles slice.
+- The task quota limits how many tasks a person creates, not what a task costs. There are no spend
+  caps and no per-user chat or planner turn limits. The next step is a usage table with spend per
+  user ([ADR 0045](adr/0045-per-user-run-cap-task-quota-offboarding.md) § Alternatives). Condition:
+  the task quota has run for a while.
+- Self-signup works for one email domain (`nesta.org.uk`). Condition: a second organisation wants
+  self-signup; adding a domain is `org domain add`, not a deploy.
+- The domain table is edited from the ops CLI only (`org domain add` and `remove`), not from the
+  ops pages: edits are rare and are a tenancy decision. Condition: the edits become routine.
+- The ops pages do not show the `ops_action` log; an operator queries the table. Condition:
+  operators ask for a page.
 
 ### Limits in the code
 
@@ -1103,12 +1160,12 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   `api/read_models/repository.py`: only inherit and suggest check again that the owner can still
   read a linked source Task (`_sources_owner_reads`). The longlist build, the Task Agent context,
   the label resolver and the option-card read use every link. Material from a source that the owner
-  can no longer read therefore stays in use, and readers of the linking Task see what was built
-  from it. [ADR 0037](adr/0037-options-scoping-task-kind-links-and-baseline-gate.md) and
-  [ADR 0039](adr/0039-options-scoping-longlist-option-searches-and-option-records.md) ask for the
-  check at every build. The fix is the same filter in the four readers, with one test for each that removes
-  the access. Condition: before Options scoping is turned on in production, or before a linking
-  Task is shared more widely than its sources.
+  can no longer read therefore stays in use, and readers of the linking Task see what was built from
+  it. [ADR 0037](adr/0037-options-scoping-task-kind-links-and-baseline-gate.md) and [ADR
+  0039](adr/0039-options-scoping-longlist-option-searches-and-option-records.md) ask for the check
+  at every build. The fix is the same filter in the four readers, with one test for each that
+  removes the access. Condition: before Options scoping is turned on in production, or before a
+  linking Task is shared more widely than its sources.
 - `api/identity.py`: Tasks from before ownership have `owner_user_id NULL`: the owner-scoped API
   cannot reach them, the admin listing shows them with no owner or organisation, and recovery is a
   manual database UPDATE. Condition: none recorded.
@@ -1119,6 +1176,42 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   enrolled somewhere. Condition: an organisation-less admin is wanted; then an org-less enrol mode.
 - `api/routers/sse.py`: An idle admin event stream writes one trace line per 0.4-second poll.
   Condition: log cost bites; then widen the poll, never drop the grain.
+- `api/auth.py`: When the key cache expires, every authenticated request waits on the refresh lock
+  while one thread fetches the key set (up to the 5-second HTTP timeout), at most once per 30
+  seconds. Serving the cached key during the fetch would remove the wait (an auth change needs
+  approval). Condition: none recorded.
+- `api/routers/tasks.py`: `create_task` stamps `created_at` from the API host's clock, but the task
+  quota counts by the database clock. The skew is seconds at a 365-day boundary; a database default
+  would remove it (a schema change). Condition: none recorded.
+- `frontend/src/ops/views/QuotaView.tsx`: The quota page finds one person by reading the whole
+  people list. Condition: the list is long enough to slow the page, or a second page needs one
+  person; then a single-person read route on the ops host.
+- `frontend/src/ops/views/QuotaView.tsx`: The pages show the settings default ("default · n") by
+  inferring it from a person with no override (`inferDefaults`). If every person has an override,
+  no default shows. Condition: a page must show the default on its own, or the defaults change
+  often; then a route that reports them.
+- `api/routers/ops.py`: `list_people` resolves `effective_limits` once per person, and each call
+  reads the person's cohorts: about three queries per person. Condition: the list reaches a few
+  hundred people; then resolve the limits for the whole list in one or two grouped queries.
+- `frontend/src/ops/views/RequestsView.tsx`: Bulk approve sends one request per row, and each one
+  reloads every ops list. Condition: operators handle tens of requests at a time; then a
+  server-side bulk route (like `people/*`), or one reload after the loop.
+
+### Work to do
+
+- **Planned** (the sign-in slice of the [security
+  programme](tasks/064-security-hardening/programme.md): MFA and threat protection) The Cognito pool
+  has no MFA (multi-factor authentication), so an admin account reads every organisation's rows
+  behind a password alone. Until then it is an accepted risk ([ADR
+  0033](adr/0033-organisation-tenancy-and-global-admin-read.md)). Email MFA needs the pool's SES
+  (Simple Email Service) sender, which now exists. Condition: before the first real organisation is
+  enrolled in production.
+- **Planned** (the cohort follow-on task) Cohorts are built; their follow-ons are not: feature
+  versions per organisation or cohort, numbers per person and cohort (with Metabase and PostHog
+  links), CSV (comma-separated values) import of a pilot with cohorts, and onboarding answers. The
+  design is in the owner's explainer. Condition: that task starts.
+- **Now** Confirm on staging that `AdminUserGlobalSignOut` succeeds on an account that is already
+  disabled; a rerun of `user offboard` assumes it. Condition: the next staging session.
 
 ## Infrastructure and deployment
 
@@ -1138,6 +1231,9 @@ sit in the last two sections. A code path with no top folder is under `backend/s
 - Metabase uses its own accounts (no single sign-on or embedding), and `deploy_analytics` is
   fail-closed outside staging. Condition: an authentication and product decision; production needs a
   capacity, backup and ownership review.
+- The firewall log and its samples hold client addresses for one month in the account; the report
+  prints them only with `--addresses`. Redacting `httpRequest.clientIp` would lose the field the
+  count week needs. Condition: none recorded.
 
 ### Limits in the code
 
@@ -1151,15 +1247,39 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   free connections, then raise the cap.
 - `scripts/prune_unlinked_snapshots.py` runs by hand (dry run by default). Condition: the document
   store's growth is measured on staging; then a scheduled run.
-- `api/contract/waitlist.py`: The public waitlist route has field caps, one row per email and a
-  honeypot only. Condition: real spam appears; then a WAF (web application firewall) rate rule, no
-  app code.
+- `infra/infra/components/waf.py`: The WAF (web application firewall) rule exclusion list
+  `COMMON_RULES_ALWAYS_COUNTED` holds one name (`SizeRestrictions_BODY`) in code. Condition: a count
+  week finds a second name, or the environments need different lists; then a config key.
+- `infra/infra/components/waf.py`: `GENERAL_RATE_LIMIT = 6000` comes from the busiest 5-minute
+  window of all traffic, not from one address, because staging logged the load balancer's address
+  until the trusted-proxy fix deployed. Condition: re-measure per address on staging (the query is
+  in the firewall slice's verification record); the change is one line and a deploy.
+- `scripts/deploy.sh`: A deploy does not re-attach the web ACL (access control list) after an
+  emergency `disassociate-web-acl`, because CloudFormation does not see the drift; the firewall
+  stays off until `associate-web-acl` is run by hand. Condition: the next change to the deploy
+  script (it needs approval); then a postcondition (`aws wafv2 get-web-acl-for-resource` when
+  `waf.enabled`) with a stubbed test.
+- `scripts/deploy.sh`: After each deploy the script calls `/readyz` from a GitHub runner address.
+  The managed rule groups skip the health paths; in block mode only the general rate rule could
+  refuse the call, if the runner's address sent over 6,000 requests in 5 minutes. Condition: a
+  deploy fails on that check.
+- `scripts/waf_report.sh`: The firewall report reads at most 10,000 matched requests per run (the
+  Logs Insights ceiling per query). Condition: a count week reaches it; then page by day.
 
 ### Work to do
 
+- **Planned** (the firewall's block switch, [ADR
+  0047](adr/0047-waf-on-the-load-balancer-and-waitlist-captcha.md)) Both environments run the
+  firewall in count mode (`waf.mode: count`), and production's CAPTCHA is off (`waf.captcha:
+  false`), so production's waitlist has the rate rule and the honeypot only. After each
+  environment's count week and the deliberate pass, set `mode: block` in `infra/pa_config.json`,
+  deploy and repeat the pass ([DEPLOYMENT.md](../infra/DEPLOYMENT.md) § The firewall). Staging
+  first; production's CAPTCHA goes on after the staging live check. Condition: the staging live
+  check passes.
 - **Now** The dead-letter, NAT traffic and writer CPU-credit alarms have no notification action (no
-  SNS, Simple Notification Service, topic). Add one topic with an email subscription (an infra
-  change needs approval). Condition: the next cleanup chore.
+  SNS, Simple Notification Service, topic), and the firewall has no alarms. Add one topic with an
+  email subscription, then an alarm on `BlockedRequests` for the general rate rule and the managed
+  groups (an infra change needs approval). Condition: the next cleanup chore.
 - **Now** The staging inspection secret's password no longer matches the database. Rotate it and
   update the secret. Condition: the next staging session.
 - **Now** Owner checks after deploy: parse wall time on staging (2 CPUs), chunk quality of the XML

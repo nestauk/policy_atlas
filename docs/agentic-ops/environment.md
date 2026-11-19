@@ -10,7 +10,8 @@ request (PR). It is not a change log: the history is in git and in each task's `
 - **Docker** (it runs the local Postgres database).
 - **Node.js** 20 or later (continuous integration (CI) uses Node 24) and **pnpm** (the frontend
   package manager). `frontend/package.json` (`packageManager`) pins the pnpm version. Install pnpm
-  as a standalone tool: corepack is not in Node 25.
+  as a standalone tool: Corepack is not in Node 25. CI installs pnpm the same way, from the
+  `packageManager` field in `frontend/package.json`, so a standalone pnpm matches CI.
 - **direnv** is optional. `.envrc` only runs `source .venv/bin/activate`, so run `make setup` first.
 
 ## Setup commands
@@ -88,6 +89,10 @@ After you pull a change:
   The web app reads `VITE_THEORY_OF_CHANGE=1` and `VITE_OPTIONS_SCOPING=1` when it is built or
   started.
   `make dev` sets all three. `VITE_MOCK=1` runs the web app against mock data, with no API.
+- **Limits.** `RUNS_PER_USER` (default 3) is the number of runs one user can have at the same
+  time. `TASK_QUOTA_PER_YEAR` (default 50) is the number of tasks one user can create in 365
+  days; administrators are exempt. `make dev` sets the quota to 100000, so the local user is
+  never refused.
 - **Uploads.** Uploaded files go to `POLICY_ATLAS_UPLOAD_BUCKET` in the cloud, or to
   `POLICY_ATLAS_UPLOAD_DIR` locally (default `backend/.uploads`, gitignored).
 - **Ingest.** `POLICY_ATLAS_INGEST_MODE` is `in_process` (the default) or `queued`. `queued` also
