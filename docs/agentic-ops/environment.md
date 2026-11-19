@@ -10,7 +10,8 @@ request (PR). It is not a change log: the history is in git and in each task's `
 - **Docker** (it runs the local Postgres database).
 - **Node.js** 20 or later (continuous integration (CI) uses Node 24) and **pnpm** (the frontend
   package manager). `frontend/package.json` (`packageManager`) pins the pnpm version. Install pnpm
-  as a standalone tool: corepack is not in Node 25.
+  as a standalone tool: Corepack is not in Node 25. CI installs pnpm the same way, from the
+  `packageManager` field in `frontend/package.json`, so a standalone pnpm matches CI.
 - **direnv** is optional. `.envrc` only runs `source .venv/bin/activate`, so run `make setup` first.
 
 ## Setup commands
