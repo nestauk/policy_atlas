@@ -344,7 +344,7 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
 
   // Round 10 (finding 4): one primary, Assess; while it is off its reason
   // is the line under it. Suggest more is a secondary.
-  it("makes Assess the page's one primary, off with its reason in words", async () => {
+  it("turns Assess off with its reason in words", async () => {
     renderShortlist();
     const assess = screen.getByRole("button", { name: "Assess these 2" });
     expect(assess).toBeDisabled();

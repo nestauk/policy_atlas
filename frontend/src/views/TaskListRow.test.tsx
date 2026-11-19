@@ -217,7 +217,7 @@ describe("TaskListRow — words and layout", () => {
     expect(screen.queryByText("Complete")).not.toBeInTheDocument();
   });
 
-  it("puts the status word first on the phone's second line, then the project", () => {
+  it("ends the status word's line with the project", () => {
     renderRow({ latestRun: paused, showProjectPrefix: true, projectNames: ["Net zero homes"] });
     const word = screen.getByTitle("Paused · waiting on you");
     const cell = word.parentElement as HTMLElement;

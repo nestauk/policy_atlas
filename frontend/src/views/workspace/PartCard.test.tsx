@@ -306,7 +306,7 @@ describe("PartCard (task 058, N18; annex scene 11)", () => {
     });
   });
 
-  it("the scope card's one choice is a secondary Looks right button, with no words option", async () => {
+  it("the scope card's one choice is a Looks right button, with no words option", async () => {
     const user = userEvent.setup();
     const onSend = renderPart(
       proposal("scope", {

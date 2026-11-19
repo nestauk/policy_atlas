@@ -361,7 +361,7 @@ describe("SourcesView — sortable table", () => {
     expect(lastEvidenceQuery()).toMatchObject({ theme: SCHOOL_FOOD_THEME_ID });
   });
 
-  it("counts the sources under the table, Download CSV at that line's end, the filter bar filters only", () => {
+  it("counts the sources under the table, Download CSV on that line, the filter bar filters only", () => {
     renderSources();
     const count = screen.getAllByRole("status").find((node) => node.textContent === `${mockEvidence.length} sources`) as HTMLElement;
     const frame = document.querySelector(".sources-frame") as HTMLElement;

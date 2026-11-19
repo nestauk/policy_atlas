@@ -283,7 +283,7 @@ describe("the committed report page (task 058, round 10)", () => {
     expect(screen.queryByRole("heading", { name: "How the evidence was gathered" })).toBeNull();
   });
 
-  it("sets the method's counts as a ruled table, the figures in one column, under one heading", async () => {
+  it("sets the method's counts as a table, the figures in one column, under one heading", async () => {
     const user = userEvent.setup();
     renderReport({ funnel: { found: 312, relevant: 118, quality_checked: 90, read_in_full: 64, selected: 40, cited: 12 } });
     const method = screen.getByRole("heading", { level: 2, name: "How the evidence was gathered" });

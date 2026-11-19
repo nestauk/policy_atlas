@@ -210,7 +210,7 @@ describe("LonglistView", () => {
 
   // A group's heading reads its name, its count, then Show / Hide; Show all
   // ends the count line.
-  it("puts the count and then Show / Hide at the heading line's right, and Show all last in the controls row", () => {
+  it("puts the count and then Show / Hide after the heading's name, and Show all after the count line", () => {
     renderClosedLonglist();
     const heading = screen.getByRole("button", { name: /^A universal offer 1 option · 1 shortlisted$/ });
     const parts = Array.from(heading.children);

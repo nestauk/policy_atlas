@@ -674,7 +674,7 @@ describe("the live page looks like the final page", () => {
     expect(headings).toEqual(["Key findings", "Examples", "Costs", "Conclusions"]);
   });
 
-  it("lays the case-study cards out as the report does, one by one as each closes", () => {
+  it("shows each case-study card as it closes, its title an h4 under the section", () => {
     const stream = streamWith(
       [
         { index: 0, title: "Key findings", focus: "", state: "planned" },
