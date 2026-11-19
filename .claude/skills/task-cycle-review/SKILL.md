@@ -144,7 +144,10 @@ rounds; then stop and bring the open findings to the owner.
 
 Write the durable records against the final code, in this PR:
 
-- New seams and step 5c's structural findings → [docs/deferred.md](../../../docs/deferred.md).
+- [docs/deferred.md](../../../docs/deferred.md), edited in place under the part of the
+  system each entry concerns: add the seams this slice left open and the step-5c findings
+  that are worth doing; remove every entry this slice built. Each entry says what is not
+  built, why, and the condition that would make someone build it. No task numbers or dates.
 - Verified learning → `docs/knowledge/` (OKF concept + index + log lines, not a diary),
   from **both** the knowledge candidates in § Review handoff **and** this stack's findings:
   findings alone lose the build's lessons. Adjudicate each candidate: author, fold into an

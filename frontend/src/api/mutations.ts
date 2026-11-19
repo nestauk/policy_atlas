@@ -71,6 +71,9 @@ export function useCreateTask() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      // `/me` carries the task quota (task 064a, Q8): the banner must appear
+      // when this create was the last one allowed, not on the next page load.
+      queryClient.invalidateQueries({ queryKey: ["me"] });
     },
   });
 }

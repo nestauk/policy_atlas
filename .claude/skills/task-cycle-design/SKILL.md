@@ -78,6 +78,10 @@ frontend brief to any other agent needs a reason in the plan. Polish passes: tas
 
 - **Identity** lives only in the branch name `task/NNN-slug` and the `Status` line of its
   `contract.md`. A fresh conversation re-grounds from `docs/tasks/<newest>/contract.md`.
+- **Read the deferred work for the parts the slice touches**: the matching sections of
+  `docs/deferred.md` (it is ordered by part of the system). State in the contract which
+  entries the slice takes in. An entry is read only when its part is opened, so this is
+  the point where it is picked up or left on purpose.
 - If the request is unclear (why, for whom, what "done" means), load
   `agent-skills:interview-me` with the Skill tool and clarify with the user before you
   write the contract.
@@ -110,7 +114,7 @@ Prose is ASD-STE100: short sentences, active voice, plain words ("accepted defec
 **Contract-stage adversarial review** (Tier 3+; Tier 2 on demand), after approval and
 before planning: a **read-only** `codex-rescue` brief (§ Codex plumbing) attacks
 `contract.md` and `rubric.md`. Reading list: contract, rubric, cited specs, AGENTS.md,
-`docs/deferred.md`, the previous slice's contract as precedent. Targets: unstated
+the sections of `docs/deferred.md` for the parts the slice touches, the previous slice's contract as precedent. Targets: unstated
 assumptions, missed requirements, spec contradictions, simpler alternatives. Human-settled
 decisions are *context, not targets* (challenge only on contradiction). The lead folds
 findings into the contract; material changes reopen the 🛑, minor ones are noted. The
@@ -163,7 +167,7 @@ classes (build-open baseline · schema/ingest-adjacent phases · step-6 exit) ar
 **Plan-stage adversarial review** (Tier 3+; Tier 2 on demand: a loose contract, a
 surprising plan, a 🟡/❓ spec area), before the 🛑: a **read-only** `codex-rescue` brief on
 `plan.md`, with the contract as *context, not target*. Reading list: contract, plan, cited
-specs, AGENTS.md, `docs/deferred.md`. Targets: plan↔contract/spec fit, sequencing risks,
+specs, AGENTS.md, the sections of `docs/deferred.md` for the parts the slice touches. Targets: plan↔contract/spec fit, sequencing risks,
 🟡/❓ items, missed requirements, simpler alternatives. If it cannot critique from the files
 alone, the files are not a self-sufficient handoff: fix that first. (Two-independent-takes
 generates options *before* a high-stakes call; this attacks the chosen plan.)

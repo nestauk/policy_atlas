@@ -23,6 +23,7 @@ from sqlalchemy.engine import Engine
 from policy_atlas.api.app import create_app
 from policy_atlas.api.contract import LIST_PAGE_SIZE_DEFAULT, TaskOut
 from policy_atlas.api.dev_issuer import init
+from policy_atlas.api.export_openapi import build_openapi_schema
 from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import capability_run, evidence_scope
 from tests.api.resource_support import api_client, create_task
@@ -466,3 +467,20 @@ def test_get_task_response_contains_only_task_out_fields(tmp_path: Path) -> None
         response = client.get(f"/api/v1/tasks/{task_id}", headers=owner)
         assert response.status_code == 200
         assert set(response.json()) == set(TaskOut.model_fields)
+
+
+# --- the two OpenAPI documents (task 065, B7) --------------------------------
+
+
+def test_ops_paths_live_only_in_the_ops_document(tmp_path: Path) -> None:
+    """The public document has no ops path; the ops document has only ops paths and health."""
+    public = _built_openapi_schema(tmp_path)
+    assert not any(path.startswith("/api/v1/ops") for path in public["paths"])
+
+    ops = build_openapi_schema(mode="ops")
+    assert ops["info"]["title"] == "Policy Atlas Ops API"
+    assert any(path.startswith("/api/v1/ops/") for path in ops["paths"])
+    assert all(
+        path in {"/healthz", "/readyz"} or path.startswith("/api/v1/ops/")
+        for path in ops["paths"]
+    ), sorted(ops["paths"])

@@ -39,6 +39,20 @@ class OrganisationRef(BaseModel):
     name: str
 
 
+class TaskQuotaOut(BaseModel):
+    """How many tasks the caller created in the last 365 days, against the limit.
+
+    The frontend shows a banner when ``used >= limit`` (task 064a, Q8).
+
+    Args:
+        used: Tasks the caller created in the last 365 days, archived included.
+        limit: The yearly limit (``settings.task_quota_per_year``).
+    """
+
+    used: int
+    limit: int
+
+
 class MeOut(BaseModel):
     """The authenticated caller's own identity row.
 
@@ -57,7 +71,10 @@ class MeOut(BaseModel):
         organisation: The caller's organisation, or `None` when unenrolled.
         is_admin: Whether the caller holds the read-across-organisations
             support role. Read-only in every sense: no route and no request
-            body can set it, and no write path consults it.
+            body can set it. The one write path that consults it is task
+            creation, whose quota it exempts (ADR 0045).
+        task_quota: The caller's task quota, or `None` when the caller is
+            exempt (an administrator).
     """
 
     user_id: str
@@ -65,3 +82,4 @@ class MeOut(BaseModel):
     email: str | None = None
     organisation: OrganisationRef | None = None
     is_admin: bool
+    task_quota: TaskQuotaOut | None = None

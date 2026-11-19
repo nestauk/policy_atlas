@@ -68,6 +68,12 @@ slice revision's downgrade refuses while any `task` or `capability_run` row carr
 round-trip in the session fail. Shared-Postgres suites clean up the scoping fixtures in the test
 that made them (`tests/api/test_task_links.py` has the autouse pattern).
 
+A pytest run outside `make test` (a single file, a delegated agent's check) must set
+`DATABASE_URL` to the `*_test` database itself — locally
+`postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas_test` — or
+conftest refuses to start; every delegated agent on 064a hit this once (AGENTS.md
+§ Landmines carries the line).
+
 # Citations
 
 - [tests/conftest.py](../../tests/conftest.py)

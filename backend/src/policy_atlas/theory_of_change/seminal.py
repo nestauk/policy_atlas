@@ -110,7 +110,7 @@ def fetch_seminal_works(
     try:
         found = list(openalex.lookup_ids(targets, wire_params=wire))
     except Exception as exc:  # any provider failure: carry on without them
-        log.warning("toc_seminal.lookup_failed", task_id=str(task_id), error=str(exc))
+        log.warning("toc_seminal.lookup_failed", task_id=str(task_id), error=type(exc).__name__)
         counts["lookup_failed"] = True
         return counts
     # Most-cited first, so the pool rank on each event is the citation rank.

@@ -36,9 +36,11 @@ from policy_atlas.api.routers.access import (
     trace_admin_listing,
 )
 from policy_atlas.api.routers.common import (
+    effective_limits,
     links_for_tasks,
     memberships_for_tasks,
     task_out,
+    tasks_created_since,
 )
 from policy_atlas.api.settings import Settings
 from policy_atlas.core import events
@@ -412,19 +414,30 @@ def create_task(
     with it.
 
     A theory of change is refused unless the server setting is on (task 054,
-    C15), before anything is written.
+    C15), before anything is written. So is a create past the caller's
+    yearly quota (task 064a, Q8; ADR 0045): administrators are exempt, which
+    makes this route the fifth named reader of the administrator flag.
 
     Raises:
         HTTPException: 404 when a named source task is not readable by the
             caller.
         ApiUnprocessable: 422 ``capability_not_enabled`` for a theory of
             change while ``POLICY_ATLAS_THEORY_OF_CHANGE`` is off.
-        ApiConflict: 409 ``visibility_conflict``, ``link_source_capability``,
-            ``link_project_mismatch`` or ``link_source_unfinished``.
+        ApiConflict: 409 ``task_quota``, ``visibility_conflict``,
+            ``link_source_capability``, ``link_project_mismatch`` or
+            ``link_source_unfinished``.
     """
     if payload.capability == THEORY_OF_CHANGE and not settings.theory_of_change_enabled:
         raise ApiUnprocessable(
             "capability_not_enabled", "theory of change is not enabled on this server"
+        )
+    limits = effective_limits(conn, user.user_id, settings=settings)
+    if limits.task_quota is not None and tasks_created_since(
+        conn, user.user_id, days=365
+    ) >= limits.task_quota:
+        raise ApiConflict(
+            "task_quota",
+            f"you have reached the limit of {limits.task_quota} tasks per year",
         )
     now = datetime.now(UTC)
     task_id = uuid.uuid4()

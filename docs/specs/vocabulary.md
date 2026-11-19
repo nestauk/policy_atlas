@@ -114,7 +114,7 @@ stays the one place screen copy is maintained.
 | Report (the Result tab's artefact) | `artefact` | `/tasks/:taskId/result` | `LIFECYCLE_LABELS.result` | "Evidence base" as the page name |
 | Agent | `plan` (the Task plan) | — | `runtime/agent.py`, `agent_backend.py`, `agent_prompt.py`, `task_plan.TaskPlan`; wire `decided_by`/`authored_by` = `agent`; model from `model_routes.toml` step `agent` (task 053); spans `agent:*`, steer point `evidence_search_coverage` | `orchestrator`, `orchestration_plan` |
 | Tabs | — | Agent (index) · Result · Sources · Share · History | `LIFECYCLE_LABELS` | Plan · Results |
-| Task Agent | conversation `kind = planning` (active, else newest closed) | — | screen label only; pinned first | "Planning" |
+| Task Agent | conversation `kind = task_agent` (active, else newest closed) | — | screen label only; pinned first | "Planning" |
 | Chat | conversation `kind = chat` | — | unchanged | — |
 
 Stored values a reader must still accept from before 038 (read-side only, `event_log` is

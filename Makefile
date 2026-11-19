@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast eval-check okf-validate audit audit-paths prompt-guard eval-search-recall frontend-install openapi-sync drift-check font-guard frontend-verify frontend-verify-fast fe-api-smoke deploy-build-guard-test deploy-migration-wait-test infra-setup deploy-check deploy-update deploy-bootstrap
+.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast eval-check okf-validate audit audit-paths prompt-guard eval-search-recall frontend-install openapi-sync drift-check font-guard frontend-verify frontend-verify-fast fe-api-smoke deploy-build-guard-test deploy-migration-wait-test waf-report-test infra-setup deploy-check deploy-update deploy-bootstrap
 
 # Root Makefile (025 A.2 monorepo hoist): the Python project lives in
 # backend/; this Makefile owns the shared db service + the root-level gates
@@ -88,7 +88,7 @@ dev:
 	@test -d backend/.dev-issuer || \
 	  (cd backend && uv run python -m policy_atlas.api.dev_issuer init --dir .dev-issuer)
 	@(trap 'kill 0' INT TERM EXIT; \
-	  POLICY_ATLAS_THEORY_OF_CHANGE=1 $(MAKE) -C backend dev & \
+	  POLICY_ATLAS_THEORY_OF_CHANGE=1 TASK_QUOTA_PER_YEAR=100000 $(MAKE) -C backend dev & \
 	  token=$$(cd backend && uv run python -m policy_atlas.api.dev_issuer mint \
 	    --dir .dev-issuer --sub dev-user --client-id policy-atlas-dev \
 	    --ttl 14400 2>/dev/null | tail -1); \
@@ -171,6 +171,7 @@ frontend-install:
 openapi-sync:
 	$(MAKE) -C backend openapi
 	cd frontend && pnpm run gen
+	cd frontend && pnpm run gen:ops
 
 # Schema-first drift gate: one schema generates both API
 # ends, so this fails the build the moment either committed artifact
@@ -194,6 +195,20 @@ drift-check:
 		rm -f "$$tmp_types"; exit 1; \
 	fi; \
 	rm -f "$$tmp_types"
+	@tmp_openapi_ops=$$(mktemp) && \
+	uv run --project backend python -m policy_atlas.api.export_openapi "$$tmp_openapi_ops" --mode ops && \
+	if ! diff -u frontend/openapi-ops.json "$$tmp_openapi_ops"; then \
+		echo "ERROR: frontend/openapi-ops.json is stale relative to the ops contract." >&2; \
+		rm -f "$$tmp_openapi_ops"; exit 1; \
+	fi; \
+	rm -f "$$tmp_openapi_ops"
+	@tmp_types_ops=$$(mktemp) && \
+	(cd frontend && pnpm exec openapi-typescript openapi-ops.json -o "$$tmp_types_ops") && \
+	if ! diff -u frontend/src/api/gen/types-ops.ts "$$tmp_types_ops"; then \
+		echo "ERROR: frontend/src/api/gen/types-ops.ts is stale relative to frontend/openapi-ops.json." >&2; \
+		rm -f "$$tmp_types_ops"; exit 1; \
+	fi; \
+	rm -f "$$tmp_types_ops"
 	@echo "drift-check: OK"
 
 # Font-binary guard: Averta/Zosia are licensed
@@ -228,13 +243,17 @@ fe-api-smoke:
 # Verifies deploy.sh's production VITE_* refusal directly once D.1 lands.
 # It deliberately reports a clear skip while that documented interface is absent.
 # CI runs this target, so it also runs the migration-waiter check below.
-deploy-build-guard-test: deploy-migration-wait-test
+deploy-build-guard-test: deploy-migration-wait-test waf-report-test
 	bash scripts/test_deploy_build_guard.sh
 
 # Checks deploy.sh's migration waiter against a stubbed `aws`: polls
 # until STOPPED, fails loudly on a non-zero exit or after MIGRATION_WAIT_MAX_S.
 deploy-migration-wait-test:
 	bash scripts/test_deploy_migration_wait.sh
+
+# Checks the read-only WAF count-week report against recorded-shaped AWS output.
+waf-report-test:
+	bash scripts/test_waf_report.sh
 
 # GitHub Actions and operators share these deployment entry points. DEPLOY_ENV
 # selects one committed environment across infra/*_config.json; deploy-check is

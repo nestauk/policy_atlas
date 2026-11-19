@@ -1,7 +1,43 @@
 """Cognito resources for the Policy Atlas v3 single-page application."""
 
+from pathlib import Path
+
 from aws_cdk import Duration, Stack, RemovalPolicy, aws_cognito as cognito, aws_ssm as ssm
 from constructs import Construct
+
+EMAIL_DIRECTORY = Path(__file__).resolve().parents[1] / "email"
+
+
+def _read_email_template(filename: str, *, required_placeholders: tuple[str, ...]) -> str:
+    """Read a Cognito email template and check its required placeholders."""
+    template = (EMAIL_DIRECTORY / filename).read_text()
+    missing = [placeholder for placeholder in required_placeholders if placeholder not in template]
+    if missing:
+        raise ValueError(f"{filename} is missing required placeholder(s): {', '.join(missing)}")
+    return template
+
+
+def _email_templates(domain_name: str) -> tuple[str, str, str, str]:
+    """Read branded templates and replace Policy Atlas URL placeholders."""
+    replacements = {
+        "__SIGN_IN_URL__": f"https://{domain_name}",
+        "__LOGO_URL__": f"https://{domain_name}/brand/email-logo.png",
+    }
+
+    def render(filename: str, required_placeholders: tuple[str, ...]) -> str:
+        template = _read_email_template(
+            filename, required_placeholders=required_placeholders
+        )
+        for placeholder, value in replacements.items():
+            template = template.replace(placeholder, value)
+        return template
+
+    return (
+        (EMAIL_DIRECTORY / "invitation.subject.txt").read_text().strip(),
+        render("invitation.html", ("{username}", "{####}")),
+        (EMAIL_DIRECTORY / "verification.subject.txt").read_text().strip(),
+        render("verification.html", ("{####}",)),
+    )
 
 
 class CognitoAuth(Construct):
@@ -12,6 +48,7 @@ class CognitoAuth(Construct):
         construct_id: Construct identifier.
         domain_name: Public SPA domain used for callback and logout URLs.
         domain_prefix: Globally unique Cognito hosted-UI domain prefix.
+        email: Optional SES sender and branded Cognito email configuration.
     """
 
     def __init__(
@@ -21,8 +58,38 @@ class CognitoAuth(Construct):
         *,
         domain_name: str,
         domain_prefix: str,
+        email: dict | None = None,
+        extra_domains: list[str] | None = None,
     ) -> None:
         super().__init__(scope, construct_id)
+
+        user_pool_kwargs = {}
+        if email and email["enabled"]:
+            (
+                invitation_subject,
+                invitation_body,
+                verification_subject,
+                verification_body,
+            ) = _email_templates(domain_name)
+            user_pool_kwargs = {
+                "email": cognito.UserPoolEmail.with_ses(
+                    from_email=email["from_address"],
+                    from_name=email["from_name"],
+                    ses_region=Stack.of(self).region,
+                    ses_verified_domain=email["sender_domain"],
+                ),
+                "user_invitation": cognito.UserInvitationConfig(
+                    email_subject=invitation_subject,
+                    email_body=invitation_body,
+                ),
+                "user_verification": cognito.UserVerificationConfig(
+                    email_subject=verification_subject,
+                    email_body=verification_body,
+                    email_style=cognito.VerificationEmailStyle.CODE,
+                ),
+            }
+
+        extra_domains = extra_domains or []
 
         self.user_pool = cognito.UserPool(
             self,
@@ -35,7 +102,7 @@ class CognitoAuth(Construct):
             # any rule it omits is off. 30 days because `--invite manual` hands
             # passwords over out of band, which routinely outlasts the 7-day default.
             password_policy=cognito.PasswordPolicy(
-                min_length=8,
+                min_length=12,
                 require_lowercase=True,
                 require_uppercase=True,
                 require_digits=True,
@@ -43,6 +110,9 @@ class CognitoAuth(Construct):
                 temp_password_validity=Duration.days(30),
             ),
             removal_policy=RemovalPolicy.RETAIN,
+            # Blocks accidental deletion of the user pool (and every account in it).
+            deletion_protection=True,
+            **user_pool_kwargs,
         )
 
         self.client = cognito.UserPoolClient(
@@ -70,10 +140,14 @@ class CognitoAuth(Construct):
                 callback_urls=[
                     f"https://{domain_name}",
                     f"https://{domain_name}/",
+                    *[f"https://{domain}" for domain in extra_domains],
+                    *[f"https://{domain}/" for domain in extra_domains],
                 ],
                 logout_urls=[
                     f"https://{domain_name}",
                     f"https://{domain_name}/",
+                    *[f"https://{domain}" for domain in extra_domains],
+                    *[f"https://{domain}/" for domain in extra_domains],
                 ],
             ),
         )

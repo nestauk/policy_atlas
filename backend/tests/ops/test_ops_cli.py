@@ -21,11 +21,11 @@ import uuid
 from typing import Any
 
 import pytest
-from sqlalchemy import RootTransaction, select
+from sqlalchemy import RootTransaction, select, update
 from sqlalchemy.engine import Engine
 
-from policy_atlas.core.schema import app_user, organisation
-from policy_atlas.ops.cli import EXIT_REFUSED, _prompt, build_parser, main
+from policy_atlas.core.schema import app_user, organisation, organisation_domain
+from policy_atlas.ops.cli import EXIT_REFUSED, _prompt, _quota_value, build_parser, main
 from tests.api.org_support import make_org, ops_enrol, seeded, unique_email
 from tests.ops.support import (
     ACCOUNT_ID,
@@ -34,7 +34,9 @@ from tests.ops.support import (
     FakeSts,
     cognito,
     expect_environment,
+    expect_lock_out,
     expect_lookup,
+    expect_sub_lookup,
     fresh_sub,
 )
 
@@ -369,6 +371,7 @@ def test_cli_traces_the_revoke_a_de_enrolment_performs(
     assert status == 0
     traced = _traces(capsys.readouterr().out)
     assert [(line["subject"], line["direction"]) for line in traced] == [(leaver, "revoke")]
+    assert traced[0]["flag"] == "is_admin"
     assert traced[0]["operator_arn"] == CALLER_ARN
 
 
@@ -414,3 +417,181 @@ def test_a_failed_commit_leaves_no_admin_trace(
             ).scalar_one()
             is False
         )
+
+
+# --- task 065: the ops role, quotas and domains through the entrypoint (B1, B12, C1) ---
+
+
+def _seed_person(engine: Engine, *, is_ops: bool = False) -> tuple[str, str, uuid.UUID]:
+    """One enrolled row — the leg-3 sample and the subject, as the trace cases seed."""
+    sub = fresh_sub("cognito")
+    email = unique_email("cli-065")
+    with seeded(engine) as conn:
+        org_id = make_org(conn)
+        ops_enrol(conn, user_id=sub, org_id=org_id, email=email)
+        if is_ops:
+            conn.execute(update(app_user).where(app_user.c.user_id == sub).values(is_ops=True))
+    return sub, email, org_id
+
+
+def _person(engine: Engine, sub: str) -> Any:
+    with seeded(engine) as conn:
+        return conn.execute(select(app_user).where(app_user.c.user_id == sub)).mappings().one()
+
+
+def test_cli_ops_grant_traces_the_ops_flag_after_the_commit(
+    engine: Engine, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Contract B1: the same post-commit ``ops.admin_change`` line, with ``flag=is_ops``."""
+    monkeypatch.setenv("LOG_FORMAT", "json")
+    sub, email, _org_id = _seed_person(engine)
+    lines: list[str] = []
+    with cognito() as (client, stubber):
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        status = main(
+            _argv("ops", "grant", "--email", email),
+            engine=engine,
+            cognito=client,
+            sts=FakeSts(),
+            write=lines.append,
+        )
+    assert status == 0
+    assert any("grant" in line and email in line for line in lines)
+    traced = _traces(capsys.readouterr().out)
+    assert [(t["subject"], t["direction"], t["flag"]) for t in traced] == [
+        (sub, "grant", "is_ops")
+    ]
+    assert traced[0]["operator_arn"] == CALLER_ARN
+    assert (_person(engine, sub)["is_ops"], _person(engine, sub)["is_admin"]) == (True, False)
+
+
+def test_cli_user_quota_writes_the_overrides(engine: Engine) -> None:
+    sub, email, _org_id = _seed_person(engine)
+    lines: list[str] = []
+    with cognito() as (client, stubber):
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        status = main(
+            _argv(
+                "user", "quota", "--email", email, "--tasks-per-year", "100", "--runs", "inherit"
+            ),
+            engine=engine,
+            cognito=client,
+            sts=FakeSts(),
+            write=lines.append,
+        )
+    assert status == 0
+    expected = "tasks per year inherit → 100, simultaneous tasks inherit → inherit"
+    assert any(expected in line for line in lines)
+    row = _person(engine, sub)
+    assert (row["task_quota_per_year"], row["runs_per_user"]) == (100, None)
+
+
+def test_cli_org_quota_writes_the_overrides(engine: Engine) -> None:
+    sub, _email, org_id = _seed_person(engine)
+    lines: list[str] = []
+    with cognito() as (client, stubber):
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        status = main(
+            _argv(
+                "org", "quota", "--org", str(org_id), "--tasks-per-year", "100", "--runs", "inherit"
+            ),
+            engine=engine,
+            cognito=client,
+            sts=FakeSts(),
+            write=lines.append,
+        )
+    assert status == 0
+    assert any(str(org_id) in line and "inherit → 100" in line for line in lines)
+    with seeded(engine) as conn:
+        stored = conn.execute(
+            select(organisation.c.task_quota_per_year, organisation.c.runs_per_user).where(
+                organisation.c.org_id == org_id
+            )
+        ).one()
+    assert tuple(stored) == (100, None)
+
+
+def test_quota_flags_take_a_non_negative_integer_or_inherit() -> None:
+    """The parser refuses what ``set_quota`` would: no negative value reaches the command."""
+    assert (_quota_value("inherit"), _quota_value("0"), _quota_value("7")) == (None, 0, 7)
+    for bad in ("-1", "abc", "1.5"):
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(
+                _argv("user", "quota", "--sub", "s", "--tasks-per-year", bad, "--runs", "1")
+            )
+
+
+def test_cli_org_domain_add_then_remove(engine: Engine) -> None:
+    sub, _email, org_id = _seed_person(engine)
+    typed = f"Cli-{uuid.uuid4()}.Example.Test"
+    lines: list[str] = []
+    with cognito() as (client, stubber):
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        status = main(
+            _argv("org", "domain", "add", "--domain", typed, "--org", str(org_id)),
+            engine=engine,
+            cognito=client,
+            sts=FakeSts(),
+            write=lines.append,
+        )
+    assert status == 0
+    assert any(f"added domain {typed.lower()}" in line for line in lines)
+    with seeded(engine) as conn:
+        assert (
+            conn.execute(
+                select(organisation_domain.c.org_id).where(
+                    organisation_domain.c.domain == typed.lower()
+                )
+            ).scalar_one()
+            == org_id
+        )
+
+    with cognito() as (client, stubber):
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        status = main(
+            _argv("org", "domain", "remove", "--domain", typed),
+            engine=engine,
+            cognito=client,
+            sts=FakeSts(),
+            write=lines.append,
+        )
+    assert status == 0
+    assert any(f"removed domain {typed.lower()}" in line for line in lines)
+    with seeded(engine) as conn:
+        assert (
+            conn.execute(
+                select(organisation_domain.c.domain).where(
+                    organisation_domain.c.domain == typed.lower()
+                )
+            ).scalar_one_or_none()
+            is None
+        )
+
+
+def test_cli_user_offboard_says_the_ops_role_was_revoked(
+    engine: Engine, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Contract B1: ``user offboard`` clears ``is_ops`` as it clears ``is_admin``, and says so."""
+    monkeypatch.setenv("LOG_FORMAT", "json")
+    sub, email, _org_id = _seed_person(engine, is_ops=True)
+    lines: list[str] = []
+    with cognito() as (client, stubber):
+        expect_environment(stubber, known_subs=[sub], sampled=[sub])
+        expect_sub_lookup(stubber, sub=sub)
+        expect_lock_out(stubber, sub=sub)
+        status = main(
+            _argv("user", "offboard", "--email", email),
+            engine=engine,
+            cognito=client,
+            sts=FakeSts(),
+            write=lines.append,
+        )
+        stubber.assert_no_pending_responses()
+    assert status == 0
+    assert any("offboarded" in line and "ops role revoked" in line for line in lines)
+    traced = _traces(capsys.readouterr().out)
+    assert [(t["subject"], t["direction"], t["flag"]) for t in traced] == [
+        (sub, "revoke", "is_ops")
+    ]
+    row = _person(engine, sub)
+    assert (row["org_id"], row["is_ops"]) == (None, False)

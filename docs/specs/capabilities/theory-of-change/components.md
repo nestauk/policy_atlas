@@ -8,7 +8,7 @@ timestamp: 2026-10-23
 
 # Theory of change — component skeleton
 
-**Status: draft (task 054).** Product intent and rulings are in [capability.md](capability.md).
+Product intent and rulings are in [capability.md](capability.md).
 This file says how the capability sits on the existing infrastructure. Python paths are under
 `backend/src/policy_atlas/` (the top-level `src/policy_atlas/` holds only stale `__pycache__`
 folders).

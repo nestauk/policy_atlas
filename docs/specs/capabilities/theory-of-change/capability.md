@@ -8,7 +8,7 @@ timestamp: 2026-10-23
 
 # Capability spec — Theory of change (ToC)
 
-**Status: draft (task 054).** The owner ruled on two rounds of questions on 2026-10-23. "R1" to
+The owner ruled on two rounds of questions on 2026-10-23. "R1" to
 "R16" are the first round; "S1" to "S11" are the second (§ Rulings). Every 🟡 is still a
 proposal; every ❓ is still open.
 

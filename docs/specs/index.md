@@ -51,12 +51,13 @@ implementation lands — see the flow-back in [README](README).
   - [system/execution-orchestration.md](system/execution-orchestration.md)
   - [system/plan-as-object.md](system/plan-as-object.md)
   - [system/prompting.md](system/prompting.md) — doctrine for every prompt surface
+  - [system/web-api.md](system/web-api.md) — the `/api/v1` surface: resources, errors, pagination, the event stream and the auth boundary
   - [system/data-flow-queued-ingest.md](system/data-flow-queued-ingest.md) — the queued full-text ingest data flow (the DPIA addendum's input)
     (promoted from the 018 research + loop method; not distilled from the frozen sources).
 - Capability specs (instances of the framework):
   - [capabilities/evidence-search/](capabilities/evidence-search/) — the first v3.0 capability.
   - [capabilities/options-scoping/](capabilities/options-scoping/) — the second: options scoping, reusing Evidence search machinery in its own pipeline ([capability](capabilities/options-scoping/capability.md) · [components](capabilities/options-scoping/components.md) · [trust rules](capabilities/options-scoping/trust.md)).
-  - [capabilities/theory-of-change/](capabilities/theory-of-change/) — the third, **draft for owner review** (task 054): a causal chain on a canvas, each link checked against evidence with the Evidence search spine, plus a stress test ([capability](capabilities/theory-of-change/capability.md) · [components](capabilities/theory-of-change/components.md)).
+  - [capabilities/theory-of-change/](capabilities/theory-of-change/) — the third: a causal chain on a canvas, each link checked against evidence with the Evidence search spine, plus a stress test ([capability](capabilities/theory-of-change/capability.md) · [components](capabilities/theory-of-change/components.md)).
 
 ## What to read for a task
 

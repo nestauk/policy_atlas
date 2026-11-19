@@ -19,7 +19,7 @@ from aws_cdk import (
 from constructs import Construct
 
 from infra.components.shared_alb import import_shared_alb
-from infra.metabase_allowlist import CIDRS_PER_LISTENER_RULE, MAX_ALLOWLIST_ENTRIES
+from infra.allowlist import CIDRS_PER_LISTENER_RULE, MAX_ALLOWLIST_ENTRIES
 
 
 class PaV3AnalyticsStack(Stack):

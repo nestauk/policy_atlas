@@ -20,7 +20,14 @@ def configure_logging() -> None:
     if os.getenv("LOG_FORMAT") == "json":
         # Structured traceback (a JSON-serializable list of frames) so
         # log.error(..., exc_info=True) renders the exception in JSON output.
-        processors.append(structlog.processors.dict_tracebacks)
+        # show_locals=False: the default dumps every frame's local variables,
+        # which carried user text and secret prefixes into CloudWatch (review
+        # finding H-06).
+        processors.append(
+            structlog.processors.ExceptionRenderer(
+                structlog.tracebacks.ExceptionDictTransformer(show_locals=False)
+            )
+        )
         processors.append(structlog.processors.JSONRenderer())
     else:
         # Formats exc_info into an "exception" string field before the console

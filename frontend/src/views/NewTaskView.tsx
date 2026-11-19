@@ -9,6 +9,7 @@ import {
   type SelectableCapabilityKey,
   isSelectableCapability,
 } from "../lib/capabilities";
+import { actionFailedNotice } from "../lib/errors";
 import { useDocumentTitle } from "../lib/title";
 import { COPY, PROJECT, TASK } from "../lib/vocabulary";
 import { Button, buttonVariants } from "../ui/brand/Button";
@@ -374,7 +375,7 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
         <Card role="alert" className="mt-6 max-w-md p-4 text-body text-navy">
           {projectFailed
             ? `The ${PROJECT.lower} couldn't be created. Try again.`
-            : `The ${TASK.lower} couldn't be started. Try again.`}
+            : actionFailedNotice(create.error, `The ${TASK.lower} couldn't be started. Try again.`)}
         </Card>
       )}
 

@@ -267,7 +267,8 @@ def _worker(
         url = database_url_from_secret(secrets(), secret_arn)
         # No pool: one invocation at a time per container, connections closed
         # on return.
-        _WORKER = _Worker(engine=create_engine(url, poolclass=NullPool), fetcher=fetcher())
+        engine = create_engine(url, poolclass=NullPool, hide_parameters=True)
+        _WORKER = _Worker(engine=engine, fetcher=fetcher())
         log.info("ingest_worker.cold_start")
     return _WORKER
 
@@ -349,7 +350,7 @@ def handler(event: Mapping[str, Any], context: LambdaContext) -> BatchResponse:
         try:
             tss_id, run_id = parse_message(record.get("body"))
         except MalformedMessage as exc:
-            log.error("ingest_worker.malformed_message", error=str(exc))
+            log.error("ingest_worker.malformed_message", error=str(exc)[:200])
             return retry_record
 
         with structlog.contextvars.bound_contextvars(tss_id=str(tss_id), run_id=str(run_id)):

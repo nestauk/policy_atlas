@@ -3,6 +3,7 @@ import { type ComponentProps, useState } from "react";
 import { type TocEdit, useTocEdit } from "../../api/mutations";
 import { useTocHistory } from "../../api/queries";
 import { formatDate } from "../../lib/dates";
+import { conflictSentences } from "../../lib/errors";
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
 import { CloseButton } from "../../ui/brand/CloseButton";
@@ -36,6 +37,7 @@ function refusal(error: unknown): string {
   if (code === "toc_duplicate") return "These two boxes are already connected.";
   if (code === "run_active") return "A check is running. Try again when it finishes.";
   if (code === "capacity") return "Policy Atlas is busy. Try again in a minute.";
+  if (code === "user_capacity") return conflictSentences.user_capacity;
   return (error as Error | null)?.message ?? "That did not work. Try again.";
 }
 

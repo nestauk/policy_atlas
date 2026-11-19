@@ -282,6 +282,7 @@ export const mockMeUnenrolled: components["schemas"]["MeOut"] = {
   email: null,
   organisation: null,
   is_admin: false,
+  task_quota: { used: 3, limit: 50 },
 };
 
 export const mockMeEnrolled: components["schemas"]["MeOut"] = {
@@ -290,6 +291,7 @@ export const mockMeEnrolled: components["schemas"]["MeOut"] = {
   email: "ada.lovelace@example.gov.uk",
   organisation: { org_id: MOCK_ORGANISATION_ID, name: "Department for Local Growth" },
   is_admin: false,
+  task_quota: { used: 3, limit: 50 },
 };
 
 export const mockFunnel: components["schemas"]["FunnelOut"] = {

@@ -5,7 +5,8 @@ from __future__ import annotations
 import os
 from collections.abc import Generator
 from concurrent.futures import ThreadPoolExecutor
-from typing import cast
+from dataclasses import dataclass
+from typing import Any, cast
 
 import structlog
 from fastapi import Request
@@ -43,6 +44,21 @@ from policy_atlas.runtime.task_agent import (
 )
 
 log = structlog.get_logger()
+
+
+@dataclass(frozen=True)
+class Identity:
+    """The operations service's optional Cognito identity-provider client.
+
+    Args:
+        cognito: Cognito Identity Provider client, when the issuer names a pool.
+        pool_id: Cognito user-pool identifier, when configured.
+        region: AWS region that owns the user pool, when configured.
+    """
+
+    cognito: Any | None
+    pool_id: str | None
+    region: str | None
 
 
 #: Product-egress keys a fully-live deployment is expected to carry; missing
@@ -95,6 +111,19 @@ def get_settings(request: Request) -> Settings:
         The lifespan-independent application configuration.
     """
     return cast(Settings, request.app.state.settings)
+
+
+def get_identity(request: Request) -> Identity:
+    """Return the identity-provider seam owned by the operations lifespan.
+
+    Args:
+        request: Incoming request whose application owns the identity seam.
+
+    Returns:
+        The configured Cognito identity, or an empty identity in development.
+    """
+    return cast(Identity, request.app.state.identity)
+
 
 
 def get_engine(request: Request) -> Engine:

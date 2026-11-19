@@ -1,4 +1,7 @@
-"""The one refusal type the operator CLI raises."""
+"""Refusal types the operator CLI raises."""
+
+import uuid
+from datetime import datetime
 
 
 class OpsError(Exception):
@@ -13,4 +16,33 @@ class OpsError(Exception):
     written*, except where the message says otherwise — ``user create``'s
     database-failure path is the single exception, and it says so in the text
     because the Cognito account it kept is real.
+    """
+
+
+class EnrolledElsewhere(OpsError):
+    """Refusal raised when an account belongs to another organisation."""
+
+    def __init__(self, *, sub: str, org_name: str, org_id: uuid.UUID, email: str) -> None:
+        self.sub = sub
+        self.org_name = org_name
+        self.org_id = org_id
+        super().__init__(
+            f"{email} is already in {org_name}. Nothing was written. Move them from the "
+            "People list (`user enrol`)."
+        )
+
+
+class ResendTooSoon(OpsError):
+    """Refusal raised while an invitation's one-hour cooldown is active."""
+
+    def __init__(self, *, retry_after: datetime) -> None:
+        self.retry_after = retry_after
+        super().__init__(f"an invitation was sent recently; retry after {retry_after.isoformat()}")
+
+
+class NotFound(OpsError):
+    """Refusal raised when the row a command was asked to act on does not exist.
+
+    The ops routes answer it with 404; every other refusal is a 409. A typed
+    class, so the routes never classify by message text (review stack, 2026-11-17).
     """

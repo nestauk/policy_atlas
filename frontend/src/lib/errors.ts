@@ -18,7 +18,10 @@ type ConflictCode =
   | "link_source_unfinished"
   | "link_source_capability"
   | "nothing_to_propose"
-  | "not_included";
+  | "not_included"
+  | "user_capacity"
+  | "task_quota"
+  | "confirm_expired";
 
 /** Human-readable, trigger-local conflict copy — the one place this
  *  copy lives; call sites wire it in rather than inlining their own. */
@@ -44,6 +47,12 @@ export const conflictSentences: Record<ConflictCode, string> = {
   // The shortlist's refusals.
   nothing_to_propose: "Every included option already has a place or was set aside. There is nothing left to propose.",
   not_included: "Only an included option can be on the shortlist.",
+  // Task 064a: per-user caps and the check-in confirmation window.
+  // No numbers here: the limits are server settings (RUNS_PER_USER,
+  // TASK_QUOTA_PER_YEAR) and the quota banner reads its number from `/me`.
+  user_capacity: "You already have the maximum number of runs in progress. Wait for one to finish.",
+  task_quota: "You have reached your usage quota of tasks. Contact your Policy Atlas administrator to request more.",
+  confirm_expired: "This confirmation has expired. Review the latest check-in and confirm again.",
 };
 
 /**
