@@ -2,7 +2,7 @@
 
 import pytest
 
-from infra.metabase_allowlist import (
+from infra.allowlist import (
     metabase_rule_source_cidrs,
     parse_allowlist,
     validate_parameter_payload,

@@ -356,7 +356,7 @@ check_metabase_allowlist_parameter() {
         --name "$METABASE_ALLOWLIST_PARAMETER" \
         --query Parameter \
         --output json | \
-        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.metabase_allowlist \
+        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.allowlist \
             validate --label "Metabase"
 }
 
@@ -366,7 +366,7 @@ metabase_allowlist_size() {
         --name "$METABASE_ALLOWLIST_PARAMETER" \
         --query Parameter \
         --output json | \
-        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.metabase_allowlist size
+        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.allowlist size
 }
 
 check_ops_allowlist_parameter() {
@@ -375,7 +375,7 @@ check_ops_allowlist_parameter() {
         --name "$OPS_ALLOWLIST_PARAMETER" \
         --query Parameter \
         --output json | \
-        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.metabase_allowlist \
+        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.allowlist \
             validate --label "ops allowlist"
 }
 
@@ -385,7 +385,7 @@ ops_allowlist_size() {
         --name "$OPS_ALLOWLIST_PARAMETER" \
         --query Parameter \
         --output json | \
-        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.metabase_allowlist \
+        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.allowlist \
             size --label "ops allowlist"
 }
 
@@ -406,7 +406,7 @@ check_metabase_listener_rule_matches_allowlist() {
         --query Rules \
         --output json | \
         METABASE_ALLOWLIST_VALUE="$allowlist_value" \
-        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.metabase_allowlist \
+        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.allowlist \
             verify-rule --host "$METABASE_DOMAIN"
 }
 
@@ -420,7 +420,7 @@ check_ops_listener_rule_matches_allowlist() {
         --query Rules \
         --output json | \
         METABASE_ALLOWLIST_VALUE="$allowlist_value" \
-        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.metabase_allowlist \
+        PYTHONPATH="$REPO_ROOT/infra" python3 -m infra.allowlist \
             verify-rule --host "$OPS_DOMAIN" --label "ops allowlist"
 }
 
