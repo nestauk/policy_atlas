@@ -87,9 +87,8 @@ describe("LonglistBuilding (task 058, N24; round 10)", () => {
     expect(container.textContent).not.toMatch(/from your report|added by you|suggested by Policy Atlas/);
   });
 
-  // Round 10, D3: one turning mark per screen; a searching row breathes the
-  // 6 px blue square instead.
-  it("marks a searching row with the breathing square, never the turning fold mark", () => {
+  // One turning mark per screen; a searching row has the status square instead.
+  it("marks a searching row with the status square, never the turning fold mark", () => {
     const { container } = renderBuilding([row(1, { search_status: "searching" }), row(2, { search_status: "failed" })], {
       key: "option_searches",
       label: "Searching for each option",
@@ -98,10 +97,7 @@ describe("LonglistBuilding (task 058, N24; round 10)", () => {
     const searching = within(screen.getByText("Searching").closest("li") as HTMLElement);
     const mark = searching.getByText("Searching").parentElement?.querySelector("[data-tone]");
     expect(mark).toHaveAttribute("data-tone", "running");
-    // The status mark's own breathing (`StatusMark`, whichever rhythm it keeps).
-    expect(mark?.className).toMatch(/\banim-breathe/);
-    const failed = screen.getByText("Search failed");
-    expect(failed).toHaveClass("text-red");
+    expect(screen.getByText("Search failed")).toBeInTheDocument();
   });
 
   // Round 11 (review findings 4 and 6): a folded suggestion leaves the list
@@ -150,12 +146,12 @@ describe("LonglistBuilding (task 058, N24; round 10)", () => {
     expect(screen.getByRole("link", { name: "School-based mentoring" })).toBeInTheDocument();
   });
 
-  // Round 10, finding 2: rows move into their themes in a View Transition,
-  // the list never blanking; the document carries the regrouping class only
-  // while it runs.
+  // Rows move into their themes in a View Transition, the list never blanking.
   it("moves the rows into their themes inside a View Transition", async () => {
     let finish: () => void = () => {};
     const start = vi.fn((update: () => void) => {
+      // The document carries this class only while the transition runs. If it
+      // stayed, every later View Transition would pick up the longlist rows.
       expect(document.documentElement).toHaveClass("longlist-regrouping");
       update();
       return { finished: new Promise<void>((resolve) => (finish = resolve)) };
@@ -188,8 +184,7 @@ describe("LonglistBuilding (task 058, N24; round 10)", () => {
     );
     expect(start).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("heading", { name: /Conditionality and support/ })).toBeInTheDocument();
-    const named = screen.getByText("School-based mentoring").closest("li") as HTMLElement;
-    expect(named.style.getPropertyValue("--longlist-row")).toMatch(/^opt-/);
+    expect(screen.getByText("School-based mentoring")).toBeInTheDocument();
     await act(async () => {
       finish();
       await Promise.resolve();

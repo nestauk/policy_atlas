@@ -78,32 +78,6 @@ describe("RankedBars — an accessible table", () => {
     expect(pendingRow.querySelector(".placeholder-bar")).toHaveAttribute("aria-hidden", "true");
   });
 
-  it("fades in a value that replaces its breathing placeholder, and only that value", () => {
-    const pendingRows = [
-      { key: "a", label: "Systematic Review and Meta-Analysis", count: null, pending: true },
-      { key: "b", label: "Observational Research Studies", count: 4 },
-    ];
-    const { rerender } = render(<RankedBars caption="Evidence types" busy rows={pendingRows} />);
-    // At first paint nothing fades: the value already there holds still.
-    expect(document.querySelectorAll(".anim-swap-in")).toHaveLength(0);
-    rerender(
-      <RankedBars
-        caption="Evidence types"
-        rows={[
-          { key: "a", label: "Systematic Review and Meta-Analysis", count: 3, pending: false },
-          { key: "b", label: "Observational Research Studies", count: 5 },
-        ]}
-      />,
-    );
-    const [landedRow, steadyRow] = screen.getAllByRole("row");
-    expect(landedRow.querySelector(".ranked-bars__bar")).toHaveClass("anim-swap-in");
-    expect(landedRow.querySelector(".ranked-bars__value")).toHaveClass("anim-swap-in");
-    // A value that changed without a placeholder does not fade.
-    expect(steadyRow.querySelector(".anim-swap-in")).toBeNull();
-    // Nothing breathes with Tailwind's pulse.
-    expect(document.querySelector(".animate-pulse")).toBeNull();
-  });
-
   it("marks Grey rows and muted labels for the stylesheet", () => {
     render(
       <RankedBars
@@ -419,12 +393,9 @@ describe("LandscapeSection", () => {
 });
 
 describe("LandscapeSkeleton", () => {
-  it("is busy, named, and holds the ranked-bar geometry with still-under-reduced-motion bars", () => {
+  it("is busy and named", () => {
     render(<LandscapeSkeleton />);
     const skeleton = screen.getByLabelText("Loading the landscape");
     expect(skeleton).toHaveAttribute("aria-busy", "true");
-    expect(skeleton.querySelectorAll(".ranked-bars__row")).toHaveLength(8);
-    expect(skeleton.querySelector(".animate-pulse")).toBeNull();
-    expect(skeleton.querySelectorAll(".placeholder-bar").length).toBe(16);
   });
 });

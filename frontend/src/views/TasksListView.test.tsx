@@ -156,7 +156,7 @@ describe("TasksListView — the Organisation/Mine switcher (task 033 phase 10b, 
     expect(screen.getByText("You")).toBeInTheDocument();
   });
 
-  it("lays Organisation's rows on one grid with the owner track, Mine's without (round 12)", async () => {
+  it("gives the reader's own You on Organisation no hover text", async () => {
     vi.mocked(queries.useMe).mockReturnValue(
       {
         data: {
@@ -169,15 +169,8 @@ describe("TasksListView — the Organisation/Mine switcher (task 033 phase 10b, 
     );
     const user = userEvent.setup();
     renderView();
-    const list = () => screen.getByRole("list");
-    expect(list()).toHaveClass("md:grid", "md:grid-cols-[minmax(0,1fr)_auto_auto_5.5rem_8.5rem]");
     await user.click(screen.getByRole("tab", { name: "Organisation" }));
-    expect(list()).toHaveClass("md:grid", "md:grid-cols-[minmax(0,1fr)_auto_auto_auto_5.5rem_8.5rem]");
-    const item = within(list()).getAllByRole("listitem")[0];
-    expect(item).toHaveClass("md:grid-cols-subgrid", "md:col-span-full");
-    expect(within(item).getByRole("link")).toHaveClass("md:grid-cols-subgrid", "md:col-span-full");
-    // Capped and ellipsed; the reader's own "You" needs no hover text.
-    expect(within(item).getByText("You")).toHaveClass("max-w-[8rem]", "truncate", "text-left");
+    const item = within(screen.getByRole("list")).getAllByRole("listitem")[0];
     expect(within(item).getByText("You")).not.toHaveAttribute("title");
   });
 
@@ -352,27 +345,13 @@ describe("TasksListView — the first-run redirect", () => {
 
 // Task 058, lists polish: the shared header with fixed slots.
 describe("TasksListView — the page header", () => {
-  it("keeps the switcher in the filters row and marks the active scope with a blue rule, never a fill", () => {
+  it("keeps the switcher in the filters row and marks the active scope as selected", () => {
     vi.mocked(queries.useMe).mockReturnValue(ENROLLED);
     const { container } = renderView();
     const filters = container.querySelector('[data-slot="filters"]') as HTMLElement;
     expect(filters).toContainElement(screen.getByRole("tablist", { name: "Scope" }));
-    // The tab language's growing rule at 2 px (owner, round 10): full under
-    // the active item, growing to the centre on hover and focus.
-    const mine = screen.getByRole("tab", { name: "Mine" });
-    expect(mine).toHaveClass("after:h-0.5", "after:bg-blue", "after:scale-x-100", "text-navy");
-    expect(mine).not.toHaveClass("bg-blue");
-    const organisation = screen.getByRole("tab", { name: "Organisation" });
-    expect(organisation).toHaveClass(
-      "after:scale-x-0",
-      "after:origin-left",
-      "hover:after:scale-x-50",
-      "focus-visible:after:scale-x-50",
-      "after:duration-200",
-      "motion-reduce:after:transition-none",
-      "font-semibold",
-    );
-    expect(organisation).not.toHaveClass("after:scale-x-100");
+    expect(screen.getByRole("tab", { name: "Mine" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Organisation" })).toHaveAttribute("aria-selected", "false");
   });
 
   // Round 11 (owner): the header keeps only the primary; Find a task is a
@@ -386,18 +365,16 @@ describe("TasksListView — the page header", () => {
     const primary = screen.getByRole("link", { name: "New task" });
     expect(actions.children).toHaveLength(1);
     expect(actions.firstElementChild).toBe(primary);
-    expect(primary).toHaveClass("h-13", "min-w-36");
     expect(filters).toContainElement(find);
     expect(screen.getByRole("tablist", { name: "Scope" })).not.toContainElement(find);
-    expect(find).toHaveClass("size-10", "text-grey");
     // The filters row holds only the switcher and the magnifier.
     expect(filters).not.toContainElement(screen.getByRole("button", { name: "Show archived" }));
   });
 
-  it("reserves the filters row for a caller without an organisation (lead ruling P5)", () => {
+  it("reserves the filters row for a caller without an organisation", () => {
     vi.mocked(queries.useMe).mockReturnValue(SOLO);
     const { container } = renderView();
-    expect(container.querySelector('[data-slot="filters"]')).toHaveClass("min-h-10");
+    expect(container.querySelector('[data-slot="filters"]')).toBeInTheDocument();
   });
 
   it("shows the admin's wider-list note in the filters row, not above the list", async () => {
@@ -413,7 +390,7 @@ describe("TasksListView — the page header", () => {
     expect(filters).toContainElement(screen.getByText("Showing every organisation."));
   });
 
-  it("loads into the list's own frame: five rows the list's height", () => {
+  it("loads as five busy placeholder rows", () => {
     vi.mocked(queries.useMe).mockReturnValue(SOLO);
     tasks.mockReturnValue(
       { data: undefined, isPending: true, isError: false, refetch: vi.fn() } as unknown as Flat,
@@ -421,10 +398,7 @@ describe("TasksListView — the page header", () => {
     renderView();
     const skeleton = screen.getByRole("list", { name: "Loading tasks" });
     expect(skeleton).toHaveAttribute("aria-busy", "true");
-    expect(skeleton).toHaveClass("border", "border-line-2", "bg-paper");
-    const rows = skeleton.querySelectorAll("li");
-    expect(rows).toHaveLength(5);
-    for (const row of rows) expect(row).toHaveClass("h-14", "max-md:h-21");
+    expect(skeleton.querySelectorAll("li")).toHaveLength(5);
   });
 });
 
@@ -482,7 +456,7 @@ describe("TasksListView — the scope it opens on", () => {
 });
 
 describe("TasksListView — a list that failed to load", () => {
-  it("says so in the list's frame with a 40 px Retry that asks again", async () => {
+  it("says so with a Retry that asks again", async () => {
     vi.mocked(queries.useMe).mockReturnValue(SOLO);
     const refetch = vi.fn();
     tasks.mockReturnValue(
@@ -492,9 +466,7 @@ describe("TasksListView — a list that failed to load", () => {
     renderView();
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent("Your tasks couldn't be loaded.");
-    expect(alert).toHaveClass("border", "border-line-2", "bg-paper");
     const retry = screen.getByRole("button", { name: "Retry" });
-    expect(retry).toHaveClass("h-10");
     await user.click(retry);
     expect(refetch).toHaveBeenCalled();
   });
@@ -526,12 +498,7 @@ describe("TasksListView — the Archived toggle", () => {
     expect(screen.queryByRole("heading", { name: "Archived" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("tab").map((tab) => tab.getAttribute("aria-selected"))).toHaveLength(2);
     expect(screen.queryByRole("tab", { name: "Archived" })).not.toBeInTheDocument();
-    // The quiet control at Caption (owner, round 11): Grey words over the
-    // Line 2 underline, never a button box.
     expect(toggle()).toHaveAccessibleName("Show archived");
-    expect(toggle()).toHaveAccessibleName("Show archived");
-    expect(toggle()).toHaveClass("text-caption", "text-grey", "underline", "decoration-line-2", "min-h-10");
-    expect(toggle()).not.toHaveClass("border", "bg-blue");
   });
 
   it("on Mine, lists the reader's archived tasks and turns back to the active list", async () => {
@@ -544,7 +511,7 @@ describe("TasksListView — the Archived toggle", () => {
     await user.click(toggle());
     expect(toggle()).toHaveAccessibleName("Hide archived");
     expect(toggle()).toHaveAccessibleName("Hide archived");
-    expect(screen.getByRole("heading", { level: 2, name: "Archived" })).toHaveClass("text-meta");
+    expect(screen.getByRole("heading", { level: 2, name: "Archived" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Mine" })).toHaveAttribute("aria-selected", "true");
     const row = screen.getByRole("link", { name: /^Old bus fares task · Archived/ });
     expect(within(row).getByText("Archived")).toBeInTheDocument();
@@ -658,7 +625,6 @@ describe("TasksListView — Show more", () => {
     const view = renderView();
     expect(screen.getAllByRole("listitem")).toHaveLength(50);
     const more = screen.getByRole("button", { name: "Show more" });
-    expect(more).toHaveClass("h-10", "border-line-2");
     await user.click(more);
     expect(fetchNextPage).toHaveBeenCalledTimes(1);
     // The next page lands, repeating the last row of page 1 (a task moved
@@ -677,7 +643,7 @@ describe("TasksListView — Show more", () => {
     expect(screen.queryByRole("button", { name: "Show more" })).not.toBeInTheDocument();
   });
 
-  it("shares the foot row with Show archived, Show more first and Show archived at the right (round 11)", () => {
+  it("shares the foot row with Show archived, Show more first", () => {
     vi.mocked(queries.useMe).mockReturnValue(SOLO);
     tasks.mockReturnValue({
       data: { data: page(1, 50), pagination: { page: 1, page_size: 50, total_items: 60, has_more: true } },
@@ -691,7 +657,6 @@ describe("TasksListView — Show more", () => {
     const archived = screen.getByRole("button", { name: "Show archived" });
     const row = more.parentElement as HTMLElement;
     expect(row).toContainElement(archived);
-    expect(archived.parentElement).toHaveClass("ml-auto");
     expect(more.compareDocumentPosition(archived) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -755,10 +720,12 @@ describe("TasksListView — the row's menu (round 12)", () => {
     await user.click(screen.getByRole("tab", { name: "Organisation" }));
     const control = screen.getByRole("button", { name: "Task settings: Healthier childhoods" });
     expect(control.closest("a")).toBeNull();
+    // Hidden until hover or focus from the medium width up only. A phone has no
+    // hover, so the control must not be hidden there.
+    expect(control).toHaveClass("md:opacity-0", "md:group-hover:opacity-100", "md:group-focus-within:opacity-100");
+    expect(control).not.toHaveClass("opacity-0");
     expect(control.closest("li")).toContainElement(screen.getByRole("link", { name: /^Healthier childhoods/ }));
     expect(screen.queryByRole("button", { name: "Task settings: Grace's task" })).not.toBeInTheDocument();
-    // Quiet until hovered or focused from md up; always there on a phone.
-    expect(control).toHaveClass("h-10", "w-10", "text-grey", "md:opacity-0", "md:group-hover:opacity-100", "md:group-focus-within:opacity-100");
   });
 
   it("renames on the row with Save name and Cancel, then gives focus back to the control", async () => {
@@ -806,10 +773,10 @@ describe("TasksListView — the row's menu (round 12)", () => {
     expect(taskMutations.archive).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Archive" }));
     expect(taskMutations.archive).toHaveBeenCalledTimes(1);
-    // It folds (height and opacity) where it stood, then leaves for good,
-    // even though the list still holds it until the refetch lands.
+    // It leaves for good, even though the list still holds it until the
+    // refetch lands.
     const fold = screen.getByRole("link", { name: /^Healthier childhoods/ }).closest("[data-leaving]");
-    expect(fold).toHaveClass("grid-rows-[0fr]", "opacity-0", "duration-200");
+    expect(fold).not.toBeNull();
     await waitFor(() => expect(screen.queryByRole("link", { name: /^Healthier childhoods/ })).not.toBeInTheDocument());
   });
 

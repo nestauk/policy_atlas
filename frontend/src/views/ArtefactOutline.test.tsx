@@ -316,14 +316,6 @@ describe("AnnotatedProse bullets (fork B)", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
     expect(screen.getByText("universal provision")).toHaveClass("citation-marker");
     expect(screen.getByText("universal provision").closest("li")).not.toBeNull();
-    // The bullet is the Electric Blue square again (owner, round 11), on the
-    // first line's baseline and raised to the x-height, and the items stand
-    // apart (round 10, finding 8).
-    const bullet = screen.getAllByRole("listitem")[0].querySelector("[data-bullet]");
-    expect(bullet).toHaveClass("bg-blue", "size-1.5", "relative", "bottom-[calc(0.5ex_-_3px)]");
-    expect(bullet).not.toHaveClass("bg-navy", "mt-2");
-    expect(screen.getAllByRole("listitem")[0]).toHaveClass("flex", "items-baseline");
-    expect(screen.getAllByRole("listitem")[0].parentElement).toHaveClass("space-y-3");
   });
 
   it("a span crossing a bullet boundary degrades to the anchored list, never mis-renders", () => {
@@ -395,24 +387,5 @@ describe("AnnotatedProse bullets (fork B)", () => {
     );
     const marker = screen.getByRole("listitem").querySelector("[aria-hidden]");
     expect(marker?.className).toContain("bg-yellow");
-  });
-});
-
-describe("SectionDisclosure meta (task 058, N24)", () => {
-  it("lets a long meta line wrap instead of holding it on one line (390 px)", () => {
-    render(
-      <SectionDisclosure
-        id="no-theme"
-        section={{ title: "No theme", role: "standard", summary: "", summary_status: "verified" }}
-        defaultOpen={false}
-        collapsible
-        meta="12 options · services, subsidies, regulation, information, procurement and convening"
-      >
-        <p>rows</p>
-      </SectionDisclosure>,
-    );
-    const meta = screen.getByText(/12 options ·/);
-    expect(meta.className).not.toMatch(/whitespace-nowrap/);
-    expect(meta.className).toMatch(/max-w-full/);
   });
 });

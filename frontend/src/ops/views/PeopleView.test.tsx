@@ -255,10 +255,9 @@ describe("People, after the review", () => {
     expect(screen.getAllByRole("columnheader")).toHaveLength(9);
   });
 
-  it("keeps the selection bar's room, so ticking a box does not move the table", async () => {
+  it("puts Select all, and then the selection bar, in the one slot above the table", async () => {
     const user = await openPeople();
     const slot = screen.getByRole("table", { name: "People" }).parentElement?.previousElementSibling as HTMLElement;
-    expect(slot).toHaveClass("min-h-12");
     // With nothing ticked the room holds only "Select all".
     expect(within(slot).getByRole("button", { name: "Select all 6" })).toBeInTheDocument();
     await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));

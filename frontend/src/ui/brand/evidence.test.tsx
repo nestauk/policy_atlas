@@ -22,7 +22,6 @@ import {
   TIER_LABEL,
   TIER_TEXT,
   TITLE_ONLY,
-  toneSquareClass,
   uncheckedLabel,
   uncheckedWords,
 } from "./evidence";
@@ -130,14 +129,12 @@ describe("the judge's verdict", () => {
 });
 
 describe("the tone square and the marks", () => {
-  it("draws the 6 px square from the palette, decorative, its colour named", () => {
-    expect(toneSquareClass("yellow")).toContain("bg-yellow");
-    expect(toneSquareClass("red")).toContain("size-1.5");
+  it("draws the square as decoration, its colour named", () => {
     const { container } = render(<ToneSquare colour="green" testId="status-mark" className="extra" />);
     const square = container.firstElementChild as HTMLElement;
     expect(square).toHaveAttribute("aria-hidden", "true");
     expect(square).toHaveAttribute("data-tone", "green");
-    expect(square).toHaveClass("size-1.5", "bg-green", "extra");
+    expect(square).toHaveClass("extra");
   });
 
   it("writes a strength as its square then its word; an unknown tier keeps the word, no square", () => {

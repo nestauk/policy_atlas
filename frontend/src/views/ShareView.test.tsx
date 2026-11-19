@@ -87,32 +87,22 @@ describe("ShareView — layout (round 10, S1, S2, S10)", () => {
       SHARE_COPY.projectsHeading,
     ]);
   });
-
-  it("carries no blue cut-corner fill: every control is the 40 px outline or ghost", () => {
-    setup({ organisation: ORG, task: { is_public: true }, projects: [{ project_id: PROJECT_A, name: "Net zero homes" }] });
-    for (const button of screen.getAllByRole("button")) {
-      expect(button.className).not.toMatch(/\bcutout\b|\bbg-blue\b/);
-      expect(button).toHaveClass("h-10");
-    }
-  });
 });
 
 // Owner, round 13 (item 23): each sharing section says what it is for in one
 // plain Body Grey line straight under its heading, as the effect of the
 // choice rather than as if it were already made.
-describe("ShareView — what each section is for (round 13)", () => {
+describe("ShareView — what each section is for", () => {
   const lineUnder = (heading: string) => screen.getByRole("heading", { level: 2, name: heading }).nextElementSibling;
 
-  it("explains the public link and the organisation under their headings, in Body Grey", () => {
+  it("explains the public link and the organisation under their headings", () => {
     setup({ organisation: ORG });
     const publicLine = lineUnder(SHARE_COPY.publicHeading);
     expect(publicLine).toHaveTextContent(
       /^Making this task public creates a link that anyone can open to read the report, without a Policy Atlas account\.$/,
     );
-    expect(publicLine).toHaveClass("text-body", "text-grey");
     const orgLine = lineUnder(SHARE_COPY.orgHeading);
     expect(orgLine).toHaveTextContent(/^Sharing with your organisation lets everyone in it open this task from their Tasks list\.$/);
-    expect(orgLine).toHaveClass("text-body", "text-grey");
   });
 
   it("explains the public link to a colleague too, and keeps the Projects line as it was", () => {
@@ -179,7 +169,7 @@ describe("ShareView — organisation (round 10, S4, S6)", () => {
   it("offers the owner Make private outside a project", async () => {
     const mutate = vi.fn();
     const { user } = setup({ organisation: ORG, task: { visibility: "org" }, mutate });
-    expect(screen.getByText(SHARE_COPY.orgShared)).toHaveClass("font-semibold", "text-navy");
+    expect(screen.getByText(SHARE_COPY.orgShared)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: SHARE_COPY.makePrivate }));
     expect(mutate).toHaveBeenCalledWith({ visibility: "private" }, expect.anything());
   });

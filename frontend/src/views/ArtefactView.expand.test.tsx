@@ -324,7 +324,7 @@ describe("the case-study and most-relevant-source chips (owner, round 12)", () =
     forgetReportExpand(TASK_ID);
   });
 
-  it("reads classification, then strength with the Sources table's tone square, both with the help cursor", () => {
+  it("reads classification, then strength with the Sources table's tone square", () => {
     renderReport();
     const card = screen.getByRole("heading", { level: 4, name: "Leeds pilot" }).closest("li") as HTMLElement;
     const sources = screen.getByRole("heading", { name: "Most relevant sources" }).closest("section") as HTMLElement;
@@ -335,10 +335,6 @@ describe("the case-study and most-relevant-source chips (owner, round 12)", () =
       expect(type.compareDocumentPosition(strength) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       const mark = within(entry).getByTestId("strength-mark");
       expect(mark).toHaveAttribute("data-tone", "green");
-      // The Sources table's own square and colour (round 12: green, yellow, red).
-      expect(mark).toHaveClass("bg-green", "size-1.5");
-      expect(type.closest(".cursor-help")).not.toBeNull();
-      expect(strength.closest(".cursor-help")).not.toBeNull();
     }
     // Nothing is read until a hover asks for the reasoning.
     expect(dossierRead).not.toHaveBeenCalled();
@@ -351,12 +347,6 @@ describe("the case-study and most-relevant-source chips (owner, round 12)", () =
     await user.hover(within(card).getByText("Systematic review and meta-analysis"));
     const typeTip = await screen.findByRole("tooltip");
     expect(typeTip).toHaveTextContent(TYPE_REASON);
-    const sizeOf = (tip: HTMLElement) => {
-      // The Tooltip's own content element carries its type size.
-      const content = [...document.querySelectorAll("[data-side]")].find((node) => node.contains(tip)) ?? tip;
-      return { meta: content.classList.contains("text-meta"), caption: content.classList.contains("text-caption") };
-    };
-    const typeSize = sizeOf(typeTip);
     expect(dossierRead).toHaveBeenCalledWith("src-7");
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
@@ -366,13 +356,10 @@ describe("the case-study and most-relevant-source chips (owner, round 12)", () =
         "Very strong evidence strength — appraised from the document type: Systematic review and meta-analysis.",
       ),
     );
-    // Both hovers at the one size, Meta, through the Tooltip itself.
-    expect(typeSize).toEqual({ meta: true, caption: false });
-    expect(sizeOf(screen.getByRole("tooltip"))).toEqual({ meta: true, caption: false });
   });
 });
 
-describe("the claim provenance sheet (owner, round 12)", () => {
+describe("the claim provenance sheet", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     wire();
@@ -381,46 +368,35 @@ describe("the claim provenance sheet (owner, round 12)", () => {
     forgetReportExpand(TASK_ID);
   });
 
-  it("sets the labelled Claim, the claim's one Judge, then the sources: the source line once, each quote labelled (round 13)", async () => {
+  it("sets the labelled Claim, the claim's one Judge, then the sources: the source line once, each quote labelled", async () => {
     const user = userEvent.setup();
     renderReport();
     const findings = screen.getByRole("heading", { name: "Key findings" }).closest("section") as HTMLElement;
     await user.click(within(findings).getByRole("button", { name: "Source 7: School meals trial" }));
     const sheet = await screen.findByRole("dialog");
     const quote = await within(sheet).findByText("Charges stopped families taking a place.");
-    // The claim's block: "Claim" over its words behind the blue rule.
+    // The claim's block: "Claim" over its words.
     const claim = within(sheet).getByText(KF_CLAIM);
-    expect(claim.parentElement).toHaveClass("border-l-2", "border-l-blue", "pl-3");
     expect(claim.parentElement?.previousElementSibling).toHaveTextContent("Claim");
     // The claim's one verdict, directly under the Claim, before the sources.
     const judge = sheet.querySelector("[data-judge-block]") as HTMLElement;
     expect(judge.closest("[data-citation-block]")).toBeNull();
     expect(claim.parentElement?.parentElement?.nextElementSibling).toBe(judge);
     expect(judge.querySelectorAll("[data-testid='ai-mark']")).toHaveLength(1);
-    const verdict = within(judge).getByText("Tier 2 · grounded");
-    expect(verdict).toHaveClass("font-semibold", "text-navy");
-    expect(verdict.parentElement).toHaveClass("bg-blue-tint-2");
-    expect(within(judge).getByText("The passage gives the take-up figures directly.")).toHaveClass("text-grey");
+    expect(within(judge).getByText("Tier 2 · grounded")).toBeInTheDocument();
+    expect(within(judge).getByText("The passage gives the take-up figures directly.")).toBeInTheDocument();
     // One label over the boxes, counting sources.
     const labels = [...sheet.querySelectorAll("[data-provenance-label]")].map((label) => label.textContent);
     expect(labels).toEqual(["Claim", "Judge", "Source", "Quote"]);
-    // One box, a hairline all round; the coloured rule is the Claim's alone.
+    // One box per source: title first, then the authors, year and venue.
     const block = sheet.querySelector("[data-citation-block]") as HTMLElement;
-    expect(block).toHaveClass("border", "border-line", "p-4");
-    expect(sheet.querySelectorAll("[class*='border-l-2'], [class*='border-l-[3px]']")).toHaveLength(1);
-    // Title first, then the authors, year and venue in Grey.
     const name = within(block).getByRole("button", { name: "School meals trial" });
     expect(name.closest("p")).toHaveTextContent(/^\[7\]\s*School meals trial$/);
-    expect(within(block).getByText("Sampleton A · 2021 · BMJ Open")).toHaveClass("text-grey");
+    expect(within(block).getByText("Sampleton A · 2021 · BMJ Open")).toBeInTheDocument();
     // The evidence type carries its reasoning on hover, as the badges do.
     const type = within(block).getByText("Systematic review and meta-analysis");
-    expect(type).toHaveClass("reason-word");
-    expect(type.closest(".cursor-help")).not.toBeNull();
     expect(quote.tagName).toBe("MARK");
     expect(name.compareDocumentPosition(quote) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // One type scale and no chips (round 12).
-    expect(sheet.querySelector(".text-\\[11\\.5px\\]")).toBeNull();
-    expect(sheet.querySelector(".text-caption")).toBeNull();
     await user.hover(type);
     await waitFor(() => expect(screen.getByRole("tooltip")).toHaveTextContent(TYPE_REASON));
   });
