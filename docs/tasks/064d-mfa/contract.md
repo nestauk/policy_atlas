@@ -15,8 +15,10 @@ Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in [docs/specs/](../../
 > runs in the same conversation. Revision 1 approved 2026-11-19 · owner. Revision 2 (Codex
 > contract-stage review F1 to F8 folded) approved 2026-11-19 · owner. Plan-stage review
 > (Codex, 7 findings) folded into plan draft 2. P0 and P0b ran 2026-11-19 (§ P0 results).
-> Revision 3 approved: _pending_ · Plan approved: _pending (draft 3)_ · ADR: 0049 (to write in
-> the build).
+> Revision 3 approved: 2026-11-19 · owner · Plan approved: 2026-11-19 · owner (draft 3) ·
+> Owner ruling 2026-11-19: Codex reviews revision 3 and plan draft 3, then the build **and** the
+> review stack run in this same conversation (a recorded exception to the fresh-conversation
+> rule of task-cycle-review). · ADR: 0049 (to write in the build).
 
 ## Goal
 

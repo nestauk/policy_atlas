@@ -1,6 +1,6 @@
 # Implementation plan: 064d-mfa
 
-> Status: **draft 3, 2026-11-19**, rewritten for contract revision 3 after P0 and P0b.
+> Status: **draft 3, approved by the owner 2026-11-19**, rewritten for contract revision 3 after P0 and P0b.
 > Draft 2 folded the Codex plan-stage review (F1 to F7); its P0 design ran as planned (a
 > throwaway CDK stack per stage, real CloudFormation updates, rollback stages tested), and its
 > lessons are kept below. Contract: [contract.md](contract.md) (revision 3). Rubric:
