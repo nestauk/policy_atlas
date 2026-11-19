@@ -13,7 +13,7 @@ documents) is for a setting that already looks good on ``mini``.
     uv run --project backend --env-file backend/.env \\
         python scripts/evals/screening/checks/run_screen.py
     uv run --project backend --env-file backend/.env \\
-        python scripts/evals/screening/checks/run_screen.py --reps 1 --model gpt-5.6-luna
+        python scripts/evals/screening/checks/run_screen.py --vote majority --reps 1 --model gpt-5.6-luna
     uv run --project backend --env-file backend/.env \\
         python scripts/evals/screening/checks/run_screen.py --dataset full
 """
