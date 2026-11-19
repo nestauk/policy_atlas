@@ -35,7 +35,7 @@ are done (spec-prep 2026-06-22; refreshed 2026-07-03); `[ ]` items are open gate
   change, the third capability, behind the `POLICY_ATLAS_THEORY_OF_CHANGE` setting; ADR 0042)
   reviewed on `task/054-1-core` as of 2026-11-05 with PR #114; 064a (security quick wins:
   seventeen review findings — no locals in error logs, a per-user run cap, a yearly task
-  quota with an administrator exemption, a bounded JWKS refresh, `user offboard`, a
+  quota with an administrator exemption, a bounded JWKS refresh, `user offboard` (now `user deactivate`, task 066), a
   task-first screening index, health check on `/healthz`, HTTPS redirect, 12-character
   passwords, TLS pins, pool deletion protection, 35-day production backups; ADR 0045)
   reviewed on `task/064a-security-quick-wins` as of 2026-11-16, PR #120 merged 2026-11-18; 064b (the

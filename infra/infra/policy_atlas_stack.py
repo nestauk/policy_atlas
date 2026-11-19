@@ -408,7 +408,7 @@ class PolicyAtlasStack(Stack):
             actions=[
                 "cognito-idp:AdminCreateUser", "cognito-idp:AdminGetUser",
                 "cognito-idp:ListUsers", "cognito-idp:AdminDisableUser",
-                "cognito-idp:AdminUserGlobalSignOut",
+                "cognito-idp:AdminUserGlobalSignOut", "cognito-idp:AdminEnableUser",
             ],
             resources=[auth.user_pool.user_pool_arn],
         ))

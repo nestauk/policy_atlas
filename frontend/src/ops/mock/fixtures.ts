@@ -176,6 +176,23 @@ export function peopleFixtures(): Person[] {
       limits: { task_quota_per_year: 100, runs_per_user: 3, task_quota_from: { kind: "organisation", name: "Nesta" }, runs_from: { kind: "default" } },
       cohorts: [],
     },
+    {
+      user_id: "sub-ada",
+      display_name: "Ada Quinn",
+      email: "ada.quinn@example.org",
+      organisation: nesta,
+      is_admin: false,
+      is_ops: false,
+      created_at: iso(90 * 24 * 60 * MINUTE),
+      invited_at: null,
+      first_signed_in_at: iso(80 * 24 * 60 * MINUTE),
+      deactivated_at: iso(3 * 24 * 60 * MINUTE),
+      task_quota_per_year: null,
+      runs_per_user: null,
+      tasks_this_year: 4,
+      limits: { task_quota_per_year: 100, runs_per_user: 3, task_quota_from: { kind: "organisation", name: "Nesta" }, runs_from: { kind: "default" } },
+      cohorts: [],
+    },
   ];
 }
 

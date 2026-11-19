@@ -209,9 +209,17 @@ function route(method: string, path: string, body: Record<string, unknown>, quer
       return "ok";
     });
   }
-  if (method === "POST" && path === "/api/v1/ops/people/offboard") {
+  if (method === "POST" && path === "/api/v1/ops/people/deactivate") {
     return bulk(ids, (subject) => {
-      opsMock.people = opsMock.people.filter((entry) => entry !== subject);
+      subject.deactivated_at = subject.deactivated_at ?? now;
+      subject.is_admin = false;
+      subject.is_ops = false;
+      return "ok";
+    });
+  }
+  if (method === "POST" && path === "/api/v1/ops/people/reactivate") {
+    return bulk(ids, (subject) => {
+      subject.deactivated_at = null;
       return "ok";
     });
   }
@@ -253,6 +261,18 @@ function route(method: string, path: string, body: Record<string, unknown>, quer
     };
     opsMock.organisations.push(created);
     return json(created, 201);
+  }
+  const orgPath = /^\/api\/v1\/ops\/organisations\/([^/]+)$/.exec(path);
+  if (method === "DELETE" && orgPath !== null) {
+    const org = opsMock.organisations.find((entry) => entry.org_id === orgPath[1]);
+    if (org === undefined) return apiError(404, "not_found", "resource not found");
+    const people = opsMock.people.filter((entry) => entry.organisation?.org_id === org.org_id).length;
+    const left = [people && `${people} people`, org.domains.length && `${org.domains.length} domains`].filter(Boolean);
+    if (left.length > 0) {
+      return apiError(409, "ops_refused", `${org.name} still has ${left.join(", ")}. Nothing was deleted.`);
+    }
+    opsMock.organisations = opsMock.organisations.filter((entry) => entry !== org);
+    return new Response(null, { status: 204 });
   }
   const quota = /^\/api\/v1\/ops\/organisations\/([^/]+)\/quota$/.exec(path);
   if (method === "POST" && quota !== null) {

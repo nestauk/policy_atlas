@@ -237,7 +237,7 @@ def test_ops_and_api_task_roles_hold_only_their_expected_cognito_permissions():
     assert sorted(ops_actions) == sorted([
         "cognito-idp:AdminCreateUser", "cognito-idp:AdminGetUser",
         "cognito-idp:ListUsers", "cognito-idp:AdminDisableUser",
-        "cognito-idp:AdminUserGlobalSignOut",
+        "cognito-idp:AdminUserGlobalSignOut", "cognito-idp:AdminEnableUser",
     ])
 
 

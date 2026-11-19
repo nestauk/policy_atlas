@@ -5,6 +5,7 @@ The command tree, with every global option before the subcommand::
     python -m policy_atlas.ops --env {staging,prod} [options] <group> <command>
 
       org   create    --name NAME
+      org   delete    --org ORG
       org   quota     --org ORG --tasks-per-year N|inherit --runs N|inherit
       org   domain add --domain D --org ORG
       org   domain remove --domain D
@@ -13,7 +14,8 @@ The command tree, with every global option before the subcommand::
       user  resync    --email E
       user  reissue   --email E
       user  de-enrol  (--email E | --sub SUB)
-      user  offboard  (--email E | --sub SUB)
+      user  deactivate (--email E | --sub SUB)
+      user  reactivate (--email E | --sub SUB)
       user  quota     (--email E | --sub SUB) --tasks-per-year N|inherit --runs N|inherit
       rows  assign    (--task ID | --project ID) --org ORG
       admin grant     (--email E | --sub SUB)
@@ -48,7 +50,7 @@ did not land.
 written inside the transaction is a durable claim about a write a failed commit
 then threw away. One mechanism serves every command that moves ``is_admin`` —
 ``admin grant``, ``admin revoke``, and the ``is_admin`` a ``user de-enrol`` or
-``user offboard`` clears.
+``user deactivate`` clears.
 
 The one place that ordering cannot save anything is ``user create``: the Cognito
 account is made before the database is touched, because its ``sub`` is the key.
@@ -226,6 +228,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     org_create = org.add_parser("create", help="create an organisation")
     org_create.add_argument("--name", required=True)
+    org_delete = org.add_parser(
+        "delete", help="delete an organisation no person, task, project or domain points at"
+    )
+    org_delete.add_argument("--org", required=True)
     org_quota = org.add_parser("quota", help="set organisation quota overrides")
     org_quota.add_argument("--org", required=True)
     _quota_args(org_quota)
@@ -286,16 +292,23 @@ def build_parser() -> argparse.ArgumentParser:
     de_enrol_subject.add_argument("--email", type=_email)
     de_enrol_subject.add_argument("--sub")
 
-    user_offboard = user.add_parser(
-        "offboard",
+    user_deactivate = user.add_parser(
+        "deactivate",
         help=(
-            "lock a person out: disable their Cognito account and sign them out "
-            "everywhere, then de-enrol them and make their public task links private"
+            "lock a person out: disable their Cognito account, sign them out everywhere, "
+            "clear their admin and ops roles and make their public task links private; "
+            "they keep their organisation and work"
         ),
     )
-    offboard_subject = user_offboard.add_mutually_exclusive_group(required=True)
-    offboard_subject.add_argument("--email", type=_email)
-    offboard_subject.add_argument("--sub")
+    deactivate_subject = user_deactivate.add_mutually_exclusive_group(required=True)
+    deactivate_subject.add_argument("--email", type=_email)
+    deactivate_subject.add_argument("--sub")
+    user_reactivate = user.add_parser(
+        "reactivate", help="turn a deactivated person's login back on (roles are not restored)"
+    )
+    reactivate_subject = user_reactivate.add_mutually_exclusive_group(required=True)
+    reactivate_subject.add_argument("--email", type=_email)
+    reactivate_subject.add_argument("--sub")
     user_quota = user.add_parser("quota", help="set a person's quota overrides")
     user_quota_subject = user_quota.add_mutually_exclusive_group(required=True)
     user_quota_subject.add_argument("--email", type=_email)
@@ -476,6 +489,9 @@ def _dispatch(
     if args.group == "org":
         if args.command == "create":
             return commands.create_organisation(conn, name=args.name)
+        if args.command == "delete":
+            org = commands.resolve_organisation(conn, args.org)
+            return commands.delete_organisation(conn, org_id=org.org_id)
         if args.command == "quota":
             org = commands.resolve_organisation(conn, args.org)
             return commands.set_quota(
@@ -500,9 +516,14 @@ def _dispatch(
             )
         if args.command == "de-enrol":
             return commands.de_enrol_user(conn, email=args.email, sub=args.sub)
-        if args.command == "offboard":
-            return commands.offboard_user(
+        if args.command == "deactivate":
+            return commands.deactivate_user(
                 conn, cognito, pool_id=target.user_pool_id, email=args.email, sub=args.sub
+            )
+        if args.command == "reactivate":
+            row = commands._resolve_and_lock(conn, email=args.email, sub=args.sub)
+            return commands.reactivate_user(
+                conn, cognito, pool_id=target.user_pool_id, sub=str(row["user_id"])
             )
         if args.command == "quota":
             row = commands._resolve_and_lock(conn, email=args.email, sub=args.sub)

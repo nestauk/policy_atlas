@@ -2313,15 +2313,16 @@ omissions.
 - **Deleting a user from the ops CLI, and ownership transfer — coupled** (owner,
   2026-08-24). 033 creates and enrols Cognito users but does not delete them: a delete
   that cannot reassign the person's work would strand it, and transfer is itself Out, so
-  the two ship together or not at all. Until then the removal lever is **`user offboard`**
-  (task 064a, Q10; ADR 0045 decision 5): it disables the Cognito account, revokes its
-  refresh tokens, de-enrols the person and switches off their public task links. Two
-  consequences remain for whoever offboards a real user: **(1) a window stays open** — an
+  the two ship together or not at all. Until then the removal lever is **`user deactivate`**
+  (task 064a, Q10; ADR 0045 decision 5; replaced `user offboard` in task 066): it disables
+  the Cognito account, revokes its refresh tokens, clears the roles, marks the person
+  deactivated and switches off their public task links; they keep their organisation and
+  work. Two consequences remain for whoever deactivates a real user: **(1) a window stays open** — an
   access token already issued is valid for up to 60 minutes, and a progress stream open
   at that moment stays open until its run ends (a `disabled` check on every request
   would close it at the price of a database read per request; deferred); **(2) erasure
-  is two-part** — offboarding clears `org_id` and `is_admin` from the application
-  database and keeps `email` and `display_name` so the person stays findable, and the
+  is two-part** — deactivation keeps `email` and `display_name` in the application
+  database so the person stays findable, and the
   Cognito account is disabled, not deleted, so a genuine erasure request still needs the
   Cognito side handled separately.
 - **Three standing discrepancies in the published privacy notice** (escalated by 033,
@@ -3687,9 +3688,12 @@ programme map in `docs/tasks/064-security-hardening/programme.md` carries the la
 - **A per-user allowance above 50.** The quota is one number for everyone except
   administrators. A person who legitimately needs more is handled by an administrator
   today; a per-user column was ruled out of scope for this slice.
-- **The 60-minute window after `user offboard`.** An access token already issued keeps
-  working until it expires, and an open progress stream outlives it. A `disabled` check
-  on every request would close it at the price of a database read per request.
+- **The 60-minute window after `user deactivate`.** An access token already issued keeps
+  working until it expires, and an open progress stream outlives it. Since task 066 the
+  person keeps their organisation, so that token can also read the organisation's shared
+  work in the window (owner ruling B, 2026-11-19). A `deactivated_at IS NULL` check where
+  the public API loads the caller would close it at the price of a database read per
+  request.
 - **Resuming after a check-in is uncapped.** The per-user run cap (Q7) applies at the
   three start surfaces; resuming a paused walk has no capacity check, because the
   person's decision is already committed when the resume runs (owner item 1, plan gate).
@@ -3704,7 +3708,7 @@ programme map in `docs/tasks/064-security-hardening/programme.md` carries the la
   which `safe_error` (Q3) treats as product-shaped, so that text reaches the event log.
   It most likely echoes the person's own steering input rather than SQL or host names;
   left as is, noted by the Q3 build.
-- **`AdminUserGlobalSignOut` on an already disabled account.** The offboard rerun path
+- **`AdminUserGlobalSignOut` on an already disabled account.** The deactivate rerun path
   assumes it succeeds; confirmed on staging at the Q10 live check, not before.
 
 Found by the 064a review stack (2026-11-16) and left as seams:

@@ -149,3 +149,9 @@ Four more settled by the review stack (2026-11-16), also within the decisions ab
    exceptions carry one too (`urllib.error.URLError`, `ssl.SSLError`,
    `UnicodeDecodeError`), as an object. Only a string code marks a structured product
    rejection.
+
+## Later change (2026-11-19, task 066)
+
+`user offboard` (decision 5) was replaced by `user deactivate` and `user reactivate`. The
+person now keeps their organisation and work, and a `deactivated_at` mark records the
+state. See the amendment to [ADR 0046](0046-ops-service-ops-pages-self-signup-and-ops-database-login.md).

@@ -585,7 +585,7 @@
         "type": "object"
       },
       "PersonCreatedOut": {
-        "description": "Answer to ``POST /api/v1/ops/people``.\n\nArgs:\n    person: The person as the list now shows them.\n    invitation_sent: Whether Cognito sent an invitation on this call.\n        ``False`` when the address already had an account.",
+        "description": "Answer to ``POST /api/v1/ops/people``.\n\nArgs:\n    person: The person as the list now shows them.\n    invitation_sent: Whether Cognito sent an invitation on this call.\n        ``False`` when the address already had an account.\n    reactivated: Whether the address belonged to a deactivated account\n        that this call turned back on.",
         "properties": {
           "invitation_sent": {
             "title": "Invitation Sent",
@@ -593,6 +593,11 @@
           },
           "person": {
             "$ref": "#/components/schemas/PersonOut"
+          },
+          "reactivated": {
+            "default": false,
+            "title": "Reactivated",
+            "type": "boolean"
           }
         },
         "required": [
@@ -603,7 +608,7 @@
         "type": "object"
       },
       "PersonOut": {
-        "description": "One person as the ops pages list them (contract B4 \"list people\").\n\nArgs:\n    user_id: The Cognito subject.\n    display_name: The stored name (never derived from the email here).\n    email: The stored address, or ``None`` for a person who only ever\n        signed in. Ops-facing: this shape never leaves the ops host.\n    organisation: Their organisation, or ``None`` when unenrolled.\n    is_admin: Whether they hold the administrator flag.\n    is_ops: Whether they hold the ops role.\n    created_at: When the row was created.\n    invited_at: When Cognito last sent them an invitation through this\n        service, or ``None``. The resend cooldown reads it.\n    first_signed_in_at: When they first opened the app, or ``None``.\n    task_quota_per_year: Their own override, or ``None``.\n    runs_per_user: Their own override, or ``None``.\n    tasks_this_year: Tasks they created in the last 365 days.\n    last_task_at: When they created their latest task, or ``None``.\n    limits: The limits that apply after resolution.\n    cohorts: The cohorts they are in, by name.",
+        "description": "One person as the ops pages list them (contract B4 \"list people\").\n\nArgs:\n    user_id: The Cognito subject.\n    display_name: The stored name (never derived from the email here).\n    email: The stored address, or ``None`` for a person who only ever\n        signed in. Ops-facing: this shape never leaves the ops host.\n    organisation: Their organisation, or ``None`` when unenrolled.\n    is_admin: Whether they hold the administrator flag.\n    is_ops: Whether they hold the ops role.\n    created_at: When the row was created.\n    invited_at: When Cognito last sent them an invitation through this\n        service, or ``None``. The resend cooldown reads it.\n    first_signed_in_at: When they first opened the app, or ``None``.\n    deactivated_at: When an operator deactivated them, or ``None`` (task 066).\n    task_quota_per_year: Their own override, or ``None``.\n    runs_per_user: Their own override, or ``None``.\n    tasks_this_year: Tasks they created in the last 365 days.\n    last_task_at: When they created their latest task, or ``None``.\n    limits: The limits that apply after resolution.\n    cohorts: The cohorts they are in, by name.",
         "properties": {
           "cohorts": {
             "items": {
@@ -616,6 +621,18 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "deactivated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deactivated At"
           },
           "display_name": {
             "title": "Display Name",
@@ -1290,6 +1307,48 @@
         ]
       }
     },
+    "/api/v1/ops/organisations/{org_id}": {
+      "delete": {
+        "description": "Delete an organisation nothing points at; otherwise say what is still in it.",
+        "operationId": "delete_organisation_api_v1_ops_organisations__org_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Organisation",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
     "/api/v1/ops/organisations/{org_id}/quota": {
       "post": {
         "description": "Set or clear an organisation's quota overrides.",
@@ -1594,6 +1653,53 @@
         ]
       }
     },
+    "/api/v1/ops/people/deactivate": {
+      "post": {
+        "description": "Disable and mark every selected person independently; they keep their organisation.",
+        "operationId": "deactivate_people_api_v1_ops_people_deactivate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkSubjects"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Deactivate People",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
     "/api/v1/ops/people/enrol": {
       "post": {
         "description": "Move each selected person to the destination organisation.",
@@ -1641,53 +1747,6 @@
         ]
       }
     },
-    "/api/v1/ops/people/offboard": {
-      "post": {
-        "description": "Disable and offboard every selected person independently.",
-        "operationId": "offboard_people_api_v1_ops_people_offboard_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BulkSubjects"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BulkOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Offboard People",
-        "tags": [
-          "ops"
-        ]
-      }
-    },
     "/api/v1/ops/people/quota": {
       "post": {
         "description": "Set the same quota overrides for every selected person.",
@@ -1730,6 +1789,53 @@
           }
         ],
         "summary": "Set People Quota",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/api/v1/ops/people/reactivate": {
+      "post": {
+        "description": "Turn every selected person's login back on; roles are not restored.",
+        "operationId": "reactivate_people_api_v1_ops_people_reactivate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkSubjects"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reactivate People",
         "tags": [
           "ops"
         ]

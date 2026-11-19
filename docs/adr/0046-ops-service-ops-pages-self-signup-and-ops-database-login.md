@@ -210,3 +210,30 @@ surface, so decision 4 and the deferred list are amended below rather than left 
   is never written onto an existing account) and whether an address that already has an
   account should be left for an operator instead of enrolled; and `max_per_hour` on
   production (20 today; 5 was suggested for the first weeks).
+
+## Amendment (2026-11-19, task 066): deactivate, reactivate and organisation delete
+
+The owner's first use of the staging ops pages showed that offboarding left no mark the
+pages could show, and that re-adding the address left the login disabled. Task 066
+([contract](../tasks/066-ops-deactivate/contract.md)) changes this:
+
+- **Deactivate replaces offboard** (owner ruling B). It disables the login, signs the
+  person out everywhere, clears the admin and ops roles, takes down their public links
+  and sets the new `app_user.deactivated_at`. The person **keeps** their organisation,
+  tasks, projects and cohorts. `user offboard` and `POST /people/offboard` are retired.
+- **Reactivate** turns the login back on (`AdminEnableUser`) and clears the mark, with
+  no role or link given back. No role can be granted while a person is deactivated.
+- **Only an operator turns a login back on:** Reactivate, or Add person on that
+  address, and then only after the organisation check passes. Waitlist approval and the
+  self-signup sweep refuse a deactivated or disabled account. The sweep's outcome
+  `deactivated` is terminal and shows as "Check".
+- **Whether a login is disabled** is read from `AdminGetUser`, not from `ListUsers`
+  (eventually consistent). A failed read fails the command.
+- **The ops server's role has six Cognito actions:** the five of decision 7, plus
+  `AdminEnableUser`.
+- **`pa_ops`** gains `UPDATE (deactivated_at)` on `app_user` and `DELETE` on
+  `organisation`. Delete refuses while any person, task, project or domain points at
+  the organisation, and the foreign keys refuse as a backstop.
+- **Accepted risk:** an access token issued before deactivation can read the
+  organisation's shared work until it expires (up to 60 minutes). It is recorded in
+  `docs/deferred.md`.

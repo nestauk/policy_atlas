@@ -523,7 +523,7 @@ export function Panel({ title, children, className }: { title: string; children:
   );
 }
 
-/** The red fill of the one destructive confirm (Offboard). */
+/** The red fill of the destructive confirms (Deactivate, Delete). */
 export const DANGER_CLASS = "bg-red hover:bg-red/90";
 
 /**

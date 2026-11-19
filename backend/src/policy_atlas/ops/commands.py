@@ -15,13 +15,14 @@ than re-implementing the write it believes the CLI performs.
 key (contract § 3b) and only Cognito can turn an address into one, so
 ``user create``, ``user enrol`` and ``user resync`` call ``ListUsers`` /
 ``AdminCreateUser``, and ``user reissue`` calls ``ListUsers`` /
-``AdminSetUserPassword``. ``user offboard`` is the one command that changes an
-account's state in Cognito: ``ListUsers``, then ``AdminDisableUser`` and
-``AdminUserGlobalSignOut`` (task 064a, ADR 0045 decision 5). ``admin grant``,
+``AdminSetUserPassword``. ``user deactivate`` and ``user reactivate`` are the
+commands that change an account's state in Cognito: ``ListUsers``, then
+``AdminDisableUser`` and ``AdminUserGlobalSignOut``, or ``AdminEnableUser``
+(task 064a, ADR 0045 decision 5; task 066). ``admin grant``,
 ``admin revoke``, ``user de-enrol`` and ``rows assign`` resolve entirely in the
 database and make no AWS call at all — which is also why operator IAM needs
 nothing beyond ``ListUsers``, ``AdminCreateUser``, ``AdminSetUserPassword``,
-``AdminDisableUser`` and ``AdminUserGlobalSignOut`` (contract § 9).
+``AdminDisableUser``, ``AdminUserGlobalSignOut`` and ``AdminEnableUser`` (contract § 9).
 
 *Compare and refuse under the row lock.* Every write to ``app_user`` reads the
 row ``FOR UPDATE`` first and refuses when the state is not what the operator was
@@ -58,10 +59,10 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 from botocore.exceptions import ClientError
-from sqlalchemy import and_, case, delete, insert, or_, select, update
+from sqlalchemy import and_, case, delete, func, insert, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection, RowMapping
 from sqlalchemy.exc import IntegrityError
@@ -78,7 +79,13 @@ from policy_atlas.core.schema import (
     task,
     waitlist_entry,
 )
-from policy_atlas.ops.errors import EnrolledElsewhere, NotFound, OpsError, ResendTooSoon
+from policy_atlas.ops.errors import (
+    Deactivated,
+    EnrolledElsewhere,
+    NotFound,
+    OpsError,
+    ResendTooSoon,
+)
 
 if TYPE_CHECKING:
     from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
@@ -153,6 +160,18 @@ class Organisation(Record):
 
 
 @dataclass(frozen=True)
+class OrganisationDeletion(Record):
+    """One empty organisation deleted."""
+
+    org_id: uuid.UUID
+    name: str
+
+    def summary(self) -> str:
+        """Render the deleted-organisation line."""
+        return f"deleted organisation {self.name!r} ({self.org_id})"
+
+
+@dataclass(frozen=True)
 class Enrolment(Record):
     """One person placed in an organisation, with the rows that moved.
 
@@ -179,10 +198,14 @@ class Enrolment(Record):
     #: (colleague assignment, owner ruling 2026-08-27).
     memberships_severed: int = 0
     invitation_sent: bool = False
+    #: The account was deactivated and this enrolment turned it back on (task 066).
+    reactivated: bool = False
 
     def summary(self) -> str:
         """Render the enrolment line, including what moved."""
         verb = "enrolled" if self.created else "re-enrolled"
+        if self.reactivated:
+            verb = f"reactivated and {verb}"
         line = (
             f"{verb} {self.email} ({self.user_id}) in {self.org.name!r}; "
             f"moved {self.tasks_moved} task(s), {self.projects_moved} "
@@ -268,7 +291,7 @@ class DeEnrolment(Record):
         Contract § 3a asks for a record of every privilege change, not of every
         ``admin revoke`` invocation. De-enrolment is the *other* way the support
         role is taken away — and the one an investigation is most likely to be
-        asking about, because it is what offboarding runs.
+        asking about.
         """
         return tuple(
             AdminTrace(subject=self.user_id, direction="revoke", flag=flag)
@@ -457,32 +480,59 @@ class DomainChange(Record):
 
 
 @dataclass(frozen=True)
-class Offboarding(Record):
-    """One person locked out: Cognito account disabled, then the database cleaned.
+class Deactivation(Record):
+    """One person locked out: Cognito account disabled, then marked in the database.
 
     Attributes:
         user_id: The Cognito subject.
         email: The address they were found by or stored under, if any.
         steps: One plain sentence per step taken or skipped, in order.
         links_made_private: Tasks whose public link was switched off.
-        de_enrolment: The de-enrolment, when the person was still enrolled or
-            held the support role; ``None`` when it was skipped.
+        already: Whether they were already marked deactivated.
+        admin_revoked: Whether this cleared ``is_admin``.
+        ops_revoked: Whether this cleared ``is_ops``.
     """
 
     user_id: str
     email: str | None
     steps: tuple[str, ...]
     links_made_private: int
-    de_enrolment: DeEnrolment | None
-
-    def summary(self) -> str:
-        """Render the offboarding as one header line and one line per step."""
-        who = f"{self.email} ({self.user_id})" if self.email else self.user_id
-        return f"offboarded {who}:\n" + "\n".join(f"  - {step}" for step in self.steps)
+    already: bool
+    admin_revoked: bool = False
+    ops_revoked: bool = False
 
     def admin_changes(self) -> Sequence[AdminTrace]:
-        """The support-role revoke the de-enrolment made, traced like ``admin revoke``."""
-        return self.de_enrolment.admin_changes() if self.de_enrolment else ()
+        """Clearing a role is a revoke, and traces as one (contract § 3a)."""
+        return tuple(
+            AdminTrace(subject=self.user_id, direction="revoke", flag=flag)
+            for flag, revoked in (("is_admin", self.admin_revoked), ("is_ops", self.ops_revoked))
+            if revoked
+        )
+
+    def summary(self) -> str:
+        """Render the deactivation as one header line and one line per step."""
+        who = f"{self.email} ({self.user_id})" if self.email else self.user_id
+        return f"deactivated {who}:\n" + "\n".join(f"  - {step}" for step in self.steps)
+
+
+@dataclass(frozen=True)
+class Reactivation(Record):
+    """One person's login turned back on.
+
+    Attributes:
+        user_id: The Cognito subject.
+        email: The stored address, if any.
+        changed: False when they were neither deactivated nor disabled.
+    """
+
+    user_id: str
+    email: str | None
+    changed: bool
+
+    def summary(self) -> str:
+        """Render the reactivation as one line."""
+        who = f"{self.email} ({self.user_id})" if self.email else self.user_id
+        return f"reactivated {who}" if self.changed else f"{who} is not deactivated; nothing to do"
 
 
 # --------------------------------------------------------------------------
@@ -514,6 +564,42 @@ def create_organisation(conn: Connection, *, name: str) -> Organisation:
     except IntegrityError as error:  # a second operator won the race to the name
         raise OpsError(f"an organisation named {name!r} already exists") from error
     return Organisation(org_id=org_id, name=name)
+
+
+def delete_organisation(conn: Connection, *, org_id: uuid.UUID) -> OrganisationDeletion:
+    """Delete an organisation nothing points at any more.
+
+    The foreign keys would refuse too; this check comes first so the refusal
+    says what is still there (contract 066 B7).
+
+    Args:
+        conn: Open connection inside the command's transaction.
+        org_id: The organisation to delete.
+
+    Returns:
+        The deleted organisation.
+
+    Raises:
+        NotFound: If no organisation has that id.
+        OpsError: If any person, task, project or domain still points at it.
+    """
+    name = conn.execute(
+        select(organisation.c.name).where(organisation.c.org_id == org_id).with_for_update()
+    ).scalar_one_or_none()
+    if name is None:
+        raise NotFound(f"no organisation {org_id}")
+    counts = {
+        label: int(conn.execute(
+            select(func.count()).select_from(table).where(table.c.org_id == org_id)
+        ).scalar_one())
+        for label, table in (("people", app_user), ("tasks", task), ("projects", project),
+                             ("domains", organisation_domain))
+    }
+    left = [f"{count} {label}" for label, count in counts.items() if count]
+    if left:
+        raise OpsError(f"{name} still has {', '.join(left)}. Nothing was deleted.")
+    conn.execute(delete(organisation).where(organisation.c.org_id == org_id))
+    return OrganisationDeletion(org_id=org_id, name=str(name))
 
 
 def resolve_organisation(conn: Connection, token: str) -> Organisation:
@@ -736,8 +822,14 @@ def ensure_account_enrolled(
     email: str,
     display_name: str,
     org: Organisation,
+    reactivate: bool = False,
 ) -> Enrolment:
     """Ensure an account exists and belongs to ``org``, sending only a new invitation.
+
+    A deactivated account (marked, or disabled in Cognito) is turned back on
+    only when ``reactivate`` is true: an operator adding the person. Every
+    other caller — waitlist approval, the self-signup sweep — is refused with
+    :class:`Deactivated`, so the public form is never a way back in.
 
     Args:
         conn: Open connection inside the command's transaction.
@@ -746,17 +838,20 @@ def ensure_account_enrolled(
         email: The account address.
         display_name: The name stored on enrolment.
         org: The destination organisation.
+        reactivate: Whether a deactivated account may be turned back on.
 
     Returns:
         The idempotent enrolment result.
 
     Raises:
+        Deactivated: If the account is deactivated and ``reactivate`` is false.
         EnrolledElsewhere: If the account already belongs to another organisation.
         OpsError: If Cognito cannot create the account or does not return a subject.
     """
     _require_filter_safe(email)
     _require_mailable(email)
-    sub = _find_sub_by_email(cognito, pool_id=pool_id, email=email)
+    found = _find_user_by_email(cognito, pool_id=pool_id, email=email)
+    sub = (_sub_of(found.get("Attributes", [])) or None) if found is not None else None
     if sub is None:
         response = cognito.admin_create_user(
             UserPoolId=pool_id,
@@ -779,6 +874,57 @@ def ensure_account_enrolled(
         )
         return replace(enrolment, invitation_sent=True)
     existing = _lock_user(conn, sub)
+    assert found is not None  # sub came from it
+    if (existing is not None and existing["deactivated_at"] is not None) or not _is_enabled(
+        cognito, pool_id=pool_id, username=found["Username"]
+    ):
+        if not reactivate:
+            raise Deactivated(email=email)
+        # Refuse a different organisation before anything is turned back on: a
+        # refused add must not restore a login (contract review, 2026-11-19).
+        if existing is not None and existing["org_id"] not in (None, org.org_id):
+            _raise_enrolled_elsewhere(conn, sub=sub, org_id=existing["org_id"], email=email)
+        reactivate_user(conn, cognito, pool_id=pool_id, sub=sub)
+        enrolment = _enrol_existing(conn, sub=sub, email=email, display_name=display_name,
+                                    org=org, existing=existing)
+        return replace(enrolment, reactivated=True)
+    return _enrol_existing(conn, sub=sub, email=email, display_name=display_name,
+                           org=org, existing=existing)
+
+
+def _is_enabled(cognito: CognitoIdentityProviderClient, *, pool_id: str, username: str) -> bool:
+    """Whether Cognito lets this account sign in, read from ``AdminGetUser``.
+
+    ``ListUsers`` is eventually consistent, so it finds the account but does not
+    decide this. A failed read raises: the caller fails closed.
+    """
+    return bool(cognito.admin_get_user(UserPoolId=pool_id, Username=username)["Enabled"])
+
+
+def _raise_enrolled_elsewhere(
+    conn: Connection, *, sub: str, org_id: uuid.UUID, email: str
+) -> NoReturn:
+    """Raise the "already in another organisation" refusal, naming it."""
+    other = conn.execute(
+        select(organisation.c.name).where(organisation.c.org_id == org_id)
+    ).scalar_one()
+    raise EnrolledElsewhere(sub=sub, org_name=other, org_id=org_id, email=email)
+
+
+def _enrol_existing(
+    conn: Connection,
+    *,
+    sub: str,
+    email: str,
+    display_name: str,
+    org: Organisation,
+    existing: RowMapping | None,
+) -> Enrolment:
+    """Enrol an account Cognito already has, under today's rules.
+
+    Raises:
+        EnrolledElsewhere: If the account already belongs to another organisation.
+    """
     if existing is None:
         return _enrol(conn, sub=sub, email=email, display_name=display_name, org=org)
     if existing["org_id"] is None:
@@ -797,10 +943,7 @@ def ensure_account_enrolled(
             tasks_moved=0,
             projects_moved=0,
         )
-    other = conn.execute(
-        select(organisation.c.name).where(organisation.c.org_id == existing["org_id"])
-    ).scalar_one()
-    raise EnrolledElsewhere(sub=sub, org_name=other, org_id=existing["org_id"], email=email)
+    _raise_enrolled_elsewhere(conn, sub=sub, org_id=existing["org_id"], email=email)
 
 
 def _finish_unenrolled(
@@ -1159,19 +1302,19 @@ def de_enrol_user(
     )
 
 
-def offboard_user(
+def deactivate_user(
     conn: Connection,
     cognito: CognitoIdentityProviderClient,
     *,
     pool_id: str,
     email: str | None = None,
     sub: str | None = None,
-) -> Offboarding:
-    """Lock a person out: disable their login, then clean up the database.
+) -> Deactivation:
+    """Lock a person out: disable their login and mark them deactivated.
 
-    This is what to run when someone leaves. ``user de-enrol`` alone only
-    changes the database: the person can still sign in and their public task
-    links still work (finding M-02).
+    This is what to run when someone leaves. They keep their organisation,
+    tasks, projects, cohorts and quotas (owner ruling B, 2026-11-19), so
+    :func:`reactivate_user` is a clean undo.
 
     **The order, and why.**
 
@@ -1180,12 +1323,9 @@ def offboard_user(
        ``AdminUserGlobalSignOut`` (their refresh tokens stop working, so no
        session can be renewed). If either call fails, this stops and raises
        before any database write, so the database is untouched.
-    3. Database, inside the caller's one transaction: de-enrol them if they
-       are still in an organisation or hold the support role (the plain
-       :func:`de_enrol_user`, unchanged), then switch off every public link on
-       the tasks they own (``task.is_public = false``). Project ``visibility``
-       is about who in the organisation can see a project, not a public link,
-       so it is left alone (ADR 0045 decision 5).
+    3. Database, inside the caller's one transaction: set ``deactivated_at``,
+       clear the support and ops roles, and switch off every public link on
+       the tasks they own (``task.is_public = false``).
 
     Cognito goes first so the dangerous half — a working login — is closed
     before anything else. If the database step then fails, the account stays
@@ -1193,8 +1333,8 @@ def offboard_user(
     completes it (disabling an already-disabled account succeeds).
 
     An access token issued before this runs stays valid until it expires (up to
-    60 minutes), and an open progress stream can outlive it. That window is
-    accepted and documented in the deployment guide.
+    60 minutes), and with the organisation kept it can still read the
+    organisation's shared work in that window (accepted, contract 066).
 
     **Finding the person.** Exactly one of ``email`` or ``sub``:
 
@@ -1203,18 +1343,8 @@ def offboard_user(
       only ever signed in, so no address was stored), Cognito is asked which
       account has that address, and that account's row is used if one exists.
 
-    Three cases follow, each reported in :attr:`Offboarding.steps`:
-
-    - **Enrolled** (in an organisation, or holding the support role):
-      Cognito, de-enrol, public links off.
-    - **Already de-enrolled** (row exists, no organisation, no support role —
-      M-02's main case: removed earlier, login still working): Cognito, public
-      links off; de-enrol is skipped because it would refuse.
-    - **No** ``app_user`` **row** (a Cognito account that never reached the
-      app): Cognito only.
-    - **No Cognito account** but a row (the account was deleted from the pool
-      earlier): the database half only, reported as such. Neither a row nor
-      an account is a refusal.
+    A Cognito account with no row is disabled only; a row whose account was
+    deleted from the pool gets the database half only. Neither is a refusal.
 
     Args:
         conn: Open connection inside the command's transaction.
@@ -1224,7 +1354,7 @@ def offboard_user(
         sub: The Cognito subject to find them by.
 
     Returns:
-        The offboarding, listing the steps taken and the counts.
+        The deactivation, listing the steps taken.
 
     Raises:
         OpsError: If neither or both selectors are given, the address is
@@ -1291,26 +1421,33 @@ def offboard_user(
             raise OpsError(
                 f"the Cognito account for {who} is DISABLED, but signing it out everywhere "
                 f"failed ({code}). Nothing in the database was changed. Re-run "
-                f"`user offboard --sub {user_id}` to finish."
+                f"`user deactivate --sub {user_id}` to finish."
             ) from error
         steps = ["disabled the Cognito account", "signed out everywhere (refresh tokens revoked)"]
 
     if row is None:
         steps.append("no app_user row: Cognito only, the database was not touched")
-        return Offboarding(
+        return Deactivation(
             user_id=user_id,
             email=email,
             steps=tuple(steps),
             links_made_private=0,
-            de_enrolment=None,
+            already=False,
         )
 
-    de_enrolment: DeEnrolment | None = None
-    if row["org_id"] is not None or row["is_admin"] or row["is_ops"]:
-        de_enrolment = de_enrol_user(conn, sub=user_id)
-        steps.append(de_enrolment.summary())
-    else:
-        steps.append("de-enrol skipped: not enrolled")
+    already = row["deactivated_at"] is not None
+    conn.execute(
+        update(app_user)
+        .where(app_user.c.user_id == user_id)
+        .values(
+            deactivated_at=row["deactivated_at"] if already else _now(),
+            is_admin=False,
+            is_ops=False,
+        )
+    )
+    steps.append("already deactivated" if already else "marked deactivated")
+    if row["is_admin"] or row["is_ops"]:
+        steps.append("cleared the admin and ops roles")
     links = int(
         conn.execute(
             update(task)
@@ -1319,13 +1456,65 @@ def offboard_user(
         ).rowcount
     )
     steps.append(f"made {links} public task link(s) private")
-    return Offboarding(
+    return Deactivation(
         user_id=user_id,
         email=row["email"] or email,
         steps=tuple(steps),
         links_made_private=links,
-        de_enrolment=de_enrolment,
+        already=already,
+        admin_revoked=bool(row["is_admin"]),
+        ops_revoked=bool(row["is_ops"]),
     )
+
+
+def reactivate_user(
+    conn: Connection,
+    cognito: CognitoIdentityProviderClient,
+    *,
+    pool_id: str,
+    sub: str,
+) -> Reactivation:
+    """Turn a person's login back on and clear their deactivated mark.
+
+    It does not give back the support or ops role, or any public link: those
+    are separate, deliberate acts. It also enables an account disabled in
+    Cognito with no mark (people offboarded before task 066).
+
+    Args:
+        conn: Open connection inside the command's transaction.
+        cognito: Client bound to the verified pool.
+        pool_id: The verified user pool.
+        sub: The Cognito subject.
+
+    Returns:
+        The reactivation; ``changed`` is false when there was nothing to undo.
+
+    Raises:
+        OpsError: If the pool does not know the person, or Cognito refuses.
+    """
+    _require_filter_safe(sub)
+    row = _lock_user(conn, sub)
+    user = _find_user_by_sub(cognito, pool_id=pool_id, sub=sub)
+    if user is None:
+        raise OpsError(f"no account in the pool for {sub}. Nothing was changed.")
+    email = row["email"] if row is not None else None
+    marked = row is not None and row["deactivated_at"] is not None
+    disabled = not _is_enabled(cognito, pool_id=pool_id, username=user["Username"])
+    if not marked and not disabled:
+        return Reactivation(user_id=sub, email=email, changed=False)
+    if disabled:
+        try:
+            cognito.admin_enable_user(UserPoolId=pool_id, Username=user["Username"])
+        except ClientError as error:
+            code = error.response.get("Error", {}).get("Code", "") or "ClientError"
+            raise OpsError(
+                f"Cognito refused to enable {sub} ({code}). Nothing was changed."
+            ) from error
+    if marked:
+        conn.execute(
+            update(app_user).where(app_user.c.user_id == sub).values(deactivated_at=None)
+        )
+    return Reactivation(user_id=sub, email=email, changed=True)
 
 
 def set_admin(
@@ -1381,6 +1570,13 @@ def set_admin(
             f"{who} is in no organisation, so the support role cannot be granted — "
             "`user enrol` first. Nothing was written."
         )
+    if grant and row["deactivated_at"] is not None:
+        # A role granted now would come back with the login (contract review,
+        # 2026-11-19): reactivate first, then grant.
+        raise OpsError(
+            f"{who} is deactivated, so the support role cannot be granted — "
+            "`user reactivate` first. Nothing was written."
+        )
     if bool(row["is_admin"]) == grant:
         state = "already an administrator" if grant else "not an administrator"
         raise OpsError(f"{who} ({user_id}) is {state}; nothing to {direction}")
@@ -1414,6 +1610,13 @@ def set_ops(
         raise OpsError(
             f"{who} is in no organisation, so the ops role cannot be granted — "
             "`user enrol` first. Nothing was written."
+        )
+    if grant and row["deactivated_at"] is not None:
+        # A role granted now would come back with the login (contract review,
+        # 2026-11-19): reactivate first, then grant.
+        raise OpsError(
+            f"{who} is deactivated, so the ops role cannot be granted — "
+            "`user reactivate` first. Nothing was written."
         )
     if bool(row["is_ops"]) == grant:
         state = "already holds the ops role" if grant else "does not hold the ops role"

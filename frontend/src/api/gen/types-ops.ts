@@ -96,6 +96,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ops/organisations/{org_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Organisation
+         * @description Delete an organisation nothing points at; otherwise say what is still in it.
+         */
+        delete: operations["delete_organisation_api_v1_ops_organisations__org_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ops/organisations/{org_id}/quota": {
         parameters: {
             query?: never;
@@ -200,6 +220,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ops/people/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deactivate People
+         * @description Disable and mark every selected person independently; they keep their organisation.
+         */
+        post: operations["deactivate_people_api_v1_ops_people_deactivate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ops/people/enrol": {
         parameters: {
             query?: never;
@@ -220,26 +260,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/ops/people/offboard": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Offboard People
-         * @description Disable and offboard every selected person independently.
-         */
-        post: operations["offboard_people_api_v1_ops_people_offboard_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/ops/people/quota": {
         parameters: {
             query?: never;
@@ -254,6 +274,26 @@ export interface paths {
          * @description Set the same quota overrides for every selected person.
          */
         post: operations["set_people_quota_api_v1_ops_people_quota_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ops/people/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reactivate People
+         * @description Turn every selected person's login back on; roles are not restored.
+         */
+        post: operations["reactivate_people_api_v1_ops_people_reactivate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -700,11 +740,18 @@ export interface components {
          *         person: The person as the list now shows them.
          *         invitation_sent: Whether Cognito sent an invitation on this call.
          *             ``False`` when the address already had an account.
+         *         reactivated: Whether the address belonged to a deactivated account
+         *             that this call turned back on.
          */
         PersonCreatedOut: {
             /** Invitation Sent */
             invitation_sent: boolean;
             person: components["schemas"]["PersonOut"];
+            /**
+             * Reactivated
+             * @default false
+             */
+            reactivated: boolean;
         };
         /**
          * PersonOut
@@ -722,6 +769,7 @@ export interface components {
          *         invited_at: When Cognito last sent them an invitation through this
          *             service, or ``None``. The resend cooldown reads it.
          *         first_signed_in_at: When they first opened the app, or ``None``.
+         *         deactivated_at: When an operator deactivated them, or ``None`` (task 066).
          *         task_quota_per_year: Their own override, or ``None``.
          *         runs_per_user: Their own override, or ``None``.
          *         tasks_this_year: Tasks they created in the last 365 days.
@@ -737,6 +785,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Deactivated At */
+            deactivated_at?: string | null;
             /** Display Name */
             display_name: string;
             /** Email */
@@ -1081,6 +1131,35 @@ export interface operations {
             };
         };
     };
+    delete_organisation_api_v1_ops_organisations__org_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     set_organisation_quota_api_v1_ops_organisations__org_id__quota_post: {
         parameters: {
             query?: never;
@@ -1279,6 +1358,39 @@ export interface operations {
             };
         };
     };
+    deactivate_people_api_v1_ops_people_deactivate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkSubjects"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     enrol_people_api_v1_ops_people_enrol_post: {
         parameters: {
             query?: never;
@@ -1312,7 +1424,7 @@ export interface operations {
             };
         };
     };
-    offboard_people_api_v1_ops_people_offboard_post: {
+    set_people_quota_api_v1_ops_people_quota_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1321,7 +1433,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["BulkSubjects"];
+                "application/json": components["schemas"]["BulkQuota"];
             };
         };
         responses: {
@@ -1345,7 +1457,7 @@ export interface operations {
             };
         };
     };
-    set_people_quota_api_v1_ops_people_quota_post: {
+    reactivate_people_api_v1_ops_people_reactivate_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1354,7 +1466,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["BulkQuota"];
+                "application/json": components["schemas"]["BulkSubjects"];
             };
         };
         responses: {

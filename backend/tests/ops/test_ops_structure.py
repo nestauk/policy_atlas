@@ -76,7 +76,8 @@ def test_no_command_accepts_an_assume_yes_flag() -> None:
 
 def test_the_command_tree_is_the_one_the_contract_names() -> None:
     """The eight commands of contract § 9, plus ``user reissue`` (owner-approved
-    2026-10-01), ``user offboard`` (task 064a, ADR 0045), and task 065's ``ops
+    2026-10-01), ``user deactivate`` and ``user reactivate`` (task 066, replacing
+    064a's ``user offboard``), ``org delete`` (task 066), and task 065's ``ops
     grant|revoke``, ``user quota``, ``org quota`` and ``org domain`` (contract
     B1, B12, C1), and nothing else that nobody reviewed."""
     parser = build_parser()
@@ -96,8 +97,11 @@ def test_the_command_tree_is_the_one_the_contract_names() -> None:
         for name, group in groups.choices.items()
     }
     assert tree == {
-        "org": ["create", "domain", "quota"],
-        "user": ["create", "de-enrol", "enrol", "offboard", "quota", "reissue", "resync"],
+        "org": ["create", "delete", "domain", "quota"],
+        "user": [
+            "create", "de-enrol", "deactivate", "enrol", "quota", "reactivate", "reissue",
+            "resync",
+        ],
         "rows": ["assign"],
         "admin": ["grant", "revoke"],
         "ops": ["grant", "revoke"],

@@ -38,9 +38,11 @@ export function AddPersonView() {
         onSuccess: (created) => {
           const org = created.person.organisation?.name ?? "";
           toast(
-            created.invitation_sent
-              ? `Invitation sent to ${created.person.email ?? email.trim()}`
-              : `Added to ${org}, no email sent`,
+            created.reactivated
+              ? `Reactivated and added to ${org}; they can sign in again`
+              : created.invitation_sent
+                ? `Invitation sent to ${created.person.email ?? email.trim()}`
+                : `Added to ${org}, no email sent`,
           );
           navigate("/people");
         },

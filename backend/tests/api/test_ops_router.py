@@ -48,6 +48,7 @@ from tests.ops.support import (
     POOL_ID,
     cognito,
     expect_create,
+    expect_enabled,
     expect_lock_out,
     expect_lookup,
     expect_resend,
@@ -60,6 +61,7 @@ _OPS_ROUTES = {
     ("GET", "/api/v1/ops/organisations"),
     ("POST", "/api/v1/ops/organisations"),
     ("POST", "/api/v1/ops/organisations/{org_id}/quota"),
+    ("DELETE", "/api/v1/ops/organisations/{org_id}"),
     ("GET", "/api/v1/ops/cohorts"),
     ("POST", "/api/v1/ops/cohorts"),
     ("POST", "/api/v1/ops/cohorts/{cohort_id}"),
@@ -71,7 +73,8 @@ _OPS_ROUTES = {
     ("POST", "/api/v1/ops/people"),
     ("POST", "/api/v1/ops/people/enrol"),
     ("POST", "/api/v1/ops/people/de-enrol"),
-    ("POST", "/api/v1/ops/people/offboard"),
+    ("POST", "/api/v1/ops/people/deactivate"),
+    ("POST", "/api/v1/ops/people/reactivate"),
     ("POST", "/api/v1/ops/people/resend"),
     ("POST", "/api/v1/ops/people/quota"),
     ("GET", "/api/v1/ops/requests"),
@@ -477,6 +480,7 @@ def test_create_person_invites_then_enrols_an_existing_account_without_a_send(
     known_row = _user(ops, known)
     assert known_row is not None
     expect_lookup(ops.stubber, email=known_row["email"], sub=known)
+    expect_enabled(ops.stubber, sub=known)
     response, lines = _post(
         ops,
         "/api/v1/ops/people",
@@ -499,6 +503,7 @@ def test_create_person_refuses_an_address_enrolled_elsewhere_and_an_unknown_org(
     row = _user(ops, elsewhere)
     assert row is not None
     expect_lookup(ops.stubber, email=row["email"], sub=elsewhere)
+    expect_enabled(ops.stubber, sub=elsewhere)
     response, lines = _post(
         ops, "/api/v1/ops/people", {"email": row["email"], "display_name": "X", "org_id": str(here)}
     )
@@ -600,8 +605,8 @@ def test_bulk_de_enrol_clears_the_row_and_fails_an_unknown_subject(ops: Harness)
     assert len(lines) == 2
 
 
-def test_bulk_offboard_locks_the_account_out_then_de_enrols(ops: Harness) -> None:
-    """Cognito disable and sign-out (Stubber-validated), then the database half."""
+def test_bulk_deactivate_locks_the_account_out_and_keeps_the_organisation(ops: Harness) -> None:
+    """Cognito disable and sign-out (Stubber-validated), then the mark (owner ruling B)."""
     org_id = _seed_org(ops)
     leaver = _seed_person(ops, org_id=org_id, label="leaver")
     with seeded(ops.engine) as conn:
@@ -609,16 +614,49 @@ def test_bulk_offboard_locks_the_account_out_then_de_enrols(ops: Harness) -> Non
         conn.execute(update(task).where(task.c.task_id == task_id).values(is_public=True))
     expect_sub_lookup(ops.stubber, sub=leaver)
     expect_lock_out(ops.stubber, sub=leaver)
-    response, lines = _post(ops, "/api/v1/ops/people/offboard", {"user_ids": [leaver]})
+    response, lines = _post(ops, "/api/v1/ops/people/deactivate", {"user_ids": [leaver]})
     assert response.status_code == 200, response.text
     assert response.json()["results"][0]["outcome"] == "ok"
     row = _user(ops, leaver)
-    assert row is not None and row["org_id"] is None
+    assert row is not None and row["org_id"] == org_id and row["deactivated_at"] is not None
     with ops.engine.connect() as conn:
         assert conn.execute(
             select(task.c.is_public, task.c.org_id).where(task.c.task_id == task_id)
-        ).one() == (False, None)
-    _assert_audited(ops, lines, action="person.offboard", target=leaver, outcome="ok")
+        ).one() == (False, org_id)
+    _assert_audited(ops, lines, action="person.deactivate", target=leaver, outcome="ok")
+    listed = ops.client.get("/api/v1/ops/people", headers=ops.actor.headers).json()
+    assert next(p for p in listed if p["user_id"] == leaver)["deactivated_at"] is not None
+
+
+def test_bulk_reactivate_turns_the_login_back_on(ops: Harness) -> None:
+    org_id = _seed_org(ops)
+    person = _seed_person(ops, org_id=org_id, label="returner")
+    with seeded(ops.engine) as conn:
+        conn.execute(
+            update(app_user).where(app_user.c.user_id == person)
+            .values(deactivated_at=datetime.now(UTC))
+        )
+    expect_sub_lookup(ops.stubber, sub=person)
+    expect_enabled(ops.stubber, sub=person, enabled=False)
+    ops.stubber.add_response("admin_enable_user", {}, {"UserPoolId": POOL_ID, "Username": person})
+    response, lines = _post(ops, "/api/v1/ops/people/reactivate", {"user_ids": [person]})
+    assert response.status_code == 200, response.text
+    row = _user(ops, person)
+    assert row is not None and row["deactivated_at"] is None
+    _assert_audited(ops, lines, action="person.reactivate", target=person, outcome="ok")
+
+
+def test_delete_organisation_refuses_a_used_one_and_deletes_an_empty_one(ops: Harness) -> None:
+    used = _seed_org(ops)
+    _seed_person(ops, org_id=used, label="member")
+    refused = ops.client.delete(f"/api/v1/ops/organisations/{used}", headers=ops.actor.headers)
+    assert refused.status_code == 409
+    assert "still has 1 people" in refused.text
+    empty = _seed_org(ops)
+    deleted = ops.client.delete(f"/api/v1/ops/organisations/{empty}", headers=ops.actor.headers)
+    assert deleted.status_code == 204
+    missing = ops.client.delete(f"/api/v1/ops/organisations/{empty}", headers=ops.actor.headers)
+    assert missing.status_code == 404
 
 
 def test_resend_honours_the_cooldown_and_resends_after_it(ops: Harness) -> None:
@@ -757,6 +795,7 @@ def test_approve_stamps_the_row_and_refuses_a_second_approval(ops: Harness) -> N
     assert known_row is not None
     second = _seed_request(ops, email=known_row["email"])
     expect_lookup(ops.stubber, email=known_row["email"], sub=known)
+    expect_enabled(ops.stubber, sub=known)
     response, lines = _post(ops, f"/api/v1/ops/requests/{second}/approve", {"org_id": str(org_id)})
     assert response.status_code == 200, response.text
     assert response.json()["account_user_id"] == known
@@ -781,6 +820,7 @@ def test_approve_refuses_an_address_enrolled_elsewhere(ops: Harness) -> None:
     assert row is not None
     entry_id = _seed_request(ops, email=row["email"])
     expect_lookup(ops.stubber, email=row["email"], sub=elsewhere)
+    expect_enabled(ops.stubber, sub=elsewhere)
     response, lines = _post(ops, f"/api/v1/ops/requests/{entry_id}/approve", {"org_id": str(here)})
     assert response.status_code == 409, response.text
     assert response.json()["error"]["code"] == "enrolled_elsewhere"
@@ -799,7 +839,7 @@ def test_approve_refuses_an_address_enrolled_elsewhere(ops: Harness) -> None:
 # --- rows (B4) ----------------------------------------------------------------
 
 
-def test_an_operator_cannot_offboard_or_de_enrol_themselves(ops: Harness) -> None:
+def test_an_operator_cannot_deactivate_or_de_enrol_themselves(ops: Harness) -> None:
     """"Select everyone shown" includes the caller; the row fails and the others proceed."""
     org_id = _seed_org(ops)
     other = _seed_person(ops, org_id=org_id, label="other")

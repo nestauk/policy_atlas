@@ -10,14 +10,17 @@ import {
   inferDefaults,
   OpsApiError,
   unwrap,
+  useDeleteOrganisation,
   useOpsAction,
   useOrganisations,
   usePeople,
+  type Organisation,
 } from "../api";
 import { facts, limitWord } from "../format";
 import {
   ACTIONS_TD_CLASS,
   ACTIONS_TH_CLASS,
+  DANGER_CLASS,
   Dialog,
   EmptyRows,
   FailedLine,
@@ -63,6 +66,8 @@ export function OrganisationsView() {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
+  const remove = useDeleteOrganisation();
+  const [deleting, setDeleting] = useState<Organisation | null>(null);
   const create = useOpsAction((client, body: { name: string }) =>
     unwrap(client.POST("/api/v1/ops/organisations", { body })),
   );
@@ -171,6 +176,16 @@ export function OrganisationsView() {
                         items={[
                           { label: "Show people", onSelect: () => navigate(`/people?org=${org.org_id}`) },
                           { label: "Set quota defaults…", onSelect: () => navigate(`/organisations/${org.org_id}/quota`) },
+                          {
+                            label: "Delete…",
+                            onSelect: () => {
+                              remove.reset();
+                              setDeleting(org);
+                            },
+                            // Tasks and projects are only known to the server; it says so if any remain.
+                            disabled: org.people > 0 || org.domains.length > 0,
+                            hint: org.people > 0 ? "Has people" : org.domains.length > 0 ? "Has a signup domain" : undefined,
+                          },
                         ]}
                       />
                     </td>
@@ -183,6 +198,41 @@ export function OrganisationsView() {
         )}
       </div>
 
+      {deleting !== null && (
+        <Dialog
+          open
+          onOpenChange={(open) => !open && setDeleting(null)}
+          title={`Delete ${deleting.name}?`}
+          description="The organisation and its quota defaults go. This cannot be undone."
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setDeleting(null)}>
+                Cancel
+              </Button>
+              <Button
+                className={DANGER_CLASS}
+                disabled={remove.isPending}
+                onClick={() =>
+                  remove.mutate(deleting.org_id, {
+                    onSuccess: () => {
+                      toast(`Deleted ${deleting.name}`);
+                      setDeleting(null);
+                    },
+                  })
+                }
+              >
+                Delete
+              </Button>
+            </>
+          }
+        >
+          {remove.isError && (
+            <p role="alert" className="mt-3 text-body text-red">
+              {remove.error?.message || "Could not delete the organisation. Try again."}
+            </p>
+          )}
+        </Dialog>
+      )}
       <Dialog
         open={adding}
         onOpenChange={setAdding}

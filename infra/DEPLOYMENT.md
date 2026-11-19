@@ -371,35 +371,41 @@ synth-time context query and must not run before the VPC exists.
      signed in; needs `AdminSetUserPassword`). SES-backed pool email is now in
      place through task 065; see [Pool email through SES (task 065)](#pool-email-through-ses-task-065).
 
-     **Removing a person's access (task 064a, Q10).** `user de-enrol` changes
-     the database only: the person's Cognito account still signs in and their
-     public links stay public. `user offboard` is the command to use when
-     someone leaves:
+     **Removing a person's access (task 064a, Q10; task 066).** `user de-enrol`
+     changes the database only: the person's Cognito account still signs in and
+     their public links stay public. `user deactivate` is the command to use when
+     someone leaves (it replaced `user offboard` in task 066). The ops pages have
+     the same action as "Deactivate…" on People.
 
      ```bash
-     uv run python -m policy_atlas.ops --env staging user offboard --email <user-email>
-     # or: ... user offboard --sub <cognito-subject>
+     uv run python -m policy_atlas.ops --env staging user deactivate --email <user-email>
+     # or: ... user deactivate --sub <cognito-subject>
+     # to undo: ... user reactivate --email <user-email>
      ```
 
-     It runs three steps in this order and prints each one: (1) in Cognito,
+     Deactivate runs these steps in this order and prints each one: (1) in Cognito,
      disable the account and revoke its refresh tokens (`AdminDisableUser`,
      `AdminUserGlobalSignOut`), so the person cannot sign in again or renew a
-     session; (2) in the database, de-enrol the person if they are still
-     enrolled or hold the administrator flag (an already de-enrolled person is
-     skipped, not refused, and an administrator's removal writes the same trace
-     line as `admin revoke`); (3) set every task they own to not public, so
-     their share links stop working. Projects shared with their organisation
-     are left as they are: that sharing is the organisation's, not theirs.
-     Cognito goes first on purpose: if the database step fails, the account is
-     already disabled and running the command again finishes the rest. A
-     person with a Cognito account but no row in the application database gets
-     the Cognito step only, and the command says so; a person whose Cognito
-     account was already deleted but whose row remains gets the database steps
-     only, reported the same way. Two things it cannot do:
-     an access token already issued stays valid for up to 60 minutes, and a
-     progress stream that is open when the command runs stays open until the
-     run ends. It needs `AdminDisableUser` and `AdminUserGlobalSignOut` on the
-     pool, from the operator's own credentials.
+     session; (2) in the database, set `app_user.deactivated_at`, clear the
+     admin and ops roles (each removal writes the same trace line as `admin
+     revoke`), and set every task they own to not public, so their share links
+     stop working. **The person keeps their organisation, tasks, projects and
+     cohorts** (owner ruling, 2026-11-19), so `user reactivate` is a clean undo:
+     it turns the login back on (`AdminEnableUser`) and clears the mark, but does
+     not give back a role or a public link. No role can be granted while a person
+     is deactivated. Adding a deactivated address again from the ops pages
+     reactivates it; approving their waitlist request, or the self-signup sweep,
+     refuses instead. Cognito goes first on purpose: if the database step fails,
+     the account is already disabled and running the command again finishes the
+     rest. Two things it cannot do: an access token already issued stays valid
+     for up to 60 minutes (and, with the organisation kept, can read the
+     organisation's shared work in that window), and a progress stream that is
+     open when the command runs stays open until the run ends.
+
+     **Deleting an organisation (task 066).** `org delete --org <name>` or
+     "Delete…" on the Organisations page. It works only when no person, task,
+     project or signup domain points at the organisation, and otherwise says
+     what is still there.
 
      With `email.enabled` false the invitation goes through the `COGNITO_DEFAULT`
      sender, which is capped at 50 messages a day; with it true it goes through
@@ -1091,7 +1097,9 @@ Makefile's ops block; `scripts/ops_run.sh` performs this section's setup
 and tunnel automatically, reusing an already-open one), under the operator's own IAM
 (Cognito `cognito-idp:ListUsers` + `cognito-idp:AdminCreateUser` +
 `cognito-idp:AdminSetUserPassword`, plus `cognito-idp:AdminDisableUser` and
-`cognito-idp:AdminUserGlobalSignOut` for `user offboard` since task 064a, nothing
+`cognito-idp:AdminUserGlobalSignOut` for `user deactivate` since task 064a, and
+`cognito-idp:AdminGetUser` plus `cognito-idp:AdminEnableUser` for `user reactivate`
+since task 066, nothing
 more — see `JUMPBOX.md` § Security notes). It is **not** run as an ECS
 task: Cognito permission belongs to the human operator, not to a task
 role, and the API task role gains no Cognito permission. Every command
