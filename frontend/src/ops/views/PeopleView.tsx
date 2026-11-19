@@ -30,6 +30,7 @@ import {
   DANGER_CLASS,
   Dialog,
   EmptyRows,
+  FailedDialog,
   FailedLine,
   Field,
   FIGURE_CLASS,
@@ -497,7 +498,7 @@ export function PeopleView() {
                     </td>
                     <td className={cn(TD_CLASS, FIGURE_CLASS)}>
                       <Figures
-                        text={quotaLimit == null ? "no limit" : `${person.tasks_this_year} of ${limitWord(quotaLimit)}`}
+                        text={`${person.tasks_this_year} of ${quotaLimit ? limitWord(quotaLimit) : "∞"}`}
                       />
                     </td>
                     <td className={cn(TD_CLASS, "py-2.5")}>
@@ -518,7 +519,7 @@ export function PeopleView() {
           {visible.length === 0 && <EmptyRows label="No people match." />}
         </div>
       )}
-      {retry !== null && <FailedLine message="Could not finish the action." onRetry={retry} />}
+      {retry !== null && <FailedDialog message="Could not finish the action." onRetry={retry} onClose={() => setRetry(null)} />}
 
       {viewing !== null && (
         <PersonDialog

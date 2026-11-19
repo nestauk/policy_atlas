@@ -20,7 +20,7 @@ describe("the ops shell", () => {
     renderOps("/people");
     const nav = screen.getByRole("navigation");
     expect(within(nav).getByText("OPS")).toBeInTheDocument();
-    expect(within(nav).getByRole("link", { name: "People" })).toBeInTheDocument();
+    expect(await within(nav).findByRole("link", { name: "People" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Organisations" })).toBeInTheDocument();
     // One request is waiting in the fixtures.
     expect(await within(nav).findByRole("link", { name: "Waitlist, 1 waiting" })).toBeInTheDocument();
@@ -47,12 +47,16 @@ describe("the ops shell", () => {
     expect(await screen.findByRole("menuitem", { name: "Sign out" })).toBeInTheDocument();
   });
 
-  it("signed out, shows one Sign in button", async () => {
+  it("does not show the sections until the first call answers", () => {
+    renderOps("/people");
+    expect(within(screen.getByRole("navigation")).queryByRole("link", { name: "People" })).toBeNull();
+  });
+
+  it("signed out, shows one Sign in button at the top bar's right", async () => {
     const signIn = vi.fn();
     renderOps("/people", { ...mockOpsAuth, status: "unauthenticated", user: null, signIn });
-    const main = screen.getByRole("main");
-    const button = within(main).getByRole("button", { name: "Sign in" });
-    expect(main).toHaveTextContent(/^Sign in$/);
+    const button = within(screen.getByRole("navigation")).getByRole("button", { name: "Sign in" });
+    expect(screen.getByRole("main")).toBeEmptyDOMElement();
     button.click();
     expect(signIn).toHaveBeenCalled();
   });

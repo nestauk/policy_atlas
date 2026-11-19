@@ -47,7 +47,7 @@ describe("People", () => {
     expect(row("Tom Ellis")).toHaveTextContent("12 of 100");
     // Invited 25 minutes ago and not signed in yet; Priya has signed in.
     expect(row("Tom Ellis")).toHaveTextContent("Invitedsent 25 min ago");
-    expect(row("Priya Shah")).toHaveTextContent("no limit");
+    expect(row("Priya Shah")).toHaveTextContent(/\d+ of ∞/);
     expect(within(row("Priya Shah")).getByText("ADMIN")).toBeInTheDocument();
     expect(within(row("Priya Shah")).getByText("OPS")).toBeInTheDocument();
     expect(within(row("Sam Holt")).getByText("not enrolled")).toBeInTheDocument();
@@ -202,6 +202,22 @@ describe("People", () => {
     expect(within(row("Tom Ellis")).getByText("Sent less than an hour ago")).toBeInTheDocument();
   });
 
+  it("shows a failed action in a dialog, with Try again", async () => {
+    const user = await openPeople();
+    opsMock.override = (method, path) =>
+      method === "POST" && path === "/api/v1/ops/people/enrol" ? apiError(500, "internal", "internal server error") : undefined;
+    await user.click(screen.getByRole("checkbox", { name: "Select Tom Ellis" }));
+    await user.click(screen.getByRole("button", { name: "Move to" }));
+    const move = await screen.findByRole("dialog", { name: "Move Tom Ellis to an organisation" });
+    await user.click(within(move).getByRole("combobox", { name: "Organisation" }));
+    await user.click(await screen.findByRole("option", { name: "Policy Lab" }));
+    await user.click(within(move).getByRole("button", { name: "Move" }));
+    const failed = await screen.findByRole("dialog", { name: "Could not finish the action." });
+    opsMock.override = undefined;
+    await user.click(within(failed).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
   it("says when the list cannot load, with Try again", async () => {
     opsMock.override = (method, path) =>
       method === "GET" && path === "/api/v1/ops/people" ? apiError(500, "internal", "internal server error") : undefined;
@@ -269,7 +285,7 @@ describe("People, after the review", () => {
     const user = userEvent.setup();
     renderOps("/people?org=00000000-0000-4000-8000-00000000000a");
     await screen.findByRole("heading", { name: "People" });
-    expect(screen.getByRole("combobox", { name: "Organisation filter" })).toHaveTextContent("Nesta");
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Organisation filter" })).toHaveTextContent("Nesta"));
     const shown = screen.getAllByRole("checkbox", { name: /^Select (?!everyone)/ }).length;
     await user.click(screen.getByRole("button", { name: `Select all ${shown} shown` }));
     expect(selectionBar()).toHaveTextContent(`${shown} selected`);

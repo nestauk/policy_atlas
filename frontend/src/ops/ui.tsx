@@ -1,6 +1,7 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
+import { Button } from "../ui/brand/Button";
 import { cn } from "../ui/brand/cn";
 import { InfoHint } from "../ui/brand/InfoHint";
 import { SortArrow, type SortOrder } from "../ui/brand/SortableColumnHeader";
@@ -587,6 +588,26 @@ export function Dialog({
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
+  );
+}
+
+/** An action that failed, as a dialog, so a long table cannot hide it. */
+export function FailedDialog({ message, onRetry, onClose }: { message: string; onRetry: () => void; onClose: () => void }) {
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={message}
+      description="Some or all of it did not go through. Try again, or close and check the list."
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Close
+          </Button>
+          <Button onClick={onRetry}>Try again</Button>
+        </>
+      }
+    />
   );
 }
 
