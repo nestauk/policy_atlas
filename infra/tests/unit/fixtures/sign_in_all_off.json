@@ -1,0 +1,329 @@
+{
+ "app": {
+  "CognitoAuthHostedUiDomain7499E1A5": {
+   "Properties": {
+    "Domain": "policy-atlas-v3-prod",
+    "UserPoolId": {
+     "Ref": "CognitoAuthUserPool9F7F9231"
+    }
+   },
+   "Type": "AWS::Cognito::UserPoolDomain"
+  },
+  "CognitoAuthSpaClient7C2FCF94": {
+   "Properties": {
+    "AccessTokenValidity": 60,
+    "AllowedOAuthFlows": [
+     "code"
+    ],
+    "AllowedOAuthFlowsUserPoolClient": true,
+    "AllowedOAuthScopes": [
+     "openid",
+     "email",
+     "profile"
+    ],
+    "CallbackURLs": [
+     "https://policyatlas.uk",
+     "https://policyatlas.uk/",
+     "https://ops.policyatlas.uk",
+     "https://ops.policyatlas.uk/"
+    ],
+    "GenerateSecret": false,
+    "LogoutURLs": [
+     "https://policyatlas.uk",
+     "https://policyatlas.uk/",
+     "https://ops.policyatlas.uk",
+     "https://ops.policyatlas.uk/"
+    ],
+    "PreventUserExistenceErrors": "ENABLED",
+    "RefreshTokenValidity": 43200,
+    "SupportedIdentityProviders": [
+     "COGNITO"
+    ],
+    "TokenValidityUnits": {
+     "AccessToken": "minutes",
+     "RefreshToken": "minutes"
+    },
+    "UserPoolId": {
+     "Ref": "CognitoAuthUserPool9F7F9231"
+    }
+   },
+   "Type": "AWS::Cognito::UserPoolClient"
+  },
+  "CognitoAuthUserPool9F7F9231": {
+   "DeletionPolicy": "Retain",
+   "Properties": {
+    "AccountRecoverySetting": {
+     "RecoveryMechanisms": [
+      {
+       "Name": "verified_email",
+       "Priority": 1
+      }
+     ]
+    },
+    "AdminCreateUserConfig": {
+     "AllowAdminCreateUserOnly": true
+    },
+    "AutoVerifiedAttributes": [
+     "email"
+    ],
+    "DeletionProtection": "ACTIVE",
+    "EmailVerificationMessage": "The verification code to your new account is {####}",
+    "EmailVerificationSubject": "Verify your new account",
+    "Policies": {
+     "PasswordPolicy": {
+      "MinimumLength": 12,
+      "RequireLowercase": true,
+      "RequireNumbers": true,
+      "RequireSymbols": true,
+      "RequireUppercase": true,
+      "TemporaryPasswordValidityDays": 30
+     }
+    },
+    "SmsVerificationMessage": "The verification code to your new account is {####}",
+    "UsernameAttributes": [
+     "email"
+    ],
+    "VerificationMessageTemplate": {
+     "DefaultEmailOption": "CONFIRM_WITH_CODE",
+     "EmailMessage": "The verification code to your new account is {####}",
+     "EmailSubject": "Verify your new account",
+     "SmsMessage": "The verification code to your new account is {####}"
+    }
+   },
+   "Type": "AWS::Cognito::UserPool",
+   "UpdateReplacePolicy": "Retain"
+  },
+  "SecurityHeadersPolicy37F9B5C0": {
+   "Properties": {
+    "ResponseHeadersPolicyConfig": {
+     "CustomHeadersConfig": {
+      "Items": [
+       {
+        "Header": "Permissions-Policy",
+        "Override": true,
+        "Value": "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"
+       },
+       {
+        "Header": "Content-Security-Policy-Report-Only",
+        "Override": true,
+        "Value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://api.policyatlas.uk https://cognito-idp.eu-west-2.amazonaws.com https://policy-atlas-v3-prod.auth.eu-west-2.amazoncognito.com; frame-src 'self' https://policy-atlas-v3-prod.auth.eu-west-2.amazoncognito.com; frame-ancestors 'self'; form-action 'self'; object-src 'none'; base-uri 'self'"
+       }
+      ]
+     },
+     "Name": "policy-atlas-v3-security-headers",
+     "SecurityHeadersConfig": {
+      "ContentTypeOptions": {
+       "Override": true
+      },
+      "FrameOptions": {
+       "FrameOption": "SAMEORIGIN",
+       "Override": false
+      },
+      "ReferrerPolicy": {
+       "Override": false,
+       "ReferrerPolicy": "strict-origin-when-cross-origin"
+      },
+      "StrictTransportSecurity": {
+       "AccessControlMaxAgeSec": 31536000,
+       "IncludeSubdomains": true,
+       "Override": false,
+       "Preload": false
+      },
+      "XSSProtection": {
+       "ModeBlock": true,
+       "Override": false,
+       "Protection": true
+      }
+     }
+    }
+   },
+   "Type": "AWS::CloudFront::ResponseHeadersPolicy"
+  }
+ },
+ "cert": {
+  "Parameters": {
+   "BootstrapVersion": {
+    "Default": "/cdk-bootstrap/hnb659fds/version",
+    "Description": "Version of the CDK Bootstrap resources in this environment, automatically retrieved from SSM Parameter Store. [cdk:skip]",
+    "Type": "AWS::SSM::Parameter::Value<String>"
+   }
+  },
+  "Resources": {
+   "CustomCrossRegionExportWriterCustomResourceProviderHandlerD8786E8A": {
+    "DependsOn": [
+     "CustomCrossRegionExportWriterCustomResourceProviderRoleC951B1E1"
+    ],
+    "Properties": {
+     "Code": {
+      "S3Bucket": "cdk-hnb659fds-assets-111111111111-us-east-1",
+      "S3Key": "08b23c75a1fe108c9fbd7896f6d7a668289c804be7852d611aecf2a0b501279f.zip"
+     },
+     "Handler": "__entrypoint__.handler",
+     "MemorySize": 128,
+     "Role": {
+      "Fn::GetAtt": [
+       "CustomCrossRegionExportWriterCustomResourceProviderRoleC951B1E1",
+       "Arn"
+      ]
+     },
+     "Runtime": "nodejs24.x",
+     "Timeout": 900
+    },
+    "Type": "AWS::Lambda::Function"
+   },
+   "CustomCrossRegionExportWriterCustomResourceProviderRoleC951B1E1": {
+    "Properties": {
+     "AssumeRolePolicyDocument": {
+      "Statement": [
+       {
+        "Action": "sts:AssumeRole",
+        "Effect": "Allow",
+        "Principal": {
+         "Service": "lambda.amazonaws.com"
+        }
+       }
+      ],
+      "Version": "2012-10-17"
+     },
+     "ManagedPolicyArns": [
+      {
+       "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      }
+     ],
+     "Policies": [
+      {
+       "PolicyDocument": {
+        "Statement": [
+         {
+          "Action": [
+           "ssm:DeleteParameters",
+           "ssm:ListTagsForResource",
+           "ssm:GetParameters",
+           "ssm:PutParameter"
+          ],
+          "Effect": "Allow",
+          "Resource": [
+           {
+            "Fn::Join": [
+             "",
+             [
+              "arn:",
+              {
+               "Ref": "AWS::Partition"
+              },
+              ":ssm:eu-west-2:111111111111:parameter/cdk/exports/*"
+             ]
+            ]
+           }
+          ]
+         }
+        ],
+        "Version": "2012-10-17"
+       },
+       "PolicyName": "Inline"
+      }
+     ]
+    },
+    "Type": "AWS::IAM::Role"
+   },
+   "ExportsWritereuwest25F52B32F9AB3BFFD": {
+    "DeletionPolicy": "Delete",
+    "Properties": {
+     "ServiceToken": {
+      "Fn::GetAtt": [
+       "CustomCrossRegionExportWriterCustomResourceProviderHandlerD8786E8A",
+       "Arn"
+      ]
+     },
+     "WriterProps": {
+      "exports": {
+       "/cdk/exports/PaV3AppStack/PaV3CertStackuseast1RefFrontendCertificate54FFAD05981FA7D2": {
+        "Ref": "FrontendCertificate54FFAD05"
+       },
+       "/cdk/exports/PaV3AppStackBedrock/PaV3CertStackuseast1RefFrontendCertificate54FFAD05981FA7D2": {
+        "Ref": "FrontendCertificate54FFAD05"
+       },
+       "/cdk/exports/PaV3AppStackCspCoupling/PaV3CertStackuseast1RefFrontendCertificate54FFAD05981FA7D2": {
+        "Ref": "FrontendCertificate54FFAD05"
+       },
+       "/cdk/exports/PaV3AppStackEmail/PaV3CertStackuseast1RefFrontendCertificate54FFAD05981FA7D2": {
+        "Ref": "FrontendCertificate54FFAD05"
+       },
+       "/cdk/exports/PaV3AppStackEnforce/PaV3CertStackuseast1RefFrontendCertificate54FFAD05981FA7D2": {
+        "Ref": "FrontendCertificate54FFAD05"
+       },
+       "/cdk/exports/PaV3AppStackInProcess/PaV3CertStackuseast1RefFrontendCertificate54FFAD05981FA7D2": {
+        "Ref": "FrontendCertificate54FFAD05"
+       },
+       "/cdk/exports/PaV3AppStackNoEmail/PaV3CertStackuseast1RefFrontendCertificate54FFAD05981FA7D2": {
+        "Ref": "FrontendCertificate54FFAD05"
+       },
+       "/cdk/exports/PaV3AppStackOpenAI/PaV3CertStackuseast1RefFrontendCertificate54FFAD05981FA7D2": {
+        "Ref": "FrontendCertificate54FFAD05"
+       },
+       "/cdk/exports/PaV3AppStackProdCsp/PaV3CertStackuseast1RefFrontendCertificate54FFAD05981FA7D2": {
+        "Ref": "FrontendCertificate54FFAD05"
+       }
+      },
+      "region": "eu-west-2"
+     }
+    },
+    "Type": "Custom::CrossRegionExportWriter",
+    "UpdateReplacePolicy": "Delete"
+   },
+   "FrontendCertificate54FFAD05": {
+    "Properties": {
+     "DomainName": "v3.policyatlas.uk",
+     "DomainValidationOptions": [
+      {
+       "DomainName": "v3.policyatlas.uk",
+       "HostedZoneId": "DUMMY"
+      },
+      {
+       "DomainName": "www.v3.policyatlas.uk",
+       "HostedZoneId": "DUMMY"
+      }
+     ],
+     "SubjectAlternativeNames": [
+      "www.v3.policyatlas.uk"
+     ],
+     "Tags": [
+      {
+       "Key": "Name",
+       "Value": "PaV3CertStack/FrontendCertificate"
+      }
+     ],
+     "ValidationMethod": "DNS"
+    },
+    "Type": "AWS::CertificateManager::Certificate"
+   }
+  },
+  "Rules": {
+   "CheckBootstrapVersion": {
+    "Assertions": [
+     {
+      "Assert": {
+       "Fn::Not": [
+        {
+         "Fn::Contains": [
+          [
+           "1",
+           "2",
+           "3",
+           "4",
+           "5"
+          ],
+          {
+           "Ref": "BootstrapVersion"
+          }
+         ]
+        }
+       ]
+      },
+      "AssertDescription": "CDK bootstrap stack version 6 required. Please run 'cdk bootstrap' with a recent version of the CDK CLI."
+     }
+    ]
+   }
+  }
+ }
+}
