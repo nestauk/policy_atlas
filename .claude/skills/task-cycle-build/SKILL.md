@@ -22,8 +22,9 @@ changes. An optional `/goal` for this phase is "through step 6: verification.md 
 - **Implement:** `agent-skills:incremental-implementation`; ground framework code
   (LangGraph, SQLAlchemy, pydantic, alembic) in official docs with
   `agent-skills:source-driven-development`; seams/interfaces with
-  `agent-skills:api-and-interface-design`; logic & bug-fixes via
-  `agent-skills:test-driven-development` (failing test first; invoke as `/test`).
+  `agent-skills:api-and-interface-design`; bug fixes via
+  `agent-skills:test-driven-development` (a failing test that reproduces the bug first;
+  invoke as `/test`). New logic follows the test rule in step 5.
 - **Delegate volume per the plan's executor marks** (decided at plan time — see
   harness.md § Agent-side model routing for the tiers and the delegation-brief shape):
   `fast-worker` for mechanical volume and test scaffolding from a precise list;
@@ -31,9 +32,7 @@ changes. An optional `/goal` for this phase is "through step 6: verification.md 
   doer); Codex as doer (`codex:rescue`) only where the plan marks it with a reason — then
   Claude anchors the review (family-flip). The lead reviews delegated output before it lands; if it misses
   the bar, rewrite the brief or escalate the model — don't hand-polish weak output.
-  Mid-build smell (failure-log, 2026-07-05): the lead catching itself editing product
-  code directly means a brief should have been written — delegation is the default and
-  `lead` marks need justification at the plan gate, not re-litigation mid-build.
+  Do not re-decide routing mid-build.
 - **Debug a red `make verify`:** `agent-skills:debugging-and-error-recovery` (root-cause,
   not guess); escalate a stubborn/substantial fix to `codex:rescue` — write-capable, a
   *doer*, not a reviewer.
@@ -43,24 +42,35 @@ changes. An optional `/goal` for this phase is "through step 6: verification.md 
 
 ## Step 5 — Implement
 
+**Tests.** Write one focused test for each behaviour the contract states, at a public
+boundary: the HTTP route, the public function, the rendered component, the stored row.
+Mock only what the repository does not own (network, model providers, the clock). Do not
+test an internal helper that a boundary test already covers. A frontend test checks what
+the user sees and can do; it never asserts a style class name, and a polish round adds no
+test for looks. Scratch checks and one-off scripts are not committed. The existing tests
+are not the model for new ones: many check more than this rule asks. Keep the guards the
+repository relies on: tenancy and access rules, migration round-trips and database
+constraints, parser security, drift checks between lists that must agree.
+
+Code, comments, docstrings and test names carry no task numbers, dates, review or polish
+rounds, contract or rubric item ids, or owner rulings. ADR numbers may stay.
+
 One contract at a time, incrementally. structlog only (no print/stdlib logging in package
 code). Touch only what the contract requires. Land a check before the next sub-phase; each
 plan checkpoint ends with a commit on `task/NNN-slug`, gated by the **tiered commit gate**
-(011 retro: eight full-verify gates ≈ 30 min of low-signal wall time on a slice whose own
-tests ran in seconds):
+(a full `make verify` at every checkpoint costs wall time and adds little signal):
 
 - **Intermediate phase commits**: green `make verify-fast` (test-fast + typecheck + lint).
 - **Full `make verify` is mandatory at**: the build-open baseline (the re-ground above),
   any phase touching **schema or ingest-adjacent code** (table-count/metadata assertions
   live inside the excluded `test_ingest_full_text.py` — a schema slice silently skips
-  them under test-fast; 011 phase 1 hit exactly this coupling), and the **step-6 exit**.
+  them under test-fast), and the **step-6 exit**.
 - The tiering changes *which suite runs*, never the rule: any red is still a full stop,
   and no commit lands on a red gate.
-- **The plan's gate map is binding** (failure-log, 2026-07-08): which phase boundaries
+- **The plan's gate map is binding**: which phase boundaries
   carry full verify vs verify-fast was decided at the plan gate — consecutive low-risk
   phases may share one full-verify gate there. Don't add full-verify runs mid-build
-  "to be safe" (014 ran six where three carried the signal), and don't downgrade a
-  plan-marked full gate either.
+  "to be safe", and don't downgrade a plan-marked full gate either.
 
 **When building reveals a design problem**, size it before reacting:
 - **Blocking / material** (the contract or a spec is wrong enough to change the design):
@@ -69,15 +79,15 @@ tests ran in seconds):
 - **Minor, resolvable within the contract's own vocabulary** (e.g. the contract offers
   "None/absent" and one of the two makes its stated intent true): resolve it, add a test,
   and **flag it explicitly in `verification.md`'s diff summary** — visible deviation, not
-  silent drift, and not a full stop (precedent: 007's None-vs-absent envelope persistence).
+  silent drift, and not a full stop.
 
 Durable records (`docs/knowledge/`, `docs/deferred.md`, agentic-ops claims) are authored
 **after** the review stack finalises the code — at step 8, not here — so they describe
-what actually shipped. But **capture is this phase's job** (014 retro, 2026-07-08): what
+what actually shipped. But **capture is this phase's job**: what
 the build learned dies at the conversation boundary unless it's written into the handoff —
 step 6's knowledge-candidates list below is where.
 
-## Step 5b — Polish passes (frontend-heavy slices; owner, 2026-11-04)
+## Step 5b — Polish passes (frontend-heavy slices)
 
 After step 5 is implemented and `make verify-fast` is green, and **before** step 6, the
 slice takes two polish passes on the live dev app, inside the same task and PR:
@@ -89,8 +99,10 @@ slice takes two polish passes on the live dev app, inside the same task and PR:
 2. **Owner pass.** The owner looks at the live app; the lead applies the notes. Rounds run
    until the owner signs off; the contract names the round budget.
 
-Each round commits on green `make verify-fast`; its rulings go into the annex, not the
-contract; the owner's sign-off is a human 🛑 recorded in `verification.md`. The rubric
+Each polish pass starts a new `frontend-designer` run; it does not resume the run of the
+pass before it. Each round commits on green `make verify-fast` and green
+`make frontend-verify-fast` (frontend type check, lint and tests); its rulings go into the
+annex, not the contract; the owner's sign-off is a human 🛑 recorded in `verification.md`. The rubric
 carries one row: "polish passes complete, annex updated, owner sign-off recorded". Give
 the polish passes their **own conversation**, re-grounded from the annex and the running
 app (`make dev`; screenshots via Playwright), not from the build transcript. Both passes
@@ -101,17 +113,16 @@ run again at the end of the review phase (task-cycle-review).
 Fill `docs/tasks/_templates/verification.md` → `docs/tasks/NNN-slug/verification.md`:
 `make verify` table, named-test results, the **exact** end-to-end command, diff summary
 (flagging any minor deviations per above), public-safety, gaps, and the **knowledge
-candidates** list in § Review handoff (014 retro, 2026-07-08): one bullet per
+candidates** list in § Review handoff: one bullet per
 durable-seeming lesson the build hit, however raw — surprises, gotchas, invariants that
 held for a non-obvious reason — *not just* flagged deviations. Step 8 authors
 `docs/knowledge/` from this list plus the review findings, against the final code; a
-lesson that never makes the list is invisible to that conversation, which is how
-step-8 knowledge drifted review-biased on 012–014 (the 014 `__main__`-guard/spawn lesson
-made verification.md only as an incident note and became knowledge nowhere).
+lesson that never makes the list is invisible to that conversation, so the knowledge
+drifts toward review findings only.
 
 Drive the affected flow end-to-end with `/verify` (exercises real behaviour, not just
 tests) — the flow it drove supplies the exact end-to-end command. **The live check runs
-at the scope the contract pinned** (failure-log, 2026-07-08: default = changed surfaces
+at the scope the contract pinned** (default = changed surfaces
 + one cheap full-chain smoke; full live e2e only where the contract bought it) — a
 bigger live run than contracted is spend the gate never approved, not extra rigour. If `make verify` is red,
 root-cause it — don't guess. When the stop condition is objective (`make verify` green, a
@@ -131,4 +142,4 @@ acceptance checks at design time when you know the slice records.
 complete · all plan checkpoints committed. **Stop — do not run the review stack here.**
 Review runs in a fresh conversation with
 [`task-cycle-review`](../task-cycle-review/SKILL.md): the adjudicator of findings must not
-be the conversation that wrote the code (failure-log, 2026-07-05).
+be the conversation that wrote the code.

@@ -54,7 +54,7 @@ servers, recorder scripts, `uv`/Docker installs — is **not** gated and is expe
 State lives in **files, not chat history** — by design — so the cycle splits cleanly
 across fresh conversations. **One phase = one conversation = (at most) one `/goal`.**
 A single goal spanning build *and* review forces same-chat review and makes the author
-the adjudicator (failure-log, 2026-07-05) — never do it.
+the adjudicator — never do it.
 
 | Conversation | Phase skill | Re-ground by reading | Produces | `/goal` shape (optional) |
 |---|---|---|---|---|
@@ -75,7 +75,7 @@ the adjudicator (failure-log, 2026-07-05) — never do it.
 Each phase boundary (and each build sub-phase from the plan) ends with a commit on the
 `task/NNN-slug` branch — that's what turns the artifact into a real handoff. The agent
 prepares and runs commits as defined steps: never on the default branch, never on a red
-gate. The gate is **tiered** (011 retro): intermediate build sub-phases commit on green
+gate. The gate is **tiered**: intermediate build sub-phases commit on green
 `make verify-fast`; full `make verify` is mandatory at the build-open baseline, any
 schema/ingest-adjacent phase, and the step-6 exit — task-cycle-build § Step 5 has the
 rule. **commit ≠ push** — pushing and merging stay human; the agent drafts the PR
@@ -116,7 +116,6 @@ updated. Anything short of this is in progress, not done.
 | "I'll write verification.md after the PR." | Evidence precedes the completion claim, not follows it. |
 | "The plan is obvious, skip the checkpoint." | The checkpoint is the human's, not yours. Tier 2+ pauses for it. |
 | "I'll defer that edge case silently." | Flag it → deferred.md. Silent omission ≠ deferral. |
-| "Faster to just do it myself than delegate." | Routing was decided at plan time (executor marks). Re-deciding mid-build is the rationalisation. |
 | "The review lanes are fresh contexts, so same-chat review is fine." | The adjudicator is the reviewer that matters. Fresh conversation, or the author grades their own work. |
 
 ## Scope boundaries

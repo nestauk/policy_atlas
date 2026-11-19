@@ -42,7 +42,7 @@ Rules:
   (the repo's runbook: `docs/knowledge/` and the lead's brief say how) at 1280 and
   400 wide, light and dark. One screenshot round per pass; fix what it shows; take
   one more; stop.
-- Keep `make verify-fast` green; never commit, push, or touch generated files,
+- Keep `make frontend-verify-fast` green; never commit, push, or touch generated files,
   secrets, schema, auth, deps, CI or public interfaces (the annex's interfaces are
   the contract's, not yours).
 - Do not expand the brief. If the annex and the build disagree on a behaviour, report

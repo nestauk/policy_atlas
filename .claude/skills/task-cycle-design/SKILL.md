@@ -38,7 +38,7 @@ runs this phase; Tier 0/1 skip it). Templates: `docs/tasks/_templates/`.
   dependency (owner types `/pick-ui-library`, or the agent reads
   `~/.claude/skills/pick-ui-library/SKILL.md`). The dependency still needs owner approval.
 
-## Frontend-heavy slices — design pass before the contract (owner, 2026-11-04)
+## Frontend-heavy slices — design pass before the contract
 
 A slice whose value is what the user sees runs a **design pass before step 1**, because
 looks only settle once they are seen, and a contract that names looks turns every taste
@@ -64,11 +64,11 @@ is the pinned **`frontend-designer`** agent (`.claude/agents/frontend-designer.m
 loads all the frontend design skills, `PRODUCT.md` (committed; its § Product Principles
 are the team's six), `DESIGN.md` (committed; the visual system) and the slice's research
 before it starts. Unskilled workers ship correct but
-unpolished surfaces (2026-09-05); a brief to any other agent for frontend work needs a
+unpolished surfaces; a brief to any other agent for frontend work needs a
 reason in the plan.
 
 Polish is first-class and multi-pass — see task-cycle-build § Step 5b and
-task-cycle-review § Frontend-heavy slices. First slice under this rule: 058.
+task-cycle-review § Frontend-heavy slices.
 
 ## Step 1 — Contract
 
@@ -81,21 +81,21 @@ Copy `docs/tasks/_templates/contract.md` → `docs/tasks/NNN-slug/contract.md`. 
 the specs it depends on *in depth*, not headings — if a spec looks wrong or incomplete,
 refine it first (§ Spec refinement).
 
-**Live-check scope is a contract-time pin** (failure-log, 2026-07-08): when the
+**Live-check scope is a contract-time pin**: when the
 acceptance checks include a live manual check, name what it covers. Default = a live
 run scoped to the slice's changed surfaces plus one cheap full-chain smoke; a full live
-e2e is a deliberate upgrade the gate approves with its wall-time cost named (014's
-inherited "skeleton e2e" spent ~50 min of downstream live chain to evidence surfaces
-needing ~2 min). Don't inherit the previous slice's live-check shape by default.
+e2e is a deliberate upgrade the gate approves with its wall-time cost named, because a
+full run can cost many times what the changed surfaces need. Don't inherit the previous
+slice's live-check shape by default.
 
-**Design docs must be legible cold** (2026-08-13): the human gate and conversation B both
+**Design docs must be legible cold**: the human gate and conversation B both
 read these files without your context. Five habits, cheap now and expensive to retrofit:
 
 - **Define the jargon once, in the contract** — the § Terms stub in the template. One row
   for each term a cold reader cannot expand: internal labels (`P1`), abbreviations
   (`PSS`), and any word the slice uses in a special sense (grain, round). The rubric and
   the plan *point at* that table. They never restate it.
-- **Map what the slice touches, in whatever shape fits it.** For a UI slice that was a
+- **Map what the slice touches, in whatever shape fits it.** For a UI slice it can be a
   table of surface → the number it shows → the file that renders it → broken /
   correct-do-not-change. The shape is slice-specific; the rule is not. The
   "do not change" rows carry the same weight as the broken ones.
@@ -121,10 +121,10 @@ precedent). Targets: unstated assumptions, missed requirements, contradictions w
 specs, simpler alternatives. Decisions the human settled in review are *context, not
 targets* (challenge only on contradiction). The lead adjudicates findings into the
 contract; a material change reopens the 🛑 for re-approval, minor ones are folded in and
-noted. **Do not commit the review record** (owner, 2026-11-04): the findings and their
+noted. **Do not commit the review record**: the findings and their
 adjudication live in the contract's status line and items; the raw review stays under the
-task's gitignored `research/` folder. (Tasks 026 to 057 committed `adversarial-review-*.md`
-files by copying the previous slice's folder; that was never a rule.) Rationale: in this repo the contract fixes the design (schema, interfaces, tests) —
+task's gitignored `research/` folder. Older task folders hold committed
+`adversarial-review-*.md` files; do not copy that pattern. Rationale: in this repo the contract fixes the design (schema, interfaces, tests) —
 attack it at its own gate, not after a plan is built on it.
 
 ## Step 2 — Rubric
@@ -140,14 +140,12 @@ against the **as-built code** (not its own claims; plans drift, code doesn't). T
 and surface tables stay in the contract; the plan cites them and reuses its defect
 numbering (§ Design docs must be legible cold).
 
-**Executor routing is a plan-time decision** (failure-log, 2026-07-05). Mark each plan
+**Executor routing is a plan-time decision**. Mark each plan
 task with its executor — `lead` · `fast-worker` · `deep-reasoner` · `frontend-designer` ·
 `builder` · `codex` — per
 harness.md § Agent-side model routing, so the plan reviewer and the human gate see the
-routing before the build starts. **Default to a delegate; every `lead` mark carries a
-one-line justification the plan gate reviews** (failure-log, 2026-07-05 — the 008 plan
-over-assigned to the lead; the burden sits on keeping work, not on delegating it).
-The ladder (full version in harness.md):
+routing before the build starts. Choose the executor that fits each task: the routing
+ladder below says which. The ladder (full version in harness.md):
 - Can't write the brief (one concern, its intent, a self-checkable definition of done)?
   Not delegable — `lead`.
 - Prompt-bearing work, taste-bearing surfaces, adjudication, and seam *design*
@@ -169,13 +167,13 @@ The ladder (full version in harness.md):
   two-independent-takes.
 Re-deciding routing mid-build is the rationalisation the plan column exists to prevent.
 
-**Gate consolidation is likewise a plan-time call** (failure-log, 2026-07-08): the plan
+**Gate consolidation is likewise a plan-time call**: the plan
 marks which phase boundaries carry a full `make verify` and which gate on
 `make verify-fast` — consecutive low-risk phases (new files, no schema/reader contact)
 may share a single full-verify gate, argued in the plan and reviewed at the plan 🛑.
 The mandatory full-verify classes (build-open baseline · schema/ingest-adjacent phases ·
 step-6 exit) are untouched; consolidation merges *adjacent* checkpoints, never skips a
-class. 014 ran six full-suite gates (~45 min) where three carried the same signal.
+class. Extra full-suite gates on low-risk phases cost wall time and add no signal.
 
 **Plan-phase adversarial review** (Tier 3+ standard; Tier 2 on demand — a loose contract,
 a surprising plan, or reliance on a 🟡/❓ spec area): before the 🛑, the other family
@@ -220,14 +218,9 @@ shaping. ⚠️ rescue defaults to **write-capable**: every review brief sent th
 state **read-only / critique-only** explicitly. ⚠️ rescue is **async fire-and-forget**:
 its final message is **either the findings or a job id** — check which before doing
 anything else. For a job id, retrieve results with the repo shim:
-`scripts/codex_job.sh wait <job-id> [timeout-s]` (or `status`/`result`) — it only
-resolves the companion-script path (the plugin's `${CLAUDE_PLUGIN_ROOT}` is injected
-solely while its user-typed `/codex:*` commands run; no such variable exists in the
-lead's shell) and delegates waiting to the
-runtime's **native** `status --wait --timeout-ms`. ⚠️ Do not hand-roll a status poll —
-the runtime has one built in, and a grep-filtered background loop turns a hard error
-into a silent spin-to-timeout (failure-log, 2026-07-07; progress-line pitfall
-2026-07-05).
+`scripts/codex_job.sh wait <job-id> [timeout-s]` (or `status`/`result`); it uses the
+runtime's **native** wait. ⚠️ Do not hand-roll a status poll: a filtered background
+loop can hide a hard error until timeout.
 
 ## Phase exit
 
