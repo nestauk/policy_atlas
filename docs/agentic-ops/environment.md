@@ -67,7 +67,9 @@ After you pull a change:
 
 ## Local env vars
 
-`backend/.env.example` is the template and lists every variable with a comment. The groups:
+`backend/.env.example` is the template for a local run and gives each of its variables a
+comment. The full list of server settings is `backend/src/policy_atlas/api/settings.py`. The
+groups:
 
 - **Database.** `DATABASE_URL` (required). `TEST_DATABASE_URL` defaults to `policy_atlas_test`;
   `make test` passes it to the tests as `DATABASE_URL`, so tests never touch the dev database.
