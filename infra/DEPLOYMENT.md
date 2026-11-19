@@ -41,7 +41,7 @@ anywhere.
 > **One deploy at a time per environment.** GitHub Actions serializes each
 > environment and never cancels an active deploy. There is no cross-system lock:
 > a local `deploy.sh` can still interleave with Actions, so coordinate local
-> recovery/bootstrap work human-to-human (deferred seam — see `docs/deferred.md`).
+> recovery/bootstrap work human-to-human (deferred: see `docs/deferred.md` § Infrastructure and deployment).
 
 ### GitHub Actions, Environments, and AWS OIDC
 
