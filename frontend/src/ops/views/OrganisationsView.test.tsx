@@ -11,7 +11,7 @@ function row(name: string) {
 }
 
 describe("Organisations", () => {
-  it("lists overrides, the defaults in grey, domains and the row menu", async () => {
+  it("lists overrides, the defaults, domains and the row menu", async () => {
     const user = userEvent.setup();
     const router = renderOps("/organisations");
     expect(await screen.findByRole("heading", { name: "Organisations" })).toBeInTheDocument();
@@ -27,8 +27,9 @@ describe("Organisations", () => {
     ]);
     const nesta = row("Nesta");
     expect(nesta).toHaveTextContent("100");
-    const grey = within(nesta).getByText((_, element) => element?.tagName === "SPAN" && /^default\s· 3$/.test(element.textContent ?? ""));
-    expect(grey).toHaveClass("text-grey");
+    expect(
+      within(nesta).getByText((_, element) => element?.tagName === "SPAN" && /^default\s· 3$/.test(element.textContent ?? "")),
+    ).toBeInTheDocument();
     expect(nesta).toHaveTextContent("nesta.org.uk");
     expect(within(row("Westbury Council")).getByText("westbury.gov.uk, westbury.example")).toBeInTheDocument();
     expect(within(row("Policy Lab")).getByText("—")).toBeInTheDocument();

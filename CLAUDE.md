@@ -1,4 +1,4 @@
-Read `AGENTS.md` first.
+@AGENTS.md
 
 Use:
 - `/plan` for non-trivial changes.

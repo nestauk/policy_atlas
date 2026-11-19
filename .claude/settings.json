@@ -16,7 +16,26 @@
       "Edit(uv.lock)",
       "Write(uv.lock)",
       "Edit(dist/**)",
-      "Write(dist/**)"
+      "Write(dist/**)",
+      "Edit(frontend/openapi.json)",
+      "Edit(frontend/src/api/gen/types.ts)",
+      "Edit(docs/specs/sources/**)"
+    ]
+  },
+  "env": {
+    "PONYTAIL_SUBAGENT_MATCHER": "^(deep-reasoner|fast-worker|builder|frontend-designer)$"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.command // \"\"' | grep -Eq '(^|[;&|[:space:]])git( -C [^ ]+)? commit' && [ \"$(git branch --show-current 2>/dev/null)\" = \"dev\" ] && echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Commits on dev are blocked. Create a branch first (git switch -c ...).\"}}' || true"
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {

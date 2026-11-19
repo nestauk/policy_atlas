@@ -40,5 +40,5 @@ that binds the route template must be `async`; the middleware half
 
 # Citations
 
-- [engineering-considerations.md](../agentic-ops/engineering-considerations.md) §Stack
+- [harness.md](../agentic-ops/harness.md) § Observability
 - [AGENTS.md](../../AGENTS.md)

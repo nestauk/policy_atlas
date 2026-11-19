@@ -34,6 +34,8 @@ describe("useRail", () => {
     const expand = screen.getByRole("button", { name: "Expand the Task Agent rail" });
     expect(expand).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByText("pane content")).not.toBeVisible();
+    // The column width is the hook's output: a rail that hides its contents but
+    // keeps its full width would otherwise pass.
     expect(screen.getByTestId("grid").style.width).toBe("48px");
 
     await userEvent.keyboard("{Enter}");
@@ -49,11 +51,11 @@ describe("useRail", () => {
     // jsdom reports zero layout width, so the first step starts from the
     // clamp floor — repeated presses must never leave the [280, 640] range.
     fireEvent.keyDown(separator, { key: "ArrowLeft" });
-    expect(screen.getByTestId("grid").style.width).toBe("280px");
+    expect(separator).toHaveAttribute("aria-valuenow", "280");
     for (let i = 0; i < 40; i++) {
       fireEvent.keyDown(separator, { key: "ArrowRight" });
     }
-    const width = parseInt(screen.getByTestId("grid").style.width, 10);
+    const width = Number(separator.getAttribute("aria-valuenow"));
     expect(width).toBeLessThanOrEqual(640);
     expect(width).toBeGreaterThanOrEqual(280);
   });

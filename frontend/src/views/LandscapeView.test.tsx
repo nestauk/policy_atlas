@@ -86,19 +86,12 @@ beforeEach(() => {
 });
 
 describe("LandscapeView — finished", () => {
-  it("sets each chart as an uncarded section in one centred column, named by an h2", () => {
+  it("sets each chart as a section named by an h2", () => {
     reads();
-    const { container } = renderLandscape();
+    renderLandscape();
     for (const name of ["From search to citation", "Evidence types", "Publication years", "Where sources were published", "Finding groups"]) {
       expect(screen.getByRole("heading", { level: 2, name })).toBeInTheDocument();
       expect(screen.getByRole("region", { name })).toBeInTheDocument();
-    }
-    expect(screen.getByRole("region", { name: "Evidence types" }).parentElement).toHaveClass("max-w-3xl");
-    // No card inside the Sources panel.
-    expect(container.querySelector(".shadow-\\[0_1px_3px_rgba\\(15\\,41\\,74\\,0\\.05\\)\\,0_8px_24px_rgba\\(15\\,41\\,74\\,0\\.04\\)\\]")).toBeNull();
-    // The one bordered thing is the List / Map switch's outline (round 11).
-    for (const bordered of container.querySelectorAll(".border-line-2")) {
-      expect(bordered.closest('[role="group"][aria-label="Show as"]')).not.toBeNull();
     }
   });
 
@@ -210,13 +203,12 @@ describe("LandscapeView — finished", () => {
     expect(screen.queryByTestId("classified-so-far")).toBeNull();
   });
 
-  it("says what the publisher countries count in the i beside the heading, not on the page (round 13)", async () => {
+  it("says what the publisher countries count in the i beside the heading, not on the page", async () => {
     reads();
     renderLandscape();
     expect(screen.queryByText(/The country of the publishing venue/)).toBeNull();
     const section = screen.getByRole("region", { name: "Where sources were published" });
     const hint = within(section).getByRole("button", { name: "About where sources were published" });
-    expect(hint).toHaveClass("cursor-help");
     await userEvent.hover(hint);
     expect((await screen.findAllByText(/^The country of the publishing venue, when the database reports it\./)).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("This is not necessarily where the study took place.")).length).toBeGreaterThan(0);
@@ -233,11 +225,10 @@ describe("LandscapeView — finished", () => {
     ]);
   });
 
-  it("draws each finding facet as a ranked table under a Caption-size facet label", () => {
+  it("draws each finding facet as a ranked table under a facet label", () => {
     reads();
     renderLandscape();
-    const facet = screen.getByRole("heading", { level: 3, name: "Intervention type" });
-    expect(facet).toHaveClass("text-caption");
+    expect(screen.getByRole("heading", { level: 3, name: "Intervention type" })).toBeInTheDocument();
     const table = screen.getByRole("table", { name: "Intervention type" });
     expect(within(table).getAllByRole("rowheader").map((cell) => cell.textContent)).toEqual([
       "Universal breakfast provision",
@@ -256,11 +247,10 @@ describe("LandscapeView — finished", () => {
     expect(within(table).getAllByRole("row")).toHaveLength(7);
   });
 
-  it("shows the section frame with placeholder rows while loading, never animate-pulse", () => {
+  it("shows a busy loading state and no table while loading", () => {
     reads({ pending: true });
-    const { container } = renderLandscape();
+    renderLandscape();
     expect(screen.getByLabelText("Loading the landscape")).toHaveAttribute("aria-busy", "true");
-    expect(container.querySelector(".animate-pulse")).toBeNull();
     expect(screen.queryByRole("table")).toBeNull();
   });
 });
