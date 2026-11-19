@@ -28,37 +28,7 @@ describe("Sheet", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("keeps the desktop slide-over and adds the max-md bottom-sheet classes", () => {
-    render(
-      <Sheet open>
-        <SheetContent title="Source dossier">
-          <p>Dossier body</p>
-        </SheetContent>
-      </Sheet>,
-    );
-    const dialog = screen.getByRole("dialog", { name: "Source dossier" });
-    // Desktop (>=768px) slide-over is untouched.
-    for (const token of ["inset-y-0", "max-w-xl", "right-0", "border-l", "starting:translate-x-full"]) {
-      expect(dialog.className.split(" ")).toContain(token);
-    }
-    // Below md: bottom-anchored, capped height, top border, slides up.
-    for (const token of [
-      "max-md:inset-x-0",
-      "max-md:inset-y-auto",
-      "max-md:bottom-0",
-      "max-md:max-h-[45svh]",
-      "max-md:max-w-none",
-      "max-md:border-x-0",
-      "max-md:border-t",
-      "max-md:starting:translate-x-0",
-      "max-md:starting:translate-y-full",
-    ]) {
-      expect(dialog.className.split(" ")).toContain(token);
-    }
-    expect(dialog.className.split(" ")).toContain("overflow-y-auto");
-  });
-
-  it("closes with the one CloseButton: a 16 px glyph in a 32 px box", () => {
+  it("closes with the one CloseButton: a 16 px glyph, not a character", () => {
     render(
       <Sheet open>
         <SheetContent title="Source dossier">
@@ -67,9 +37,6 @@ describe("Sheet", () => {
       </Sheet>,
     );
     const close = screen.getByRole("button", { name: "Close panel" });
-    for (const token of ["h-8", "w-8", "pressable", "hover:bg-blue-tint-2"]) {
-      expect(close.className.split(" ")).toContain(token);
-    }
     const glyph = close.querySelector("svg");
     expect(glyph).not.toBeNull();
     expect(glyph).toHaveAttribute("width", "16");

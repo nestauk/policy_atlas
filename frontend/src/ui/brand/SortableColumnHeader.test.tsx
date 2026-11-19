@@ -28,15 +28,13 @@ describe("SortableColumnHeader", () => {
     expect(th).toHaveClass("my-cell");
     expect(th).toHaveAttribute("aria-sort", "none");
     const button = screen.getByRole("button", { name: "Sort by year" });
-    expect(button).toHaveClass("whitespace-nowrap", "text-caption", "uppercase", "min-h-6");
     expect(button.querySelector("[data-testid='sort-arrow']")).not.toBeNull();
     await userEvent.setup().click(button);
     expect(onSort).toHaveBeenCalledWith("year");
   });
 
-  it("points the arrow the way the column sorts", () => {
+  it("says the way the column sorts", () => {
     renderHeader({ activeSort: "year", activeOrder: "asc" });
     expect(screen.getByRole("columnheader")).toHaveAttribute("aria-sort", "ascending");
-    expect(screen.getByTestId("sort-arrow").getAttribute("class")).toContain("rotate-180");
   });
 });

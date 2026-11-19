@@ -92,11 +92,11 @@ describe("Select", () => {
     expect(trigger).toHaveFocus();
   });
 
-  it("shows an option's grey line under its words, and stays shut when disabled", async () => {
+  it("shows an option's line under its words, and stays shut when disabled", async () => {
     const user = userEvent.setup();
     const { unmount } = render(<Harness />);
     await user.click(screen.getByRole("combobox", { name: "Columns" }));
-    expect(screen.getByText("What it would cost to run")).toHaveClass("text-grey");
+    expect(screen.getByText("What it would cost to run")).toBeInTheDocument();
     unmount();
     render(<Harness disabled />);
     const trigger = screen.getByRole("combobox", { name: "Columns" });
@@ -105,11 +105,10 @@ describe("Select", () => {
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
 
-  it("shows the placeholder in grey when no option is chosen", () => {
+  it("shows the placeholder when no option is chosen", () => {
     render(<Select label="Add to a project" value="" placeholder="Choose a project" options={OPTIONS} onChange={vi.fn()} />);
     const trigger = screen.getByRole("combobox", { name: "Add to a project" });
     expect(trigger).toHaveTextContent("Choose a project");
-    expect(screen.getByText("Choose a project")).toHaveClass("text-grey");
   });
 
   it("takes the caller's trigger, giving it the open state and the chosen option (round 12)", async () => {

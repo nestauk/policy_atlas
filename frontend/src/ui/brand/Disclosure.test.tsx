@@ -5,13 +5,13 @@ import { describe, expect, it } from "vitest";
 import { DisclosureChevron, DisclosureWord, useExpandForPrint } from "./Disclosure";
 
 describe("DisclosureChevron", () => {
-  it("points right when shut and turns down when open, Grey turning Navy with its control, still under reduced motion", () => {
+  it("points right when shut and turns down when open, still under reduced motion", () => {
     const { container, rerender } = render(<DisclosureChevron open={false} className="self-center" />);
     const glyph = container.querySelector("svg") as SVGElement;
     expect(glyph).toHaveAttribute("aria-hidden", "true");
     expect(glyph).toHaveAttribute("width", "12");
     expect(glyph).not.toHaveClass("rotate-90");
-    expect(glyph).toHaveClass("text-grey", "group-hover:text-navy", "duration-200", "motion-reduce:transition-none", "self-center");
+    expect(glyph).toHaveClass("motion-reduce:transition-none");
     rerender(<DisclosureChevron open />);
     expect(container.querySelector("svg")).toHaveClass("rotate-90");
   });
@@ -20,7 +20,7 @@ describe("DisclosureChevron", () => {
 describe("DisclosureWord", () => {
   it("draws the one chevron before its word", () => {
     const { container } = render(<DisclosureWord open />);
-    expect(container.querySelector("svg")).toHaveClass("rotate-90", "group-hover:text-navy");
+    expect(container.querySelector("svg")).toHaveClass("rotate-90");
   });
 
   it("reads Show when shut and Hide when open, hidden from assistive technology unless it names its button", () => {

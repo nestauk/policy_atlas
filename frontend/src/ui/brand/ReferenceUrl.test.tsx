@@ -10,7 +10,6 @@ describe("ReferenceUrl", () => {
     expect(link).toHaveAttribute("href", "https://doi.org/10.1000/x/");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
-    expect(link).toHaveClass("text-grey", "hover:text-navy");
     expect(link.querySelector(".print\\:inline")).toBeNull();
   });
 

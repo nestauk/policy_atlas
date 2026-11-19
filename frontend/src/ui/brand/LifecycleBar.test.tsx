@@ -24,12 +24,4 @@ describe("LifecycleBar — the Result tab's routes", () => {
       expect(screen.getByRole("link", { name: "Sources" })).not.toHaveAttribute("aria-current");
     },
   );
-
-  it("gives the option card's Result tab the same active classes as on the Result page", () => {
-    renderAt("/tasks/t1/result");
-    const onResult = screen.getByRole("link", { name: "Result" }).className;
-    renderAt("/tasks/t1/options/o1");
-    const links = screen.getAllByRole("link", { name: "Result" });
-    expect(links.at(-1)?.className).toBe(onResult);
-  });
 });

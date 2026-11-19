@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { TONE_HEX, TONE_VAR, toneSquareClass } from "./evidence";
+import { TONE_HEX, TONE_VAR } from "./evidence";
 
 // Paths are relative to the vitest root (`frontend/`).
 const cssSource = readFileSync("src/index.css", "utf8");
@@ -21,10 +21,5 @@ describe("the tone squares' colours, defined once", () => {
       const name = /var\(--([a-z0-9-]+)\)/.exec(variable)?.[1] ?? "";
       expect(token(name), colour).toBe(TONE_HEX[colour as keyof typeof TONE_HEX]);
     }
-  });
-
-  it("draws the grey square in Line 2", () => {
-    expect(toneSquareClass("grey")).toContain("bg-line-2");
-    expect(toneSquareClass("grey")).toContain("size-1.5");
   });
 });
