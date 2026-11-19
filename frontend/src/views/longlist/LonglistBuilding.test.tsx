@@ -150,6 +150,9 @@ describe("LonglistBuilding (task 058, N24; round 10)", () => {
   it("moves the rows into their themes inside a View Transition", async () => {
     let finish: () => void = () => {};
     const start = vi.fn((update: () => void) => {
+      // The document carries this class only while the transition runs. If it
+      // stayed, every later View Transition would pick up the longlist rows.
+      expect(document.documentElement).toHaveClass("longlist-regrouping");
       update();
       return { finished: new Promise<void>((resolve) => (finish = resolve)) };
     });
@@ -186,6 +189,7 @@ describe("LonglistBuilding (task 058, N24; round 10)", () => {
       finish();
       await Promise.resolve();
     });
+    expect(document.documentElement).not.toHaveClass("longlist-regrouping");
   });
   // Round 11: the names "Clustering into options" publishes are rows at once.
   it("shows the options clustering names as rows while it runs, each assigning its sources", () => {

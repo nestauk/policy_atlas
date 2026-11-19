@@ -720,6 +720,10 @@ describe("TasksListView — the row's menu (round 12)", () => {
     await user.click(screen.getByRole("tab", { name: "Organisation" }));
     const control = screen.getByRole("button", { name: "Task settings: Healthier childhoods" });
     expect(control.closest("a")).toBeNull();
+    // Hidden until hover or focus from the medium width up only. A phone has no
+    // hover, so the control must not be hidden there.
+    expect(control).toHaveClass("md:opacity-0", "md:group-hover:opacity-100", "md:group-focus-within:opacity-100");
+    expect(control).not.toHaveClass("opacity-0");
     expect(control.closest("li")).toContainElement(screen.getByRole("link", { name: /^Healthier childhoods/ }));
     expect(screen.queryByRole("button", { name: "Task settings: Grace's task" })).not.toBeInTheDocument();
   });

@@ -602,6 +602,9 @@ describe("AppShell — global chrome", () => {
     expect(screen.getByRole("link", { name: "Projects" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("link", { name: "New" })).not.toHaveAttribute("aria-current");
     expect(screen.getByRole("link", { name: TASK.many })).not.toHaveAttribute("aria-current");
+    // The Tasks item draws its active rule from its own match function, and
+    // aria-current does not read that function, so the class is the only signal.
+    expect(screen.getByRole("link", { name: TASK.many })).not.toHaveClass("after:scale-x-100");
   });
 
   it("opens Sign out from the account icon", async () => {

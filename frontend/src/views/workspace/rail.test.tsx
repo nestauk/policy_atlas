@@ -34,9 +34,13 @@ describe("useRail", () => {
     const expand = screen.getByRole("button", { name: "Expand the Task Agent rail" });
     expect(expand).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByText("pane content")).not.toBeVisible();
+    // The column width is the hook's output: a rail that hides its contents but
+    // keeps its full width would otherwise pass.
+    expect(screen.getByTestId("grid").style.width).toBe("48px");
 
     await userEvent.keyboard("{Enter}");
     expect(screen.getByText("pane content")).toBeVisible();
+    expect(screen.getByTestId("grid").style.width).toBe("55%");
   });
 
   it("arrow keys resize within the clamped bounds", () => {
