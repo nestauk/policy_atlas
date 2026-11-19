@@ -36,7 +36,7 @@ guard = _load()
 def _hash(tmp_path: Path, name: str, text: str) -> str:
     path = tmp_path / name
     path.write_text(text, encoding="utf-8")
-    return guard.sha256_of(path)
+    return str(guard.sha256_of(path))
 
 
 def test_comment_and_formatting_edits_keep_the_hash(tmp_path: Path) -> None:
