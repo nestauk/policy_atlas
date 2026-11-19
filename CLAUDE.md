@@ -1,6 +1,5 @@
 # CLAUDE.md for Policy Atlas
 
-
 Guidance for working on Policy Atlas (v3).
 
 ## Key conventions
@@ -9,7 +8,7 @@ First and foremost, refer to DS_GUIDELINES.md for our org conventions.
 
 - Every module starts with a docstring; runnable scripts document their CLI usage in it.
 - Every function: type hints + Google-style docstring. Getters must state data publisher, geographic coverage, and CRS.
-- Functional/modular style; avoid OOP unless customising an API. Never use `global` (one legacy exception exists in `load_geodata.py`).
+- Functional/modular style; avoid OOP unless customising an API.
 - `black` autoformatting via pre-commit; snake_case functions/variables, SCREAMING_SNAKE module-level constants.
 - No hard-coded S3 paths or magic numbers — put them in `base.yaml`.
 - Prefer `logging` over `print` (much existing code uses `print`; new code should use `logging`).
