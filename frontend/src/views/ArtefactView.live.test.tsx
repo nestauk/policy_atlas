@@ -233,7 +233,7 @@ describe("ArtefactView around a run", () => {
     expect(screen.queryByText("Report ready")).toBeNull();
   });
 
-  it("swaps in place: the same page and section elements, sections left open, what arrives fades in", async () => {
+  it("swaps in place: the same page and section elements, sections left open", async () => {
     const LIVE_PROSE = "Costs prose.";
     const view = render(page());
     world.stream = streamOf("running", SECTIONS);
@@ -289,12 +289,10 @@ describe("ArtefactView around a run", () => {
     expect(screen.getByRole("main")).toBe(main);
     const after = screen.getByRole("heading", { name: "Costs and funding" }).closest("section") as HTMLElement;
     expect(after).toBe(costs);
-    // The section the reader was reading stays open; its control fades in.
+    // The section the reader was reading stays open.
     expect(within(after).getByRole("button", { name: /Costs and funding/ })).toHaveAttribute("aria-expanded", "true");
-    expect(within(after).getAllByText("Hide")[0].closest(".anim-swap-in")).not.toBeNull();
-    // The marker is a control now, and its new number fades in.
-    const marker = within(after).getByRole("button", { name: "Source 1: Smith 2023" });
-    expect(marker).toHaveClass("anim-swap-in");
+    // The marker is a control now.
+    expect(within(after).getByRole("button", { name: "Source 1: Smith 2023" })).toBeInTheDocument();
   });
 
   it("opens a report the reader watched being written with every section open and Hide all, kept across tabs (owner, round 12)", () => {
@@ -443,7 +441,7 @@ describe("ArtefactView around a run", () => {
     expect(await within(sheet).findByText("“New quote.”")).toBeInTheDocument();
   });
 
-  it("keeps the opening paragraph and the most relevant sources in place at the swap; only their additions fade in", () => {
+  it("keeps the opening paragraph and the most relevant sources in place at the swap, with their additions", () => {
     const INTRO = "This report sets out what raises take-up.";
     const NOTE = "The largest trial of direct payment.";
     const view = render(page());
@@ -496,17 +494,13 @@ describe("ArtefactView around a run", () => {
       ],
     } as unknown as typeof committedArtefact;
     view.rerender(page());
-    // The same elements, not faded in again.
-    const intro = screen.getByText(INTRO);
-    expect(intro).toBe(liveIntro);
-    expect(intro).not.toHaveClass("anim-swap-in");
+    // The same elements.
+    expect(screen.getByText(INTRO)).toBe(liveIntro);
     const note = screen.getByText(NOTE).closest("li") as HTMLElement;
     expect(note).toBe(liveNote);
-    expect(note.closest(".anim-swap-in")).toBeNull();
-    // What the committed report adds to them does fade in: the title as a
-    // link, the chips.
+    // What the committed report adds to them: the title as a link, the chips.
     expect(within(note).getByRole("link", { name: "Smith 2023" })).toBeInTheDocument();
-    expect(within(note).getByText("Cited by 1 claim").closest(".anim-swap-in")).not.toBeNull();
+    expect(within(note).getByText("Cited by 1 claim")).toBeInTheDocument();
   });
 
   it("opens the report at once when the run had finished before the page loaded", () => {

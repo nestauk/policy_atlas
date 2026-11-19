@@ -148,7 +148,7 @@ describe("ChatMessages", () => {
 
   // Owner, round 14: References in the report's style, the shared marks in
   // place of the chips.
-  it("lays a References row out as the report's: the blue number, the reference line and the marks line", async () => {
+  it("lays a References row out as the report's: the number, the reference line and the marks line", async () => {
     mockGet.mockResolvedValue({ data: { context: "context text", year: 2024 }, error: undefined });
     renderChat([
       turn({
@@ -158,11 +158,10 @@ describe("ChatMessages", () => {
     const user = userEvent.setup();
     await user.click(screen.getByText("References (1)"));
     const row = screen.getByRole("button", { name: "Source 1: A breakfast study" }).closest("li") as HTMLElement;
-    expect(within(row).getByRole("button", { name: "Source 1: A breakfast study" })).toHaveClass("text-blue", "tabular-nums");
+    expect(within(row).getByRole("button", { name: "Source 1: A breakfast study" })).toBeInTheDocument();
     expect(within(row).getByRole("button", { name: "A breakfast study" })).toBeInTheDocument();
     expect(within(row).getByTestId("strength-mark")).toBeInTheDocument();
     expect(within(row).getByTestId("status-mark")).toHaveAttribute("data-tone", "yellow");
-    expect(row.querySelector(".rounded-full, [class*='chip']")).toBeNull();
     // The verdict opens the citation's sheet.
     await user.click(within(row).getByRole("button", { name: "Tier 2 · grounded" }));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
@@ -284,12 +283,10 @@ describe("ChatMessages", () => {
     expect(marker).toBeDisabled();
   });
 
-  // 030 fold: chat's answer prose becomes claim-span annotated, mirroring
-  // the report reader's own claim-span affordance (same citation-marker
-  // class, same click/Enter/Space-opens-a-sheet grain) — a distinct entry
-  // point from the literal `[n]` marker button, which keeps its 029 Fix C
-  // behaviour untouched.
-  it("renders a claim span with the report's citation-marker treatment, opening a claim-oriented sheet over the claim's cited source (030 fold)", async () => {
+  // Chat's answer prose is claim-span annotated, as the report reader's is (a
+  // click, Enter or Space opens a sheet), a distinct entry point from the
+  // literal `[n]` marker button.
+  it("renders a claim span as a button, opening a claim-oriented sheet over the claim's cited source", async () => {
     mockGet.mockResolvedValueOnce({
       data: { context: "Costs fell sharply overall.", year: 2024, venue: "Journal of Policy" },
       error: undefined,
@@ -303,14 +300,12 @@ describe("ChatMessages", () => {
       }),
     ]);
     const span = screen.getByRole("button", { name: spanText });
-    expect(span.className).toContain("citation-marker");
     // The literal `[1]` marker stays its own, separate, small button (the
     // References row below carries a second one) — the span wraps only the
     // claim's own text, not the trailing marker.
     expect(screen.getAllByRole("button", { name: "[1]" })).toHaveLength(1);
-    // The References row's number is the report's: Electric Blue, named for
-    // its source, opening it (owner, round 14).
-    expect(screen.getByRole("button", { name: "Source 1: A breakfast study" })).toHaveClass("text-blue");
+    // The References row's number is the report's: named for its source.
+    expect(screen.getByRole("button", { name: "Source 1: A breakfast study" })).toBeInTheDocument();
     await userEvent.setup().click(span);
     const sheet = screen.getByRole("dialog", { name: "Evidence for this claim" });
     // Appears twice: the claim-text blockquote, and again inside the

@@ -315,7 +315,7 @@ analysis enrichment for Impact/VfM.
 profile name is a compile error — and **defaults to both profiles at deep depth**
 (`ANALYSIS_DEPTH_TABLE`; extract stays deep-only, and `findings_chain` — extract + group — is
 only ever meaningful once `select` has run). IOF-only remains expressible; **ICF-only is not**
-this slice (`docs/deferred.md` § Extract names the seam). Each profile is its own fingerprint
+this slice (`docs/deferred.md` § Evidence search: extraction names the seam). Each profile is its own fingerprint
 domain (own schema version, own prompt, own field rules, own vetter) hanging off
 `source_extraction_record` via the same composite FK — a profile's arrival or version bump
 never invalidates the other profile's memoised findings. `extraction_result` stays one row per
@@ -342,7 +342,7 @@ Evidence search's chain, its two profiles and § 1 acquire are unchanged.
 of the two schemas' records a run produced; a facet or claim shape outside both schemas is
 still shallow-landscape-only (topic clusters/tags/metadata). A future third schema is content
 work (a new profile bundle plugged into the profile-parameterised pipeline), not plumbing —
-see `docs/deferred.md` § Extract / findings layer for the schema-candidate ladder.
+see `docs/deferred.md` § Evidence search: extraction for the schema-candidate ladder.
 
 ## 8 — group (facet-level theming)
 

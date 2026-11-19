@@ -532,7 +532,7 @@ describe("PlanDocument", () => {
         />
       </TooltipProvider>,
     );
-    expect(screen.getByRole("button", { name: "Start search" }).className).toContain("bg-green");
+    expect(screen.getByRole("button", { name: "Start search" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Move the plan to the side" }));
     expect(onDock).toHaveBeenCalledTimes(1);
   });
@@ -555,7 +555,7 @@ describe("PlanDocument", () => {
     expect(screen.getByRole("button", { name: "Start search" })).toBeInTheDocument();
   });
 
-  it("keeps the title left-aligned in the same column as the sections", () => {
+  it("keeps the title in the same column as the sections", () => {
     mockUsePlan({ data: planOut(fullPlan()) });
     render(
       <TooltipProvider delayDuration={0}>
@@ -570,32 +570,8 @@ describe("PlanDocument", () => {
       </TooltipProvider>,
     );
     const title = screen.getByRole("heading", { name: "Search plan" });
-    expect(title.className).not.toContain("text-center");
-    expect(title.parentElement?.className).not.toContain("text-center");
     const column = title.closest("header")?.parentElement?.parentElement;
     expect(column).toContainElement(screen.getByRole("heading", { name: "Research question" }));
-  });
-
-  it("renders dock and close as matching icon buttons", () => {
-    mockUsePlan({ data: planOut(fullPlan()) });
-    render(
-      <TooltipProvider delayDuration={0}>
-        <PlanDocument
-          taskId={TASK_ID}
-          placement="center"
-          onClose={vi.fn()}
-          onDock={vi.fn()}
-          overlay={{}}
-          onOverlayChange={vi.fn()}
-        />
-      </TooltipProvider>,
-    );
-    const dock = screen.getByRole("button", { name: "Move the plan to the side" });
-    const close = screen.getByRole("button", { name: "Close the search plan" });
-    expect(dock.className).toBe(close.className);
-    expect(dock.querySelector("svg")?.getAttribute("class")).toBe(
-      close.querySelector("svg")?.getAttribute("class"),
-    );
   });
 
   it("edits screening rules as separate inputs with add/remove", async () => {

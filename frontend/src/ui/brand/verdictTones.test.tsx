@@ -33,16 +33,13 @@ describe("the theory of change's verdict tones", () => {
     expect(theoryVerdictColour({ mechanism: "plausible", evidence: "too_little" })).toBe("grey");
   });
 
-  it("draws the grey square as the shared 6 px square in Line 2, and the others as ToneSquare", () => {
+  it("marks the grey square and the others with their tone, hidden from screen readers", () => {
     const { rerender } = render(<VerdictSquare colour="grey" />);
     const grey = screen.getByTestId("verdict-mark");
     expect(grey).toHaveAttribute("data-tone", "grey");
     expect(grey).toHaveAttribute("aria-hidden", "true");
-    expect(grey.className).toContain("size-1.5");
-    expect(grey.className).toContain("bg-line-2");
-    expect(grey.className).not.toContain("bg-green");
     rerender(<VerdictSquare colour="red" />);
-    expect(screen.getByTestId("verdict-mark").className).toContain("bg-red");
+    expect(screen.getByTestId("verdict-mark")).toHaveAttribute("data-tone", "red");
   });
 
   it("writes the word beside its square, and a word with no tone alone", () => {

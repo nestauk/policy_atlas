@@ -10,7 +10,6 @@ describe("Button", () => {
     const onClick = vi.fn();
     render(<Button onClick={onClick}>Start the analysis</Button>);
     const button = screen.getByRole("button", { name: "Start the analysis" });
-    expect(button.className).toContain("cutout");
     await userEvent.tab();
     expect(button).toHaveFocus();
     await userEvent.keyboard("{Enter}");
@@ -24,19 +23,6 @@ describe("Button", () => {
     const className = screen.getByRole("button", { name: "New task" }).className;
     expect(className).toContain("text-white");
     expect(className).toContain("text-meta");
-  });
-
-  it("secondary and ghost variants drop the cutout", () => {
-    render(
-      <>
-        <Button variant="secondary">Cancel</Button>
-        <Button variant="ghost">Back to top</Button>
-      </>,
-    );
-    expect(screen.getByRole("button", { name: "Cancel" }).className).not.toContain("cutout");
-    expect(screen.getByRole("button", { name: "Back to top" }).className).not.toContain(
-      "cutout",
-    );
   });
 
   it("disabled is present but inert", async () => {

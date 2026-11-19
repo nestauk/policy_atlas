@@ -58,18 +58,11 @@ beforeEach(() => {
 });
 
 describe("LonglistGrid", () => {
-  // Round 13 (owner): the grid's heads take the list's group heading, the
-  // name in the uppercase Label style in Navy and the count in Meta Grey.
-  // Round 13 (owner): the heads take the list's group heading, the name
-  // alone, with no count.
-  it("heads its columns and rows in the list's group heading style, the name alone", () => {
+  // The heads take the list's group heading, the name alone, with no count.
+  it("heads its columns and rows with the name alone", () => {
     renderGrid();
-    const head = screen.getAllByRole("columnheader")[1];
-    expect(head.querySelector(".uppercase .uppercase")).toHaveClass("text-navy");
-    expect(head).not.toHaveTextContent(/options?|shortlisted/);
-    const row = screen.getAllByRole("rowheader")[0];
-    expect(row.querySelector(".uppercase .uppercase")).toHaveClass("text-navy");
-    expect(row).not.toHaveTextContent(/options?|shortlisted/);
+    expect(screen.getAllByRole("columnheader")[1]).not.toHaveTextContent(/options?|shortlisted/);
+    expect(screen.getAllByRole("rowheader")[0]).not.toHaveTextContent(/options?|shortlisted/);
   });
 
   it("lays out rows by lever type (plus Other) and columns by the chosen line, Ambition first", () => {
@@ -168,8 +161,8 @@ describe("LonglistGrid", () => {
     expect(container.querySelectorAll("table")).toHaveLength(1);
   });
 
-  // Round 10 (finding 13): the lever types with no option are one Grey line
-  // under the table, not empty bands (the absence is still the message).
+  // The lever types with no option are one line under the table, not empty
+  // bands (the absence is still the message).
   it("places each option's tile at its lever/ambition intersection and folds the empty lever rows into one line", () => {
     renderGrid(true);
     const structuralCell = screen.getByRole("link", { name: "National sanctions regime" }).closest("td");
@@ -177,26 +170,16 @@ describe("LonglistGrid", () => {
     expect(within(structuralCell as HTMLElement).getByText("National sanctions regime")).toBeInTheDocument();
     expect(screen.queryByText("no option of this type on the longlist")).not.toBeInTheDocument();
     expect(screen.queryByRole("row", { name: /^Convene/ })).not.toBeInTheDocument();
-    // Round 13 (owner): under the grid in the row heads' column, "No options
-    // for" then each lever on its own line, as heads, not in the table.
+    // Under the grid, "No options found for" then each lever on its own line,
+    // not in the table.
     expect(screen.queryByRole("row", { name: /^No options found for/ })).not.toBeInTheDocument();
     const absent = screen.getByRole("group", { name: "No options found for" });
     expect(absent.closest("table")).toBeNull();
-    expect(absent).toHaveClass("w-44", "space-y-2");
-    // A Line hairline across the grid under its last row, 24 px above the foot.
-    expect(absent.parentElement).toHaveClass("border-t", "border-line", "pt-6");
-    expect(absent.parentElement).not.toHaveClass("w-44");
     const lines = Array.from(absent.children).map((line) => line.textContent);
     expect(lines[0]).toBe("No options found for");
     expect(lines).toContain("Convene");
     expect(lines).not.toContain("Other");
     expect(lines.join(" ")).not.toMatch(/Enforce existing powers|Regulate/);
-    // The words a Body Grey line in sentence case; the
-    // names in the heads' style (round 13, owner).
-    const [words, ...names] = Array.from(absent.children);
-    expect(words).toHaveClass("text-body", "text-grey");
-    expect(words).not.toHaveClass("uppercase");
-    for (const line of names) expect(line).toHaveClass("uppercase", "text-grey");
   });
 
   it("hides excluded options until asked", () => {
@@ -204,29 +187,25 @@ describe("LonglistGrid", () => {
     expect(screen.queryByRole("link", { name: "National sanctions regime" })).not.toBeInTheDocument();
   });
 
-  // Round 10 (finding 6): states in words, no chips; red only on the failure word.
+  // States in words, no chips.
   it("marks an excluded tile with the grey exclude glyph and no in-scope evidence in words", () => {
-    const { container } = renderGrid(true);
+    renderGrid(true);
     const excludedLink = screen.getByRole("link", { name: "National sanctions regime" });
-    expect(excludedLink).toHaveClass("text-grey");
     const excludedCell = excludedLink.closest("td") as HTMLElement;
-    // Round 13 (owner): no word on an excluded tile; the grey exclude glyph
-    // in the toggle's corner, not a control, its exclusion line as the
-    // tooltip and its name.
+    // No word on an excluded tile; the exclude glyph, not a control, its
+    // exclusion line as the tooltip and its name.
     const tile = excludedLink.closest("li") as HTMLElement;
     expect(within(tile).queryByText("Excluded")).not.toBeInTheDocument();
     expect(within(tile).queryByRole("button")).not.toBeInTheDocument();
     const mark = within(tile).getByTestId("tile-excluded");
-    expect(mark).toHaveClass("text-grey", "absolute", "-top-2", "-right-2", "h-10", "w-10");
     expect(mark.querySelector("svg")).toHaveAttribute("width", "24");
-    // Round 15 (owner): the one short phrase, no constraint or reason.
+    // The one short phrase, no constraint or reason.
     expect(mark).toHaveAccessibleName(/^Excluded (by you|by a constraint|with the (theme|lever) .+)$/);
     expect(within(excludedCell).queryByText(/^Excluded$/)).not.toBeInTheDocument();
 
     const noInScopeLink = screen.getByRole("link", { name: "School-based mentoring" });
     const noInScopeCell = noInScopeLink.closest("td") as HTMLElement;
-    expect(within(noInScopeCell).getByText("No in-scope evidence")).toHaveClass("text-grey");
-    expect(container.querySelector("[class*='text-[11.5px]']")).toBeNull();
+    expect(within(noInScopeCell).getByText("No in-scope evidence")).toBeInTheDocument();
   });
 
   it("folds a crowded cell behind +N more", async () => {

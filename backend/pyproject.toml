@@ -97,7 +97,7 @@ src = ["src", "tests"]
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM"]
+select = ["E", "F", "I", "UP", "B", "SIM", "T20"]
 
 [dependency-groups]
 dev = [

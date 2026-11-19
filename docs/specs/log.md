@@ -630,7 +630,7 @@ owner's words quoted (item 10, the decision sheet, landed at plan approval). Con
   withdrawn (24 boards). [capability.md](capabilities/options-scoping/capability.md) § Output
   structure and the report/export bullet, [components.md](capabilities/options-scoping/components.md)
   (synthesise, ⟨longlist depth⟩) amended; the on-demand longlist report recorded in
-  [deferred.md](../deferred.md) § Product / output.
+  [deferred.md](../deferred.md) § Options scoping.
 
 ## 2026-09-07 (boards redrawn)
 * **Update**: Options scoping wireframes redrawn to concept rulings 15–44 at the owner's direction

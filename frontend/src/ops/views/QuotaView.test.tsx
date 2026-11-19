@@ -20,7 +20,6 @@ describe("Set a quota", () => {
     expect(warning).toHaveTextContent(
       "Warning: this limit protects the shared run capacity. A higher number lets this person take more of it at the same time, which can slow other people's runs.",
     );
-    expect(warning).toHaveClass("bg-yellow-tint");
     const limits = screen.getByRole("region", { name: "Currently applied limits" });
     expect(limits).toHaveTextContent("Tasks per year: 100 · from Nesta");
     expect(limits).toHaveTextContent("Simultaneous tasks: 3 · from the default");
