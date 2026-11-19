@@ -12,10 +12,21 @@ from typing import Literal
 #: threads (the default), or ``queued`` through the cloud queue and function.
 IngestMode = Literal["in_process", "queued"]
 
-#: The in-app feedback elements, each switched on by name in
-#: ``POLICY_ATLAS_FEEDBACK`` (task 062): citation flag, missing paper,
-#: use-intent question, claim flag, report a problem, onboarding profile.
-FEEDBACK_ELEMENTS = frozenset({"cf", "mp", "uiq", "clf", "rap", "op"})
+#: The in-app feedback elements. Each one has its own feature flag: an element
+#: is on only when ``POLICY_ATLAS_FEEDBACK`` names it. The frontend reads the
+#: same names from ``VITE_FEEDBACK`` at build time.
+FEEDBACK_ELEMENTS = frozenset(
+    {
+        "citation_flag",
+        "missing_paper",
+        "use_intent",
+        "claim_flag",
+        "problem_report",
+        "onboarding",
+        # Product analytics events to PostHog (policy_atlas.api.analytics).
+        "analytics",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,10 +53,11 @@ class Settings:
         ingest_queue_url: The SQS queue the documents go to in ``queued`` mode
             (``POLICY_ATLAS_INGEST_QUEUE_URL``); None in process.
         feedback_elements: The in-app feedback elements that are on
-            (``POLICY_ATLAS_FEEDBACK``, a comma-separated list of
-            ``FEEDBACK_ELEMENTS`` names; task 062). Empty by default.
-        pa_version: The deployed git commit (``POLICY_ATLAS_VERSION``), stored
-            on each feedback event; None in local development.
+            (``POLICY_ATLAS_FEEDBACK``, a comma-separated list of names from
+            :data:`FEEDBACK_ELEMENTS`). Empty by default: every element is off.
+        pa_version: The version of the running application
+            (``POLICY_ATLAS_VERSION``, set from the git tag or commit at
+            deploy time). Stored on each feedback event. None when unset.
     """
 
     oidc_issuer: str
@@ -127,10 +139,12 @@ def feedback_elements_from_env() -> frozenset[str]:
     """Read ``POLICY_ATLAS_FEEDBACK``: the feedback elements that are on.
 
     Returns:
-        The element names; empty when the variable is unset or blank.
+        The named elements. Empty when the variable is unset or blank.
 
     Raises:
-        RuntimeError: The variable names an element that does not exist.
+        RuntimeError: The variable names an element that does not exist, so a
+            spelling mistake fails at startup and does not leave an element
+            silently off.
     """
     value = _optional("POLICY_ATLAS_FEEDBACK") or ""
     elements = frozenset(name.strip() for name in value.split(",") if name.strip())
@@ -138,7 +152,7 @@ def feedback_elements_from_env() -> frozenset[str]:
     if unknown:
         raise RuntimeError(
             f"POLICY_ATLAS_FEEDBACK names unknown elements {sorted(unknown)}; "
-            f"known: {sorted(FEEDBACK_ELEMENTS)}"
+            f"the elements are {sorted(FEEDBACK_ELEMENTS)}"
         )
     return elements
 

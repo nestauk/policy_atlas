@@ -23,6 +23,13 @@ placeholder glyph is a rendering decision and belongs to the frontend.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine import Connection
+
+from policy_atlas.core.schema import app_user
+
 #: How many leading characters of the token subject the sub rendering keeps.
 #: A Cognito ``sub`` is a UUID, so eight hex characters read as an identifier
 #: while staying short enough for a table cell.
@@ -47,6 +54,28 @@ def sub_display(user_id: str) -> str:
         a UUID and the address never reaches the API).
     """
     return f"User {user_id[:SUB_DISPLAY_CHARS]}"
+
+
+def provision_user(conn: Connection, user_id: str) -> None:
+    """Create the caller's bare ``app_user`` row when it does not exist yet.
+
+    ``ON CONFLICT DO NOTHING``, never ``DO UPDATE``: an existing row holds the
+    ``display_name``, ``email`` and ``is_admin`` that ops set out of band, and
+    a sign-in must not overwrite them (see ``api/routers/me.py``).
+
+    Args:
+        conn: Open database connection.
+        user_id: The caller's token subject.
+    """
+    conn.execute(
+        pg_insert(app_user)
+        .values(
+            user_id=user_id,
+            display_name=sub_display(user_id),
+            created_at=datetime.now(UTC),
+        )
+        .on_conflict_do_nothing(index_elements=["user_id"])
+    )
 
 
 def owner_display_for(owner_user_id: str | None, display_name: str | None) -> str | None:

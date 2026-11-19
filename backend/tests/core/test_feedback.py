@@ -1,18 +1,14 @@
-"""In-app feedback foundations (task 062, ADR 0045): the event envelope, the
-toggle rule, retraction, the Langfuse score mirror, the trace id the runner
-stores on each component run, and the migration round trip.
+"""In-app feedback foundations: the envelope, toggles, the trace join and the score mirror.
 
-Tests on the ``conn`` fixture roll back. The runner and migration tests commit:
-they remove what they wrote and leave the chain at head.
+Covers ``core/feedback.py``, the two mirror functions in ``core/tracing.py``,
+the runner's trace id write, and the migration round trip. Tracing is off in
+the test suite, so the score calls go to a fake client.
 """
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import Iterator
-from contextlib import contextmanager
-from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any
 
 import pytest
 from alembic import command
@@ -21,327 +17,282 @@ from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.core import tracing
-from policy_atlas.core.feedback import record_feedback_event, retract_feedback, submit_feedback
+from policy_atlas.core.feedback import record_feedback, retract_feedback, trace_id_for
 from policy_atlas.core.schema import app_user, feedback_event, runs
-from policy_atlas.runtime import runner as runner_module
+from policy_atlas.runtime.runner import _store_trace_id
 from tests.conftest import _alembic_cfg
-from tests.helpers import now, seed_task_and_run, seed_walk
-from tests.runtime.test_runner import _cleanup, _seed_task, _single_component_attempt
+from tests.feedback_support import FakeLangfuse, seed_component_run
+from tests.helpers import delete_task_data, now, seed_task_and_run, seed_walk
 
-PRE_REVISION = "f5a1c8e93b27"
-TRACE_ID = "0af7651916cd43dd8448eb211c80319c"
-FEEDBACK_TABLES = {"feedback_event", "missing_paper_resolution", "user_profile"}
+PREVIOUS_REVISION = "f5a1c8e93b27"
 
 
-class _FakeLangfuse:
-    """Records the score calls the mirror makes."""
-
-    def __init__(self) -> None:
-        self.created: list[dict[str, Any]] = []
-        self.deleted: list[str] = []
-        self.api = SimpleNamespace(
-            legacy=SimpleNamespace(score_v1=SimpleNamespace(delete=self.deleted.append))
-        )
-
-    def create_score(self, **kwargs: Any) -> None:
-        self.created.append(kwargs)
-
-    def flush(self) -> None:
-        pass
-
-
-class _OneConnEngine:
-    """Hands ``submit_feedback`` the test's rolled-back connection as its transaction."""
-
-    def __init__(self, conn: Connection) -> None:
-        self._conn = conn
-
-    @contextmanager
-    def begin(self) -> Iterator[Connection]:
-        yield self._conn
-
-
-def _seed(conn: Connection) -> dict[str, Any]:
-    """Insert a user and a run with one traced component run; return the event fields."""
-    task_id, _ = seed_task_and_run(conn)
-    walk = seed_walk(conn, task_id, with_run=True)
-    conn.execute(runs.update().where(runs.c.run_id == walk.run_id).values(trace_id=TRACE_ID))
-    user_id = f"user-{uuid.uuid4()}"
+def _user(conn: Connection) -> str:
+    """Insert one ``app_user`` row and return its id."""
+    user_id = f"feedback-{uuid.uuid4()}"
     conn.execute(
-        app_user.insert().values(user_id=user_id, display_name="Test user", created_at=now())
+        app_user.insert().values(user_id=user_id, display_name="Tester", created_at=now())
     )
-    return {
+    return user_id
+
+
+def _flag(conn: Connection, user_id: str, **overrides: Any) -> Any:
+    """Record one citation flag with defaults that a test can override."""
+    values: dict[str, Any] = {
         "user_id": user_id,
-        "capability_run_id": walk.walk_id,
-        "component_run_id": walk.run_id,
         "surface": "report_references",
         "kind": "citation_flag",
         "target_type": "document",
-        "target_id": str(uuid.uuid4()),
+        "target_id": "doc-1",
         "payload": {"action": "useful"},
-        "pa_version": "abc1234",
     }
+    return record_feedback(conn, **{**values, **overrides})
 
 
-def _active(conn: Connection, user_id: str) -> list[Any]:
-    return list(
-        conn.execute(
-            select(feedback_event)
-            .where(feedback_event.c.user_id == user_id)
-            .where(feedback_event.c.retracted_at.is_(None))
-        )
+def test_a_record_carries_the_full_envelope(conn: Connection) -> None:
+    """Each envelope column is stored, and the trace comes from the named component."""
+    user_id = _user(conn)
+    task_id, _ = seed_task_and_run(conn)
+    walk = seed_walk(conn, task_id, capability="evidence_search")
+    seed_component_run(conn, task_id, walk.walk_id, "acquire", trace_id="trace-acquire")
+    seed_component_run(conn, task_id, walk.walk_id, "synthesise", trace_id="trace-synthesise")
+
+    recorded = _flag(
+        conn,
+        user_id,
+        capability_run_id=walk.walk_id,
+        component="synthesise",
+        pa_version="v1.2.3",
     )
-
-
-def test_an_event_stores_the_envelope_and_the_component_runs_trace(conn: Connection) -> None:
-    event = _seed(conn)
-
-    event_id, trace_id, replaced = record_feedback_event(conn, **event)
 
     row = conn.execute(
-        select(feedback_event).where(feedback_event.c.feedback_event_id == event_id)
-    ).one()
-    assert (trace_id, replaced) == (TRACE_ID, [])
-    assert row.trace_id == TRACE_ID
-    assert row.payload == {"action": "useful"}
-    assert row.pa_version == "abc1234"
-    assert row.retracted_at is None
+        select(feedback_event).where(
+            feedback_event.c.feedback_event_id == recorded.feedback_event_id
+        )
+    ).mappings().one()
+    assert recorded.trace_id == "trace-synthesise"
+    assert recorded.replaced_id is None
+    assert row["user_id"] == user_id
+    assert row["capability_run_id"] == walk.walk_id
+    assert row["trace_id"] == "trace-synthesise"
+    assert (row["surface"], row["kind"]) == ("report_references", "citation_flag")
+    assert (row["target_type"], row["target_id"]) == ("document", "doc-1")
+    assert row["payload"] == {"action": "useful"}
+    assert row["pa_version"] == "v1.2.3"
+    assert row["created_at"] is not None
+    assert row["retracted_at"] is None
 
 
-def test_an_event_with_no_component_run_has_no_trace(conn: Connection) -> None:
-    event = _seed(conn) | {"component_run_id": None}
+def test_a_second_submit_of_a_toggle_retracts_the_first(conn: Connection) -> None:
+    """One active row per (user, target, kind); the old row is kept, retracted."""
+    user_id = _user(conn)
+    first = _flag(conn, user_id)
 
-    _, trace_id, _ = record_feedback_event(conn, **event)
+    second = _flag(conn, user_id, payload={"action": "not_relevant"})
 
-    assert trace_id is None
-
-
-def test_a_changed_toggle_retracts_the_first_row_and_keeps_it(conn: Connection) -> None:
-    event = _seed(conn)
-    first, _, _ = record_feedback_event(conn, **event)
-
-    second, _, replaced = record_feedback_event(
-        conn, **(event | {"payload": {"action": "not_relevant"}})
-    )
-
-    assert replaced == [first]
-    assert [row.feedback_event_id for row in _active(conn, event["user_id"])] == [second]
-    assert (
-        conn.execute(
-            select(feedback_event.c.retracted_at).where(
-                feedback_event.c.feedback_event_id == first
-            )
-        ).scalar_one()
-        is not None
-    )
+    assert second.replaced_id == first.feedback_event_id
+    rows = conn.execute(
+        select(feedback_event.c.feedback_event_id, feedback_event.c.retracted_at).where(
+            feedback_event.c.user_id == user_id
+        )
+    ).all()
+    active = [row.feedback_event_id for row in rows if row.retracted_at is None]
+    assert len(rows) == 2
+    assert active == [second.feedback_event_id]
 
 
-def test_the_same_document_in_another_run_is_a_separate_flag(conn: Connection) -> None:
-    event = _seed(conn)
-    record_feedback_event(conn, **event)
-    task_id, _ = seed_task_and_run(conn)
-    other_run = seed_walk(conn, task_id).walk_id
+def test_a_toggle_is_per_user_and_per_target(conn: Connection) -> None:
+    """Another user, or another target, does not replace the flag."""
+    user_id = _user(conn)
+    _flag(conn, user_id)
 
-    _, _, replaced = record_feedback_event(
-        conn, **(event | {"capability_run_id": other_run, "component_run_id": None})
-    )
-
-    assert replaced == []
-    assert len(_active(conn, event["user_id"])) == 2
+    assert _flag(conn, _user(conn)).replaced_id is None
+    assert _flag(conn, user_id, target_id="doc-2").replaced_id is None
 
 
-def test_a_kind_that_is_not_a_toggle_keeps_every_row(conn: Connection) -> None:
-    event = _seed(conn) | {
-        "kind": "missing_paper",
-        "surface": "report_foot",
+def test_a_kind_that_is_not_a_toggle_keeps_every_record(conn: Connection) -> None:
+    """A user can report many problems for one run."""
+    user_id = _user(conn)
+    report = {
+        "surface": "app_header",
+        "kind": "problem_report",
         "target_type": "run",
+        "target_id": None,
+        "payload": {"problem_kind": "error"},
     }
 
-    record_feedback_event(conn, **event)
-    _, _, replaced = record_feedback_event(conn, **event)
+    first = _flag(conn, user_id, **report)
+    second = _flag(conn, user_id, **report)
 
-    assert replaced == []
-    assert len(_active(conn, event["user_id"])) == 2
-
-
-def test_an_unknown_kind_is_rejected(conn: Connection) -> None:
-    event = _seed(conn) | {"kind": "thumbs"}
-
-    with pytest.raises(IntegrityError), conn.begin_nested():
-        record_feedback_event(conn, **event)
+    assert second.replaced_id is None
+    assert first.feedback_event_id != second.feedback_event_id
+    assert first.trace_id is None
 
 
-def test_submit_mirrors_the_row_as_a_score_and_replaces_the_old_score(
-    conn: Connection,
-) -> None:
-    event = _seed(conn)
-    engine = cast(Engine, _OneConnEngine(conn))
-    client = _FakeLangfuse()
+def test_the_index_refuses_two_active_rows_for_one_toggle(conn: Connection) -> None:
+    """The unique partial index is the guard when two submits race."""
+    user_id = _user(conn)
+    recorded = _flag(conn, user_id)
+    row = conn.execute(
+        select(feedback_event).where(
+            feedback_event.c.feedback_event_id == recorded.feedback_event_id
+        )
+    ).mappings().one()
 
-    first = submit_feedback(engine, cast(Any, client), score_value=1.0, **event)
-    second = submit_feedback(
-        engine,
-        cast(Any, client),
-        score_value=-1.0,
-        comment="About schools, not hospitals",
-        score_metadata={"reason": "off_topic"},
-        **(event | {"payload": {"action": "not_relevant"}}),
+    with pytest.raises(IntegrityError, match="uq_feedback_event_active_toggle"):
+        conn.execute(feedback_event.insert().values({**row, "feedback_event_id": uuid.uuid4()}))
+
+
+def test_the_schema_refuses_a_value_outside_a_closed_list(conn: Connection) -> None:
+    """``kind`` is a Text column with a CHECK, not a free string."""
+    with pytest.raises(IntegrityError, match="ck_feedback_event_kind"):
+        _flag(conn, _user(conn), kind="thumbs")
+
+
+def test_retraction_keeps_the_row_and_is_only_for_the_owner(conn: Connection) -> None:
+    """Retraction sets ``retracted_at``; another user cannot retract; twice is a no-op."""
+    user_id = _user(conn)
+    recorded = _flag(conn, user_id)
+    event_id = recorded.feedback_event_id
+
+    assert retract_feedback(conn, feedback_event_id=event_id, user_id=_user(conn)) is False
+    assert retract_feedback(conn, feedback_event_id=event_id, user_id=user_id) is True
+    assert retract_feedback(conn, feedback_event_id=event_id, user_id=user_id) is False
+    retracted_at = conn.execute(
+        select(feedback_event.c.retracted_at).where(
+            feedback_event.c.feedback_event_id == event_id
+        )
+    ).scalar_one()
+    assert retracted_at is not None
+
+
+def test_the_trace_is_the_newest_run_of_the_component(conn: Connection) -> None:
+    """A step that ran twice joins to its newest trace; no component means the newest run."""
+    task_id, _ = seed_task_and_run(conn)
+    walk = seed_walk(conn, task_id, capability="evidence_search")
+    walk_id = walk.walk_id
+    seed_component_run(conn, task_id, walk_id, "screen_abstract", trace_id="old", age_minutes=9)
+    seed_component_run(conn, task_id, walk_id, "screen_abstract", trace_id="new", age_minutes=5)
+    seed_component_run(conn, task_id, walk_id, "synthesise", trace_id="synth", age_minutes=1)
+
+    assert trace_id_for(conn, capability_run_id=walk_id, component="screen_abstract") == "new"
+    assert trace_id_for(conn, capability_run_id=walk_id) == "synth"
+    assert trace_id_for(conn, capability_run_id=walk_id, component="screen_full") is None
+
+
+def test_a_run_with_no_stored_trace_gives_no_trace(conn: Connection) -> None:
+    """An old run, or a run with tracing off, has a NULL trace id."""
+    task_id, _ = seed_task_and_run(conn)
+    walk = seed_walk(conn, task_id, capability="evidence_search")
+    seed_component_run(conn, task_id, walk.walk_id, "synthesise", trace_id=None)
+
+    assert trace_id_for(conn, capability_run_id=walk.walk_id, component="synthesise") is None
+
+
+def test_the_runner_stores_the_trace_id_in_its_own_transaction(engine: Engine) -> None:
+    """The id is committed on the ``runs`` row; no trace means no write."""
+    with engine.begin() as conn:
+        task_id, run_id = seed_task_and_run(conn)
+    try:
+        _store_trace_id(engine, run_id=run_id, trace_id=None)
+        with engine.connect() as conn:
+            stored = conn.execute(select(runs.c.trace_id).where(runs.c.run_id == run_id))
+            assert stored.scalar_one() is None
+
+        _store_trace_id(engine, run_id=run_id, trace_id="trace-abc")
+        with engine.connect() as conn:
+            stored = conn.execute(select(runs.c.trace_id).where(runs.c.run_id == run_id))
+            assert stored.scalar_one() == "trace-abc"
+    finally:
+        with engine.begin() as conn:
+            delete_task_data(conn, task_id)
+
+
+def test_the_trace_id_of_a_span() -> None:
+    """A span gives its trace id; no span (tracing off) gives None."""
+    span = type("Span", (), {"trace_id": "abc123"})()
+
+    assert tracing.trace_id_of(span) == "abc123"
+    assert tracing.trace_id_of(None) is None
+
+
+def test_the_score_mirror_writes_one_score_by_trace_id() -> None:
+    """The score id is the row id; a label is CATEGORICAL and a number is NUMERIC."""
+    client = FakeLangfuse()
+    event_id = uuid.uuid4()
+
+    tracing.score_feedback(
+        client,  # type: ignore[arg-type]
+        feedback_event_id=event_id,
+        trace_id="trace-1",
+        name="citation_flag",
+        value=-1.0,
+        comment="not about schools",
+        metadata={"surface": "sources_all"},
+    )
+    tracing.score_feedback(
+        client,  # type: ignore[arg-type]
+        feedback_event_id=event_id,
+        trace_id="trace-1",
+        name="claim_flag",
+        value="overstated",
     )
 
-    assert client.created[0] == {
-        "trace_id": TRACE_ID,
-        "score_id": str(first),
+    assert client.scores[0] == {
+        "score_id": str(event_id),
+        "trace_id": "trace-1",
         "name": "citation_flag",
-        "value": 1.0,
+        "value": -1.0,
         "data_type": "NUMERIC",
-        "comment": None,
-        "metadata": {"feedback_event_id": str(first)},
+        "comment": "not about schools",
+        "metadata": {"surface": "sources_all", "feedback_event_id": str(event_id)},
     }
-    assert client.created[1]["score_id"] == str(second)
-    assert client.created[1]["comment"] == "About schools, not hospitals"
-    assert client.created[1]["metadata"] == {
-        "feedback_event_id": str(second),
-        "reason": "off_topic",
-    }
-    assert client.deleted == [str(first)]
+    assert client.scores[1]["data_type"] == "CATEGORICAL"
 
 
-def test_submit_saves_the_row_and_writes_no_score_when_the_run_has_no_trace(
-    conn: Connection,
-) -> None:
-    event = _seed(conn) | {"component_run_id": None}
-    client = _FakeLangfuse()
+def test_the_score_mirror_does_nothing_without_a_client_or_a_trace() -> None:
+    """Tracing off, or a run with no stored trace: the row is kept, no score is written."""
+    client = FakeLangfuse()
+    event_id = uuid.uuid4()
 
-    submit_feedback(
-        cast(Engine, _OneConnEngine(conn)), cast(Any, client), score_value=1.0, **event
+    tracing.score_feedback(
+        None, feedback_event_id=event_id, trace_id="trace-1", name="use_intent", value=2.0
+    )
+    tracing.score_feedback(
+        client,  # type: ignore[arg-type]
+        feedback_event_id=event_id,
+        trace_id=None,
+        name="use_intent",
+        value=2.0,
     )
 
-    assert client.created == []
-    assert len(_active(conn, event["user_id"])) == 1
+    assert client.scores == []
 
 
-def test_retract_sets_retracted_at_and_deletes_the_score_for_the_owner_only(
-    conn: Connection,
-) -> None:
-    event = _seed(conn)
-    engine = cast(Engine, _OneConnEngine(conn))
-    client = _FakeLangfuse()
-    event_id, _, _ = record_feedback_event(conn, **event)
+def test_a_retraction_deletes_the_score_and_a_failure_does_not_raise() -> None:
+    """The delete is a direct HTTP call; an error there must not fail the request."""
+    event_id = uuid.uuid4()
+    client = FakeLangfuse()
+    broken = FakeLangfuse(delete_error=ConnectionError("langfuse is down"))
 
-    assert not retract_feedback(
-        engine, cast(Any, client), user_id="someone-else", feedback_event_id=event_id
-    )
-    assert len(_active(conn, event["user_id"])) == 1
+    tracing.delete_feedback_score(client, event_id)  # type: ignore[arg-type]
+    tracing.delete_feedback_score(broken, event_id)  # type: ignore[arg-type]
+    tracing.delete_feedback_score(None, event_id)
 
-    assert retract_feedback(
-        engine, cast(Any, client), user_id=event["user_id"], feedback_event_id=event_id
-    )
-    assert _active(conn, event["user_id"]) == []
-    assert client.deleted == [str(event_id)]
-    # A second retraction is a no-op.
-    assert not retract_feedback(
-        engine, cast(Any, client), user_id=event["user_id"], feedback_event_id=event_id
-    )
+    assert client.score_api.deleted == [str(event_id)]
 
 
-def test_a_category_is_a_categorical_score_and_a_failed_mirror_never_raises() -> None:
-    client = _FakeLangfuse()
-    tracing.feedback_score(
-        cast(Any, client), trace_id=TRACE_ID, score_id="s", name="use_intent", value="dismissed"
-    )
-    assert client.created[0]["data_type"] == "CATEGORICAL"
-
-    def fail(**kwargs: Any) -> None:
-        raise RuntimeError("Langfuse is down")
-
-    client.create_score = fail  # type: ignore[method-assign]
-    tracing.feedback_score(
-        cast(Any, client), trace_id=TRACE_ID, score_id="s", name="use_intent", value=2.0
-    )
-    client.api.legacy.score_v1.delete = fail
-    tracing.delete_feedback_score(cast(Any, client), score_id="s")
-    # Tracing off: nothing to call.
-    tracing.feedback_score(None, trace_id=TRACE_ID, score_id="s", name="use_intent", value=2.0)
-    tracing.delete_feedback_score(None, score_id="s")
-
-
-def test_the_runner_stores_the_trace_id_even_when_the_component_rolls_back(
-    engine: Engine, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    task_id: uuid.UUID | None = None
-
-    @contextmanager
-    def traced_span(*args: Any, **kwargs: Any) -> Iterator[Any]:
-        yield SimpleNamespace(trace_id=TRACE_ID)
-
-    def rollback_harness(conn: Connection, **kwargs: Any) -> dict[str, Any]:
-        raise RuntimeError("forced component rollback")
-
-    monkeypatch.setattr(tracing, "component_span", traced_span)
-    monkeypatch.setattr(runner_module, "run_harness", rollback_harness)
-    try:
-        task_id, scope_id = _seed_task(engine)
-        outcome = _single_component_attempt(
-            engine, task_id=task_id, scope_id=scope_id, component="acquire"
-        )
-        assert outcome.status == "failed"
-        with engine.connect() as conn:
-            stored = conn.execute(
-                select(runs.c.trace_id).where(runs.c.task_id == task_id)
-            ).scalar_one()
-        assert stored == TRACE_ID
-    finally:
-        _cleanup(engine, task_id)
-
-
-def test_a_failed_trace_id_write_does_not_fail_the_component(
-    engine: Engine, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    task_id: uuid.UUID | None = None
-
-    @contextmanager
-    def traced_span(*args: Any, **kwargs: Any) -> Iterator[Any]:
-        # Postgres refuses a NUL character in text, so the write of this id fails.
-        yield SimpleNamespace(trace_id="bad\x00id")
-
-    def succeeding_harness(conn: Connection, *, run_id: uuid.UUID, **kwargs: Any) -> dict[str, Any]:
-        conn.execute(
-            runs.update().where(runs.c.run_id == run_id).values(status="succeeded", ended_at=now())
-        )
-        return {"summary": {"sources_added": 1}, "error": None}
-
-    monkeypatch.setattr(tracing, "component_span", traced_span)
-    monkeypatch.setattr(runner_module, "run_harness", succeeding_harness)
-    try:
-        task_id, scope_id = _seed_task(engine)
-        outcome = _single_component_attempt(
-            engine, task_id=task_id, scope_id=scope_id, component="acquire"
-        )
-        assert outcome.status == "succeeded"
-        with engine.connect() as conn:
-            stored = conn.execute(
-                select(runs.c.trace_id).where(runs.c.task_id == task_id)
-            ).scalar_one()
-        assert stored is None
-    finally:
-        _cleanup(engine, task_id)
-
-
-def test_the_revision_round_trips(engine: Engine) -> None:
+def test_the_migration_round_trip(engine: Engine) -> None:
+    """Downgrade drops the tables and the column; upgrade brings them back."""
+    tables = {"feedback_event", "missing_paper_resolution", "user_profile"}
     cfg = _alembic_cfg()
-
-    def shape() -> tuple[set[str], bool]:
-        with engine.connect() as conn:
-            inspector = inspect(conn)
-            tables = FEEDBACK_TABLES & set(inspector.get_table_names())
-            has_trace = "trace_id" in {c["name"] for c in inspector.get_columns("runs")}
-        return tables, has_trace
-
     try:
-        command.upgrade(cfg, "head")
-        assert shape() == (FEEDBACK_TABLES, True)
-        command.downgrade(cfg, PRE_REVISION)
-        assert shape() == (set(), False)
+        command.downgrade(cfg, PREVIOUS_REVISION)
+        inspector = inspect(engine)
+        assert not tables & set(inspector.get_table_names())
+        assert "trace_id" not in {col["name"] for col in inspector.get_columns("runs")}
     finally:
         command.upgrade(cfg, "head")
-    assert shape() == (FEEDBACK_TABLES, True)
+    inspector = inspect(engine)
+    assert tables <= set(inspector.get_table_names())
+    assert "trace_id" in {col["name"] for col in inspector.get_columns("runs")}

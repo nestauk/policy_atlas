@@ -69,40 +69,49 @@ def test_the_theory_of_change_setting_is_on_only_for_1(
     assert load_settings().theory_of_change_enabled is enabled
 
 
-def test_the_feedback_elements_and_version_are_off_by_default(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    ("value", "elements"),
+    [
+        (None, frozenset()),
+        ("", frozenset()),
+        ("citation_flag", frozenset({"citation_flag"})),
+        (" onboarding , problem_report,", frozenset({"onboarding", "problem_report"})),
+    ],
+)
+def test_the_feedback_setting_is_a_list_of_element_names(
+    monkeypatch: pytest.MonkeyPatch, value: str | None, elements: frozenset[str]
 ) -> None:
-    """`POLICY_ATLAS_FEEDBACK` and `POLICY_ATLAS_VERSION` (task 062): unset or blank is off."""
+    """`POLICY_ATLAS_FEEDBACK`: every element is off unless the list names it."""
     _set_required_env(monkeypatch)
-    monkeypatch.delenv("POLICY_ATLAS_FEEDBACK", raising=False)
-    monkeypatch.setenv("POLICY_ATLAS_VERSION", "")
+    if value is None:
+        monkeypatch.delenv("POLICY_ATLAS_FEEDBACK", raising=False)
+    else:
+        monkeypatch.setenv("POLICY_ATLAS_FEEDBACK", value)
 
-    settings = load_settings()
-
-    assert settings.feedback_elements == frozenset()
-    assert settings.pa_version is None
+    assert load_settings().feedback_elements == elements
 
 
-def test_the_feedback_elements_are_a_comma_separated_list(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_an_unknown_feedback_element_fails_at_startup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A spelling mistake must not leave an element silently off."""
     _set_required_env(monkeypatch)
-    monkeypatch.setenv("POLICY_ATLAS_FEEDBACK", "cf, rap,")
-    monkeypatch.setenv("POLICY_ATLAS_VERSION", "abc1234")
+    monkeypatch.setenv("POLICY_ATLAS_FEEDBACK", "citation_flag,thumbs")
 
-    settings = load_settings()
-
-    assert settings.feedback_elements == {"cf", "rap"}
-    assert settings.pa_version == "abc1234"
-
-
-def test_an_unknown_feedback_element_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A typing mistake must stop the deploy, not leave an element silently off."""
-    _set_required_env(monkeypatch)
-    monkeypatch.setenv("POLICY_ATLAS_FEEDBACK", "cf,claims")
-
-    with pytest.raises(RuntimeError, match="POLICY_ATLAS_FEEDBACK"):
+    with pytest.raises(RuntimeError, match="unknown elements \\['thumbs'\\]"):
         load_settings()
+
+
+@pytest.mark.parametrize(("value", "version"), [(None, None), ("", None), ("v3.2.0", "v3.2.0")])
+def test_the_version_setting_is_optional(
+    monkeypatch: pytest.MonkeyPatch, value: str | None, version: str | None
+) -> None:
+    """`POLICY_ATLAS_VERSION` is stored on feedback events; blank means unknown."""
+    _set_required_env(monkeypatch)
+    if value is None:
+        monkeypatch.delenv("POLICY_ATLAS_VERSION", raising=False)
+    else:
+        monkeypatch.setenv("POLICY_ATLAS_VERSION", value)
+
+    assert load_settings().pa_version == version
 
 
 def test_db_pool_size_zero_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:

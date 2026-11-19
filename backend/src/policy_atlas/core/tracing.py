@@ -1004,84 +1004,85 @@ def classification_score_summary(
     )
 
 
-def span_trace_id(root_span: Any) -> str | None:
-    """Read the trace id the SDK gave a span, or ``None`` when tracing is off.
+def trace_id_of(span: Any) -> str | None:
+    """Return the Langfuse trace id of a span.
 
     Args:
-        root_span: A span yielded by ``component_span``, or ``None``.
+        span: A span from :func:`component_span`, or ``None`` when tracing is off.
 
     Returns:
-        The Langfuse trace id, or ``None`` when no span exists.
+        The trace id, or ``None`` when there is no span.
     """
-    if root_span is None:
+    if span is None:
         return None
-    value = getattr(root_span, "trace_id", None) or getattr(root_span, "id", None)
+    value = getattr(span, "trace_id", None)
     return str(value) if value is not None else None
 
 
-def feedback_score(
+def score_feedback(
     client: Langfuse | None,
     *,
+    feedback_event_id: uuid.UUID,
     trace_id: str | None,
-    score_id: str,
     name: str,
     value: float | str,
     comment: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> None:
-    """Mirror one feedback event as a score on a finished trace (ADR 0045 decision 3).
+    """Mirror one feedback event as a Langfuse score on a finished trace.
 
-    The database row is the record and is already committed, so a failure
-    here is logged and never raised. The SDK queues the write and sends it in
-    the background.
+    Postgres is the system of record. The score is a copy for error analysis.
+    The score id is the Postgres row id, so the two records reconcile, and a
+    second call with the same id replaces the score. The SDK queues the write
+    and logs its own failures, so this call does not block or raise.
 
     Args:
         client: Langfuse client, or ``None`` for no-op tracing.
-        trace_id: The component run's trace; ``None`` (an old run, or tracing
-            off) writes nothing.
-        score_id: The ``feedback_event_id``, so the score and the row reconcile.
-        name: Score name: the feedback kind.
-        value: A number, or a category name.
-        comment: The user's free text, when there is some.
-        metadata: Extra fields for the kind.
+        feedback_event_id: The ``feedback_event`` row id. Becomes the score id.
+        trace_id: The trace to score, or ``None`` when the run has no stored
+            trace (an old run, or a run made with tracing off). Then no score
+            is written.
+        name: The score name. By convention the feedback kind.
+        value: A number (NUMERIC score) or a label (CATEGORICAL score).
+        comment: Free text from the user, if any.
+        metadata: Other fields of the event, for filters in Langfuse.
     """
     if client is None or trace_id is None:
         return
     common: dict[str, Any] = {
+        "score_id": str(feedback_event_id),
         "trace_id": trace_id,
-        "score_id": score_id,
         "name": name,
         "comment": comment,
-        "metadata": metadata,
+        "metadata": {**(metadata or {}), "feedback_event_id": str(feedback_event_id)},
     }
-    try:
-        # Two calls: the SDK types a text value and a number as separate overloads.
-        if isinstance(value, str):
-            client.create_score(value=value, data_type="CATEGORICAL", **common)
-        else:
-            client.create_score(value=value, data_type="NUMERIC", **common)
-    except Exception:
-        log.warning("feedback.score_failed", score_id=score_id, name=name, exc_info=True)
+    # Two calls, because the SDK types a label and a number as separate overloads.
+    if isinstance(value, str):
+        client.create_score(value=value, data_type="CATEGORICAL", **common)
+    else:
+        client.create_score(value=value, data_type="NUMERIC", **common)
 
 
-def delete_feedback_score(client: Langfuse | None, *, score_id: str) -> None:
+def delete_feedback_score(client: Langfuse | None, feedback_event_id: uuid.UUID) -> None:
     """Delete the mirrored score of a retracted feedback event.
 
-    A failure is logged and never raised, as in ``feedback_score``.
+    This is a direct HTTP call, not a queued write. A failure is logged and
+    not raised: the retraction is already safe in Postgres.
 
     Args:
         client: Langfuse client, or ``None`` for no-op tracing.
-        score_id: The ``feedback_event_id`` of the retracted row.
+        feedback_event_id: The ``feedback_event`` row id, which is the score id.
     """
     if client is None:
         return
     try:
-        # Flush first: the delete is a direct HTTP call and would otherwise
-        # overtake a create that is still in the SDK's queue.
-        client.flush()
-        client.api.legacy.score_v1.delete(score_id)
-    except Exception:
-        log.warning("feedback.score_delete_failed", score_id=score_id, exc_info=True)
+        client.api.legacy.score_v1.delete(str(feedback_event_id))
+    except Exception as exc:  # noqa: BLE001 - a mirror failure must not fail the request
+        log.warning(
+            "feedback.score_delete_failed",
+            feedback_event_id=str(feedback_event_id),
+            error=type(exc).__name__,
+        )
 
 
 def flush(client: Langfuse | None) -> None:

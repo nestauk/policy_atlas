@@ -185,16 +185,6 @@ if missing:
         f"FAIL: {env_name!r} deployment config is missing: {', '.join(missing)}"
     )
 
-# In-app feedback (task 062): the element names that are on. The API gets the
-# same list from the CDK stack; the frontend build gets it below.
-feedback = backend.get("feedback", [])
-if not isinstance(feedback, list) or not all(
-    isinstance(name, str) and re.fullmatch(r"[a-z]+", name) for name in feedback
-):
-    raise SystemExit(
-        f"FAIL: {env_name!r} backend.feedback must be a JSON list of element names"
-    )
-
 values = [
     regions.pop(),
     public_domain,
@@ -202,15 +192,14 @@ values = [
     required["backend.secret_name"],
     analytics_allowlist_parameter,
     metabase_domain,
-    ",".join(feedback) or "-",
 ]
 if any("\t" in value or "\n" in value for value in values):
     raise SystemExit("FAIL: deployment config values may not contain tabs or newlines")
 print("\t".join(values))
 PY
 )"
-IFS=$'\t' read -r DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER METABASE_DOMAIN FEEDBACK_ELEMENTS <<< "$deploy_config"
-readonly DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER METABASE_DOMAIN FEEDBACK_ELEMENTS
+IFS=$'\t' read -r DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER METABASE_DOMAIN <<< "$deploy_config"
+readonly DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME METABASE_ALLOWLIST_PARAMETER METABASE_DOMAIN
 readonly API_BASE_URL="https://${BACKEND_SUBDOMAIN}.${PUBLIC_DOMAIN}"
 
 readonly SSM_CLUSTER_ARN="/policy_atlas_v3/deploy/cluster_arn"
@@ -401,6 +390,13 @@ run_cdk() {
     PATH="$REPO_ROOT/infra/.venv/bin:$PATH" npx cdk@2.1133.0 "$@" --require-approval never
 }
 
+# The version that in-app feedback stores on each event: the nearest git tag,
+# else the short commit id. The API gets it as POLICY_ATLAS_VERSION and the
+# frontend build as VITE_PA_VERSION.
+pa_version() {
+    git -C "$REPO_ROOT" describe --tags --always --dirty
+}
+
 deploy_all_stacks() {
     local analytics_context=()
     if [[ "$METABASE_ALLOWLIST_PARAMETER" != "-" ]]; then
@@ -411,10 +407,8 @@ deploy_all_stacks() {
     (
         cd "$REPO_ROOT/infra"
         # app.py requires env_name; stage=all is explicit for reproducible deploys.
-        # pa_version: the commit being deployed, stored on each feedback
-        # event (task 062).
         run_cdk deploy -c "env_name=${ENV_NAME}" -c stage=all \
-            -c "pa_version=$(git -C "$REPO_ROOT" rev-parse --short HEAD)" \
+            -c "pa_version=$(pa_version)" \
             ${analytics_context[@]+"${analytics_context[@]}"} --all
     )
     verify_metabase_allowlist_applied
@@ -628,11 +622,15 @@ resolve_frontend_publish_config() {
         export VITE_OPTIONS_SCOPING=1
         export VITE_THEORY_OF_CHANGE=1
     fi
-    # In-app feedback (task 062): the same element list the API gets from
-    # infra/pa_config.json, so the two sides cannot disagree.
-    if [[ "$FEEDBACK_ELEMENTS" != "-" ]]; then
-        export VITE_FEEDBACK="$FEEDBACK_ELEMENTS"
-    fi
+    # In-app feedback: the frontend shows the elements that the API has on.
+    # One value in infra/pa_config.json feeds both sides.
+    VITE_FEEDBACK="$(python3 -c '
+import json, sys
+config = json.load(open(sys.argv[1], encoding="utf-8"))
+print(config[sys.argv[2]]["policy_atlas_config"]["backend"].get("feedback", ""))
+' "$REPO_ROOT/infra/pa_config.json" "$ENV_NAME")"
+    VITE_PA_VERSION="$(pa_version)"
+    export VITE_FEEDBACK VITE_PA_VERSION
 }
 
 publish_frontend() {

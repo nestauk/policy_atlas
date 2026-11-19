@@ -4,6 +4,34 @@
  */
 
 export interface paths {
+    "/api/v1/analytics/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Relay Event
+         * @description Forward one page event to PostHog for the caller.
+         *
+         *     Args:
+         *         body: The event name and the task that was open, if any.
+         *         user: The authenticated caller, who is the person in PostHog.
+         *         sender: The PostHog sender, or ``None`` when no project key is set.
+         *
+         *     Returns:
+         *         An empty 204 response. The event is sent on a worker thread.
+         */
+        post: operations["relay_event_api_v1_analytics_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/conversations/{conversation_id}": {
         parameters: {
             query?: never;
@@ -144,6 +172,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Feedback
+         * @description List the caller's active records of one kind on one task.
+         *
+         *     The frontend reads this to show a flag again after a reload.
+         *
+         *     Args:
+         *         task_id: The task.
+         *         kind: The feedback kind.
+         *         user: The authenticated caller.
+         *         engine: The process engine.
+         *         settings: The application settings (feature flags).
+         *
+         *     Returns:
+         *         The caller's records that are not retracted, newest first.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the kind's element is off, or the task is
+         *             absent or not readable by the caller.
+         */
+        get: operations["list_feedback_api_v1_feedback_get"];
+        put?: never;
+        /**
+         * Submit Feedback
+         * @description Store one feedback record, then mirror it as a Langfuse score.
+         *
+         *     For a toggle kind, a second submit for the same target replaces the first:
+         *     the earlier record is retracted and its score is deleted.
+         *
+         *     A missing-paper report is resolved on a worker thread. The request waits
+         *     for the answer up to :data:`RESOLVE_BUDGET_S`; after that the response has
+         *     a pending resolution, and ``GET /api/v1/feedback/{id}`` has the answer
+         *     when the resolver is done.
+         *
+         *     Args:
+         *         body: The validated record of one kind.
+         *         user: The authenticated caller.
+         *         engine: The process engine. The route owns its transaction, so that
+         *             the mirror runs after the commit.
+         *         settings: The application settings (feature flags, version).
+         *         langfuse: The Langfuse client, or ``None`` when tracing is off.
+         *         lookup: The OpenAlex lookups for a missing paper, or ``None``.
+         *         analytics: The PostHog sender, or ``None`` when analytics is off.
+         *
+         *     Returns:
+         *         The stored record.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the element is off, or when the task, the
+         *             report or the document is absent or not readable by the caller.
+         *             422 for an override of a document that was not screened out.
+         */
+        post: operations["submit_feedback_api_v1_feedback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feedback/{feedback_event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Feedback
+         * @description Return one of the caller's records.
+         *
+         *     The frontend polls this while a missing paper's resolution is pending.
+         *
+         *     Args:
+         *         feedback_event_id: The record.
+         *         user: The authenticated caller.
+         *         engine: The process engine.
+         *         settings: The application settings (feature flags).
+         *
+         *     Returns:
+         *         The record, with its resolution for a missing paper.
+         *
+         *     Raises:
+         *         HTTPException: 404 when no feedback kind is on, or when the caller has
+         *             no record with this id.
+         */
+        get: operations["get_feedback_api_v1_feedback__feedback_event_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Retract
+         * @description Retract one of the caller's records. The row is kept; its score is deleted.
+         *
+         *     Args:
+         *         feedback_event_id: The record.
+         *         user: The authenticated caller.
+         *         engine: The process engine.
+         *         settings: The application settings (feature flags).
+         *         langfuse: The Langfuse client, or ``None`` when tracing is off.
+         *
+         *     Returns:
+         *         An empty 204 response.
+         *
+         *     Raises:
+         *         HTTPException: 404 when no feedback kind is on, or when the caller has
+         *             no active record with this id.
+         */
+        delete: operations["retract_api_v1_feedback__feedback_event_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -171,6 +318,85 @@ export interface paths {
         get: operations["get_me_api_v1_me_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Profile
+         * @description Return the caller's onboarding profile.
+         *
+         *     Args:
+         *         user: The authenticated caller.
+         *         conn: Open database connection.
+         *
+         *     Returns:
+         *         The profile. ``completed_at`` is null until the form is completed.
+         */
+        get: operations["get_profile_api_v1_me_profile_get"];
+        /**
+         * Save Profile
+         * @description Complete the caller's profile, or edit a completed one.
+         *
+         *     ``completed_at`` keeps the time of the first completion. A later edit
+         *     replaces the answers and leaves that time unchanged.
+         *
+         *     The profile is mirrored to PostHog person properties: ``jobs`` and
+         *     ``source``. Each holds codes. The workplace (``department``) and the
+         *     ``role`` are free text and are not sent.
+         *
+         *     Args:
+         *         payload: The validated answers.
+         *         user: The authenticated caller.
+         *         conn: Open database connection.
+         *         analytics: The PostHog sender, or ``None`` when analytics is off.
+         *
+         *     Returns:
+         *         The stored profile.
+         */
+        put: operations["save_profile_api_v1_me_profile_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/profile/skip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Skip Profile
+         * @description Record the caller's one "Skip for now".
+         *
+         *     Only the first skip is recorded: a second call changes nothing, so
+         *     ``skipped_once_at`` always holds the time of the first skip. The frontend
+         *     offers no skip when this time is set (``frontend/src/lib/profileGate.ts``).
+         *
+         *     Args:
+         *         user: The authenticated caller.
+         *         conn: Open database connection.
+         *         analytics: The PostHog sender, or ``None`` when analytics is off.
+         *
+         *     Returns:
+         *         The stored profile.
+         */
+        post: operations["skip_profile_api_v1_me_profile_skip_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1895,6 +2121,19 @@ export interface components {
             kind: "abort";
         };
         /**
+         * AnalyticsEventIn
+         * @description One page event. No free text: an event name and an optional task id.
+         */
+        AnalyticsEventIn: {
+            /**
+             * Event
+             * @enum {string}
+             */
+            event: "planner_opened" | "report_opened" | "report_exported" | "sources_tab_opened";
+            /** Task Id */
+            task_id?: string | null;
+        };
+        /**
          * AnswerPayloadOut
          * @description The cited half of one grounded answer, shared by every turn that has one.
          *
@@ -2775,6 +3014,50 @@ export interface components {
             year?: number | null;
         };
         /**
+         * CitationFlagIn
+         * @description Element A: "Useful" or "Not relevant" on one cited or screened-in document.
+         *
+         *     A toggle: a second submit for the same document replaces the first. The
+         *     reason and the note refine a "Not relevant" flag and are optional.
+         */
+        CitationFlagIn: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "useful" | "not_relevant";
+            /**
+             * Artefact Id
+             * @description The report that the flag was given on. It names the run. Absent on the Sources tab: the task's latest run is used.
+             */
+            artefact_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "citation_flag";
+            /** Note */
+            note?: string | null;
+            /** Reason */
+            reason?: ("off_topic" | "wrong_population" | "not_evidence" | "duplicate" | "other") | null;
+            /**
+             * Source Id
+             * Format: uuid
+             * @description The document: its task source identity.
+             */
+            source_id: string;
+            /**
+             * Surface
+             * @enum {string}
+             */
+            surface: "report_references" | "sources_all";
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+        };
+        /**
          * CitationOut
          * @description One citation attached to a citation-type claim.
          *
@@ -2847,6 +3130,59 @@ export interface components {
             url?: string | null;
             /** Year */
             year?: string | null;
+        };
+        /**
+         * ClaimFlagIn
+         * @description Element D: a flag on one claim, from the foot of the claim's evidence sheet.
+         *
+         *     A toggle: one flag per user and claim, which the user can change or
+         *     retract. The reason is required. ``unsupported`` ("Citation doesn't
+         *     support it") needs at least one failing citation.
+         */
+        ClaimFlagIn: {
+            /**
+             * Artefact Id
+             * Format: uuid
+             * @description The report that holds the claim.
+             */
+            artefact_id: string;
+            /**
+             * Claim Id
+             * Format: uuid
+             */
+            claim_id: string;
+            /**
+             * Failing Citation Ids
+             * @description The claim's citations that the user ticked as not supporting it.
+             */
+            failing_citation_ids?: string[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "claim_flag";
+            /** Note */
+            note?: string | null;
+            /**
+             * Provenance Viewed
+             * @description The claim's citations whose source the user had in view before the submit.
+             */
+            provenance_viewed?: string[];
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "wrong" | "overstated" | "unsupported";
+            /**
+             * Surface
+             * @constant
+             */
+            surface: "report_claim_sidebar";
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
         };
         /**
          * ClaimOut
@@ -3454,6 +3790,49 @@ export interface components {
             code: string;
             /** Message */
             message: string;
+        };
+        /**
+         * FeedbackListOut
+         * @description The caller's active feedback records on one task.
+         */
+        FeedbackListOut: {
+            /** Data */
+            data: components["schemas"]["FeedbackOut"][];
+        };
+        /**
+         * FeedbackOut
+         * @description One stored feedback record of the caller.
+         */
+        FeedbackOut: {
+            /** Capability Run Id */
+            capability_run_id?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Feedback Event Id
+             * Format: uuid
+             */
+            feedback_event_id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "citation_flag" | "missing_paper" | "screening_override" | "use_intent" | "claim_flag" | "problem_report";
+            /** Payload */
+            payload: {
+                [key: string]: unknown;
+            };
+            /** @description For a missing-paper record only. */
+            resolution?: components["schemas"]["MissingPaperResolutionOut"] | null;
+            /** Surface */
+            surface: string;
+            /** Target Id */
+            target_id?: string | null;
+            /** Target Type */
+            target_type: string;
         };
         FindingOut: components["schemas"]["IofFindingOut"] | components["schemas"]["IcfFindingOut"];
         /**
@@ -4147,6 +4526,60 @@ export interface components {
             organisation?: components["schemas"]["OrganisationRef"] | null;
             /** User Id */
             user_id: string;
+        };
+        /**
+         * MissingPaperIn
+         * @description Element B: "A paper I expected is missing".
+         *
+         *     The user gives a DOI, a URL or a title. The server resolves the paper and
+         *     names the pipeline stage at which it was lost; the user never chooses one.
+         */
+        MissingPaperIn: {
+            /**
+             * Artefact Id
+             * @description The report that the form is under. It names the run. Absent on the Sources tab: the task's latest run is used.
+             */
+            artefact_id?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "missing_paper";
+            /**
+             * Raw Input
+             * @description A DOI, a URL or a title.
+             */
+            raw_input: string;
+            /**
+             * Surface
+             * @enum {string}
+             */
+            surface: "report_foot" | "sources_tab";
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+            /** Why */
+            why?: string | null;
+        };
+        /**
+         * MissingPaperResolutionOut
+         * @description The resolver's answer for one missing-paper record.
+         *
+         *     ``failure_stage`` is null while the resolver is still at work (pending).
+         *     ``resolved_id`` is the document's task source identity when the task holds
+         *     the paper, else the paper's own id (an OpenAlex address or a DOI).
+         */
+        MissingPaperResolutionOut: {
+            /** Failure Stage */
+            failure_stage?: ("unresolved" | "cited" | "not_cited" | "not_selected" | "screened_out_s2" | "screened_out_s1" | "acquired_only" | "not_retrieved") | null;
+            /** Resolved At */
+            resolved_at?: string | null;
+            /** Resolved Id */
+            resolved_id?: string | null;
+            /** Resolver Confidence */
+            resolver_confidence?: number | null;
         };
         /**
          * MostRelevantNoteOut
@@ -5202,6 +5635,69 @@ export interface components {
             version: number;
         };
         /**
+         * ProblemClientInfo
+         * @description What the browser attaches to a problem report.
+         */
+        ProblemClientInfo: {
+            /**
+             * Browser
+             * @description The user agent.
+             */
+            browser: string;
+            /**
+             * Time
+             * Format: date-time
+             * @description The browser's clock when the report was sent.
+             */
+            time: string;
+        };
+        /**
+         * ProblemReportIn
+         * @description Element E: "Report a problem", from the app header on any page.
+         */
+        ProblemReportIn: {
+            client: components["schemas"]["ProblemClientInfo"];
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "problem_report";
+            /**
+             * Page
+             * @description The page path.
+             */
+            page: string;
+            /**
+             * Problem Kind
+             * @enum {string}
+             */
+            problem_kind: "error" | "stalled" | "unusable" | "other";
+            /**
+             * Query Text
+             * @description The research question, when the user left its checkbox on.
+             */
+            query_text?: string | null;
+            /** Step Reached */
+            step_reached?: string | null;
+            /** Step Status */
+            step_status?: string | null;
+            /**
+             * Surface
+             * @constant
+             */
+            surface: "app_header";
+            /**
+             * Task Id
+             * @description The task that was open. Absent on a page with no task: the report is then stored with no run.
+             */
+            task_id?: string | null;
+        };
+        /**
          * ProfileLineOut
          * @description One line of an option's profile (task 046, R37).
          *
@@ -5436,12 +5932,17 @@ export interface components {
          *         venue: Publication venue, or `None` if unknown.
          *         url: Optional reference URL.
          *         authorships: Authors and their institutions, for display.
+         *         source_id: The cited document's task source identity, so that in-app
+         *             feedback on a reference names the document. ``None`` for a
+         *             snapshot with no link to the task.
          */
         ReferenceOut: {
             /** Authorships */
             authorships?: components["schemas"]["AuthorshipOut"][];
             /** N */
             n: number;
+            /** Source Id */
+            source_id?: string | null;
             /** Title */
             title: string;
             /** Url */
@@ -5943,6 +6444,35 @@ export interface components {
             action: "proceed_flag";
             /** Steer Point */
             steer_point: string;
+        };
+        /**
+         * ScreeningOverrideIn
+         * @description Element B: "Should have been kept" on one screened-out document.
+         *
+         *     A toggle with no free text. The server reads the screening stage.
+         */
+        ScreeningOverrideIn: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "screening_override";
+            /**
+             * Source Id
+             * Format: uuid
+             * @description The document: its task source identity.
+             */
+            source_id: string;
+            /**
+             * Surface
+             * @constant
+             */
+            surface: "screened_out_row";
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
         };
         /**
          * SearchQueryFrame
@@ -8445,6 +8975,101 @@ export interface components {
             /** Plan Version */
             plan_version: number;
         };
+        /**
+         * UseIntentIn
+         * @description Element C: "Would you use this report in your work?", under Key findings.
+         *
+         *     A toggle: one answer per user and report, which the user can change.
+         *     ``dismissed`` is "Not now": it is recorded so that the question is never
+         *     asked again for that report.
+         */
+        UseIntentIn: {
+            /**
+             * Artefact Id
+             * Format: uuid
+             * @description The report that the answer is about.
+             */
+            artefact_id: string;
+            /**
+             * Change Reasons
+             * @description What would need to change. Optional.
+             */
+            change_reasons?: ("missing_evidence" | "wrong_emphasis" | "accuracy_concern" | "length" | "tone_or_format" | "other")[];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "use_intent";
+            /** Note */
+            note?: string | null;
+            /**
+             * Shown At
+             * Format: date-time
+             * @description When the browser first showed the question.
+             */
+            shown_at: string;
+            /**
+             * Surface
+             * @constant
+             */
+            surface: "report_key_findings";
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+            /**
+             * Use Intent
+             * @enum {string}
+             */
+            use_intent: "as_is" | "with_edits" | "no" | "dismissed";
+        };
+        /**
+         * UserProfileIn
+         * @description Inbound body for ``PUT /api/v1/me/profile``.
+         *
+         *     The first three questions (the workplace, the role and the uses) are
+         *     required. ``panel_opt_in`` is optional.
+         */
+        UserProfileIn: {
+            /**
+             * Department
+             * @description Where the user works, as typed. Free text.
+             */
+            department: string;
+            /**
+             * Jobs
+             * @description The uses that the user picked. One or more.
+             */
+            jobs: ("j1" | "j2" | "j3" | "j4" | "j5" | "j6" | "j7" | "other")[];
+            /** Panel Opt In */
+            panel_opt_in?: boolean | null;
+            /**
+             * Role
+             * @description The user's role, as typed. Free text.
+             */
+            role: string;
+        };
+        /**
+         * UserProfileOut
+         * @description The caller's onboarding profile. Every field is null before the first answer.
+         */
+        UserProfileOut: {
+            /** Completed At */
+            completed_at?: string | null;
+            /** Department */
+            department?: string | null;
+            /** Jobs */
+            jobs?: ("j1" | "j2" | "j3" | "j4" | "j5" | "j6" | "j7" | "other")[] | null;
+            /** Panel Opt In */
+            panel_opt_in?: boolean | null;
+            /** Role */
+            role?: string | null;
+            /** Skipped Once At */
+            skipped_once_at?: string | null;
+            /** Source */
+            source?: ("signup" | "migration" | "waitlist") | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -8577,6 +9202,37 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    relay_event_api_v1_analytics_events_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalyticsEventIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_conversation_api_v1_conversations__conversation_id__get: {
         parameters: {
             query?: never;
@@ -8806,6 +9462,131 @@ export interface operations {
             };
         };
     };
+    list_feedback_api_v1_feedback_get: {
+        parameters: {
+            query: {
+                task_id: string;
+                kind: "citation_flag" | "missing_paper" | "screening_override" | "use_intent" | "claim_flag" | "problem_report";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_feedback_api_v1_feedback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CitationFlagIn"] | components["schemas"]["ProblemReportIn"] | components["schemas"]["MissingPaperIn"] | components["schemas"]["ScreeningOverrideIn"] | components["schemas"]["UseIntentIn"] | components["schemas"]["ClaimFlagIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_feedback_api_v1_feedback__feedback_event_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                feedback_event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retract_api_v1_feedback__feedback_event_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                feedback_event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_me_api_v1_me_get: {
         parameters: {
             query?: never;
@@ -8822,6 +9603,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MeOut"];
+                };
+            };
+        };
+    };
+    get_profile_api_v1_me_profile_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserProfileOut"];
+                };
+            };
+        };
+    };
+    save_profile_api_v1_me_profile_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserProfileIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    skip_profile_api_v1_me_profile_skip_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserProfileOut"];
                 };
             };
         };

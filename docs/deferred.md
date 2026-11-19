@@ -3651,18 +3651,3 @@ unbuilt increments are in ADR 0042 § Amendment 2026-11-05.
   creation; ES findings reuse; the cross-task duplicate gap; the Miro API; E3, E4, E5, E7, E8;
   removing the build flag; an upload retention rule; J9 (how an older theory signals it may be
   out of date).
-
-## In-app feedback (task 062 seams)
-
-- **No Langfuse score for feedback on a run made before task 062** (ADR 0045 decision 4):
-  `runs.trace_id` is null for those runs. Lever: a one-time backfill that finds each trace by
-  the `run_id` in its metadata.
-- **No retry for a failed score mirror** (ADR 0045 decision 3): the failure is logged only.
-  Lever: a re-sync script; the score id is the `feedback_event_id`, so it can find the gaps.
-- **Score create and delete against the self-hosted Langfuse v3 server are not yet checked**:
-  the SDK 4.15.4 functions exist; a manual check on staging is in the contract.
-- **`user_profile.source`** (signup, migration, waitlist) is not a column: nothing stores how a
-  user arrived. Lever: add it when ops can supply the value.
-- **The alert channel for problem reports** does not exist; the routing function will be a stub.
-- **The privacy notice** names email as the only identifier stored. The flags for RAP, OP and
-  PostHog stay off in every deployed environment until the notice owner changes it.

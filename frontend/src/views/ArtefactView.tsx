@@ -72,6 +72,17 @@ import {
   type ReportFact,
 } from "./reportPage";
 import { usePublicView } from "./publicView";
+import { CitationFlag } from "./feedback/CitationFlag";
+import {
+  ClaimFlagBlock,
+  ClaimFlagProvider,
+  FlagClaimButton,
+  FlaggableSource,
+} from "./feedback/ClaimFlag";
+import { MissingPaperCard } from "./feedback/MissingPaper";
+import { TrackAction, TrackEvent } from "./feedback/TrackEvent";
+import { UseIntentCard } from "./feedback/UseIntentCard";
+import { feedbackEnabled } from "../lib/feedback";
 import {
   DisclosureHeading,
   FullReportExpandAllButton,
@@ -138,6 +149,9 @@ interface ClaimLike {
    *  (the span, the tier, each citation's id, quote and title) and leaves out
    *  what only the committed report has. */
   live?: boolean;
+  /** In-app feedback, element D: the sheet opens scrolled to the flag form
+   *  (the claim's flag control was pressed). */
+  openAtFlag?: boolean;
 }
 interface BlockLike {
   block_id: string;
@@ -807,11 +821,14 @@ export function ProvenanceSheet({
   extras,
   judgement = null,
   onClose,
+  footer,
   children,
 }: {
   description?: string;
   claimTexts: string[];
   extras?: ReactNode;
+  /** A block at the foot of the sheet (in-app feedback: the claim flag). */
+  footer?: ReactNode;
   /** The claim's one verdict, shown once under the Claim (lead, round 13:
    *  the read model copies the claim's verdict onto every citation). */
   judgement?: CitationJudgement | null;
@@ -856,6 +873,7 @@ export function ProvenanceSheet({
               {children}
             </div>
           )}
+          {footer}
         </div>
       </SheetContent>
     </Sheet>
@@ -870,13 +888,19 @@ function ClaimPanel({
   claim,
   onClose,
   onOpenDossier,
+  flagArtefactId,
 }: {
   taskId: string;
   claim: ClaimLike | null;
   onClose: () => void;
   onOpenDossier: (title: string) => void;
+  /** In-app feedback, element D: the report whose claims can be flagged.
+   *  Absent, the sheet has no flag (flag off, public view, live report). */
+  flagArtefactId?: string;
 }) {
   if (claim === null) return null;
+  // A claim of the report while it is written has no stored id to flag.
+  const flagging = flagArtefactId !== undefined && claim.live !== true;
   const hint = TYPE_HINT[claim.claim_type];
   const gap = claim.gap ?? null;
   const extras = (
@@ -959,24 +983,51 @@ function ClaimPanel({
       )}
     </>
   );
-  return (
+  const sourceBlock = (group: CitationOut[]) => (
+    <SourceGroupBlock
+      key={group[0].citation_id}
+      taskId={taskId}
+      citations={group}
+      onOpenDossier={onOpenDossier}
+      live={claim.live === true}
+    />
+  );
+  const sheet = (
     <ProvenanceSheet
       description="Claim provenance"
       claimTexts={[claim.text]}
       extras={extras}
       judgement={claimJudgement(claim)}
       onClose={onClose}
+      footer={flagging ? <ClaimFlagBlock /> : undefined}
     >
-      {citationsBySource(claim.citations ?? []).map((group) => (
-        <SourceGroupBlock
-          key={group[0].citation_id}
-          taskId={taskId}
-          citations={group}
-          onOpenDossier={onOpenDossier}
-          live={claim.live === true}
-        />
-      ))}
+      {citationsBySource(claim.citations ?? []).map((group) =>
+        flagging ? (
+          // Each source block gains "Doesn't support the claim".
+          <FlaggableSource
+            key={group[0].citation_id}
+            citationIds={group.map((citation) => citation.citation_id)}
+          >
+            {sourceBlock(group)}
+          </FlaggableSource>
+        ) : (
+          sourceBlock(group)
+        ),
+      )}
     </ProvenanceSheet>
+  );
+  return flagging ? (
+    <ClaimFlagProvider
+      key={claim.claim_id}
+      taskId={taskId}
+      artefactId={flagArtefactId}
+      claimId={claim.claim_id}
+      openAtFlag={claim.openAtFlag === true}
+    >
+      {sheet}
+    </ClaimFlagProvider>
+  ) : (
+    sheet
   );
 }
 
@@ -1064,6 +1115,10 @@ function ClaimSpan({
   live?: boolean;
 }) {
   const swap = useContext(ReportSwapContext);
+  const isPublicView = usePublicView();
+  // A claim of the committed report, for a signed-in reader, can be flagged.
+  const canFlag =
+    feedbackEnabled("claim_flag") && !isPublicView && !live && claim.live !== true && showCitationMarker;
   // Dev-facing markings (source-check flags, connective reasoning) carry no
   // user-facing detail: their prose renders unmarked (owner, 2026-07-29).
   if (UNMARKED_TYPES.has(claim.claim_type)) return <span>{scrub(text)}</span>;
@@ -1131,7 +1186,9 @@ function ClaimSpan({
     );
   const typeLabel = TYPE_LABEL[claim.claim_type];
   return (
-    <span>
+    // `data-claim-id` makes the claim addressable in the page; `group` shows
+    // the flag control while the pointer is on the claim.
+    <span data-claim-id={claim.claim_id} className="group">
       {/* The words are a pointer target only: hover tints them and shows the
           preview, a click opens the panel. The marker after them is the one
           control a keyboard and a screen reader meet (round 10, finding 4),
@@ -1177,6 +1234,8 @@ function ClaimSpan({
           </button>
         </Tooltip>
       )}
+      {/* In-app feedback, element D: opens the same sheet at the flag form. */}
+      {canFlag && <FlagClaimButton onFlag={() => onOpen({ ...claim, openAtFlag: true })} />}
     </span>
   );
 }
@@ -3572,6 +3631,9 @@ function ArtefactReport() {
       taskId={taskId}
       claim={shownClaim}
       onClose={closeClaim}
+      flagArtefactId={
+        feedbackEnabled("claim_flag") && !isPublicView ? artefact.data?.artefact_id : undefined
+      }
       onOpenDossier={(sourceRef) =>
         shownClaim !== null && shownClaim.live !== true
           ? openDossierFromClaim(sourceRef, shownClaim.claim_id)
@@ -3857,6 +3919,8 @@ function ArtefactReport() {
       <ReportPage entries={outlineEntries}>
         {[
           <div key="notice">
+            {/* In-app feedback analytics: `report_opened`, signed-in readers only. */}
+            {!isPublicView && <TrackEvent event="report_opened" taskId={taskId} />}
             {rerunLive && rerunStartedAt !== undefined && (
               <RerunNotice taskId={taskId} artefactId={data.artefact_id} runStartedAt={rerunStartedAt} />
             )}
@@ -3868,7 +3932,16 @@ function ArtefactReport() {
                   surfaces; the Result's heading says what the reader is
                   looking at (owner ruling 2026-09-18). */}
               <span className={arriving}>
-                <ArtefactDownload artefact={data} question={baseline ? null : question} />
+                {/* In-app feedback analytics: `report_exported`. */}
+                <TrackAction event="report_exported" taskId={taskId}>
+                  {(onExport) => (
+                    <ArtefactDownload
+                      artefact={data}
+                      question={baseline ? null : question}
+                      onExport={onExport}
+                    />
+                  )}
+                </TrackAction>
               </span>
             </ReportKindRow>
             {/* A report's title is its question, live and committed, so the
@@ -3920,7 +3993,16 @@ function ArtefactReport() {
             </h2>
           ),
 
-          ...frontSections.map(renderSection),
+          // In-app feedback, element C: the use-intent question sits
+          // immediately below the Key findings section.
+          ...frontSections.flatMap((entry) =>
+            entry.section.role === "key_findings" && feedbackEnabled("use_intent") && !isPublicView
+              ? [
+                  renderSection(entry),
+                  <UseIntentCard key="use-intent" taskId={taskId} artefactId={data.artefact_id} />,
+                ]
+              : [renderSection(entry)],
+          ),
 
           /* The executive summary's last part, above the Full report (owner,
              round 11, reversing round 10's D2). A baseline writes no
@@ -3971,7 +4053,29 @@ function ArtefactReport() {
             {bodySections.map(renderSection)}
 
             {(data.references ?? []).length > 0 && (
-              <ReferencesSection references={data.references ?? []} onOpenReference={openDossier} />
+              <ReferencesSection
+                references={data.references ?? []}
+                onOpenReference={openDossier}
+                // In-app feedback, element A: for signed-in readers only.
+                rowExtra={
+                  feedbackEnabled("citation_flag") && !isPublicView
+                    ? (reference) =>
+                        reference.source_id != null && (
+                          <CitationFlag
+                            taskId={taskId}
+                            artefactId={data.artefact_id}
+                            sourceId={reference.source_id}
+                            title={reference.title}
+                            surface="report_references"
+                          />
+                        )
+                    : undefined
+                }
+              />
+            )}
+            {/* In-app feedback, element B: at the foot of the reference list. */}
+            {feedbackEnabled("missing_paper") && !isPublicView && (
+              <MissingPaperCard taskId={taskId} artefactId={data.artefact_id} />
             )}
 
             <div className={arriving}>
@@ -3997,6 +4101,18 @@ function ArtefactReport() {
   );
 }
 
+/** One row of the reference list. */
+type ReferenceRow = {
+  n: number;
+  title: string;
+  year?: number | null;
+  venue?: string | null;
+  url?: string | null;
+  authorships?: components["schemas"]["AuthorshipOut"][];
+  /** The cited document's task source identity, when it has one. */
+  source_id?: string | null;
+};
+
 /** References as a collapsible entry with an always-visible summary line —
  *  it is the ArtefactOut.references collection, not a synthesis section
  *  (028 strand 10, binding record). While the report is written the same
@@ -4013,18 +4129,14 @@ export function ReferencesSection({
   references,
   onOpenReference,
   defaultOpen = false,
+  rowExtra,
 }: {
-  references: Array<{
-    n: number;
-    title: string;
-    year?: number | null;
-    venue?: string | null;
-    url?: string | null;
-    authorships?: components["schemas"]["AuthorshipOut"][];
-  }>;
+  references: ReferenceRow[];
   /** Absent while the report is live: the titles are not links yet. */
   onOpenReference?: (title: string) => void;
   defaultOpen?: boolean;
+  /** A block under each reference (in-app feedback: the citation flag). */
+  rowExtra?: (reference: ReferenceRow) => ReactNode;
 }) {
   const [open, setOpen] = useRememberedOpen("references", defaultOpen);
   const arriving = useArrivingClass();
@@ -4062,7 +4174,14 @@ export function ReferencesSection({
               ) : (
                 <span className="w-9 shrink-0 text-right font-semibold tabular-nums text-grey">[{reference.n}]</span>
               )}
-              <ReferenceEntry reference={reference} onOpen={onOpenReference} arrivingClass={arriving} />
+              {rowExtra === undefined ? (
+                <ReferenceEntry reference={reference} onOpen={onOpenReference} arrivingClass={arriving} />
+              ) : (
+                <div className="min-w-0 flex-1">
+                  <ReferenceEntry reference={reference} onOpen={onOpenReference} arrivingClass={arriving} />
+                  {rowExtra(reference)}
+                </div>
+              )}
             </li>
           ))}
         </ol>

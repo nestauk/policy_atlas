@@ -13,11 +13,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.analytics import Sender, capture_run_started
 from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import RunCreate, RunOut, RunStageOut
 from policy_atlas.api.contract.common import PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX, Page, PageMeta
 from policy_atlas.api.deps import (
+    get_analytics_sender,
     get_current_user,
     get_engine,
     get_executor,
@@ -342,6 +344,7 @@ def create_run(
     executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
     backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
     titles: Annotated[TitleWriter, Depends(get_title_backend)],
+    analytics: Annotated[Sender | None, Depends(get_analytics_sender)],
 ) -> RunOut:
     """Dispatch an approved plan off the request path and return its walk row.
 
@@ -432,6 +435,8 @@ def create_run(
 
         # Only once the walk's row exists: a Start that fails names nothing.
         in_background(_name_task, name=f"policy-atlas-task-title-{task_id}")
+    # In-app feedback analytics: only once the run exists.
+    capture_run_started(analytics, user_id=user.user_id, task_id=task_id)
     return created
 
 

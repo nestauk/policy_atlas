@@ -39,11 +39,15 @@ SCOPING_TASK_QUESTION = "What could reduce the number of young people not in wor
 def api_client(
     tmp_path: Path,
     overrides: dict[Callable[..., object], Callable[..., object]] | None = None,
+    feedback_elements: frozenset[str] = frozenset(),
 ) -> Iterator[tuple[TestClient, dict[str, str], dict[str, str]]]:
     """Yield an application client and bearer headers for two distinct users.
 
     Args:
         tmp_path: Per-test temporary directory for a development issuer key.
+        overrides: Dependency overrides for the application.
+        feedback_elements: The in-app feedback elements that are on. Every
+            element is off by default, as in a deployment.
 
     Yields:
         Client plus owner and other-user authorization headers.
@@ -56,6 +60,7 @@ def api_client(
         init(key_dir),
         "http://app.example.test",
         os.environ["DATABASE_URL"],
+        feedback_elements=feedback_elements,
     )
     # Unique subs per client: the test DB is shared across the suite, and
     # owner-scoped listings would otherwise see other tests' tasks.

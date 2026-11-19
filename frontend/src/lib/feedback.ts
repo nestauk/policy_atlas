@@ -1,29 +1,35 @@
 /**
- * In-app feedback elements (task 062, ADR 0045).
+ * In-app feedback: the feature flags.
  *
- * Each element is on only where its name is in `VITE_FEEDBACK` at build time.
- * The deploy script sets that from the same list the API reads as
- * `POLICY_ATLAS_FEEDBACK`, so the two sides agree.
+ * Each feedback element has its own flag, so that each one can ship alone.
+ * `VITE_FEEDBACK` is a comma-separated list of the elements that are on. It is
+ * read at build time, as for `VITE_THEORY_OF_CHANGE`. The API has the same list
+ * in `POLICY_ATLAS_FEEDBACK` and returns a 404 for an element that is off.
  */
 
-/**
- * The element names: citation flag, missing paper, use-intent question, claim
- * flag, report a problem, onboarding profile.
- */
-export type FeedbackElement = "cf" | "mp" | "uiq" | "clf" | "rap" | "op";
+/** The feedback elements. The names are the same as in the API settings. */
+export type FeedbackElement =
+  | "citation_flag"
+  | "missing_paper"
+  | "use_intent"
+  | "claim_flag"
+  | "problem_report"
+  | "onboarding"
+  // Product analytics: page events go to the API's relay, not to PostHog.
+  | "analytics";
 
 /**
- * Whether a feedback element is switched on in this build.
+ * Whether a feedback element is on in this build.
  *
  * Args:
  *   element: The element name.
  *
  * Returns:
- *   True when `VITE_FEEDBACK` lists the element.
+ *   True when `VITE_FEEDBACK` names the element.
  */
 export function feedbackEnabled(element: FeedbackElement): boolean {
   return (import.meta.env.VITE_FEEDBACK ?? "")
     .split(",")
-    .map((name) => name.trim())
+    .map((name: string) => name.trim())
     .includes(element);
 }

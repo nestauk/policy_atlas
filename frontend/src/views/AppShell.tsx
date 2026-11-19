@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link, Outlet, useLocation, useParams } from "react-router";
 import { useFinishAlerts } from "./finishAlerts";
 
@@ -6,6 +6,8 @@ import { useArchiveTask, useUpdateTask } from "../api/mutations";
 import { useCheckIns, useMe, useProject, useTask } from "../api/queries";
 import { useAuth } from "../auth";
 import { capabilityLabel } from "../lib/capabilities";
+import { feedbackEnabled } from "../lib/feedback";
+import { forgetSkipped } from "../lib/profileGate";
 import { TitleMarkerProvider } from "../lib/title";
 import { scrub } from "../lib/scrub";
 import { StatusMark } from "../ui/brand/Card";
@@ -27,6 +29,8 @@ import { MENU_ITEM_CLASS, moveMenuFocus } from "../ui/radix/menu";
 import { iconButtonClass } from "../ui/brand/icons";
 import { PROSE_LINK_CLASS } from "../ui/brand/inlineActions";
 import { AppFooter } from "./AppFooter";
+import { OnboardingGate } from "./feedback/OnboardingGate";
+import { ReportProblem } from "./feedback/ReportProblem";
 import { SensitiveInfoBanner } from "./SensitiveInfoBanner";
 import { ChatSidePanel } from "./workspace/chat/ChatSidePanel";
 import { PlanDocument } from "./workspace/PlanDocument";
@@ -145,8 +149,10 @@ function TaskKindLine({
 function AccountMenu({ signOut }: { signOut: () => void }) {
   const me = useMe();
   const menuRef = useRef<HTMLDivElement>(null);
+  // Controlled, so that the "Your profile" link can close the menu.
+  const [open, setOpen] = useState(false);
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         {/* The open state shows on the trigger (the pressed look: Blue Wash,
             Navy) while the menu is open; Radix sets `aria-expanded`. */}
@@ -215,6 +221,17 @@ function AccountMenu({ signOut }: { signOut: () => void }) {
           className="border-t border-line py-1"
           onKeyDown={(event) => moveMenuFocus(event, menuRef.current)}
         >
+          {/* In-app feedback, element F: the onboarding answers stay editable. */}
+          {feedbackEnabled("onboarding") && (
+            <Link
+              to="/profile"
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              className={MENU_ITEM_CLASS}
+            >
+              Your profile
+            </Link>
+          )}
           <button
             type="button"
             role="menuitem"
@@ -442,10 +459,22 @@ export function AppShell() {
             {TASK.many}
           </NavItem>
           <NavItem to="/projects">{PROJECT.many}</NavItem>
+          {/* In-app feedback, element E: on every signed-in page. */}
+          {feedbackEnabled("problem_report") && auth.user !== null && (
+            <ReportProblem task={task.data} />
+          )}
         </div>
         {/* 026 live-check gap: the AuthApi always had signOut; nothing
             rendered it — Cognito users had no way out of a session. */}
-        {auth.user !== null && <AccountMenu signOut={() => auth.signOut()} />}
+        {auth.user !== null && (
+          <AccountMenu
+            signOut={() => {
+              // The next login shows the onboarding form again after a skip.
+              forgetSkipped();
+              return auth.signOut();
+            }}
+          />
+        )}
       </NavBar>
       {base !== null && (
         <NavBar
@@ -543,6 +572,7 @@ export function AppShell() {
   );
 
   return (
+    <OnboardingGate>
     <ToastProvider>
       <TooltipProvider delayDuration={200}>
         <TitleMarkerProvider active={hasPendingCheckIn}>
@@ -572,5 +602,6 @@ export function AppShell() {
         </TitleMarkerProvider>
       </TooltipProvider>
     </ToastProvider>
+    </OnboardingGate>
   );
 }

@@ -2419,6 +2419,7 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                 # A missed metadata lookup has only the display placeholder —
                 # never let that fall through _url's locator rung as a "URL".
                 url=_url(ref_meta, ref_locator) if ref_entry is not None else None,
+                source_id=doc_key if doc_key in tss_to_envelope else None,
                 authorships=_authorships(ref_meta),
             )
         )
