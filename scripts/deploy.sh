@@ -969,7 +969,7 @@ common_tail() {
     publish_frontend
     # The ops service starts last, after the public service and its pages are
     # back, so an ops-only failure (a login sync, an unhealthy ops task) never
-    # stops the public deploy (review stack, 2026-11-17).
+    # stops the public deploy.
     gate_check "ops database secret carries db_connection_string" check_ops_db_connection_string
     deploy_step "check ops login"
     check_ops_db_login
@@ -1056,7 +1056,7 @@ if [[ "$METABASE_ALLOWLIST_PARAMETER" != "-" ]]; then
         check_metabase_allowlist_parameter
 fi
 
-# Contract W7: the CAPTCHA values are resolved before anything touches AWS
+# The CAPTCHA values are resolved before anything touches AWS
 # state, so a missing key or permission fails with nothing changed. Both
 # bootstrap and update publish the frontend, so both need them.
 apply_waf_captcha_values
