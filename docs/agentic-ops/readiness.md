@@ -30,6 +30,11 @@ hard gates of the [task-cycle](../../.claude/skills/task-cycle/SKILL.md) skill.
   ([ADR 0045](../adr/0045-per-user-run-cap-task-quota-offboarding.md)). A web application
   firewall (WAF) on the load balancer, and a CAPTCHA on the waitlist form
   ([ADR 0047](../adr/0047-waf-on-the-load-balancer-and-waitlist-captcha.md)).
+- **Browser security headers.** One CloudFront response headers policy sends a Content Security
+  Policy built from `infra/pa_config.json`, a Permissions-Policy and HSTS with subdomains. The
+  per-environment key `csp_mode` chooses report-only or enforce; each environment switches to
+  enforce after a manual browser check
+  ([ADR 0048](../adr/0048-content-security-policy-and-security-headers-on-cloudfront.md)).
 - **Accounts and operations.** An operations service behind the office allowlist, with its own
   pages and its own database login, and self-signup for one email domain
   ([ADR 0046](../adr/0046-ops-service-ops-pages-self-signup-and-ops-database-login.md)).
