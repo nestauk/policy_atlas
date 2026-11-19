@@ -18,6 +18,30 @@ address ranges, passwords, email addresses or account ids.
 | `make verify` (after the delta review-stack fixes, uncommitted on `16d1af76`) | pass | 2026-11-18: backend 4960 passed, 1 skipped; infra 139 passed; drift-check OK; frontend 2069 tests and both builds. A run before it failed only on an import-order lint in the new theory-of-change fixture, fixed. |
 | `aws sesv2 get-account` (both profiles) | pass | 2026-11-18 (owner, live): both accounts have production access, both sender domains verified with DKIM; two template test sends from staging accepted. (Blocked on 2026-11-17: SSO tokens had expired.) |
 
+## Staging dry run (2026-11-19, read-only, on `90565f51`)
+
+- `make deploy-check DEPLOY_ENV=staging`: pass (config only).
+- `/policy_atlas_v3/ops/allowed_cidrs`: 7 ranges, none open to all (a copy of the Metabase list).
+- SES `v3.policyatlas.uk`: verified, DKIM `SUCCESS`, same account and region (eu-west-2) as the
+  user pool; account has production access and sending on. The pool still uses
+  `COGNITO_DEFAULT`; deletion protection is on (064a deployed).
+- `cdk diff --all` against live staging (read-only change sets):
+  - **App stack, added:** the ops service, task definition, task and execution roles, target
+    group, two allowlisted listener rules, the `ops.` DNS record, `OpsDbSecret`, the ops SSM
+    exports, and the allowlist parameter reference.
+  - **App stack, IAM:** the ops task role gets the five Cognito actions on the pool ARN only;
+    the migration task role gets get/put on `OpsDbSecret` (the login sync); the ops execution
+    role gets the standard image-pull, log and secret-read rights. Nothing new on the API's
+    roles; no security-group change.
+  - **App stack, changed:** the user pool sends through SES (`DEVELOPER`, `no-reply@`, the
+    identity ARN) with the branded invitation and verification templates; the app client adds
+    the two `ops.` callback and logout URLs; the migration command adds the login sync and
+    `OPS_DB_SECRET_ARN`; the API, migration and ingest images move to the new digest.
+  - **Database stack:** the jumpbox is replaced because `latest_amazon_linux2023` resolves to a
+    newer AMI. Not from 065 (the file is unchanged against `dev`); any deploy does this when AWS
+    publishes a new image. An open tunnel through it drops during the deploy.
+  - Network, certificate and analytics stacks: no differences.
+
 ## Checks beyond the build
 
 - **Deterministic tests** — filled per phase below.
