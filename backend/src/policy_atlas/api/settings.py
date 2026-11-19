@@ -27,10 +27,9 @@ class Settings:
         run_executor_max: Maximum number of concurrent walk workers.
         runs_per_user: Maximum number of walks one person's tasks may hold on
             the walk executor at once; administrators are exempt
-            (``RUNS_PER_USER``; task 064a, Q7).
+            (``RUNS_PER_USER``).
         task_quota_per_year: How many tasks one person may create in any
-            365 days; administrators are exempt (``TASK_QUOTA_PER_YEAR``;
-            task 064a, Q8).
+            365 days; administrators are exempt (``TASK_QUOTA_PER_YEAR``).
         jwks_cache_ttl_seconds: Duration for which a fetched JWKS is retained.
         sse_poll_interval_seconds: Durable-tail poll cadence for SSE clients.
         sse_heartbeat_seconds: Idle interval before an SSE keep-alive comment.

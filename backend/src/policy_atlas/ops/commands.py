@@ -1170,7 +1170,7 @@ def offboard_user(
 
     This is what to run when someone leaves. ``user de-enrol`` alone only
     changes the database: the person can still sign in and their public task
-    links still work (finding M-02).
+    links still work.
 
     **The order, and why.**
 
@@ -1509,7 +1509,7 @@ def set_quota(
         conn: Open connection inside the command transaction.
         user_id: User subject, mutually exclusive with ``org_id``.
         org_id: Organisation identifier; exactly one of the three is given.
-        cohort_id: Cohort identifier (owner, 2026-11-18).
+        cohort_id: Cohort identifier.
         task_quota_per_year: Task quota override; ``None`` inherits.
         runs_per_user: Simultaneous run override; ``None`` inherits.
 
@@ -2259,8 +2259,7 @@ def _require_mailable(email: str) -> None:
 
     Cognito substitutes ``{username}`` (the address) into the HTML invitation
     without escaping, and the public form's pattern admits ``<``, ``>`` and
-    ``&``. Such an address is not deliverable anyway, so refusing costs nothing
-    (review stack, 2026-11-17).
+    ``&``. Such an address is not deliverable anyway, so refusing costs nothing.
     """
     if any(character in email for character in "<>&") or any(c.isspace() for c in email):
         raise OpsError(f"refusing an address containing markup or whitespace: {email!r}")

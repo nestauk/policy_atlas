@@ -1,4 +1,4 @@
-"""Rendered-template checks for task 064b's API firewall."""
+"""Rendered-template checks for the API firewall."""
 import json
 
 import aws_cdk as cdk

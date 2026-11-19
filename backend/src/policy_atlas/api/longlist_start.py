@@ -158,7 +158,7 @@ def admit_and_mint(
     The admission ``create_run`` makes: no ``running | paused`` parentless walk
     and no reservation for the task, and (unless ``check_capacity`` is false)
     fewer running parentless walks plus reservations than the executor's
-    width, and fewer than ``user_cap`` for the person (task 064a, Q7). Then,
+    width, and fewer than ``user_cap`` for the person. Then,
     in the same transaction, the longlist intent record is
     inserted and the reservation taken. With ``executor``, the walk is
     submitted under the lock too, exactly as ``create_run`` submits.

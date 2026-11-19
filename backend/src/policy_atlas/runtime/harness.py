@@ -142,12 +142,12 @@ def safe_error(exc: BaseException) -> str:
     drivers, HTTP clients, model providers) often hold SQL, host names or
     provider request ids, so for those only the class name is kept. Our own
     exceptions (classes defined under ``policy_atlas.``) and any exception
-    carrying a structured ``reason`` code (a string; the task 013 rule) are
+    carrying a structured ``reason`` code (a string) are
     written to be shown, so they keep their message. The code must be a
     string because library exceptions carry a ``reason`` too
     (``urllib.error.URLError``, ``ssl.SSLError``, ``UnicodeDecodeError``)
     and theirs is an object, not a code. Callers log the full exception
-    server-side with ``exc_info=True`` (review finding M-11).
+    server-side with ``exc_info=True``.
 
     Args:
         exc: The exception a component raised.

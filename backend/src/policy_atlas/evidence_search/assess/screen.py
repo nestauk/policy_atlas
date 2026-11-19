@@ -161,8 +161,7 @@ def effective_screen_rows(*, run_ids: set[uuid.UUID] | None = None) -> Subquery:
     The window partitions by ``task_id`` as well as scope and snapshot.
     ``task_id`` is constant within a scope/snapshot partition (``fk_ssr_scope_task``
     ties each scope to one task), so the ranking is unchanged; it leads the key
-    so PostgreSQL pushes a caller's ``task_id`` filter below the window function
-    (task 064a Q9, review finding H-14).
+    so PostgreSQL pushes a caller's ``task_id`` filter below the window function.
 
     ``excluded_retracted`` is a terminal effective status like any other
     non-failed status: it is always a stage-1 row (retraction
