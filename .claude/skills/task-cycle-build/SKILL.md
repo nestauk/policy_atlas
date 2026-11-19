@@ -27,9 +27,9 @@ changes. An optional `/goal` for this phase is "through step 6: verification.md 
 - **Delegate volume per the plan's executor marks** (decided at plan time — see
   harness.md § Agent-side model routing for the tiers and the delegation-brief shape):
   `fast-worker` for mechanical volume and test scaffolding from a precise list;
-  `deep-reasoner` for reasoning offload; Codex as doer (`codex:rescue`) for a precise,
-  machine-verifiable brief when Claude budget is the constraint — then Claude anchors the
-  review (family-flip). The lead reviews delegated output before it lands; if it misses
+  `deep-reasoner` for reasoning offload and judgment-bearing implementation (the default
+  doer); Codex as doer (`codex:rescue`) only where the plan marks it with a reason — then
+  Claude anchors the review (family-flip). The lead reviews delegated output before it lands; if it misses
   the bar, rewrite the brief or escalate the model — don't hand-polish weak output.
   Mid-build smell (failure-log, 2026-07-05): the lead catching itself editing product
   code directly means a brief should have been written — delegation is the default and

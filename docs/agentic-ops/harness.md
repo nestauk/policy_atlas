@@ -20,7 +20,7 @@ prescribe *process and gates* (tiers, artifacts, 🛑s — model-independent), n
 how-to-think prescription tuned to one generation degrades the next (2026-07 Fable guidance), and
 it's the first thing the expiry review should trim.
 
-- Primary: Claude Code in the IDE and CLI — **Fable 5, effort `high`**, as the lead. `high` is the
+- Primary: Claude Code in the IDE and CLI — **Fable 5.2, effort `high`**, as the lead. `high` is the
   default on purpose: `max` burns budget for little gain on routine work; raise effort per
   subagent-call for the hardest verify/judge steps instead of globally.
 - **Remit sizing:** current-generation leads support contracts at the top of the difficulty
@@ -47,17 +47,17 @@ and the lead-only rules below (you can't pin a "don't delegate" — those stay p
 
 | Work | Route |
 |---|---|
-| Orchestration, architecture, hard debugging, synthesis, final judgment | Fable 5 (the lead itself) |
+| Orchestration, architecture, hard debugging, synthesis, final judgment | The lead itself |
 | Deep-reasoning offload: long independent analysis, root-cause hunts | [`deep-reasoner`](../../.claude/agents/deep-reasoner.md) (pinned Opus) |
 | Mechanical volume: boilerplate, sweeps, broad codebase search | [`fast-worker`](../../.claude/agents/fast-worker.md) (pinned Sonnet); `Explore` agents for search |
 | Web research fan-out: one narrow sourced question per agent, notes to a named file; the lead coordinates and the writer synthesises | [`researcher`](../../.claude/agents/researcher.md) (pinned Opus; web tools plus Write, no Bash/Edit, no nesting: widen by adding researchers, not layers; owner 2026-10-30) |
 | Built-to-measure artefacts: experiment scripts, probes, prototypes in scratch or gitignored dirs | [`builder`](../../.claude/agents/builder.md) (pinned Opus, effort high; code tools, no web; owner 2026-09-29 "builds go to Opus") |
-| Judgment-bearing scoped implementation (nontrivial logic, multi-file coherence, unfamiliar APIs) from a precise, **machine-verifiable** brief | **Codex as the default doer** (`codex:rescue` / `codex exec`) — ~Opus-tier capability on the non-bottleneck budget; the **other family reviews** (family-flip). Precondition is the brief, not the budget: rescue is async fire-and-forget, so "done" must be self-checkable (`make verify`, named tests) |
+| Judgment-bearing scoped implementation (nontrivial logic, multi-file coherence, unfamiliar APIs) from a precise, **machine-verifiable** brief | **`deep-reasoner` as the default doer** (pinned Opus; owner ruling 2026-09-04, confirmed 2026-11-19). The family flip happens at the step-7 Codex review, so a Codex build adds no independence and costs the async round-trip. Mark Codex (`codex:rescue` / `codex exec`) as the doer only where the build itself needs a second family's view, with the reason in the plan; rescue is async fire-and-forget, so "done" must be self-checkable (`make verify`, named tests) |
 | Review fan-out: contract verification, adversarial passes | [`contract-verifier`](../../.claude/agents/contract-verifier.md) (pinned Opus) · `agent-skills` reviewer subagents · Codex — **not the lead**; the lead adjudicates findings |
 | Heterogeneous peer (different model family): native review, adversarial review, rescue/doer | Codex — `/codex:review` · `/codex:adversarial-review` · `codex:rescue` |
 
 **Routing is decided at plan time, not implement time** (failure-log, 2026-07-05): the plan
-marks each task with its executor (`lead` / `fast-worker` / `deep-reasoner` / `codex`), reviewed
+marks each task with its executor (`lead` / `fast-worker` / `deep-reasoner` / `frontend-designer` / `builder` / `codex`), reviewed
 at the plan gate. **The default executor is a delegate; every `lead` mark carries a one-line
 justification the plan gate reviews** (failure-log, 2026-07-05 — the 008 plan over-assigned to
 the lead and the burden must sit on keeping work, not on delegating it). The decision ladder
@@ -66,12 +66,9 @@ condition): can't write a self-checkable brief → lead; prompt-bearing work, ta
 surfaces, adjudication, and seam *design* (signatures, semantics, the brief itself) → lead —
 but the *implementation* of a lead-designed seam against a machine-verifiable done is delegable
 like any other execution ("seam-bearing" describes the design decision, not the typing);
-judgment-bearing execution → **Codex** (~Opus tier,
-different budget, family-flip review built in — needs a machine-verifiable brief because rescue
-is async, no mid-task steering); mechanical transcription of an exact spec → fast-worker (Codex
-would overpay and the async round-trip is slower); analysis-not-code → deep-reasoner (NB
-deep-reasoner and fast-worker also spend Claude budget — Codex offload helps most exactly where
-Opus-tier work would otherwise run). Mid-build, the lead always has full context loaded and every task looks
+judgment-bearing execution → **deep-reasoner** (Codex only where the build needs a second
+family's view, with the reason in the plan); mechanical transcription of an exact spec →
+fast-worker; analysis-not-code → deep-reasoner. Mid-build, the lead always has full context loaded and every task looks
 cheapest inline — 007's ~450-line test file went to the lead that way despite a
 fast-worker-shaped contract test list; mid-build, the lead catching itself editing product code
 directly is the smell — write a brief instead. Counter-rule: one-command mechanical edits
@@ -176,7 +173,8 @@ weight review attention toward delegated test diffs accordingly.
   aid) — the conformance *gate* is `make okf-validate`, a repo script, so it doesn't depend on a
   personal skill being installed.
 - **Local subagents:** `.claude/agents/` — `deep-reasoner` (pinned Opus) · `fast-worker` (pinned
-  Sonnet) · `contract-verifier` (pinned Opus, read-only). The structural half of § Agent-side
+  Sonnet) · `contract-verifier` (pinned Opus, read-only) · `builder` · `researcher` ·
+  `frontend-designer` (all pinned Opus). The structural half of § Agent-side
   model routing.
 - **Permissions:** `.claude/settings.json` deny rules + `.claude/settings.local.json` allowlist.
 

@@ -83,7 +83,7 @@ and opens it on your go (step 8); the human owns review + merge (step 9).
 
 ## Evidence requirements
 
-- `make verify` green (okf-validate · test · typecheck · lint · build).
+- `make verify` green (the `verify` target in the `Makefile` lists every check it runs).
 - `verification.md` complete, including the exact end-to-end command run.
 - Every rubric box checked or explicitly justified.
 

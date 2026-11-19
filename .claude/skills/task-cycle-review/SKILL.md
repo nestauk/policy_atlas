@@ -48,15 +48,15 @@ and a naive fan-out pays it once per angle (008: 8 angles × a ~4.8K-line diff �
 before any finding). When dispatching `/code-review` finder angles, hand each angle a
 **lens-matched pathspec**, never one shared whole-diff command: correctness angles
 (line-by-line · removed-behaviour · cross-file) read product code
-(`src`/`alembic`/config); cleanup angles (reuse · simplification · efficiency ·
-altitude) read `src` + `tests`; conventions reads the governing rule files plus the
+(`backend/src`/`backend/alembic`/config); cleanup angles (reuse · simplification · efficiency ·
+altitude) read `backend/src` + `backend/tests`; conventions reads the governing rule files plus the
 changed-file list. Apply at any diff size — it's free precision, and big slices are
 normal here (user, 2026-07-05: sized to the model's orchestration capability); the
 scoping is what keeps their reviews affordable.
 
 **Diff hygiene (failure-log, 2026-07-05):** before dispatching any reviewer, **exclude
 generated/bulk data files from the review diff by pathspec** — e.g.
-`git diff dev...HEAD -- ':!src/policy_atlas/data/*.json'` — and give data files their own
+`git diff dev...HEAD -- ':!backend/tests/**/data/*.json'` — and give data files their own
 purpose-built check (leak guard, schema/shape audit). On 007, 12K lines of fixture JSON
 were read by all 8 finder angles for zero findings (~2× budget overrun). NB this is an
 *exclude*-list of known data globs — the 2026-06-30 entry rejected *include*-lists, which
@@ -194,7 +194,7 @@ which before doing anything else. For a job id, retrieve results with the repo s
 `scripts/codex_job.sh wait <job-id> [timeout-s]` (or `status`/`result`) — it only
 resolves the companion-script path (the plugin's `${CLAUDE_PLUGIN_ROOT}` is injected
 solely while its user-typed `/codex:*` commands run; no such variable exists in the
-lead's shell — `$CODEX_PLUGIN_ROOT` never existed at all) and delegates waiting to the
+lead's shell) and delegates waiting to the
 runtime's **native** `status --wait --timeout-ms`. ⚠️ Do not hand-roll a status poll —
 the runtime has one built in, and a grep-filtered background loop turns a hard error
 into a silent spin-to-timeout (failure-log, 2026-07-07; progress-line pitfall

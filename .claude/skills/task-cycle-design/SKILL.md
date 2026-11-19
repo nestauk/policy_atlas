@@ -29,6 +29,14 @@ runs this phase; Tier 0/1 skip it). Templates: `docs/tasks/_templates/`.
 - **Adversarial review (documents):** a **read-only** brief through the `codex-rescue`
   agent (see § Codex plumbing below). `agent-skills:doubt-driven-development` applies the
   same fresh-context skepticism to key decisions.
+- **Compare directions in a mock (frontend design pass, step 3):** when the direction is
+  open, the `prototype` skill — several different versions of one UI piece behind a picker,
+  so the owner can compare them live. It only runs when called: the owner types
+  `/prototype`, or the brief tells the `builder` to read
+  `~/.claude/skills/prototype/SKILL.md` first.
+- **Situational (frontend):** `pick-ui-library` when a slice needs a new frontend
+  dependency (owner types `/pick-ui-library`, or the agent reads
+  `~/.claude/skills/pick-ui-library/SKILL.md`). The dependency still needs owner approval.
 
 ## Frontend-heavy slices — design pass before the contract (owner, 2026-11-04)
 
@@ -66,8 +74,8 @@ task-cycle-review § Frontend-heavy slices. First slice under this rule: 058.
 
 The slice's identity lives in two places and nowhere else: the branch name
 `task/NNN-slug` and the `Status` line at the top of its `contract.md`. Do not write phase
-state into `AGENTS.md` (removed 2026-09-04: it duplicated both and was stale on `dev` after
-every merge). A fresh conversation re-grounds by reading `docs/tasks/<newest>/contract.md`.
+state into `AGENTS.md`: it duplicates both and goes stale on `dev` after every merge.
+A fresh conversation re-grounds by reading `docs/tasks/<newest>/contract.md`.
 
 Copy `docs/tasks/_templates/contract.md` → `docs/tasks/NNN-slug/contract.md`. Read
 the specs it depends on *in depth*, not headings — if a spec looks wrong or incomplete,
@@ -133,7 +141,8 @@ and surface tables stay in the contract; the plan cites them and reuses its defe
 numbering (§ Design docs must be legible cold).
 
 **Executor routing is a plan-time decision** (failure-log, 2026-07-05). Mark each plan
-task with its executor — `lead` · `fast-worker` · `deep-reasoner` · `codex` — per
+task with its executor — `lead` · `fast-worker` · `deep-reasoner` · `frontend-designer` ·
+`builder` · `codex` — per
 harness.md § Agent-side model routing, so the plan reviewer and the human gate see the
 routing before the build starts. **Default to a delegate; every `lead` mark carries a
 one-line justification the plan gate reviews** (failure-log, 2026-07-05 — the 008 plan
@@ -147,13 +156,13 @@ The ladder (full version in harness.md):
   delegable like any other execution — "seam-bearing" describes the design decision,
   not the typing.
 - **Judgment-bearing execution** (nontrivial logic, multi-file coherence, unfamiliar
-  APIs) with a machine-verifiable done → `codex` — the **default doer** for complex
-  subtasks: ~Opus-tier capability on the non-Claude budget, and the family-flip review
-  comes built in. (Async fire-and-forget: if the task would need mid-course steering,
-  it fails the brief test — keep it with the lead.)
+  APIs) with a machine-verifiable done → `deep-reasoner` — the **default doer** for
+  complex subtasks. Mark `codex` only when the build itself needs a second model
+  family's view, and give the reason in the plan: the family flip already happens at
+  the step-7 review, so a Codex build adds no independence and costs the async
+  round-trip.
 - Mechanical transcription of an exact spec (test scaffolding from a precise contract
-  list, sweeps, boilerplate) → `fast-worker` — Codex overpays here and the async
-  round-trip is slower.
+  list, sweeps, boilerplate) → `fast-worker`.
 - One-command mechanical edits (`sed`-able renames, count bumps) → `lead` **inline** —
   delegation costs more than it saves there.
 - Analysis-not-code → `deep-reasoner`; Codex takes the second seat in
@@ -214,7 +223,7 @@ anything else. For a job id, retrieve results with the repo shim:
 `scripts/codex_job.sh wait <job-id> [timeout-s]` (or `status`/`result`) — it only
 resolves the companion-script path (the plugin's `${CLAUDE_PLUGIN_ROOT}` is injected
 solely while its user-typed `/codex:*` commands run; no such variable exists in the
-lead's shell — `$CODEX_PLUGIN_ROOT` never existed at all) and delegates waiting to the
+lead's shell) and delegates waiting to the
 runtime's **native** `status --wait --timeout-ms`. ⚠️ Do not hand-roll a status poll —
 the runtime has one built in, and a grep-filtered background loop turns a hard error
 into a silent spin-to-timeout (failure-log, 2026-07-07; progress-line pitfall
