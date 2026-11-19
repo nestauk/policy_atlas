@@ -1,31 +1,37 @@
 # API layer
 
-`client.ts` exports `createAuthedApiClient(auth)`, a typed `openapi-fetch`
-client bound to the generated `paths` type in `gen/types.ts`. Base URL comes
-from `VITE_API_BASE_URL`, defaulting to `/api` (the local dev proxy).
+The code that talks to the backend web API.
 
-The generated client is schema-first: `gen/types.ts` and the committed
-`../../openapi.json` are produced from the backend's Pydantic contract
-(`policy_atlas.api.contract`) by `make openapi-sync` at the repo root.
-`make drift-check` fails the build if either goes stale — never hand-edit
-`gen/`.
+## What is in it
 
-- `authMiddleware.ts` — the `openapi-fetch` middleware `createAuthedApiClient`
-  installs: injects `Authorization: Bearer <token>` from the active
-  `AuthApi`, and on a 401 attempts exactly one silent refresh + retry
-  before surfacing the response.
-- `sseFrame.ts` — `SseFrame` (re-exported from the generated contract) and
-  `narrowSseFrame`, the one runtime-narrow seam in the SSE pipeline
-  (verifies `.type` against the pinned frame-type set; trusts the rest of
-  the shape from the contract).
-- `sse.ts` — `connectEventStream()`, the fetch-stream SSE client:
-  bearer-header auth (never a query-string token), `cursor=` reconnects,
-  exponential backoff with jitter (1s–30s), and a single
-  refresh-then-retry on a 401 before surfacing `onUnauthenticated`.
-- `queries.ts` — TanStack Query hooks over the authed client:
-  `useTasks`, `useTask`, `useCheckIns`, plus the read-model hooks
-  named in task 025 §6 (`useFunnel`, `useLandscape`, `useEvidence`,
-  `useFindings`, `useDecisions`, `useArtefact`) and the task-027 durable
-  transcript/run reads (`useTaskAgentTurns`, `useRuns`). `groups`/`coverage`
-  are in the generated contract too but aren't named in the task brief's
-  hook list — add a hook for either once a view needs it.
+- `client.ts`: `createAuthedApiClient(auth)`, a typed `openapi-fetch` client built on the
+  generated `paths` type in `gen/types.ts`. The base address comes from `VITE_API_BASE_URL`;
+  the default is `/api` (the dev-server proxy).
+- `authMiddleware.ts`: adds `Authorization: Bearer <token>` from the active `AuthApi`. On a 401
+  (not signed in) response it refreshes the token once, silently, and tries again. A request
+  sent with no token (a public link) is not retried.
+- `sse.ts`: `connectEventStream()`, the client for a Task's event stream (SSE, server-sent
+  events). It sends the token in a header, never in the address. It reconnects at its cursor
+  with a back-off of 1 to 30 seconds, drops a connection that is silent for 45 seconds, and
+  calls `onUnauthenticated` if a 401 stays after one refresh.
+- `sseFrame.ts`: `SseFrame` and `narrowSseFrame`. It drops a frame whose `type` is not in the
+  known list.
+- `queries.ts`: `queryKeys` and the TanStack Query read hooks (`useTasks`, `useTask`,
+  `useArtefact`, `useEvidence`, `useOptions`, `useToc` and the others).
+- `mutations.ts`: the write hooks (create and update Tasks and Projects, start a run, answer a
+  check-in, the Options scoping and Theory of change actions).
+- `gen/`: generated types. Do not edit ([README](gen/README.md)). `gen/types-ops.ts` is for the
+  ops pages, whose client is `src/ops/api.ts`. That client uses `authMiddleware.ts` too.
+
+## Rules
+
+- The types come from the backend's request and response models
+  (`policy_atlas.api.contract`). After a backend contract change, run `make openapi-sync` from
+  the root. `make drift-check` fails if `frontend/openapi.json`, `frontend/openapi-ops.json`,
+  `gen/types.ts` or `gen/types-ops.ts` is out of date.
+- Use `queryKeys` for every query key, so the event-stream refreshes find the right queries.
+
+## Commands
+
+From `frontend/`: `pnpm test` runs the unit tests. `pnpm gen` remakes `gen/types.ts` from
+`openapi.json`, and `pnpm gen:ops` remakes `gen/types-ops.ts` from `openapi-ops.json`.

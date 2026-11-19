@@ -27,6 +27,7 @@ import { MENU_ITEM_CLASS, moveMenuFocus } from "../ui/radix/menu";
 import { iconButtonClass } from "../ui/brand/icons";
 import { PROSE_LINK_CLASS } from "../ui/brand/inlineActions";
 import { AppFooter } from "./AppFooter";
+import { QuotaBanner } from "./QuotaBanner";
 import { SensitiveInfoBanner } from "./SensitiveInfoBanner";
 import { ChatSidePanel } from "./workspace/chat/ChatSidePanel";
 import { PlanDocument } from "./workspace/PlanDocument";
@@ -478,6 +479,7 @@ export function AppShell() {
         </NavBar>
       )}
       <SensitiveInfoBanner />
+      <QuotaBanner />
       {/* The Agent overlay beside every task view outside the Agent tab
           (029 rev 3.4, 038 V8): the Agent tab hosts the conversation list
           and the conversation itself, so the panel mounts everywhere else. */}

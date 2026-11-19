@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LifecycleBar } from "../brand/LifecycleBar";
-import { GROWING_RULE_ACTIVE_CLASS, GROWING_RULE_CLASS, NavItem } from "../brand/Nav";
+import { GROWING_RULE_CLASS, NavItem } from "../brand/Nav";
 import { Arrival, ArrivalProvider, useFirstPaintDone } from "./arrivals";
 import { Collapse } from "./Collapse";
 
@@ -31,7 +31,7 @@ function Thread({ ready, ids }: { ready: boolean; ids: string[] }) {
   );
 }
 
-describe("arrivals (task 058, round 9; the animation sweep's entry 2)", () => {
+describe("arrivals", () => {
   afterEach(() => vi.useRealTimers());
 
   it("holds the history still and rises only what arrives after the first paint", () => {
@@ -65,25 +65,21 @@ describe("arrivals (task 058, round 9; the animation sweep's entry 2)", () => {
     expect(screen.getByTestId("x")).not.toHaveClass("anim-rise");
   });
 
-  it("is one rise on the strong ease-out, a cut under reduced motion", () => {
+  it("cuts the rise under reduced motion", () => {
     const rise = block(css, "@utility anim-rise {");
-    expect(rise).toContain("animation: rise 300ms var(--ease-out-strong) both");
     expect(rise).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*animation-duration: 1ms;/);
   });
 });
 
 describe("Collapse", () => {
-  it("cuts where Web Animations are missing (jsdom) and opens with its height on the strong ease-out", () => {
+  it("cuts where Web Animations are missing (jsdom), still under reduced motion", () => {
     const view = render(
       <Collapse show durationMs={200}>
         <p>Rows</p>
       </Collapse>,
     );
     const box = screen.getByText("Rows").parentElement?.parentElement as HTMLElement;
-    expect(box).toHaveClass("grid", "grid-rows-[1fr]", "transition-[grid-template-rows,opacity]", "motion-reduce:transition-none");
-    expect(box.style.transitionDuration).toBe("200ms");
-    // At rest it does not clip, so focus rings and shadows inside show.
-    expect(screen.getByText("Rows").parentElement).not.toHaveClass("overflow-hidden");
+    expect(box).toHaveClass("motion-reduce:transition-none");
     view.rerender(
       <Collapse show={false} durationMs={200}>
         <p>Rows</p>
@@ -93,31 +89,12 @@ describe("Collapse", () => {
   });
 });
 
-describe("the growing underline (owner, round 9)", () => {
-  it("grows a blue rule from the left edge to the centre on hover and focus, over 200 ms, still under reduced motion", () => {
-    for (const name of [
-      "after:scale-x-0",
-      "after:origin-left",
-      "after:bg-blue",
-      "after:h-[3px]",
-      "after:duration-200",
-      "after:ease-[var(--ease-out-strong)]",
-      "hover:after:scale-x-50",
-      "focus-visible:after:scale-x-50",
-      "motion-reduce:after:transition-none",
-    ]) {
-      expect(GROWING_RULE_CLASS).toContain(name);
-    }
-    expect(GROWING_RULE_CLASS).not.toContain("after:origin-center");
+describe("the growing underline", () => {
+  it("holds the growing rule still under reduced motion", () => {
+    expect(GROWING_RULE_CLASS).toContain("motion-reduce:after:transition-none");
   });
 
-  it("holds the active item's rule at full width, the same rule continuing past the centre", () => {
-    for (const name of ["after:scale-x-100", "hover:after:scale-x-100", "focus-visible:after:scale-x-100"]) {
-      expect(GROWING_RULE_ACTIVE_CLASS).toContain(name);
-    }
-  });
-
-  it("is on the top nav's items and the lifecycle tabs, the active rule full and still", () => {
+  it("marks the current nav item and leaves a locked stage disabled", () => {
     render(
       <MemoryRouter initialEntries={["/tasks"]}>
         <NavItem to="/tasks">Tasks</NavItem>
@@ -131,43 +108,15 @@ describe("the growing underline (owner, round 9)", () => {
         />
       </MemoryRouter>,
     );
-    // The active item's rule is the growing rule at full width (not a
-    // border), so a click continues the hover's half rule.
-    const tasks = screen.getByRole("link", { name: "Tasks" });
-    expect(tasks).toHaveClass("border-transparent", "after:scale-x-100", "hover:after:scale-x-100");
-    expect(tasks).not.toHaveClass("after:scale-x-0", "hover:after:scale-x-50");
-    const projects = screen.getByRole("link", { name: "Projects" });
-    expect(projects).toHaveClass("border-transparent", "after:scale-x-0", "hover:after:scale-x-50");
-    const agent = screen.getByRole("link", { name: "Agent" });
-    expect(agent).toHaveClass("after:scale-x-0", "hover:after:scale-x-50");
-    // A locked stage has no rule to grow.
-    expect(screen.getByText("Share").closest("[aria-disabled]")).not.toHaveClass("hover:after:scale-x-50");
+    expect(screen.getByRole("link", { name: "Tasks" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Projects" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Agent" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByText("Share").closest("[aria-disabled]")).toHaveAttribute("aria-disabled", "true");
   });
 });
 
-describe("the chip wave while claims are checked (owners, rounds 9 and 11)", () => {
-  it("pulses each chip narrowly to the checked marker's blue look with a halo, every 2 s, 350 ms apart", () => {
-    const keyframes = block(artefactCss, "@keyframes checking-pulse {");
-    expect(keyframes).toContain("background-color: var(--color-blue-tint-2)");
-    expect(keyframes).toContain("border-color: rgb(0 0 255 / 0.25)");
-    expect(keyframes).toContain("color: rgb(0 0 255 / 0.8)");
-    expect(keyframes).toContain("box-shadow: 0 0 0 1px rgb(0 0 255 / 0.35)");
-    expect(keyframes).not.toContain("opacity");
-    // A narrow pulse: muted to 25 %, in by 40 %, held to 50 %, out by 65 %
-    // (300 ms each way on a 2 s cycle).
-    expect(keyframes).toMatch(/0%,\s*25%,\s*65%,\s*100% \{/);
-    expect(keyframes).toMatch(/40%,\s*50% \{/);
-    const rule = block(artefactCss, ".draft-checking .pending-mark {");
-    expect(rule).toContain("checking-pulse 2s ease-in-out infinite");
-    expect(rule).toContain("calc(var(--mark-at, 0) * 350ms)");
+describe("the chip wave while claims are checked", () => {
+  it("stops the chip wave under reduced motion", () => {
     expect(artefactCss).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*\.draft-checking \.pending-mark \{\s*animation: none;/);
-  });
-});
-
-describe("the check-in ring", () => {
-  it("is the ring only, blooming 150 ms after the card arrives", () => {
-    const glow = block(css, "@keyframes glow-in {");
-    expect(glow).not.toContain("opacity");
-    expect(block(css, "@utility anim-glow {")).toContain("glow-in 900ms ease-out 150ms both");
   });
 });

@@ -1,8 +1,8 @@
 # Spec-authoring disciplines
 
-How to write or refine a spec — the disciplines a distillation must carry, used by the
-[task-cycle](../../.claude/skills/task-cycle/SKILL.md)'s *Spec refinement* flow-back. Governs *how*
-spec work is done; it is not itself a contract.
+How to write or refine a spec: the disciplines a distillation must carry. The
+[task-cycle-design](../../.claude/skills/task-cycle-design/SKILL.md) § Spec refinement step uses
+them. This file governs *how* spec work is done; it is not itself a contract.
 
 A spec is a **declarative, status-tagged compression** of a source section, not a duplicate of it.
 Specs + `docs/adr/` are canonical and living; the `sources/` they were distilled from are frozen

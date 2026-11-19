@@ -10,11 +10,13 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:ops": "tsc -b && vite build --config vite.ops.config.ts",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
     "e2e": "playwright test",
     "gen": "openapi-typescript openapi.json -o src/api/gen/types.ts",
+    "gen:ops": "openapi-typescript openapi-ops.json -o src/api/gen/types-ops.ts",
     "preview": "vite preview"
   },
   "dependencies": {

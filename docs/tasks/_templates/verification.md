@@ -30,15 +30,21 @@ The exact command run for the manual end-to-end thread (copy-paste, including an
 
 What changed and why, in one short read. Don't make the reviewer reconstruct intent from the diff.
 
+## Simplification (build step 5c)
+
+What `/simplify` changed, and what it found but did not apply. Structural findings that it
+left go on the deferred list in § Review handoff.
+
 ## Review findings
 
 Added after the review stack (step 7) — what each review caught and how it was resolved:
 
 - **Contract verifier:**
 - **`/code-review`:**
-- **`/security-review`:**
-- **Adversarial review** (Tier 2+):
-- **`/simplify`:**
+- **Security lane:**
+- **Adversarial review** (Tier 2+; say so if a Claude reader stood in for Codex):
+- **`ponytail-review`:**
+- **Design lane** (frontend slices):
 - **`/okf validate`** (if specs/knowledge changed):
 
 ## Rubric status
@@ -60,10 +66,12 @@ What the review conversation needs but cannot see from the diff: adjudication it
 (flagged deviations, build-flagged anomalies), executor provenance for the family flip,
 diff-scoping exclusions, live-trace pointers — and:
 
-- **Knowledge candidates** (014 retro): one bullet per durable-seeming lesson from the
+- **Knowledge candidates**: one bullet per durable-seeming lesson from the
   build, however raw — surprises, gotchas, invariants that held for a non-obvious reason.
   Step 8 authors `docs/knowledge/` from this list + the review findings, against the
   final code. An empty list on a non-trivial slice is a smell, not a default.
+- **Deferred candidates**: structural findings that step 5c did not apply, one line each.
+  Step 8 writes them into `docs/deferred.md`.
 
 ## Deferred work
 

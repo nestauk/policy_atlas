@@ -52,3 +52,11 @@ only if this process minted it (`created_at >= _PROCESS_STARTED`). The
 durable halves are keyed on rows
 ([walk-existence-reads-intent-record-and-status](walk-existence-reads-intent-record-and-status.md));
 the queued window is not.
+
+The corollary for capacity accounting (064a review stack, 2026-11-16): a launch
+reservation exists only to cover the window before the walk row is written, so it must be
+given back **the moment the row exists** — the row then owns the count. `start_toc_check`
+(task 054) held its reservation for the whole check, and once the per-user cap counted
+reservations as well as rows, one running check cost a person two of three slots. Every
+start surface now calls `release_when_open` after submit, and a check chained on the same
+worker reserves again for its own pre-insert window.

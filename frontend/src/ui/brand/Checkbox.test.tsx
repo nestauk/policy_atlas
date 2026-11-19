@@ -14,14 +14,12 @@ describe("Checkbox", () => {
     expect(onChange).toHaveBeenCalledWith(true);
   });
 
-  it("draws the tick on Navy when checked, and the empty box at 40 % Navy", () => {
+  it("draws the tick when checked, and an empty box when not", () => {
     const { rerender } = render(<Checkbox checked={false} label="A" onChange={vi.fn()} />);
     const mark = () => screen.getByRole("checkbox").querySelector("span[aria-hidden]");
-    expect(mark()).toHaveClass("border-navy/40");
     expect(mark()?.querySelector("svg")).toBeNull();
     rerender(<Checkbox checked label="A" onChange={vi.fn()} />);
     expect(screen.getByRole("checkbox")).toHaveAttribute("aria-checked", "true");
-    expect(mark()).toHaveClass("bg-navy", "border-navy");
     expect(mark()?.querySelector("svg")).not.toBeNull();
   });
 

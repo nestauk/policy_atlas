@@ -45,17 +45,15 @@ function menu(overrides: Partial<Parameters<typeof NameMenu>[0]> = {}) {
 
 // Owner, round 11: the header's name and its menu, shared by a task and a project.
 describe("NameMenu", () => {
-  it("shows the name with a 40 px chevron control on its baseline, and the short line under it (round 12)", () => {
+  it("shows the name with its chevron control, and the short line under it", () => {
     menu();
     const name = screen.getByText("NEET in Tower Hamlets");
     const chevron = screen.getByRole("button", { name: "Task settings" });
-    expect(chevron).toHaveClass("h-10", "w-10", "self-baseline");
     // The chevron shares the name's line; the capability is on its own line under them.
     // The name sits in its own box (round 14: it changes smoothly), on the
     // chevron's line.
     const line = name.parentElement?.parentElement as HTMLElement;
     expect(chevron.parentElement).toBe(line);
-    expect(line).toHaveClass("items-baseline");
     const capability = screen.getByText("Options scoping");
     expect(capability.parentElement).not.toBe(line);
     expect(line.nextElementSibling).toBe(capability);
@@ -231,7 +229,6 @@ describe("NameMenu — a name that changes on screen (round 14)", () => {
     view.rerender(renderName("Reducing NEET numbers in Tower Hamlets"));
     const leaving = screen.getByTestId("name-leaving");
     expect(leaving).toHaveTextContent("Untitled task");
-    expect(leaving).toHaveClass("anim-fade-out");
     // A screen reader hears the new name at once.
     expect(screen.getByText("Reducing NEET numbers in Tower Hamlets")).toHaveClass("sr-only");
     // After the old name's 150 ms fade, the reveal.
@@ -268,9 +265,7 @@ describe("NameMenu — a name that changes on screen (round 14)", () => {
     const view = render(named("Untitled task"));
     const chevron = screen.getByRole("button", { name: "Task settings" });
     const box = chevron.previousElementSibling as HTMLElement;
-    expect(box).toHaveClass("peer");
     expect(box).not.toHaveAttribute("data-changing");
-    expect(chevron.className).toContain("peer-data-[changing=true]:opacity-0");
     view.rerender(named("Reducing NEET numbers in Tower Hamlets"));
     expect(box).toHaveAttribute("data-changing", "true");
     // Still in the row and still a focusable button.

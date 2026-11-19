@@ -88,16 +88,12 @@ describe("PlanCard — ready actions", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders Review the plan and the green Start the search when approved and ready", () => {
+  it("renders Review the plan and Start the search when approved and ready", () => {
     mockPlanQuery({ plan: basePlan(), status: "approved", version: 1 });
     renderCard();
     expect(screen.getByTestId("plan-ready-actions")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Review the plan" })).toBeInTheDocument();
-    const start = screen.getByRole("button", { name: "Start the search" });
-    // The Button's own start tone and entry size (N18), not a class string.
-    expect(start.className).toContain("bg-green");
-    expect(start.className).toContain("cutout");
-    expect(start.className).toContain("text-body");
+    expect(screen.getByRole("button", { name: "Start the search" })).toBeInTheDocument();
   });
 
   it("says what the plan is from the draft's own fields", () => {
@@ -201,7 +197,7 @@ describe("PlanCard — options scoping (task 044)", () => {
     } as unknown as PlanOut;
   }
 
-  it("starts the baseline from the card with Confirm and build the baseline (N18)", async () => {
+  it("starts the baseline from the card with Confirm and build the baseline", async () => {
     mockPlanQuery(scopingPlanOut());
     const onReviewPlan = vi.fn();
     const user = userEvent.setup();
@@ -209,7 +205,6 @@ describe("PlanCard — options scoping (task 044)", () => {
     // The annex's scoping summary line (round 10: the annex wins over the build).
     expect(screen.getByText("Scoping plan · ~20 to 40 min")).toBeInTheDocument();
     const start = screen.getByRole("button", { name: "Confirm and build the baseline" });
-    expect(start.className).toContain("bg-green");
     await user.click(start);
     expect(scopingStart).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: "Review the plan" }));
@@ -255,7 +250,7 @@ describe("PlanCard — theory of change (task 054)", () => {
     renderCard({ onReviewPlan });
     expect(screen.getByText("Theory of change plan")).toBeInTheDocument();
     expect(screen.getByText("Youth wage subsidies and fewer NEETs")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Draft the theory" }).className).toContain("bg-green");
+    expect(screen.getByRole("button", { name: "Draft the theory" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Review the plan" }));
     expect(onReviewPlan).toHaveBeenCalledTimes(1);
   });

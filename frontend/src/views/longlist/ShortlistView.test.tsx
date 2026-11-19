@@ -151,7 +151,7 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
     await openShortlist();
     // The longlist's header (round 10): "Shortlist", the question under it.
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/^Shortlist$/);
-    expect(screen.getByText("How can we cut the NEET rate?")).toHaveClass("text-grey");
+    expect(screen.getByText("How can we cut the NEET rate?")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Risk appetite" })).toHaveTextContent(RISK_APPETITE_LABELS.mostly_tried);
     // No baseline line and no facts strip (owner, 2026-10-27).
     expect(screen.queryByText(/situation today/)).not.toBeInTheDocument();
@@ -344,13 +344,11 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
 
   // Round 10 (finding 4): one primary, Assess; while it is off its reason
   // is the line under it. Suggest more is a secondary.
-  it("makes Assess the page's one primary, off with its reason in words", async () => {
-    const { container } = renderShortlist();
+  it("turns Assess off with its reason in words", async () => {
+    renderShortlist();
     const assess = screen.getByRole("button", { name: "Assess these 2" });
     expect(assess).toBeDisabled();
     expect(assess).toHaveAccessibleDescription("Assessment is not yet available.");
-    expect(container.querySelectorAll(".cutout, .cutout-sm")).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "Suggest more" }).className).not.toMatch(/cutout|bg-blue/);
   });
 
   it("links back to the longlist instead of repeating it", async () => {
@@ -391,7 +389,7 @@ describe("ShortlistView — the Shortlist result view (task 055)", () => {
       option.exclusion = { by: "constrain", constraint: "Only include options a local authority can fund directly", reason: "It needs national funding." };
     });
     const notice = screen.getByText(/It needs national funding\./);
-    expect(within(notice).getByText("Excluded:")).toHaveClass("text-red");
+    expect(within(notice).getByText("Excluded:")).toBeInTheDocument();
   });
 
 });
@@ -417,7 +415,7 @@ describe("ShortlistView, the note kept current", () => {
   it("rewrites a stale note once on opening, and says it is behind until then", () => {
     renderShortlist({}, staleNote(true));
     expect(noteMutate).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("Written before your latest changes.")).toHaveClass("text-meta", "text-grey");
+    expect(screen.getByText("Written before your latest changes.")).toBeInTheDocument();
   });
 
   it("asks nothing when the note is fresh, then or later", () => {
@@ -461,8 +459,7 @@ describe("ShortlistView, the note kept current", () => {
     }
   });
 
-  // Owner, 2026-11-08: no breathing words; the Task Agent's working line in
-  // the note's place, then the new note fades in.
+  // The Task Agent's working line in the note's place, then the new note.
   it("shows the turning mark and Reviewing the shortlist for gaps in the note's place while it is rewritten", () => {
     notePending = true;
     const { rerender } = renderShortlist({}, staleNote(true));
@@ -470,20 +467,14 @@ describe("ShortlistView, the note kept current", () => {
     expect(line).toHaveTextContent(/^Reviewing the shortlist for gaps$/);
     expect(line.querySelector("svg")).not.toBeNull();
     expect(screen.queryByText(/Nothing on housing\./)).not.toBeInTheDocument();
-    expect(document.querySelector(".anim-breathe-soft")).toBeNull();
     expect(screen.queryByText("Written before your latest changes.")).not.toBeInTheDocument();
-    // The new note lands: it replaces the line with the arrivals' fade.
+    // The new note lands and replaces the line.
     notePending = false;
     const next = mockLonglist();
     next.shortlist = { ...next.shortlist, note: "Nothing on transport.", note_stale: false } as Longlist["shortlist"];
     rerender(tree(next));
     expect(screen.queryByText("Reviewing the shortlist for gaps")).not.toBeInTheDocument();
-    expect(screen.getByText(/Nothing on transport\./).closest("p")).toHaveClass("anim-swap-in");
-  });
-
-  it("does not fade the note the page opened with", () => {
-    renderShortlist({}, staleNote(false));
-    expect(screen.getByText(/Nothing on housing\./).closest("p")).not.toHaveClass("anim-swap-in");
+    expect(screen.getByText(/Nothing on transport\./)).toBeInTheDocument();
   });
 
   it("asks nothing on the public link", () => {

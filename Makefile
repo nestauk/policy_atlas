@@ -1,4 +1,4 @@
-.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast eval-check okf-validate audit audit-paths prompt-guard eval-search-recall frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test deploy-migration-wait-test infra-setup deploy-check deploy-update deploy-bootstrap
+.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast eval-check okf-validate audit audit-paths rules-check prompt-guard eval-search-recall frontend-install openapi-sync drift-check font-guard frontend-verify frontend-verify-fast fe-api-smoke deploy-build-guard-test deploy-migration-wait-test waf-report-test infra-setup deploy-check deploy-update deploy-bootstrap
 
 # Root Makefile (025 A.2 monorepo hoist): the Python project lives in
 # backend/; this Makefile owns the shared db service + the root-level gates
@@ -88,7 +88,7 @@ dev:
 	@test -d backend/.dev-issuer || \
 	  (cd backend && uv run python -m policy_atlas.api.dev_issuer init --dir .dev-issuer)
 	@(trap 'kill 0' INT TERM EXIT; \
-	  POLICY_ATLAS_THEORY_OF_CHANGE=1 $(MAKE) -C backend dev & \
+	  POLICY_ATLAS_THEORY_OF_CHANGE=1 TASK_QUOTA_PER_YEAR=100000 $(MAKE) -C backend dev & \
 	  token=$$(cd backend && uv run python -m policy_atlas.api.dev_issuer mint \
 	    --dir .dev-issuer --sub dev-user --client-id policy-atlas-dev \
 	    --ttl 14400 2>/dev/null | tail -1); \
@@ -128,6 +128,11 @@ audit:
 # hoisted backend/ path as repo-root-relative instead of backend/-relative.
 audit-paths:
 	uv run --project backend python scripts/audit_paths.py
+
+# Path-scoped rule files (.claude/rules/): fails if a `paths:` pattern matches no
+# tracked file, or a rule names a repository path that no longer exists.
+rules-check:
+	uv run --project backend python scripts/rules_check.py
 
 # Prompt-family content-hash guard: fails if any prompt-bearing
 # module or prompt text file drifted from its committed hash (scripts/prompt_hashes.json) — prompt
@@ -171,6 +176,7 @@ frontend-install:
 openapi-sync:
 	$(MAKE) -C backend openapi
 	cd frontend && pnpm run gen
+	cd frontend && pnpm run gen:ops
 
 # Schema-first drift gate (task 025 F.1): one schema generates both API
 # ends, so this fails the build the moment either committed artifact
@@ -194,6 +200,20 @@ drift-check:
 		rm -f "$$tmp_types"; exit 1; \
 	fi; \
 	rm -f "$$tmp_types"
+	@tmp_openapi_ops=$$(mktemp) && \
+	uv run --project backend python -m policy_atlas.api.export_openapi "$$tmp_openapi_ops" --mode ops && \
+	if ! diff -u frontend/openapi-ops.json "$$tmp_openapi_ops"; then \
+		echo "ERROR: frontend/openapi-ops.json is stale relative to the ops contract." >&2; \
+		rm -f "$$tmp_openapi_ops"; exit 1; \
+	fi; \
+	rm -f "$$tmp_openapi_ops"
+	@tmp_types_ops=$$(mktemp) && \
+	(cd frontend && pnpm exec openapi-typescript openapi-ops.json -o "$$tmp_types_ops") && \
+	if ! diff -u frontend/src/api/gen/types-ops.ts "$$tmp_types_ops"; then \
+		echo "ERROR: frontend/src/api/gen/types-ops.ts is stale relative to frontend/openapi-ops.json." >&2; \
+		rm -f "$$tmp_types_ops"; exit 1; \
+	fi; \
+	rm -f "$$tmp_types_ops"
 	@echo "drift-check: OK"
 
 # Font-binary guard (task 025, contract strand 7): Averta/Zosia are licensed
@@ -212,6 +232,12 @@ font-guard:
 frontend-verify:
 	cd frontend && pnpm typecheck && pnpm lint && pnpm test && pnpm build
 
+# The quick frontend check for a commit between polish rounds: type check, lint and
+# unit tests, without the production build. `make verify-fast` covers the backend
+# only, so a frontend-only commit needs this target to be green.
+frontend-verify-fast:
+	cd frontend && pnpm typecheck && pnpm lint && pnpm test
+
 # Thin browser smoke against the real local API: fresh dev-issuer credentials,
 # real Postgres, real CORS/base URL/auth transport, and the API SSE stream.
 # The script owns process lifecycle and leaves its temporary issuer material
@@ -222,13 +248,17 @@ fe-api-smoke:
 # Verifies deploy.sh's production VITE_* refusal directly once D.1 lands.
 # It deliberately reports a clear skip while that documented interface is absent.
 # CI runs this target, so it also runs the migration-waiter check below.
-deploy-build-guard-test: deploy-migration-wait-test
+deploy-build-guard-test: deploy-migration-wait-test waf-report-test
 	bash scripts/test_deploy_build_guard.sh
 
 # Checks deploy.sh's migration waiter (task 057) against a stubbed `aws`: polls
 # until STOPPED, fails loudly on a non-zero exit or after MIGRATION_WAIT_MAX_S.
 deploy-migration-wait-test:
 	bash scripts/test_deploy_migration_wait.sh
+
+# Checks the read-only WAF count-week report against recorded-shaped AWS output.
+waf-report-test:
+	bash scripts/test_waf_report.sh
 
 # GitHub Actions and operators share these deployment entry points. DEPLOY_ENV
 # selects one committed environment across infra/*_config.json; deploy-check is
@@ -256,6 +286,7 @@ verify:
 	$(MAKE) eval-check
 	$(MAKE) -C infra test
 	$(MAKE) audit-paths
+	$(MAKE) rules-check
 	$(MAKE) prompt-guard
 	$(MAKE) font-guard
 	$(MAKE) drift-check

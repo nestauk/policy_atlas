@@ -1,0 +1,179 @@
+import { useRef, type ReactNode } from "react";
+import { Link, Outlet } from "react-router";
+
+import { useAuth } from "../auth";
+import { Button } from "../ui/brand/Button";
+import { cn } from "../ui/brand/cn";
+import { Chip } from "../ui/brand/Chip";
+import { iconButtonClass } from "../ui/brand/icons";
+import { NavBar, NavItem, NavLogo } from "../ui/brand/Nav";
+import { PAGE_COLUMN_CLASS } from "../ui/brand/PageHeader";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
+import { MENU_ITEM_CLASS, moveMenuFocus } from "../ui/radix/menu";
+import { errorStatus, usePeople, useRequests, type Person } from "./api";
+
+/**
+ * The ops pages' frame: their own top bar (the wordmark and the OPS chip, the
+ * sections when there is something to show, and the signed-in person) over the page column. No New, Tasks or Projects:
+ * ops work is separate from using the product (contract B6).
+ */
+function Frame({ sections, account, children }: { sections?: ReactNode; account?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="flex min-h-svh flex-col bg-ground">
+      <NavBar>
+        {/* The main app's bar (AppShell): the wordmark and its chip at the
+            left, the sections pinned right against the account icon. */}
+        <div className="flex min-w-0 items-center gap-3">
+          <Link to="/people" className="min-w-0 no-underline">
+            <NavLogo />
+          </Link>
+          <Chip className="border-orange/50 bg-orange/10 text-orange">OPS</Chip>
+        </div>
+        {sections !== undefined && (
+          <div className={cn("flex items-center gap-5 md:ml-auto max-md:order-last max-md:w-full", account !== undefined && "md:mr-5")}>
+            {sections}
+          </div>
+        )}
+        {sections === undefined && <div className="md:ml-auto" />}
+        {account}
+      </NavBar>
+      <main className={cn(PAGE_COLUMN_CLASS, "flex-1")}>{children}</main>
+    </div>
+  );
+}
+
+/** Signed out, or the session could not be refreshed: one button. */
+function SignIn() {
+  const auth = useAuth();
+  return (
+    <div className="pt-10">
+      <Button onClick={() => void auth.signIn()}>Sign in</Button>
+    </div>
+  );
+}
+
+/** A 403 on the first call: the two sentences and nothing else. */
+function NoOpsRole() {
+  return (
+    <div className="max-w-[44em] pt-10">
+      <p className="text-lead font-semibold text-navy">Your account does not have the ops role.</p>
+      <p className="mt-2 text-body text-grey">Ask an operator to grant it from the command line.</p>
+    </div>
+  );
+}
+
+/** The signed-in person: the account icon, opening a menu with who they are and Sign out. */
+function AccountMenu({ me }: { me: Person | undefined }) {
+  const auth = useAuth();
+  const menuRef = useRef<HTMLDivElement>(null);
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Account"
+          aria-haspopup="menu"
+          title="Account"
+          className={cn(
+            iconButtonClass("chrome"),
+            "text-navy hover:text-navy data-[state=open]:bg-blue-tint-2 data-[state=open]:text-navy",
+          )}
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2.75} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className="anim-menu w-auto min-w-60 p-0 transition-none"
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+        }}
+      >
+        {me !== undefined && (
+          <div className="max-w-80 p-4 pb-3">
+            <p className="truncate text-meta font-bold text-navy">{me.display_name}</p>
+            {me.email != null && <p className="truncate text-caption text-grey">{me.email}</p>}
+          </div>
+        )}
+        <div
+          ref={menuRef}
+          role="menu"
+          aria-label="Account"
+          className={cn("py-1", me !== undefined && "border-t border-line")}
+          onKeyDown={(event) => moveMenuFocus(event, menuRef.current)}
+        >
+          <button type="button" role="menuitem" onClick={() => void auth.signOut()} className={MENU_ITEM_CLASS}>
+            Sign out
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** The signed-in shell: the people read is the first call, and a 403 or 401 on it replaces the page. */
+function SignedInShell() {
+  const auth = useAuth();
+  const people = usePeople();
+  const requests = useRequests();
+  const status = errorStatus(people.error);
+
+  if (status === 403) {
+    // Still a way out: the account menu with Sign out. No sections, no retry.
+    return (
+      <Frame account={<AccountMenu me={undefined} />}>
+        <NoOpsRole />
+      </Frame>
+    );
+  }
+  if (status === 401) {
+    return (
+      <Frame>
+        <SignIn />
+      </Frame>
+    );
+  }
+
+  const waiting = requests.data?.items.filter((item) => item.status === "waiting").length ?? 0;
+  const me = people.data?.find((person) => person.user_id === auth.user?.sub);
+  const sections = (
+    <>
+      <NavItem to="/people">People</NavItem>
+      <NavItem to="/organisations">Organisations</NavItem>
+      <NavItem to="/cohorts">Cohorts</NavItem>
+      <NavItem to="/waitlist">
+        Waitlist
+        {waiting > 0 && (
+          <>
+            <span aria-hidden="true" className="ml-1.5 font-semibold tabular-nums text-blue">
+              {waiting}
+            </span>
+            <span className="sr-only">, {waiting} waiting</span>
+          </>
+        )}
+      </NavItem>
+    </>
+  );
+  return (
+    <Frame sections={sections} account={<AccountMenu me={me} />}>
+      <Outlet />
+    </Frame>
+  );
+}
+
+/** The route element every ops page sits in. */
+export function OpsShell() {
+  const auth = useAuth();
+  if (auth.status !== "authenticated") {
+    return (
+      <Frame>
+        <SignIn />
+      </Frame>
+    );
+  }
+  return <SignedInShell />;
+}

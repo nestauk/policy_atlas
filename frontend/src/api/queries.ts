@@ -158,12 +158,13 @@ export function useApiClient() {
  * on first call. Keys the whole tenancy UI: a `null` `organisation` hides
  * the scope switcher and every org-scoped affordance.
  *
- * `staleTime: Infinity` is deliberate: the row changes only via an ops
- * action (enrol/de-enrol, admin grant/revoke) — never something this app
- * writes — so there is no in-session event that should invalidate it, and
- * paying for a refetch on every navigation would buy nothing. The only path
- * an ops change reaches an open session is a fresh load anyway, which starts
- * a fresh `QueryClient` and re-fetches for free.
+ * `staleTime: Infinity` is deliberate: the identity fields change only via
+ * an ops action (enrol/de-enrol, admin grant/revoke) — never something this
+ * app writes — so paying for a refetch on every navigation would buy
+ * nothing. The only path an ops change reaches an open session is a fresh
+ * load anyway, which starts a fresh `QueryClient` and re-fetches for free.
+ * The one in-session change is `task_quota.used` (task 064a, Q8), which is
+ * why `useCreateTask` invalidates this query on success.
  */
 export function useMe() {
   const client = useApiClient();

@@ -164,9 +164,11 @@ export interface paths {
          *     Args:
          *         user: The authenticated caller.
          *         conn: Open database connection.
+         *         settings: Application settings (the yearly task quota).
          *
          *     Returns:
-         *         The caller's identity, with their organisation resolved by name.
+         *         The caller's identity, with their organisation resolved by name, and
+         *         their task quota unless they are exempt (task 064a, Q8).
          */
         get: operations["get_me_api_v1_me_get"];
         put?: never;
@@ -410,15 +412,18 @@ export interface paths {
          *     with it.
          *
          *     A theory of change is refused unless the server setting is on (task 054,
-         *     C15), before anything is written.
+         *     C15), before anything is written. So is a create past the caller's
+         *     yearly quota (task 064a, Q8; ADR 0045): administrators are exempt, which
+         *     makes this route the fifth named reader of the administrator flag.
          *
          *     Raises:
          *         HTTPException: 404 when a named source task is not readable by the
          *             caller.
          *         ApiUnprocessable: 422 ``capability_not_enabled`` for a theory of
          *             change while ``POLICY_ATLAS_THEORY_OF_CHANGE`` is off.
-         *         ApiConflict: 409 ``visibility_conflict``, ``link_source_capability``,
-         *             ``link_project_mismatch`` or ``link_source_unfinished``.
+         *         ApiConflict: 409 ``task_quota``, ``visibility_conflict``,
+         *             ``link_source_capability``, ``link_project_mismatch`` or
+         *             ``link_source_unfinished``.
          */
         post: operations["create_task_api_v1_tasks_post"];
         delete?: never;
@@ -1173,7 +1178,7 @@ export interface paths {
          *
          *     The access check runs in its own short transaction, then the opener takes
          *     the dispatch lock and the task row itself (the order ``create_run``
-         *     uses). Refused with 409 ``run_active``, ``capacity``, ``plan_stale`` or
+         *     uses). Refused with 409 ``run_active``, ``capacity``, ``user_capacity``, ``plan_stale`` or
          *     ``nothing_to_propose``, and 404 when the task has no longlist.
          */
         post: operations["post_suggest_more_api_v1_tasks__task_id__shortlist_suggest_post"];
@@ -1825,9 +1830,6 @@ export interface paths {
          *
          *     Returns:
          *         Minimal acknowledgement of the new row.
-         *
-         *     Raises:
-         *         ApiConflict: When the email is already on the waitlist.
          */
         post: operations["signup_api_v1_waitlist_post"];
         delete?: never;
@@ -4135,7 +4137,10 @@ export interface components {
          *         organisation: The caller's organisation, or `None` when unenrolled.
          *         is_admin: Whether the caller holds the read-across-organisations
          *             support role. Read-only in every sense: no route and no request
-         *             body can set it, and no write path consults it.
+         *             body can set it. The one write path that consults it is task
+         *             creation, whose quota it exempts (ADR 0045).
+         *         task_quota: The caller's task quota, or `None` when the caller is
+         *             exempt (an administrator).
          */
         MeOut: {
             /** Display Name */
@@ -4145,6 +4150,7 @@ export interface components {
             /** Is Admin */
             is_admin: boolean;
             organisation?: components["schemas"]["OrganisationRef"] | null;
+            task_quota?: components["schemas"]["TaskQuotaOut"] | null;
             /** User Id */
             user_id: string;
         };
@@ -6936,6 +6942,22 @@ export interface components {
              * @enum {string}
              */
             visibility: "org" | "private";
+        };
+        /**
+         * TaskQuotaOut
+         * @description How many tasks the caller created in the last 365 days, against the limit.
+         *
+         *     The frontend shows a banner when ``used >= limit`` (task 064a, Q8).
+         *
+         *     Args:
+         *         used: Tasks the caller created in the last 365 days, archived included.
+         *         limit: The yearly limit (``settings.task_quota_per_year``).
+         */
+        TaskQuotaOut: {
+            /** Limit */
+            limit: number;
+            /** Used */
+            used: number;
         };
         /**
          * TaskUpdate

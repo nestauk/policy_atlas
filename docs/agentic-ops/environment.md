@@ -1,238 +1,185 @@
 # Environment
 
-How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (058 (`task/058-perceived-latency`, perceived latency) adds one migration, `c4e8a2f6d1b3`
-(`project.archived_at`, nullable, no table rewrite; its downgrade drops the column and loses the
-archive times) — `alembic upgrade head` after pulling it — and three frontend packages for the
-Landscape map (`d3-geo`, `topojson-client`, `world-atlas`) — `pnpm install` in `frontend/`; it adds
-no env var; 054 (`task/054-1-core`, theory of change, the third capability; PR #114) adds ten migrations after 058's head, `9127f849697f` through `f5a1c8e93b27` (each downgrade refuses while its own data exists; `python scripts/ops_remove_toc_tasks.py --apply` deletes the named tasks and their uploaded files first, ADR 0042 § Rollback) — `alembic upgrade head` against the dev DB after pulling it; the server setting `POLICY_ATLAS_THEORY_OF_CHANGE=1` lets the API create the task kind (on in staging and off in production through `theory_of_change` in `infra/pa_config.json`; the staging build sets `VITE_THEORY_OF_CHANGE=1` in `scripts/deploy.sh`; `make dev` sets both locally); uploaded diagrams go to `POLICY_ATLAS_UPLOAD_BUCKET` in the cloud or `POLICY_ATLAS_UPLOAD_DIR` locally (default `backend/.uploads`, gitignored) and are sent to the model route's provider for reading; two frontend dependencies, `@xyflow/react` and `html-to-image`; no other new runtime egress (web search is not built); 057 (`task/057-queued-ingest`, queued ingest, the document store, SQL retrieval and
-step timeouts) adds three migrations, `a3d8f6c1e2b4` (expand: the store key and vector columns),
-`b7e2c4a9d1f3` (a resumable backfill of the binary vectors and token arrays; about 20 minutes on
-a dev database with 270,000 chunk embeddings, and it commits per batch so it can be stopped and
-resumed) and `0914321f8de4` (drops the JSON vector column once no row lacks a vector; ADR 0043
-§ Consequences and `infra/DEPLOYMENT.md` § 8 for the rollback) — `alembic upgrade head` against
-the dev DB after pulling it; the dev and CI Postgres image is `pgvector/pgvector:pg17`
-(`docker compose pull db` then `make setup`); two optional env vars, `POLICY_ATLAS_INGEST_MODE`
-(`in_process`, the default, or `queued`) and `POLICY_ATLAS_INGEST_QUEUE_URL` (required by
-`queued`; staging only), see `backend/.env.example`; 056 (`task/056-cost-latency`, cost and latency) adds one migration, `152a234e2391` (the appraisal score becomes nullable with an `unrated` flag; its downgrade deletes Unrated rows, ADR 0042 § Rollback) — `alembic upgrade head` against the dev DB after pulling it; `make test` now runs the backend suite on every core with one copy of the test database per worker (`tests/conftest.py`), so a second suite on the same Postgres needs its own `TEST_DATABASE_URL` name; runtime egress gains `www.ebi.ac.uk` (Europe PMC full-text XML; only a PubMed Central id is sent); models and per-step effort and cache mode come from `backend/src/policy_atlas/model_routes.toml` and `synthesis/cache_modes.py`; no new env vars; tasks 001–040 on `dev`; 044 on `feat/options-scoping` adds two reversible migrations (`a7d3f1c8e2b5` Task Agent rename, `b5e1d7a4c026` options-scoping records) 045 a third (`c7e2a9f4b1d8` the longlist records) and 046 three more (`d8f3b6a2c4e1` profile tags, `e9a4c1f7b3d2` the option profile column, `f1b6d3a8c2e5` the `population` → `unit` rename with a reversible data migration of the grouping facet key — the first of this branch that rewrites production rows; ADR 0040 § Rollback) — run `alembic upgrade head` against the dev DB after pulling that branch; 055 (the shortlist, `task/055-scoping-shortlist`) adds one more, `b33ffb8c3a16` (three columns, the scope purpose check widened to `shortlist`; its downgrade strips `risk_appetite` from every plan payload, ADR 0041 shortlist § Rollback) — `alembic upgrade head` again after pulling it; the backend must run as one worker process (the start and add reservations are per process, ADR 0039 decision 13); note that since 053 every `POLICY_ATLAS_*_MODEL` variable (including `POLICY_ATLAS_TASK_AGENT_MODEL`) is ignored with one warning, and `POLICY_ATLAS_PLANNER_MODEL`, which 044 had already stopped reading, is ignored silently, models come from `backend/src/policy_atlas/model_routes.toml`; and note the slice downgrade refuses while any `options_scoping` task or walk exists (`scripts/ops_remove_scoping_tasks.py --task-id <id> --apply` is the remedy — it deletes each named task whole, ADR 0037 § Rollback, ADR 0039 § Rollback); 040 is frontend-only and changes no env; 051 changes no env and no schema (the single-pass search; model ids were code constants until 053); 053 adds one optional selector, `POLICY_ATLAS_MODEL_ROUTE` (unset = OpenAI direct, as before), and each route names its key variable (`OPENAI_API_KEY` for OpenAI direct, `AWS_BEARER_TOKEN_BEDROCK` for the Bedrock routes), no schema change, see `backend/.env.example`; 039 adds the APO test-mod (`publisher_source`,
-Overton `source=apo`) plus planning/artefact bug fixes — no migration; when
-another checkout of this repo may be running tests, isolate the gate with a
-per-checkout `TEST_DATABASE_URL` `*_test` override; 038 renames the catalog (`project`→`task`,
-`portfolio`→`project`, `orchestration_plan`→`plan`) and the API paths
-(`/api/v1/tasks`, `/api/v1/projects`) — run `alembic upgrade head` against
-the dev DB after pulling (reversible: ADR 0036 § Rollback), and rename any
-local `POLICY_ATLAS_ORCHESTRATOR_*` override to `POLICY_ATLAS_AGENT_*` (a
-stale one is logged at boot and ignored); the CLI is
-`python -m policy_atlas.runtime.agent`; 030–032 change no env; 034 changes no env; 036 adds the
-`waitlist_entry` table and 037 adds `project.is_public` — both additive
-migrations, so run `alembic upgrade head` against the dev DB after pulling;
-neither adds env vars; 033 adds the `ops` dependency
-group to `[tool.uv] default-groups` — synced automatically by `uv run`, excluded
-from the image — plus the organisation schema, so run `alembic upgrade head`
-against the dev DB after pulling it; the ops CLI (`python -m policy_atlas.ops`)
-is tunnel-only and needs no local setup, but `make dev-seed` puts the tenancy
-UI on screen locally — it enrols dev-user/dev-colleague/dev-admin into
-"Dev Org" on the dev DB via the real enrol logic with a faked Cognito; 029 adds the chat surface: no new env vars required locally
-(the chat model is read from the committed route file since task 053); a live chat turn needs the
-funded OpenAI key `make dev` already loads; 025 hoists the Python project to `backend/` and adds the `frontend/`
-web app; 026 adds `infra/` (CDK, own venv from `infra/requirements*.txt`; `make -C infra test`
-joined `make verify` — no AWS/Docker needed) plus `make fe-api-smoke` (real-HTTP Playwright
-smoke against a disposable `policy_atlas_smoke` DB); 027 adds the root `make dev` (backend
-:8000 + frontend :5173 together, self-minting dev-issuer auth) and NB the dev DB is never
-migrated by `make test` — run `alembic upgrade head` against dev after a schema slice;
-setup unchanged since 002 *within* `backend/`; task 007 adds two dev-time
-fixture-recorder scripts needing `OVERTON_API_KEY`/optional OpenAlex vars in `.env` — see
-`.env.example`; task 008 adds parsing deps (pymupdf/pymupdf4llm/trafilatura — arrive via
-`make setup`/`uv sync`) and a keyless dev-time recorder using system `curl`; task 009 adds
-`openai` + `langfuse` deps (via `uv sync`) and three **optional** live-route vars —
-`OPENAI_API_KEY` makes the skeleton entrypoint go live (real embedding + grouping egress,
-costs money), `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` **plus a required
-`LANGFUSE_HOST`** enable full-I/O tracing; tasks 010–012 add **no new deps or env vars** —
-the same `OPENAI_API_KEY` live route now also drives the select rerank, the extract step
-(extraction is the deliberately-expensive Tier-1 call: full-document prompts, single calls
-can run minutes — see the 011 verification cost note) and the group facet partition (cheap
-— reference strings only); task 013 adds **no new deps or env vars** either — the same key
-drives synthesise's three generation surfaces (proposal · section loop · grounding judge;
-a full four-profile skeleton run ≈ $1, see the 013 verification cost note); task 014 adds
-**no new deps or env vars** — the same key now also drives screen (gpt-5-mini ×3 consensus
-reps + the stage-2 full-text confirmation on deep profiles) and classify (gpt-5.5);
-fixture-corpus live chain ≈ $0.2, see the 014 verification cost note; task 015 promotes
-`httpx` to a declared dep (no new packages — it was already transitive) and makes
-**live search** available: `OPENALEX_API_KEY` + `OVERTON_API_KEY` in `.env` switch the
-skeleton's search backends live (both required together, checked loudly); task 046
-adds two **optional, eval-only** keys, `SEMANTIC_SCHOLAR_API_KEY` (free) and
-`CONSENSUS_API_KEY` (paid, $0.05 per call, fetched once into the git-ignored
-`scripts/evals/search/results/cache/`), read only by `scripts/evals/search/measure/baseline_recall.py`
-and never by the product; the same
-`OPENAI_API_KEY` drives the three search-generation surfaces; a live rapid+deep check
-lands in low single-digit dollars, see the 015 verification cost note; task 016
-promotes `httpcore` to a declared dep (no new packages — httpx's own transitive) and
-makes **live full-text fetch** available behind the same live flag (no new keys — the
-fetcher hits document hosts directly; a live spine check ≈ low single-digit dollars,
-see the 016 verification cost note), relocates the fixture corpus to `tests/data/`
-(`POLICY_ATLAS_FIXTURE_CORPUS` points elsewhere if needed) and adds a `pip-audit` gate
-(`make audit`, also a CI job); task 017 adds **no new deps or env vars** — the one new
-entrypoint `python -m policy_atlas.orchestrate` runs fully stubbed without keys and goes
-live behind the same `OPENAI_API_KEY` flag (planner conversation + composed run; one
-modest standard×standard run ≈ 40 min wall, see the 017 verification evidence — the
-standard band is re-measured post-018 at D1, standard no longer runs the extraction
-chain); task 018 adds **no new deps or env vars** — model constants move to the
-gpt-5.4/5.5 family, one schema migration rides it (`64ff33416d1a`, effect-direction
-rename — remember the dev-DB `alembic upgrade head` gotcha below), and chain runs are
-now Langfuse-session-correlated with durable per-component usage/timing events;
-task 019 adds one **dev-only** dep, `pytest-socket` (via `uv sync`) — the per-test deny
-patterns became a suite-wide socket deny with a loopback allowlist — plus two schema
-migrations riding the same slice (`921d3a781f3f` stop-grain/retraction widen,
-`b7f3d9a2c5e1` screen-step rename: same dev-DB `alembic upgrade head` gotcha below);
-no new env vars — a live standard×standard composed run ≈ 13.4 min wall (measured at
-D1, see 019 verification.md); task 020 adds **no new deps or env vars** — one schema
-migration (`0f4e2d8c9b1a`, extract schema v2: same `alembic upgrade head` gotcha) and a
-fingerprint bump, so the first post-upgrade extract over a previously-extracted corpus
-re-extracts fresh by design (mini-priced); task 021 adds **no new deps or env vars** —
-one schema migration (`2f9d7e1c4a6b`, ICF table + IOF `setting` column: same
-`alembic upgrade head` gotcha) and the second extraction profile, so a deep run now
-extracts BOTH profiles by default (ICF is mini-priced; the 021 both-profiles live
-extract over 10 docs landed in low single-digit dollars, see 021 verification.md) —
-note pre-021 `extraction_result` rows are no longer referenceable by group/synthesise
-(greenfield ruling: flat roll-ups raise a loud corrupt-reference error);
-task 023 adds **no new env vars** — `lxml` + `pymupdf` become *declared* direct deps (no
-new packages, both already arrived transitively; via `uv sync`), the walking-skeleton CLI
-and its `policy-atlas-skeleton` console script are **retired** (where per-task notes above
-say "skeleton", today's equivalent is the one entry point
-`python -m policy_atlas.runtime.orchestrate` — note the new `runtime.` module path), and
-the provider fixture data + replay backends move into the test suite
-(`tests/data/provider_records/` + `tests/provider_fixtures.py`), so a no-key orchestrate
-run's acquire step adds nothing and the chain walks the seeded corpus;
-task 024 adds **no new deps** and one **optional** env var —
-`POLICY_ATLAS_ORCHESTRATOR_MODEL` overrides the judgment-class model behind the
-orchestrator's three moments (planning · router · watch; the same `OPENAI_API_KEY`
-flag makes them live), one schema migration rides it (`a3c6f9e2b7d4`,
-`capability_run` + `screen_generation` — the dev-DB `alembic upgrade head` gotcha
-below applies), and free-text steering at every pause runs through the confirm gate
-(stubbed + scripted in the suite);
-task 025 hoists everything Python into `backend/` (import name unchanged; the root
-Makefile orchestrates), adds `frontend/` (Node 24+/pnpm 10+ — install pnpm standalone,
-corepack is gone from Node 25; `pnpm install`, `pnpm dev`, mock mode via `VITE_MOCK=1`),
-adds `fastapi`/`uvicorn`/`pyjwt` (via `uv sync`), two schema migrations
-(`b5f1a3d7e9c2` project lifecycle + `c6e2b4f8a1d3` capability_run statuses — the dev-DB
-upgrade gotcha below applies), the dev-issuer CLI for local JWTs (README quickstart;
-keys land gitignored), API env vars in `backend/.env` (`OIDC_*`, `APP_ORIGIN`,
-`DATABASE_URL`; loaded by `make -C backend dev` via `uv run --env-file`, deliberately
-NOT by the test suite), and `PA_BACKEND_MODE=live|stub|auto` (auto = key presence;
-live fails loud without the route's key variable, warns on missing search keys; since 053 that variable is `OPENAI_API_KEY` on `openai-direct` and `AWS_BEARER_TOKEN_BEDROCK` on a Bedrock route, and every earlier "`OPENAI_API_KEY` makes it live" line above reads as "the route's key").
-`make verify` and the test suite need none of them — stub backends + socket-deny keep
-the suite egress-free (conftest scrubs product-egress keys a keyed `.env` may carry). One suite runner at a time: concurrent `make verify` runs
-contend on the shared test DB and flake (018 note).
-Gotcha (bit the 012 live check): after pulling a schema-bearing slice, run
-`uv run alembic upgrade head` against the **dev** DB — only the test DB migrates itself
-(conftest); a stale dev DB fails mid-run with `UndefinedTable`.
-Gotcha (bit the 014 live check): any wrapper script that runs the live chain needs an
-`if __name__ == "__main__":` guard — the full-text parse workers use multiprocessing
-*spawn*, which re-imports the entry module, and a guardless wrapper re-runs the whole
-live chain in every worker (014: three projects and ~2× spend from one run; see the 014
-verification.md incident note).
-Update it when the setup changes, not before.
+How to start a working local environment, and the problems that are known to occur. This file
+describes the repository as it is now. When the setup changes, change this file in the same pull
+request (PR). It is not a change log: the history is in git and in each task's `verification.md`.
 
 ## Prerequisites
 
-- **uv** (Python toolchain + venv manager) · **Docker** (for the Postgres container) · **Python 3.12**.
-- **direnv** optional — `.envrc` just runs `source .venv/bin/activate`, so run `make setup` first to
-  create the venv.
+- **uv** (the Python package and virtual-environment manager) and **Python 3.12**.
+- **Docker** (it runs the local Postgres database).
+- **Node.js** 20 or later (continuous integration (CI) uses Node 24) and **pnpm** (the frontend
+  package manager). `frontend/package.json` (`packageManager`) pins the pnpm version. Install pnpm
+  as a standalone tool: Corepack is not in Node 25. CI installs pnpm the same way, from the
+  `packageManager` field in `frontend/package.json`, so a standalone pnpm matches CI.
+- **direnv** is optional. `.envrc` only runs `source .venv/bin/activate`, so run `make setup` first.
 
 ## Setup commands
 
 ```
-cp backend/.env.example backend/.env     # provides DATABASE_URL (see Local env vars)
-make setup               # uv sync -> compose up db -> wait -> create policy_atlas_test -> alembic upgrade head
-make verify              # test (against policy_atlas_test) -> typecheck -> lint -> build (pre-checks the DB is up)
+cp backend/.env.example backend/.env   # the template; it gives DATABASE_URL
+make setup                             # starts Postgres, waits for it, creates policy_atlas_test,
+                                       # then runs `uv sync` and `alembic upgrade head` in backend/
+make frontend-install                  # installs the frontend packages from the lockfile
+make verify                            # the full check (see harness.md § Verification layer)
+make dev                               # API on :8000 and web app on :5173, signed in as dev-user
+make dev-seed                          # optional: adds "Dev Org" and two more users to the dev database
 ```
 
-`make setup` is idempotent. `make verify` refuses to run with a clear error if Postgres is down.
+`make setup` is safe to run again. `make verify` stops with a clear error if Postgres is not
+running. `make verify` needs `frontend/node_modules`, so run `make frontend-install` first.
+
+After you pull a change:
+
+- If it adds a database migration, run `uv run alembic upgrade head` in `backend/`. This updates
+  the **dev** database. Only the test database is migrated by the tests.
+- If it adds frontend packages, run `make frontend-install`.
+- If the Postgres image changed, run `docker compose pull db`, then `make setup`.
 
 ## Required services
 
-- **Postgres 17 with pgvector** via Docker Compose (service `db`, image `pgvector/pgvector:pg17` since task 057; it matches the Aurora engine and the chunk-retrieval query uses the `vector` type).
-- Published on **127.0.0.1:5432** only (not exposed beyond localhost).
-- User / password are `policy_atlas` (local dev only — not secrets). **Two databases** on the one
-  container: `policy_atlas` (dev / smoke) and `policy_atlas_test` (tests; created by `make setup`).
+- **Postgres 17 with pgvector** (a vector-search extension) through Docker Compose: service `db`,
+  image `pgvector/pgvector:pg17`. It matches the cloud database engine (Amazon Aurora), and the
+  chunk-retrieval query uses the `vector` type.
+- It listens on **127.0.0.1:5432** only.
+- User and password are `policy_atlas`. These are local values, not secrets.
+- Databases on the one container:
+  - `policy_atlas`: the dev database (`make dev`, `make dev-seed`).
+  - `policy_atlas_test`: the test base. `make test` and `make test-fast` drop and recreate it at
+    the start of each run, then each test worker makes its own copy (`backend/tests/conftest.py`).
+  - `policy_atlas_smoke`: a disposable database for `make fe-api-smoke`.
 
 ## Seed data
 
-None. The only fixture data is **synthetic**, hand-written in `src/policy_atlas/fixtures.py`, loaded
-by both the runtime entrypoint and the test suite. No seed step, no real/acquired source text.
+- `make dev-seed` adds the organisation "Dev Org" with `dev-user` (owner), `dev-colleague` and
+  `dev-admin` to the local dev database. The script refuses any host other than localhost and any
+  `*_test` database.
+- Test fixtures live under `backend/tests/data/` (provider records, full-text documents and
+  replay data) and `backend/tests/provider_fixtures.py`. A run with no keys uses this data.
 
 ## Test accounts
 
-N/A — no auth or tenancy yet (deferred seam).
+- Local: `make dev` starts a local sign-in issuer (`backend/.dev-issuer`, gitignored), creates a
+  token for `dev-user` and gives it to the web app. A token lives 4 hours.
+- Cloud (staging and production): accounts live in Amazon Cognito (the cloud sign-in service).
+  Manage them with the `make user-*`, `org-create`, `rows-assign` and `admin-*` targets. The root
+  `Makefile` comments explain the arguments.
 
 ## Local env vars
 
-- **`DATABASE_URL`** (required) — e.g.
-  `postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas`.
-  Canonical value is in `.env.example`; copy it to `.env`. The orchestrate entry point reads it; `conftest` calls
-  `load_dotenv()` and fails loudly if it is unset.
-- **`TEST_DATABASE_URL`** — defaulted by the Makefile to the `policy_atlas_test` DB. `make test` /
-  `make verify` export it as `DATABASE_URL`, so tests never touch the dev DB. Override only to point
-  tests at a different host/DB.
-- No provider/API keys this slice (inference is the no-egress stub). Real keys arrive with the real
-  inference provider (separately gated).
+`backend/.env.example` is the template for a local run and gives each of its variables a
+comment. The full list of server settings is `backend/src/policy_atlas/api/settings.py`. The
+groups:
+
+- **Database.** `DATABASE_URL` (required). `TEST_DATABASE_URL` defaults to `policy_atlas_test`;
+  `make test` passes it to the tests as `DATABASE_URL`, so tests never touch the dev database.
+- **Web API.** `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_JWKS_PATH` (or `OIDC_JWKS_URL`) and
+  `APP_ORIGIN`.
+- **Backend mode.** `PA_BACKEND_MODE=live|stub|auto`. `auto` goes live when the route's key is
+  set. `live` fails at start if the route's key is missing.
+- **Model route.** `POLICY_ATLAS_MODEL_ROUTE` picks the route; unset means `openai-direct`. The
+  deployed environments use `bedrock` (`infra/pa_config.json`). Each route names its key:
+  `OPENAI_API_KEY` for `openai-direct`, `AWS_BEARER_TOKEN_BEDROCK` for the Bedrock routes. Models,
+  reasoning effort and cache mode per step come from `backend/src/policy_atlas/model_routes.toml`.
+  The old `POLICY_ATLAS_*_MODEL` variables are ignored, with one warning.
+- **Search.** `OPENALEX_API_KEY` and `OVERTON_API_KEY` turn on live search. Set both or neither.
+- **Evaluation only.** `SEMANTIC_SCHOLAR_API_KEY` (free) and `CONSENSUS_API_KEY` (paid per call).
+  Only `scripts/evals/search/` reads them, never the product.
+- **Tracing.** `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_HOST` (all three)
+  send traces to Langfuse.
+- **Features.** `POLICY_ATLAS_THEORY_OF_CHANGE=1` lets the API create theory-of-change tasks.
+  The web app reads `VITE_THEORY_OF_CHANGE=1` and `VITE_OPTIONS_SCOPING=1` when it is built or
+  started.
+  `make dev` sets all three. `VITE_MOCK=1` runs the web app against mock data, with no API.
+- **Limits.** `RUNS_PER_USER` (default 3) is the number of runs one user can have at the same
+  time. `TASK_QUOTA_PER_YEAR` (default 50) is the number of tasks one user can create in 365
+  days; administrators are exempt. `make dev` sets the quota to 100000, so the local user is
+  never refused.
+- **Uploads.** Uploaded files go to `POLICY_ATLAS_UPLOAD_BUCKET` in the cloud, or to
+  `POLICY_ATLAS_UPLOAD_DIR` locally (default `backend/.uploads`, gitignored).
+- **Ingest.** `POLICY_ATLAS_INGEST_MODE` is `in_process` (the default) or `queued`. `queued` also
+  needs `POLICY_ATLAS_INGEST_QUEUE_URL`. Only the cloud uses `queued`.
+
+Where the variables are read:
+
+- `make dev` and `make -C backend dev` load `backend/.env` through `uv run --env-file`. The
+  application settings read only the process environment.
+- The tests load `backend/.env` (for `DATABASE_URL`), then remove the model, search and Langfuse
+  keys (`backend/tests/conftest.py`). So a key in your `.env` never turns a test live.
 
 ## Secret policy
 
-- `.env` is gitignored **and** denied for read/write via `.claude/settings.json`. Only `.env.example`
-  (a template with no secrets) is committed.
-- When real provider credentials land, they go in `.env` (local) or a secret manager (deployed) —
-  **never committed, never pasted into prompts/traces/logs**.
+- `.env` is gitignored, and `.claude/settings.json` denies agents read and write access to it.
+  Only `.env.example` (a template with no secrets) is committed.
+- Real credentials go in `.env` (local) or a secret manager (deployed). Never commit them. Never
+  paste them into prompts, traces or logs.
 
 ## Network policy
 
-- **No runtime product egress** this slice — the inference provider is a stub; there is no `search`
-  backend. Postgres is localhost-only. (Runtime egress is a per-slice approval gate; see
-  [engineering-considerations.md](engineering-considerations.md).)
-- Agent/dev-time network use is fine: `uv` package installs, Docker image pulls, doc fetches, MCP
-  servers (e.g. codex for adversarial review).
+- **Runtime egress** means the running product sends data to an outside service. The product
+  calls:
+  - the model provider of the selected route (OpenAI or Amazon Bedrock). Uploaded files are sent
+    to it for reading;
+  - the search services (OpenAlex and Overton) when their keys are set;
+  - document hosts, to fetch full text (Europe PMC at `www.ebi.ac.uk` receives only a PubMed
+    Central id);
+  - Langfuse, when its keys are set.
+- A slice that adds runtime egress needs approval (the hard gates in the `task-cycle` skill).
+- The tests make no network calls. `pytest-socket` blocks every socket except loopback.
+- Agent and developer network use is not gated: package installs, image pulls, documentation
+  fetches, Model Context Protocol (MCP) servers.
 
 ## Browser verification
 
-N/A — backend only; no frontend scaffold yet (deferred). Revisit when the Next.js surface lands.
+- `make dev`, then open `http://localhost:5173`. For screenshots, use Playwright against the live
+  dev app (see `docs/knowledge/` for the method).
+- `make fe-api-smoke`: a short browser test of the built web app against the real local API and
+  the `policy_atlas_smoke` database.
+- `cd frontend && pnpm e2e`: the mock-data browser journey (`VITE_MOCK=1`, no backend).
 
 ## CI parity
 
-CI ([.github/workflows/verify.yml](../../.github/workflows/verify.yml), 2026-07-03) runs the
-**same `make setup` + `make verify`** against an ephemeral compose Postgres, and is a required
-status check for merging to `dev`. Local and CI stay identical by construction — both go through
-the Makefile; if they ever diverge, that's a bug in the workflow, not a fact to document.
+CI ([.github/workflows/verify.yml](../../.github/workflows/verify.yml)) runs the same Makefile
+targets as a local run, so the two stay the same. Jobs on every PR and every push to `dev`:
+
+- `verify`: `make setup`, `make frontend-install`, `make verify`. This job is a required check
+  for a merge to `dev`.
+- `fe-api-smoke`: `make fe-api-smoke` and `make deploy-build-guard-test`.
+- `mock-journey`: `pnpm e2e`.
+- `audit`: `make audit` (known vulnerabilities in the locked Python packages).
+
+`deploy-staging.yml` deploys `dev` to staging after `verify` passes on a push to `dev`.
+`deploy-production.yml` runs only when started by hand. If local and CI results differ, fix the
+workflow, not the Makefile.
 
 ## Known environment quirks
 
-- **Tests need a live DB + `DATABASE_URL`.** `conftest.py` fails with a setup hint if it is unset.
-- **Dedicated test database.** Tests run against `policy_atlas_test` (created by `make setup`), each
-  test still wrapped in a rolled-back transaction (`conn` fixture). `make test` / `make verify` set
-  `DATABASE_URL` to it, and `conftest` **refuses to run against the dev `policy_atlas` DB**
-  (fail-closed), so the split holds however pytest is launched. The test DB is disposable — drop it
-  and re-run `make setup` if it gets into a bad state.
-- **`make verify` pre-checks the DB** and errors clearly (`Run 'make setup' first`) rather than
-  failing deep in pytest.
-- **Migration is idempotent** — `alembic upgrade head` runs in both `make setup` and the test
-  session fixture; running twice is safe.
-- **Git worktrees silently lose the shared dev Postgres** (040 build) — `docker compose` derives
-  its project name from the directory, so a worktree checkout looks for containers under the
-  worktree's name and finds none. Root-Makefile DB checks need `COMPOSE_PROJECT_NAME=policy_atlas`
-  (e.g. `COMPOSE_PROJECT_NAME=policy_atlas make verify`).
-- **Diagnose baseline test reds with an isolated rerun before believing them** (040 build) — the
-  first `make verify` on a fresh branch showed 13 backend failures; an isolated `make test` (nothing
-  else touching the shared Postgres) cleared 12 as test-DB pollution (the stranded-rows/parallel-lane
-  landmine, AGENTS.md § Landmines). A red baseline read without isolation misattributes pre-existing
-  pollution to the slice.
-- **A dev token lives 4 hours** (046 builds) — `make dev` mints one; a browser or API check on a
-  resumed session mints a fresh one first (`python -m policy_atlas.api.dev_issuer mint --dir
-  .dev-issuer --sub dev-user --client-id policy-atlas-dev --ttl 14400` from `backend/`).
-- **A lone 5-second vitest timeout under load is load, not the tree** (046 amendment 4) — two
-  unrelated timeouts on a machine running a replay chain and two test suites; a quiet rerun passed.
-- **A page with an open event stream never reaches Playwright's `networkidle`** (046 builds) — wait
-  for `domcontentloaded` and a fixed time.
-- **A new run-stage key changes the OpenAPI document** (046 amendment 2) — `drift-check` is red
-  until `make openapi-sync`; the stage enum is part of the contract.
-- **The gate's backend step reads the whole suite serially in ~15 minutes** (3,600 tests); a
-  session restart kills a background `make verify` without a record — rerun only the step it was
-  in if the log shows the earlier steps green.
+- **The dev database does not migrate itself.** A stale dev database fails mid-run with
+  `UndefinedTable`. Run `uv run alembic upgrade head` in `backend/`.
+- **Some migration downgrades refuse while their data exists.** The ADR (architecture decision
+  record) § Rollback for that migration names the clean-up script, for example
+  `scripts/ops_remove_toc_tasks.py` or `scripts/ops_remove_scoping_tasks.py`.
+- **The tests refuse the dev database.** `conftest` stops if `DATABASE_URL` names
+  `policy_atlas`, because the tests commit rows.
+- **One test run per test database name.** `make test` drops its base database with
+  `dropdb --force` at the start, so a second run on the same Postgres breaks the first. Give the
+  second run its own `TEST_DATABASE_URL`, with a name that ends in `_test`.
+- **The backend runs as one worker process.** The start and add reservations are held in the API
+  process ([ADR 0039](../adr/0039-options-scoping-longlist-option-searches-and-option-records.md)).
+- **A script that runs the live chain needs an `if __name__ == "__main__":` guard.** The
+  full-text parse workers are child processes that import the entry module again. Without the
+  guard, each worker runs the whole live chain again and spends money.
+- **Git worktrees do not find the shared dev Postgres.** `docker compose` takes its project name
+  from the directory. In a worktree, set `COMPOSE_PROJECT_NAME=policy_atlas` (for example
+  `COMPOSE_PROJECT_NAME=policy_atlas make verify`).
+- **Check a red baseline with an isolated rerun.** Another process on the same Postgres can leave
+  rows that fail tests. Run `make test` alone before you blame the slice.
+- **A dev token lives 4 hours.** To make a new one, run this from `backend/`:
+  `uv run python -m policy_atlas.api.dev_issuer mint --dir .dev-issuer --sub dev-user --client-id policy-atlas-dev --ttl 14400`.
+- **One vitest timeout on a busy machine is load, not a fault.** Rerun when the machine is quiet.
+- **A page with an open event stream never reaches Playwright's `networkidle`.** Wait for
+  `domcontentloaded` and a fixed time.
+- **A new run-stage key changes the OpenAPI document** (the generated API description).
+  `make drift-check` fails until you run `make openapi-sync`.
+- **A session restart stops a background `make verify` and leaves no record.** If the log shows
+  the earlier steps green, rerun only the step that was running.

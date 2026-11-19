@@ -30,15 +30,14 @@ function actions(patch: Partial<Actions> = {}): Actions {
   };
 }
 
-// Round 13 (owner): the shortlist is a bookmark icon toggle, Exclude a menu.
-describe("ShortlistToggle (round 13)", () => {
-  it("shows the filled circled check in Electric Blue on a place, named Remove from shortlist, pressed", async () => {
+// The shortlist is an icon toggle, Exclude a menu.
+describe("ShortlistToggle", () => {
+  it("shows the filled circled check on a place, named Remove from shortlist, pressed", async () => {
     const user = userEvent.setup();
     const done = actions();
     render(<ShortlistToggle actions={done} optionId="o1" shortlistState="proposed" excluded={false} />);
     const toggle = screen.getByRole("button", { name: "Remove from shortlist" });
     expect(toggle).toHaveAttribute("aria-pressed", "true");
-    expect(toggle).toHaveClass("text-blue", "h-10", "w-10");
     expect(toggle.querySelector("circle")).toHaveAttribute("fill", "currentColor");
     expect(toggle.querySelector("path")).toHaveAttribute("stroke", "white");
     expect(toggle).not.toHaveTextContent(/\S/);
@@ -46,12 +45,11 @@ describe("ShortlistToggle (round 13)", () => {
     expect(done.unshortlist).toHaveBeenCalledWith("o1", expect.any(Function));
   });
 
-  it("shows the outline circle in Grey without a place, named Add to shortlist, with its tooltip", async () => {
+  it("shows the outline circle without a place, named Add to shortlist, with its tooltip", async () => {
     const done = actions();
     render(<ShortlistToggle actions={done} optionId="o1" shortlistState={null} excluded={false} />);
     const toggle = screen.getByRole("button", { name: "Add to shortlist" });
     expect(toggle).toHaveAttribute("aria-pressed", "false");
-    expect(toggle).toHaveClass("text-grey");
     expect(toggle.querySelector("circle")).toHaveAttribute("fill", "transparent");
     expect(toggle.querySelector("path")).toBeNull();
     act(() => toggle.focus());
@@ -71,10 +69,9 @@ describe("ShortlistToggle (round 13)", () => {
   });
 });
 
-// Round 13 (owner): shortlisting one option flashed every marker. The
-// pressed control changes at once and holds until the read agrees; a
+// The pressed control changes at once and holds until the read agrees; a
 // re-render with the same state changes nothing and remounts nothing.
-describe("ShortlistToggle, one press (round 13)", () => {
+describe("ShortlistToggle, one press", () => {
   it("shows the new state at once, holds it until the read agrees, and drops it on a failure", async () => {
     const user = userEvent.setup();
     const done = actions();

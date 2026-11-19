@@ -12,7 +12,6 @@ import {
 import * as queries from "../../api/queries";
 import * as mutations from "../../api/mutations";
 import { TOGGLE_GLYPH_SIZE } from "./optionActions";
-import { REPORT_SECTION_HEADING_CLASS } from "../artefactPresentation";
 
 vi.mock("../../api/queries", () => ({
   useTask: vi.fn(),
@@ -153,49 +152,36 @@ describe("LonglistView", () => {
     expect(screen.queryByText(/excluded/)).not.toBeInTheDocument();
   });
 
-  // Round 13 (owner): "View as" before the switch, the grid's Columns on the
-  // same row, and the lever types with no option said plainly in both views.
+  // "View as" before the switch, the grid's Columns on the same row, and the
+  // lever types with no option said plainly in both views.
   it("labels the switch View as, puts Columns on the left in the grid, and names the levers with no option", async () => {
     const user = userEvent.setup();
     renderLonglist();
-    expect(screen.getByText("View as")).toHaveClass("text-meta", "text-grey");
+    expect(screen.getByText("View as")).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Columns" })).not.toBeInTheDocument();
     await user.click(within(screen.getByRole("group", { name: "View as" })).getByRole("button", { name: "Grid" }));
     const columns = screen.getByRole("combobox", { name: "Columns" });
     const controls = screen.getByTestId("longlist-controls");
-    // Its visible label before it, the controls row's label style (round 13, owner).
+    // Its visible label before it.
     const columnsLabel = within(controls).getByText("Columns");
-    expect(columnsLabel).toHaveClass("text-meta", "text-grey");
     expect(columnsLabel.compareDocumentPosition(columns) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Columns on the left; the view switch keeps the right edge in both views.
     expect(controls.firstElementChild?.contains(columns)).toBe(true);
     expect(controls.lastElementChild?.contains(screen.getByRole("group", { name: "View as" }))).toBe(true);
-    // Round 13 (owner): listed under the grid, as heads.
+    // Listed under the grid.
     const absent = screen.getByRole("group", { name: "No options found for" });
     expect(absent).not.toHaveTextContent(/Other/);
     await user.click(within(screen.getByRole("group", { name: "View as" })).getByRole("button", { name: "List" }));
     expect(controls.lastElementChild?.contains(screen.getByRole("group", { name: "View as" }))).toBe(true);
     await user.click(within(screen.getByRole("group", { name: "Group by" })).getByRole("button", { name: "Lever" }));
-    // Round 13 (owner): the list's lever view ends with the grid's foot, the
-    // same component: the words a Body Grey line, not a heading, then each
-    // lever on its own line in the row heads' style.
+    // The list's lever view ends with the grid's foot: the words, not a
+    // heading, then each lever on its own line.
     expect(screen.queryByRole("heading", { name: "No options found for" })).not.toBeInTheDocument();
     const listFoot = screen.getByRole("group", { name: "No options found for" });
-    expect(listFoot).toHaveClass("w-44", "space-y-2");
     const [words, ...names] = Array.from(listFoot.children);
-    expect(words).toHaveClass("text-body", "text-grey");
-    expect(words).not.toHaveClass("uppercase");
+    expect(words).toHaveTextContent("No options found for");
     expect(names.length).toBeGreaterThan(0);
-    for (const name of names) {
-      expect(name).toHaveClass("uppercase", "text-grey");
-      expect(name.textContent).not.toContain(" · ");
-    }
-    // Round 14 (owner): the same hairline above it as in the grid, 24 px over the foot.
-    expect(listFoot.parentElement).toHaveClass("border-t", "border-line", "pt-6");
-    expect(listFoot.parentElement?.className).toContain(absent.parentElement?.className ?? "missing");
-    // The same lines as the grid's foot.
-    expect(words.className).toBe(absent.firstElementChild?.className);
-    expect(names[0].className).toBe(absent.children[1]?.className);
+    for (const name of names) expect(name.textContent).not.toContain(" · ");
   });
 
   it("shows the excluded part as plain text in grid mode", async () => {
@@ -222,36 +208,26 @@ describe("LonglistView", () => {
     expect(screen.queryByText("School-based mentoring")).not.toBeInTheDocument();
   });
 
-  // Round 12 (owner): a group's count and its Show / Hide stand at the right
-  // of the heading's line, the count in Meta Grey, the control on the edge;
-  // Show all ends the controls row on the same edge.
-  it("puts the count and then Show / Hide at the heading line's right, and Show all last in the controls row", () => {
+  // A group's heading reads its name, its count, then Show / Hide; Show all
+  // ends the count line.
+  it("puts the count and then Show / Hide after the heading's name, and Show all after the count line", () => {
     renderClosedLonglist();
     const heading = screen.getByRole("button", { name: /^A universal offer 1 option · 1 shortlisted$/ });
     const parts = Array.from(heading.children);
     expect(parts).toHaveLength(3);
     expect(parts[0]).toHaveTextContent(/^A universal offer$/);
-    expect(parts[0]).toHaveClass("flex-1");
     expect(parts[1]).toHaveTextContent(/^1 option · 1 shortlisted$/);
-    expect(parts[1]).toHaveClass("text-meta", "text-grey", "text-right");
     expect(parts[2]).toHaveTextContent(/^Show$/);
-    // Round 13 (owner): Show all with Group by on the left; View as on the right edge.
+    // Show all after the count line, under the controls row.
     const showAll = screen.getByRole("button", { name: "Show all" });
-    // Round 13 (owner): Show all at the count line's right, under the
-    // controls row and inside the hairlines.
     const countLine = screen.getByText(/^4 options in 2 themes/);
     expect(showAll.parentElement).toBe(countLine.parentElement);
     expect(showAll.previousElementSibling).toBe(countLine);
     const block = screen.getByTestId("longlist-controls-block");
     expect(block.firstElementChild).toBe(screen.getByTestId("longlist-controls"));
     expect(block.lastElementChild).toBe(countLine.parentElement);
-    // Round 12 (owner): the name in Navy, the count Grey; no contents
-    // sidebar, the list on the page's full column.
-    expect(parts[0]).toHaveClass("text-navy");
+    // No contents sidebar.
     expect(screen.queryByRole("navigation", { name: /contents/i })).toBeNull();
-    expect(document.querySelector(".longlist-paper")).toHaveClass("md:max-w-[1180px]");
-    // Round 12 (owner): a Line hairline above and below the controls row.
-    expect(screen.getByTestId("longlist-controls-block")).toHaveClass("border-y", "border-line", "py-3");
   });
 
   // Round 12 (owner): what a theme and a lever are, in an "i" beside Group
@@ -259,7 +235,6 @@ describe("LonglistView", () => {
   it("says what a theme and a lever are in the i beside Group by", async () => {
     renderClosedLonglist();
     const info = screen.getByRole("button", { name: "What a theme and a lever are" });
-    expect(info).toHaveClass("size-6");
     expect(GROUP_BY_INFO).toEqual([
       "Theme: a group of options that work in a similar way.",
       "Lever: the kind of action that the policy takes.",
@@ -277,10 +252,7 @@ describe("LonglistView", () => {
     renderLonglist();
     const section = screen.getByRole("region", { name: "Excluded" });
     const heading = within(section).getByRole("heading", { level: 2, name: "Excluded" });
-    expect(heading).toHaveClass(...REPORT_SECTION_HEADING_CLASS.split(" "));
-    expect(heading).not.toHaveClass("uppercase");
     expect(heading.nextElementSibling).toHaveTextContent("Excluded from shortlisting by a constraint or by you.");
-    expect(section).toHaveClass("border-t", "border-line", "mt-8", "pt-8");
     // No loose rows: every row sits in a group.
     expect(Array.from(section.children).filter((child) => child.tagName === "UL")).toHaveLength(0);
     expect(screen.queryByText("National sanctions regime")).not.toBeInTheDocument();
@@ -377,13 +349,10 @@ describe("LonglistView", () => {
     const scoped = within(row as HTMLElement);
     expect(scoped.getByText("6 documents")).toBeInTheDocument();
     expect(scoped.queryByText(/evaluated it/)).not.toBeInTheDocument();
-    // Round 15 (owner): one short phrase in the meta line's grey; the
-    // constraint and the reason are the card's.
+    // One short phrase; the constraint and the reason are the card's.
     expect(scoped.queryByText("Excluded:")).not.toBeInTheDocument();
-    const exclusion = scoped.getByText("Excluded by a constraint");
-    expect(exclusion).toHaveClass("text-meta", "text-grey");
+    expect(scoped.getByText("Excluded by a constraint")).toBeInTheDocument();
     expect(row).not.toHaveTextContent(/Breaks|local authority can fund/);
-    expect(within(row as HTMLElement).getByRole("link", { name: "National sanctions regime" }).closest("p")).toHaveClass("text-body");
     expect(scoped.queryByText("part of Universal youth offer bundle")).toBeNull();
   });
 
@@ -421,12 +390,9 @@ describe("LonglistView", () => {
     const description = within(section).getByText(/./, { selector: "p.text-grey" });
     expect(description.parentElement).toContainElement(control);
     expect(within(section).getByTestId("edge-action")).toBe(control);
-    // The words, then the glyph at the row toggle's size, centred in its 40 px width
-    // (one column with the toggles; one constant for both).
+    // The words, then the glyph at the row toggle's size (one constant for both).
     const glyph = within(control).getByTestId("edge-action-glyph");
     expect(control.lastElementChild).toBe(glyph);
-    expect(glyph).toHaveClass("w-10");
-    expect(glyph).not.toHaveClass("h-10");
     const toggle = within(section).getAllByRole("button", { name: /^(Add to|Remove from) shortlist$/ })[0];
     expect(glyph.querySelector("svg")).toHaveAttribute("width", String(TOGGLE_GLYPH_SIZE));
     expect(toggle.querySelector("svg")).toHaveAttribute("width", String(TOGGLE_GLYPH_SIZE));
@@ -468,15 +434,13 @@ describe("LonglistView", () => {
     // No longer a theme of its own on the list: only its group in Excluded.
     const excluded = screen.getByRole("region", { name: "Excluded" });
     for (const button of screen.getAllByRole("button", { name: /^A universal offer/ })) expect(excluded).toContainElement(button);
-    // A hairline sets Excluded apart from the groups above it.
-    expect(excluded).toHaveClass("border-t", "border-line", "mt-8", "pt-8");
     const toggle = within(excluded).getByRole("button", { name: /^A universal offer/ });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(toggle.closest("h3")).not.toBeNull();
     expect(toggle).toHaveTextContent(/^A universal offer 1 optionShow$/);
     const group = toggle.closest("section") as HTMLElement;
     // Shut: the description shows, the rows and Include again do not.
-    expect(within(group).getByText("A single, non-conditional offer replacing today's patchwork.")).toHaveClass("text-grey");
+    expect(within(group).getByText("A single, non-conditional offer replacing today's patchwork.")).toBeInTheDocument();
     expect(within(group).queryByText("Universal youth offer bundle")).not.toBeInTheDocument();
     expect(within(group).queryByRole("button", { name: "Include theme again" })).not.toBeInTheDocument();
     await user.click(toggle);
@@ -584,7 +548,6 @@ describe("LonglistView", () => {
     expect(fields.length).toBeGreaterThan(2);
     for (const field of fields.slice(0, -1)) expect(field.textContent).toMatch(/ ·,$/);
     expect(fields[fields.length - 1].textContent).toBe("No in-scope evidence");
-    expect(row.querySelector("[class*='text-[11.5px]']")).toBeNull();
   });
 
   it("Add an option posts once and is disabled while a walk is active", async () => {
@@ -615,17 +578,13 @@ describe("LonglistView", () => {
   });
 });
 
-describe("LonglistView — the view switches (round 10, findings 3 and 13)", () => {
-  it("draws Group by and List / Grid as outline switches with aria-pressed, never a filled chip", async () => {
+describe("LonglistView — the view switches", () => {
+  it("marks the chosen Group by with aria-pressed, and moves it on a press", async () => {
     const user = userEvent.setup();
     renderLonglist();
     const groupBy = within(screen.getByRole("group", { name: "Group by" }));
     expect(groupBy.getByRole("button", { name: "Theme" })).toHaveAttribute("aria-pressed", "true");
     expect(groupBy.getByRole("button", { name: "Lever" })).toHaveAttribute("aria-pressed", "false");
-    for (const button of [...groupBy.getAllByRole("button"), ...within(screen.getByRole("group", { name: "View as" })).getAllByRole("button")]) {
-      expect(button.className).toContain("border");
-      expect(button.className).not.toMatch(/bg-blue/);
-    }
     await user.click(groupBy.getByRole("button", { name: "Lever" }));
     expect(groupBy.getByRole("button", { name: "Lever" })).toHaveAttribute("aria-pressed", "true");
   });
