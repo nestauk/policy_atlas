@@ -1125,12 +1125,15 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   with one-month retention or in the operator's terminal. Options: a log subscription filter to long
   retention, or an `ops_action` row from every CLI command. Condition: none recorded (raised with
   the DPIA, data protection impact assessment).
-- There is no user deletion and no ownership transfer; they ship together. `user offboard` ([ADR
-  0045](adr/0045-per-user-run-cap-task-quota-offboarding.md)) is the removal lever: it disables the
-  Cognito account, revokes its refresh tokens, de-enrols the person and switches off their public
-  task links. Two gaps stay open. An access token already issued works for up to 60 minutes, and an
-  open progress stream stays open until its run ends; a `disabled` check on every request would
-  close this at the cost of one database read per request. Erasure is two-part: the database keeps
+- There is no user deletion and no ownership transfer; they ship together. `user deactivate` ([ADR
+  0045](adr/0045-per-user-run-cap-task-quota-offboarding.md); it replaced `user offboard` in task
+  066) is the removal lever: it disables the Cognito account, revokes its refresh tokens, clears the
+  roles, marks the person deactivated and switches off their public task links. The person keeps
+  their organisation and work (owner ruling, 2026-11-19). Two gaps stay open. An access token
+  already issued works for up to 60 minutes, and since the organisation is kept it can also read
+  the organisation's shared work in that window; an open progress stream stays open until its run
+  ends. A `deactivated_at IS NULL` check where the public API loads the caller would close this at
+  the cost of one database read per request. Erasure is two-part: the database keeps
   `email` and `display_name`, and the Cognito account is disabled, not deleted. Condition: a real
   user asks for erasure, or the 60-minute window becomes unacceptable.
 - The privacy notice disagrees with the product: § 7 promises permanent deletion (database
@@ -1211,7 +1214,7 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   links), CSV (comma-separated values) import of a pilot with cohorts, and onboarding answers. The
   design is in the owner's explainer. Condition: that task starts.
 - **Now** Confirm on staging that `AdminUserGlobalSignOut` succeeds on an account that is already
-  disabled; a rerun of `user offboard` assumes it. Condition: the next staging session.
+  disabled; a rerun of `user deactivate` assumes it. Condition: the next staging session.
 
 ## Infrastructure and deployment
 

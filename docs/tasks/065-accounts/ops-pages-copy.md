@@ -41,16 +41,17 @@ chips except the ones named here.
 - Columns: Name · Email · Organisation · Flags · Tasks this year · Invited · (row menu).
   - Organisation: the name, or "not enrolled" in grey.
   - Flags: chips "Admin" and "Ops" when true; otherwise empty.
-  - Tasks this year: "12 of 50", or "no limit" when `limits.task_quota_per_year` is null.
+  - Tasks this year: "12 of 50", or "12 of ∞" when there is no limit (task 066).
   - Invited: relative time of `invited_at` ("2 h ago"), or "—".
 - Row menu (one person): "Enrol or move to an organisation…", "Set quota…",
-  "Resend invitation", "De-enrol", "Offboard…".
+  "Resend invitation", "De-enrol", "Deactivate…" (or "Reactivate…" for a deactivated
+  person, task 066).
   - "Resend invitation" is disabled inside the hour, with the hint "sent 2 h ago, try again
     after 15:40" (the time one hour after `invited_at`, local time).
   - "De-enrol" is disabled when the person is not enrolled and holds no flag.
 - Selection: a checkbox per row and one in the header. With one or more ticked, a bar above
   the table: "<n> selected" · "Set quota…" · "Move to…" · "Resend invitation" · "De-enrol" ·
-  "Offboard…" · "Clear selection". The bar's actions use the bulk routes with every ticked
+  "Deactivate" · "Reactivate" · "Clear selection". The bar's actions use the bulk routes with every ticked
   subject.
 - **Enrol or move dialog:** title "Move <name> to an organisation" (or "Move <n> people to an
   organisation"); a select of organisations; help "Their tasks and projects move with them and
@@ -58,15 +59,26 @@ chips except the ones named here.
 - **De-enrol dialog:** title "De-enrol <name>?" (or "<n> people"); sentence "They stay signed in
   but leave their organisation. Their tasks and projects stay with them and leave the
   organisation too."; buttons "De-enrol" and "Cancel".
-- **Offboard dialog (one person):** title "Offboard <name>?"; sentence "This stops them signing
-  in, signs them out everywhere, removes them from their organisation and takes down any public
-  links to their tasks. Their tasks stay in the database. This cannot be undone from here.";
+- **Deactivate dialog (one person, task 066):** title "Deactivate <name>?"; sentence "This stops
+  them signing in, signs them out everywhere, takes away any admin or ops role and takes down any
+  public links to their tasks. They stay in their organisation with their tasks and projects. You
+  can reactivate them later.";
   field label "Type the email to confirm" with the address as placeholder; the button
-  "Offboard" is red (the one red button, DESIGN.md) and disabled until the typed value equals
+  "Deactivate" is red (DESIGN.md) and disabled until the typed value equals
   the address; "Keep the account" cancels.
-- **Offboard dialog (several):** the same sentence, then a list of every person's name and
+- **Deactivate dialog (several):** the same sentence, then a list of every person's name and
   address, then the field "Type the number of people to confirm" (the button enables when the
   typed value equals the count).
+- **Reactivate dialog (task 066):** title "Reactivate <name>?" (or "<n> people"); sentence
+  "They can sign in again. Any admin or ops role and public links are not given back.";
+  buttons "Reactivate" and "Cancel".
+- **Deactivated people (task 066):** a red "DEACTIVATED" chip in the flags column; a "Status
+  filter" (Active, the default; Deactivated; Active and deactivated); the details panel's
+  "Status" row; "Resend invitation" is not offered. Add person on a deactivated address says
+  "Reactivated and added to <org>; they can sign in again".
+- **Organisation delete (task 066):** row menu "Delete…", disabled with the hint "Has people" or
+  "Has a signup domain"; dialog "Delete <org>?" with "The organisation and its quota defaults
+  go. This cannot be undone."; a red "Delete"; a refusal shows the server's sentence.
 - **Resend (bulk) outcome:** rows with `too_soon` show "Sent less than an hour ago" under the
   name.
 
@@ -143,10 +155,10 @@ The `frontend-designer` agent proposed wording where the script gave none. All o
 is accepted and is now part of the script:
 
 - Toast summaries: "Moved <name> to <org> · recorded", "De-enrolled <name> · recorded",
-  "Offboarded <name> · recorded", "Invitation sent to <email> · recorded",
+  "Deactivated <name>", "Reactivated <name>", "Invitation sent to <email> · recorded",
   "<name> approved · recorded", "Created <org> · recorded". The move toast uses real
   plurals ("1 project and 4 tasks").
-- Offboard dialog title for several people: "Offboard <n> people?". Bulk "Set quota…"
+- Deactivate dialog title for several people: "Deactivate <n> people?". Bulk "Set quota…"
   opens a dialog "Quota for <n> people" with the same two fields, the name list and empty
   placeholders. The Move and De-enrol dialogs for several people list every name and
   address (B6).

@@ -184,6 +184,7 @@ class PersonOut(BaseModel):
         invited_at: When Cognito last sent them an invitation through this
             service, or ``None``. The resend cooldown reads it.
         first_signed_in_at: When they first opened the app, or ``None``.
+        deactivated_at: When an operator deactivated them, or ``None`` (task 066).
         task_quota_per_year: Their own override, or ``None``.
         runs_per_user: Their own override, or ``None``.
         tasks_this_year: Tasks they created in the last 365 days.
@@ -201,6 +202,7 @@ class PersonOut(BaseModel):
     created_at: datetime
     invited_at: datetime | None = None
     first_signed_in_at: datetime | None = None
+    deactivated_at: datetime | None = None
     task_quota_per_year: int | None = None
     runs_per_user: int | None = None
     tasks_this_year: int
@@ -242,10 +244,13 @@ class PersonCreatedOut(BaseModel):
         person: The person as the list now shows them.
         invitation_sent: Whether Cognito sent an invitation on this call.
             ``False`` when the address already had an account.
+        reactivated: Whether the address belonged to a deactivated account
+            that this call turned back on.
     """
 
     person: PersonOut
     invitation_sent: bool
+    reactivated: bool = False
 
 
 #: How one subject of a bulk action ended. ``ok`` means the command ran and

@@ -127,6 +127,8 @@ app_user = Table(
     Column("task_quota_per_year", Integer, nullable=True),
     Column("runs_per_user", Integer, nullable=True),
     Column("first_signed_in_at", DateTime(timezone=True), nullable=True),
+    # Set by deactivate, cleared by reactivate (task 066).
+    Column("deactivated_at", DateTime(timezone=True), nullable=True),
     CheckConstraint("task_quota_per_year >= 0", name="ck_app_user_task_quota_nonneg"),
     CheckConstraint("runs_per_user >= 0", name="ck_app_user_runs_nonneg"),
 )

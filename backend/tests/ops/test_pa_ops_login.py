@@ -21,6 +21,7 @@ from tests.ops.support import (
     POOL_ID,
     cognito,
     expect_create,
+    expect_enabled,
     expect_lock_out,
     expect_lookup,
     expect_sub_lookup,
@@ -260,9 +261,24 @@ def test_pa_ops_runs_every_ops_write_of_this_slice(
     with _as_pa_ops(pa_ops_engine) as conn, cognito() as (client, stubber):
         expect_sub_lookup(stubber, sub=seeded_admin_user)
         expect_lock_out(stubber, sub=seeded_admin_user)
-        offboarded = commands.offboard_user(conn, client, pool_id=POOL_ID, sub=seeded_admin_user)
-        assert offboarded.de_enrolment is not None
+        deactivated = commands.deactivate_user(conn, client, pool_id=POOL_ID, sub=seeded_admin_user)
+        assert deactivated.admin_revoked is True
         stubber.assert_no_pending_responses()
+
+    with _as_pa_ops(pa_ops_engine) as conn, cognito() as (client, stubber):
+        expect_sub_lookup(stubber, sub=seeded_admin_user)
+        expect_enabled(stubber, sub=seeded_admin_user, enabled=False)
+        stubber.add_response(
+            "admin_enable_user", {}, {"UserPoolId": POOL_ID, "Username": seeded_admin_user}
+        )
+        assert commands.reactivate_user(
+            conn, client, pool_id=POOL_ID, sub=seeded_admin_user
+        ).changed
+        stubber.assert_no_pending_responses()
+
+    with _as_pa_ops(pa_ops_engine) as conn:
+        empty = commands.create_organisation(conn, name=f"pa-ops empty {uuid.uuid4()}")
+        assert commands.delete_organisation(conn, org_id=empty.org_id).name == empty.name
 
     with _as_pa_ops(pa_ops_engine) as conn:
         person = commands.set_quota(conn, user_id=mover, task_quota_per_year=5, runs_per_user=0)
@@ -340,7 +356,7 @@ def test_pa_ops_cannot_grant_a_role_through_the_command_functions(
 #: table, or a wider column list, fails here.
 _EXPECTED_TABLE_GRANTS: dict[str, set[str]] = {
     "app_user": {"SELECT", "INSERT"},
-    "organisation": {"SELECT", "INSERT"},
+    "organisation": {"SELECT", "INSERT", "DELETE"},
     "organisation_domain": {"SELECT"},
     "waitlist_entry": {"SELECT", "DELETE"},
     "ops_action": {"SELECT", "INSERT"},
@@ -353,7 +369,7 @@ _EXPECTED_TABLE_GRANTS: dict[str, set[str]] = {
 _EXPECTED_COLUMN_UPDATES: dict[str, set[str]] = {
     "app_user": {
         "org_id", "email", "display_name", "is_admin", "is_ops", "invited_at",
-        "task_quota_per_year", "runs_per_user",
+        "task_quota_per_year", "runs_per_user", "deactivated_at",
     },
     "organisation": {"name", "task_quota_per_year", "runs_per_user"},
     "waitlist_entry": {"account_user_id", "account_created_at", "rejected_at"},

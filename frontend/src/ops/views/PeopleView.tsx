@@ -30,6 +30,7 @@ import {
   DANGER_CLASS,
   Dialog,
   EmptyRows,
+  FailedDialog,
   FailedLine,
   Field,
   FIGURE_CLASS,
@@ -53,7 +54,7 @@ import { draftErrors, draftIsValid, QuotaFields, valuesOf, WARNING_WHO, type Quo
 /** A line under a person's name after an action: a failure's message, or a cooldown. */
 type Note = { text: string; failed: boolean };
 
-type DialogKind = "move" | "deenrol" | "offboard" | "quota" | "cohortAdd" | "cohortRemove";
+type DialogKind = "move" | "deenrol" | "deactivate" | "reactivate" | "quota" | "cohortAdd" | "cohortRemove";
 
 /** The open dialog: what it does, to whom, and whether a row's menu or the selection bar opened it. */
 type DialogState = { kind: DialogKind; ids: string[]; from: "row" | "bar" } | null;
@@ -70,8 +71,15 @@ const NO_ORG = "none";
 const DE_ENROL_SENTENCE =
   "They stay signed in but leave their organisation. Their tasks and projects stay with them and leave the organisation too.";
 
-const OFFBOARD_SENTENCE =
-  "This stops them signing in, signs them out everywhere, removes them from their organisation and takes down any public links to their tasks. Their tasks stay in the database. This cannot be undone from here.";
+const DEACTIVATE_SENTENCE =
+  "This stops them signing in, signs them out everywhere, takes away any admin or ops role and takes down any public links to their tasks. They stay in their organisation with their tasks and projects. You can reactivate them later.";
+
+const REACTIVATE_SENTENCE =
+  "They can sign in again. Any admin or ops role and public links are not given back.";
+
+/** The status filter's values; the list opens on the active people. */
+const ACTIVE = "active";
+const DEACTIVATED = "deactivated";
 
 function matches(person: Person, query: string): boolean {
   const q = query.trim().toLowerCase();
@@ -114,6 +122,7 @@ export function PeopleView() {
   // on an organisation or cohort lands here filtered.
   const orgFilter = params.get("org") ?? ALL;
   const cohortFilter = params.get("cohort") ?? ALL;
+  const statusFilter = params.get("status") ?? ACTIVE;
   const location = useLocation();
   // "Open person" on Requests passes the address in router state, so it stays
   // out of the URL; a plain search word may still come as ?q=.
@@ -126,14 +135,15 @@ export function PeopleView() {
   const [notes, setNotes] = useState<Record<string, Note>>({});
   const [retry, setRetry] = useState<(() => void) | null>(null);
   const tableRef = useRef<HTMLTableElement>(null);
-  /** Whether the open dialog's action went through (an offboarded row is on its way out). */
+  /** Whether the open dialog's action went through. */
   const acted = useRef(false);
   const people = usePeople();
   const organisations = useOrganisations();
   const toast = useRecordedToast();
   const enrol = useEnrol();
   const deEnrol = useBulk("/api/v1/ops/people/de-enrol");
-  const offboard = useBulk("/api/v1/ops/people/offboard");
+  const deactivate = useBulk("/api/v1/ops/people/deactivate");
+  const reactivate = useBulk("/api/v1/ops/people/reactivate");
   const resend = useBulk("/api/v1/ops/people/resend");
   const quota = usePeopleQuota();
   const cohorts = useCohorts();
@@ -146,7 +156,8 @@ export function PeopleView() {
       matches(person, query) &&
       (orgFilter === ALL ||
         (orgFilter === NO_ORG ? person.organisation == null : person.organisation?.org_id === orgFilter)) &&
-      (cohortFilter === ALL || person.cohorts.some((own) => own.cohort_id === cohortFilter)),
+      (cohortFilter === ALL || person.cohorts.some((own) => own.cohort_id === cohortFilter)) &&
+      (statusFilter === ALL || (person.deactivated_at != null) === (statusFilter === DEACTIVATED)),
   );
   const { sorted: shown, sort, onSort } = useSort(visible, {
     name: (person) => person.display_name,
@@ -160,9 +171,9 @@ export function PeopleView() {
   });
   const th = { sort, onSort };
   if (people.isPending) return <Loading />;
-  const setFilter = (key: "org" | "cohort", value: string) => {
+  const setFilter = (key: "org" | "cohort" | "status", value: string) => {
     const next = new URLSearchParams(params);
-    if (value === ALL) next.delete(key);
+    if (value === (key === "status" ? ACTIVE : ALL)) next.delete(key);
     else next.set(key, value);
     setParams(next, { replace: true });
     setSelected(new Set());
@@ -242,13 +253,14 @@ export function PeopleView() {
       setDialog({ kind, ids: [person.user_id], from: "row" });
     };
     const cooling = inCooldown(person.invited_at);
+    const off = person.deactivated_at != null;
     return [
       { label: "Enrol or move to an organisation…", onSelect: open("move") },
       { label: "Set quota…", onSelect: () => navigate(`/people/${person.user_id}/quota`) },
       { label: "Add to cohort…", onSelect: open("cohortAdd") },
       { label: "Remove from cohort…", onSelect: open("cohortRemove"), disabled: person.cohorts.length === 0 },
       // Only while the invitation is unused (owner, 2026-11-18).
-      ...(waitingForSignIn(person)
+      ...(waitingForSignIn(person) && !off
         ? [
             {
               label: "Resend invitation",
@@ -263,7 +275,9 @@ export function PeopleView() {
         onSelect: open("deenrol"),
         disabled: person.organisation == null && !person.is_admin && !person.is_ops,
       },
-      { label: "Offboard…", onSelect: open("offboard") },
+      off
+        ? { label: "Reactivate…", onSelect: open("reactivate") }
+        : { label: "Deactivate…", onSelect: open("deactivate") },
     ];
   };
 
@@ -285,13 +299,12 @@ export function PeopleView() {
   };
   /**
    * Where focus goes when a dialog closes: back to the row's menu button
-   * (the menu item that opened it is gone), or to the table when the row is
-   * leaving (offboarded) or the action cleared the selection bar. A
+   * (the menu item that opened it is gone), or to the table when the row
+   * left the filtered list or the action cleared the selection bar. A
    * cancelled bar action returns to the bar's button, as Radix does by itself.
    */
   const returnFocus = () => {
     if (dialog?.from === "row") {
-      if (dialog.kind === "offboard" && acted.current) return tableRef.current;
       return document.getElementById(rowMenuId(dialog.ids[0])) ?? tableRef.current;
     }
     return document.querySelector("[data-selection-bar] button") === null ? tableRef.current : null;
@@ -334,6 +347,21 @@ export function PeopleView() {
                 empty="No cohorts match."
               />
             </div>
+            <div className="w-44">
+              <SearchSelect
+                label="Status filter"
+                value={statusFilter}
+                options={[
+                  { value: ACTIVE, label: "Active" },
+                  { value: DEACTIVATED, label: "Deactivated" },
+                  { value: ALL, label: "Active and deactivated" },
+                ]}
+                onChange={(value) => setFilter("status", value)}
+                placeholder="Active"
+                filterLabel="Find a status"
+                empty="No status matches."
+              />
+            </div>
           </div>
         }
       />
@@ -373,8 +401,11 @@ export function PeopleView() {
             <Button variant="secondary" size="sm" onClick={openBulk("deenrol")}>
               De-enrol
             </Button>
-            <Button variant="secondary" size="sm" onClick={openBulk("offboard")}>
-              Offboard
+            <Button variant="secondary" size="sm" onClick={openBulk("deactivate")}>
+              Deactivate
+            </Button>
+            <Button variant="secondary" size="sm" onClick={openBulk("reactivate")}>
+              Reactivate
             </Button>
             {!allVisibleTicked && (
               <Button variant="ghost" size="sm" onClick={selectAllShown}>
@@ -491,13 +522,16 @@ export function PeopleView() {
                     </td>
                     <td className={cn(TD_CLASS, "py-2.5")}>
                       <span className="flex gap-1.5">
+                        {person.deactivated_at != null && (
+                          <Chip className="border-red/50 bg-red/10 text-red">DEACTIVATED</Chip>
+                        )}
                         {person.is_admin && <Chip>ADMIN</Chip>}
                         {person.is_ops && <Chip>OPS</Chip>}
                       </span>
                     </td>
                     <td className={cn(TD_CLASS, FIGURE_CLASS)}>
                       <Figures
-                        text={quotaLimit == null ? "no limit" : `${person.tasks_this_year} of ${limitWord(quotaLimit)}`}
+                        text={`${person.tasks_this_year} of ${quotaLimit ? limitWord(quotaLimit) : "∞"}`}
                       />
                     </td>
                     <td className={cn(TD_CLASS, "py-2.5")}>
@@ -518,7 +552,7 @@ export function PeopleView() {
           {visible.length === 0 && <EmptyRows label="No people match." />}
         </div>
       )}
-      {retry !== null && <FailedLine message="Could not finish the action." onRetry={retry} />}
+      {retry !== null && <FailedDialog message="Could not finish the action." onRetry={retry} onClose={() => setRetry(null)} />}
 
       {viewing !== null && (
         <PersonDialog
@@ -592,14 +626,42 @@ export function PeopleView() {
           {chosen.length > 1 && <NameList people={chosen} />}
         </Dialog>
       )}
-      {dialog?.kind === "offboard" && (
-        <OffboardDialog
+      {dialog?.kind === "deactivate" && (
+        <DeactivateDialog
           people={chosen}
-          pending={offboard.isPending}
+          pending={deactivate.isPending}
           onOpenChange={close}
           returnFocus={returnFocus}
-          onOffboard={() => run(offboard, dialog.ids, dialog.ids, (person) => `Offboarded ${person.display_name}`)}
+          onDeactivate={() =>
+            run(deactivate, dialog.ids, dialog.ids, (person) => `Deactivated ${person.display_name}`)
+          }
         />
+      )}
+      {dialog?.kind === "reactivate" && (
+        <Dialog
+          open
+          onOpenChange={close}
+          returnFocus={returnFocus}
+          title={`Reactivate ${who(chosen)}?`}
+          description={REACTIVATE_SENTENCE}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setDialog(null)}>
+                Cancel
+              </Button>
+              <Button
+                disabled={reactivate.isPending}
+                onClick={() =>
+                  run(reactivate, dialog.ids, dialog.ids, (person) => `Reactivated ${person.display_name}`)
+                }
+              >
+                Reactivate
+              </Button>
+            </>
+          }
+        >
+          {chosen.length > 1 && <NameList people={chosen} />}
+        </Dialog>
       )}
       {dialog?.kind === "quota" && (
         <BulkQuotaDialog
@@ -669,18 +731,18 @@ function MoveDialog({
 }
 
 /**
- * Offboard, the one red button. One person confirms by typing their address;
+ * Deactivate, the one red button. One person confirms by typing their address;
  * several (or one with no address) by typing how many, under the list of
  * every name and address (contract B6, revision 3.1). The consequence
  * sentence is the dialog's description, read before the confirm field.
  */
-function OffboardDialog({
+function DeactivateDialog({
   people,
   pending,
   onOpenChange,
   returnFocus,
-  onOffboard,
-}: DialogProps & { onOffboard: () => void }) {
+  onDeactivate,
+}: DialogProps & { onDeactivate: () => void }) {
   const [typed, setTyped] = useState("");
   const email = people.length === 1 ? people[0].email : null;
   const confirmed =
@@ -692,24 +754,24 @@ function OffboardDialog({
       open
       onOpenChange={onOpenChange}
       returnFocus={returnFocus}
-      title={`Offboard ${who(people)}?`}
-      description={OFFBOARD_SENTENCE}
+      title={`Deactivate ${who(people)}?`}
+      description={DEACTIVATE_SENTENCE}
       footer={
         <>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             {people.length > 1 ? "Keep the accounts" : "Keep the account"}
           </Button>
-          <Button className={DANGER_CLASS} disabled={!confirmed || pending} onClick={onOffboard}>
-            Offboard
+          <Button className={DANGER_CLASS} disabled={!confirmed || pending} onClick={onDeactivate}>
+            Deactivate
           </Button>
         </>
       }
     >
       {email == null && <NameList people={people} />}
       <div className="mt-5">
-        <Field id="offboard-confirm" label={email != null ? "Type the email to confirm" : "Type the number of people to confirm"}>
+        <Field id="deactivate-confirm" label={email != null ? "Type the email to confirm" : "Type the number of people to confirm"}>
           <input
-            id="offboard-confirm"
+            id="deactivate-confirm"
             autoComplete="off"
             spellCheck={false}
             inputMode={email != null ? "email" : "numeric"}
@@ -838,6 +900,12 @@ function PersonDialog({ person, onClose, onQuota }: { person: Person; onClose: (
   const limit = (value: number | null | undefined, from: string) => facts(limitWord(value), `from ${from}`);
   const rows: Array<[string, ReactNode]> = [
     ["Email", person.email ?? <span className="text-grey">none stored</span>],
+    [
+      "Status",
+      person.deactivated_at != null
+        ? `Deactivated ${formatDate(person.deactivated_at, "long")}, ${formatDate(person.deactivated_at, "time")}`
+        : "Active",
+    ],
     ["Organisation", person.organisation?.name ?? <span className="text-grey">not enrolled</span>],
     [
       "Cohorts",

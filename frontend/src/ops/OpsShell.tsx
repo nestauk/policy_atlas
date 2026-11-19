@@ -11,6 +11,7 @@ import { PAGE_COLUMN_CLASS } from "../ui/brand/PageHeader";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { MENU_ITEM_CLASS, moveMenuFocus } from "../ui/radix/menu";
 import { errorStatus, usePeople, useRequests, type Person } from "./api";
+import { Loading } from "./ui";
 
 /**
  * The ops pages' frame: their own top bar (the wordmark and the OPS chip, the
@@ -42,13 +43,13 @@ function Frame({ sections, account, children }: { sections?: ReactNode; account?
   );
 }
 
-/** Signed out, or the session could not be refreshed: one button. */
+/** Signed out, or the session could not be refreshed: one button at the bar's right. */
 function SignIn() {
   const auth = useAuth();
   return (
-    <div className="pt-10">
-      <Button onClick={() => void auth.signIn()}>Sign in</Button>
-    </div>
+    <Button size="sm" onClick={() => void auth.signIn()}>
+      Sign in
+    </Button>
   );
 }
 
@@ -131,9 +132,15 @@ function SignedInShell() {
     );
   }
   if (status === 401) {
+    return <Frame account={<SignIn />}>{null}</Frame>;
+  }
+  if (people.data === undefined && !people.isError) {
+    // No sections until the first read answers: a 401 or 403 replaces them,
+    // and links that flash and vanish read as a glitch. Any other failure
+    // falls through: the page shows its own error and "Try again".
     return (
       <Frame>
-        <SignIn />
+        <Loading />
       </Frame>
     );
   }
@@ -169,11 +176,7 @@ function SignedInShell() {
 export function OpsShell() {
   const auth = useAuth();
   if (auth.status !== "authenticated") {
-    return (
-      <Frame>
-        <SignIn />
-      </Frame>
-    );
+    return <Frame account={<SignIn />}>{null}</Frame>;
   }
   return <SignedInShell />;
 }
