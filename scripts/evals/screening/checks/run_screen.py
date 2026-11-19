@@ -34,7 +34,7 @@ from typing import Any
 import _bootstrap  # noqa: F401
 import pandas as pd
 from adapter import MISSING_ABSTRACT, SIZES, dataset_manifest, load_and_adapt_dataset
-from metrics import PRICE_AS_OF, PRICE_PER_MILLION, calculate_metrics, cost_usd
+from metrics import PRICE_AS_OF, calculate_metrics, cost_usd, rates_for
 from targets import TARGETS_JSON, select_targets
 from vote import combine_adaptive, combine_reps
 
@@ -464,7 +464,7 @@ def run(args: argparse.Namespace) -> Path:
             completion_tokens=run_usage.completion,
         ),
         "price_per_million_usd": {
-            "rates": PRICE_PER_MILLION.get(args.model),
+            "rates": rates_for(args.model),
             "as_of": PRICE_AS_OF,
         },
         "targets": summaries,
