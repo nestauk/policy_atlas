@@ -420,8 +420,11 @@ request per row) → `docs/deferred.md`.
 `aws sesv2 get-account` on the staging profile and confirm `/policy_atlas_v3/ops/allowed_cidrs`
 holds office or VPN ranges, never `0.0.0.0/0`.
 
-**Outside this slice:** `scripts/test_deploy_build_guard.sh` fails on `dev` as well (its
-stub `aws` does not answer the Metabase allowlist read); `make verify` does not run it.
+**Deploy harness (corrected 2026-11-19, found by CI):** `scripts/test_deploy_build_guard.sh`
+failed because of this branch's rebase, not `dev`: 064b's WAF section exported an `aws`
+function that shadowed the ops section's stub, and the ops stub did not answer 064b's WAF key
+lookup. Fixed in `90565f51`; `make deploy-build-guard-test` passes. (`make verify` does not
+run it; CI does.)
 
 ## Review handoff (step-7/8 inputs)
 

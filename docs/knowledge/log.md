@@ -6,7 +6,7 @@ Added: [sqlalchemy-core-insert-rowcount-is-not-a-signal](sqlalchemy-core-insert-
 (from the stack's pa_ops write test). Folded: the reverted per-task advisory lock and its
 caller trace into [event-log-sequence](event-log-sequence.md). Declined: the in-place
 migration edits (an owner ruling for migrations that never left local databases, not a
-general rule) and the build-guard harness failure (a `dev` defect, recorded in
+general rule) and the build-guard harness failure (a rebase merge slip, fixed and recorded in
 verification.md).
 
 ## 2026-11-17 (task 064b, review stack)
