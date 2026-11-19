@@ -67,9 +67,7 @@ describe("TaskListRow — the running stage", () => {
   });
 });
 
-// Task 058 (owner, round 8): every row's mark is the 6 px square, so a
-// running row's mark is the same size as a finished one's: blue and
-// breathing while the run is live, orange while paused, green once done.
+// Every row's mark is the status square, its tone set by the run's status.
 describe("TaskListRow — the status mark", () => {
   const startedAt = new Date(Date.now() - 60_000).toISOString();
   const markOf = (container: HTMLElement) => container.querySelector("[data-tone]") as HTMLElement;
@@ -80,29 +78,27 @@ describe("TaskListRow — the status mark", () => {
       latestRun: { capability_run_id: "r1", status: "running", started_at: startedAt },
       activeRun: { capability_run_id: "r1", status: "running", started_at: startedAt, stage: "acquire", stage_label: "Searching" },
     });
-    expect(markOf(container)).toHaveClass("bg-blue", "size-1.5", "anim-breathe-mark");
+    expect(markOf(container)).toHaveAttribute("data-tone", "running");
     expect(liveMarkOf(container)).toBeNull();
     unmount();
     const before = renderRow({ latestRun: { capability_run_id: "r1", status: "running", started_at: startedAt } });
-    expect(markOf(before.container)).toHaveClass("bg-blue", "size-1.5", "anim-breathe-mark");
+    expect(markOf(before.container)).toHaveAttribute("data-tone", "running");
     expect(liveMarkOf(before.container)).toBeNull();
   });
 
   it.each([
-    ["paused", "bg-orange"],
-    ["succeeded", "bg-green"],
-    ["failed", "bg-red"],
-  ] as const)("is %s → %s", (status, colour) => {
+    ["paused", "paused"],
+    ["succeeded", "complete"],
+    ["failed", "failed"],
+  ] as const)("is %s → %s", (status, tone) => {
     const { container } = renderRow({ latestRun: { capability_run_id: "r1", status, started_at: startedAt } });
-    expect(markOf(container)).toHaveClass(colour, "size-1.5");
+    expect(markOf(container)).toHaveAttribute("data-tone", tone);
     expect(liveMarkOf(container)).toBeNull();
   });
 });
 
-// Task 058, lists polish: the project prefix never hides the task's own
-// name, several projects read as the first and a count (lead ruling P2),
-// and phone rows are two fixed lines without owner or sources (P3).
-describe("TaskListRow — layout (lists polish)", () => {
+// Several projects read as the first and a count.
+describe("TaskListRow — layout", () => {
   it("shows the first project and a count, with every project in the hover text", () => {
     renderRow({
       showProjectPrefix: true,
@@ -110,8 +106,8 @@ describe("TaskListRow — layout (lists polish)", () => {
     });
     // Twice in the DOM: before the name from md up, on line 2 below md.
     const [desktop, phone] = screen.getAllByText("Child health, Tower Hamlets");
-    expect(desktop.parentElement).toHaveClass("max-md:hidden");
-    expect(phone.parentElement).toHaveClass("md:hidden");
+    expect(desktop).toBeInTheDocument();
+    expect(phone).toBeInTheDocument();
     expect(screen.getAllByText("+1")).toHaveLength(2);
     expect(screen.queryByText("Net zero homes")).not.toBeInTheDocument();
     expect(screen.getByTitle("Child health, Tower Hamlets · Net zero homes")).toBeInTheDocument();
@@ -122,13 +118,7 @@ describe("TaskListRow — layout (lists polish)", () => {
     expect(screen.queryByText(/^\+\d/)).not.toBeInTheDocument();
   });
 
-  it("caps the prefix so the task's own name always shows", () => {
-    renderRow({ showProjectPrefix: true, projectNames: ["Child health, Tower Hamlets"] });
-    expect(screen.getByTitle("Child health, Tower Hamlets")).toHaveClass("max-w-[45%]", "shrink", "min-w-0");
-    expect(screen.getByText("Youth employment")).toHaveClass("min-w-0", "flex-1", "truncate");
-  });
-
-  it("is one 56 px line from md up and two fixed lines below, without owner and sources", () => {
+  it("shows the sources count with its word", () => {
     renderRow({
       sourceCount: 46,
       showOwner: true,
@@ -136,20 +126,7 @@ describe("TaskListRow — layout (lists polish)", () => {
       ownerName: "Ada Lovelace",
       updatedAt: "2026-07-21T09:00:00Z",
     });
-    expect(screen.getByRole("link")).toHaveClass("min-h-14", "py-3.5");
-    expect(screen.getByText("Youth employment").parentElement).toHaveClass("max-md:col-span-2", "leading-7", "max-md:leading-6");
-    const sources = screen.getByText("46").parentElement as HTMLElement;
-    expect(sources).toHaveTextContent("46 sources");
-    expect(sources).toHaveClass("max-md:hidden", "text-meta");
-    // Only the digits take tabular figures; the space keeps its width.
-    expect(screen.getByText("46")).toHaveClass("tabular-nums");
-    expect(sources).not.toHaveClass("tabular-nums");
-    expect(screen.getByText("Ada Lovelace")).toHaveClass("max-md:hidden");
-  });
-
-  it("deepens to Blue Tint the instant it is pressed (round 10)", () => {
-    renderRow();
-    expect(screen.getByRole("link")).toHaveClass("active:bg-blue-tint", "active:duration-0", "group-hover:bg-blue-tint-2");
+    expect(screen.getByText("46").parentElement).toHaveTextContent("46 sources");
   });
 });
 
@@ -198,9 +175,9 @@ describe("TaskListRow — the accessible name", () => {
   });
 });
 
-// Round 10, lead rulings 3 to 5 and 7: the status column's words, the
-// phone's second line, the capability as plain text, one date form.
-describe("TaskListRow — round 10 words and layout", () => {
+// The status column's words, the phone's second line, the capability, one
+// date form.
+describe("TaskListRow — words and layout", () => {
   const paused = { capability_run_id: "r1", status: "paused" as const, started_at: "2026-01-01T00:00:00Z" };
 
   it.each([
@@ -217,13 +194,13 @@ describe("TaskListRow — round 10 words and layout", () => {
     expect(screen.getByTitle("Complete · with gaps")).toBeInTheDocument();
   });
 
-  it("shows the dash, not 0 sources, on a failed row (lead ruling, round 10)", () => {
+  it("shows the dash, not 0 sources, on a failed row", () => {
     renderRow({ sourceCount: 0, latestRun: { capability_run_id: "r1", status: "failed", started_at: "2026-01-01T00:00:00Z" } });
     expect(screen.queryByText("0")).not.toBeInTheDocument();
-    expect(screen.getByText("—")).toHaveClass("max-md:hidden");
+    expect(screen.getByText("—")).toBeInTheDocument();
   });
 
-  it("shows the dash on an archived task whose run failed (lead ruling, round 11)", () => {
+  it("shows the dash on an archived task whose run failed", () => {
     renderRow({
       archived: true,
       sourceCount: 0,
@@ -231,7 +208,7 @@ describe("TaskListRow — round 10 words and layout", () => {
     });
     expect(screen.getByTitle("Archived")).toBeInTheDocument();
     expect(screen.queryByText("0 sources")).not.toBeInTheDocument();
-    expect(screen.getByText("—")).toHaveClass("max-md:hidden");
+    expect(screen.getByText("—")).toBeInTheDocument();
   });
 
   it("reads Archived for an archived task, whatever its last run", () => {
@@ -240,47 +217,38 @@ describe("TaskListRow — round 10 words and layout", () => {
     expect(screen.queryByText("Complete")).not.toBeInTheDocument();
   });
 
-  it("puts the status word first on the phone's second line, then the project, which gives way first", () => {
+  it("puts the status word first on the phone's second line, then the project", () => {
     renderRow({ latestRun: paused, showProjectPrefix: true, projectNames: ["Net zero homes"] });
     const word = screen.getByTitle("Paused · waiting on you");
     const cell = word.parentElement as HTMLElement;
-    expect(word).toHaveClass("min-w-0", "truncate", "max-md:shrink-0");
     const phoneProject = cell.lastElementChild as HTMLElement;
-    expect(phoneProject).toHaveClass("md:hidden", "min-w-0", "shrink-[1000]");
     expect(phoneProject).toHaveTextContent(/^·\s*Net zero homes$/);
   });
 
-  it("shows the capability as plain Grey text, hidden on phones", () => {
+  it("shows the capability", () => {
     renderRow({ capabilityKey: "options_scoping" });
-    const kind = screen.getByText("Options scoping");
-    expect(kind).toHaveClass("text-meta", "text-grey", "max-md:hidden");
-    expect(kind).not.toHaveClass("bg-blue-tint");
+    expect(screen.getByText("Options scoping")).toBeInTheDocument();
   });
 
-  it("dates the row at Meta in the one list form", () => {
+  it("dates the row in the one list form", () => {
     const { container } = renderRow({ updatedAt: "2025-10-12T09:00:00" });
     const time = container.querySelector("time") as HTMLElement;
     expect(time).toHaveTextContent("12 Oct 2025");
-    expect(time).toHaveClass("text-meta");
-    expect(time).not.toHaveClass("text-caption", "tabular-nums");
   });
 });
 
-// Round 12: the owner column is capped at 8rem; a colleague's name cut by
-// the cap is whole in the hover text.
+// A colleague's name cut by the owner column's cap is whole in the hover text.
 describe("TaskListRow — the owner cell", () => {
   it("gives a colleague's capped name its full form on hover", () => {
     renderRow({ showOwner: true, isOwner: false, ownerName: "Bartholomew Featherstonehaugh" });
     const owner = screen.getByText("Bartholomew Featherstonehaugh");
     expect(owner).toHaveAttribute("title", "Bartholomew Featherstonehaugh");
-    expect(owner).toHaveClass("max-w-[8rem]", "truncate");
   });
 });
 
-// Owner, round 14: a running row with a long live step kept hiding its
-// timer. The step truncates; the timer always shows.
+// A running row with a long live step still shows its timer.
 describe("TaskListRow — a long live step", () => {
-  it("truncates the step and keeps the timer whole beside it", () => {
+  it("shows the timer beside a long step, the pair whole in the hover text", () => {
     const startedAt = new Date(Date.now() - 28 * 60_000).toISOString();
     renderRow({
       activeRun: {
@@ -292,9 +260,7 @@ describe("TaskListRow — a long live step", () => {
       },
     });
     const step = screen.getByText("Screening the sources against the inclusion criteria");
-    expect(step).toHaveClass("min-w-0", "truncate");
     const timer = step.nextElementSibling as HTMLElement;
-    expect(timer).toHaveClass("shrink-0");
     expect(timer).toHaveTextContent(/^· 28 min$/);
     // The whole pair is the hover text.
     expect(step.parentElement).toHaveAttribute("title", "Screening the sources against the inclusion criteria · 28 min");

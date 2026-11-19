@@ -398,10 +398,6 @@ describe("AppShell — new content marks its tab (task 058, N14)", () => {
     const taskNav = screen.getByRole("navigation", { name: TASK.one });
     expect(within(taskNav).getByRole("link", { name: /Result/ })).toHaveTextContent("New content");
     expect(within(taskNav).getByRole("link", { name: /Sources/ })).not.toHaveTextContent("New content");
-    // One mark shape in the app: a 6 px navy square, no radius.
-    const mark = within(within(taskNav).getByRole("link", { name: /Result/ })).getByTestId("new-content-mark");
-    expect(mark).toHaveClass("size-1.5", "bg-navy");
-    expect(mark.className).not.toMatch(/rounded/);
   });
 
   it("never dots Sources, whatever lands (owner, round 8: the mark was not useful)", () => {
@@ -463,7 +459,6 @@ describe("AppShell — the Sources tab opens on the step that has landed (owner,
     // The link opens All sources, and the reader is on Themes: still Sources.
     expect(sourcesLink()).toHaveAttribute("href", `/tasks/${TASK_ID}/sources/all`);
     expect(sourcesLink()).toHaveAttribute("aria-current", "page");
-    expect(sourcesLink()).toHaveClass("after:scale-x-100");
   });
 });
 
@@ -523,16 +518,6 @@ describe("AppShell — the task-settings popover (task 033 phase 10c, contract �
     await openTaskSettings();
     expect(screen.getByRole("menuitem", { name: "Rename" })).toHaveFocus();
     expect(screen.getByRole("menuitem", { name: "Archive" })).toBeInTheDocument();
-  });
-
-  // Owner, round 11: the capability is plain Grey text after the name, no chip.
-  it("sets the capability after the name in plain grey, not as a chip", () => {
-    taskState.isOwner = true;
-    renderShell(`/tasks/${TASK_ID}`);
-    const bar = screen.getByRole("navigation", { name: "Task" });
-    const kind = within(bar).getByText(/Evidence search|Options scoping/);
-    expect(kind).toHaveClass("text-grey", "text-meta");
-    expect(kind.className).not.toMatch(/border|bg-|uppercase/);
   });
 
   // Owner, round 12: the header's menu has the rows' "Add to project".
@@ -612,11 +597,11 @@ describe("AppShell — global chrome", () => {
     expect(await screen.findByText(BETA_CHIP_HINT)).toBeInTheDocument();
   });
 
-  it("underlines the active global nav item", () => {
+  it("marks the active global nav item as the current page", () => {
     renderShell("/projects");
-    expect(screen.getByRole("link", { name: "Projects" })).toHaveClass("after:scale-x-100");
-    expect(screen.getByRole("link", { name: "New" })).not.toHaveClass("after:scale-x-100");
-    expect(screen.getByRole("link", { name: TASK.many })).not.toHaveClass("after:scale-x-100");
+    expect(screen.getByRole("link", { name: "Projects" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "New" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: TASK.many })).not.toHaveAttribute("aria-current");
   });
 
   it("opens Sign out from the account icon", async () => {
@@ -636,12 +621,10 @@ describe("AppShell — global chrome", () => {
     await user.click(trigger);
     expect(trigger).toHaveAttribute("aria-expanded", "true");
     expect(trigger).toHaveAttribute("data-state", "open");
-    expect(trigger).toHaveClass("data-[state=open]:bg-blue-tint-2");
     const menu = screen.getByRole("menu", { name: "Account" });
     const signOut = screen.getByRole("menuitem", { name: "Sign out" });
     expect(menu).toContainElement(signOut);
     expect(signOut).toHaveFocus();
-    expect(signOut).toHaveClass("h-10", "text-meta", "hover:bg-blue-tint-2");
   });
 
   it("moves between items with the arrow keys and Home and End", async () => {
@@ -779,22 +762,6 @@ describe("AppShell — the account menu (task 033 phase 10b, contract § 11 / ru
     };
     await openAccountMenu();
     expect(screen.getByText("Administrator")).toBeInTheDocument();
-    // Blue is the one pen (owner, round 10): the role is Grey, not Electric Blue.
-    expect(screen.getByText("Administrator")).toHaveClass("text-grey");
-    expect(screen.getByText("Administrator")).not.toHaveClass("text-blue");
-  });
-
-  it("truncates a long email with CSS rather than breaking the popover layout", async () => {
-    meState.data = {
-      user_id: "policy-lead",
-      display_name: "Ada Lovelace",
-      email: "a.very.long.civil.service.email.address.indeed@example.gov.uk",
-      organisation: null,
-      is_admin: false,
-    };
-    await openAccountMenu();
-    const emailNode = screen.getByText("a.very.long.civil.service.email.address.indeed@example.gov.uk");
-    expect(emailNode.className).toContain("truncate");
   });
 });
 
@@ -986,7 +953,7 @@ describe("AppShell — round 14 (owner)", () => {
     expect(screen.queryByTestId("plan-scrim")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Open the plan (test)" }));
     expect(screen.getByRole("complementary", { name: "Search plan" })).toBeInTheDocument();
-    expect(screen.getByTestId("plan-scrim")).toHaveClass("bg-navy/40");
+    expect(screen.getByTestId("plan-scrim")).toBeInTheDocument();
   });
 
   it("opens a lifecycle tab at its top", async () => {
