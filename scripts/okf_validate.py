@@ -4,7 +4,7 @@ Checks the repo's two OKF bundles against the v0.1 conformance rules
 (docs/agentic-ops/references/open-knowledge-format.md §9): every
 non-reserved .md file needs a parseable frontmatter block with a
 non-empty `type`. docs/specs/sources/ is exempt — raw frozen sources,
-not concepts (backlog: "OKF lanes", 2026-06-24).
+not concepts (backlog: "OKF lanes").
 
 Stdlib only, no YAML dependency.
 """

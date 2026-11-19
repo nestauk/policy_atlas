@@ -28,7 +28,7 @@ def _strip_trailing_structured_blob(prose: str) -> str:
     """Drop a trailing citations/claims JSON dump from the answer prose.
 
     The schema-free prose stream can leak the structured payload as text
-    (observed live, 2026-08-11). Only a TERMINAL JSON object that parses and
+    (observed live). Only a TERMINAL JSON object that parses and
     carries the structured-answer keys is stripped — never JSON the answer
     legitimately quotes mid-prose.
     """

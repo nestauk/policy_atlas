@@ -1,4 +1,4 @@
-"""Task 057 (N4, N5, N11): the queued ingest worker and its alarms, pinned value by value.
+"""The queued ingest worker and its alarms, pinned value by value.
 
 Each test reads the synthesized templates built once in ``test_synth``.
 """

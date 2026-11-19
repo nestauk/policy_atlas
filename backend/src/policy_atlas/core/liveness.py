@@ -1,29 +1,29 @@
-"""Live activity for running tasks, kept in this process's memory only (task 058).
+"""Live activity for running tasks, kept in this process's memory only.
 
 While a task's run is working, the stage loops, the model-call wrapper and the
 report writer publish short-lived messages here: an activity line ("tick") per
 stage, and the report section's text as it streams. The hub hands each message
 to every browser connection (a "subscriber") watching that task, and remembers
 just enough to greet a newly connected browser with where things stand: the
-last tick per stage and the section text written so far (task 058, N4).
+last tick per stage and the section text written so far.
 While a section is written the hub also passes on the sources the writer has
 just read and, as each of the writer's citations closes, the stretch of text it
 marks; it remembers both beside the section text, so a newly connected browser
-sees them too (task 058, "evidence shown live", owner 2026-11-05). The
-case-study cards are passed on the same way, each as it closes (task 058,
-round 7). After the sections, each most-relevant-source note is passed on as
+sees them too ("evidence shown live"). The
+case-study cards are passed on the same way, each as it closes.
+After the sections, each most-relevant-source note is passed on as
 it is written; the hub keeps the run's notes for a newly connected browser
-until the run ends (task 058, round 8). While the search runs, each query is
+until the run ends. While the search runs, each query is
 passed on as it goes out and again when it comes back, and after the
 characterise stage finds its themes, their names are passed on before the
 sources are assigned to them; the hub keeps both for a newly connected
-browser until the run ends (task 058, round 9). The longlist walk's two
+browser until the run ends. The longlist walk's two
 clusterings pass on their names the same way: the options found while
-sources are assigned to them, then the themes found while options are
-(round 11), each kept under its stage. While the theory of change's first draft
+sources are assigned to them, then the themes found while options are,
+each kept under its stage. While the theory of change's first draft
 is written, the boxes and connections the model has closed so far are passed on
 as one sketch, sent whole each time; the hub keeps the latest for a newly
-connected browser until the draft's stage ends (task 054, S12).
+connected browser until the draft's stage ends.
 
 Nothing here is saved to the database. The durable record stays in
 ``event_log``; these messages may be lost (a full queue is emptied and
@@ -34,7 +34,7 @@ Three things keep the stream calm and alive:
 
 * Coalescing: at most one tick per task and stage every
   :data:`COALESCE_SECONDS`; quicker ticks are held and the latest one is sent
-  when the window closes (task 058, N1).
+  when the window closes.
 * Heartbeats: while a model call is open, the stage's last tick is repeated
   every :data:`HEARTBEAT_SECONDS`, so a long call still shows signs of life.
 * Delta merging: streamed section text that arrives within
@@ -105,7 +105,7 @@ class Tick:
         dropped: How many messages for this task had been dropped from full
             subscriber queues when this tick was sent.
         run_id: The walk the line belongs to (a longlist walk's option search
-            is its own walk), or ``None`` when unknown (round 11).
+            is its own walk), or ``None`` when unknown.
     """
 
     stage: str | None
@@ -196,7 +196,7 @@ class SectionClaim:
 
 @dataclass(frozen=True, slots=True)
 class SectionCard:
-    """One case-study card as it closes in the streamed reply (task 058, round 7).
+    """One case-study card as it closes in the streamed reply.
 
     Display-only: the card is still to be checked; the completed section
     brings the checked cards.
@@ -216,7 +216,7 @@ class SectionCard:
 
 @dataclass(frozen=True, slots=True)
 class SourceNote:
-    """One most-relevant-source note, as soon as it is written (task 058, round 8).
+    """One most-relevant-source note, as soon as it is written.
 
     Display-only: the saved report brings the notes it keeps.
 
@@ -241,7 +241,7 @@ type SearchQueryKind = Literal["topic", "semantic", "citations", "lookup"]
 
 @dataclass(frozen=True, slots=True)
 class SearchQuery:
-    """One search query as it goes out, and again when it comes back (task 058, round 9).
+    """One search query as it goes out, and again when it comes back.
 
     Display-only: the saved search record lists the queries after the stage.
 
@@ -264,7 +264,7 @@ class SearchQuery:
 
 @dataclass(frozen=True, slots=True)
 class ThemesFound:
-    """Names a clustering found, before units are assigned to them (rounds 9 and 11).
+    """Names a clustering found, before units are assigned to them.
 
     The characterise stage's themes (sources into themes), the longlist
     stage's options (sources into options) and the theme stage's themes
@@ -292,7 +292,7 @@ type SketchLink = tuple[str, str, str]
 
 @dataclass(frozen=True, slots=True)
 class TocSketch:
-    """The theory of change's first draft as it is written (task 054, S12).
+    """The theory of change's first draft as it is written.
 
     Display-only and sent whole: each message replaces the one before. An
     empty sketch means "start again" (the draft is written again). The
@@ -414,7 +414,7 @@ def _clean(text: str) -> str:
 
 
 def normalise_query(query: object, limit: int = ACTIVITY_QUERY_MAX) -> str:
-    """Make the model's search query safe to show (task 058, N3).
+    """Make the model's search query safe to show.
 
     The text is put in Unicode NFC form, every run of whitespace becomes one
     space, control and format characters (Unicode categories starting with
@@ -500,7 +500,7 @@ class TickHub:
 
         Both happen under the hub's lock, so a message published at the same
         moment lands either in the returned state or in the queue, never both
-        and never neither (task 058, P6).
+        and never neither.
 
         Args:
             task_id: The task to follow.
@@ -1351,7 +1351,7 @@ def task_liveness(
         stage: The public stage key, when the block is one stage's work.
         run_id: The walk the work belongs to, when known: its ticks carry it,
             so a longlist walk's page can tell its option searches' lines
-            from its own (round 11).
+            from its own.
 
     Yields:
         Nothing; the binding lasts until the block exits.
@@ -1552,7 +1552,7 @@ def publish_themes(
 
     Args:
         themes: ``(label, description)`` pairs in the order found.
-        stage: The stage that found them (rounds 9 and 11).
+        stage: The stage that found them.
     """
     task_id = _task_id.get()
     if task_id is not None:
@@ -1560,7 +1560,7 @@ def publish_themes(
 
 
 def publish_toc_sketch(boxes: Sequence[SketchBox], links: Sequence[SketchLink]) -> None:
-    """Publish the theory of change draft's sketch so far for the bound task (task 054, S12).
+    """Publish the theory of change draft's sketch so far for the bound task.
 
     Does nothing when no task is bound.
 

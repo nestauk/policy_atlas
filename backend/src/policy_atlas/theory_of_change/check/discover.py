@@ -1,4 +1,4 @@
-"""The ``toc_discover`` step: routes the evidence suggests (task 054, C6).
+"""The ``toc_discover`` step: routes the evidence suggests.
 
 Batches of screened-in documents propose routes the theory lacks; a proposal
 whose route breaks a structure rule or whose passages are not in the documents

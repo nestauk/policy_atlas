@@ -1,4 +1,4 @@
-"""The ``toc_judge`` step: one link against one document (task 054, C5, C36).
+"""The ``toc_judge`` step: one link against one document.
 
 Per link, its own search's documents (or, for a link with none, the *K* pool
 documents closest by meaning) are read with one call each; its support,
@@ -154,10 +154,10 @@ def toc_judge_scope(
     only: set[str] | None = None,
     connect: ConnectFactory | None = None,
 ) -> dict[str, Any]:
-    """Judge each link against its top documents, both questions at once (C5).
+    """Judge each link against its top documents, both questions at once.
 
     Each link's evidence rows are written as soon as its last judge call
-    finishes, in a short transaction of their own (task 054, S8), so the canvas
+    finishes, in a short transaction of their own, so the canvas
     colours the link while the other links are still being judged. The step's
     one ``toc.changed`` event, the whole programme's judgements and the
     screening of documents no link found on topic still wait for the end.
@@ -170,8 +170,8 @@ def toc_judge_scope(
         backend: The ToC model seam.
         ranker: The rerank backend ``select`` uses, or ``None`` to keep order.
         embedder: The embedding backend that picks the closest pool documents
-            for a link with no search of its own (C27), or ``None``.
-        only: The links the second search covers (C44), or ``None``.
+            for a link with no search of its own, or ``None``.
+        only: The links the second search covers, or ``None``.
         connect: Opens one short committed transaction for a link's rows
             (``engine.begin``); ``None`` writes them inside ``conn``, as one
             transaction with the rest of the step.
@@ -430,7 +430,7 @@ def toc_judge_scope(
 
 @dataclass
 class _LinkWriter:
-    """Writes one link's judgements in a short transaction of its own (task 054, S8).
+    """Writes one link's judgements in a short transaction of its own.
 
     The insert of its ``toc_item_evidence`` rows and, outside Find more
     evidence, the move of its ``counted_hash`` to the current wording commit
@@ -557,10 +557,10 @@ def _written_by_this_step(
 ) -> dict[str, list[tuple[uuid.UUID, str]]]:
     """The links an earlier attempt of this step already wrote, at their current wording.
 
-    A link's rows commit as it is judged (S8), so a component retry finds the
+    A link's rows commit as it is judged, so a component retry finds the
     rows the failed attempt wrote. They are this walk's rows at the link's
     current hash, written since this step's first attempt started: rows the
-    walk's first judge wrote before the second search (C44) are older, so the
+    walk's first judge wrote before the second search are older, so the
     second search still judges its links.
 
     Args:
@@ -625,7 +625,7 @@ def toc_search_again_scope(
     embedder: EmbeddingBackend | None = None,
     connect: ConnectFactory | None = None,
 ) -> dict[str, Any]:
-    """One more search for the links the judge left thin, then judge what it found (C44).
+    """One more search for the links the judge left thin, then judge what it found.
 
     The runner has already dispatched and joined one reformulated item search
     per link whose verdict was *Not enough evidence* after the judge (stage
@@ -642,7 +642,7 @@ def toc_search_again_scope(
         backend: The ToC model seam.
         ranker: The rerank backend, or ``None`` to keep order.
         embedder: The embedding backend for the shared pool, or ``None``.
-        connect: Opens the judge's short per-link transactions (S8), or ``None``.
+        connect: Opens the judge's short per-link transactions, or ``None``.
 
     Returns:
         The links searched again, the select counts and the judge counts.

@@ -99,7 +99,7 @@ def deep_merge_delta(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str,
 
     Nested objects merge recursively; a non-dict overlay value (list, scalar)
     replaces the base value wholesale. Used to fold a pending overlay into a
-    component's composed directive at execution time (task 024, 15c).
+    component's composed directive at execution time.
 
     Args:
         base: The component's composed directive delta.
@@ -124,7 +124,7 @@ def commit_layer_overlay(component: str, delta: dict[str, Any]) -> dict[str, Any
     A pure commit-layer component (:data:`COMMIT_LAYER_COMPONENTS`) overlays its
     whole delta. A mixed-grammar component (extract / group) overlays ONLY its
     commit-layer keys — the plan-mappable part (extract profiles, group facets)
-    takes the plan path (task 024, 15d). Returns ``None`` when there is nothing to
+    takes the plan path. Returns ``None`` when there is nothing to
     overlay.
 
     Args:
@@ -254,7 +254,7 @@ def lattice_name_for(
 
     Args:
         point: A concrete component boundary.
-        lattice: The **capability's** lattice (A2), from
+        lattice: The **capability's** lattice, from
             ``capability_registry.lattice_for``. Defaults to the Evidence
             search table, which is the only lattice registered in this slice,
             so every existing caller is unchanged.
@@ -333,7 +333,7 @@ SHIPPED_SEGMENT_START = "acquire"
 
 @dataclass(frozen=True)
 class ReEnterSegment:
-    """Additive segment re-entry (contract decision 7a) — a bounded re-walk.
+    """Additive segment re-entry — a bounded re-walk.
 
     At an ``after_component`` boundary the walk jumps BACK to ``segment_start``
     with an amended directive, re-walks forward through every already-completed
@@ -361,9 +361,9 @@ class ReEnterSegment:
 
 @dataclass(frozen=True)
 class FreeText:
-    """Free-text steering prose typed at a pause (task 024, decision 3 — the router).
+    """Free-text steering prose typed at a pause (decision 3 — the router).
 
-    Returned by a pause-capable IO layer (the CLI, Task 17) when the user typed
+    Returned by a pause-capable IO layer (the CLI) when the user typed
     prose rather than picking a canonical option. The runner compiles it through
     the agent ``route`` backend into a deterministically-validated fan-out
     of bounded directive deltas, renders that fan-out for confirmation, and
@@ -453,10 +453,10 @@ def pause_points(
 
     This is the static pause set — the boundaries that pause unconditionally in
     ``mode``. ``"fired"`` lattice points are deliberately NOT here: the runner
-    evaluates their floor triggers at the boundary (Task 10 readers) and pauses
+    evaluates their floor triggers at the boundary (the floor-trigger readers) and pauses
     only when a trigger fired, so a static set cannot express them.
 
-    Frequent pauses after every component (the pre-024 behaviour), enriching the
+    Frequent pauses after every component, enriching the
     after-boundary lattice points (P1 after acquire, P3 after select), PLUS the
     before-boundary lattice points P2 (before select) and P4 (before synthesise)
     as additional enriched pauses — "walk me through everything" keeps the
@@ -468,7 +468,7 @@ def pause_points(
     Args:
         mode: Steering mode from the approved task plan.
         chain: Deterministically composed component chain.
-        lattice: The **capability's** lattice (A2), from
+        lattice: The **capability's** lattice, from
             ``capability_registry.lattice_for``. Defaults to the Evidence
             search table.
 
@@ -509,7 +509,7 @@ CHECK_IN_QUESTION_DEFAULT = "Does this look right so far?"
 
 
 def check_in_question(component: str) -> str:
-    """Return the question a check-in after ``component`` asks (task 058, N19)."""
+    """Return the question a check-in after ``component`` asks."""
     return CHECK_IN_QUESTIONS.get(component, CHECK_IN_QUESTION_DEFAULT)
 
 
@@ -720,10 +720,10 @@ def build_steer_point_options(
 
 
 def baseline_confirm_options() -> list[dict[str, Any]]:
-    """Return the two options the options-scoping baseline gate offers (D12).
+    """Return the two options the options-scoping baseline gate offers.
 
     Both ids are deliberately distinct from the durable response vocabulary
-    (``continue | adjust | abort | mode_change``, X10): the id names the user's
+    (``continue | adjust | abort | mode_change``): the id names the user's
     decision, the response names what the walk then does. Neither option
     carries a delta — the gate does not amend the plan, it ends the walk one
     way or the other.
@@ -753,7 +753,7 @@ def baseline_confirm_options() -> list[dict[str, Any]]:
 
 
 def generic_floor_options() -> list[dict[str, Any]]:
-    """Return the generic non-lattice floor (finding M6).
+    """Return the generic non-lattice floor.
 
     At a Frequent-mode boundary that is not a lattice point the canonical menu is
     continue · change mode · abort — always present, the degrade target for a
@@ -848,7 +848,7 @@ def _p2_options() -> list[dict[str, Any]]:
     """P2 evidence_search_coverage floor (before select).
 
     ``search_more`` is ADDITIVE (segment re-entry back to acquire); the criteria
-    re-screen and re-characterise are REPLACEMENT re-runs (contract decision 7):
+    re-screen and re-characterise are REPLACEMENT re-runs:
     the criteria re-screen supersedes screen rows at document grain via the
     generation mechanism (Task 9), even though the walk mechanics are an
     acquire→assess re-walk. NOTE: a stage-2 toggle is deliberately OMITTED — the
@@ -1028,7 +1028,7 @@ def _p4_options() -> list[dict[str, Any]]:
 
     ``edit_sections``/``emphasis_boosts`` target the synthesis directive grammar
     (``context["synthesis"]``); ``regroup_*`` are REPLACEMENT re-runs of group.
-    Tag boosts are dropped (D4) — the boost floor speaks type/tier only.
+    Tag boosts are dropped — the boost floor speaks type/tier only.
     """
     return [
         {
@@ -1493,7 +1493,7 @@ def render_authored_replacement_confirmation(fragment: CompiledFragment) -> str:
     same plain-language mode declaration ("this will REDO selection, replacing the
     current one" / additive equivalent) plus the bounded delta render before it
     applies. The user's y/N on THIS render is the safety gate — nothing applies
-    unconfirmed (contract decision 3).
+    unconfirmed.
     """
     return "\n".join(
         [
@@ -1513,7 +1513,7 @@ def render_fanout_confirmation(fanout: FanOut) -> str:
     actual compiled delta as a bounded, deterministic JSON render (FIX A), so the
     user can SEE what the prose compiled to before confirming. Each refused
     fragment is named with its reason. Nothing here applies — the user's
-    confirmation of this render is the safety gate (contract decision 3).
+    confirmation of this render is the safety gate.
 
     Args:
         fanout: The validated fan-out from :func:`compile_fanout`.
@@ -1857,7 +1857,7 @@ def apply_replacement_rerun(
     """Persist a user-attributed plan version row for a replacement re-run.
 
     Generalises the deepening-selection reselect pattern to the three
-    reference-moving replacement re-runs (contract decision 7): reselect,
+    reference-moving replacement re-runs: reselect,
     re-characterise and re-group. Each fires at a steer point *after* its
     component has run, so the generic completed-component adjustment path
     (``apply_adjustment``) cannot amend it — it treats the component as
@@ -1907,7 +1907,7 @@ def apply_segment_reentry(
 ) -> tuple[uuid.UUID, int]:
     """Persist a user-attributed plan version row for an additive segment re-entry.
 
-    Additive segment re-entry (contract decision 7a) is a user decision, so it
+    Additive segment re-entry is a user decision, so it
     records a new plan version row the same way a replacement re-run does — but
     it is *additive*, not reference-moving: the plan payload carries forward
     unchanged and the amendment is a commit-layer directive the runner applies to

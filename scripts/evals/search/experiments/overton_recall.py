@@ -1,4 +1,4 @@
-"""Overton recall probes (R&D, task 049).
+"""Overton recall probes (R&D).
 
 Overton indexes policy documents, and the current ground truth is a list of paper DOIs
 (the product wants both; the ground truth measures the paper side only). So a policy

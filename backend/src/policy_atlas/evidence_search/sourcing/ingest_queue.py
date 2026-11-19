@@ -1,8 +1,8 @@
-"""The ingest queue: messages, the queue-client seam, and the in-process client (task 057).
+"""The ingest queue: messages, the queue-client seam, and the in-process client.
 
 The full-text stage sends one message per document to a queue client (plan P9).
 A message names the link row (``task_source_snapshot`` row) and the run, nothing
-else: no URL and no user id ever enters the queue (owner item 2, contract N1).
+else: no URL and no user id ever enters the queue.
 
 Two clients implement :class:`QueueClient`:
 
@@ -146,7 +146,7 @@ def make_ingest_handler(
         thin_min: Thin-text guard threshold in characters.
 
     Returns:
-        The handler. In process there is no deadline (D4).
+        The handler. In process there is no deadline.
     """
 
     def handle(connect: ConnectFactory, message: IngestMessage) -> DocumentOutcome:
@@ -179,7 +179,7 @@ class LocalQueueClient:
 
     With ``workers > 0`` the documents run on a pool of that many threads; each
     thread opens its own connections through ``connect`` (a SQLAlchemy connection
-    is not thread-safe, finding 17) and commits per document, so both ingest modes
+    is not thread-safe) and commits per document, so both ingest modes
     have the same commit behaviour. ``send`` returns when every document is done;
     if any handler raised, the first error is raised after the rest have finished.
 

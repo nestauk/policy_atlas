@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Check that chunk retrieval returns the same top 8 as a saved reference (task 057, D7).
+"""Check that chunk retrieval returns the same top 8 as a saved reference.
 
 What this answers
 -----------------
-Task 057 moved the ``search_chunks`` retrieval from Python into one SQL statement.
-The rule is parity: for the same task, scope and query, the new retriever must return
-the same eight chunks in the same order as the old one. This script runs a list of
+The ``search_chunks`` retrieval is one SQL statement that replaced a Python retriever.
+The rule is parity: for the same task, scope and query, the SQL retriever must return
+the same eight chunks in the same order as the Python one. This script runs a list of
 queries through the retriever of whatever code you run it from and either
 
 - **compares** the eight chunk ids with each query's reference list and prints a

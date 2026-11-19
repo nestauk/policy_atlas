@@ -1,4 +1,4 @@
-"""Where tried: two levels read from the record (task 046, amendment 3; R59, R72).
+"""Where tried: two levels read from the record.
 
 The top level comes from the record's ``study_country`` (every country the
 study names, separated by ";", each its short English name); the level
@@ -12,10 +12,8 @@ them, or any gives "multiple"; else "other" when any record states a place;
 else "not stated". Countries compare with case folded only.
 
 The name tables below drive :func:`names_place` and :func:`named_place`
-(the setting pass). The plan-text place strip of S6 is gone (R74; the
-owner's ruling at the review, 2026-10-12): the place rule is words in the
-prompts. Task 046, amendment 4 (R87; S29a,
-S32): :data:`COUNTRY_NAMES` holds every ISO-3166 country, and one resolver
+(the setting pass). The place rule is words in the prompts; no code strip of
+the plan text backs it. :data:`COUNTRY_NAMES` holds every ISO-3166 country, and one resolver
 (:func:`resolve_country`) maps a place text to one country code and one
 short English name (:data:`COUNTRY_DISPLAY_NAMES`), so "UK", "England" and
 "Britain" are the United Kingdom; coverage reads the signal's countries and
@@ -483,8 +481,7 @@ def resolve_country(text: str | None) -> tuple[str, str] | None:
     The text has its whitespace collapsed and a leading "the" stripped; it
     is looked up case-folded in :data:`COUNTRY_NAMES`, then case-sensitively
     in :data:`ABBREVIATIONS` ("UK", "U.S."), then case-folded in
-    :data:`SUBNATIONAL_PLACES` ("England", "New South Wales") (task 046,
-    amendment 4, R87; S29a).
+    :data:`SUBNATIONAL_PLACES` ("England", "New South Wales").
 
     Args:
         text: A country or place as written, or ``None``.
@@ -506,8 +503,7 @@ def names_country(text: str | None) -> bool:
 
     A name or alias in :data:`COUNTRY_NAMES`, an abbreviation ("UK") or one
     of the United Kingdom's nations (:data:`UK_NATIONS`); a city, region or
-    state ("London", "New South Wales") is a place within its country
-    (task 046, amendment 4, R87; S32).
+    state ("London", "New South Wales") is a place within its country.
 
     Args:
         text: A place as written, or ``None``.
@@ -525,7 +521,7 @@ def names_country(text: str | None) -> bool:
 
 
 def place_key(text: str) -> str:
-    """The key a place's spellings are grouped under (task 046, amendment 4, R87; S32).
+    """The key a place's spellings are grouped under.
 
     Case folded, a leading "the" stripped, hyphens and spaces removed, so
     "South West", "south-west" and "southwest" are one place.
@@ -551,7 +547,7 @@ def country_level(
     Kingdom", "Scotland")`` → ``("United Kingdom", None)`` and ``(None,
     "France")`` → ``("France", None)``. A geography that resolves to another
     country ("Georgia" under the United Kingdom) or to no country is kept as
-    written (task 046, amendment 4, R87; S32). Nothing is written back.
+    written. Nothing is written back.
 
     Args:
         study_country: The record's ``study_country``.

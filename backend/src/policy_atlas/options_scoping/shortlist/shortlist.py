@@ -1,4 +1,4 @@
-"""The ``shortlist`` component: Policy Atlas proposes the places (task 055, items 3-5).
+"""The ``shortlist`` component: Policy Atlas proposes the places.
 
 ADR 0041 (architecture decision record); plan P4-P8. The step reads every
 included option's card (the same text the user sees), the plan, the
@@ -15,7 +15,7 @@ shortlist walk (an appetite change or Suggest more). It is not a spine step:
 a :class:`ShortlistFailure` ends the walk ``degraded``, and the previous places
 stay, because every write of the proposal happens after the model call. The
 one earlier write is the clearing of picks whose option was since excluded or
-merged (O1), which stands whatever the call does.
+merged, which stands whatever the call does.
 
 Code checks only the hard things (plan P5): every pick is a candidate, none
 twice, exactly as many as asked, each reason and the note present, short
@@ -100,7 +100,7 @@ class ShortlistFailure(Exception):
 
 
 def shuffled[T](items: Sequence[T], *, run_id: uuid.UUID, attempt: int) -> list[T]:
-    """The candidates in the order the model reads them (S16).
+    """The candidates in the order the model reads them.
 
     Seeded with ``"{run_id}:{attempt}"``, so a run's order can be reproduced.
 
@@ -118,7 +118,7 @@ def shuffled[T](items: Sequence[T], *, run_id: uuid.UUID, attempt: int) -> list[
 
 
 def _clear_lost_picks(conn: Connection, task_id: uuid.UUID) -> int:
-    """Clear Policy Atlas's picks whose option is now excluded or merged (O1).
+    """Clear Policy Atlas's picks whose option is now excluded or merged.
 
     A reader's own place and a set-aside are never touched here.
     """
@@ -164,7 +164,7 @@ def _one_line(value: object) -> str:
 
 
 def _excluded_line(row: Any) -> str:
-    """One excluded option: name · lever type · ambition · why excluded (A11)."""
+    """One excluded option: name · lever type · ambition · why excluded."""
     exclusion = row.exclusion if isinstance(row.exclusion, Mapping) else {}
     constraint = _one_line(exclusion.get("constraint"))
     reason = _one_line(exclusion.get("reason"))
@@ -262,12 +262,12 @@ def shortlist_scope(
     """Propose the shortlist's places over every included option's card, and write them.
 
     The newest ``longlist_result`` of the task is read, whatever walk wrote
-    it (a shortlist walk's own intent record has none; A5). At the end of a
+    it (a shortlist walk's own intent record has none). At the end of a
     longlist walk and in an appetite walk (no ``suggest`` in the intent
     record's context) Policy Atlas's picks are released and refilled up to
     :data:`PLACES_TARGET` beside the reader's own places; with
     ``{"suggest": true}`` (Suggest more) the picks stay and the call fills up
-    to five, or one more at five or above (S8).
+    to five, or one more at five or above.
 
     Args:
         conn: Open connection inside the component transaction.

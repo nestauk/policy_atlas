@@ -1,4 +1,4 @@
-"""Opening the longlist walk (task 045, S3; ADR 0039 decision 1).
+"""Opening the longlist walk (S3; ADR 0039 decision 1).
 
 "Confirm plan and build longlist" opens a **second walk** on the confirmed
 plan version: a new ``capability_run`` under its own intent record
@@ -16,9 +16,9 @@ open it:
 
 Every surface takes the admission ``POST /runs`` takes — the dispatch lock,
 no ``running | paused`` parentless walk, the pre-insert reservation — so two
-walks can never race into existence (A23).
+walks can never race into existence.
 
-The shortlist walk (task 055, P8) takes the same admission through
+The shortlist walk takes the same admission through
 :func:`open_shortlist_walk`: its intent record has ``purpose = 'shortlist'``
 and composes the one ``shortlist`` step.
 """
@@ -87,7 +87,7 @@ class LonglistRefused(Exception):
         reason: ``not_scoping`` · ``run_active`` · ``capacity`` ·
             ``plan_stale`` · ``plan_too_long`` · ``no_plan``; for a shortlist
             walk also ``no_longlist`` and ``nothing_to_propose``, and for the
-            shortlist button ``not_included`` (task 055).
+            shortlist button ``not_included``.
         message: A sentence for the error body.
     """
 
@@ -173,8 +173,8 @@ def admit_and_mint(
         backends: The runner backend bundle (with ``executor``).
         user_id: The user traces are attributed to (with ``executor``).
         shortlist_suggest: ``None`` for a longlist walk. ``True`` or
-            ``False`` mints a shortlist walk's intent record instead (task
-            055, P8): Suggest more, or a re-proposal after an appetite change.
+            ``False`` mints a shortlist walk's intent record instead:
+            Suggest more, or a re-proposal after an appetite change.
 
     Returns:
         The admitted walk.
@@ -332,7 +332,7 @@ def open_longlist_walk(
 def longlist_pinned_plan(
     conn: Connection, *, task_id: uuid.UUID
 ) -> tuple[int, ScopingPlan | None] | None:
-    """The plan version the task's newest longlist was built from (task 055, PR6).
+    """The plan version the task's newest longlist was built from.
 
     Args:
         conn: Open database connection.
@@ -366,7 +366,7 @@ def longlist_pinned_plan(
 def _refuse_shortlist(
     conn: Connection, *, task_id: uuid.UUID, plan: ScopingPlan, suggest: bool
 ) -> bool:
-    """Refuse a shortlist walk that has nothing to work on (task 055, P8).
+    """Refuse a shortlist walk that has nothing to work on.
 
     Suggest more on a stale proposal (none yet, or made under another risk
     appetite: :func:`shortlist_proposal_stale`, the rule the longlist view
@@ -439,7 +439,7 @@ def open_shortlist_walk(
     user_id: str,
     suggest: bool,
 ) -> uuid.UUID:
-    """Open a shortlist walk on the current approved plan (task 055, P8).
+    """Open a shortlist walk on the current approved plan.
 
     The longlist walk's shape (:func:`open_longlist_walk`): the same
     admission under the dispatch lock, then a wait for the walk's row. The
@@ -512,7 +512,7 @@ def opened_run(engine: Engine, *, task_id: uuid.UUID, capability_run_id: uuid.UU
 
 
 def longlist_walk_exists(engine: Engine, *, task_id: uuid.UUID, plan_id: uuid.UUID) -> bool:
-    """Whether a longlist exists, or is on its way, for one plan version (B3, F2).
+    """Whether a longlist exists, or is on its way, for one plan version.
 
     Read from the longlist intent records of that version, not from walk rows:
     a walk still queued on the executor has its record but no row yet, and a
@@ -560,7 +560,7 @@ def longlist_walk_exists(engine: Engine, *, task_id: uuid.UUID, plan_id: uuid.UU
 def plan_row_of_walk(
     engine: Engine, *, task_id: uuid.UUID, capability_run_id: uuid.UUID
 ) -> dict[str, Any] | None:
-    """The plan version a walk ran, as the opener takes a confirmed version (A10).
+    """The plan version a walk ran, as the opener takes a confirmed version.
 
     A gate's "Confirm plan and build longlist" confirms the version the
     baseline walk ran; the opener refuses (``plan_stale``) if a newer version

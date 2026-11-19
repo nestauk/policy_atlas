@@ -1,37 +1,36 @@
-"""Agent backend seam (task 024, decision 3) — router + watch moments.
+"""Agent backend seam — router + watch moments.
 
 Mirrors :mod:`policy_atlas.runtime.task_agent`: a live OpenAI structured-output
 backend with tracing inside the backend, and a deterministic zero-egress stub for
-tests and the CLI. One backend, three moments (contract decision 3): the task_agent
+tests and the CLI. One backend, three moments: the task_agent
 moment lives in the task_agent seam; this module owns the two mid-run moments —
 
 - **route**: compiles a user's free-text steering prose at a pause into a fan-out
-  plan of bounded directive deltas (Task 15 wires its APPLY path; Task 14 only
-  ships the seam + stub + wire-shape);
+  plan of bounded directive deltas;
 - **triage**: the mini-class notable-or-not verdict on an anomalous / trigger-fired
   boundary (push-only, no tools);
 - **decide**: the judgment-class in-loco-user decision at a delegated decision
   point, and — with ``framing="authoring"`` — the authored-options composition
   that rides an attended pause alongside the canonical floor;
 - **sort_gate_turn**: the mini-class question · decision · unsure sort of a Task
-  Agent turn taken while an options-scoping walk is paused on its baseline gate
-  (task 044, A4). It applies nothing; the caller dispatches the verdict.
+  Agent turn taken while an options-scoping walk is paused on its baseline gate.
+  It applies nothing; the caller dispatches the verdict.
 - **sort_longlist_turn**: the mini-class ``longlist_verbs_v1`` sort of a Task
-  Agent turn taken while a longlist exists and no walk is active (task 045,
-  D13): question · add · exclude · include again · other. It applies nothing;
+  Agent turn taken while a longlist exists and no walk is active:
+  question · add · exclude · include again · other. It applies nothing;
   the caller proposes a verb back and applies it only on a confirming turn.
 - **propose_option_design**: the judgment-class ``option_design_v1`` call that
   proposes a specified design back from an option the user named in their own
-  words (task 045, D19). It applies nothing; the caller stores the design.
+  words. It applies nothing; the caller stores the design.
 - **suggest_options**: the judgment-class ``longlist_suggest_v1`` call — the
-  longlist walk's ``suggest`` step (task 045, D7, A15). It applies nothing;
+  longlist walk's ``suggest`` step. It applies nothing;
   the ``suggest`` component mints the option rows. Typed at the harness as the
   narrow :class:`~policy_atlas.options_scoping.suggest.suggest.SuggestBackend`
   seam, which both backends here satisfy.
 
 This module also owns the **structurally-gated invocation** classifier, the
-**single-shot decide + bounded fallback deliberation loop** (contract decision 3's
-information+cost model), and the fail-safe **discretion-hook adapter** that bridges
+**single-shot decide + bounded fallback deliberation loop**, and the fail-safe
+**discretion-hook adapter** that bridges
 ``decide`` into the runner's Task-12 :data:`DiscretionHook` seam for the Unattended
 path. Every LLM moment fails safe: the runner catches any backend exception and
 degrades to the deterministic floor (watch discipline 5).
@@ -120,10 +119,10 @@ AGENT_TRIAGE_MODEL = route().model_for("agent_triage")
 
 
 def _warn_stale_agent_env(environ: Mapping[str, str]) -> list[str]:
-    """Name any pre-038 ``POLICY_ATLAS_ORCHESTRATOR_*`` override still set.
+    """Name any old ``POLICY_ATLAS_ORCHESTRATOR_*`` override still set.
 
-    Task 038 renamed the overrides to ``POLICY_ATLAS_AGENT_*`` and task 053 retired
-    those too: the route file is the only way to choose a model. An old name is
+    The route file is the only way to choose a model; these overrides (and the
+    ``POLICY_ATLAS_AGENT_*`` names that replaced them) are no longer read. An old name is
     ignored, so it is logged rather than silently falling back to the default.
 
     Args:
@@ -258,7 +257,7 @@ class AgentBackend(Protocol):
         *,
         session_id: uuid.UUID | None = None,
     ) -> GateSortWire:
-        """Sort one Task Agent turn taken at a paused gate (task 044, A4).
+        """Sort one Task Agent turn taken at a paused gate.
 
         The mini-class third moment: while an options-scoping walk is paused
         on its baseline gate the user's turn is either a question about the
@@ -287,7 +286,7 @@ class AgentBackend(Protocol):
         pending: dict[str, str] | None = None,
         session_id: uuid.UUID | None = None,
     ) -> LonglistVerbWire:
-        """Sort one Task Agent turn taken while a longlist exists (task 045, D13).
+        """Sort one Task Agent turn taken while a longlist exists.
 
         The mini-class ``longlist_verbs_v1`` call. It applies nothing: the
         caller proposes a verb back and applies it only on a confirming turn.
@@ -316,7 +315,7 @@ class AgentBackend(Protocol):
         outcomes: list[str],
         session_id: uuid.UUID | None = None,
     ) -> OptionDesignWire:
-        """Propose a specified design back from the user's words (task 045, D19).
+        """Propose a specified design back from the user's words.
 
         The judgment-class ``option_design_v1`` call. The user's words are
         never edited; the design is Policy Atlas's reading of them.
@@ -950,7 +949,7 @@ def classify_boundary(
 
     The watch is called only at (i) decision points, (ii) trigger-fired boundaries,
     (iii) anomalous check-ins. A boundary matching none of those is CLEAN and
-    resolves with no LLM call (contract decision 3 — structure first, judgement for
+    resolves with no LLM call (structure first, judgement for
     the residual).
 
     Args:

@@ -183,9 +183,9 @@ class SelectionDirective:
         boosts: Soft boost rules that multiply matched document composites.
         weight_emphasis: Multipliers for default signal weights.
         priority_strata: Soft priority patterns used only for trigger flags.
-        strata_scope: D6 stratum eligibility filter, or ``None`` (as-built:
+        strata_scope: Stratum eligibility filter, or ``None`` (as-built:
             every stratum eligible).
-        exclude_ids: D7 candidate ids removed from the selectable pool before
+        exclude_ids: Candidate ids removed from the selectable pool before
             ranking — the complement of ``must_include_ids``.
     """
 
@@ -739,10 +739,10 @@ def _resolve_strata_scope(
     strata_scope: _StrataScope | None,
     strata: Sequence[SelectionStratum],
 ) -> tuple[set[str], list[str]]:
-    """Resolve D6's strata_scope against the actual stratum names present.
+    """Resolve the strata_scope directive against the actual stratum names present.
 
     Args:
-        strata_scope: Validated D6 directive, or ``None`` (as-built: every
+        strata_scope: Validated strata_scope directive, or ``None`` (as-built: every
             stratum eligible).
         strata: Characterisation strata over the eligible candidates.
 

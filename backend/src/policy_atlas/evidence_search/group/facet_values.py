@@ -149,7 +149,7 @@ def parse_grouping_directive(
         ``(facets, facet_source, granularity, guidance)`` where source is
         ``"default"`` or ``"scope_context"``, granularity is ``"coarser" |
         "standard" | "finer"`` (``"standard"`` when absent — byte-identical to
-        as-built), and guidance is the B3 ``grouping.guidance`` list or
+        as-built), and guidance is the ``grouping.guidance`` list or
         ``None`` when absent.
 
     Raises:

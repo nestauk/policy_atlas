@@ -1,4 +1,4 @@
-"""Title matching for the references and candidates that have no DOI (R&D, task 049).
+"""Title matching for the references and candidates that have no DOI (R&D).
 
 The recall evaluation scores on DOIs. A reference without a DOI (a government report,
 a working paper, a book chapter) can never be a hit, and a candidate without a DOI (most

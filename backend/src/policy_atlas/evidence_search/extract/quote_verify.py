@@ -1,4 +1,4 @@
-"""Deterministic quote verification and field validation (task 011, decision 4).
+"""Deterministic quote verification and field validation.
 
 Pure functions only — no I/O, no DB. Three responsibilities:
 
@@ -7,7 +7,7 @@ Pure functions only — no I/O, no DB. Three responsibilities:
   index map back to *raw* offsets, and record chunk-local raw intervals with a
   graded status (``exact`` | ``normalised`` | ``failed``). The offset substrate
   is never normalised (the LangExtract NFC lesson): recorded intervals are
-  always raw, half-open ``[start, end)``. ``qv_v2`` (task 057, N14) is
+  always raw, half-open ``[start, end)``. ``qv_v2`` is
   ``qv_v1`` plus one step: markdown/HTML markup (``**bold**``,
   ``[text](url)``, ``<br>`` ...) is ignored on both sides, using the shared
   rule in :mod:`policy_atlas.core.markup`. Rows stored under ``qv_v1`` keep
@@ -360,8 +360,7 @@ def _flanks_ok(haystack: str, start: int, end: int) -> bool:
     Mirrors regex ``\\b`` semantics: a boundary exists unless the char just
     outside the interval and the char just inside it are both word chars —
     that combination means the interval is embedded in a longer word run
-    (task 029 delta-review: rejects ``"cat"`` matching inside
-    ``"concatenate"``).
+    (this rejects ``"cat"`` matching inside ``"concatenate"``).
     """
     if start > 0 and _is_word_char(haystack[start - 1]) and _is_word_char(haystack[start]):
         return False
@@ -373,7 +372,7 @@ def _flanks_ok(haystack: str, start: int, end: int) -> bool:
 def locate_unique_span(basis: BasisText, quote: str) -> tuple[int, int] | None:
     """Locate one quote's raw ``[start, end)`` doc-level span iff it is unambiguous.
 
-    The canonical read-time locator (task 029 delta-review) shared by
+    The canonical read-time locator shared by
     ``chat_turns._snapped_chunk_quote`` and ``repository.chunk_quote_context_out``:
     unlike :class:`QuoteMatcher` (which grounds an ordered sequence of anchor
     quotes and repeats the last occurrence past the end), a single candidate
@@ -407,7 +406,7 @@ def locate_unique_span(basis: BasisText, quote: str) -> tuple[int, int] | None:
     only the qv_v2 fold (casefold, punctuation/whitespace folding, soft-hyphen
     and markup deletion). A composed (``"é"``) vs. decomposed (``"e"`` + combining acute)
     pair of an otherwise-identical quote is an honest absence, not a match:
-    documented envelope, not a bug (task 029 delta-review).
+    documented envelope, not a bug.
 
     Args:
         basis: The document basis to match against.

@@ -31,7 +31,7 @@ class Settings:
         db_pool_size: SQLAlchemy engine connection pool size.
         db_max_overflow: SQLAlchemy engine pool overflow above ``db_pool_size``.
         theory_of_change_enabled: Whether new theory-of-change tasks may be
-            created (``POLICY_ATLAS_THEORY_OF_CHANGE=1``; task 054, C15).
+            created (``POLICY_ATLAS_THEORY_OF_CHANGE=1``).
             Off by default; existing ones stay readable either way.
         ingest_mode: Where full-text ingestion runs (``POLICY_ATLAS_INGEST_MODE``).
         ingest_queue_url: The SQS queue the documents go to in ``queued`` mode

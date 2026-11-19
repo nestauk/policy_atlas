@@ -1,4 +1,4 @@
-"""The ``toc_select`` and ``toc_search_new`` steps: which documents reach the judge (C27, C32).
+"""The ``toc_select`` and ``toc_search_new`` steps: which documents reach the judge.
 
 ``toc_select`` keeps every document the item searches found, with no model
 call, and picks the ones the judge reads for each link. ``toc_search_new``
@@ -138,7 +138,7 @@ class LinkCandidate:
 
 
 def documents_per_link(context: Mapping[str, Any] | None) -> int:
-    """How many documents a check walk picks and judges per link (C27, C44).
+    """How many documents a check walk picks and judges per link.
 
     Args:
         context: The check walk's intent-record context.
@@ -151,7 +151,7 @@ def documents_per_link(context: Mapping[str, Any] | None) -> int:
 
 
 def select_for_link(candidates: list[LinkCandidate], n: int = PICK_N) -> list[uuid.UUID]:
-    """The round-robin rule: the pick call's top-up and its fallback (C27, C28).
+    """The round-robin rule: the pick call's top-up and its fallback.
 
     In turn from the result lists (:data:`LINK_LISTS` order) in rank order,
     ``n`` documents. A document with no abstract is taken only when fewer than
@@ -180,7 +180,7 @@ def select_for_link(candidates: list[LinkCandidate], n: int = PICK_N) -> list[uu
 
 
 def picked_ids(ids: list[str], candidates: list[LinkCandidate], n: int = PICK_N) -> list[uuid.UUID]:
-    """Map a pick answer's short ids (``d1``...) back, topped up by round-robin (C28).
+    """Map a pick answer's short ids (``d1``...) back, topped up by round-robin.
 
     Unknown and repeated ids are dropped; a short answer is filled from
     :func:`select_for_link` in its order.
@@ -275,7 +275,7 @@ def _link_candidates(
 def _fill_abstracts(
     conn: Connection, candidates: dict[str, list[LinkCandidate]]
 ) -> dict[str, list[LinkCandidate]]:
-    """Store Crossref abstracts on the snapshots of candidates that lack one (C30).
+    """Store Crossref abstracts on the snapshots of candidates that lack one.
 
     The abstract goes on the snapshot's metadata with ``abstract_source``
     ``crossref``, so the pick, classify, appraise and the judge all read it.
@@ -328,15 +328,15 @@ def toc_select_scope(
     only: set[str] | None = None,
     exclude_judged: bool = False,
 ) -> dict[str, Any]:
-    """Pick each link's documents and write the screen's rows (C27, C28, C31, C32).
+    """Pick each link's documents and write the screen's rows.
 
     No screen model call: each link search already searched its own sentence
     by meaning. One small pick call per link (in parallel) chooses the
     :data:`PICK_N` documents most likely to test the step; a short answer is
     topped up, and a failed call replaced, by :func:`select_for_link`. Each
     link chooses from its own search's documents plus the :data:`PICK_N`
-    documents of the whole walk's searches closest by meaning to its item text
-    (C31), so a study one link's search found can serve another link. A link
+    documents of the whole walk's searches closest by meaning to its item text,
+    so a study one link's search found can serve another link. A link
     with no more than :data:`PICK_N` documents to choose from keeps them all,
     with no call. The picks are written as one ``toc_select.picked`` event,
     which the judge reads.
@@ -572,7 +572,7 @@ def toc_select_scope(
 def _studies_by_link(
     conn: Connection, task_id: uuid.UUID, dois_by_link: dict[str, list[str]]
 ) -> dict[str, list[uuid.UUID]]:
-    """The task's documents for the DOIs the user added to each link (C42).
+    """The task's documents for the DOIs the user added to each link.
 
     The link's search has acquired them, or found them already in the task.
     """
@@ -624,7 +624,7 @@ def _user_decisions(
 def _judged_documents(
     conn: Connection, task_id: uuid.UUID, link_ids: list[str]
 ) -> dict[str, list[uuid.UUID]]:
-    """The documents already judged for each link, any wording, not removed (C43)."""
+    """The documents already judged for each link, any wording, not removed."""
     out: dict[str, list[uuid.UUID]] = {}
     if not link_ids:
         return out
@@ -643,7 +643,7 @@ def _judged_documents(
 
 
 def previous_queries(conn: Connection, *, task_id: uuid.UUID, link_id: str) -> list[str]:
-    """The queries a link's earlier item searches ran, newest first (C44).
+    """The queries a link's earlier item searches ran, newest first.
 
     Read from the ``search.executed`` events of every item-search child walk
     for the link in this task, with the review and trial clauses stripped from
@@ -700,7 +700,7 @@ def previous_queries(conn: Connection, *, task_id: uuid.UUID, link_id: str) -> l
 def links_without_evidence(
     conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID
 ) -> list[str]:
-    """The links this walk searched and judged that still have too little evidence (C44).
+    """The links this walk searched and judged that still have too little evidence.
 
     Read after the judge: a link whose verdict is *Not enough evidence* gets
     one more search, in the words of the research that would test it.
@@ -733,7 +733,7 @@ PREVIOUS_QUERIES_MAX = 4
 
 
 def links_without_search(conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID) -> list[str]:
-    """The kept links that have no item search of their own in this walk (C32).
+    """The kept links that have no item search of their own in this walk.
 
     After merge, these are the links discovery added. Kept-pathway links
     first, as :func:`links_to_check` orders them.
@@ -761,7 +761,7 @@ def toc_search_new_scope(
     backend: TocBackend,
     embedder: EmbeddingBackend | None = None,
 ) -> dict[str, Any]:
-    """Pick documents for the links discovery added, after their own searches (C32).
+    """Pick documents for the links discovery added, after their own searches.
 
     The runner has already dispatched and joined one item search per kept
     link with no search of its own (stage ``toc_new_link_searches``). Each such
@@ -925,7 +925,7 @@ def nearest[D: _HasId](
     text: str,
     k: int = JUDGE_TOP_K,
 ) -> list[D]:
-    """The ``k`` candidates closest by meaning to the item text (C27).
+    """The ``k`` candidates closest by meaning to the item text.
 
     For a link with no search of its own. A document's closeness is its
     best-matching stored embedding unit; a document with no embedding ranks

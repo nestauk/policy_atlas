@@ -1,4 +1,4 @@
-"""The theory-of-change report as it is written (task 054's 058 alignment, S4 to S7b).
+"""The theory-of-change report as it is written.
 
 In plain terms: the report is still one model call with the same prompt
 (``toc_report_v7``), model and answer format. What changes is that the answer

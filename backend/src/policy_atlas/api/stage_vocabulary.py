@@ -1,10 +1,9 @@
 """The one source of run-progress copy: stage labels, blurbs, card rows, verbs, counts.
 
-Task 058 (N17, D4): every word a run page shows about a stage comes from this
+Every word a run page shows about a stage comes from this
 module. The client has no stage copy of its own; it renders the labels the
 frames and the plan steps carry, the activity line a ``tick`` carries, and the
-counts this table names. The voice is a short label, then one plain sentence
-(owner, 2026-11-04).
+counts this table names. The voice is a short label, then one plain sentence.
 
 Internal names must never leave the API: ``StageKey`` is the pinned contract
 vocabulary (spec § SSE); labels and blurbs are presentation and may change.
@@ -404,12 +403,12 @@ def stage_for_payload(payload: dict[str, Any]) -> StageKey | None:
     stage frame: its progress shows as a line on the "Screening" row (task
     058, N2; its own row since owner round 8). The guard tests the composed ``component``,
     because the full-text screen's ``run.started`` payload carries
-    ``registry_component = "screen"`` (the duplicate Screening row seen on
-    staging and production, owner 2026-11-04).
+    ``registry_component = "screen"`` (testing that would show a duplicate
+    Screening row).
 
     A payload the runner stamped with a public ``stage`` reports under it
     first: an uploaded theory's read is the ``toc_draft`` component, reported
-    as ``toc_read`` (task 054, S1).
+    as ``toc_read``.
     """
     stamped = payload.get("stage")
     if isinstance(stamped, str) and stamped in STAGE_KEYS:

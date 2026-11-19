@@ -1,6 +1,6 @@
-"""Opening theory-of-change walks and following draft with check (task 054, S4, S7).
+"""Opening theory-of-change walks and following draft with check.
 
-A theory of change runs two walks (C3), each under its own intent record with
+A theory of change runs two walks, each under its own intent record with
 ``purpose = 'toc'`` and ``context.toc_walk``:
 
 - the **draft walk** runs under the record ``persist_approved_plan`` wrote
@@ -15,10 +15,10 @@ Restart rule: Start on a task that already has a graph mints a full check
 walk instead of drafting again (:func:`start_scope`), so a check that failed
 or was cut off always has a way forward.
 
-The Task Agent speaks in code-authored lines with no model call (J5): when
+The Task Agent speaks in code-authored lines with no model call: when
 the check ends, and when an uploaded theory's read lands for the reader to
 review. When the check follows the draft by itself, the draft's landing is not
-announced: the two walks read as one run (task 054's 058 alignment, decision 13).
+announced: the two walks read as one run.
 """
 
 from __future__ import annotations
@@ -144,9 +144,9 @@ def mint_scope(
         toc_walk: ``draft`` or ``check``.
         links: The link ids a named-link check covers, or ``None``.
         draft_run_id: The draft walk a check follows, or ``None``.
-        mode: Why a named check runs (C40), or ``None`` for a full check.
+        mode: Why a named check runs, or ``None`` for a full check.
         started_by: The user who started a named check.
-        studies: Link id → the DOIs the user added to it (C42).
+        studies: Link id → the DOIs the user added to it.
 
     Returns:
         The new intent record's id.
@@ -562,7 +562,7 @@ def _and(items: list[str]) -> str:
 
 
 def _pending_found(conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID) -> str | None:
-    """The message for a named check (C40 to C45), or ``None`` for a full check.
+    """The message for a named check (a ``TOC_CHECK_MODE_KEY`` mode), or ``None`` for a full check.
 
     It says what the check searched, read and set aside, then one line per
     connection: how many documents test the step and the verdict now.
@@ -644,7 +644,7 @@ def failure_reason(error: str | None) -> str:
 
 
 def post_failure_message(engine: Engine, *, task_id: uuid.UUID, walk_id: uuid.UUID) -> None:
-    """Say a walk failed, why in plain words, and how to try again (owner, 2026-11-04)."""
+    """Say a walk failed, why in plain words, and how to try again."""
     with engine.connect() as conn:
         kind = walk_kind(conn, task_id=task_id, capability_run_id=walk_id)
         error = conn.execute(
@@ -674,8 +674,8 @@ def post_check_message(engine: Engine, *, task_id: uuid.UUID, walk_id: uuid.UUID
     """Post the check's end message: where the results are, then the stress-test suggestion.
 
     The verdict and the findings are on the Result tab; the chat only points
-    there (owner, 2026-11-04: the longer summary read as bitty). A Find more
-    evidence walk (C44) says instead how many new documents wait for the user,
+    there (the longer summary read as bitty). A Find more
+    evidence walk says instead how many new documents wait for the user,
     and where.
     """
     with engine.connect() as conn:

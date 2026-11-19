@@ -1,6 +1,6 @@
 """Seed the LOCAL dev database with an organisation and three enrolled people.
 
-Dev-only quality-of-life (owner request, 2026-08-25): local dev is
+Dev-only quality-of-life: local dev is
 deliberately the dark-launch state — org-less — so seeing the 033 tenancy UI
 (the Organisation·Mine switcher, colleague read-only views, the admin wide
 list) locally means seeding `organisation`/`app_user` rows. This script does

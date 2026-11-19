@@ -1,4 +1,4 @@
-"""Ground-truth evaluation of the theory of change (task 054, decision C33).
+"""Ground-truth evaluation of the theory of change.
 
 What this does, in plain terms: for each published theory of change in the ground-truth
 pack (``datasets/ground_truth_v1/datasets/gt_<case>.md``) it

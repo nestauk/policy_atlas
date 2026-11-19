@@ -127,7 +127,7 @@ class CharacteriseContext:
         intent: The evidence-scope intent used to ground thematic grouping.
         context: Scope context JSONB, optionally carrying
             ``{"characterise": {"themes": "fewer"|"standard"|"more",
-            "guidance": [str, ...]}}`` (D9/B5, 024 steering surface).
+            "guidance": [str, ...]}}`` (the steering surface).
     """
 
     scope_id: uuid.UUID
@@ -571,7 +571,7 @@ def _doc_for_grouping(source: ScreenedSource) -> GroupingDoc:
 def _theme_bounds(n: int, *, themes: str = "standard") -> tuple[int, int]:
     """Derive theme-count bounds for one characterise run.
 
-    D9 (024 steering surface): ``themes`` scales the as-built derived bounds —
+    Steering: ``themes`` scales the as-built derived bounds —
     "fewer" halves and "more" doubles both bounds (rounded); "standard" (the
     default) is byte-identical to as-built. The hard floors respected after
     scaling are the same ones the unscaled bounds already enforce: never fewer
@@ -579,7 +579,7 @@ def _theme_bounds(n: int, *, themes: str = "standard") -> tuple[int, int]:
 
     Args:
         n: Number of documents being characterised.
-        themes: D9 ``characterise.themes`` value.
+        themes: The ``characterise.themes`` value.
 
     Returns:
         ``(min_themes, max_themes)``.
@@ -652,7 +652,7 @@ def _characterise_clustering_policy(*, min_themes: int, max_themes: int) -> Clus
 
 
 def _publish_themes(labels: list[ClusterLabel]) -> None:
-    """Show the themes found while sources are assigned to them (task 058, round 9)."""
+    """Show the themes found while sources are assigned to them."""
     liveness.publish_themes(
         [(label.label, label.description or None) for label in labels], stage="characterise"
     )

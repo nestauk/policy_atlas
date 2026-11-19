@@ -89,8 +89,8 @@ class ScreenDirectiveError(Exception):
 
 class ScreenSupersessionError(RuntimeError):
     """A stage-2 re-screen collides with an existing stage-2 row at the effective
-    generation. Stage-2 supersession is deliberately NOT built (task 024
-    contract): stage-2 rows inherit their stage-1 generation rather than
+    generation. Stage-2 supersession is deliberately NOT built:
+    stage-2 rows inherit their stage-1 generation rather than
     minting their own, so there is no fresh generation to write into. This is a
     reason-coded halt-and-re-gate trigger, never a silent skip.
     """
@@ -144,7 +144,7 @@ def effective_screen_rows(*, run_ids: set[uuid.UUID] | None = None) -> Subquery:
     """Return the effective non-failed screening row per scope/source.
 
     The effective row is the non-failed row ordering **generation DESC first,
-    stage DESC second** (task 024 generation supersession, ADR 0022). A
+    stage DESC second** (generation supersession, ADR 0022). A
     criteria-changed re-screen writes fresh rows at ``screen_generation =
     max+1`` without touching prior rows; the newest generation's verdicts win
     by design because the criteria changed. *Within* a generation the
@@ -159,7 +159,7 @@ def effective_screen_rows(*, run_ids: set[uuid.UUID] | None = None) -> Subquery:
     ``status``/``screen_stage`` columns.
 
     ``excluded_retracted`` is a terminal effective status like any other
-    non-failed status (task 019): it is always a stage-1 row (retraction
+    non-failed status: it is always a stage-1 row (retraction
     exclusion happens before any stage-2 candidate exists), so it ranks as
     the effective row within its generation and is never superseded by a
     later stage of the same generation. Consumers that filter on
@@ -240,7 +240,7 @@ def _parse_screen_directive(
     by ``CRITERIA_LIST_MAX`` entries. Anything above a cap rejects — it is
     never truncated. Criteria are preserved alongside a stage-2 directive.
 
-    ``rescreen`` (task 024 generation supersession) accepts ONLY the literal
+    ``rescreen`` (generation supersession) accepts ONLY the literal
     boolean ``True`` — any other value (including ``1``, ``"true"``, or
     ``False``) rejects. It flags a replacement re-run: stage-1 re-screens all
     scope docs at ``generation = max+1``; prior rows are never touched.
@@ -296,8 +296,7 @@ def _compose_screen_intent(intent: str, criteria: list[str]) -> str:
 
     Criteria compose ONLY into the screen's intent input, never into
     ``evidence_scope.intent`` itself — that column is also read by search
-    generation and synthesise, and is never rewritten here (contract
-    decision 2 rev 2.5).
+    generation and synthesise, and is never rewritten here.
 
     The composed string is validated HERE against ``SCREEN_INTENT_MAX``, at
     directive validation time. ``CRITERIA_LIST_MAX`` (50) x per-entry
@@ -661,7 +660,7 @@ def _exclude_retracted_docs(
 
     Writes an ``excluded_retracted`` row (and matching event) for every
     retracted doc, BEFORE any doc reaches the screening backend — the backend
-    is never called for a retracted doc. Owner decision: retraction is a
+    is never called for a retracted doc. Retraction is a
     policy exclusion, never a relevance verdict, so it is never conflated
     with ``not_relevant``.
 
@@ -840,7 +839,7 @@ def screen_in(
     reason: str,
     rescreen: bool = False,
 ) -> dict[str, Any]:
-    """Screen chosen documents in or out by code, with no model call (task 054, C27).
+    """Screen chosen documents in or out by code, with no model call.
 
     Writes the same stage-1 rows and ``source.screened`` events the screen
     writes: each chosen document not yet screened in this scope gets

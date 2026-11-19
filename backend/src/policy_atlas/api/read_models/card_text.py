@@ -1,12 +1,11 @@
-"""The option card as text, for the shortlist proposal (task 055, P7; A12, A13).
+"""The option card as text, for the shortlist proposal.
 
 One builder renders an :class:`~policy_atlas.api.contract.read_models.OptionOut`
 the way the option card (``frontend/src/views/longlist/OptionCard.tsx``) shows
 it, in the card's order, as plain Markdown: the header, the callouts, *How it
 works*, *Evidence* (where it has been evaluated first, then the outcomes and
-the maturity rung), one line per document, then *What it could take* (task
-058, round 12: the card's order and its heading). What Policy Atlas reads is
-what the user can see (S13).
+the maturity rung), one line per document, then *What it could take*. What Policy Atlas reads is
+what the user can see.
 
 Left out, as the contract's card-text matrix says: the exclusion block
 (excluded options are never candidates), the action buttons, every link and
@@ -128,7 +127,7 @@ class CardText:
         document_lines: One ``(year, line)`` per document, in the card's
             order; the year (``None`` when unknown) decides the cut order.
         tail: What follows the document lines: *What it could take*, or
-            ``""`` when the option has no profile (task 058, round 12).
+            ``""`` when the option has no profile.
     """
 
     fixed: str

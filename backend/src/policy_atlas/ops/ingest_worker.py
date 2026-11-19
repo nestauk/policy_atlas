@@ -1,12 +1,12 @@
-"""The queued ingest function's handler: one queue message, one document (task 057, P10).
+"""The queued ingest function's handler: one queue message, one document.
 
 In plain words: in ``queued`` mode the API puts one message per document on an
 SQS queue (Amazon Simple Queue Service, a managed to-do list), and AWS Lambda
 starts this handler once per message. The handler fetches the document, reads
 (parses) it and writes its passages to the database, through the same
 :func:`~policy_atlas.evidence_search.sourcing.ingest_document.ingest_document`
-the in-process mode runs. It makes no AI model call and holds no model key
-(contract D6): embedding stays in the API's run.
+the in-process mode runs. It makes no AI model call and holds no model key:
+embedding stays in the API's run.
 
 The function's image command is
 ``python -m awslambdaric policy_atlas.ops.ingest_worker.handler`` (the AWS

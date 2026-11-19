@@ -152,7 +152,7 @@ class GroupClusteringBackendFactory(Protocol):
             projection: Unit projection kind.
             include_context_in_discovery: Whether discovery calls may see
                 per-unit context payloads. Assignment calls always receive them.
-            guidance: B3 (024 steering surface) ``grouping.guidance`` — bounded
+            guidance: ``grouping.guidance`` — bounded
                 user-intent sentences steering the label-DISCOVERY prompt only.
                 ``None``/empty is byte-identical to as-built.
 
@@ -171,7 +171,7 @@ class StubGroupCall:
         facet: Facet being clustered.
         projection: Unit projection kind.
         payloads: Prompt-facing unit payload copies seen by the call.
-        guidance: B3 ``grouping.guidance`` seen by this call. Always ``None``
+        guidance: The ``grouping.guidance`` seen by this call. Always ``None``
             for ``"assign"`` — the stub never threads guidance into
             assignment (isolation property).
     """
@@ -230,7 +230,7 @@ class StubGroupClusteringBackend:
             projection: Unit projection kind.
             include_context_in_discovery: Whether discovery records include
                 context.
-            guidance: B3 ``grouping.guidance``; recorded on stub discovery
+            guidance: ``grouping.guidance``; recorded on stub discovery
                 calls (``StubGroupCall.guidance``) but has no effect on the
                 stub's deterministic first-token grouping.
 
@@ -566,7 +566,7 @@ def group_max_labels(unit_count: int, *, granularity: str = "standard") -> int:
 
     Args:
         unit_count: Number of eligible units in the facet run.
-        granularity: D8 ``grouping.granularity`` value. ``"standard"`` (the
+        granularity: The ``grouping.granularity`` value. ``"standard"`` (the
             default) is byte-identical to as-built. ``"coarser"`` halves and
             ``"finer"`` doubles the derived ceiling before re-applying the
             same hard floor/cap.

@@ -94,8 +94,8 @@ def _row_result(row: RowMapping, *, replayed: bool) -> ChatTurnResult:
 def _expire_stale_pending_turns(conn: Connection, *, user_id: str) -> None:
     """Mark the acting user's expired pending chat turns failed, in this transaction.
 
-    **Keyed to the conversation's creator, not the task owner** (task 033,
-    contract § 4). The sweep and the cap it feeds are one change, not two: the
+    **Keyed to the conversation's creator, not the task owner**.
+    The sweep and the cap it feeds are one change, not two: the
     cap counts an acting user's pending turns, so a sweep that still selected
     by ``task.owner_user_id`` would leave a colleague's dead turns pending
     for ever — rate-limiting them permanently, on every task, with no
@@ -141,8 +141,8 @@ def _phase_one_turn(
 ) -> ChatTurnResult | uuid.UUID:
     """Reserve one chat row, or replay a completed one, under the conversation lock.
 
-    **The lock is on the ``conversation`` row, not the task row** (task 033,
-    contract § 4). Three findings moved it:
+    **The lock is on the ``conversation`` row, not the task row**.
+    Three findings moved it:
 
     - *What the task lock was thought to protect, it did not.* The chat
       turn's ``run_active`` fence reads ``capability_run`` under the lock, but
@@ -157,8 +157,8 @@ def _phase_one_turn(
       Every one of those is scoped to a single conversation, which is the row
       now locked. Narrower **and** more precise: two chats in one task no
       longer serialise against each other at all.
-    - *A colleague may now reserve a turn*, and contract § 4 forbids their
-      path taking ``FOR UPDATE`` on the owner's task row — it would block
+    - *A colleague may now reserve a turn*, and their path must not take
+      ``FOR UPDATE`` on the owner's task row — it would block
       the owner's own rename, archive and run-start for the length of the
       colleague's transaction.
 
@@ -187,7 +187,7 @@ def _phase_one_turn(
         task_id: The conversation's task.
         conversation_id: Active chat conversation id.
         user_id: The acting user — the conversation's creator, or the task
-            owner for a legacy pre-033 row that records no creator.
+            owner for a row written before authors were recorded (no creator).
         message: Current user question.
         client_turn_id: Client-minted idempotency key.
         reserved_turn_id: The turn id the caller itself already reserved for
@@ -196,7 +196,7 @@ def _phase_one_turn(
             client_turn_id is only retried in place when it matches; any
             other caller racing the same client_turn_id gets a conflict
             instead of resetting — and possibly double-running — a turn that
-            is not its own (security review, 2026-08-11).
+            is not its own.
     """
     chat = (
         conn.execute(

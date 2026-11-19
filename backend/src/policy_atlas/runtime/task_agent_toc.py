@@ -1,11 +1,11 @@
-"""The Task Agent for a theory-of-change task (task 054, step 1.3).
+"""The Task Agent for a theory-of-change task.
 
 The profile the capability registry loads by name (``_toc_task_agent``):
 ``task_agent_toc_v1`` fills a :class:`~policy_atlas.runtime.toc_plan.TocPlan`
 from the conversation. A code-authored ``theory_state`` line tells the prompt
 where the theory is (no draft, drafting, checking, checked).
 
-Once a draft exists the plan is fixed (S7): a turn answers questions, and
+Once a draft exists the plan is fixed: a turn answers questions, and
 whatever plan draft the model returns, the approved plan stays as it is —
 :func:`_build_plan` refuses, so nothing is persisted, and the turn shows the
 approved plan.
@@ -78,7 +78,7 @@ class TocInputs:
         theory_state: The code-authored theory-state line.
         has_draft: Whether the graph exists (the plan is then fixed).
         approved: The latest approved plan, if any.
-        theory_outline: The theory by code, once a draft exists (C46).
+        theory_outline: The theory by code, once a draft exists.
     """
 
     theory_state: str
@@ -166,7 +166,7 @@ def load_toc_inputs(conn: Connection, task_id: uuid.UUID) -> TocInputs:
 
 
 def theory_outline(conn: Connection, task_id: uuid.UUID) -> str:
-    """The theory as the Task Agent reads it: one line per box, link and pathway (C46)."""
+    """The theory as the Task Agent reads it: one line per box, link and pathway."""
     from policy_atlas.theory_of_change.review import _theory
 
     theory = _theory(conn, task_id)
@@ -183,7 +183,7 @@ def theory_outline(conn: Connection, task_id: uuid.UUID) -> str:
 
 
 def toc_after_turn(engine: Engine, task_id: uuid.UUID, turn: Any, user_id: str) -> str | None:
-    """Store what a turn proposed and any clarification; say where to find them (C46, C49)."""
+    """Store what a turn proposed and any clarification; say where to find them."""
     from policy_atlas.core import events
     from policy_atlas.theory_of_change import proposals
     from policy_atlas.theory_of_change.draft import TOC_CLARIFICATION_EVENT
@@ -300,7 +300,7 @@ def build_toc_plan(draft: TocPlanDraftWire, inputs: TocInputs, turn_index: int) 
     """Validate the model's draft into the executable plan, failing closed.
 
     Raises:
-        ValueError: If a draft already exists (the plan is fixed, S7) or the
+        ValueError: If a draft already exists (the plan is fixed) or the
             plan is not ready for its entry point.
         ValidationError: If the draft does not validate.
     """

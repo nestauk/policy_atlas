@@ -80,7 +80,7 @@ def test_api_container_has_the_complete_deployed_plain_environment_map():
 
 
 def test_theory_of_change_is_on_in_staging_only():
-    """Task 054 (C15): colleagues try it on staging; production stays off."""
+    """Colleagues try it on staging; production stays off."""
     config = json.loads((REPO_ROOT / "infra/pa_config.json").read_text())
     backends = {env: config[env]["policy_atlas_config"]["backend"] for env in config}
     assert {env: backend.get("theory_of_change") for env, backend in backends.items()} == {
@@ -90,7 +90,7 @@ def test_theory_of_change_is_on_in_staging_only():
 
 
 def _uploads_bucket_id(template: dict | None = None) -> str:
-    """The logical id of the uploads bucket (task 054 increment 5)."""
+    """The logical id of the uploads bucket."""
     return next(
         name
         for name, resource in _resources(template or TEMPLATES["app"], "AWS::S3::Bucket")
@@ -164,7 +164,7 @@ def test_api_container_references_database_and_app_secrets_without_values():
 
 
 def test_bedrock_route_adds_only_the_bedrock_key_from_the_app_secret():
-    """Task 053: a Bedrock route passes AWS_BEARER_TOKEN_BEDROCK; OpenAI direct does not."""
+    """A Bedrock route passes AWS_BEARER_TOKEN_BEDROCK; OpenAI direct does not."""
     container = _container(_task_definition("policy-atlas-v3-api", BEDROCK_APP_TEMPLATE))
     environment = {item["Name"]: item["Value"] for item in container["Environment"]}
     assert environment["POLICY_ATLAS_MODEL_ROUTE"] == "bedrock"

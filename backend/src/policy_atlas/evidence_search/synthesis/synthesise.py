@@ -1,6 +1,6 @@
 """Synthesise component: terminal evidence artefact composition.
 
-This module owns task 013's terminus component. It resolves optional upstream
+This module owns the terminus component. It resolves optional upstream
 references, mints the artefact, proposes sections, runs the capped section
 agent loop, validates typed claims, judges cited/reasoning claims, performs the
 single bounded repair pass, writes the 001 substrate rows and finally writes the
@@ -702,8 +702,8 @@ def generation_budget_max(section_turn_caps: Sequence[int] | None = None) -> int
     Args:
         section_turn_caps: The run's actual per-section turn caps, in section
             order. Given by an output kind whose section list is known up front
-            and whose sections carry their own caps (the baseline, task 044
-            phase 4.2): the section term is then the sum of the real lanes
+            and whose sections carry their own caps (the baseline): the section term is then
+            the sum of the real lanes
             rather than the worst case, and every Evidence-search-shaped pass
             the baseline does not run — key findings, case studies, the
             most-relevant-source notes and the full-report intro — drops out of
@@ -729,8 +729,8 @@ def generation_budget_max(section_turn_caps: Sequence[int] | None = None) -> int
 def build_ledger(claims: Sequence[ClaimDraft]) -> list[dict[str, Any]]:
     """Build the rolling prior-section ledger (prompt-facing; slimmed).
 
-    Per-record ``cited_ids``/``flags``/a repeated non-citable note are dropped
-    (022 rider 18 / F0 § DTO spec): the "ledger is context, never evidence,
+    Per-record ``cited_ids``/``flags``/a repeated non-citable note are dropped:
+    the "ledger is context, never evidence,
     not citable" rule is already stated once at the prompt level
     (``SECTION_SYSTEM_PROMPT``), so repeating it — and carrying fields the
     prompt tells the model never to cite — on every record was pure input
@@ -1180,8 +1180,8 @@ def _load_bases_for_snapshots(
 ) -> dict[str, BasisText]:
     """Batch-load basis text for a set of distinct source snapshots.
 
-    Replaces the former one-chunk-query-per-snapshot pattern (013 review N+1
-    finding, task 020 C3 rider): every snapshot's chunks are fetched in ONE
+    Avoids a one-chunk-query-per-snapshot (N+1) pattern:
+    every snapshot's chunks are fetched in ONE
     query over the whole distinct-snapshot set, then grouped in Python. A
     chunkless snapshot (abstract-only basis) reads its envelope metadata's
     ``abstract`` from ``metadata_by_snapshot`` — already selected by the
@@ -1371,7 +1371,7 @@ def _extraction_profile_ids(extraction_row: Mapping[str, Any] | None) -> set[str
 
 
 def _relevance_annotations(extraction_row: Mapping[str, Any] | None) -> dict[str, str]:
-    """Read this run's B2′ relevance marks from the extraction provenance.
+    """Read this run's relevance marks from the extraction provenance.
 
     Run-scoped by design (ADR 0023): relevance is question-relative, so it lives
     in the extraction result's ``extraction_provenance["relevance"]["annotations"]``
@@ -1741,7 +1741,7 @@ def _characterisation_summary_prompt(
 
     Internal consumers (``SubstrateView.characterisation``) keep the full
     ``_characterisation_summary`` records, ``member_ids`` included — this
-    slims only at the seed/prompt boundary (F0 § DTO spec).
+    slims only at the seed/prompt boundary.
     """
     if summary is None:
         return None
@@ -1758,7 +1758,7 @@ def _grouping_summary_prompt(summary: dict[str, Any] | None) -> dict[str, Any] |
 
     Internal consumers (``SubstrateView.grouping``) keep the full
     ``_grouping_summary`` records, ``member_finding_ids`` included — this
-    slims only at the seed/prompt boundary (F0 § DTO spec): prompt-side group
+    slims only at the seed/prompt boundary: prompt-side group
     records carry id/label/description/size/spread, residuals carry counts,
     never membership UUID lists.
     """
@@ -1845,8 +1845,8 @@ def _validate_sections(
     Returns ``(sections, reasons, normalisations)``. Integrity rules reject
     (``reasons`` drive the one bounded repair — instructive sentences, fed
     back verbatim as data, or the repair repeats the mistake). Two live model
-    slips are instead **normalised and recorded** (the rev 8 M5
-    clamp-over-reject posture — they annotate, they are not evidence-bearing):
+    slips are instead **normalised and recorded** (clamp over
+    reject — they annotate, they are not evidence-bearing):
     overlong titles/foci truncate to their bound with an ellipsis, and
     group_ids on a run with no grouping are stripped. ``normalisations`` is
     recorded in provenance, never silent.
@@ -2168,7 +2168,7 @@ def _baseline_evidence_restrictions(
     The restrictions live on the approved plan the scope points at, not in the
     scope context: the two that reach retrieval are compiled into the acquire
     search filters (``country_group`` and the publication-date bounds) and the
-    language restriction deliberately is not (C8), so the plan row is the one
+    language restriction deliberately is not, so the plan row is the one
     place that carries both what was applied and what was recorded and not
     applied. Read defensively — a scope with no plan row, or a payload shape
     this component does not recognise, yields no restrictions rather than
@@ -2333,10 +2333,10 @@ def propose_synthesis_plan(
     synthesis_backend: SynthesisBackend,
     section_budget: int | None = None,
 ) -> dict[str, Any]:
-    """Propose a synthesis plan for a scope without minting anything (022 F5).
+    """Propose a synthesis plan for a scope without minting anything.
 
     A read-only, side-effect-free entry point for the pre-synthesise steer
-    point (contract item 14). Unlike ``synthesise_scope``'s own proposal path —
+    point. Unlike ``synthesise_scope``'s own proposal path —
     which mints the artefact *before* proposing sections — this resolves the
     same upstream substrate references, calls the backend's ``propose_sections``
     seam and reads the persisted grouping payload, minting no artefact and
@@ -2421,7 +2421,7 @@ def propose_synthesis_plan(
 
 
 def compile_synthesis_directive(response: Mapping[str, Any]) -> dict[str, Any]:
-    """Compile a steer response into the ``context["synthesis"]`` directive (022 F5).
+    """Compile a steer response into the ``context["synthesis"]`` directive.
 
     Deterministic, fail-closed and pure: it maps the out-of-band user response
     ``{"sections": [...], "group_ids": [...], "retrieval_boosts": {...}}`` to the
@@ -4287,7 +4287,7 @@ def _section_claims(
 ) -> tuple[list[ClaimDraft], str, list[dict[str, Any]], dict[str, int], dict[str, int]]:
     """Check a section's claims, repair the failing ones once, and settle its prose.
 
-    While it runs it tells the user what is happening (task 058, N3 and N7):
+    While it runs it tells the user what is happening:
     "Checking claims" before the judge; when claims fail, "Revising n claims"
     and the draft ranges being rewritten, before the repair call. Once the
     prose is settled the live draft is forgotten; the durable
@@ -4430,7 +4430,7 @@ def _publish_revising(
     *,
     section_line: str | None,
 ) -> None:
-    """Tell the user which claims are being rewritten (task 058, N3 and N7).
+    """Tell the user which claims are being rewritten.
 
     Publishes "Revising n claim(s)" and the draft ranges of the failing claims
     that bound to the prose (a claim that never bound has no range).
@@ -4943,7 +4943,7 @@ def _key_findings_ledger(
     ``claim_type``, ``verdict``, ``cited_finding_ids`` and chunk citations
     (``chunk_record_id`` + ``quote``). Gap claims also carry
     ``payload["gap"]`` (grade + coverage base) so the pass can re-state
-    them (task 034 S3). Data, not instructions (ADR 0015 §8).
+    them. Data, not instructions (ADR 0015 §8).
     """
     ledger: list[dict[str, Any]] = []
     for section, claims in section_claim_groups:
@@ -5024,7 +5024,7 @@ def _key_findings_pass(
     When the backend can stream (``write_key_findings_stream``) and the page
     has a key-findings slot (``display_index``), the prose streams into the
     slot and the writer's citations are marked as they close, as for a body
-    section (task 058, round 8); ``sources`` names what the cited ids are
+    section; ``sources`` names what the cited ids are
     for those marks. The parsed reply is the same either way.
 
     A schema-constrained emission over the run's surviving claims ledger, then
@@ -5334,7 +5334,7 @@ def _ground_case_study_card(
 ) -> tuple[list[ClaimDraft], dict[str, int], dict[str, int]] | None:
     """Validate and judge one case-study card without repair.
 
-    Failing cards are dropped whole (task 034 plan Phase B): any span-bind,
+    Failing cards are dropped whole: any span-bind,
     structural, or judge failure returns ``None``.
 
     Args:
@@ -5437,7 +5437,7 @@ def _case_studies_pass(
 
     When the backend can stream (``write_case_studies_stream``) and the page
     has a case-studies slot (``display_index``), each card is sent to the
-    page as it closes in the reply (task 058, round 7); the parsed reply is
+    page as it closes in the reply; the parsed reply is
     the same either way.
 
     Returns a result dict: ``present`` plus, when present, the minted
@@ -5729,7 +5729,7 @@ def _write_mrs_notes(
 
     Fail-soft: a failing note is omitted, never fails the run.
 
-    Each note is visible as it is written (task 058, round 8): the activity
+    Each note is visible as it is written: the activity
     line names the source ("Writing a source note · Smith 2023") and each
     kept note is sent to the page with the source's title. Neither is saved;
     the notes this returns are the record.
@@ -5798,7 +5798,7 @@ def _write_full_report_intro(
 
     When the backend can stream (``write_full_report_intro_stream``) and the
     page has an introduction slot (``display_index``), the text streams into
-    the slot (task 058, round 8); the parsed reply is the same either way.
+    the slot; the parsed reply is the same either way.
 
     Args:
         intent: The evidence-scope intent.

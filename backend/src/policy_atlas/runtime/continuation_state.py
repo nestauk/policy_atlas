@@ -54,7 +54,7 @@ class ContinuationState:
         capability_run_id: Identity of the parked capability walk.
         capability: The owning task's capability — which plan model read the
             payload, which chain it composed to, and which steering lattice the
-            resumed walk's boundaries use (task 044).
+            resumed walk's boundaries use.
         plan: Version-max approved plan, of ``capability``'s model.
         plan_id: Persisted plan id.
         plan_version: Persisted plan version.

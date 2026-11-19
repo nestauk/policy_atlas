@@ -1,4 +1,4 @@
-"""Prompt-cache mode per model call site (task 056, contract D3).
+"""Prompt-cache mode per model call site.
 
 What this is, in plain terms: the model provider can keep a copy of the start
 (the "prefix") of a prompt it has just seen, so a later call that starts with the

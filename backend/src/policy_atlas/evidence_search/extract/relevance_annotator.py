@@ -1,4 +1,4 @@
-"""Relevance-annotator backend seam — the B2′ sibling pass (024 / ADR 0023).
+"""Relevance-annotator backend seam — the sibling pass (ADR 0023).
 
 The verdict-fenced home of extraction relevance emphasis. Extraction and vetting
 run entirely unguided — user emphasis NEVER enters those prompts or the

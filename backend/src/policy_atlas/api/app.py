@@ -203,7 +203,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         """Bind the request's identity onto every log line the request emits.
 
         The admin trace is the only control the privileged read has while the
-        privacy notice stands unedited (task 033 § 3a, § 12), and until this
+        privacy notice stands unedited, and until this
         existed an `admin_read` line carried a row id and nothing about the
         request that produced it — so opening a task card and reading a
         colleague's whole chat transcript were indistinguishable in the log.
@@ -241,7 +241,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next: Any) -> Any:
-        """Defense-in-depth response headers on the JSON API (review finding)."""
+        """Defense-in-depth response headers on the JSON API."""
         response = await call_next(request)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         # Ignored by browsers over plain HTTP (dev); load-bearing behind TLS.
@@ -420,10 +420,10 @@ def _claim_and_execute(
 ) -> None:
     """Claim (unless pre-claimed) and execute one durable continuation.
 
-    Builds the SAME key-driven backends as the request path (review finding
-    codex-1, 2026-07-21: the drainer previously fell through to run_plan's stub
-    bundle and NullIO — a redispatched real continuation executed against
-    deterministic stubs and auto-continued every subsequent pause).
+    Builds the SAME key-driven backends as the request path, so the drainer
+    never falls through to run_plan's stub bundle and NullIO — which would run
+    a redispatched real continuation against deterministic stubs and
+    auto-continue every subsequent pause.
     """
     from policy_atlas.api.deps import get_agent_backend, runner_backends_for
     from policy_atlas.api.run_io import ParkIO

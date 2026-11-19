@@ -1,11 +1,11 @@
 """The label resolver: a document's evidence type and quality tier, with provenance.
 
-Task 045, D23 / S5 (ADR 0039 decision 9). An options-scoping task inherits a
-linked Evidence search task's documents; their classification and appraisal
+An options-scoping task inherits a linked Evidence search task's documents
+(ADR 0039 decision 9); their classification and appraisal
 are **read across**, never copied or re-run. One resolver answers "what type
 and tier does this document carry, and where did that come from" for every
 reader that shows a label: the Sources tab read models, the Result's
-citations, the answer core's citation labels, and (Phase 5) the longlist's
+citations, the answer core's citation labels, and the longlist's
 coverage.
 
 Resolution order, per document of this task:
@@ -28,7 +28,7 @@ when every label is this task's, ``absent`` when there is none.
 
 **The rubric rule.** An inherited appraisal whose ``rubric_version`` differs
 from the current rubric is not mixed in: its ``quality_score`` is withheld and
-``stale_rubric`` is set; the appraise skip (task 045 S6) leaves such a
+``stale_rubric`` is set; the appraise skip leaves such a
 document to appraise, which re-appraises it deterministically.
 
 **Reach.** A task with no inbound link resolves own rows only and reads no
@@ -86,7 +86,7 @@ class DocumentLabels:
         type_inherited: ``True`` when the evidence type came through the link.
         tier_inherited: ``True`` when the appraisal came through the link.
         unrated: ``True`` when the appraisal is Unrated: a row with no score
-            for a document typed Unknown or Other (task 056, D7). Read it with
+            for a document typed Unknown or Other. Read it with
             :func:`~policy_atlas.evidence_search.assess.appraise.appraisal_label`.
     """
 

@@ -1,4 +1,4 @@
-"""The options-scoping baseline gate's deterministic card content (task 044, S4).
+"""The options-scoping baseline gate's deterministic card content.
 
 The gate is the one steer point on the scoping lattice
 (``baseline_confirm = PausePoint("after_component", "synthesise")``). Its card
@@ -43,8 +43,7 @@ def baseline_settings(plan: ScopingPlan) -> dict[str, Any]:
     Returns:
         ``target_unit``, ``where``, ``outcomes`` (plain strings, tags dropped —
         the card shows what was run, the plan document shows where it came
-        from), ``depth`` and ``risk_appetite`` (the label the user sees;
-        task 058, N19).
+        from), ``depth`` and ``risk_appetite`` (the label the user sees).
     """
     return {
         "target_unit": plan.target_unit.text,

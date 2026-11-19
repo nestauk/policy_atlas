@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Per-step client timeouts for the Bedrock route, derived from Langfuse (task 057, P1).
+"""Per-step client timeouts for the Bedrock route, derived from Langfuse.
 
 What this answers
 -----------------
 "How long should we wait for each kind of model call before giving up and trying
 again?" Today every model call site waits a fixed 30, 60 or 120 seconds (the
 ``timeout=`` its OpenAI client is built with). A call that hangs at the provider
-holds the whole run for that long. Task 057 sets a timeout per *route step* (one
+holds the whole run for that long. This script proposes a timeout per *route step* (one
 named model call site in ``backend/src/policy_atlas/model_routes.toml``) from what
 healthy calls of that step actually took.
 
-Method (plan decision P1)
--------------------------
+Method
+------
 1. Read every GENERATION observation (one per model call) that Langfuse (our
    self-hosted tracing tool) recorded since ``--since`` (default 2026-11-02, the
    switch to GPT-6). Keep only Bedrock calls: the model name starts with
@@ -32,8 +32,7 @@ Method (plan decision P1)
    at least ``--floor`` seconds (default 5), so
    ``max(floor, ceil(2 x p99 / round_to) x round_to)``. A step gets a proposal only
    when it has at least ``--min-n`` healthy calls (default 100); otherwise it keeps
-   today's value. Streamed chat is exempt (plan P1) and keeps its value. (Task 057
-   review, contract verifier 5: options described here.)
+   today's value. Streamed chat is exempt and keeps its value.
 
 Outputs (``--format``)
 ----------------------

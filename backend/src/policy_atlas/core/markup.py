@@ -3,7 +3,7 @@
 Parsed full texts (the PDF parser's markdown output, and HTML) carry markup such as
 ``**bold**``, ``_emphasis_``, ``[link text](url)``, ``<br>`` line breaks and HTML tags.
 This module holds the one rule that removes it, so that every reader applies the same
-rule (task 057, contract N7 and N14):
+rule:
 
 * the parser strips markup from newly parsed text (parse profile v2), using
   :func:`strip_markup`;
@@ -164,7 +164,7 @@ def _has_markup_chars(line: str) -> bool:
 
 
 def _strip_line(line: str, *, table: bool) -> str:
-    """Apply the markup rule to one line (the E6 reference behaviour)."""
+    """Apply the markup rule to one line."""
     t = _IMG_RE.sub("", line)
     for _ in range(2):  # nested link text
         t = _LINK_RE.sub(r"\1", t)
@@ -184,8 +184,7 @@ def _strip_line(line: str, *, table: bool) -> str:
 def strip_markup(text: str, *, table: bool = False) -> str:
     """Remove markdown and HTML markup from text, keeping the words.
 
-    The rule is applied to each line on its own (lines split on ``"\\n"``), so a
-    one-line input behaves exactly as the task 057 experiment E6 rule did.
+    The rule is applied to each line on its own (lines split on ``"\\n"``).
 
     Args:
         text: Text that may carry markup (for example a line of the PDF parser's

@@ -1,8 +1,8 @@
-"""Ingest one document: fetch, look it up in the document store, parse, write (task 057).
+"""Ingest one document: fetch, look it up in the document store, parse, write.
 
 This is the one function both ingest modes run for each document (plan P8): the
 in-process thread pool calls it on the API's machine, and the cloud function
-(Phase 4b) calls it once per queue message. It is given the id of a link row (a
+calls it once per queue message. It is given the id of a link row (a
 ``task_source_snapshot`` row) in status ``queued`` and:
 
 1. reads the link row and its envelope snapshot's metadata (one short read; a row
@@ -13,7 +13,7 @@ in-process thread pool calls it on the API's machine, and the cloud function
    when a parse fails, the open-access cross-check and the reason priority;
 3. hashes each fetched body and looks the store key (body hash, parse profile,
    segmentation policy) up BEFORE parsing; a hit links the existing snapshot
-   without parsing again (N9);
+   without parsing again;
 4. otherwise parses in its own process with the 120 s kill;
 5. writes the result in one short transaction whose link-row update is guarded on
    ``full_text_status = 'queued'`` and on the message's run, so a result that
@@ -21,9 +21,9 @@ in-process thread pool calls it on the API's machine, and the cloud function
    changes nothing on the row (the parsed snapshot still joins the store).
 
 ``ingested_by_run_id`` is the run that last queued the row; it is stamped at
-queue time and required by the guarded writes (task 057 review, Codex 1 /
-security 8). A store hit whose snapshot the retention script deleted between the
-lookup and the write is parsed afresh and written again (Codex 7 / code-review 2).
+queue time and required by the guarded writes.
+A store hit whose snapshot the retention script deleted between the
+lookup and the write is parsed afresh and written again.
 
 No connection is held while fetching or parsing. The shared snapshot row carries
 no task, user, run or URL key beyond the public document address in

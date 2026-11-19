@@ -166,7 +166,7 @@ def sanitize_openalex_query(q: str) -> str:
         with a space, and whitespace collapsed. Commas are the OpenAlex
         ``filter`` clause separator — a comma surviving into the embedded
         ``title_and_abstract.search:`` value would open a new, injectable
-        filter clause (015 review finding, Codex + security lanes convergent).
+        filter clause (Codex + security lanes convergent).
     """
     stripped = _OPENALEX_WILDCARD_RE.sub("", q.replace(",", " "))
     return " ".join(stripped.split())

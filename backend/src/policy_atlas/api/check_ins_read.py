@@ -89,7 +89,7 @@ def _check_in(row: dict[str, Any], *, decided: bool) -> CheckInOut:
 
 
 def _task_bundle(payload: dict[str, Any]) -> dict[str, Any] | None:
-    """Project only the owner-approved display fields from a durable bundle."""
+    """Project only the approved display fields from a durable bundle."""
     bundle = payload.get("bundle")
     # Pause records are never rewritten, so a record written before the
     # Evidence Base to Evidence search rename still carries the old P2

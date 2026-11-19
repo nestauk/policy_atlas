@@ -1,10 +1,10 @@
-"""The draft walk's step: write the first theory of change (task 054, step 1.3).
+"""The draft walk's step: write the first theory of change.
 
-``toc_draft`` reads the walk's plan, asks the model for a draft, runs the E1
+``toc_draft`` reads the walk's plan, asks the model for a draft, runs the
 structure checks, retries once with the problems named, and writes the graph
 through :mod:`policy_atlas.theory_of_change.store`. A draft written onto an
 empty canvas is drawn on the page as it is written
-(:mod:`policy_atlas.theory_of_change.draft_stream`, task 054, S12).
+(:mod:`policy_atlas.theory_of_change.draft_stream`).
 """
 
 from __future__ import annotations
@@ -132,7 +132,7 @@ TOC_CLARIFICATION_EVENT = "toc.clarification"
 
 
 def clarifications(conn: Connection, task_id: uuid.UUID) -> list[str]:
-    """The user's clarifications to the plan, oldest first (C49)."""
+    """The user's clarifications to the plan, oldest first."""
     return [
         str(payload.get("text"))
         for payload in conn.execute(
@@ -208,7 +208,7 @@ def with_trimmed_conditions(draft: DraftResponse) -> DraftResponse:
 
 
 def draft_problems(draft: DraftResponse, *, as_drawn: bool = False) -> list[str]:
-    """The E1 problems of a draft, plus the checks only a draft can fail.
+    """The structure problems of a draft, plus the checks only a draft can fail.
 
     ``as_drawn``: the user's diagram kept as given, checked by the lighter rules.
     """
@@ -359,7 +359,7 @@ def adopt_sketch(
     boxes: list[Any],
     links: list[Any],
 ) -> tuple[DraftResponse, dict[str, uuid.UUID]]:
-    """Keep the user's canvas as drawn and fill it in from the draft (owner, 2026-11-05).
+    """Keep the user's canvas as drawn and fill it in from the draft.
 
     The user's boxes and connections stay where they are. A draft box with
     the same text is theirs; a draft link between two of them is their

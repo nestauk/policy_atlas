@@ -1,4 +1,4 @@
-"""Pick the ground-truth sample from the fetched collections (owner decisions, 2026-10-05).
+"""Pick the ground-truth sample from the fetched collections.
 
 The ``getters/`` scripts write one pair of CSV files per public collection under
 ``results/ground_truth/`` (Campbell, 3ie, YEF, SR4ALL): hundreds of candidate reviews.
@@ -34,8 +34,8 @@ and so on). Inside a group the best rows come first: highest DOI share, then mos
 references. Everything is sorted, so the same inputs give the same sample.
 
 **Labels.** Every reference row in the sample is written ``label = content``, including
-the Campbell and SR4ALL reference lists that nobody has labelled. The owner chose this on
-2026-10-05 instead of a labelling pass: a reference list mixes the studies a review is about
+the Campbell and SR4ALL reference lists that nobody has labelled. This is chosen
+instead of a labelling pass: a reference list mixes the studies a review is about
 with background and methods citations, so about half of its rows may be off topic, and a
 search that finds every on-topic study would still score near 50% on those rows. Read
 Campbell and SR4ALL recall against that ceiling, not against 100%. The reviews file says

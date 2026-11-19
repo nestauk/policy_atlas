@@ -1,9 +1,9 @@
-"""The shortlist's not-covered note, kept true to the places (task 058, round 14).
+"""The shortlist's not-covered note, kept true to the places.
 
-The shortlist step writes its note with its picks and, since round 14, the
+The shortlist step writes its note with its picks and the
 places it was written against (``places_at`` in ``longlist_result.shortlist``).
 The note has one writer, :func:`write_shortlist_note` and the
-``shortlist_note`` step (owner, 2026-11-08: one implementation): the shortlist
+``shortlist_note`` step (one implementation): the shortlist
 step calls it after its picks, with the proposal's changes; when the reader
 then adds or removes places by hand the note goes stale (:func:`note_stale`)
 and ``POST /tasks/{id}/shortlist/note`` calls it again with no changes. It
@@ -61,7 +61,7 @@ def current_places(conn: Connection, task_id: uuid.UUID) -> list[uuid.UUID]:
 def note_stale(shortlist: Mapping[str, Any], places: Iterable[uuid.UUID]) -> bool:
     """Whether the stored note was written against other places than these.
 
-    A note stored without ``places_at`` (before round 14) counts as stale: the
+    A note stored without ``places_at`` (an older note) counts as stale: the
     places it was written against are unknown. A proposal whose note failed
     (no note beside its provenance) is stale too, so a refresh can write it;
     with no proposal at all there is nothing to refresh.
@@ -124,11 +124,11 @@ def _note_inputs(
 
 
 def without_links(text: str) -> str:
-    """The note with every link taken out (plan P5: the card shows none).
+    """The note with every link taken out (the card shows none).
 
     A Markdown link keeps its words; any other word carrying a link mark
-    (``http://``, ``https://``, ``www.``) is dropped. Task 058 review: the
-    proposal re-asked a note with a link once; the note's own step has no
+    (``http://``, ``https://``, ``www.``) is dropped. The
+    proposal step can re-ask a note with a link; the note's own step has no
     re-ask wording, so the link is taken out instead.
     """
     unlinked = _MARKDOWN_LINK.sub(r"\1", text)

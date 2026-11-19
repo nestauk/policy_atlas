@@ -366,7 +366,7 @@ def _map_overton_document(record: dict[str, Any]) -> dict[str, Any] | None:
     Overton expresses absence as empty strings/lists on always-present keys —
     empty-string/empty-list is treated as absent throughout.
 
-    English-first title mapping (contract rev 3.6a): the envelope title is
+    English-first title mapping: the envelope title is
     ``translated_title`` when present, else the native ``title`` — unusable
     only when both are absent. The native title is always retained in
     ``provider_fields`` (``_OVERTON_RETAIN_KEYS``) so it survives displacement.
@@ -441,7 +441,7 @@ _RECORD_ID_KEYS = {
 def returned_record_ids(backend_name: str, records: list[dict[str, Any]]) -> list[str]:
     """The backend record ids one search call returned, in order, once each.
 
-    Written on ``search.executed`` as ``record_ids`` (task 058, round 12) so a
+    Written on ``search.executed`` as ``record_ids`` so a
     reader can filter the sources table to what one query returned: the
     values match ``source_snapshot.metadata.backend_record_id``.
 
@@ -572,13 +572,13 @@ class _Candidate(NamedTuple):
 def publish_acquire_progress(
     found: int, round_index: int, *, candidates: int | None = None
 ) -> None:
-    """Publish the acquire stage's running count (task 058, N2).
+    """Publish the acquire stage's running count.
 
     Args:
         found: Records acquired so far on this pass.
         round_index: 1 for the first search on a scope, 2 or more after.
         candidates: The distinct records the search's calls returned, when
-            the search counted them as it ran (round 9). The line then reads
+            the search counted them as it ran. The line then reads
             "keeping {kept} of {found} candidates", counting ``done`` against
             that ``total``, so the count the search showed never reads as a drop.
     """
@@ -630,7 +630,7 @@ def acquire_sources(
         depth: Search-depth directive recorded in events and coverage.
         scope_wire_params: Per-backend executed wire params or variant payloads
             recorded on the coverage record.
-        search_guidance: B1 (024 steering surface) executed ``search.guidance``
+        search_guidance: The executed ``search.guidance``
             list, echoed verbatim onto ``search_coverage_record.scope_filters``
             as a sibling ``guidance`` key when present.
         pools: Ranked raw records as ``(record, origin, verb)`` tuples. When
@@ -642,7 +642,7 @@ def acquire_sources(
         round_index: 1 on a fresh scope, 2 or more when the search is run
             again on the same scope; it picks the progress line's wording.
         search_found: The distinct records the search returned, when it
-            counted them (round 9); the progress line then reads "keeping
+            counted them; the progress line then reads "keeping
             {kept} of {search_found} candidates".
 
     Returns:

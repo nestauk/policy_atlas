@@ -406,7 +406,7 @@ class InterventionsBackend(Protocol):
     The payload is the shared extraction payload; the profile reads only its
     ``title``, ``abstract`` and ``primary_evidence_type`` (never a segment of
     full text). A transport or parse failure raises so the caller applies the
-    retry and per-document failure policy. The tagging context (task 046, S4)
+    retry and per-document failure policy. The tagging context
     is passed as a keyword only when the run has one; a caller with none
     calls ``extract(payload)`` exactly as before.
     """

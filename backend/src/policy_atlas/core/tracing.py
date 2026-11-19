@@ -1,7 +1,7 @@
 """Langfuse telemetry wrappers for live model traffic.
 
-Telemetry is the third runtime egress destination in task 009: user-operated
-Langfuse instances. By decision 13, traces carry full I/O payloads for eval-ready
+Telemetry is a runtime egress destination: user-operated
+Langfuse instances. Traces carry full I/O payloads for eval-ready
 spans, while keys remain env-only. Without both Langfuse keys this module is a
 no-op, keeping the suite deterministic and egress-free and avoiding SDK auto-init.
 """
@@ -206,7 +206,7 @@ _RETRYABLE_BOTOCORE_CODES = frozenset(
 def _retryable(exc: BaseException) -> bool:
     """Whether a failed model request is worth one more try.
 
-    The same failures the OpenAI SDK retried on its own before task 057: a
+    The same failures the OpenAI SDK would retry on its own: a
     timeout, a dropped connection, "too many requests" (429) and a server
     error (5xx). Anything else (a bad request, a refused key, an answer that
     does not parse) would fail the same way again. On the Bedrock routes the
@@ -271,17 +271,17 @@ def traced_attempts[T](
 
     In plain terms: the request is sent; if it times out or fails for a passing
     reason (see :func:`_retryable`) it is sent again after a short wait, up to
-    :data:`MODEL_CALL_ATTEMPTS` attempts (three today; task 057 review:
-    code-review 9). Every attempt opens its own Langfuse generation and, before
+    :data:`MODEL_CALL_ATTEMPTS` attempts (three today). Every attempt opens
+    its own Langfuse generation and, before
     the request goes out, stamps it with the step name, the attempt number
     (1 to :data:`MODEL_CALL_ATTEMPTS`) and a call id the attempts share. A
     request that never comes back is therefore still visible and countable. A
     failed attempt's generation is marked ``ERROR`` with the error class and
-    message. Task 057, contract D12.
+    message.
 
     Args:
         client: Langfuse client, or ``None`` to run the same attempts untraced.
-        name: Observation name (unchanged from before task 057: saved views
+        name: Observation name (keep it stable: saved views
             in Langfuse depend on it).
         step: The route step name.
         call: Zero-argument function that makes the provider request and
@@ -362,9 +362,7 @@ def traced_attempts[T](
 def trace_scope(session_id: uuid.UUID | None = None, user_id: str | None = None) -> Iterator[None]:
     """Propagate session/user ids to every observation opened inside the scope.
 
-    SDK 4.13 has no ``update_current_trace`` (the pre-fix code silently no-opped
-    on every trace, chat and task_agent alike — confirmed live, sessionId null
-    since 2026-08-09): the v4 seam is ``propagate_attributes``, which only
+    SDK 4.13 has no ``update_current_trace``: the v4 seam is ``propagate_attributes``, which only
     reaches observations OPENED while its context is active. Callers must
     therefore wrap the WHOLE observation-creation call in this scope, never
     update a session after the observation already opened. Scopes nest:
@@ -502,7 +500,7 @@ class TracedThemeGroupingBackend:
             intent: Evidence-scope intent.
             min_themes: Requested minimum theme count.
             max_themes: Requested maximum theme count.
-            guidance: B5 ``characterise.guidance``, forwarded to the wrapped
+            guidance: ``characterise.guidance``, forwarded to the wrapped
                 backend unchanged.
 
         Returns:
@@ -594,7 +592,7 @@ def component_span(
         task_id: Current task id.
         component: Component name.
         session_id: Optional Langfuse session id shared by the Task's traces
-            (task 038, V9: no longer the conversation id).
+            (no longer the conversation id).
         conversation_id: Optional chat/task_agent conversation id recorded in
             trace metadata next to ``task_id``, so one chat is still
             filterable now that ``session_id`` groups by task.
@@ -692,7 +690,7 @@ def extraction_score_summary(
 ) -> None:
     """Attach the extract run's grounding scores to the current Langfuse trace.
 
-    The 009 ``score_summary`` pattern; task 011 rev 1.4 — extraction quality
+    Follows the ``score_summary`` pattern, so extraction quality is
     measurable from the first live run.
 
     Args:
@@ -759,8 +757,7 @@ def grouping_score_summary(
 ) -> None:
     """Attach the group run's partition scores to the current Langfuse trace.
 
-    The 009 ``score_summary`` pattern, mirroring ``extraction_score_summary``
-    (task 012).
+    The 009 ``score_summary`` pattern, mirroring ``extraction_score_summary``.
 
     Args:
         client: Langfuse client, or ``None`` for no-op tracing.
@@ -835,8 +832,7 @@ def synthesis_score_summary(
 ) -> None:
     """Attach the synthesise run's claim/citation scores to the current Langfuse trace.
 
-    The 009 ``score_summary`` pattern, mirroring ``grouping_score_summary``
-    (task 012).
+    The 009 ``score_summary`` pattern, mirroring ``grouping_score_summary``.
 
     Args:
         client: Langfuse client, or ``None`` for no-op tracing.
@@ -919,8 +915,8 @@ def screening_score_summary(
 ) -> None:
     """Attach the screen run's consensus/demotion scores to the current Langfuse trace.
 
-    The 009 ``score_summary`` pattern, mirroring ``grouping_score_summary``
-    (task 014). ``summary`` may be a stage-1 (envelope) or stage-2 (full-text)
+    The 009 ``score_summary`` pattern, mirroring ``grouping_score_summary``.
+    ``summary`` may be a stage-1 (envelope) or stage-2 (full-text)
     screen component summary; the stage-specific scores are only emitted when
     the corresponding keys are present.
 
@@ -969,8 +965,7 @@ def classification_score_summary(
 ) -> None:
     """Attach the classify run's evidence-type scores to the current Langfuse trace.
 
-    The 009 ``score_summary`` pattern, mirroring ``grouping_score_summary``
-    (task 014).
+    The 009 ``score_summary`` pattern, mirroring ``grouping_score_summary``.
 
     Args:
         client: Langfuse client, or ``None`` for no-op tracing.

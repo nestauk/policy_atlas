@@ -67,7 +67,7 @@ def test_dockerfile_has_dockerignore_when_copying_context() -> None:
 
 
 def test_every_uv_sync_excludes_the_ops_group() -> None:
-    """The operator CLI's boto3 must not reach the runtime image (task 033 § 10).
+    """The operator CLI's boto3 must not reach the runtime image.
 
     `ops` is a *default* group (backend/pyproject.toml `[tool.uv] default-groups`)
     so tests, strict mypy and pip-audit can all see boto3. The image is the one

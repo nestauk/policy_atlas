@@ -39,7 +39,7 @@ def vector_literal(value: Any) -> str:
     """Return pgvector's text form of a vector, ``'[a,b,...]'``.
 
     One formatter for the column's bind processor and for a query vector passed
-    as a literal (task 057 review, code-review 7), so the stored and the searched
+    as a literal, so the stored and the searched
     vectors are always written the same way.
     """
     return "[" + ",".join(repr(float(v)) for v in value) + "]"
@@ -49,8 +49,8 @@ class Vector(UserDefinedType[list[float]]):
     """The pgvector ``vector(n)`` column type, without the pgvector Python package.
 
     pgvector is a PostgreSQL extension that stores a list of numbers (an embedding)
-    in a compact binary form and compares them in SQL. Task 057 adds no Python
-    library for it (contract G3): a vector goes to the database as text such as
+    in a compact binary form and compares them in SQL. The app uses no Python
+    library for it: a vector goes to the database as text such as
     ``'[0.1,0.2]'``, cast to ``vector(n)`` in the SQL, and comes back as the same
     text form, which this type parses into a list of floats. The database keeps
     single-precision (float32) numbers, so a value read back can differ from the
@@ -449,8 +449,8 @@ def tss_owns_snapshot(snapshot_id: ColumnElement[uuid.UUID] | uuid.UUID) -> Colu
     True when ``snapshot_id`` is either the envelope (``source_snapshot_id``)
     or the full-text (``full_text_snapshot_id``) snapshot linked by a
     ``task_source_snapshot`` row — the "does this chunk/snapshot belong to
-    this task" predicate that was hand-written at five call sites across
-    the API layer (task 029 delta-review). ``snapshot_id`` may be a column
+    this task" predicate, written once for the API layer's call sites.
+    ``snapshot_id`` may be a column
     expression (e.g. ``chunk.c.source_snapshot_id``) or a bound scalar — both
     compare correctly against ``task_source_snapshot``'s two snapshot
     columns. Callers still add their own ``task_id`` scoping; this returns
@@ -1859,7 +1859,7 @@ _TOC_SUPPORTS_SQL = "'strong', 'weak', 'mixed', 'refutes', 'not_about'"
 
 
 def _toc_common() -> list[Column[Any]]:
-    """``created_at``, ``updated_at`` and ``revision`` (C10)."""
+    """``created_at``, ``updated_at`` and ``revision``."""
     return [
         Column("created_at", DateTime(timezone=True), nullable=False),
         Column("updated_at", DateTime(timezone=True), nullable=False),
@@ -1868,7 +1868,7 @@ def _toc_common() -> list[Column[Any]]:
 
 
 def _toc_flags() -> list[Column[Any]]:
-    """The changed-by-Policy-Atlas flag columns (T1, C9)."""
+    """The changed-by-Policy-Atlas flag columns."""
     return [
         Column("pa_changed", Boolean, nullable=False, server_default=text("false")),
         Column("pa_change_reason", Text, nullable=True),

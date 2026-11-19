@@ -203,12 +203,11 @@ class ClusteringPolicy:
         rejection_detail_max_len: Maximum length of one retained rejection detail.
         progress_key: ``ACTIVITY`` key (a ``"<stage>.batches"`` line) the
             first assignment round publishes as each batch finishes, or
-            ``None`` to publish nothing (task 058, N2).
+            ``None`` to publish nothing.
         on_labels: Called once with the discovered labels, in order, after
             discovery and before assignment (when there are any), or
             ``None``. The characterise stage publishes its themes this way,
-            so the page shows them while sources are assigned (task 058,
-            round 9).
+            so the page shows them while sources are assigned.
     """
 
     min_labels: int

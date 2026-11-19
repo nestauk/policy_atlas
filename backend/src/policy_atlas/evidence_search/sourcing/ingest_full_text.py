@@ -1,7 +1,7 @@
 """Full-text ingestion component — fetch → parse → segment, post-screen Tier 0.
 
 For every screened-in acquired source of a scope, resolve candidate URLs from the
-provider fields task 007 retained, fetch through the ``DocumentFetcher`` seam
+retained provider fields, fetch through the ``DocumentFetcher`` seam
 (current build: fixture replay of committed real, openly-licensed documents — zero
 runtime egress until the live-fetcher slice opens that gate; live fetching is
 v3.0-required, see docs/deferred.md), parse structure-aware (PDF via pymupdf4llm,
@@ -12,18 +12,18 @@ snapshot to the corpus document via ``task_source_snapshot.full_text_snapshot_id
 
 Never truncate: a stored ``full_text`` snapshot is the whole parsed document; the
 fetch byte cap and the hard per-document parse timeout are guards that fail loudly
-(``too_large`` / ``timeout``), never scissors (contract decision 6). A failed source
+(``too_large`` / ``timeout``), never scissors. A failed source
 stays on the text in hand with a queryable, reason-coded ``full_text_status`` —
 nothing is dropped, nothing is silent (decision 3).
 
-Task 057 (P8, P9): one document is handled by one call of
+One document is handled by one call of
 ``ingest_document.ingest_document`` (fetch, store-key lookup, parse in its own
 terminable process, one short write transaction). The stage below queues the
 eligible documents, sends one message per document to a queue client, waits for
 the documents to resolve, and embeds. The in-process client runs the function on a
-thread pool, one database connection per thread; the cloud client (Phase 4b) puts
+thread pool, one database connection per thread; the cloud client puts
 the messages on a queue that a function reads. Parse workers receive primitives
-only (decision 8, adversarial findings 6 + 7). Each document's text is decided by
+only. Each document's text is decided by
 its own bytes, so the persisted outcome does not depend on the number of workers.
 """
 
@@ -351,7 +351,7 @@ class FixtureFetcher:
     """Replays committed real documents by URL from the manifest. Zero egress.
 
     The fixture corpus is repo test data (``tests/data``), not package data — it
-    never ships in the wheel (contract decision 12). URLs map to outcomes in
+    never ships in the wheel. URLs map to outcomes in
     ``fulltext_manifest.json``: ``ok`` entries read the committed document bytes;
     ``http_error``/``oversize`` entries replay the recorded failure. An unmapped
     URL is a dead link (``not_found``). The manifest loads lazily on first
@@ -473,7 +473,7 @@ _DOI_HOSTS = frozenset({"doi.org", "dx.doi.org"})
 
 
 def _valid_doi(value: Any) -> str | None:
-    """Validate a bare, normalised DOI string (contract decision 7 recall aid).
+    """Validate a bare, normalised DOI string (a recall aid).
 
     Must be a ``str`` matching ``^10\\.\\d{4,9}/\\S{1,200}$`` and contain no
     control characters — ``\\S`` alone does not exclude them (e.g. embedded
@@ -523,8 +523,8 @@ def candidate_urls(metadata: dict[str, Any]) -> list[str]:
     ``pdf_url`` → ``document_url``. Deduplicated preserving order; non-URL
     sentinels (e.g. Overton's ``"n/a"``) are treated as absent.
 
-    Every URL above is verbatim provider metadata. The one exception (contract
-    decision 3/7) is a DOI-URL fallback: when ``metadata["doi"]`` is a valid
+    Every URL above is verbatim provider metadata. The one exception
+    is a DOI-URL fallback: when ``metadata["doi"]`` is a valid
     bare DOI (see ``_valid_doi``), ``https://doi.org/<percent-encoded doi>`` is
     appended as the LAST cascade entry — the one URL this function constructs
     rather than receives — unless an equivalent doi.org/dx.doi.org URL is
@@ -629,7 +629,7 @@ _ANCHOR_SCAN_CAP = 2000  # bounds worst-case anchor scan cost on huge landing pa
 def discover_document_url(html_body: bytes, base_url: str) -> str | None:
     """Discover a document URL from a fetched HTML landing page.
 
-    Pure, side-effect-free recall aid (contract decision 7): no fetching and no
+    Pure, side-effect-free recall aid: no fetching and no
     SSRF validation beyond URL shape — the caller validates any returned URL
     before use.
 
@@ -721,7 +721,7 @@ def _segment_markdown_pages(pages: list[tuple[int, str]]) -> list[dict[str, Any]
     Sections may span pages; each chunk's locator carries its page number(s) and
     the heading path in force (decision 7 — the provenance v2 threw away).
 
-    Parse profile v2 (task 057, N7): the markup rule runs on every line as it is
+    Parse profile v2: the markup rule runs on every line as it is
     read, after the line has been recognised as a heading, a table row or body
     text, so the structure (which lines are headings, which are tables) is decided
     exactly as in v1. Body lines are cleaned with ``table=False`` (a ``<br>`` starts
@@ -926,7 +926,7 @@ def parse_and_segment(body: bytes, content_type: str, thin_min: int) -> dict[str
     Args:
         body: Raw document bytes.
         content_type: ``"application/pdf"`` | ``"text/html"`` | ``"text/plain"`` |
-            ``"application/xml"`` / ``"text/xml"`` (Europe PMC JATS, task 056).
+            ``"application/xml"`` / ``"text/xml"`` (Europe PMC JATS).
         thin_min: Minimum total parsed characters; below it → ``thin_text``.
 
     Returns:
@@ -1004,7 +1004,7 @@ def _worker_entry(
 
 
 def _parse_process_context() -> Any:
-    """Return the start-method context for parse workers (task 056, N8).
+    """Return the start-method context for parse workers.
 
     A ``forkserver`` context whose helper ("server") process imports this module
     once, and with it pymupdf4llm, trafilatura and the determinism patch above.
@@ -1040,11 +1040,11 @@ def run_parse_worker(
 ) -> dict[str, Any]:
     """Parse one document in its own process, killing it if it runs out of time.
 
-    The process is forked from the preloaded forkserver (task 056, N8), so it
+    The process is forked from the preloaded forkserver, so it
     starts in milliseconds, and it is a real process, so a parser stuck in native
-    code can be terminated (adversarial finding 6). It receives primitives only
-    (finding 7). While it runs it holds one of the process-wide ingest slots
-    (task 045, S2), so every walk in the process shares one budget of parse
+    code can be terminated. It receives primitives only.
+    While it runs it holds one of the process-wide ingest slots,
+    so every walk in the process shares one budget of parse
     processes. The pipe is readable when the worker has sent its result or has
     died, so a child busy sending a large result is never misread as a timeout.
 
@@ -1447,7 +1447,7 @@ _EMBED_COUNT_KEYS = (
 
 
 class _StageEmbedder:
-    """Embeds the stage's documents on its own thread as they arrive (task 057, D6).
+    """Embeds the stage's documents on its own thread as they arrive.
 
     The stage hands it the snapshots that became ``ingested`` at each tick; the
     thread embeds their chunks through the stage's one :class:`AdaptivePool`,
@@ -1582,7 +1582,7 @@ def ingest_full_text_sources(
     clock: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
 ) -> dict[str, Any]:
-    """Ingest full text for a scope's screened-in acquired sources (task 057, P9).
+    """Ingest full text for a scope's screened-in acquired sources.
 
     One path in both ingest modes. In its own committed transaction the stage
     sets every eligible document that is not yet ``ingested`` to ``queued`` (a
@@ -1595,7 +1595,7 @@ def ingest_full_text_sources(
     ``ingest`` progress ticks. A document still ``queued`` when the stage stops
     waiting becomes ``fetch_failed`` with reason ``not_ready``.
 
-    Embedding (task 057, D6): with a real ``connect``, each tick hands the
+    Embedding: with a real ``connect``, each tick hands the
     documents that arrived since the last tick to an embedding thread, which
     embeds their chunks through one adaptive pool on its own connections, so
     the polls and the deadline never wait on it; before returning, the stage

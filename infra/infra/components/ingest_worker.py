@@ -1,4 +1,4 @@
-"""The queued document-ingest worker (task 057): a queue, its dead-letter queue and a function.
+"""The queued document-ingest worker: a queue, its dead-letter queue and a function.
 
 In plain words: when a run needs the full text of documents, the API puts one
 message per document on a queue, and AWS starts a copy of the ingest function
@@ -23,8 +23,7 @@ The pieces, one line each:
 
 The function reads its database password at start-up from Secrets Manager
 (through its own permission, never through an environment variable) and holds
-no AI model key and no Bedrock permission: embedding stays in the API's run
-(contract D6).
+no AI model key and no Bedrock permission: embedding stays in the API's run.
 """
 
 from aws_cdk import (

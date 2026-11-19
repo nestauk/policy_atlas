@@ -1,26 +1,26 @@
-"""The ``option_profile`` component: all that is said about each option (task 046, R37).
+"""The ``option_profile`` component: all that is said about each option.
 
-ADR 0040 (amendment 2). The longlist walk runs
+ADR 0040. The longlist walk runs
 ``longlist → option_profile → constrain → theme``: ``longlist`` makes the
 list, ``option_profile`` writes what is said about each option, ``constrain``
 makes verdicts, ``theme`` groups what a reader still sees. It is a spine step:
 an :class:`OptionProfileFailure` fails the walk.
 
 ``option_profile_scope`` reads the walk's latest ``longlist_result`` and the
-task's options that are not merged, included or not (S16), in the order
+task's options that are not merged, included or not, in the order
 ``created_at, option_id``. Two kinds of call run at one time:
 
-- **Lever typing**, moved out of ``longlist`` as built (S20): one call per
+- **Lever typing**, moved out of ``longlist`` as built: one call per
   :data:`~policy_atlas.options_scoping.option_profile.lever_typing_prompt.LEVER_TYPING_BATCH_SIZE`
   options, the batches in a thread pool of :data:`TYPING_MAX_CONCURRENT`,
   with the place-stripped plan and the baseline. An invalid or failed typing
   leaves the option's columns as they are and carries its runner-up and its
-  lever reason forward from the latest earlier result (task 046, S12).
-- **The ten profile calls** (R36, R40, R41), each over the WHOLE list, in a
+  lever reason forward from the latest earlier result.
+- **The ten profile calls**, each over the WHOLE list, in a
   thread pool of :data:`OPTION_PROFILE_MAX_CONCURRENT`: one per line of
   "What it would take" (:data:`~policy_atlas.runtime.scoping_plan.PROFILE_LINE_KEYS`),
-  the ambition and the delivery setting. Each reads the same option list
-  (S16): short ids ``o1 … oN``, the label, description and design features,
+  the ambition and the delivery setting. Each reads the same option list:
+  short ids ``o1 … oN``, the label, description and design features,
   and at most :data:`OPTION_PROFILE_RECORDS_MAX` member records ordered by
   role. The plan data is the place-stripped plan the typing reads; the
   plan's Where reaches the ``who_decides`` call only. Each response is
@@ -29,7 +29,7 @@ task's options that are not merged, included or not (S16), in the order
   fails the step (:class:`OptionProfileFailure`) and nothing is written. The
   model's marks are stored as given: no quota, no floor, no check of a mark
   against its sentence.
-- **The two folding calls** (task 046, amendment 3, R54, R55; S21), in the
+- **The two folding calls**, in the
   same pool, on the mini model: one per facet over the DISTINCT record words
   of the whole list — every member of every option, not the profile calls'
   records — the ``unit`` words for Tried on, the ``outcome`` words for
@@ -38,7 +38,7 @@ task's options that are not merged, included or not (S16), in the order
   its kind; a kind for an id not in the input is dropped; a kind equal
   (case-folded) to a plan outcome or to the target unit is that plan text.
 
-Writes (S17), all after the last model call: the lever types on each option
+Writes, all after the last model call: the lever types on each option
 row typed validly and the ambition (mark and sentence) on every option row;
 on the ``longlist_result`` row, the ``option_profile`` column replaced whole
 (per option id and design version: the eight lines and the setting), and,
@@ -53,7 +53,7 @@ merged into its JSON as ``theme`` merges, the typing keys the read side reads
 its members through the maps (a database read, no model call) and merged
 into the row's ``coverage``.
 
-**The place sentences (task 046, amendment 4, R80; S31).** A second wave,
+**The place sentences.** A second wave,
 after the first pool has returned and before any write: per option on the
 stored coverage that has evaluating documents, one call on the mini model
 (:meth:`~policy_atlas.options_scoping.scoping_backend.LonglistBackend.place_sentences`),
@@ -235,7 +235,7 @@ class _Typing:
 
 
 def _profiled_options(conn: Connection, *, task_id: uuid.UUID) -> list[_ProfiledOption]:
-    """The task's options that are not merged, included or not (S16).
+    """The task's options that are not merged, included or not.
 
     In the order ``created_at, option_id``. Each option's label, description
     and design features are the ones ``longlist`` offers a seed (engine-valid,
@@ -262,7 +262,7 @@ def _profiled_options(conn: Connection, *, task_id: uuid.UUID) -> list[_Profiled
 
 
 def _validated_typing(wire: Any) -> _Typing | None:
-    """One wire typing, validated fail-closed (D8); ``None`` when unusable."""
+    """One wire typing, validated fail-closed; ``None`` when unusable."""
     primary = wire.primary_lever_type
     reason = (wire.none_fits_reason or "").strip() or None
     if primary is None:
@@ -295,7 +295,7 @@ def _type_options(
     plan: dict[str, object],
     baseline: list[tuple[str, str]],
 ) -> tuple[dict[uuid.UUID, _Typing], list[uuid.UUID], dict[str, Any]]:
-    """Type every option, one call per batch, the batches in a thread pool (S12).
+    """Type every option, one call per batch, the batches in a thread pool.
 
     Returns:
         ``(valid typings, kept option ids, stats)``: an option whose typing
@@ -401,7 +401,7 @@ _CARRIED_ENTRIES: dict[str, Callable[[Any], Any]] = {
 def _earlier_typing_entries(
     conn: Connection, *, task_id: uuid.UUID, option_ids: Sequence[uuid.UUID]
 ) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
-    """Per kept option, the runner-up and the lever reason it carries forward (S12, R29).
+    """Per kept option, the runner-up and the lever reason it carries forward.
 
     One walk over the task's ``longlist_result`` rows, newest first, reading
     ``provenance[key][option_id]`` for each key of :data:`_CARRIED_ENTRIES`.
@@ -503,7 +503,7 @@ def _acts_on_words(values: Sequence[str]) -> tuple[str, ...] | None:
 def _evidence_records(
     conn: Connection, *, task_id: uuid.UUID, option_ids: Sequence[uuid.UUID]
 ) -> dict[uuid.UUID, list[dict[str, object]]]:
-    """At most :data:`OPTION_PROFILE_RECORDS_MAX` member records per option (S16).
+    """At most :data:`OPTION_PROFILE_RECORDS_MAX` member records per option.
 
     The option's intervention profile records, ordered by role
     (:data:`OPTION_PROFILE_ROLE_ORDER`), then ``created_at``, then
@@ -562,7 +562,7 @@ def _evidence_records(
 def _profile_payload(
     options: Sequence[_ProfiledOption], records: Mapping[uuid.UUID, list[dict[str, object]]]
 ) -> tuple[list[dict[str, object]], dict[str, uuid.UUID]]:
-    """The one option list all the profile calls read (S16).
+    """The one option list all the profile calls read.
 
     Short ids ``o1 … oN`` in list order, mapped back to the option ids in
     code.
@@ -650,7 +650,7 @@ def _checked_line(
     """One line response, checked fail-closed; ``None`` when malformed.
 
     On ``who_decides`` and ``dependencies`` the mark is ``None`` whatever
-    the response holds (R36).
+    the response holds.
     """
     pairs = _answered(
         response, (MarkedLineResponse, PlainLineResponse, PotentialImpactResponse), short_ids
@@ -680,7 +680,7 @@ def _checked_line(
 def _checked_ambition(
     response: Any, short_ids: Mapping[str, uuid.UUID]
 ) -> dict[str, _Line] | None:
-    """The ambition response, checked fail-closed; ``None`` when malformed (R40)."""
+    """The ambition response, checked fail-closed; ``None`` when malformed."""
     pairs = _answered(response, AmbitionResponse, short_ids)
     if pairs is None:
         return None
@@ -696,7 +696,7 @@ def _checked_ambition(
 def _checked_setting(
     response: Any, short_ids: Mapping[str, uuid.UUID]
 ) -> dict[str, _Setting] | None:
-    """The setting response, checked fail-closed; ``None`` when malformed (R41).
+    """The setting response, checked fail-closed; ``None`` when malformed.
 
     A setting is null or a non-blank word, lower-cased; the second setting is
     null when the main one is. ``acts_on`` is at most :data:`ACTS_ON_MAX`
@@ -733,11 +733,11 @@ def _profile_calls(
     impact_payload: list[dict[str, object]] | None = None,
     impact_plan: dict[str, object] | None = None,
 ) -> list[tuple[str, Callable[[], UsageResult[Any]], Callable[[Any], Mapping[str, Any] | None]]]:
-    """The eleven profile calls: one per line, the ambition, the setting (R36, R40, R41).
+    """The eleven profile calls: one per line, the ambition, the setting.
 
     Where and the plan's who-can-act constraint texts reach the ``who_decides``
-    call only (task 046, amendment 4: R89; S35). The ``potential_impact`` line
-    has its own call and payload (task 055, P13): ``impact_payload`` and
+    call only. The ``potential_impact`` line
+    has its own call and payload: ``impact_payload`` and
     ``impact_plan`` (the shared ones when not given).
     """
 
@@ -797,7 +797,7 @@ def _fold_call_name(facet: str) -> str:
 
 
 def _folding_words(read: MembershipRead) -> dict[str, dict[str, str]]:
-    """Per facet, the list's distinct words keyed ``w1 … wN`` (S21).
+    """Per facet, the list's distinct words keyed ``w1 … wN``.
 
     Over every member of every option read, sorted, de-duplicated
     case-folded (:func:`~policy_atlas.options_scoping.longlist.coverage.distinct_words`).
@@ -813,7 +813,7 @@ def _folding_words(read: MembershipRead) -> dict[str, dict[str, str]]:
 
 
 def _guarded_kind(kind: str, references: Sequence[str]) -> str:
-    """The plan outcome a kind contains as whole words, else the kind (R86; S34).
+    """The plan outcome a kind contains as whole words, else the kind.
 
     Case-folded, on word boundaries (``employment`` is not in
     ``unemployment``). Several outcomes in one kind: the longest wins, the
@@ -840,13 +840,13 @@ def _checked_folds(
     one input id given two different indexes; or not one input id answered.
     Otherwise every input word is in the map: a word left out, or whose
     index is out of range or names a blank kind, keeps its own text; an id
-    not in the input is dropped (B10); a kind equal, case-folded, to one of
+    not in the input is dropped; a kind equal, case-folded, to one of
     ``references`` (the plan outcomes, or the target unit) is that plan text
-    exactly (A4). More than :data:`FOLDING_KINDS_MAX` kinds is kept, and
+    exactly. More than :data:`FOLDING_KINDS_MAX` kinds is kept, and
     logged (the refine loop measures it). On the Measures facet only, a
     returned kind that contains a plan outcome as whole words becomes that
     outcome's text (the longest, when it contains several) before the words
-    are mapped back (task 046, amendment 4: R86; S34; contract review C12).
+    are mapped back.
 
     Returns:
         ``{"folds": {word: kind}, "catch_all": bool}``, or ``None``.
@@ -923,7 +923,7 @@ def _folding_calls(
         Callable[[Any], Mapping[str, Any] | None],
     ]
 ]:
-    """The two folding calls, one per facet with words (R54, R55; S21).
+    """The two folding calls, one per facet with words.
 
     Each entry: the name, the call, the strict check (a catch-all answer is
     refused) and the lenient check for the last attempt.
@@ -965,7 +965,7 @@ def option_profile_scope(
     context: ScopeContext,
     backend: LonglistBackend,
 ) -> dict[str, Any]:
-    """Write what is said about each option of the walk's list (S16, S17, S20).
+    """Write what is said about each option of the walk's list.
 
     The typing batches and the ten profile calls run at one time; every
     model call ends before the first write. The writes — the lever columns
@@ -1230,12 +1230,12 @@ def _folded_coverage(
     where_country: str | None = None,
     place_sentences: Mapping[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
-    """The row's coverage with each option's folded keys recomputed (S21, S24).
+    """The row's coverage with each option's folded keys recomputed.
 
     Each option the stored coverage holds and the membership read covers gets
     :data:`FOLDED_COVERAGE_KEYS` from its members through the maps, and each
-    option the second wave wrote sentences for gets :data:`PLACE_SENTENCES_KEY`
-    (task 046, amendment 4, S31); every other key, and every other option (an
+    option the second wave wrote sentences for gets :data:`PLACE_SENTENCES_KEY`;
+    every other key, and every other option (an
     option added since, read from its own search at read time), is left as
     it is.
     """
@@ -1289,7 +1289,7 @@ def _document_meta(
 def _checked_places(
     response: Any, known: Collection[str] | None = None
 ) -> Mapping[str, Any] | None:
-    """A place-sentence answer, checked; ``None`` when malformed (S31).
+    """A place-sentence answer, checked; ``None`` when malformed.
 
     An id not in ``known`` (the input's place ids) is dropped first, so an
     unknown id never makes the answer malformed; malformed is not a
@@ -1311,7 +1311,7 @@ def _checked_places_within_ceiling(
 ) -> Mapping[str, Any] | None:
     """The place-sentence check for the first attempt: an answer with a
     sentence over the ceiling is refused once, so the retry can come in under
-    it (loop 26L, round 3); the last attempt accepts it and the ceiling check
+    it (loop 26L); the last attempt accepts it and the ceiling check
     then replaces that sentence with the template."""
     value = _checked_places(response, known)
     if value is None:
@@ -1336,7 +1336,7 @@ def _place_sentence_wave(
     where_country: str | None,
     usage: UsageAccumulator,
 ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
-    """The place sentences of every option given (task 046, amendment 4, R80; S31).
+    """The place sentences of every option given.
 
     Per option, its evaluating documents grouped by place
     (:func:`~.place_sentences.group_places`, the Where country first); one call
@@ -1519,7 +1519,7 @@ def _profile_column(
     short_ids: Mapping[str, uuid.UUID],
     answers: Mapping[str, Mapping[str, Any] | None],
 ) -> dict[str, dict[str, dict[str, Any]]]:
-    """The ``longlist_result.option_profile`` value (S17; final § 2.10).
+    """The ``longlist_result.option_profile`` value (final § 2.10).
 
     ``{option_id: {design_version: {"lines": {line key: {"sentence",
     "mark"}}, "setting": {"main", "second", "acts_on"}}}}`` for every option of the list,

@@ -1,6 +1,6 @@
-"""The ``suggest`` component: the longlist walk's entrants (task 045, S10).
+"""The ``suggest`` component: the longlist walk's entrants.
 
-Contract D7 and A15, ADR 0039: the longlist walk's second step (after
+ADR 0039: the longlist walk's second step (after
 ``inherit``, non-spine) makes **one** judgment-model call over the plan, the
 baseline's sections and each linked Evidence search report
 (``longlist_suggest_v1``), and mints the **entrants** as option rows:
@@ -14,9 +14,9 @@ baseline's sections and each linked Evidence search report
 
 The report is context for the model, never a source of records: nothing
 here writes a profile record, a membership or anything else from report
-text (owner: "the source would be the AI written synthesis").
+text ("the source would be the AI written synthesis").
 
-**Rebuild** (D14): the model is shown every option already on the task
+**Rebuild**: the model is shown every option already on the task
 (``existing_options``) and told not to propose one again; in code, a
 suggestion whose name or description matches an existing option's
 (case-insensitive, whitespace collapsed) is dropped, so a rebuild mints only
@@ -302,7 +302,7 @@ def _mint(
     entrant: _Entrant,
     existing: dict[tuple[str, str], uuid.UUID],
 ) -> tuple[uuid.UUID, bool]:
-    """Insert one entrant's option row, or return the existing one (D14)."""
+    """Insert one entrant's option row, or return the existing one."""
     key = (entrant.origin, entrant.design.name)
     if key in existing:
         return existing[key], False

@@ -1,12 +1,12 @@
-"""Embedding backends and unit-grain chunk vectorisation for task 009.
+"""Embedding backends and unit-grain chunk vectorisation.
 
 This module owns the first runtime-egress embedding seam. The defaultable stub is
 deterministic and zero-egress; the live backend is explicit and env-keyed. The
 embed pass is task-scoped through ``task_source_snapshot`` because chunks
 and snapshots are corpus-global, not task-owned.
 
-Task 057 (D6, plan P11): when the provider says "too many requests" (throttling),
-the live backends no longer wait and retry on their own; they raise
+When the provider says "too many requests" (throttling),
+the live backends do not wait and retry on their own; they raise
 :class:`Throttled`. :class:`AdaptivePool` owns both how many requests are in
 flight and the waiting: it halves the number in flight when throttled, waits,
 and adds one back after a run of clean batches, up to the route's ``pool_cap``.
@@ -522,7 +522,7 @@ class AdaptivePool:
     The provider (Bedrock for Cohere Embed v4) limits tokens per minute, so a
     fixed number of requests in flight is either too few (slow) or too many
     (time lost to throttling). The pool adapts, like a driver easing off when
-    traffic bunches up (task 057, D6):
+    traffic bunches up:
 
     - it starts with ``start`` requests in flight;
     - when a request is throttled, it halves the number in flight (never below
@@ -978,7 +978,7 @@ def embed_pending_chunks(
     profile and unit policy is treated as already embedded, matching the
     result-table idempotency pattern.
 
-    The requests go through an :class:`AdaptivePool` (task 057, D6), several at
+    The requests go through an :class:`AdaptivePool`, several at
     a time; the database writes stay on the calling thread.
 
     Args:
@@ -992,7 +992,7 @@ def embed_pending_chunks(
         max_chunks: Maximum embedding units allowed for this pass.
         snapshot_ids: When given, only chunks of these snapshots (still within
             the task's snapshots) are considered; the full-text stage passes the
-            snapshots its documents link (task 057).
+            snapshots its documents link.
         pool: The pool to send the requests through (the full-text stage keeps
             one across its passes); None builds one for this pass.
         connect: Opens one short committed transaction; used when ``conn`` is

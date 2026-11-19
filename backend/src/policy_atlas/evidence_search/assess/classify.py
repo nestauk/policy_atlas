@@ -443,7 +443,7 @@ def classify_sources(
     ``source.classified`` event per successful row. Backend failures leave no
     row, so the same source is retried by the next run.
 
-    Task 045: ``context.context["classify"]`` may carry
+    ``context.context["classify"]`` may carry
     ``{"skip_task_source_snapshot_ids": [...]}`` (parsed fail-closed by
     ``_parse_classify_directive``) — documents whose type the label resolver
     already answers from a linked task. They are left unclassified and

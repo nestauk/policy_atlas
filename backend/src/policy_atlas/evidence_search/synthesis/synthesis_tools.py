@@ -1,4 +1,4 @@
-"""Section-loop tools, retrieval helper, loop runner and directive parser (task 013).
+"""Section-loop tools, retrieval helper, loop runner and directive parser.
 
 This module owns the *code-enforced* side of the repo's first agent loop: the
 plan-pinned constants, the three read-only scoped tools (``search_chunks`` /
@@ -9,7 +9,7 @@ surfaces live in :mod:`policy_atlas.evidence_search.synthesis.section_prompt` an
 :mod:`policy_atlas.evidence_search.synthesis.grounding_judge`; nothing in this module
 composes prose.
 
-Disciplines binding here (contract 013): the tool set is closed, read-only and
+Disciplines binding here: the tool set is closed, read-only and
 substrate-scoped; an unknown tool name is a validation error, never executed;
 caps are enforced in code and cap exhaustion forces the claims emission, never
 extends the loop; ``search`` remains acquire's alone — no egress verb exists in
@@ -433,7 +433,7 @@ def borrowed_connection(conn: Connection) -> ConnectionFactory:
 
 @dataclass(frozen=True)
 class RetrievalScope:
-    """The frozen retrieval scope of one synthesis run or one chat turn (task 057).
+    """The frozen retrieval scope of one synthesis run or one chat turn.
 
     It holds the documents and the snapshot each one's text lives in, read once;
     every search then runs one SQL statement over those snapshots, so no chunk
@@ -1237,11 +1237,11 @@ def build_retrieval_scope(
     """Load the screened-in chunk retrieval scope.
 
     Reads the documents and the snapshot each one's text lives in, once; no
-    chunk text, unit or vector is loaded (task 057 N8). Every later search reads
+    chunk text, unit or vector is loaded. Every later search reads
     the chunks of exactly these snapshots through ``connect``, so documents
     screened in after this call never join a running synthesis.
 
-    **Several scopes** (task 045, S11, P13): an options-scoping chat answers
+    **Several scopes**: an options-scoping chat answers
     over the longlist scope and the option searches' targeted scopes at once.
     A document screened in under more than one of them is **one** document:
     the precedence rule keeps one row per ``task_source_snapshot_id`` — the
@@ -1444,7 +1444,7 @@ def oversized_chunk_window(
     The one window rule for every place that hands chunk text to the section
     writer: the ``search_chunks`` tool return (anchored on the winning
     embedding unit) and the repair's dependency chunks (anchored on the cited
-    quote, task 056 N5). A chunk at or under ``UNIT_CHAR_BUDGET`` characters is
+    quote). A chunk at or under ``UNIT_CHAR_BUDGET`` characters is
     never windowed. An oversized one becomes the anchor stretch widened by
     ``OVERSIZED_CHUNK_WINDOW_MARGIN_CHARS`` on each side, clipped to the chunk.
     The caller marks the cut record with ``window_start`` / ``window_end``.
@@ -1549,7 +1549,7 @@ def _repair_chunk_anchor(
 
 
 def window_repair_dependency_chunks(failing: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Cut each failing claim's oversized dependency chunks to a window (task 056 N5).
+    """Cut each failing claim's oversized dependency chunks to a window.
 
     Each dependency chunk over the oversized threshold goes through
     :func:`oversized_chunk_window`, anchored on the claim's citation quote for
@@ -2547,7 +2547,7 @@ def priority_counts_by_group(
     """Per-group priority/normal/total member counts for the P4 proposal render.
 
     Pure (no DB, no I/O): the P4 steering bundle shows, per group, how many of
-    its member findings the B2′ annotator marked ``priority`` — so the user
+    its member findings the relevance annotator marked ``priority`` — so the user
     sees where their stated emphasis landed before steering the synthesis shape.
 
     Args:
@@ -2714,7 +2714,7 @@ def make_findings_reader(
         extraction_run_id: Referenced extraction run id.
         evidence_scope_id: Evidence scope id.
         grouping_groups: Optional grouping records for group-id filtering.
-        relevance_annotations: B2′ run-scoped marks (``finding_id`` → "priority"
+        relevance_annotations: Run-scoped relevance marks (``finding_id`` → "priority"
             | "normal") from this run's extraction result, or ``None``. When
             present, each returned ``query_findings`` record gains a
             ``"relevance"`` key for its finding id; findings not in the map (and
@@ -2877,7 +2877,7 @@ def _screened_in_doc_ids(
 def _scope_precedence(
     scope_column: ColumnElement[uuid.UUID], scope_id: uuid.UUID
 ) -> ColumnElement[int]:
-    """Order the primary scope's row first (task 045, P13)."""
+    """Order the primary scope's row first."""
     return case((scope_column == scope_id, 0), else_=1)
 
 
@@ -3075,7 +3075,7 @@ def available_lookup_kinds(
     The same facts :func:`make_lookup_reader` checks before it reads: a kind in
     :data:`LOOKUP_KIND_REQUIRED_RUN` is servable only when its upstream run id
     is referenced. The section writer's ``lookup`` tool then offers only these
-    kinds (task 056 X3), so the model never spends a turn on a kind that can
+    kinds, so the model never spends a turn on a kind that can
     only fail.
 
     Args:
@@ -3112,7 +3112,7 @@ def make_lookup_reader(
 ) -> Callable[[dict[str, Any]], dict[str, Any]]:
     """Create the universal closed-vocabulary lookup reader.
 
-    With ``extra_scope_ids`` (task 045, S11) the per-document and scope-wide
+    With ``extra_scope_ids`` the per-document and scope-wide
     reads span every scope, a per-document label reading the primary scope's
     row first and then the latest (the retrieval precedence rule, P13); the
     selection, characterisation and grouping reads stay the primary scope's,
@@ -3607,16 +3607,16 @@ def run_section_loop(
 ) -> SectionLoopResult:
     """Run one bounded section loop against the closed read-only tool set.
 
-    While it runs, the loop publishes what the writer is doing (task 058,
-    N3): before each read tool, "Looking for: <query>", "Reading findings" or
+    While it runs, the loop publishes what the writer is doing:
+    before each read tool, "Looking for: <query>", "Reading findings" or
     "Looking up sources"; before the write turn, "Writing". Each line
     carries ``section_line`` so the user sees which section it belongs to.
 
     After each read tool returns, the loop also publishes the sources its
     results came from, so the page can say which sources the writer is
-    drawing on (task 058, owner 2026-11-05; see :func:`read_sources`).
+    drawing on (see :func:`read_sources`).
 
-    The write turn (task 058, owner 2026-11-05) runs when the writer says it
+    The write turn runs when the writer says it
     has gathered enough (a ``ready`` turn: it called ``write_section``) or
     when the turn budget runs out. It is the same loop turn as the ready
     signal, and its tokens are added to that turn's. A backend that returns
@@ -3937,7 +3937,7 @@ def _first_author(metadata: Mapping[str, Any]) -> str | None:
 
 
 def source_short_name(metadata: Mapping[str, Any], locator: str | None) -> str:
-    """Return the short name the page shows for a source (task 058).
+    """Return the short name the page shows for a source.
 
     The first author's family name (or, without authors, the publisher) and
     the year, as "Smith 2023", when both are known; otherwise the title, as

@@ -3,7 +3,7 @@
 The StateGraph dispatches components by name from the compiled Config.
 In-process this slice; durable checkpointer is a deferred seam.
 Lifecycle events: the runner brackets each component with component.started/
-component.completed in standalone transactions (027); harness nodes append
+component.completed in standalone transactions; harness nodes append
 only component.failed, on their own error paths.
 """
 
@@ -172,7 +172,7 @@ class HarnessState(TypedDict):
 
 
 def _stamp(state: HarnessState) -> dict[str, Any]:
-    """The runner's stage stamp for a lifecycle payload (task 054, S1), if any."""
+    """The runner's stage stamp for a lifecycle payload, if any."""
     stage = state.get("stage")
     return {"stage": stage} if stage is not None else {}
 
@@ -307,7 +307,7 @@ def _run_directed_extract_scope(
         finding_vetter_backend: Optional IOF finding vetter.
         icf_extraction_backend: Optional ICF extraction backend.
         icf_finding_vetter_backend: Optional ICF finding vetter.
-        relevance_annotator_backend: Optional B2′ relevance annotator; runs only
+        relevance_annotator_backend: Optional relevance annotator; runs only
             when the scope context carries ``extraction.relevance_emphasis``.
 
     Returns:
@@ -352,7 +352,7 @@ def _run_extract(state: HarnessState) -> HarnessState:
 def _scope_tagging_context(
     conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID
 ) -> TaggingContext | None:
-    """The tagging context of the scope's plan (task 046, S4), or ``None``.
+    """The tagging context of the scope's plan, or ``None``.
 
     Reads the plan version the intent record names (``evidence_scope.plan_id``)
     on the component's own connection and builds the context with the place
@@ -431,13 +431,13 @@ def _extract_interventions_scope(
 
 
 def _run_extract_interventions(state: HarnessState) -> HarnessState:
-    """The intervention profile node (task 045, ADR 0039 decision 6).
+    """The intervention profile node (ADR 0039 decision 6).
 
     The selection-free path: ``extract_scope`` over every screened-in document
     of the scope, with the intervention profile named through the
     ``profiles`` kwarg — never the scope's extraction directive, whose
     IOF-mandatory rule stands (plan P9). No select run is referenced. The
-    scope plan's tagging context rides along (task 046, S4).
+    scope plan's tagging context rides along.
     """
     context_cls = functools.partial(ExtractContext, selection_run_id=None)
     sources_fn = functools.partial(
@@ -830,8 +830,8 @@ def scoped_search_backends[TBackend: _HasBackendName](
 def _default_search_backends(search_backend_scope: str) -> list[SearchBackend]:
     """Return the default (empty) search-backend set for a scope.
 
-    The fixture replay backends moved to ``tests/provider_fixtures`` (task 023,
-    owner rider): production search backends arrive by injection; without
+    The fixture replay backends live in ``tests/provider_fixtures``:
+    production search backends arrive by injection; without
     injection acquire adds nothing and a stub run walks the seeded corpus —
     the shape the suite's full stub e2e pins.
 
@@ -884,28 +884,27 @@ def run_harness(
         run_id: Pre-created run row to execute.
         provider: Inference provider; unused by every current component node,
             kept required pending a live grounding/provider-backed seam
-            (task 023 C3: retired the echo node, its sole reader).
+            (retired the echo node, its sole reader).
         search_backends: Backends for the acquire component, searched in list
             order; when omitted, the default is empty — search backends arrive
-            only by injection (task 023 rider), and acquire adds nothing.
+            only by injection, and acquire adds nothing.
         search_generation_backend: Generation backend for search fan-out;
             defaults to ``StubSearchGenerationBackend()`` — no default egress.
         document_fetcher: Fetcher for the ingest_full_text component; defaults
             to ``FixtureFetcher()`` — the same injection pattern as
-            ``search_backends`` (approved gated change 3, task 008).
-        ingest_queue: Queue client for the ingest_full_text stage (task 057);
+            ``search_backends`` (approved gated change 3).
+        ingest_queue: Queue client for the ingest_full_text stage;
             ``None`` runs every document inline on ``conn`` (each in a savepoint).
         ingest_connect: Opens one short committed transaction for that stage's
             own writes (``engine.begin``); ``None`` uses savepoints on ``conn``.
-            The ToC judge commits each link's judgements through it too
-            (task 054, S8).
+            The ToC judge commits each link's judgements through it too.
         screening_backend: Screening backend for the screen component;
             defaults to ``StubScreeningBackend()`` — no default egress, the
-            extraction backend pattern (approved gated change 2, task 014).
+            extraction backend pattern (approved gated change 2).
         classification_backend: Classification backend for the classify
             component; defaults to ``StubClassificationBackend()`` — no
             default egress, the extraction backend pattern (approved gated
-            change 2, task 014).
+            change 2).
         embedding_backend: Embedding backend threaded through state; defaults
             to ``StubEmbeddingBackend()`` — no default egress, same injection
             pattern as ``search_backends``.
@@ -919,24 +918,24 @@ def run_harness(
             ``llm_rerank_v1``. No default egress.
         extraction_backend: Extraction backend for the extract component;
             defaults to ``StubExtractionBackend()`` — no default egress, the
-            theme grouping backend pattern (approved gated change 2, task 011).
-        finding_vetter_backend: Post-extract finding vetter for the extract component
-            (018 C5). Unlike the other backends this stays ``None`` by default
+            theme grouping backend pattern (approved gated change 2).
+        finding_vetter_backend: Post-extract finding vetter for the extract component.
+            Unlike the other backends this stays ``None`` by default
             with NO stub substitution — ``None`` means judging is off, so a
             caller that does not pass one gets byte-identical extract output
-            to the pre-018-C5 pipeline.
+            to a run with no vetter.
         icf_extraction_backend: ICF extraction backend for the extract component;
             defaults to ``StubICFExtractionBackend()`` — no default egress.
         icf_finding_vetter_backend: Post-extract ICF finding vetter. ``None``
             means judging is off for ICF.
         interventions_backend: Intervention profile backend for the
-            extract_interventions component (task 045); defaults to
+            extract_interventions component; defaults to
             ``StubInterventionsBackend()`` — no default egress.
-        relevance_annotator_backend: B2′ relevance annotator for the extract
-            component (024). Like the finding vetter it stays ``None`` by
+        relevance_annotator_backend: Relevance annotator for the extract
+            component. Like the finding vetter it stays ``None`` by
             default with NO stub substitution — ``None`` (or absent
             ``extraction.relevance_emphasis``) means the annotator pass never
-            runs, so extract output is byte-identical to the pre-B2′ pipeline.
+            runs, so extract output is byte-identical to a run without the annotator.
         group_clustering_backend: Group clustering backend factory for the
             group component; defaults to ``StubGroupClusteringBackend()`` —
             no default egress.
@@ -944,16 +943,16 @@ def run_harness(
             defaults to ``StubSynthesisBackend()`` — no default egress.
         grounding_judge_backend: Grounding judge backend for the synthesise component;
             defaults to ``StubGroundingJudgeBackend()`` — no default egress.
-        suggest_backend: Judgment-model seam for the suggest component (task
-            045); defaults to ``StubAgentBackend()`` — no default egress.
+        suggest_backend: Judgment-model seam for the suggest component;
+            defaults to ``StubAgentBackend()`` — no default egress.
         longlist_backend: Model seam for the longlist, option_profile,
-            constrain and theme components (task 045; task 046, S20);
+            constrain and theme components;
             defaults to ``StubLonglistBackend()`` — no default egress.
-        toc_backend: Model seam for every theory-of-change step (task 054);
+        toc_backend: Model seam for every theory-of-change step;
             defaults to ``StubTocBackend()`` — no default egress.
         stage: The public stage the runner stamped on this run, when its walk
             names one other than the component's own (an uploaded theory's
-            read, task 054); ``None`` uses the component's.
+            read); ``None`` uses the component's.
 
     Returns:
         Harness outcome with ``summary`` populated only after successful

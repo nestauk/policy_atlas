@@ -1,4 +1,4 @@
-"""Shared parts of the task 054 evidence-search evaluation (theory of change).
+"""Shared parts of the evidence-search evaluation (theory of change).
 
 What is left, in plain terms: the ``Harness`` class (it loads a saved link from the
 local database with ``load_link`` and holds the OpenAI client and search clients), the
@@ -6,12 +6,12 @@ cost meter and on-disk call cache, the document record (``Doc``), the OpenAlex,
 System (a findings graph of health papers) and Semantic Scholar clients, and a few
 small helpers. The ``judge_context`` scripts use them.
 
-**Removed 2026-10-28 (C36).** The three search arms (A as run, B cheap fixes, C
+**The search arms are not here.** The three search arms (A as run, B cheap fixes, C
 agentic, plus L and the round-two study), their command line and reports graded links
-with the old two grades (*worked elsewhere*, *holds here*). C36 replaced those with one
-evidence verdict per link (``evidence.grade.link_verdict``), so the arms no longer ran.
-Their results and design stay in ``docs/tasks/054-toc-integration/agentic-search.md``
-and git history (last full version: commit 18b2601f). Port them to ``link_verdict`` if
+with two grades (*worked elsewhere*, *holds here*); the product gives one evidence
+verdict per link (``evidence.grade.link_verdict``) instead, so the arms do not run.
+They stay in git history (last full version: commit 18b2601f). Port them to
+``link_verdict`` if
 the search comparison is needed again.
 
 Every model and search call made through ``Cache`` is stored on disk

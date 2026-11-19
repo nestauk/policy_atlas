@@ -1,4 +1,4 @@
-"""The agent CLI — the one new public interface of slice 017.
+"""The agent CLI.
 
 Runnable as ``python -m policy_atlas.runtime.agent``. It owns the whole
 user-facing product path: a task_agent conversation (intent -> refined,
@@ -191,8 +191,8 @@ def _route_option_delta(delta: dict[str, Any]) -> dict[str, Any]:
 def _bundle_headline(key: str, value: Any) -> str:
     """A compact one-line headline for one decision-bundle key.
 
-    Bundle keys with headline numbers only — never full document lists
-    (contract deliverable § pause rendering upgrades). Scalars print their
+    Bundle keys with headline numbers only — never full document lists.
+    Scalars print their
     value; collections print a count (or their scalar sub-fields, when the
     dict carries headline numbers).
     """
@@ -349,7 +349,7 @@ class CliIO:
         self._console.print(render_check_in(payload))
 
     def confirm(self, render: str) -> bool:
-        """Render a router fan-out and take the confirm gate (contract decision 3).
+        """Render a router fan-out and take the confirm gate.
 
         Nothing a free-text steer compiles into applies until the user confirms
         the rendered fan-out — the fan-out already declares each fragment's re-run
@@ -895,7 +895,7 @@ def _seed_stub_corpus(engine: Engine, task_id: uuid.UUID) -> None:
 
 
 def _scoping_scope_fields(plan: Any) -> dict[str, Any]:
-    """Compile a scoping plan's intent record (task 044, X7).
+    """Compile a scoping plan's intent record.
 
     The intent text is deterministic — compiled from the plan by
     ``baseline_prompt.compile_intent``, never written by a model (contract
@@ -937,7 +937,7 @@ def persist_approved_plan(
 ) -> tuple[uuid.UUID, uuid.UUID]:
     """Persist an approved plan and its execution scope for an existing task.
 
-    Every plan shape takes this one path (task 044, X7). A scoping plan differs
+    Every plan shape takes this one path. A scoping plan differs
     in what its intent record says and in two columns the Evidence search
     leaves null: ``purpose='baseline'`` and ``plan_id``, pointing back at the
     plan row minted in this very call. Because ``evidence_scope.plan_id``
@@ -945,9 +945,9 @@ def persist_approved_plan(
     inserted first without it and updated once the plan row exists — one
     transaction, so no reader ever sees a scope whose ``plan_id`` is missing.
     A theory-of-change plan does the same with ``purpose='toc'`` and
-    ``context.toc_walk='draft'`` (task 054).
+    ``context.toc_walk='draft'``.
 
-    A **new scope row per plan version** is deliberate (C3): the plan row's
+    A **new scope row per plan version** is deliberate: the plan row's
     ``evidence_scope_id`` is one-to-one, so an amended plan or a rebuild must
     not inherit the previous version's scope — otherwise "which plan version
     was this baseline built from" has two answers.

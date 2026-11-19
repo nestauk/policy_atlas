@@ -1,4 +1,4 @@
-"""The History sentences: one plain line per recorded act (task 058, round 10).
+"""The History sentences: one plain line per recorded act.
 
 The History tab is the record a reader audits, so each line says what
 happened, to what, and who did it: "Screening finished: 118 of 435
@@ -217,8 +217,8 @@ def step_sentence(event_type: str, payload: Mapping[str, Any]) -> str:
     """One line for a step: started, finished with its counts, skipped, or failed.
 
     Args:
-        event_type: ``component.started`` (a theory of change's chat only,
-            task 054), ``component.completed``, ``component.skipped`` or
+        event_type: ``component.started`` (a theory of change's chat only),
+            ``component.completed``, ``component.skipped`` or
             ``component.failed``.
         payload: The event's payload.
 

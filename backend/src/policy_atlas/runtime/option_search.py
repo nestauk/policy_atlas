@@ -1,7 +1,7 @@
-"""The option search: a tool whose implementation is a child walk (task 045, S2).
+"""The option search: a tool whose implementation is a child walk.
 
 ADR 0039 decision 3. :func:`run_option_search` takes one entrant's specified
-design — **its only input** (D26): the queries are generated inside the walk by
+design — **its only input**: the queries are generated inside the walk by
 the acquire component from the intent, as the Evidence search generates them —
 inserts a ``targeted`` intent record whose intent is ``design.as_intent()``,
 mints the child walk's ``capability_run_id`` and submits ``run_plan`` for it to
@@ -10,7 +10,7 @@ id at once; nothing polls for the row (P2).
 
 Two callers: the longlist walk's runner-level fan-out after ``suggest``
 (:func:`dispatch_option_searches`, with the walk as parent) and the chat verb
-*add* (task 045 Phase 7, ``parent_capability_run_id=None``).
+*add* (``parent_capability_run_id=None``).
 
 The runner's two barriers live here beside the tool, because the runner holds
 the engine, the backend bundle and the walk's identity and a harness component
@@ -22,9 +22,9 @@ holds none of them (P1):
   already has a finished option search (P12), dispatch one child walk each,
   and emit the ``option_searches`` stage's start; then publish the stage's
   count at once and keep it current while the walk's own search runs (a
-  daemon poll the join stops; task 058, round 12).
-- :func:`join_option_searches` — before ``screen_abstract`` (task 046,
-  S2; the children only acquire): wait, outside any
+  daemon poll the join stops).
+- :func:`join_option_searches` — before ``screen_abstract`` (the
+  children only acquire): wait, outside any
   transaction, for every child to reach a terminal status, bounded by
   :data:`OPTION_SEARCH_JOIN_TIMEOUT`; stragglers are marked ``interrupted``
   and counted failed; emit the stage's completion with
@@ -33,7 +33,7 @@ holds none of them (P1):
   join never waited for (the walk failed, aborted or raised after the
   fan-out) is cancelled and ended ``interrupted``, never left running.
 
-**Finding a walk's children** (for Phase 5 and any reader):
+**Finding a walk's children** (for any reader):
 ``capability_run.parent_capability_run_id = <the longlist walk>``; each
 child's intent record is ``evidence_scope`` with ``purpose = 'targeted'`` and
 ``context->>'option_id'`` naming the option (:func:`child_walks`).
@@ -160,8 +160,8 @@ def run_option_search(
     In one transaction, inserts the targeted intent record (``purpose =
     'targeted'``, ``intent = design.as_intent()``, ``plan_id`` = the confirmed
     version, ``context.option_id`` naming the option, and
-    ``context.acquire_only = true`` when the walk has a parent — task 046,
-    AM4: a longlist walk's option search only acquires) and mints the child's
+    ``context.acquire_only = true`` when the walk has a parent —
+    a longlist walk's option search only acquires) and mints the child's
     ``capability_run_id``; then submits the child walk to the option-search
     pool. The walk's own row is written by the runner when the pool starts it.
 
@@ -170,7 +170,7 @@ def run_option_search(
         task_id: The options-scoping task.
         plan_row: The confirmed plan version: ``plan_id``, ``version`` and
             ``payload`` (the scoping plan's dump).
-        design: The entrant's specified design — the tool's only input (D26).
+        design: The entrant's specified design — the tool's only input.
         option_id: The option the search is for.
         parent_capability_run_id: The longlist walk that asked, or ``None``
             for the chat verb *add* (a child walk with no parent).
@@ -214,7 +214,7 @@ def run_option_search(
 
 @dataclass(frozen=True)
 class ChildSearchRequest:
-    """What one child search runs under (C2): its intent record and where it runs.
+    """What one child search runs under: its intent record and where it runs.
 
     Args:
         intent: The intent record's intent text.
@@ -298,7 +298,7 @@ def run_child_search(
 def unattended_plan(payload: Mapping[str, Any]) -> ScopingPlan:
     """Return the plan a longlist walk or an option search runs: unattended.
 
-    Neither walk pauses (contract D1: "the walk does not pause"; ADR 0039
+    Neither walk pauses (ADR 0039
     decision 5: a child never opens or locks a tab). Run under the plan's
     attended mode, a
     fired floor trigger — a classification mix collapse on a ten-document
@@ -428,7 +428,7 @@ def entrants_for_search(
     a finished option search on this task — a ``succeeded`` or ``degraded``
     walk under a ``targeted`` record whose ``context.option_id`` names it — is
     not searched again; one whose search failed or was cut off is. The cap
-    (:data:`OPTION_SEARCH_CAP`, A16) keeps every ``added_by_you`` and
+    (:data:`OPTION_SEARCH_CAP`) keeps every ``added_by_you`` and
     ``from_evidence_search`` entrant and fills the rest with suggestions; an
     entrant whose stored design does not validate is skipped and logged.
 
@@ -487,7 +487,7 @@ def entrants_for_search(
 def _summary_entrants(
     conn: Connection, *, task_id: uuid.UUID, suggest_run_id: uuid.UUID
 ) -> list[uuid.UUID] | None:
-    """Read ``entrants`` off the suggest run's completed summary (Phase 4.2)."""
+    """Read ``entrants`` off the suggest run's completed summary."""
     payload = next(
         (
             entry["payload"]
@@ -768,7 +768,7 @@ def _fan_out[T](
 
 
 def toc_join_timeout(children: int) -> float:
-    """The item-search join timeout: ``max(1800, ceil(n / width) × 300)`` seconds (C2)."""
+    """The item-search join timeout: ``max(1800, ceil(n / width) × 300)`` seconds."""
     return float(max(1800, math.ceil(children / TOC_ITEM_WIDTH) * 300))
 
 
@@ -786,7 +786,7 @@ def dispatch_toc_item_searches(
     scale: int = 1,
     reformulate: bool = False,
 ) -> list[uuid.UUID]:
-    """A check walk's fan-out: one acquire-only item search per link (task 054, S3).
+    """A check walk's fan-out: one acquire-only item search per link (S3).
 
     Links on kept pathways first, at most :data:`TOC_LINK_CAP`; how many were
     left out is recorded on the stage event. Idempotent like the option
@@ -800,13 +800,13 @@ def dispatch_toc_item_searches(
         backends: The runner backend bundle, passed to every child.
         session_id: The walk's tracing session, recorded on the stage event.
         links: The links a named-link check covers, or ``None`` for all.
-        stage: The fan-out's stage: the first, or the new links' (C32).
-        dois: Link id → the DOIs the user added to it (C42): that link's search
+        stage: The fan-out's stage: the first, or the new links'.
+        dois: Link id → the DOIs the user added to it: that link's search
             only looks them up.
-        scale: The result multiplier every item search runs with (C44, Find
+        scale: The result multiplier every item search runs with (Find
             more evidence); 1 is the ordinary link search.
         reformulate: Search in the words of the research that would test each
-            step, with the link's earlier queries ruled out (C44).
+            step, with the link's earlier queries ruled out.
 
     Returns:
         The child walks' ids, in dispatch order.
@@ -967,7 +967,7 @@ def _publish_progress(
     The one body of the join's loop and the fan-out's progress poll, on the
     walk's fan-out row: "n of M searches done · S sources" for the option
     searches, "n of M searches done · S found" for a theory of change's item
-    searches (task 054, A3).
+    searches.
 
     Args:
         engine: Database engine.
@@ -1018,7 +1018,7 @@ def _start_progress_poll(
 
     The walk runs its own broad search between the fan-out and the join, so
     without this the ``option_searches`` row would read nothing until that
-    search ended (task 058, round 12). Publishes the first tick ("0 of M
+    search ended. Publishes the first tick ("0 of M
     searches done · 0 sources") at once, then a daemon thread re-reads every
     :data:`OPTION_SEARCH_JOIN_POLL` seconds. It stops when the join or
     :func:`abandon_children` stops it, when every child has ended, or after

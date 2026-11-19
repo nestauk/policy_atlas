@@ -1,7 +1,7 @@
-"""The longlist walk's model seam (task 045, S8), shared by its components.
+"""The longlist walk's model seam, shared by its components.
 
 ``longlist``, ``option_profile``, ``constrain`` and ``theme`` share this one
-backend (task 046, S20). Each call has one lead-authored prompt builder
+backend. Each call has one lead-authored prompt builder
 (:mod:`~policy_atlas.options_scoping.longlist.longlist_cluster_prompt`,
 :mod:`~policy_atlas.options_scoping.theme.theme_prompt`,
 :mod:`~policy_atlas.options_scoping.option_profile.lever_typing_prompt`,
@@ -14,33 +14,31 @@ backend (task 046, S20). Each call has one lead-authored prompt builder
   (judgment model; the contract's model route puts theme grouping there);
 - ``type_options`` — one lever-typing batch, with the plan and the baseline
   (judgment model; batches run in a thread pool), the ``option_profile``
-  step's (task 046, S20; its Langfuse name stays ``longlist:type``);
+  step's (its Langfuse name stays ``longlist:type``);
 - ``profile_line`` / ``profile_potential_impact`` / ``profile_ambition`` /
   ``profile_setting`` — the ``option_profile`` step's eleven calls over the
   whole list: one per line of "What it would take" (the Potential impact
-  line has its own call, task 055), the ambition and the delivery setting (judgment
-  model; task 046, R36, R40, R41;
+  line has its own call), the ambition and the delivery setting (judgment
+  model;
   :mod:`~policy_atlas.options_scoping.option_profile.option_profile_prompt`);
 - ``constrain`` — one constraint-judgement batch with the plan and the
   baseline (judgment model; batches run in a thread pool), the walk's
-  ``constrain`` step (S9) on the same seam
+  ``constrain`` step on the same seam
   (:mod:`~policy_atlas.options_scoping.constrain.constrain_prompt`);
 - ``distinct`` — the constrain step's one duplicate check over the whole list
-  (judgment model; task 046, S13);
+  (judgment model);
 - ``authority`` — the constrain step's one authority-label call over the
   whole list, made only when the plan holds a consideration on "who decides"
-  (judgment model; task 046, R38, S18);
+  (judgment model);
 - ``fold`` — one of the ``option_profile`` step's two folding calls over the
   list's distinct record words, one per facet (Tried on: the ``unit`` words;
-  Measures: the ``outcome`` words), word → kind (mini model; task 046,
-  amendment 3, R54, R55;
+  Measures: the ``outcome`` words), word → kind (mini model;
   :mod:`~policy_atlas.options_scoping.option_profile.folding_prompt`);
 - ``place_sentences`` — the ``option_profile`` step's second wave: one call
   per option with evaluating documents, one sentence per place (mini model;
-  task 046, amendment 4, R80; S31;
   :mod:`~policy_atlas.options_scoping.option_profile.place_sentences_prompt`);
 - ``propose_shortlist`` — the ``shortlist`` step's one proposal call over the
-  assembled messages (judgment model; task 055, P6;
+  assembled messages (judgment model;
   :mod:`~policy_atlas.options_scoping.shortlist.shortlist_prompt`). It takes
   the messages, not the data, so the step can append its re-ask turn.
 
@@ -277,7 +275,7 @@ class LonglistBackend(Protocol):
         options: list[dict[str, object]],
         considerations: list[str] | None = None,
     ) -> UsageResult[MarkedLineResponse | PlainLineResponse]:
-        """Write one line of "What it would take" for every option (R36, S16).
+        """Write one line of "What it would take" for every option.
 
         One call over the whole list; the ten profile calls run at one time.
 
@@ -288,8 +286,7 @@ class LonglistBackend(Protocol):
             baseline_sections: ``(title, markdown)`` per baseline section.
             options: Every option as data, keyed by its short ``option_id``.
             considerations: The texts of the plan's constraints on who can
-                act, for ``who_decides`` only; ``None`` otherwise (task 046,
-                amendment 4: R89; S35).
+                act, for ``who_decides`` only; ``None`` otherwise.
 
         Returns:
             A :class:`MarkedLineResponse` on a marked line, else a
@@ -304,7 +301,7 @@ class LonglistBackend(Protocol):
         baseline_sections: list[tuple[str, str]],
         options: list[dict[str, object]],
     ) -> UsageResult[PotentialImpactResponse]:
-        """Write the Potential impact line for every option (task 055, item 6).
+        """Write the Potential impact line for every option.
 
         Args:
             plan: The plan fields as data, with Where, the target unit and
@@ -325,7 +322,7 @@ class LonglistBackend(Protocol):
         baseline_sections: list[tuple[str, str]],
         options: list[dict[str, object]],
     ) -> UsageResult[AmbitionResponse]:
-        """Write the ambition of every option (R40, S16).
+        """Write the ambition of every option.
 
         Args:
             plan: The plan fields as data, place stripped.
@@ -340,7 +337,7 @@ class LonglistBackend(Protocol):
     def profile_setting(
         self, *, plan: dict[str, object], options: list[dict[str, object]]
     ) -> UsageResult[SettingResponse]:
-        """Name the delivery setting of every option (R41, S16).
+        """Name the delivery setting of every option.
 
         Args:
             plan: The plan fields as data, place stripped.
@@ -354,7 +351,7 @@ class LonglistBackend(Protocol):
     def fold(
         self, *, facet: Facet, plan: dict[str, object], words: dict[str, str]
     ) -> UsageResult[FoldingResponse]:
-        """Fold the list's distinct words of one facet into kinds (R54, R55; S21).
+        """Fold the list's distinct words of one facet into kinds.
 
         Args:
             facet: ``"tried_on"`` (the records' ``unit`` words) or
@@ -376,7 +373,7 @@ class LonglistBackend(Protocol):
         vocabulary: dict[str, list[str]],
         places: list[dict[str, Any]],
     ) -> UsageResult[PlaceSentencesResponse]:
-        """One option's place sentences (task 046, amendment 4, R80; S31).
+        """One option's place sentences.
 
         Args:
             option: ``{"name", "description"}``.
@@ -399,7 +396,7 @@ class LonglistBackend(Protocol):
         preferences: list[dict[str, str]],
         options: list[dict[str, object]],
     ) -> UsageResult[ConstrainResponse]:
-        """Judge one batch of options against the constraints (S9).
+        """Judge one batch of options against the constraints.
 
         Called from a thread pool: one call per batch, several at once.
 
@@ -416,7 +413,7 @@ class LonglistBackend(Protocol):
         ...
 
     def distinct(self, *, options: list[dict[str, object]]) -> UsageResult[DistinctResponse]:
-        """Report the options that duplicate another, over the whole list (S13).
+        """Report the options that duplicate another, over the whole list.
 
         Args:
             options: Every option on the list that is not merged, as data.
@@ -429,7 +426,7 @@ class LonglistBackend(Protocol):
     def authority(
         self, *, considerations: list[str], options: list[dict[str, object]]
     ) -> UsageResult[AuthorityResponse]:
-        """Label every option by who can adopt it, over the whole list (R38, S18).
+        """Label every option by who can adopt it, over the whole list.
 
         Args:
             considerations: The texts of the plan's considerations on "who
@@ -446,7 +443,7 @@ class LonglistBackend(Protocol):
     def propose_shortlist(
         self, *, messages: list[ChatCompletionMessageParam]
     ) -> UsageResult[ShortlistWire]:
-        """Propose the shortlist's places over the assembled messages (task 055, P6).
+        """Propose the shortlist's places over the assembled messages.
 
         Args:
             messages: The system and user messages, plus, on the second
@@ -465,7 +462,7 @@ class LonglistBackend(Protocol):
         places: list[str],
         changes: list[dict[str, object]],
     ) -> UsageResult[ShortlistNoteWire]:
-        """Write the shortlist's not-covered note (task 058, round 14).
+        """Write the shortlist's not-covered note.
 
         The note's one writer: after a proposal (with its changes) and on a
         refresh when the reader has moved places by hand (none).

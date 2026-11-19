@@ -1,8 +1,8 @@
-"""The specified design: an option's defining features (task 045).
+"""The specified design: an option's defining features.
 
 One model, three readers: the plan slot *Options you already have in mind*
-(``ScopingPlan.your_options[].design``), the option row (Phase 5) and the
-option search tool (Phase 4), which runs a targeted walk whose intent is
+(``ScopingPlan.your_options[].design``), the option row and the
+option search tool, which runs a targeted walk whose intent is
 :meth:`OptionDesign.as_intent`. Support binds to the design, not the name
 (ruling 36): two options can share a name and differ by one feature.
 
@@ -81,7 +81,7 @@ class OptionDesign(BaseModel):
         One plain paragraph: the name, the one-sentence description, then the
         design features in order. Deterministic — the same design always gives
         the same intent — so an option search is reproducible from the design
-        alone (plan S2). Outcomes are not included: the targeted chain's
+        alone. Outcomes are not included: the targeted chain's
         screening criteria carry the plan's outcomes.
 
         Returns:
@@ -102,10 +102,9 @@ class OptionDesign(BaseModel):
         logged) rather than failing the whole proposal: the features are the
         design; ``assumed`` only marks which of them to show as supplied.
 
-        The design names no place (task 046, R31): the design is the option's
+        The design names no place: the design is the option's
         search query, and evidence from any country is wanted. The rule is
-        words in the design prompt (R74); no code strip backs it (the strip
-        was deleted on the owner's ruling at the review, 2026-10-12). A
+        words in the design prompt; no code strip backs it. A
         feature left empty is dropped.
 
         Args:

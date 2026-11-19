@@ -70,7 +70,7 @@ class ConfirmTokenExpiredError(Exception):
     """A free-text confirm token was lost to restart/eviction — recompile to proceed.
 
     Distinct from ``LookupError`` so the router can surface the recovery action
-    (409 ``confirm_expired``) instead of an opaque 404 (review finding m3).
+    (409 ``confirm_expired``) instead of an opaque 404.
     """
 
 
@@ -98,7 +98,7 @@ class AnswerResult:
         decision_event_id: Appended steering-decision event identity.
         continuation_requested: Whether a worker should be dispatched.
         follow_on: The walk the caller opens once this answer has committed,
-            or ``None`` (task 045): ``"longlist"`` for "Confirm plan and build
+            or ``None``: ``"longlist"`` for "Confirm plan and build
             longlist" at the baseline gate.
     """
 
@@ -148,8 +148,7 @@ class SweepReport:
         reexecute: Walks whose continuation was claimed but never made component
             progress before the process died — the claim is durable, the walk sat
             at a clean boundary, so the sweep re-executes rather than interrupts
-            (review finding, 2026-07-21: interrupting here discarded a
-            just-answered multi-day park).
+            (interrupting here would discard a just-answered multi-day park).
     """
 
     interrupted_capability_run_ids: tuple[uuid.UUID, ...]
@@ -505,8 +504,8 @@ def execute_continuation(
 ) -> RunPlanOutcome:
     """Rebuild and execute an already-claimed parked continuation.
 
-    ``backends`` and ``io`` are deliberately required (review finding codex-1,
-    2026-07-21): a ``None`` default fell through to ``run_plan``'s stub bundle
+    ``backends`` and ``io`` are deliberately required:
+    a ``None`` default fell through to ``run_plan``'s stub bundle
     and ``NullIO`` — the startup drainer redispatched real continuations onto
     deterministic stubs that auto-continued every subsequent pause.
 
@@ -564,7 +563,7 @@ def mark_interrupted_best_effort(
 ) -> None:
     """Terminally mark a walk whose executor raised outside runner handling.
 
-    Called from executor catch-blocks (review finding I1/codex-7, 2026-07-21):
+    Called from executor catch-blocks:
     an exception between claim/dispatch commit and runner-owned status handling
     left the walk ``running`` forever with no thread. Best-effort by design —
     a failure here is logged and the startup sweep remains the backstop.
@@ -600,7 +599,7 @@ def mark_interrupted_best_effort(
 def startup_sweep(engine: Engine) -> SweepReport:
     """Recover walk state after a process death (idempotent, fires per boot).
 
-    Classifies every ``running`` walk three ways (review findings, 2026-07-21):
+    Classifies every ``running`` walk three ways:
 
     - claimed continuation with **no component progress** after the claim → the
       walk sat at a clean boundary with the full durable record intact; it is
@@ -780,7 +779,7 @@ def pending_pause_for_walk(
 
     :func:`_pending_pause` answers "may this named check-in be answered"; this
     answers "which check-in is this walk waiting on" — what a Task Agent turn
-    taken at a pause needs before it can sort the turn (task 044, S5). The
+    taken at a pause needs before it can sort the turn. The
     undecided rule is the same one, read off the same durable events.
 
     Args:
@@ -829,8 +828,7 @@ def _persist_intent(
     """Persist one validated canonical-menu intent in the caller transaction.
 
     ``option_id`` is the card option the person chose; it rides on the
-    decision so History can name the choice in the card's words (task 058,
-    round 10).
+    decision so History can name the choice in the card's words.
     """
     kind, value = intent
     chosen = {"option_id": option_id} if option_id is not None else None
@@ -972,7 +970,7 @@ def _persist_change_plan(
     state: Any,
     actor: str,
 ) -> AnswerResult:
-    """End the walk at the baseline gate and leave the plan editable (D12).
+    """End the walk at the baseline gate and leave the plan editable.
 
     Everything :func:`_persist_abort` does except the one thing that would make
     the plan unreachable: the plan row is **not** flipped to ``abandoned``,
@@ -1034,7 +1032,7 @@ def _persist_confirm_plan(
     state: Any,
     actor: str,
 ) -> AnswerResult:
-    """End the baseline walk at the gate and ask for the longlist (task 045, S3).
+    """End the baseline walk at the gate and ask for the longlist (S3).
 
     "Confirm plan and build longlist" no longer resumes the walk to let it run
     out: it records the decision (``continue``, with the gate's record), ends
@@ -1112,8 +1110,8 @@ def _persist_abort(
 ) -> AnswerResult:
     """Record an abort and terminally mark the parked capability run.
 
-    Mirrors the runner's in-process ``_abort_and_record`` semantics (review
-    finding, 2026-07-21): the plan flips to ``abandoned`` in the same
+    Mirrors the runner's in-process ``_abort_and_record`` semantics:
+    the plan flips to ``abandoned`` in the same
     transaction, and a ``run.finished`` event carries the terminal status so
     SSE replay and the live store see the walk end — without it the workspace
     showed an aborted run as still paused forever. ``extra`` is the
@@ -1353,7 +1351,7 @@ def _offered_option(
         allow_floor: Whether the ``continue``/``abort`` floor applies. The
             options-scoping baseline gate passes ``False``: its two options
             are ends, written out, and the floor's generic ``abort`` abandons
-            the plan the gate exists to let the user change (X3).
+            the plan the gate exists to let the user change.
     """
     options = pause_payload.get("options") or []
     if not isinstance(options, list) or not all(isinstance(option, dict) for option in options):
@@ -1473,7 +1471,7 @@ def _append_decision(
     ``extra`` carries the point-specific record a decision needs beyond the
     canonical attribution fields — at the baseline gate, the plan version and
     the baseline artefact the user answered against. An answer is work on the
-    task, so it touches the task's modified time (task 058, round 10).
+    task, so it touches the task's modified time.
     """
     touch_task(conn, task_id)
     base = steering_events.base_payload(
@@ -1538,8 +1536,7 @@ def _current_plan_row(conn: Connection, *, task_id: uuid.UUID, state: Any) -> An
 
     Returns the SQLAlchemy row itself — the steering persistence helpers
     (`_plan_row_value`) read it by ATTRIBUTE access, exactly as the in-process
-    runner passes it; a dict here 500s the confirm-apply path (live-check
-    finding, 2026-07-21).
+    runner passes it; a dict here 500s the confirm-apply path.
     """
     if state.plan_row_id is None:
         raise LookupError("parked walk has no persisted plan row")
@@ -1571,11 +1568,11 @@ def _with_plan(
         plan_id: Its row identity.
         version: Its version number.
         capability: The owning task's capability — it decides which chain the
-            plan composes to and which lattice its pauses come from (C9, A2).
-        purpose: The parked walk's intent-record purpose (task 045, S1), read
+            plan composes to and which lattice its pauses come from.
+        purpose: The parked walk's intent-record purpose, read
             by the caller, which holds the connection.
-        scope_context: The parked walk's intent-record context (task 046,
-            AM4), read by the caller beside the purpose.
+        scope_context: The parked walk's intent-record context,
+            read by the caller beside the purpose.
     """
     chain = compose_plan(capability, plan, purpose=purpose, context=scope_context)
     return type(state)(

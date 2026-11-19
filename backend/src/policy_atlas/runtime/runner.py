@@ -1,6 +1,6 @@
 """ES capability-runner for executing approved task plans.
 
-The runner is the deterministic sub-agent boundary for task 017: it walks a
+The runner is the deterministic sub-agent boundary: it walks a
 composed task plan, owns per-component commits, applies component
 directive deltas to the scope context, and delegates one component at a time to
 the existing harness.
@@ -317,7 +317,7 @@ class RunnerBackends:
         finding_vetter: Optional post-extract finding vetter (``None`` = off).
         icf_extraction: Optional ICF extraction backend.
         icf_finding_vetter: Optional ICF post-extract finding vetter.
-        interventions: Optional intervention profile backend (task 045).
+        interventions: Optional intervention profile backend.
         group_clustering: Optional group clustering backend factory.
         synthesis: Optional synthesis backend.
         grounding_judge: Optional grounding-judge backend.
@@ -326,14 +326,14 @@ class RunnerBackends:
         document_fetcher: Optional full-text document fetcher.
         langfuse_client: Optional tracing client used for component spans.
         suggest: Optional judgment-model seam for the options-scoping
-            ``suggest`` step (task 045); ``None`` lets the harness resolve the
+            ``suggest`` step; ``None`` lets the harness resolve the
             deterministic ``StubAgentBackend``.
         longlist: Optional model seam for the options-scoping ``longlist``
-            step (task 045); ``None`` lets the harness resolve the
+            step; ``None`` lets the harness resolve the
             deterministic ``StubLonglistBackend``.
-        toc: Optional model seam for every theory-of-change step (task
-            054); ``None`` lets the harness resolve ``StubTocBackend``.
-        queue: The full-text ingest queue client (task 057). ``None`` lets the
+        toc: Optional model seam for every theory-of-change step;
+            ``None`` lets the harness resolve ``StubTocBackend``.
+        queue: The full-text ingest queue client. ``None`` lets the
             runner build the in-process client over its own engine.
         connect: Opens one short committed transaction for the full-text stage's
             own writes (``engine.begin``); ``None`` uses the runner's engine.
@@ -487,9 +487,9 @@ class RunPlanOutcome:
         steps: Ordered per-step outcomes.
         flagged_events: Collated retry, failure and skip flags for review.
         collation_render: Deterministic end-of-run flagged-event render.
-        capability_run_id: The walk identity opened for this run (task 024).
-        follow_on: The walk to open once this one has ended, or ``None``
-            (task 045, A2): ``"longlist"`` when an unattended baseline walk
+        capability_run_id: The walk identity opened for this run.
+        follow_on: The walk to open once this one has ended, or ``None``:
+            ``"longlist"`` when an unattended baseline walk
             recorded its standing default at the gate. The runner cannot open
             a walk itself; the worker that ran this one does, inline.
     """
@@ -554,7 +554,7 @@ class _SteeringState:
 
     @property
     def lattice(self) -> dict[str, PausePoint]:
-        """The steering lattice belonging to this walk's capability (A2)."""
+        """The steering lattice belonging to this walk's capability."""
         return lattice_for(self.capability)
 
 
@@ -627,13 +627,13 @@ class _DiscretionContext:
         triggers: The fired floor triggers at this boundary (never suppressible —
             the watch can add to the floor, never remove from it).
         plan: The current task plan.
-        bundle: The pre-fetched decision bundle (P2/P3/P4), or ``None`` (Task 14 —
-            the watch decides over the same option-complete state a pause shows).
+        bundle: The pre-fetched decision bundle (P2/P3/P4), or ``None`` (the
+            watch decides over the same option-complete state a pause shows).
         header: Orienting header — refined question, plan summary, mode, standing
-            instructions (Task 14; empty for the deterministic floor).
-        digest: Run-so-far digest — prior steering decisions (Task 14).
+            instructions (empty for the deterministic floor).
+        digest: Run-so-far digest — prior steering decisions.
         read_tools: Allowlisted read-tool executors for the fallback loop, or
-            ``None`` (Task 14). The deterministic floor ignores all four extras.
+            ``None``. The deterministic floor ignores all four extras.
     """
 
     steer_point: str
@@ -653,11 +653,11 @@ class _DiscretionOutcome:
 
     The shipped deterministic floor always returns proceed / ``unconfigured_default``
     (the loudest flag class). A future watch hook returns the same shape carrying
-    its in-loco decision; Task 12 builds only the floor.
+    its in-loco decision.
 
     Args:
         interpreted_action: The action taken — ``"proceed"`` for the floor, or
-            ``"apply"`` when the watch authored a delta to apply (Task 14).
+            ``"apply"`` when the watch authored a delta to apply.
         rule: The flag/rule label — ``"unconfigured_default"`` for the floor,
             ``"agent_decision"``/``"agent_escalation"`` for the watch.
         delta: The watch-authored directive delta to apply (``interpreted_action``
@@ -701,7 +701,7 @@ def _section_budget(state: _SteeringState) -> int | None:
     """The plan's ordinary-section budget, or ``None`` for a plan without one.
 
     Only the Evidence search plan carries ``section_budget``; a scoping walk's
-    baseline has a fixed section list (task 044).
+    baseline has a fixed section list.
     """
     plan = state.plan
     return plan.section_budget if isinstance(plan, TaskPlan) else None
@@ -739,8 +739,7 @@ def leg_directive(
     delta. For every Evidence search step it returns the composer-emitted
     directive unchanged and reads nothing.
 
-    **It reads the database for one case** (task 045, S6; contract surface-map
-    row 3 as amended, owner: "amend row 3"): at ``classify`` and ``appraise``
+    **It reads the database for one case**: at ``classify`` and ``appraise``
     of an options-scoping walk whose intent record's ``purpose`` is
     ``longlist``, it resolves the scope's screened-in documents through the
     label resolver (after the ``inherit`` step has created the inherited
@@ -802,8 +801,8 @@ def resolved_skip_ids(
       classification rows, so a document whose inherited appraisal is under a
       stale rubric (or missing, or whose tier is this task's own) is
       classified here and appraised afresh rather than left without a tier.
-      Since task 056 (D7) every type gets a tier (Unknown and Non-evidence get
-      Unrated), so a type outside the rubric no longer means "nothing to do".
+      Every type gets a tier (Unknown and Non-evidence get
+      Unrated), so a type outside the rubric does not mean "nothing to do".
     - ``appraise``: the tier **and** the type are both inherited-resolved and
       the tier is not under a stale rubric (the resolver withholds a stale
       score), so a stale-rubric document is re-appraised, and an inherited
@@ -844,7 +843,7 @@ def _extend_overlays(
     existing: dict[str, dict[str, Any]],
     directive_deltas: dict[str, dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
-    """Fold commit-layer pending deltas into the overlay map (task 024, 15c).
+    """Fold commit-layer pending deltas into the overlay map.
 
     Only the commit-layer part of a delta is overlaid (:func:`commit_layer_overlay`):
     a pure commit-layer component whole, a mixed component's commit-layer keys only
@@ -911,7 +910,7 @@ def _run_plan_impl(
             ``unconfigured_default``). A pinned rule is always resolved before the
             hook is consulted (authority order: declared rules > agent).
             An explicit hook takes precedence over one derived from ``agent``.
-        agent: Optional agent backend (Task 14). ``None`` = no watch:
+        agent: Optional agent backend. ``None`` = no watch:
             today's deterministic behaviour, no LLM calls, no judgement events. When
             provided, the watch authors options at attended lattice pauses, triages
             anomalous/trigger-fired boundaries, decides in loco user at Unattended
@@ -922,7 +921,7 @@ def _run_plan_impl(
         resume_decision: The persisted answer to apply before resuming.
         park_context: Filled with the walk's state for the park boundary.
         capability_run_id: The walk's identity, minted by the caller (task
-            045: the option search tool mints its child's id so it never polls
+            The option search tool mints its child's id so it never polls
             for it). ``None`` mints one here. Ignored on resume.
         parent_capability_run_id: The walk that asked for this one — a longlist
             walk's option search is its child walk (ADR 0039 decision 3).
@@ -1838,7 +1837,7 @@ def run_plan(
         resume_from: Durable state of a previously parked capability run.
         resume_decision: Persisted answer to apply before resuming.
         capability_run_id: The new walk's identity when the caller minted it
-            (the option search tool, task 045); ``None`` mints one.
+            (the option search tool); ``None`` mints one.
         parent_capability_run_id: The walk that asked for this one (a longlist
             walk's option search); ``None`` for every other walk.
 
@@ -2171,7 +2170,7 @@ def _before_boundary_surface(
     *,
     allow_segment_reentry: bool,
 ) -> tuple[str | None, bool]:
-    """The re-run surface a before_component boundary offers (Task 15b).
+    """The re-run surface a before_component boundary offers.
 
     Returns ``(replacement_component, segment_reentry_allowed)``. The replacement
     component is the last-completed component that is a replacement re-run target
@@ -2235,7 +2234,7 @@ def _handle_before_component_boundary(
     """Evaluate a before-component boundary (P2 before select, P4 before synthesise).
 
     Before-lattice points carry a bundle/options/triggers exactly as after-points
-    do, and (Task 15b) APPLY their canonical re-run surface: at P2 a re-characterise
+    do, and APPLY their canonical re-run surface: at P2 a re-characterise
     replacement re-run or an additive segment re-entry (re-search / criteria
     re-screen), at P4 a re-group replacement re-run. A not-yet-run component
     adjustment (P4 synthesis section edits / boosts) still applies through the
@@ -2244,7 +2243,7 @@ def _handle_before_component_boundary(
 
     In Unattended mode the point never pauses: a pinned standing rule decides
     (hard stop honoured; the point's re-run surface applied through the same
-    machinery), else the discretion floor (Task 12).
+    machinery), else the discretion floor.
     """
     point = PausePoint("before_component", step.component)
     floor_run_ids = (
@@ -2396,13 +2395,13 @@ def _evaluate_boundary(
     successful_runs: dict[str, uuid.UUID],
     attempted_runs: dict[str, uuid.UUID],
 ) -> tuple[bool, str | None, list[dict[str, Any]] | None]:
-    """Decide whether a boundary pauses, per the annex mode table.
+    """Decide whether a boundary pauses, per the mode table.
 
     Returns ``(should_pause, steer_point_name, triggers)``. A lattice point pauses
-    on ``always`` or on ``fired`` with non-empty triggers (read through Task 10
-    readers at the boundary, never recomputed); triggers are attached to the
+    on ``always`` or on ``fired`` with non-empty triggers (read through the floor
+    trigger readers at the boundary, never recomputed); triggers are attached to the
     payload either way. A non-lattice after_component boundary that carries its own
-    floor classes (:data:`FLOOR_BOUNDARY_FOR_COMPONENT`, FIX 1) reads them here:
+    floor classes (:data:`FLOOR_BOUNDARY_FOR_COMPONENT`) reads them here:
     when they fire it pauses (attended) or flows them to the watch/collation only
     (Unattended), with no steer point. A boundary that fires nothing pauses only
     when it is a Frequent generic pause (present in the static pause set).
@@ -2456,7 +2455,7 @@ def _lattice_triggers(
     successful_runs: dict[str, uuid.UUID],
     attempted_runs: dict[str, uuid.UUID],
 ) -> list[dict[str, Any]]:
-    """Read a lattice point's floor triggers from persisted state (Task 10)."""
+    """Read a lattice point's floor triggers from persisted state."""
     with engine.connect() as conn:
         if name == SEARCH_EXCEPTION:
             acquire_run_id = successful_runs.get("acquire")
@@ -3032,7 +3031,7 @@ def _confirm(io: CheckInIO, render: str) -> bool:
     """Ask a confirm-capable IO to gate the fan-out; default/NullIO is False.
 
     Nothing a router compiles applies until the user confirms the rendered
-    fan-out (contract decision 3). An IO with no ``confirm`` method — ``NullIO``
+    fan-out. An IO with no ``confirm`` method — ``NullIO``
     and the unattended default — declines, so nothing applies.
     """
     if isinstance(io, _ConfirmCapable):
@@ -3104,7 +3103,7 @@ def _handle_free_text(
     agent: AgentBackend | None,
     session_id: uuid.UUID | None,
 ) -> _FreeTextResult:
-    """Compile free text into a confirmed fan-out and apply it (contract decision 3).
+    """Compile free text into a confirmed fan-out and apply it.
 
     Routes the utterance through ``agent.route``, re-validates every
     fragment author-blind through :func:`compile_fanout`, renders the fan-out,
@@ -3511,8 +3510,8 @@ def _pause_payload(
     A lattice pause carries ``kind="steer_point"`` + the point name + its
     canonical options + fired triggers + (P2/P3/P4) its deterministic bundle —
     the durable record of what the user saw. A generic non-lattice pause carries
-    ``kind="check_in"`` + the generic floor options (finding M6). When the watch
-    authored run-specific options (Task 14) they ride the pause alongside the
+    ``kind="check_in"`` + the generic floor options. When the watch
+    authored run-specific options they ride the pause alongside the
     canonical floor under ``authored_options`` with authorship attribution — the
     canonical options remain the floor and the degrade target.
     """
@@ -3565,7 +3564,7 @@ def _pause_payload(
 
 
 def _decision_response(adjustment: Adjust) -> steering_events.DecisionResponse:
-    """An Adjust carrying a new mode surfaces as ``mode_change`` (review N3)."""
+    """An Adjust carrying a new mode surfaces as ``mode_change``."""
     return "mode_change" if adjustment.new_mode is not None else "adjust"
 
 
@@ -3700,7 +3699,7 @@ def _abort_and_record(
 ) -> None:
     """Flip the plan to abandoned and record the abort decision atomically.
 
-    Contract decision 1 (finding m1): the abort decision commits on the same
+    The abort decision commits on the same
     transaction as the abandon flip. When there is no plan row to flip
     (``plan_row_id`` is None — a run-local stop), the decision is a standalone
     append with no state-change partner. ``decided_by``/``authored_by`` default
@@ -3843,7 +3842,7 @@ def _apply_replacement_rerun(
     — select budget, group facets — while gaining the option's fine directive),
     records a new user-attributed plan version row, and returns steering state
     advanced to that version. The chain and plan payload are unchanged — the fine
-    directive lives at the commit layer (contract decision 7). The decision pairs
+    directive lives at the commit layer. The decision pairs
     transactionally with the plan-version row and stamps ``rerun_mode`` =
     ``replacement``.
     """
@@ -4091,7 +4090,7 @@ def _apply_segment_reentry(
     component inside the re-walked segment, records a new user-attributed plan
     version row (plan payload carries forward — the amendment is commit-layer),
     and pairs the decision event with the version row transactionally, stamping
-    ``rerun_mode`` = ``additive`` (contract decision 7a).
+    ``rerun_mode`` = ``additive``.
     """
     if state.plan_row_id is None:
         raise SteeringAdjustmentError("plan_row_id is required to persist a segment re-entry")
@@ -4174,7 +4173,7 @@ def _run_segment_reentry(
 ) -> _SegmentReentryResult:
     """Re-walk a bounded additive segment, then signal whether to re-enter the boundary.
 
-    Contract decision 7a: from ``segment_start`` the walk re-runs every
+    From ``segment_start`` the walk re-runs every
     already-completed component up to ``boundary_component`` in chain order. Each
     re-walked component gets a FRESH run threaded with ``capability_run_id`` (the
     normal ``_run_step_attempt`` path), and ``successful_runs`` moves to each new
@@ -4499,7 +4498,7 @@ def _run_plan_before_segment_reentry(
     agent: AgentBackend | None,
     discretion_hook: DiscretionHook,
 ) -> _PlanSegmentReentryResult:
-    """Additive segment re-entry at a before_component boundary (Task 15b, P2).
+    """Additive segment re-entry at a before_component boundary (P2).
 
     Mirrors :func:`_run_plan_segment_reentry` but re-presents the SAME *before*
     boundary once (segment re-entry withheld — the one-cycle rule). The re-walk
@@ -4766,7 +4765,7 @@ def _resolve_baseline_gate_unattended(
     base: dict[str, Any],
     event_run_id: uuid.UUID | None,
 ) -> _PauseApplied:
-    """Record the baseline gate without pausing (D11, A9).
+    """Record the baseline gate without pausing.
 
     An unattended scoping plan must declare a ``baseline_confirm`` standing
     default (``ScopingPlan`` refuses to validate without one), so the rule is
@@ -4791,7 +4790,7 @@ def _resolve_baseline_gate_unattended(
 
     Returns:
         The state, carrying ``follow_on="longlist"`` when a declared standing
-        default was honoured (task 045, A2): the worker opens the second walk
+        default was honoured: the worker opens the second walk
         once this one has ended.
     """
     rule = next(
@@ -4874,7 +4873,7 @@ def _apply_standing_proceed(
     template (validation guarantees a requires-input option's rule carries its own
     delta). An empty delta proceeds. A delta targeting the point's re-run
     component re-runs it (replacement): select at P3, characterise at P2, group at
-    P4 (Task 15b). An ``{"acquire": ...}`` delta where segment re-entry is allowed
+    P4. An ``{"acquire": ...}`` delta where segment re-entry is allowed
     (P2 / an after-boundary before the run-scoped components) re-enters the
     additive segment; anything else is a plan adjustment of a pending component. A
     delta the wiring genuinely cannot execute here degrades fail-safe to
@@ -5113,7 +5112,7 @@ def _watch_observe_boundary(
     is_decision_point: bool,
     anomalous: bool,
 ) -> _WatchObservation:
-    """Observe one attended boundary under the gated-invocation model (Task 14).
+    """Observe one attended boundary under the gated-invocation model.
 
     Classifies the boundary (:func:`classify_boundary`) and emits the matching
     ``agent_judgement_routed`` event:
@@ -5691,19 +5690,19 @@ def _open_capability_run(
     session_id: uuid.UUID | None,
     parent_capability_run_id: uuid.UUID | None = None,
 ) -> tuple[str, str | None, dict[str, Any]]:
-    """Open the walk-identity row before the step loop (contract decision 2).
+    """Open the walk-identity row before the step loop.
 
-    ``parent_capability_run_id`` is written on the row (task 045): a longlist
+    ``parent_capability_run_id`` is written on the row: a longlist
     walk's option search names its parent; every other walk writes ``NULL``.
 
     Returns:
         The task's capability, read from the task row in the same transaction
-        that writes the walk (task 044): the walk is a walk *of* the task's
+        that writes the walk: the walk is a walk *of* the task's
         kind, so the two can never disagree, and the caller needs the value
         anyway to compose the chain. Beside it, the purpose of the intent
-        record the walk runs under (task 045, S1), read in the same
+        record the walk runs under, read in the same
         transaction because it too selects the chain, and that record's
-        context (task 046, AM4: it marks an acquire-only option search).
+        context (it marks an acquire-only option search).
     """
     with engine.begin() as conn:
         # A run's start is work on the task; first in the
@@ -5938,10 +5937,9 @@ def _attach_trace_scores(
 ) -> None:
     """Attach trace-level input/output and quality scores to the open run span.
 
-    Restores the skeleton-era wiring that task 023's skeleton retirement
-    dropped: the ``*_score_summary`` functions are the only code that fills a
-    ``run:{component}:{run_id}`` trace's input/output, and they had no caller
-    between task 023 and this fix. Components without a dedicated scorer still
+    The ``*_score_summary`` functions are the only code that fills a
+    ``run:{component}:{run_id}`` trace's input/output, and this is their
+    caller. Components without a dedicated scorer still
     get the summary as trace output. Best-effort by design — telemetry must
     never fail a committed component, so a scorer error is logged and dropped.
 
@@ -6354,7 +6352,7 @@ def _stamped_stage(
     evidence_scope_id: uuid.UUID,
     registry_component: str,
 ) -> StageKey | None:
-    """The public stage a component run reports under when its walk names one (task 054, S1).
+    """The public stage a component run reports under when its walk names one.
 
     An uploaded theory's read is the ``toc_draft`` component in a
     ``review_first`` draft walk: its lifecycle payloads carry ``"stage":

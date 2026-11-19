@@ -1,4 +1,4 @@
-"""Extract component (task 011): the framework's first findings-layer write.
+"""Extract component: the framework's first findings-layer write.
 
 Per selected document: load the selection row, resolve the extraction basis
 (full-text chunks or the envelope abstract), check the durable memo, window and
@@ -225,15 +225,15 @@ class ExtractContext:
     Attributes:
         scope_id: Evidence scope being extracted.
         intent: Scope intent, carried for wiring uniformity with the other
-            scope components. It is **not** consumed by extraction (contract
-            rev 1.5): extraction is question-agnostic, so no intent enters the
+            scope components. It is **not** consumed by extraction:
+            extraction is question-agnostic, so no intent enters the
             prompt or the extraction fingerprint. Keeping it here means the
             ``functools.partial`` context construction in the harness is uniform
             across components; a reviewer need not re-flag its presence.
         context: Scope context JSONB (unused by extraction in v1).
         selection_run_id: Explicit selection run whose ``selected`` set is
             extracted — the compile-fails-closed upstream reference — or
-            ``None`` for the selection-free path (task 045, D24): every
+            ``None`` for the selection-free path: every
             screened-in document of the scope, for the intervention profile
             only.
     """
@@ -267,7 +267,7 @@ def extraction_fingerprint(
         mode: The backend mode (``"live"`` or ``"stub"``), from
             ``backend.mode`` — a stub result can never masquerade as a live one.
         finding_vetter_active: Whether a finding-vetter backend was supplied. Vetted
-            and unvetted runs never reuse each other's records (018 C5).
+            and unvetted runs never reuse each other's records.
 
     Returns:
         A ``(fingerprint_hex, components)`` pair. ``components`` is recorded
@@ -661,7 +661,7 @@ def _resolve_interventions_basis(doc: _Doc) -> None:
     memo key). A document with neither a title nor an abstract fails with
     ``empty_basis``. A document with a title and no abstract never reaches
     here on the selection-free path: ``extract_scope`` drops it before basis
-    resolution and counts it (task 046, S10). One payload per document — no
+    resolution and counts it. One payload per document — no
     windowing.
     """
     doc.status = ""
@@ -696,7 +696,7 @@ def _resolve_interventions_basis(doc: _Doc) -> None:
 
 
 def _is_title_only(doc: _Doc) -> bool:
-    """True when the document has a title and no abstract (task 046, S10)."""
+    """True when the document has a title and no abstract."""
     abstract = doc.abstract
     return bool(doc.title.strip()) and (abstract is None or not abstract.strip())
 
@@ -755,7 +755,7 @@ def _apply_memo(
         task_id: Owning task.
         fingerprint: Extraction fingerprint for this profile run.
         docs: Profile-local documents to classify.
-        refresh: D3 ``extraction.refresh`` value, or ``None`` (as-built memo
+        refresh: The ``extraction.refresh`` value, or ``None`` (as-built memo
             behaviour). ``"all"`` bypasses every memo hit; ``"abstract_only"``
             bypasses only hits whose stored ``basis`` is ``"abstract_only"``.
             ``"failed"`` needs no bypass here — a prior ``extraction_failed``
@@ -1345,7 +1345,7 @@ def _write_docs(
         docs: Profile-local documents to write.
         created_at: Write timestamp.
         profile: Extraction profile bundle.
-        refresh_fingerprint: D3 refresh-tagged fingerprint. Documents marked
+        refresh_fingerprint: Refresh-tagged fingerprint. Documents marked
             ``doc.refreshed`` are stamped with this fingerprint instead of the
             base one — the surviving base-fingerprint row for that snapshot
             still exists, so writing under the same fingerprint would
@@ -1354,7 +1354,7 @@ def _write_docs(
 
     Each document's writes run in a savepoint. When a concurrent walk on the
     same task wrote the same memo key first (two option-search child walks
-    profiling one document; task 045), the insert violates ``uq_ser_memo``:
+    profiling one document), the insert violates ``uq_ser_memo``:
     only that document's savepoint rolls back, and the document becomes
     ``reused`` of the sibling's row — never ``failed``, and never an aborted
     component transaction.
@@ -1812,7 +1812,7 @@ def _interventions_fingerprint(
 
 
 def _no_vetter(*args: Any, **kwargs: Any) -> Any:
-    """The intervention profile's vetter seams: it has no vetter (S7)."""
+    """The intervention profile's vetter seams: it has no vetter."""
     del args, kwargs
     raise RuntimeError("the intervention profile has no finding vetter")
 
@@ -1893,7 +1893,7 @@ def _parse_extraction_directive(raw: Any) -> tuple[tuple[str, ...], str | None]:
 
     Returns:
         ``(profiles, refresh)``: requested profile ids in ``KNOWN_PROFILE_IDS``
-        order, and the D3 ``refresh`` value (``None`` when absent — absent is
+        order, and the ``refresh`` value (``None`` when absent — absent is
         byte-identical to as-built memo behaviour).
 
     Raises:
@@ -1962,7 +1962,7 @@ def _parse_extraction_directive(raw: Any) -> tuple[tuple[str, ...], str | None]:
 
 
 def parse_relevance_emphasis(raw: Any) -> list[str] | None:
-    """Parse the B2′ ``extraction.relevance_emphasis`` channel, fail-closed.
+    """Parse the ``extraction.relevance_emphasis`` channel, fail-closed.
 
     A bounded list of 1–5 user-emphasis sentences (the Family B guidance shape,
     ``parse_guidance_channel``). Returns the validated list, or ``None`` when
@@ -2278,9 +2278,9 @@ def extract_scope(
         icf_extraction_backend: The ICF extraction seam. ``None`` resolves to the
             deterministic ICF stub, preserving no-default-egress behaviour.
         icf_finding_vetter_backend: Optional ICF post-extract finding vetter.
-        relevance_annotator_backend: Optional B2′ sibling relevance annotator
-            (024 / ADR 0023). ``None`` (or absent ``relevance_emphasis``) means
-            no annotation pass — byte-identical to the pre-B2′ pipeline. Runs
+        relevance_annotator_backend: Optional sibling relevance annotator
+            (ADR 0023). ``None`` (or absent ``relevance_emphasis``) means
+            no annotation pass — byte-identical to the pipeline without it. Runs
             post-vetting, pay-only-when-steered, fail-open.
         relevance_emphasis: Optional parsed ``extraction.relevance_emphasis``
             sentences. The annotator runs only when both this and the backend
@@ -2288,16 +2288,16 @@ def extract_scope(
             extraction fingerprint (memo reuse untouched).
         profiles: Selected extraction profile ids. Profiles run in
             ``ALL_PROFILE_IDS`` order regardless of caller order.
-        refresh: D3 ``extraction.refresh`` value (``"abstract_only" | "failed"
+        refresh: The ``extraction.refresh`` value (``"abstract_only" | "failed"
             | "all"``), or ``None`` for as-built memo behaviour.
-        interventions_backend: The intervention profile seam (task 045).
+        interventions_backend: The intervention profile seam.
             Required when that profile is requested — a missing backend is
             an ``ExtractError``, never a silent stub.
         interventions_context: The tagging context for the intervention
-            profile (task 046, S4), or ``None``. It enters that profile's
+            profile, or ``None``. It enters that profile's
             fingerprint (``context_hash``) and reaches its backend; the IOF
-            and ICF profiles never receive it. ``None`` is byte-identical to
-            the pre-046 pipeline.
+            and ICF profiles never receive it. ``None`` leaves the fingerprint
+            and the backend call as they were before tagging contexts existed.
 
     Returns:
         The extraction summary payload for ``component.completed``.

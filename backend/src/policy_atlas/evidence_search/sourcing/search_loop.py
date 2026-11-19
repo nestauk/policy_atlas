@@ -524,10 +524,9 @@ def parse_search_directive(
 ) -> tuple[SearchDepth, Any | None, list[str] | None]:
     """Parse ``context["search"]`` using the fail-closed directive grammar.
 
-    The former D5 ``target`` key was removed with ``TARGET_CONFIDENT_RELEVANT``
-    (task 030): the round cap is the budget, so there is no stop target to
-    override. A directive still carrying it is refused as an unknown key —
-    honest refusal beats the silent no-op it previously compiled to.
+    There is no ``target`` key: the round cap is the budget, so there is no
+    stop target to override. A directive still carrying the old ``target``
+    key is refused as an unknown key — honest refusal beats a silent no-op.
 
     Args:
         context: Evidence-scope context JSON object.
@@ -538,7 +537,7 @@ def parse_search_directive(
 
     Raises:
         SearchDirectiveError: If the directive has an unknown key, a malformed
-            depth value, or a malformed ``guidance`` channel (B1: 1-5
+            depth value, or a malformed ``guidance`` channel (1-5
             non-empty, bounded, control-character-free strings).
     """
     raw = context.get("search")
@@ -574,7 +573,7 @@ def parse_search_directive(
 
 
 def parse_reformulate(context: dict[str, Any]) -> bool:
-    """Whether the link depth searches by meaning on the generated paraphrase (C44).
+    """Whether the link depth searches by meaning on the generated paraphrase.
 
     Returns:
         ``search.reformulate`` when the directive carries it, else ``False``.
@@ -599,7 +598,7 @@ LINK_SCALE_MAX = 4
 
 
 def parse_link_scale(context: dict[str, Any]) -> int:
-    """The link depth's result multiplier from the search directive (C44).
+    """The link depth's result multiplier from the search directive.
 
     Returns:
         ``search.link_scale`` when the directive carries it, else 1.
@@ -633,11 +632,11 @@ RECORD_CAP_MAX = DEPTH_CONSTANTS["deep"]["papers_cap"]
 def parse_record_cap(context: dict[str, Any]) -> int | None:
     """Parse the optional per-backend record cap from ``context["search"]``.
 
-    Added by task 044 (plan S2): the volume brake was previously reachable only
-    through the depth rung, so a plan whose question is narrow by construction
-    had no way to buy a smaller acquisition than ``rapid``'s own caps. The key
-    is optional and additive — an absent value keeps the depth rung's
-    ``papers_cap`` / ``policy_cap`` exactly as before.
+    Without it the volume brake is reachable only through the depth rung, so
+    a plan whose question is narrow by construction has no way to buy a
+    smaller acquisition than ``rapid``'s own caps. The key is optional and
+    additive — an absent value keeps the depth rung's ``papers_cap`` /
+    ``policy_cap``.
 
     Args:
         context: Evidence-scope context JSON object.
@@ -882,7 +881,7 @@ def count_search_runs(
 
     ``run_search`` reports its ``round_index`` from this (1 on a fresh scope;
     a check-in steer that re-runs the search on the same scope counts up).
-    Search is one pass at every scope (task 051); historical rows from the
+    Search is one pass at every scope; historical rows from the
     round loop still count.
 
     Args:
@@ -1090,7 +1089,7 @@ def _record_key(backend_name: str, record: dict[str, Any]) -> str | None:
 
 
 class _LiveSearch:
-    """What the page sees of the search while it runs (task 058, round 9).
+    """What the page sees of the search while it runs.
 
     Each topic and semantic query is published as it goes out and again when
     it comes back (``search.query``); a citations or lookup pass is published
@@ -1099,7 +1098,7 @@ class _LiveSearch:
     the query that went out last and is still out. Both legs and their
     thread pools report here, so one lock guards the state; the hub's own
     lock is taken inside it, which keeps each query's two messages in order.
-    An option search publishes no query frames (lead ruling, round 9): its
+    An option search publishes no query frames: its
     lines only.
     """
 
@@ -1257,7 +1256,7 @@ class _LiveSearch:
 
 
 def _is_option_search(conn: Connection, scope_id: uuid.UUID) -> bool:
-    """Whether the scope is an option search's (purpose ``targeted``, task 045)."""
+    """Whether the scope is an option search's (purpose ``targeted``)."""
     from policy_atlas.runtime.scoping_plan import TARGETED_PURPOSE
 
     purpose = conn.execute(
@@ -1337,7 +1336,7 @@ class _Pass:
         origin_of: The origin and verb of the call that returned each record
             object, keyed by ``id(record)``.
         ranked_count: How many records the ranking produced per backend.
-        live: What the page sees while the search runs (round 9), or
+        live: What the page sees while the search runs, or
             ``None`` to publish nothing.
     """
 
@@ -1367,7 +1366,7 @@ class _Pass:
         """Turn one fetch outcome into the executed call and record it.
 
         A logical call is one planned request however the transport pages or
-        retries underneath (contract D12). ``spec.keep`` is a local filter
+        retries underneath. ``spec.keep`` is a local filter
         applied to the returned records; what it drops is counted on the call
         as ``post_filter_excluded``, beside anything the backend itself
         excluded. The backend's per-request fields (``last_post_filter_excluded``,
@@ -1416,7 +1415,7 @@ class _Pass:
         return call
 
     def _fetch(self, backend_name: str, spec: _CallSpec) -> list[dict[str, Any]]:
-        """Run one call's fetch, telling the page as it goes out and comes back (round 9).
+        """Run one call's fetch, telling the page as it goes out and comes back.
 
         A topic or semantic query is published on its own; a call of a
         citations or lookup pass only adds its records to the found count
@@ -1751,9 +1750,9 @@ def _link_pools(
     validated: dict[str, dict[str, Any]],
     wires: dict[str, list[dict[str, str]]],
 ) -> tuple[dict[str, list[PoolEntry]], list[str]]:
-    """The link depth's search: five calls for one link, ``cap`` records at most (C27, C31).
+    """The link depth's search: five calls for one link, ``cap`` records at most.
 
-    ``scale`` multiplies every call's results (C44, Find more evidence).
+    ``scale`` multiplies every call's results (Find more evidence).
 
     OpenAlex semantic search on the sentence (origin ``semantic``) and on the
     sentence with :data:`LINK_PLACE_SUFFIX` (``semantic_place``); the one
@@ -2008,11 +2007,11 @@ def run_search(
 ) -> dict[str, Any]:
     """Run the single search pass and persist the two capped pools.
 
-    Every scope runs the same pass once (task 051, ADR 0038): one
+    Every scope runs the same pass once (ADR 0038): one
     query-generation call, OpenAlex keyword and semantic seeds, backward and
     forward citation chasing, Overton relevance results and their landmarks,
     two specificity-ranked pools cut at the scope's two caps. Every planned
-    call runs; there is no wall clock (task 030). Volume is bounded by the
+    call runs; there is no wall clock. Volume is bounded by the
     caps at acquisition and by the logical-call budgets here.
 
     Args:

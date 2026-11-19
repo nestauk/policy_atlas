@@ -1,4 +1,4 @@
-"""Frequency snowball on top of the raw OpenAlex baseline (R&D, task 047).
+"""Frequency snowball on top of the raw OpenAlex baseline (R&D).
 
 The idea, in one paragraph. Keyword search returns papers whose words match the
 question. The papers that a topic's literature keeps citing often use older or

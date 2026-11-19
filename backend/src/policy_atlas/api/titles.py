@@ -1,4 +1,4 @@
-"""Short names written by a model: a task's from its question, a chat's (task 058, round 14).
+"""Short names written by a model: a task's from its question, a chat's.
 
 A task is created with a name cut from the question the user typed. Once the
 user confirms the refined question (the plan is approved, or the question part

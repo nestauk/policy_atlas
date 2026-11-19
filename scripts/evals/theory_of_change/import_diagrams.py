@@ -1,4 +1,4 @@
-"""Synthetic theory-of-change diagrams with known answers, for the import experiment (task 054, 5).
+"""Synthetic theory-of-change diagrams with known answers, for the import experiment.
 
 Each diagram is data (boxes with their layer and place, arrows, assumption
 notes), drawn to SVG and rendered to PNG with PyMuPDF; the same data is the

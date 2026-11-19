@@ -134,7 +134,7 @@ def apply_appraisal_labels(citations: list[dict[str, Any]]) -> list[dict[str, An
     — a later re-appraisal does not rewrite an old answer's chip) and this
     function derives ``appraisal_label`` from it fresh on every read, at the
     router/read-model serialization boundary — never baked into the durable
-    ``answer_payload`` (task 029 delta-review).
+    ``answer_payload``.
 
     Args:
         citations: A turn's citation dicts, as persisted (or freshly
@@ -144,7 +144,7 @@ def apply_appraisal_labels(citations: list[dict[str, Any]]) -> list[dict[str, An
         The same citations with ``appraisal_label`` set from
         ``appraisal_score`` (via ``SCORE_LABELS``) wherever a score is
         present and known, or to "Unrated" where the citation persisted
-        ``appraisal_unrated`` (an appraisal with no score, task 056);
+        ``appraisal_unrated`` (an appraisal with no score);
         neither persisted key is re-exposed — the frontend contract has only
         ever carried the label.
     """
@@ -198,15 +198,15 @@ def _resolve_citation_sources(
     """Attach source display facts to floored citations (title + document id).
 
     Also carries the cited snapshot's ``text_basis`` (``abstract_only`` or
-    ``full_text``, task 046) straight through from ``source_snapshot`` — the
+    ``full_text``) straight through from ``source_snapshot`` — the
     exact snapshot the quote/finding came from, not envelope-resolved.
 
-    References must read as documents, not durable ids (owner live check,
-    2026-08-11). Bibliographic authority is the ENVELOPE snapshot per the
+    References must read as documents, not durable ids. Bibliographic
+    authority is the ENVELOPE snapshot per the
     artefact read model's rule; the tss id joins to the sources/dossier
     surface. Resolution failure leaves the honest id-only citation.
 
-    Both branches are task-scoped (security review, 2026-08-11): a chunk's
+    Both branches are task-scoped: a chunk's
     source_snapshot is content-keyed and can be shared by another task's
     task_source_snapshot, and a finding_id alone carries no task
     boundary, so either lookup left unscoped could resolve another task's
@@ -214,7 +214,7 @@ def _resolve_citation_sources(
     ``repository.chunk_quote_context_out`` for the same chunk-side filter).
 
     Also resolves the cited document's ``appraisal_score`` + ``evidence_type``
-    through the label resolver (``options_scoping.labels``, task 045 S5) —
+    through the label resolver (``options_scoping.labels``) —
     the same resolution ``repository.artefact_out``'s CitationOut uses: this
     task's latest rows, then a linked task's pinned walk for an inherited
     document. The score, not the label, is what

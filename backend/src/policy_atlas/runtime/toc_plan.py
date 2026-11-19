@@ -1,25 +1,25 @@
-"""The theory-of-change plan model and its deterministic chain composer (task 054).
+"""The theory-of-change plan model and its deterministic chain composer.
 
 The third plan payload shape in the ``plan`` table, validated and composed only
 through :mod:`policy_atlas.runtime.capability_registry` (the registry imports
 this module, never the reverse).
 
-A theory of change runs two walks (C3), told apart by the intent record's
+A theory of change runs two walks, told apart by the intent record's
 ``purpose = 'toc'`` and ``context.toc_walk``:
 
 - ``draft``: ``toc_draft``. Pasted text in the existing-theory entry point drafts
-  too: the draft prompt keeps the user's words (``toc_import`` is increment 5).
+  too: the draft prompt keeps the user's words.
 - ``check``: ``toc_select → toc_discover → toc_merge → toc_search_new →
   toc_judge → toc_figures → classify → appraise → toc_choose → toc_summarise →
-  toc_report`` (C31, C32, C37, C38). With ``context.links``
+  toc_report``. With ``context.links``
   (Search for more) the same chain without discover, merge and choose.
 
 The item searches a check walk dispatches are ``targeted`` walks with
 ``acquire_only`` in their context; each runs ``acquire`` alone at the
-``link`` search depth (C27). They are a runner stage, not a chain step (S3).
+``link`` search depth. They are a runner stage, not a chain step.
 ``toc_select`` keeps every document they acquired, with no model call.
 
-The lattice is empty (C12): a theory-of-change walk never pauses, so the plan
+The lattice is empty: a theory-of-change walk never pauses, so the plan
 is always ``unattended`` and declares no standing defaults.
 """
 
@@ -79,7 +79,7 @@ TOC_STOP_EVENT = "toc.stop_requested"
 
 
 def toc_stop_requested(engine: Any, *, task_id: Any, capability_run_id: Any) -> bool:
-    """Whether the user asked to stop this theory-of-change walk (C48)."""
+    """Whether the user asked to stop this theory-of-change walk."""
     from sqlalchemy import select
 
     from policy_atlas.core.schema import event_log
@@ -115,7 +115,7 @@ TOC_REFORMULATE_KEY = "reformulate"
 
 
 def link_scale_for(context: Mapping[str, Any] | None) -> int:
-    """The result multiplier a check walk runs with (C44).
+    """The result multiplier a check walk runs with.
 
     Args:
         context: The check walk's intent-record context.
@@ -193,7 +193,7 @@ class TocEvidenceRestriction(BaseModel):
 
 
 class TocPlan(BaseModel):
-    """The approved theory-of-change plan (S2; spec § Plan slots).
+    """The approved theory-of-change plan (spec § Plan slots).
 
     Args:
         title: Short user-visible name for the task.
@@ -204,13 +204,13 @@ class TocPlan(BaseModel):
         intervention: The intervention; required for ``intervention_first``.
         dosage: How much of the intervention, when known.
         existing_theory_text: A pasted theory, kept verbatim.
-        upload_id: An uploaded theory (increment 5).
+        upload_id: An uploaded theory.
         drawn_on_canvas: The theory the user drew on the canvas is theirs, kept as drawn.
         where: The place the theory is for. Steers the search; never excludes.
         time_horizon: When the impact is expected.
         context: What the user knows about the setting.
         evidence_restriction: Where evidence may come from.
-        steering_mode: Always ``unattended``: the lattice is empty (C12).
+        steering_mode: Always ``unattended``: the lattice is empty.
         steer_point_defaults: Always empty: there is no point to declare.
         source_turn_index: The Task Agent turn that approved this version.
     """
@@ -260,7 +260,7 @@ def as_drawn(plan: TocPlan) -> bool:
 
     The canvas starts with only the user's boxes and arrows; what the draft
     adds to complete the theory, and the routes the evidence check finds, wait
-    as suggestions (owner, 2026-11-04).
+    as suggestions.
     """
     return plan.upload_id is not None or plan.drawn_on_canvas
 
@@ -288,9 +288,9 @@ def _item_search_directive(
 
     Args:
         plan: The validated plan.
-        scale: The result multiplier (C44): every call keeps ``scale`` times its
+        scale: The result multiplier: every call keeps ``scale`` times its
             results and the cap grows with it; 1 is the ordinary link search.
-        previous: For a reformulated search (C44), the queries the link's
+        previous: For a reformulated search, the queries the link's
             earlier searches ran; ``None`` is the ordinary search.
     """
     search: dict[str, Any] = {
@@ -341,7 +341,7 @@ def compose_toc(
         purpose: The intent record's ``purpose``: ``toc`` for a main walk,
             ``targeted`` for an item search.
         context: The intent record's ``context``: ``toc_walk`` (and ``links``)
-            for a main walk, ``acquire_only`` (and ``link_scale``, C44) for an
+            for a main walk, ``acquire_only`` (and ``link_scale``) for an
             item search.
 
     Returns:

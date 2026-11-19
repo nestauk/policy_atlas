@@ -1,4 +1,4 @@
-"""The plan-stage sense check: can this intervention cause this goal at all? (task 054, red team).
+"""The plan-stage sense check: can this intervention cause this goal at all? (red team).
 
 When the Task Agent makes a theory-of-change plan ready, one quick OpenAlex
 search on the whole intervention (two queries, six results each) and one

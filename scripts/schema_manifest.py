@@ -1,4 +1,4 @@
-"""Emit the rename manifest for task 038 from the SQLAlchemy metadata.
+"""Emit the vocabulary-rename manifest from the SQLAlchemy metadata.
 
 Deterministic and complete: every table, column, primary key, foreign key,
 CHECK, UNIQUE and index (named or positional, explicit or auto-named by
@@ -6,7 +6,7 @@ PostgreSQL's ``<table>_pkey`` / ``<table>_<col>_fkey`` convention) whose
 name carries one of the old vocabulary tokens, with its target name. The
 migration and the round-trip test are written from this output, never typed.
 
-Run it on a **pre-038 checkout** (a worktree at the last `dev` before the
+Run it on a **checkout from before the vocabulary rename** (a worktree at the last `dev` before the
 sweep): at HEAD `project` already names the Project entity, so the same
 mapping would read it as the old Task and emit a corrupt manifest — `main`
 refuses when the metadata already carries a `task` table.
