@@ -1,4 +1,4 @@
-"""The theory of change's first draft, drawn on the page as it is written (task 054, S12).
+"""The theory of change's first draft, drawn on the page as it is written.
 
 In plain terms: the draft is still one model call with the same prompt
 (``toc_draft_v5``), model, answer format, checks and retry. What changes is

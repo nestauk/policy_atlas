@@ -29,11 +29,11 @@ from policy_atlas.runtime.task_plan import TIME_BANDS
 
 # planner_v11: APO (Australian Policy Online) source-collection restriction —
 # publisher_source "apo" + backend_scope grey_lit_only when the user asks for
-# APO (task 039 test mod) — and the per-criterion screening cap raised to
+# APO — and the per-criterion screening cap raised to
 # 1000 characters (matches SCREENING_CRITERION_MAX). Succeeds planner_v10
 # (OECD members source-origin default + OECD setting screening criterion).
 # The router and watch moments live in agent_prompt.py.
-# planner_v12 (task 058, review 2026-11-09): the thoroughness copy in the plain voice
+# planner_v12: the thoroughness copy in the plain voice
 # (totals kept, sections, deep extracts), the preset bands read from task_plan.TIME_BANDS
 # (Rapid overview ~5-10 min, Standard ~10-20, Detailed ~20-30). Three content changes
 # shipped under v11 during the build; the review bumps the version so the stored
@@ -45,7 +45,7 @@ PLANNER_PROMPT_VERSION = "planner_v12"
 OECD_SETTING_CRITERION = "Study, programme, or policy setting is in an OECD member country."
 
 # Input-side caps at prompt assembly. Generous for legitimate intents; a
-# bound, not a filter (the screen prompt's M10 discipline).
+# bound, not a filter.
 PLANNER_INTENT_MAX = 4_000
 PLANNER_TURN_MAX = 2_000
 PLANNER_HISTORY_TURNS_MAX = 20
@@ -692,7 +692,7 @@ if the instruction text were absent.
 
 #: The three preset time bands come from the one table the plan document shows
 #: (``task_plan.TIME_BANDS``), so the planner's words and the plan document can
-#: never disagree (task 058, N20).
+#: never disagree.
 PLANNER_SYSTEM_PROMPT = (
     _PLANNER_SYSTEM_PROMPT_TEMPLATE.replace("__BAND_QUICK__", TIME_BANDS[("rapid", "landscape")])
     .replace("__BAND_STANDARD__", TIME_BANDS[("standard", "standard")])

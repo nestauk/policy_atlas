@@ -3,8 +3,8 @@ import { cn } from "../../ui/brand/cn";
 import { LABEL_CLASS } from "../../ui/brand/label";
 
 /**
- * A group's name and count, the one heading style for the longlist (round
- * 13, owner): the list's group headings and the grid's column and row
+ * A group's name and count, the one heading style for the longlist:
+ * the list's group headings and the grid's column and row
  * heads. The name in the Label style in Navy (uppercase, tracked, bold);
  * the count after it in Meta Grey, regular case.
  *

@@ -1,23 +1,23 @@
 """The synthesis writer backends (live OpenAI and stub) for the section prompt surfaces.
 
-The prompt text, tool schemas and response models now live in
-:mod:`policy_atlas.evidence_search.synthesis.section_prompt` (task 056, so the
+The prompt text, tool schemas and response models live in
+:mod:`policy_atlas.evidence_search.synthesis.section_prompt` (so the
 prompt hash guard pins them); the history below describes those surfaces.
 
 The repo's fifth and sixth product prompts — lead-authored, versioned, recorded
-in synthesis provenance and event payloads. ``synthesise_sections_v2`` (v2, 018 C2:
-the evidence-descriptive role menu — owner-scoped addition) is a
+in synthesis provenance and event payloads. ``synthesise_sections_v2`` (v2:
+the evidence-descriptive role menu) is a
 single bounded schema-constrained call proposing the intent-led section list.
-``synthesise_section_v7`` (v3, task 018 B-B2: the deliberate voice design; v4,
-018 C2 round 2: repetition/label-translation rules; v5 = 018 C2 round 3
-multi-read-tool turns; v6 = task 021 Phase E unified kind-typed findings read;
-v7 = task 022 Phase F cache-prefix RUN/SECTION layout and id-carrying repair)
+``synthesise_section_v7`` (v3: the deliberate voice design; v4,
+repetition/label-translation rules; v5, multi-read-tool turns;
+v6, unified kind-typed findings read;
+v7, cache-prefix RUN/SECTION layout and id-carrying repair)
 is the section-loop surface: one system prompt plus
 the three tool JSON schemas, **versioned as one unit** — the OpenAI form runs
 the bounded tool-calling loop (the repo's first agent loop; the loop runner and
 turn accounting live in :mod:`policy_atlas.evidence_search.synthesis.synthesis_tools`).
 
-Standing injection posture, tightened for the loop (contract decision 14):
+Standing injection posture, tightened for the loop:
 intent, substrate summaries, finding records, tool-returned frozen chunk text,
 lookup results (tag labels included) and the rolling claim ledger enter as
 id-keyed JSON data records, never instructions; responses and tool calls are
@@ -133,8 +133,8 @@ log = structlog.get_logger()
 
 # The contracted model floor (the 009 nano lesson is binding); section/prose
 # quality on real corpora is eval territory, not asserted by the build.
-# Models from the route file (task 053); see core/model_routes.py. Every call
-# site below is its own step (task 056): its own model and its own effort.
+# Models from the route file; see core/model_routes.py. Every call
+# site below is its own step: its own model and its own effort.
 # ``SYNTHESIS_MODEL`` is the section-turn step's model, the one the run's
 # provenance stamps as "the synthesis model".
 SYNTHESIS_MODEL = route().model_for("synthesise_section_turn")
@@ -147,8 +147,8 @@ FULL_REPORT_INTRO_MODEL = route().model_for("synthesise_write_intro")
 def _step_kwargs(step: str) -> dict[str, Any]:
     """Return the model, reasoning effort and request timeout for one synthesis call site.
 
-    All three come from the route file (tasks 056 and 057): Terra needs
-    ``"none"`` or tool-bearing and structured-parse calls return 400 (029),
+    All three come from the route file: Terra needs
+    ``"none"`` or tool-bearing and structured-parse calls return 400,
     and the route file says so on the writer steps.
 
     Args:
@@ -183,12 +183,13 @@ def _cache_messages(step: str, messages: list[Any]) -> list[Any]:
         return with_system_breakpoint(messages)
     return messages
 
-# Read-path ceiling for section titles (artefacts minted before task 034); the
+# Read-path ceiling for section titles (artefacts minted before the 60-character
+# proposal bound); the
 # proposal bounds the prompt states live in section_prompt.py.
 SECTION_TITLE_MAX = 200
 
 # Forbidden generic section titles — the 012 label set, shared verbatim
-# (contract rev 8 M5), plus the section-shaped catch-alls of the same kind.
+# , plus the section-shaped catch-alls of the same kind.
 FORBIDDEN_SECTION_TITLES = FORBIDDEN_GROUP_LABELS | frozenset(
     {"overview", "introduction", "conclusion", "summary", "findings", "background"}
 )
@@ -219,12 +220,12 @@ class SectionTurn(TypedDict):
     whole-emission failure) — surfaced into ``claims_rejected_structural``.
     ``extra_tool_calls_ignored`` counts the further tool calls a forced
     final turn carried beyond the ``emit_section`` call that was taken (task
-    056 D10: parallel tool calls stay on for the forced turn so it reads the
+    Parallel tool calls stay on for the forced turn so it reads the
     cache). The ``claims`` field name is kept for the wire shape ``SectionProseWire``
     (prose + claims) to bound the diff.
 
-    ``ready`` is True when the writer said it has gathered enough (task 058,
-    owner 2026-11-05): it called ``write_section``, or replied with no tool
+    ``ready`` is True when the writer said it has gathered enough:
+    it called ``write_section``, or replied with no tool
     call at all. Such a turn carries no reads and no claims; the loop then
     runs the write turn, which streams the section to the user.
     """
@@ -240,7 +241,7 @@ class SectionTurn(TypedDict):
 
 
 class SynthesisBackend(Protocol):
-    """The synthesis writer seam (task 013) — both writer surfaces, one backend.
+    """The synthesis writer seam — both writer surfaces, one backend.
 
     Backends perform one schema-constrained provider call per method (or
     deterministic fixture-like work) and return raw output after structural
@@ -320,7 +321,7 @@ class SynthesisBackend(Protocol):
         Returns:
             The turn plus token usage: exactly one of ``tool_calls`` (one or
             more entries), ``claims``, or ``ready`` (the writer has gathered
-            enough; the loop runs the write turn next, task 058).
+            enough; the loop runs the write turn next).
         """
         ...
 
@@ -503,7 +504,7 @@ def _salvage_section(arguments: str) -> tuple[SectionProseWire, int]:
 
 
 class StreamedClaimMarker:
-    """Mark the writer's citations on the page as each claim closes (task 058).
+    """Mark the writer's citations on the page as each claim closes.
 
     In plain terms: the streamed write turn sends the prose first and then the
     claims, each naming the exact words of the prose it supports and the
@@ -524,7 +525,7 @@ class StreamedClaimMarker:
         sources: The citable ids' sources, ``(by_chunk_id, by_finding_id)``
             as :func:`citable_sources` gives them, when the caller already
             has them (the key findings, which run without a transcript, cite
-            what the sections read; round 8). ``None`` reads them from
+            what the sections read). ``None`` reads them from
             ``seed`` and ``transcript``.
     """
 
@@ -645,7 +646,7 @@ def _open_model_call() -> Iterator[None]:
     page a small "still working" signal (a heartbeat). Every other model call
     is marked by :func:`tracing.traced_attempts`; the streamed write calls
     run outside it, so without this the page heard nothing between chunks
-    (task 058 review: a 32 s silent gap on a real run). The mark covers the
+    (a 32 s silent gap on a real run). The mark covers the
     stream and its non-streamed fallback, closed in a ``finally`` as
     ``traced_attempts`` closes it.
     """
@@ -657,7 +658,7 @@ def _open_model_call() -> Iterator[None]:
 
 
 class StreamedCardPublisher:
-    """Send each case-study card to the page as it closes in the reply (task 058).
+    """Send each case-study card to the page as it closes in the reply.
 
     In plain terms: the case-studies reply is one JSON object,
     ``{"cards": [{"title": ..., "prose": ..., ...}, ...]}``, arriving in
@@ -892,7 +893,7 @@ def _first_named_tool_call(
     """Return a forced response's first ``name`` call and the ignored calls' names.
 
     The forced final section turn and the repair keep ``parallel_tool_calls``
-    on (task 056 D10, so their request matches the cached prefix), so the
+    on (so their request matches the cached prefix), so the
     provider may return more than one call. The first call named ``name`` is
     taken; every other call is ignored, logged
     (``synthesise.extra_tool_calls_ignored``) and counted by the caller. When
@@ -971,7 +972,7 @@ class OpenAISynthesisBackend:
         self._langfuse_client = langfuse_client
         self._turn_count = 0
         self._lock = Lock()
-        # Streamed final turns that fell back to the forced tool call (task 058, N6).
+        # Streamed final turns that fell back to the forced tool call.
         self.stream_fallbacks = 0
 
     @property
@@ -1172,7 +1173,7 @@ class OpenAISynthesisBackend:
         force_emit: bool,
         tools: list[dict[str, Any]] | None = None,
     ) -> UsageResult[SectionTurn]:
-        # Task 056 D10: every turn sends the same five tools and parallel tool
+        # Every turn sends the same five tools and parallel tool
         # calls, so the request prefix matches the cache; tool_choice alone
         # differs (allowed_tools over the four section tools, or emit_section
         # by name on the forced final turn). ``tools`` defaults to the full
@@ -1231,7 +1232,7 @@ class OpenAISynthesisBackend:
         message_tool_calls = response.choices[0].message.tool_calls or []
         if not message_tool_calls:
             # A bare reply with no tool call means the writer is ready to write
-            # (owner, 2026-11-05): the loop runs the write turn next.
+            # The loop runs the write turn next.
             return _ready_turn()
 
         if len(message_tool_calls) == 1:
@@ -1343,7 +1344,7 @@ class OpenAISynthesisBackend:
         seed: dict[str, Any],
         transcript: list[ToolExchange],
     ) -> UsageResult[SectionTurn]:
-        """Write the section as one streamed reply (task 058, N6; owner 2026-11-05).
+        """Write the section as one streamed reply.
 
         This is every section's write turn: the turn after the writer calls
         ``write_section`` (it has gathered enough), and the forced final turn
@@ -1355,7 +1356,7 @@ class OpenAISynthesisBackend:
         Keeping the tools means the provider can reuse the part of the prompt
         it has already stored from the earlier turns (its "prompt cache"); a
         structured-output schema would change that stored part and lose the
-        reuse (probe, 2026-11-05). Each piece of prose is sent to the user as
+        reuse (probe). Each piece of prose is sent to the user as
         it arrives through :func:`publish_section_delta`. Each claim object is
         read as soon as it closes, and a claim whose text is found in the
         prose and that cites a source is sent to the page with its sources
@@ -1390,7 +1391,7 @@ class OpenAISynthesisBackend:
         # Deltas are addressed to the page's section index (key findings first
         # at 0), which the seed carries as ``display_index``; the loop's own
         # ``section_index`` is one lower for a body section when the report
-        # has key findings (task 058; owner round 5).
+        # has key findings.
         index = int(seed.get("display_index", seed["section_index"]))
         metadata = {
             "step": step,
@@ -1464,7 +1465,7 @@ class OpenAISynthesisBackend:
                 with self._lock:
                     self.stream_fallbacks += 1
                 result = self.section_turn(seed, transcript, force_emit=True)
-                # Task 058 review: the fallback's prose reaches the page at once, not at
+                # The fallback's prose reaches the page at once, not at
                 # ``section_completed`` after the claim checks and the repair.
                 section = result[0]["claims"]
                 if section is not None and section.prose:
@@ -1478,7 +1479,7 @@ class OpenAISynthesisBackend:
         tools: list[dict[str, Any]] | None = None,
     ) -> tuple[SectionRepairWire, Any, int]:
         """Send the repair request; return the repairs, usage and ignored-call count."""
-        # Task 056 D10: the same five tools and parallel tool calls as the
+        # The same five tools and parallel tool calls as the
         # section turns, so the repair reads the section's cached prefix;
         # emit_repairs is forced by name.
         completions: Any = self._client.chat.completions
@@ -1634,11 +1635,11 @@ class OpenAISynthesisBackend:
             tuple[dict[str, tuple[str, str | None]], dict[str, tuple[str, str | None]]] | None
         ) = None,
     ) -> UsageResult[SectionProseWire]:
-        """Write the key findings as one streamed reply (task 058, round 8).
+        """Write the key findings as one streamed reply.
 
         The messages are the ones :meth:`write_key_findings` sends, unchanged.
         That call forces the ``emit_section`` tool, which the provider
-        delivers in one burst at the end (probe, 2026-11-04), so this one asks
+        delivers in one burst at the end (probe), so this one asks
         for the same arguments as a structured reply instead: the
         ``emit_section`` parameters schema as a strict ``json_schema``
         response format (the schema the probe's fourth call showed the
@@ -1796,7 +1797,7 @@ class OpenAISynthesisBackend:
     def write_case_studies_stream(
         self, seed: dict[str, Any], *, index: int
     ) -> UsageResult[CaseStudyWire]:
-        """Write the case-study cards as one streamed reply (task 058, round 7).
+        """Write the case-study cards as one streamed reply.
 
         The request is the one :meth:`write_case_studies` sends (the same
         messages and the same structured-output schema), streamed. As each
@@ -2008,7 +2009,7 @@ class OpenAISynthesisBackend:
     def write_full_report_intro_stream(
         self, seed: dict[str, Any], *, index: int
     ) -> UsageResult[IntroWire]:
-        """Write the full report's introduction as one streamed reply (task 058, round 8).
+        """Write the full report's introduction as one streamed reply.
 
         The request is the one :meth:`write_full_report_intro` sends (the
         same messages and the same structured-output schema), streamed. As

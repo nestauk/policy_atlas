@@ -23,7 +23,7 @@ import type { TocBox, TocDocument, TocEvidence, TocGraph, TocLink } from "./type
 export type Selection = { kind: "box" | "link"; id: string };
 
 /** A section of the panel ("How this works", "Evidence"): a plain head, Body
- *  Bold Navy, with room above it (no uppercase label, phase 7). */
+ *  Bold Navy, with room above it (no uppercase label). */
 const HEAD = "mt-6 text-body font-bold text-navy";
 /** A part inside a section ("Conditions", "Size of change"): body size, bold, body ink. */
 const SUB = "mt-3 text-body font-bold text-ink";
@@ -229,7 +229,7 @@ function LinkDetail({
   if (editing && editor !== null) return <LinkEditForm link={link} editor={editor} onDone={() => setEditing(false)} />;
   const codeOf = (boxId: string) => graph.boxes.find((box) => box.box_id === boxId)?.code ?? null;
   const [source, target] = [codeOf(link.source_box_id), codeOf(link.target_box_id)];
-  // "Connection #5 · S3 → L1" (C35); rows written before codes have none.
+  // "Connection #5 · S3 → L1"; rows written before codes have none.
   const codes = link.code !== null && source !== null && target !== null ? `${link.code} · ${source} → ${target}` : null;
   return (
     <>
@@ -379,7 +379,7 @@ export function DetailPanel({
   evidence: TocEvidence | null | undefined;
   selection: Selection;
   onClose: () => void;
-  /** Editing controls for an editor (C41); null keeps the panel read-only. */
+  /** Editing controls for an editor; null keeps the panel read-only. */
   editor: Editor | null;
   /** The width the user dragged it to, kept by the page while it is open. */
   panel: PanelWidth;

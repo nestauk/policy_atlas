@@ -1,12 +1,12 @@
-"""The deterministic "no in-scope evidence" check (task 045, S9; D9, A12).
+"""The deterministic "no in-scope evidence" check.
 
-An evidence restriction never excludes an option (ruling 23). Retrieval
+An evidence restriction never excludes an option. Retrieval
 already applies it, so only inherited documents and documents acquired under
-an earlier plan version's restriction can fall outside it (A12). This module
+an earlier plan version's restriction can fall outside it. This module
 reads each member document's publication country and publication year from
 its snapshot metadata and marks an option **no in-scope evidence** when none
 of its member documents passes the plan's restrictions. No model is called;
-languages are not applied (044 C8: the search grammar has no language
+languages are not applied (the search grammar has no language
 filter, so nothing was narrowed by language either).
 
 Which fields are read, and why:
@@ -18,7 +18,7 @@ Which fields are read, and why:
   authorship countries (``provider_fields.authorships[].countries``): the
   OpenAlex leg of retrieval filters a country group on
   ``authorships.countries`` (``search_loop.openalex_wire_params``), not on the
-  publisher's country, and D9 reads "the same fields retrieval filtered on".
+  publisher's country, and this check reads the same fields retrieval filtered on.
   Without it a journal article retrieved *under* the restriction, whose
   publisher sits elsewhere, would read as out of scope.
 - **year** — ``publication_year`` else ``year``, the envelope's year grain
@@ -91,7 +91,7 @@ class _Document:
 def restrictions_for(plan: ScopingPlan) -> list[Restriction]:
     """The plan's evidence restrictions with a country group or a year bound.
 
-    A restriction with only languages is left out (not applied, 044 C8).
+    A restriction with only languages is left out (not applied).
 
     Args:
         plan: The walk's scoping plan.

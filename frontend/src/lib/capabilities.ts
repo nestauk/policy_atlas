@@ -11,7 +11,7 @@ export const CAPABILITIES = [
     available: true,
   },
   {
-    // Task 044 (D5): the key is the API's stored `task.capability` value, so
+    // The key is the API's stored `task.capability` value, so
     // the label lookup below works straight off `TaskOut.capability` with no
     // translation table in between.
     key: "options_scoping",
@@ -41,7 +41,7 @@ const LABEL_BY_KEY = new Map<string, string>(
   CAPABILITIES.map((capability) => [capability.key, capability.name]),
 );
 
-/** One of the keys the New task screen can offer (task 044). */
+/** One of the keys the New task screen can offer. */
 export type SelectableCapabilityKey = "evidence_search" | "options_scoping" | "theory_of_change";
 
 /**
@@ -62,9 +62,10 @@ export function isSelectableCapability(
 /**
  * Human label for a capability key on list surfaces.
  *
- * `TaskOut.capability` carries the key from task 044 on, but the fallback
+ * `TaskOut.capability` carries the key, but the fallback
  * stays: an older client reading a newer key should show the key rather than
- * nothing, and a caller with no key at all is reading a pre-044 row.
+ * nothing, and a row with no key at all predates the capability field (an
+ * Evidence search).
  */
 export function capabilityLabel(key?: string | null): string {
   if (key == null) return LABEL_BY_KEY.get("evidence_search") ?? "Evidence search";

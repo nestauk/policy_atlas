@@ -1,25 +1,25 @@
-"""The theory-of-change plan model and its deterministic chain composer (task 054).
+"""The theory-of-change plan model and its deterministic chain composer.
 
 The third plan payload shape in the ``plan`` table, validated and composed only
 through :mod:`policy_atlas.runtime.capability_registry` (the registry imports
 this module, never the reverse).
 
-A theory of change runs two walks (C3), told apart by the intent record's
+A theory of change runs two walks, told apart by the intent record's
 ``purpose = 'toc'`` and ``context.toc_walk``:
 
 - ``draft``: ``toc_draft``. Pasted text in the existing-theory entry point drafts
-  too: the draft prompt keeps the user's words (``toc_import`` is increment 5).
+  too: the draft prompt keeps the user's words.
 - ``check``: ``toc_select → toc_discover → toc_merge → toc_search_new →
   toc_judge → toc_figures → classify → appraise → toc_choose → toc_summarise →
-  toc_report`` (C31, C32, C37, C38). With ``context.links``
+  toc_report``. With ``context.links``
   (Search for more) the same chain without discover, merge and choose.
 
 The item searches a check walk dispatches are ``targeted`` walks with
 ``acquire_only`` in their context; each runs ``acquire`` alone at the
-``link`` search depth (C27). They are a runner stage, not a chain step (S3).
+``link`` search depth. They are a runner stage, not a chain step.
 ``toc_select`` keeps every document they acquired, with no model call.
 
-The lattice is empty (C12): a theory-of-change walk never pauses, so the plan
+The lattice is empty: a theory-of-change walk never pauses, so the plan
 is always ``unattended`` and declares no standing defaults.
 """
 
@@ -54,32 +54,32 @@ TOC_PURPOSE = "toc"
 #: The intent-record context key that names the walk kind.
 TOC_WALK_KEY = "toc_walk"
 
-#: The walk kinds (C3, C19).
+#: The walk kinds.
 TOC_WALK_DRAFT = "draft"
 TOC_WALK_CHECK = "check"
 
 #: The intent-record context key naming the links a check walk covers.
 TOC_LINKS_KEY = "links"
 
-#: Link id → DOIs the user added (C42): those links' searches only look them up.
+#: Link id → DOIs the user added: those links' searches only look them up.
 TOC_STUDIES_KEY = "studies"
-#: Why a named check runs (C40): ``new_items`` · ``check_again`` · ``find_more``.
+#: Why a named check runs: ``new_items`` · ``check_again`` · ``find_more``.
 TOC_CHECK_MODE_KEY = "mode"
 #: The user who started a named check, for ``added_by`` on the studies they added.
 TOC_STARTED_BY_KEY = "started_by"
-#: On a draft walk of an uploaded theory (increment 5): stop after the draft, so
+#: On a draft walk of an uploaded theory: stop after the draft, so
 #: the user compares the canvas with their diagram before the evidence check.
 TOC_REVIEW_FIRST_KEY = "review_first"
 #: On a check walk the server started after a draft: the draft walk's id (the
-#: duplicate guard, and the follow-on the run read exposes; task 054).
+#: duplicate guard, and the follow-on the run read exposes).
 TOC_DRAFT_WALK_KEY = "draft_capability_run_id"
 
-#: The event a Stop writes; the runner ends the walk before its next step (C48).
+#: The event a Stop writes; the runner ends the walk before its next step.
 TOC_STOP_EVENT = "toc.stop_requested"
 
 
 def toc_stop_requested(engine: Any, *, task_id: Any, capability_run_id: Any) -> bool:
-    """Whether the user asked to stop this theory-of-change walk (C48)."""
+    """Whether the user asked to stop this theory-of-change walk."""
     from sqlalchemy import select
 
     from policy_atlas.core.schema import event_log
@@ -98,24 +98,24 @@ def toc_stop_requested(engine: Any, *, task_id: Any, capability_run_id: Any) -> 
 
 
 #: Records each item search may keep per backend: every distinct result of
-#: its five calls (C27, C31). ``toc_select`` then picks the documents judged.
+#: its five calls. ``toc_select`` then picks the documents judged.
 TOC_ITEM_RECORD_CAP = 60
-#: An item search's context key for the result multiplier (C44): Find more
+#: An item search's context key for the result multiplier: Find more
 #: evidence runs every call with this many times the results, and the cap.
 TOC_LINK_SCALE_KEY = "link_scale"
-#: The multiplier Find more evidence uses (owner, 2026-11-06): twice the results,
+#: The multiplier Find more evidence uses: twice the results,
 #: so the search reaches past what the first check found.
 TOC_FIND_MORE_SCALE = 2
-#: Documents a Find more evidence walk picks and judges per link (owner,
-#: 2026-11-06), in place of the ordinary ten.
+#: Documents a Find more evidence walk picks and judges per link,
+#: in place of the ordinary ten.
 TOC_FIND_MORE_PER_LINK = 40
-#: An item search's context key for a reformulated search (C44): the queries the
+#: An item search's context key for a reformulated search: the queries the
 #: link's earlier searches ran, which the query writer is told not to repeat.
 TOC_REFORMULATE_KEY = "reformulate"
 
 
 def link_scale_for(context: Mapping[str, Any] | None) -> int:
-    """The result multiplier a check walk runs with (C44).
+    """The result multiplier a check walk runs with.
 
     Args:
         context: The check walk's intent-record context.
@@ -128,7 +128,7 @@ def link_scale_for(context: Mapping[str, Any] | None) -> int:
     return TOC_FIND_MORE_SCALE if (context or {}).get(TOC_CHECK_MODE_KEY) == "find_more" else 1
 
 
-#: Links judged per check walk at most (C5).
+#: Links judged per check walk at most.
 TOC_LINK_CAP = 80
 
 #: The check walk's chain. Discover and summarise degrade the walk when they
@@ -137,25 +137,25 @@ TOC_CHECK_CHAIN: tuple[tuple[str, bool], ...] = (
     ("toc_select", True),
     ("toc_discover", False),
     ("toc_merge", True),
-    # The links discovery added get their own search and pick (C32).
+    # The links discovery added get their own search and pick.
     ("toc_search_new", False),
     ("toc_judge", True),
     # A link the judge left with too little evidence gets one more search, in the
-    # words of the research that would test it, and its new documents judged (C44).
+    # words of the research that would test it, and its new documents judged.
     ("toc_search_again", False),
-    # The size of change behind each judged link (C37); a failure degrades the walk.
+    # The size of change behind each judged link; a failure degrades the walk.
     ("toc_figures", False),
-    # Classify and appraise read only what the judge found on topic (C31).
+    # Classify and appraise read only what the judge found on topic.
     ("classify", True),
     ("appraise", True),
     ("toc_choose", True),
     ("toc_summarise", False),
-    # Detailed information, rebuilt on every check (C38); a failure degrades the walk.
+    # Detailed information, rebuilt on every check; a failure degrades the walk.
     ("toc_report", False),
 )
 
-#: The steps a named-link check (C40) leaves out. The report is rewritten by the
-#: review's Update the report (C45), not by every small check.
+#: The steps a named-link check leaves out. The report is rewritten by the
+#: review's Update the report, not by every small check.
 _NAMED_LINK_SKIPS = frozenset(
     {"toc_discover", "toc_merge", "toc_search_new", "toc_choose", "toc_report"}
 )
@@ -163,7 +163,7 @@ _NAMED_LINK_SKIPS = frozenset(
 EntryPoint = Literal["outcome_first", "intervention_first", "existing_theory"]
 
 #: The evidence a theory is checked against starts here unless the user changes
-#: the plan: older studies (1980s, 1990s) crowded the checks (owner, 2026-11-04).
+#: the plan: older studies (1980s, 1990s) crowded the checks.
 #: A new plan carries it, and a stored plan with no restriction is read the same.
 DEFAULT_PUBLISHED_AFTER = "2000-01-01"
 
@@ -193,7 +193,7 @@ class TocEvidenceRestriction(BaseModel):
 
 
 class TocPlan(BaseModel):
-    """The approved theory-of-change plan (S2; spec § Plan slots).
+    """The approved theory-of-change plan (spec § Plan slots).
 
     Args:
         title: Short user-visible name for the task.
@@ -204,13 +204,13 @@ class TocPlan(BaseModel):
         intervention: The intervention; required for ``intervention_first``.
         dosage: How much of the intervention, when known.
         existing_theory_text: A pasted theory, kept verbatim.
-        upload_id: An uploaded theory (increment 5).
+        upload_id: An uploaded theory.
         drawn_on_canvas: The theory the user drew on the canvas is theirs, kept as drawn.
         where: The place the theory is for. Steers the search; never excludes.
         time_horizon: When the impact is expected.
         context: What the user knows about the setting.
         evidence_restriction: Where evidence may come from.
-        steering_mode: Always ``unattended``: the lattice is empty (C12).
+        steering_mode: Always ``unattended``: the lattice is empty.
         steer_point_defaults: Always empty: there is no point to declare.
         source_turn_index: The Task Agent turn that approved this version.
     """
@@ -227,7 +227,7 @@ class TocPlan(BaseModel):
     existing_theory_text: Annotated[str, _not_blank("existing_theory_text")] | None = None
     # Lax: the stored payload carries UUIDs as strings (see ``ScopingPlan``).
     upload_id: Annotated[uuid.UUID, Field(strict=False)] | None = None
-    #: The user drew their own theory on the canvas before the plan (owner, 2026-11-05).
+    #: The user drew their own theory on the canvas before the plan.
     drawn_on_canvas: bool = False
     where: Annotated[str, _clean("where")] | None = None
     time_horizon: Annotated[str, _clean("time_horizon")] | None = None
@@ -260,7 +260,7 @@ def as_drawn(plan: TocPlan) -> bool:
 
     The canvas starts with only the user's boxes and arrows; what the draft
     adds to complete the theory, and the routes the evidence check finds, wait
-    as suggestions (owner, 2026-11-04).
+    as suggestions.
     """
     return plan.upload_id is not None or plan.drawn_on_canvas
 
@@ -288,9 +288,9 @@ def _item_search_directive(
 
     Args:
         plan: The validated plan.
-        scale: The result multiplier (C44): every call keeps ``scale`` times its
+        scale: The result multiplier: every call keeps ``scale`` times its
             results and the cap grows with it; 1 is the ordinary link search.
-        previous: For a reformulated search (C44), the queries the link's
+        previous: For a reformulated search, the queries the link's
             earlier searches ran; ``None`` is the ordinary search.
     """
     search: dict[str, Any] = {
@@ -341,7 +341,7 @@ def compose_toc(
         purpose: The intent record's ``purpose``: ``toc`` for a main walk,
             ``targeted`` for an item search.
         context: The intent record's ``context``: ``toc_walk`` (and ``links``)
-            for a main walk, ``acquire_only`` (and ``link_scale``, C44) for an
+            for a main walk, ``acquire_only`` (and ``link_scale``) for an
             item search.
 
     Returns:
@@ -357,12 +357,12 @@ def compose_toc(
         if walk == TOC_WALK_DRAFT:
             return _chain([("toc_draft", True)], plan)
         if walk == TOC_WALK_CHECK:
-            # Update the report (C45): the sentences and the report, nothing searched.
+            # Update the report: the sentences and the report, nothing searched.
             if context.get(TOC_CHECK_MODE_KEY) == "report":
                 return _chain([("toc_summarise", True), ("toc_report", True)], plan)
             if context.get(TOC_LINKS_KEY):
                 # Check again and Find more evidence are the user steering one link:
-                # no second search behind their back (owner, 2026-11-06).
+                # no second search behind their back.
                 skips = _NAMED_LINK_SKIPS | (
                     {"toc_search_again"}
                     if context.get(TOC_CHECK_MODE_KEY) in ("check_again", "find_more")

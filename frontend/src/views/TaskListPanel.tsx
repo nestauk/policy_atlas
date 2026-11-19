@@ -23,14 +23,14 @@ type LatestRun = components["schemas"]["TaskOut"]["latest_run"];
 type TaskListItem = {
   task_id: string;
   name: string;
-  /** The kind of work (task 044). Optional so a caller assembling rows by
+  /** The kind of work. Optional so a caller assembling rows by
    *  hand need not invent one; the row's label falls back. */
   capability?: string | null;
   updated_at: string;
   latest_run?: LatestRun;
-  /** Task 045 (S15): any running or paused walk, option searches included. */
+  /** Any running or paused walk, option searches included. */
   active_run?: LatestRun;
-  /** Task 045: whether a scoping task has a longlist. */
+  /** Whether a scoping task has a longlist. */
   has_longlist?: boolean;
   project_ids?: string[];
   source_count?: number | null;
@@ -41,7 +41,7 @@ type TaskListItem = {
 };
 
 /** Where a row lands: the Result once there is one to read (a finished run,
- *  or a scoping task's longlist — task 045), else the Agent tab. */
+ *  or a scoping task's longlist), else the Agent tab. */
 function rowDestination(row: TaskListItem): string {
   return taskDestination(row.task_id, row.latest_run?.status, { hasLonglist: hasLonglist(row) });
 }
@@ -63,7 +63,7 @@ function projectPrefix(
 }
 
 /** "Find a task", shared by the Tasks and Project pages: the magnifier at
- *  the right of the filters row (round 11; the header keeps only the
+ *  the right of the filters row (the header keeps only the
  *  primary). */
 export function FindTasks({
   rows,
@@ -99,7 +99,7 @@ export function FindTasks({
 type PagedTasks = ReturnType<typeof useTasksPaged>;
 type TaskRow = NonNullable<PagedTasks["data"]>["pages"][number]["data"][number];
 
-/** What the list's foot needs to offer the next page (round 10). */
+/** What the list's foot needs to offer the next page. */
 export type MoreTasks = {
   /** The server holds rows the list has not asked for yet. */
   hasMore: boolean;
@@ -112,7 +112,7 @@ export type MoreTasks = {
 };
 
 /**
- * A paged task list's rows and its foot (round 10: "Show more").
+ * A paged task list's rows and its foot ("Show more").
  *
  * `useTasksPaged` holds the pages and asks for the next one only while the
  * server says `has_more`. The rows are the pages in order with any task
@@ -156,7 +156,7 @@ type TaskListPanelProps = {
   isError?: boolean;
   onRetry?: () => void;
   loaded?: boolean;
-  /** Task 033 phase 10b: render the `owner_display` column, and what a null
+  /** Render the `owner_display` column, and what a null
    *  value renders as (see `ownerLabelRule` — the em dash by default, or
    *  the admin-wide-list's "No organisation" when the caller passes it). */
   showOwner?: boolean;
@@ -170,7 +170,7 @@ type TaskListPanelProps = {
 };
 
 /**
- * One task row with its menu (owner, round 12): the row's link, and beside
+ * One task row with its menu: the row's link, and beside
  * it, for the task's owner only, the control that opens Rename and Archive.
  * Rename turns the row into the name's field; Archive, once confirmed,
  * folds the row away (`onArchived`). An archived task offers Rename only.
@@ -197,7 +197,7 @@ function TaskRowWithMenu({
   const isOwner = row.is_owner ?? true;
   const archived = row.status === "archived";
   const pending = update.isPending || archive.isPending;
-  // The header's "Add to project", shared (owner, round 12).
+  // The header's "Add to project", shared.
   const addToProject = useAddToProjectStep(row.task_id, row.project_ids);
 
   if (editing) {
@@ -290,7 +290,7 @@ export function TaskListPanel({
     listRef.current?.querySelectorAll<HTMLAnchorElement>(":scope > li a[href]")[from]?.focus();
   }, [rows.length]);
 
-  // An archived row folds away where it stood (owner, round 12).
+  // An archived row folds away where it stood.
   const { shown, depart } = useDepartingRows(rows, (row) => row.task_id);
 
   const foot = (start?: ReactNode) => <ListFootRow start={start} end={footEnd} />;

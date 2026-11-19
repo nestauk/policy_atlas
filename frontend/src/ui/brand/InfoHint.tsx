@@ -6,7 +6,7 @@ import { Popover, PopoverContent } from "../radix/Popover";
 import { Tooltip, TooltipProvider } from "../radix/Tooltip";
 
 /**
- * A small "i" whose words say what something is (round 12, owner): a 16 px
+ * A small "i" whose words say what something is: a 16 px
  * glyph from the icon module in a 24 px target, Grey turning Navy on a Blue
  * Wash, the help cursor, focusable. One component, two paths: hover and
  * keyboard focus open the tooltip; a tap (a touch press, where a tooltip

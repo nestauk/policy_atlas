@@ -45,7 +45,7 @@ interface ChatCitation {
   appraisal_label?: string;
   evidence_type?: string;
   quote_snapped?: boolean;
-  // Task 046: the cited document's extraction basis, carried through
+  // The cited document's extraction basis, carried through
   // unchanged from `answer_payload`'s citation dicts.
   text_basis?: string;
 }
@@ -100,7 +100,7 @@ export function ChatMessages({ taskId, rows, onOpenTaskAgent, onRetry }: { taskI
  *  spans, its `[n]` markers, its References footer and both provenance sheets
  *  — for a surface that is not the chat thread.
  *
- *  Task 044 Phase 5.5: a Task Agent turn whose `kind` is `answer` carries
+ *  A Task Agent turn whose `kind` is `answer` carries
  *  `AnswerPayloadOut`, the same citation fields `ChatTurnOut` has always
  *  carried (`store/thread.taskAgentAnswerRow` restates that identity), so the
  *  Task Agent thread renders its answers through THIS component rather than a
@@ -159,7 +159,7 @@ function AssistantMessage({ turn, onCitation, onClaim, onOpenDossier, onOpenTask
       <Button size="sm" variant="secondary" onClick={() => onRetry(clientTurnIdOf(turn))}>Retry</Button>
     </div>;
   }
-  // While the agent works, the Task Agent's action line (owner, round 14):
+  // While the agent works, the Task Agent's action line:
   // the turning mark with what the chat stream says it is doing (the read
   // tools' words), then, once the answer is stored, the evidence check.
   const streaming = !("id" in turn) && turn.status === "pending";
@@ -170,7 +170,7 @@ function AssistantMessage({ turn, onCitation, onClaim, onOpenDossier, onOpenTask
   return <div className="mr-8 space-y-2">{answer && <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{streaming ? <PacedReply turnId={clientTurnIdOf(turn)} text={answer} streamed /> : <PacedChatProse turn={turn} text={answer} citations={citations} claims={claims} disabled={cancelled} onCitation={onCitation} onClaim={onClaim} />}</p>}{(streaming || checking) && <ActionLine label={working} live arrivalId={`chat-action:${clientTurnIdOf(turn)}`} />}{cancelled && <NoticeLine>Stopped before evidence check</NoticeLine>}{warning && <NoticeLine>Not evidence-checked</NoticeLine>}{handoff && <div className="border-l-2 border-yellow bg-yellow-tint/50 p-3 text-body text-navy">The evidence base does not hold this.<Button size="sm" variant="secondary" className="ml-2" onClick={onOpenTaskAgent}>Open Task Agent</Button></div>}{citations.length > 0 && <References citations={citations} turn={turn} onCitation={onCitation} onOpenDossier={onOpenDossier} />}{answer && <button type="button" aria-label="Copy answer" title="Copy answer" onClick={() => void copy()} className="text-grey hover:text-blue"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="5" width="9" height="10" rx="1" /><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h2" /></svg></button>}</div>;
 }
 
-/** A stored answer's prose, paced (owner, round 14): one that was streamed
+/** A stored answer's prose, paced: one that was streamed
  *  here carries on from where the streamed words had got to, then shows
  *  its citation markers and claims as they are revealed; the history shows
  *  at once. */
@@ -179,8 +179,8 @@ function PacedChatProse({ turn, text, ...rest }: { turn: ChatConversationRow; te
   return <AnnotatedChatProse text={revealed.text} turn={turn} {...rest} />;
 }
 
-/** A notice about an answer's check, in the marks' language (owner, round
- *  14: no chips): the yellow tone square, then the words at Meta Grey. */
+/** A notice about an answer's check, in the marks' language (no
+ *  chips): the yellow tone square, then the words at Meta Grey. */
 function NoticeLine({ children }: { children: string }) {
   return (
     <p className="flex items-center gap-1.5 text-meta text-grey">
@@ -315,7 +315,7 @@ function resolveCitation(citations: ChatCitation[], n: number): ChatCitation | n
 // support (Enter/Space on the summary) for free, styled to the footer's
 // existing caption typography.
 function References({ citations, turn, onCitation, onOpenDossier }: { citations: ChatCitation[]; turn: ChatConversationRow; onCitation: (citation: ChatCitation) => void; onOpenDossier: (sourceRef: string) => void }) {
-  // The report's References (owner, round 14): the number column, the
+  // The report's References: the number column, the
   // number in Electric Blue opening the source; the reference line, the title
   // opening it too; then the marks line: the judge's verdict (opening the
   // citation's sheet), the evidence type, the strength and the read depth,
@@ -441,13 +441,13 @@ function ChatProvenanceSheet({ taskId, active, onClose, onOpenDossier }: { taskI
 
 /** One citation's provenance block within the sheet above — the shared
  *  `CitationProvenanceBlock`, fed this chunk's on-demand context (Fix A) and
- *  the same blocks as the report's sheet (round 12): the evidence type and
+ *  the same blocks as the report's sheet: the evidence type and
  *  strength at Meta, and the judge's words under their label for the
  *  citation's best-supported claim (`verdictInfoFor`), then the text basis
  *  ("Abstract only" with its tone square, the Sources table's) on a quiet
  *  line. An unjudged citation says it is
- *  unchecked, awaiting the check or with the check unavailable (lead,
- *  round 12); the References rows keep their verdict chip. */
+ *  unchecked, awaiting the check or with the check unavailable;
+ *  the References rows keep their verdict chip. */
 function ChatCitationBlock({ taskId, turn, citation, onOpenDossier }: { taskId: string; turn: ChatConversationRow; citation: ChatCitation; onOpenDossier: (sourceRef: string) => void }) {
   const context = useChatChunkContext(taskId, citation);
   const sourceRef = citation.source_id ?? citation.source_title ?? null;
@@ -467,8 +467,8 @@ function ChatCitationBlock({ taskId, turn, citation, onOpenDossier }: { taskId: 
       quote={citation.quote ?? ""}
       fallbackNote="Exact passage not found in the source — showing the cited quote."
     />
-    {/* The text basis (task 046, AM10): the shared block has no slot for
-        it, so chat says it on a quiet line of its own, no chip (round 12). */}
+    {/* The text basis: the shared block has no slot for
+        it, so chat says it on a quiet line of its own, no chip. */}
     {citation.text_basis === "abstract_only" && (
       <p className="mt-1 flex items-center gap-1.5 text-meta text-grey">
         <DepthMark depth={ABSTRACT_ONLY} />

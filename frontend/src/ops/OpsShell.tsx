@@ -16,7 +16,7 @@ import { Loading } from "./ui";
 /**
  * The ops pages' frame: their own top bar (the wordmark and the OPS chip, the
  * sections when there is something to show, and the signed-in person) over the page column. No New, Tasks or Projects:
- * ops work is separate from using the product (contract B6).
+ * ops work is separate from using the product.
  */
 function Frame({ sections, account, children }: { sections?: ReactNode; account?: ReactNode; children: ReactNode }) {
   return (

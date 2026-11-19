@@ -3,7 +3,7 @@ import { useCallback, useSyncExternalStore } from "react";
 import type { PlanOverlay } from "../views/workspace/planOverlay";
 
 /**
- * The Evidence search plan's unsaved edits, per task (task 058, N20). They
+ * The Evidence search plan's unsaved edits, per task. They
  * live here, not in the Agent tab's view, so leaving the tab and coming back
  * keeps them; they apply when the run starts, as before. Held for the page's
  * life only: a reload starts from the saved plan.

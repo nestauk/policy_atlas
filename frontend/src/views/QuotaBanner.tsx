@@ -1,7 +1,7 @@
 import { useMe } from "../api/queries";
 
 /** Yellow-tint band under the sensitive-information banner once the caller
- *  has used their yearly task quota (task 064a, Q8). Not dismissible: the
+ *  has used their yearly task quota. Not dismissible: the
  *  state lasts until a task ages out or an administrator acts. `task_quota`
  *  is null for admins, who are exempt. */
 export function QuotaBanner() {

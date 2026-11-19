@@ -1,36 +1,35 @@
-"""The ``longlist`` component: records clustered into options (task 045, S8).
+"""The ``longlist`` component: records clustered into options.
 
-Contract deliverable 6, D4, D5, D8, D10, D11, D14, D16, D20; ADR 0039
-decisions 7 and 8. The longlist walk's clustering step:
+ADR 0039 decisions 7 and 8. The longlist walk's clustering step:
 
 1. **Units.** The ``intervention_profile_record`` rows of the longlist scope
    and of each option's latest finished add-walk search (a targeted walk with
-   no parent; task 046, S3), read through each scope's latest extraction
+   no parent), read through each scope's latest extraction
    roll-up, one extraction per document, minus ``comparator`` records; plus,
    per link whose pinned walk ran ``extract``, the source task's IOF/ICF
-   findings of that walk through ``finding_reference_union``
-   (D5). Each unit's payload is this component's projection.
-   Before clustering the profile records are **thinned** (task 046, S10):
+   findings of that walk through ``finding_reference_union``.
+   Each unit's payload is this component's projection.
+   Before clustering the profile records are **thinned**:
    ``mentioned`` records with no features and no outcome are dropped,
    records of one document with the same folded name collapse to the one of
    the highest role, and at most :data:`RECORDS_PER_DOCUMENT_MAX` records a
    document are kept; each rule's count is in ``provenance.thinning``.
 2. **Seeded clustering, the engine untouched** (P8). The seeds are every
    option the task holds — on a first build the entrants ``suggest`` minted
-   (and the user's own), on a rebuild every existing option (D14).
+   (and the user's own), on a rebuild every existing option.
    :class:`LonglistClusteringBackend` returns the seeds plus newly
    discovered options from ``discover`` and places each unit under one label
    in ``assign``; :func:`~policy_atlas.core.clustering_engine.cluster_units`
    runs exactly as characterise runs it. Discovery reads the plan, the
    baseline, the seeds and the **corpus digest** — never a unit record — and
    works to :data:`LONGLIST_TARGET_SIZE`; new options stop at
-   :data:`LONGLIST_HARD_CEILING`, seeds included (task 046, R1). It may
+   :data:`LONGLIST_HARD_CEILING`, seeds included. It may
    **fold** a suggested seed into a wider option (the existing merge,
    ``merged_into_option_id``); code rejects a fold of a user's option, of a
    user-held one, into an unknown label or into a folded seed, and counts
    each rejection. Assignment prompts carry short unit ids (``u1`` …) that
    code maps back per call.
-3. **The residual pass** (task 046, R9): a second ``cluster_units`` call
+3. **The residual pass**: a second ``cluster_units`` call
    over the *unclustered* units only, every option on the list as a seed
    that cannot be folded, its new options bounded by the room left under the
    ceiling; skipped when there is no room or no unclustered unit. Its answers
@@ -38,14 +37,14 @@ decisions 7 and 8. The longlist walk's clustering step:
 4. **Option rows**: seeds keep their rows; each discovered option mints one
    (``origin="clustered"``, design v1 from the discovery wire, its outcomes
    the plan outcomes its members' outcome tags name). No package is minted
-   and no ``part_of`` row is written (task 046, item 4). One option per
+   and no ``part_of`` row is written. One option per
    record; a document with several records lands in several options.
    Memberships are replaced wholesale by this run's.
 5. **Themes** are not built here: the ``theme`` component groups the
-   included options after ``constrain`` (task 046, R28); this component
+   included options after ``constrain``; this component
    writes ``themes = []`` and no theme counts.
 6. **Typing** is not done here: the ``option_profile`` component types every
-   option after this one (task 046, R37, S20). This component writes no
+   option after this one. This component writes no
    lever column, no ambition and no typing key; its ``longlist_result`` row
    holds none until ``option_profile`` has run.
 7. **Coverage** (:mod:`.coverage`), deterministic, DOI-collapsed.
@@ -174,20 +173,20 @@ DISCOVERY_RETRY_CAP = 1
 ASSIGNMENT_REPAIR_CAP = 1
 MAX_CONCURRENT_BATCHES = 4
 
-#: The list's target size and hard ceiling, seeds included (task 046, R1).
+#: The list's target size and hard ceiling, seeds included.
 LONGLIST_TARGET_SIZE = 20
 LONGLIST_HARD_CEILING = 25
 
-#: Thinning (task 046, S10): records kept per document, at most.
+#: Thinning: records kept per document, at most.
 RECORDS_PER_DOCUMENT_MAX = 8
-#: The corpus digest's names, at most (task 046, S8).
+#: The corpus digest's names, at most.
 DIGEST_NAMES_MAX = 400
 
 #: A unit payload's free-text bound (the quote, a claim, each reference).
 UNIT_TEXT_MAX = 240
 UNIT_FEATURES_MAX = 8
 
-#: Seeds are offered in entrant order, then the clustered options (D14).
+#: Seeds are offered in entrant order, then the clustered options.
 _SEED_ORIGIN_ORDER = ("added_by_you", "from_evidence_search", "suggested", "clustered")
 
 #: The reader's word for a seed's origin, as the discovery prompt reads it.
@@ -210,7 +209,7 @@ UnitKind = Literal["interventions", "iof", "icf"]
 
 
 def discovery_bounds(seed_count: int) -> tuple[int, int]:
-    """The discovery bounds for ``seed_count`` seeds (task 046, R1, AM9).
+    """The discovery bounds for ``seed_count`` seeds.
 
     Args:
         seed_count: The seeds offered.
@@ -246,7 +245,7 @@ class _Unit:
     outcome: str | None
     study_geography: str | None
     payload: dict[str, object]
-    # The record's three tags (task 046), ``None`` when the record was written
+    # The record's three tags, ``None`` when the record was written
     # under another tagging context than the current plan's (S3 a).
     unit_tag: str | None = None
     outcome_tag: str | None = None
@@ -319,8 +318,8 @@ def current_profile_fingerprints(
 
     The profile's fingerprint depends on the backend mode, which this
     component does not know, so both modes' fingerprints are returned; a
-    record matches when its extraction record carries either (task 046,
-    S3 a). The context is built from the plan the intent record names
+    record matches when its extraction record carries either.
+    The context is built from the plan the intent record names
     (``evidence_scope.plan_id``), as the profile's own harness node builds it;
     a record with no plan gives the context-free fingerprint.
 
@@ -374,12 +373,12 @@ class _OwnUnits:
 
 
 def _thin_order(row: Any) -> tuple[int, datetime, str]:
-    """Thinning's keep order within a document: role, then profile order (S10)."""
+    """Thinning's keep order within a document: role, then profile order."""
     return (_ROLE_RANK.get(row.role, len(_ROLE_RANK)), row.created_at, str(row.record_id))
 
 
 def _thin(rows: Sequence[Any]) -> tuple[set[uuid.UUID], dict[str, int]]:
-    """The thinning rules of S10 over one union of profile records, in order.
+    """The thinning rules over one union of profile records, in order.
 
     1. a ``mentioned`` record with no design feature and no outcome is dropped;
     2. records of one document with the same folded intervention name
@@ -445,7 +444,7 @@ def _own_units(
 ) -> _OwnUnits:
     """The profile records of the given scopes, minus comparators, thinned.
 
-    The union of the scopes' latest roll-ups (task 046, S3). A document
+    The union of the scopes' latest roll-ups (S3). A document
     profiled in two scopes counts once: the memo shares one extraction record
     between scopes profiled under the same fingerprint, and when a document
     has records from more than one extraction record (profiled under two
@@ -453,7 +452,7 @@ def _own_units(
     written under the current plan's context, else the newest. A record whose
     extraction fingerprint is not in ``current_fingerprints`` reads as "not
     tagged": its tags are ``None`` in the unit and its payload. The thinning
-    of S10 (:func:`_thin`) then runs over what that rule keeps.
+    (:func:`_thin`) then runs over what that rule keeps.
 
     Returns:
         The units in document order, the comparator records, the records of
@@ -598,7 +597,7 @@ _FINDING_ROLE: dict[str, str] = {"iof": "evaluated", "icf": "described"}
 def _linked_units(
     conn: Connection, *, task_id: uuid.UUID
 ) -> tuple[list[_Unit], list[dict[str, Any]]]:
-    """Each link's pinned walk's IOF/ICF findings, when that walk ran ``extract`` (D5).
+    """Each link's pinned walk's IOF/ICF findings, when that walk ran ``extract``.
 
     Returns:
         ``(units, link_provenance)``.
@@ -863,7 +862,7 @@ def _seeds(conn: Connection, *, task_id: uuid.UUID) -> list[_Seed]:
                 description=description,
                 design_features=features,
                 origin=row.origin,
-                # A user's shortlist place is never folded either (O1).
+                # A user's shortlist place is never folded either.
                 user_held=merge_protected(row),
                 name=row.name,
                 outcomes=outcomes,
@@ -897,7 +896,7 @@ class _Answer:
 def corpus_digest(
     entries: Iterable[tuple[object, object]], *, limit: int = DIGEST_NAMES_MAX
 ) -> tuple[list[dict[str, object]], int]:
-    """The corpus digest: each folded intervention name with its record counts (S8).
+    """The corpus digest: each folded intervention name with its record counts.
 
     Built by code from the units, in place of every unit record: one entry
     per folded name (whitespace collapsed, case folded) with its record count
@@ -946,7 +945,7 @@ def corpus_digest(
 
 
 def _short_id(raw: str, short: Mapping[str, str]) -> tuple[str, bool]:
-    """Map a returned short id back to its unit id (S9).
+    """Map a returned short id back to its unit id.
 
     A mangled short id ("U1", " u1 ", "1") is read as ``u<n>`` when that is
     an id of this call; an id not of this call goes to the engine as it came
@@ -972,7 +971,7 @@ class _Fold:
 
 
 class LonglistClusteringBackend(ClusteringBackend):
-    """The engine's backend for seeded option clustering (P8; task 046, S8, S9).
+    """The engine's backend for seeded option clustering.
 
     ``discover`` returns the seeds that are not folded, followed by the
     options the model discovers beyond them (one call over the plan, the
@@ -1103,7 +1102,7 @@ class LonglistClusteringBackend(ClusteringBackend):
         return self._labels(), usage
 
     def _fold(self, seed_label: str, into_label: str) -> None:
-        """Accept one fold, or record why it is rejected (the four guards, S8)."""
+        """Accept one fold, or record why it is rejected (the four guards)."""
         seeds = {fold_text(seed.label): seed for seed in self._seeds}
         new = {fold_text(label): label for label in self.discovered}
         seed = seeds.get(fold_text(seed_label))
@@ -1243,7 +1242,7 @@ def _option_policy(max_labels: int) -> ClusteringPolicy:
 
 
 def _publish_options(labels: list[ClusterLabel]) -> None:
-    """Show the options found while sources are assigned to them (task 058, round 11).
+    """Show the options found while sources are assigned to them.
 
     The residual pass sends the whole list again, which replaces the first.
     """
@@ -1278,7 +1277,7 @@ class _Option:
 
 
 def _member_outcomes(members: Sequence[_Unit], plan_outcomes: Sequence[str]) -> list[str]:
-    """The plan outcomes the members' outcome tags name, in plan order (S11).
+    """The plan outcomes the members' outcome tags name, in plan order.
 
     ``other`` and a tag that names no plan outcome are left out; empty when no
     member has a plan outcome.
@@ -1290,7 +1289,7 @@ def _member_outcomes(members: Sequence[_Unit], plan_outcomes: Sequence[str]) -> 
 def _discovered_design(
     label: str, wire: DiscoveredOptionWire, outcomes: list[str]
 ) -> OptionDesign:
-    """Design v1 from the discovery wire and the members' outcomes (S11).
+    """Design v1 from the discovery wire and the members' outcomes.
 
     A wire with no feature keeps its description as the one feature.
     """
@@ -1323,7 +1322,7 @@ def _option_search_scopes(conn: Connection, *, task_id: uuid.UUID) -> list[uuid.
 
     One targeted scope per option: the latest ``succeeded`` or ``degraded``
     walk with **no parent** under a ``targeted`` record naming it — the verb
-    *add*'s search (task 046, S3, AM5). A longlist walk's option searches only
+    *add*'s search (S3). A longlist walk's option searches only
     acquire; the longlist scope screens and profiles their documents, so
     their scopes supply no units — and an old full-chain child of a build
     before this slice would supply a document a second time.
@@ -1385,7 +1384,7 @@ def _folded_seeds(
     option_ids: Sequence[uuid.UUID],
     documents_of: Mapping[uuid.UUID, set[str]],
 ) -> dict[uuid.UUID, list[FoldedSeed]]:
-    """The options folded into each of ``option_ids`` (task 046, AM20).
+    """The options folded into each of ``option_ids``.
 
     A folded seed is an option merged into the wider one
     (``merged_into_option_id``) that the user did not name (origin not
@@ -1442,11 +1441,11 @@ class MembershipRead:
         """Each option's coverage (:func:`option_coverage`).
 
         Args:
-            plan_outcomes: The plan's outcome texts, in plan order (R42).
-            folds: The list's folding maps (task 046, amendment 3, S21), or
+            plan_outcomes: The plan's outcome texts, in plan order.
+            folds: The list's folding maps, or
                 ``None``.
-            where_country: The plan's Where as one country's short name
-                (task 046, amendment 4, S29), or ``None``.
+            where_country: The plan's Where as one country's short name,
+                or ``None``.
 
         Returns:
             ``{option_id: coverage}``.
@@ -1552,7 +1551,7 @@ def latest_longlist(
 
 
 def _title_only(conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID) -> int:
-    """The title-only documents the scope's latest extraction left unprofiled (S10)."""
+    """The title-only documents the scope's latest extraction left unprofiled."""
     counts = conn.execute(
         select(extraction_result.c.counts)
         .where(extraction_result.c.task_id == task_id)
@@ -1642,7 +1641,7 @@ def longlist_scope(
     before the first write; the writes — new option rows, the folds' merges,
     the task's memberships replaced, and ``longlist_result`` last — share the
     component transaction. No typing: ``option_profile`` types the options
-    after this step (task 046, S20).
+    after this step.
 
     Args:
         conn: Open connection inside the component transaction.
@@ -1659,7 +1658,7 @@ def longlist_scope(
         LonglistFailure: If clustering fails or the exhaustiveness invariant
             (units = memberships + unclustered + not an option) breaks.
     """
-    # The stage line while the discovery call runs (task 058, N24): the
+    # The stage line while the discovery call runs: the
     # loop's own words, which the wrapper's verb never overwrites.
     liveness.publish_progress(activity=activity("longlist.clustering"))
     plan, plan_version = walk_plan(
@@ -1712,7 +1711,7 @@ def longlist_scope(
     placements = _placements(units, clustering, clustering_backend.answers)
     answers: dict[str, _Answer] = dict(clustering_backend.answers)
 
-    # 2. The residual pass (R9): the unclustered units only, every option on
+    # 2. The residual pass: the unclustered units only, every option on
     # the list as a seed that cannot be folded, at most once.
     residual_units = [unit for unit in units if _unclustered(placements[unit.unit_id])]
     room = max(LONGLIST_HARD_CEILING - len(options), 0)
@@ -1802,7 +1801,7 @@ def longlist_scope(
             f"unclustered={len(unclustered)} not_an_option={len(not_an_option)}"
         )
 
-    # 4. Outcomes at mint time (S11): a discovered option's are the plan
+    # 4. Outcomes at mint time: a discovered option's are the plan
     # outcomes its members' tags name; a seed keeps its design's.
     plan_outcomes = [outcome.text for outcome in plan.outcomes]
     for o in options:
@@ -1812,15 +1811,15 @@ def longlist_scope(
         o.design_features = list(o.design.design_features)
         o.outcomes = list(o.design.outcomes_served)
 
-    # Themes are the ``theme`` component's, after ``constrain`` (task 046,
-    # R28): this row is written with none.
+    # Themes are the ``theme`` component's, after ``constrain``:
+    # this row is written with none.
     usage = UsageAccumulator()
     if clustering is not None:
         usage.add_payload(clustering.usage_totals)
     if residual_clustering is not None:
         usage.add_payload(residual_clustering.usage_totals)
 
-    # 5. Typing is the ``option_profile`` component's, after this one (S20).
+    # 5. Typing is the ``option_profile`` component's, after this one.
 
     # 6. Coverage (deterministic).
     label_ids = {u.label_tss_id for u in units if u.label_tss_id is not None}
@@ -1840,7 +1839,7 @@ def longlist_scope(
         into = target_ids[fold.into_label]
         fold_rows.append((fold.seed.option_id, into))
         folded.setdefault(into, []).append(FoldedSeed(name=fold.seed.name, documents=0))
-    # The plan's Where leads the signal's countries (task 046, amendment 4, S29).
+    # The plan's Where leads the signal's countries.
     where_resolved = resolve_country(plan.where.text)
     where_country = where_resolved[1] if where_resolved is not None else None
     coverage = {

@@ -25,7 +25,7 @@ from cdk_fck_nat import FckNatInstanceProvider, FckNatInstanceProps
 
 from .components.nesta_ssm_endpoints import SsmConnectivity, SsmVpcEndpoints
 
-# NAT traffic alarm (task 057). NetworkOut counts every byte a NAT instance
+# NAT traffic alarm. NetworkOut counts every byte a NAT instance
 # sends, so downloaded documents count once on their way back to the private
 # subnets. 1 GB in 5 minutes is about 27 Mbit/s, close to a t4g.nano's
 # 32 Mbit/s baseline bandwidth; three such periods in a row means the NAT has

@@ -8,7 +8,7 @@ import { ChevronIcon } from "./icons";
 import type { SelectOption } from "./Select";
 
 /**
- * The app's searchable multi-select (owner, round 14; first used by the New
+ * The app's searchable multi-select (first used by the New
  * page's "Evidence search to start from"). Built on the `Select`'s skin and
  * popover: the field's trigger (Paper, a Line 2 border, square, the 12 px
  * chevron), reading the placeholder with nothing chosen, the one choice's

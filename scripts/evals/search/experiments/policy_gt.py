@@ -1,4 +1,4 @@
-"""A quick policy-document ground truth from UK government strategies (R&D, task 049).
+"""A quick policy-document ground truth from UK government strategies (R&D).
 
 The paper ground truth (reference lists of systematic reviews, keyed by DOI) holds no
 policy documents, so nothing in it can say whether a policy-document ranking is good.

@@ -13,15 +13,15 @@ from policy_atlas.core import events
 
 log = structlog.get_logger()
 
-#: The case-studies slot's title and focus in the skeleton (task 058, round 7).
+#: The case-studies slot's title and focus in the skeleton.
 CASE_STUDIES_SLOT_TITLE = "Case studies"
 CASE_STUDIES_SLOT_FOCUS = "Relevant examples from the cited evidence."
 #: The introduction's slot: the saved report shows the intro under its "Full
-#: report" heading, so the slot carries that title and no focus (round 8).
+#: report" heading, so the slot carries that title and no focus.
 INTRO_SLOT_TITLE = "Full report"
 #: The introduction's section line while it is written: the card and the
 #: strip read "Writing · Introduction", while the slot keeps its "Full report"
-#: title (owner round 9, 2026-11-05).
+#: title.
 INTRO_SECTION_LINE = "Introduction"
 
 

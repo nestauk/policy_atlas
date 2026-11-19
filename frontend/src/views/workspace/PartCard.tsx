@@ -41,11 +41,11 @@ export function confirmMessage(part: PartProposal, option: PartOption): string {
 }
 
 export interface PartState {
-  /** Latest proposal per part id wins (F34): older proposals render inert. */
+  /** Latest proposal per part id wins: older proposals render inert. */
   live: boolean;
   /** A later turn exists, so the user answered this card (in words or by a
-   *  choice); it renders settled even without a recorded option (owner,
-   *  polish round 2: no open card on a finished conversation). */
+   *  choice); it renders settled even without a recorded option (no open
+   *  card on a finished conversation). */
   answered: boolean;
   /** What the user wrote in reply to this card (the next turn's message),
    *  shown on the settled line when no recorded choice names the answer. */
@@ -56,7 +56,7 @@ export interface PartState {
    *  staged chip edits above its marker, and the settled lines apply them. */
   confirmedMessage: string | null;
   /** The answer is the user's turn still on its way (an optimistic turn):
-   *  the card settles on the choice at once (owner, 2026-11-05) and names
+   *  the card settles on the choice at once and names
    *  the user's words or choice until the durable turns catch up. */
   pending: boolean;
 }
@@ -66,7 +66,7 @@ type PartTurn = Pick<TaskAgentTurn, "turn_index" | "user_message" | "part">;
 
 /**
  * Derive each part-bearing turn's card state from the turn sequence alone
- * (F34 rehydration rules): the latest proposal per part id is live; a confirm
+ * (the rehydration rules): the latest proposal per part id is live; a confirm
  * marker binds to the newest proposal of its part id at the time it was sent;
  * a confirm referencing a superseded proposal never mis-binds.
  *
@@ -136,7 +136,7 @@ const THOROUGHNESS_OPTION_BY_PRESET: Record<string, string> = {
 };
 
 /**
- * What a settled part's line says (owner, polish round 2): the outcome the
+ * What a settled part's line says: the outcome the
  * plan settled on, not the user's words. A recorded choice names itself;
  * otherwise the question's text, the scope's chips, the thoroughness preset
  * and its band, the scoping depth and risk appetite labels; the user's reply
@@ -162,14 +162,14 @@ export function settledSummary(
     state.confirmedOptionId === null ? undefined : part.options.find((option) => option.id === state.confirmedOptionId);
   const confirmed = confirmedOption?.label ?? null;
   const words = state.answer !== null && state.answer !== "" ? state.answer : null;
-  // The outcome first (owner, polish round 3: "what looks right?"); the
+  // The outcome first ("what looks right?"); the
   // recorded choice's label, then the user's words, only where the plan
   // names nothing.
   const fallbackText = confirmed ?? words;
   const fallback = fallbackText === null ? null : [{ label: null, text: fallbackText }];
   // While the answer is on its way the plan has not caught up with it: the
   // user's words, or a choice other than the planner's own, name the part
-  // until the durable turns land (owner, 2026-11-05). Taking the planner's
+  // until the durable turns land. Taking the planner's
   // primary option keeps the draft as it stands, so its outcome reads now.
   if (state.pending && (words !== null || (confirmedOption !== undefined && !confirmedOption.primary))) {
     return fallback;
@@ -180,7 +180,7 @@ export function settledSummary(
     case "question":
       return one(plan?.question ?? scoping?.question);
     case "scope": {
-      // One line per group under its label (owner, 2026-11-05: on one line
+      // One line per group under its label (on one line
       // the criteria and the filters read as one jumble), with the chip
       // edits the "Looks right" carried already applied.
       const edited = applyChipEdits(part.chips ?? [], state.confirmedMessage);
@@ -237,8 +237,8 @@ export function chipText(label: string): string {
 }
 
 /**
- * The scope card's chips grouped by what they constrain (owner, 2026-11-05:
- * screening criteria and source filters were mixed in one row). Chips with
+ * The scope card's chips grouped by what they constrain, so screening
+ * criteria and source filters are not mixed in one row. Chips with
  * no recognised prefix form an unnamed group, first.
  */
 export function chipGroups(chips: PartChip[]): Array<{ heading: string | null; chips: PartChip[] }> {
@@ -439,8 +439,8 @@ function EditableChip({
 /**
  * Option ids the planners reserve for "let me say it in my own words"
  * (`task_agent_prompt.py`: refine, change; `task_agent_scoping_prompt.py`:
- * i_have_some, and my_own_words on the settings and constraints parts,
- * owner round 12). Choosing one opens a short input inside the card with its own
+ * i_have_some, and my_own_words on the settings and constraints parts).
+ * Choosing one opens a short input inside the card with its own
  * Send; every other option is a choice and sends at once.
  */
 const WORDS_OPTION_IDS = new Set(["refine", "change", "i_have_some", "my_own_words"]);
@@ -450,7 +450,7 @@ export function optionNeedsWords(option: PartOption): boolean {
   return !option.primary && WORDS_OPTION_IDS.has(option.id);
 }
 
-/** The options in the order the planner gave them (owner, polish round 3:
+/** The options in the order the planner gave them (so
  *  the thoroughness presets read fastest to slowest; the primary is not
  *  moved to the front). */
 export function orderedOptions(options: PartOption[]): PartOption[] {
@@ -465,7 +465,7 @@ export interface PlanStep {
 }
 
 /**
- * The plan's steps for the stepper (task 058, N18): the capability's parts
+ * The plan's steps for the stepper: the capability's parts
  * in the planner's order, computed on the client rather than read off the
  * model's `step_label`. An optional part counts only once the transcript
  * carries it; a step is settled when its newest proposal was confirmed.
@@ -501,8 +501,8 @@ export function planSteps(
 
 /**
  * The one small line above the active part card: the settled steps named in
- * grey, then "Plan · decision n of M · <part>" (annex scene 11; owner round 12:
- * the line counts decisions, M the parts the planner asks, the question
+ * grey, then "Plan · decision n of M · <part>" (the line counts decisions,
+ * M the parts the planner asks, the question
  * included, Who can act and Your options only once asked).
  *
  * Args:
@@ -533,7 +533,7 @@ export function PlanStepper({ steps, activeId }: { steps: PlanStep[]; activeId: 
 }
 
 /**
- * One choice in a radio list (annex block H: one shape for a choice): the
+ * One choice in a radio list (one shape for a choice): the
  * label, then its plain sentences in grey. Nothing is pre-selected; the dot
  * fills only once the user has chosen.
  */
@@ -633,7 +633,7 @@ export function WordsInput({
   );
 }
 
-/** How long what leaves a settling card takes to fade (owner, round 8). */
+/** How long what leaves a settling card takes to fade. */
 const SETTLE_FADE_MS = 150;
 /** How long the card takes to ease to its settled height and place. */
 const SETTLE_MS = 300;
@@ -641,8 +641,8 @@ const SETTLE_MS = 300;
 const EASE_OUT_STRONG = "cubic-bezier(0.23, 1, 0.32, 1)";
 
 /**
- * The settle's motion (owner, round 8: "make the transition from the decision
- * card to the decided card smoother"). One card across the two states: when
+ * The settle's motion, so the decision card turns smoothly into the decided
+ * card. One card across the two states: when
  * it settles, the box eases from its open height to its settled height and
  * from the thread's side to the user's (the 32 px indent) over 300 ms on the
  * strong ease-out, while the open form fades out over it for 150 ms and the
@@ -667,7 +667,7 @@ function useSettleMotion(settled: boolean) {
   const [leaving, setLeaving] = useState(false);
   const [justSettled, setJustSettled] = useState(false);
   const [flip, setFlip] = useState(0);
-  // The box's open height, held through the settle's commit (round 14): the
+  // The box's open height, held through the settle's commit: the
   // open form leaves the flow in that commit, and anything that reads the
   // layout before the height animation starts (React giving focus back to
   // the pressed option) saw a shorter thread and clamped its scroll, so the
@@ -734,8 +734,8 @@ function useSettleMotion(settled: boolean) {
 }
 
 /**
- * One structured part proposal in the task_agent thread (task 058, N18;
- * annex scene 11). A radio list: each option's label, then its one plain
+ * One structured part proposal in the task_agent thread.
+ * A radio list: each option's label, then its one plain
  * sentence; the planner's primary option first with its reason under it;
  * nothing pre-selected and no "Recommended" word. An option that needs words
  * opens a short input inside the card with its own Send. A confirmed part
@@ -765,7 +765,7 @@ export function PartCard({
   summary?: SettledLine[] | null;
   /** Send a message as an ordinary task_agent turn. */
   onSend: (message: string) => void;
-  /** The card's id in the thread's arrivals (round 9): a card that arrives
+  /** The card's id in the thread's arrivals: a card that arrives
    *  after the thread's first paint rises in and lays its rows out. */
   arrivalId?: string;
 }) {
@@ -795,7 +795,7 @@ export function PartCard({
   // lands. They stay clickable throughout. None under reduced motion.
   const cascade = (index: number): { className?: string; style?: CSSProperties } =>
     arrives && !settled ? { className: "anim-cascade", style: { "--i": index } as CSSProperties } : {};
-  // The settled form (owner, 2026-11-05, rounds 6 and 8): the part's name
+  // The settled form: the part's name
   // and a green line naming the outcome the plan settled on (`summary`), the
   // recorded choice or the user's words. It reads as the user's: the user
   // bubble's surface (Blue Wash fill, Blue Tint border, 32 px left indent),
@@ -811,14 +811,13 @@ export function PartCard({
     <div key="settled" className={cn("px-3.5 py-2.5", justSettled && "anim-rise")}>
       <p className={cn(LABEL_CLASS, "text-grey")}>{scrub(name)}</p>
       {/* The scope's groups each take a line under a grey label, so the
-          criteria and the filters do not read as one list (owner,
-          2026-11-05). */}
+          criteria and the filters do not read as one list.*/}
       {lines.map((line, index) => (
         // A first line under its own group label stands a step below the
         // part's name.
         <div key={index} className={index > 0 || line.label !== null ? "mt-2" : "mt-0.5"}>
           {/* The group labels a step smaller than the part's name, so the
-              name leads (lead, round 6). */}
+              name leads. */}
           {line.label !== null && <p className={cn(LABEL_CLASS, "text-caption text-grey")}>{line.label}</p>}
           {/* The deep green of the green tint's text: it passes contrast at
               the sidebar's Body size too. */}
@@ -826,7 +825,7 @@ export function PartCard({
         </div>
       ))}
       {/* "Change" takes its own line under the green words, left-aligned,
-          as a quiet control at Caption size (owner, round 8): never inline
+          as a quiet control at Caption size: never inline
           with the words it would change. */}
       {state.live && confirmedOption !== null && (
         <button
@@ -853,7 +852,7 @@ export function PartCard({
   );
 
   const chips = part.chips ?? [];
-  // The scope changes through its chips alone (owner, 2026-11-05): the
+  // The scope changes through its chips alone: the
   // planner's words option is not shown, and the card's one choice is a
   // "Looks right" button that records the planner's primary option and
   // carries any staged chip edits with it, in one turn.
@@ -1019,7 +1018,7 @@ export function PartCard({
     </>
   );
 
-  // One container across the two states (owner, round 8: a fluid settle).
+  // One container across the two states (a fluid settle).
   // The card keeps its box: the surface and the rule ease to the settled
   // look, the box eases to its settled height and across to the user's side,
   // the options and controls fade out over it and the settled words rise in.

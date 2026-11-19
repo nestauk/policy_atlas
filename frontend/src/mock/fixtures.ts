@@ -16,7 +16,7 @@ type StageKey = components["schemas"]["StageStartedFrame"]["stage"];
 /**
  * The server's stage copy, copied from `api/stage_vocabulary.py`
  * (`STAGE_PRESENTATION`, `STAGE_ROW`). There is no runtime import across the
- * boundary, so a change there is made here by hand (task 058, N26).
+ * boundary, so a change there is made here by hand.
  */
 export const STAGE_PRESENTATION: Record<StageKey, readonly [label: string, blurb: string]> = {
   acquire: ["Searching", "Querying the databases and collecting candidates."],
@@ -55,7 +55,7 @@ export const STAGE_PRESENTATION: Record<StageKey, readonly [label: string, blurb
   toc_report: ["Writing the report", "The report, as it is written."],
 };
 
-/** The server's `STAGE_COUNTS` (task 058, N17): the done row's counts, each
+/** The server's `STAGE_COUNTS`: the done row's counts, each
  *  with its noun, copied here so the mock's frames carry what the server's do. */
 export const STAGE_COUNTS: Record<StageKey, ReadonlyArray<readonly [string, string]>> = {
   acquire: [["acquired", "found"]],
@@ -95,7 +95,7 @@ export const STAGE_COUNTS: Record<StageKey, ReadonlyArray<readonly [string, stri
 };
 
 /** The card row each stage belongs to: classify and appraise share one row;
- *  search and screen are two rows (owner round 8, 2026-11-05). */
+ *  search and screen are two rows. */
 export const STAGE_ROW: Record<StageKey, string> = {
   acquire: "search",
   screen: "screen",
@@ -152,30 +152,30 @@ export const mockTask: components["schemas"]["TaskOut"] = {
   updated_at: now,
   archived_at: null,
   latest_run: null,
-  // Task 033 tenancy. The mock signs in as the row's owner, so `is_owner` is
+  // The mock signs in as the row's owner, so `is_owner` is
   // true and every affordance stays live; the org journeys the switcher needs
   // arrive with the mock's `/me` and project routes.
   visibility: "org",
   is_owner: true,
   owner_display: "Ada Lovelace",
-  // Task 037 public sharing: the mock's task starts unshared, read at the
+  // Public sharing: the mock's task starts unshared, read at the
   // full grade — mock mode signs in as the owner.
   is_public: false,
   access: "full",
   // Assigned to `mockProject` below so `GET /tasks?project_id=` has a
-  // real member to return (task 033 phase 10a; membership is a list, ADR 0032).
+  // real member to return (membership is a list, ADR 0032).
   project_ids: [MOCK_PROJECT_ID],
-  // Task 044: the kind of work. The mock's task is an Evidence search; a
+  // The kind of work. The mock's task is an Evidence search; a
   // scoping task is created through the mock's `POST /tasks`.
   capability: "evidence_search",
   links: [],
-  // Task 045: what exists and what is active. No walk, no longlist yet.
+  // What exists and what is active. No walk, no longlist yet.
   active_run: null,
   has_longlist: false,
 };
 
 /**
- * Task 058, round 10: the rest of the mock's task list, so the Tasks page has
+ * The rest of the mock's task list, so the Tasks page has
  * more than one page (50 a page) and "Show more" shows. Fifty-five are the
  * signed-in owner's, six a colleague's (Organisation only), three archived
  * (the archived filter). All older than `mockTask`, which stays first. Only
@@ -217,7 +217,7 @@ export const mockOtherTasks: components["schemas"]["TaskOut"][] = Array.from({ l
   };
 });
 
-/** A finished Evidence search in the mock project (round 13): the New page's
+/** A finished Evidence search in the mock project: the New page's
  *  "Evidence search to start from" offers only these, so the scoping journey
  *  can link one. Listed with the other tasks and readable by id. */
 export const MOCK_LINKABLE_SEARCH_ID = "30000000-0000-4000-8000-000000000001";
@@ -248,10 +248,10 @@ mockOtherTasks.unshift({
   has_longlist: false,
 });
 
-/** Task 033 phase 10a: the one project the mock serves. `task_count`
+/** The one project the mock serves. `task_count`
  *  mirrors the real read model's own derivation (never cached on the row) —
  *  it counts `mockTask` and the finished search a scoping task can start
- *  from (round 13). */
+ *  from. */
 export const mockProject: components["schemas"]["ProjectOut"] = {
   project_id: MOCK_PROJECT_ID,
   name: "Child health, Tower Hamlets",
@@ -262,18 +262,18 @@ export const mockProject: components["schemas"]["ProjectOut"] = {
   is_owner: true,
   owner_display: "Ada Lovelace",
   archived_at: null,
-  // Its newest member's update, or its own creation (round 12).
+  // Its newest member's update, or its own creation.
   last_activity_at: "2026-07-15T09:00:00Z",
-  // Its tasks in no other project, which archiving it archives (round 14);
+  // Its tasks in no other project, which archiving it archives;
   // the mock serves the live count.
   solo_task_count: 2,
 };
 
 /**
- * `GET /api/v1/me` fixtures (task 033 phase 10a). `mockMeUnenrolled` is the
+ * `GET /api/v1/me` fixtures. `mockMeUnenrolled` is the
  * mock's default identity — dark launch: an unenrolled caller (`organisation:
  * null`) so the switcher and every org-scoped affordance stay hidden and
- * every pre-033 mock journey is unchanged until a test opts into
+ * a mock journey sees no organisation until a test opts into
  * `mockMeEnrolled` via `setMockMe` (`mock/api.ts`).
  */
 export const mockMeUnenrolled: components["schemas"]["MeOut"] = {
@@ -326,12 +326,12 @@ export const mockLandscape: components["schemas"]["LandscapeOut"] = {
     { name: "School food environments", size: 19, description: "Meal standards, free breakfast, and food access.", theme_id: MOCK_THEME_ID_SCHOOL_FOOD },
     { name: "Active travel", size: 15, description: "Safer walking and cycling for the school journey.", theme_id: MOCK_THEME_ID_ACTIVE_TRAVEL },
     { name: "Family support", size: 6, description: "Affordable cooking and community referral support." },
-    // Round 9 (lead ruling): the four themes the live `characterise.themes`
+    // The four themes the live `characterise.themes`
     // frame names, in its order, so the handover neither reorders nor drops one.
     { name: "Healthy high streets", size: 6, description: "Food outlets and advertising around schools.", theme_id: MOCK_THEME_ID_HIGH_STREETS },
   ],
-  // Publisher countries by the one name the server gives them (task 058,
-  // round 10): each row links to All sources filtered by that value, and the
+  // Publisher countries by the one name the server gives them:
+  // each row links to All sources filtered by that value, and the
   // mock sources carry the same countries.
   geographies: { "United Kingdom": 30, "United States": 8, Netherlands: 3, "Not reported": 5 },
 };
@@ -361,7 +361,7 @@ export const mockEvidenceThemeIds: Record<string, string[]> = {
   [mockEvidence[3].source_id]: [MOCK_THEME_ID_HIGH_STREETS],
 };
 
-/** What each coverage row's search returned, by its `query_id` (round 12):
+/** What each coverage row's search returned, by its `query_id`:
  *  the mock's `GET /evidence?query=` keeps these rows. A key not listed
  *  stands for a search from before the ids were kept: an empty page. */
 export const mockEvidenceByQuery: Record<number, string[]> = {
@@ -373,7 +373,7 @@ export const mockEvidenceByQuery: Record<number, string[]> = {
   110: [mockEvidence[2].source_id, mockEvidence[4].source_id, mockEvidence[6].source_id],
 };
 
-/** Shared + distinct institutions: markers 1, 1-2 — the D5 numbering path.
+/** Shared + distinct institutions: markers 1, 1-2.
  *  One copy feeds the dossier, the reference list and both chunk-context
  *  handlers so the surfaces can never silently disagree. */
 export const mockAuthorships: components["schemas"]["AuthorshipOut"][] = [
@@ -405,7 +405,7 @@ export const mockSourceDossiers: Record<string, components["schemas"]["SourceDos
   // the "grouped by asserter, never merged" rendering (contract strand 7).
   [mockEvidence[7].source_id]: {
     ...mockEvidence[7],
-    // Corporate author (042 D2): one name, no institutions, no markers.
+    // Corporate author: one name, no institutions, no markers.
     authorships: [{ name: "Example Policy Institute" }],
     abstract: "An AI-generated summary: measures near the school gate that make the healthy choice the easy choice.",
     abstract_source: "llm_description",
@@ -504,7 +504,7 @@ export const mockGroups: components["schemas"]["GroupsOut"] = {
 };
 
 /**
- * The History read model as the server writes it (task 058, round 10): each
+ * The History read model as the server writes it: each
  * line says what happened, to what, and who did it. The mock signs in as the
  * owner, so the owner's acts read "You"; Policy Atlas's acts name it; a
  * step's line needs no subject. A run's searches are one row whose detail
@@ -557,8 +557,7 @@ export const mockDecisions: components["schemas"]["DecisionOut"][] = [
  * `search_review` steer point (the runner pauses after `acquire` and writes
  * kind `steer_point`). Its options are the server's five, in the server's ids,
  * with the suggested one first and its reason in `why`. No floor trigger
- * fired, so `triggers` is empty, as it is on a pause the mode always takes
- * (task 058, N26; annex scene 12).
+ * fired, so `triggers` is empty, as it is on a pause the mode always takes.
  */
 export const mockCheckIn: components["schemas"]["CheckInOut"] = {
   check_in_id: MOCK_CHECK_IN_ID,
@@ -588,7 +587,7 @@ export const mockCheckIn: components["schemas"]["CheckInOut"] = {
 };
 
 /** The sentence the judge fails in section 1, and its repaired wording: one
- *  number differs (task 058, N26). */
+ *  number differs. */
 const MOCK_SECTION_ONE_LEAD =
   "Pair school food action with safer active-travel routes and practical family support, while monitoring local reach.";
 const MOCK_SECTION_ONE_FAILED = "Schools that added a walking bus saw 8 more children arrive on foot in every 100.";
@@ -615,7 +614,7 @@ export const mockSectionOneRevisingSpan: { start: number; end: number } = (() =>
 })();
 
 /** The sources the writer reads for section 1, as `artefact.section_sources`
- *  carries them (task 058, evidence shown live): the first read returns two,
+ *  carries them (evidence shown live): the first read returns two,
  *  the second adds three more. Short names where the source has an author or
  *  publisher and a year; one long title the page cuts. */
 export const mockSectionOneSources: { source_id: string; title: string }[][] = [
@@ -653,7 +652,7 @@ export const mockSectionOneClaims: { start: number; end: number; sources: { sour
   },
 ];
 
-/** The case-study cards the writer streams (task 058, round 7), as
+/** The case-study cards the writer streams, as
  *  `artefact.section_card` carries them, and as the committed report keeps
  *  them. */
 export const mockCaseStudyCards: { title: string; prose: string }[] = [
@@ -674,7 +673,7 @@ export const mockCaseStudiesProse = mockCaseStudyCards
   .join("\n\n");
 
 /** One citation claim of the mock report, with the span and reference number
- *  the live page shows before the swap (task 058, round 7). */
+ *  the live page shows before the swap. */
 interface MockCitedClaim {
   claimId: string;
   text: string;
@@ -717,7 +716,7 @@ const MOCK_CASE_STUDIES_CITED: MockCitedClaim = {
   cites: [{ citationId: "50000000-0000-4000-8000-000000000005", n: 2, source: mockEvidence[4], quote: "Breakfast uptake rose in the first year of universal provision." }],
 };
 
-/** The checker's reason the mock gives every checked claim (round 13). */
+/** The checker's reason the mock gives every checked claim. */
 const MOCK_GROUNDING_RATIONALE = "The quote states the result the sentence reports.";
 
 function mockClaimOut(claim: MockCitedClaim, span: [number, number] = claim.span): components["schemas"]["ClaimOut"] {
@@ -733,7 +732,7 @@ function mockClaimOut(claim: MockCitedClaim, span: [number, number] = claim.span
       source_title: cite.source.title,
       quote: cite.quote,
     })),
-    // Round 13: the checker's verdict is the claim's.
+    // The checker's verdict is the claim's.
     grounding_tier: "tier_2",
     grounding_rationale: MOCK_GROUNDING_RATIONALE,
   };
@@ -747,8 +746,8 @@ function mockLiveCitations(claims: MockCitedClaim[]): components["schemas"]["Sec
       n: cite.n,
       source_id: cite.source.source_id,
       title: cite.source.title,
-      // Round 8: the committed report's ids (the mock answers the chunk
-      // context for any citation id) and the checked quote; 2026-11-09: the
+      // The committed report's ids (the mock answers the chunk
+      // context for any citation id) and the checked quote; the
       // cited chunk, which the live page reads the passage by (the mock
       // answers any chunk id).
       citation_id: cite.citationId,
@@ -760,7 +759,7 @@ function mockLiveCitations(claims: MockCitedClaim[]): components["schemas"]["Sec
 }
 
 /** The checked claims a completed section carries, each with its verdict
- *  (`artefact.section_completed.claims`, round 13). */
+ *  (`artefact.section_completed.claims`). */
 function mockLiveClaims(claims: MockCitedClaim[]): components["schemas"]["SectionClaim"][] {
   return claims.map((claim) => ({
     claim_id: claim.claimId,
@@ -772,11 +771,11 @@ function mockLiveClaims(claims: MockCitedClaim[]): components["schemas"]["Sectio
 }
 
 /** The full report's introduction as the writer streams it into the `intro`
- *  slot and as the committed report keeps it (task 058, round 8). */
+ *  slot and as the committed report keeps it. */
 export const MOCK_FULL_REPORT_INTRO =
   "The report first sets out what local action the evidence supports, then turns to the programmes that show it working in practice.";
 
-/** The search's queries as `search.query` carries them (task 058, round 9):
+/** The search's queries as `search.query` carries them:
  *  the five topic queries the coverage record lists after the stage, each
  *  sent then back with its count, then one citations pass described in
  *  words. `found` is the activity line's running count once each is back. */
@@ -796,7 +795,7 @@ export const mockSearchQueries: {
 ];
 
 /** The themes as `characterise.themes` carries them once found, before the
- *  sources are assigned (task 058, round 9): the saved landscape's four, in
+ *  sources are assigned: the saved landscape's four, in
  *  its order and with its words, so the handover to the saved themes (with
  *  their counts) neither reorders nor drops one. */
 export const mockLiveThemes: { label: string; description: string | null }[] = (mockLandscape.themes ?? []).map(
@@ -804,7 +803,7 @@ export const mockLiveThemes: { label: string; description: string | null }[] = (
 );
 
 /** The most-relevant-source notes as `artefact.source_note` carries them, in
- *  the order written, and as the committed report keeps them (round 8). Each
+ *  the order written, and as the committed report keeps them. Each
  *  `short` is the source's name on the activity line. */
 export const mockSourceNotes: { sourceId: string; title: string; short: string; note: string }[] = [
   {
@@ -896,7 +895,7 @@ export const mockArtefact: components["schemas"]["ArtefactOut"] = {
  *  same titles/prose as `mockArtefact` so the streamed and committed pages
  *  read as one continuous document. Each slot names its role; the
  *  case-studies slot follows the body sections and the introduction's slot
- *  comes last, as the server numbers them (task 058, rounds 7 and 8). The
+ *  comes last, as the server numbers them. The
  *  page shows the introduction by its role, before the body sections. */
 export const mockArtefactSkeleton: components["schemas"]["ArtefactSectionSkeleton"][] = [
   { index: 0, title: "What appears to help", focus: "What the evidence shows helps, headline first.", role: "key_findings" },
@@ -907,10 +906,10 @@ export const mockArtefactSkeleton: components["schemas"]["ArtefactSectionSkeleto
 
 /** The case-studies slot's display index in the mock skeleton. */
 export const MOCK_CASE_STUDIES_INDEX = 2;
-/** The introduction slot's display index in the mock skeleton (round 8). */
+/** The introduction slot's display index in the mock skeleton. */
 export const MOCK_INTRO_INDEX = 3;
 /** The key findings' writer's citation as `artefact.section_claim` carries it
- *  while the block streams (round 8): the span the judge later keeps. */
+ *  while the block streams: the span the judge later keeps. */
 export const mockKeyFindingsClaim = {
   start: 34,
   end: 79,
@@ -921,7 +920,7 @@ export const mockKeyFindingsClaim = {
 export const MOCK_STREAMED_SECTION_INDEX = 1;
 
 /** Each completed section's checked citations, as `artefact.section_completed`
- *  carries them (task 058, round 7), keyed by display index. The numbers and
+ *  carries them, keyed by display index. The numbers and
  *  spans match `mockArtefact`: the key findings cite reference 1; the
  *  implications cite 2, then 2 and 3; the case studies cite 2. */
 export const mockSectionCitations: Record<number, components["schemas"]["SectionCitation"][]> = {
@@ -943,7 +942,7 @@ export const mockSectionCitations: Record<number, components["schemas"]["Section
 };
 
 /** Each completed section's checked claims with their verdicts, keyed by
- *  display index like {@link mockSectionCitations} (round 13). */
+ *  display index like {@link mockSectionCitations}. */
 export const mockSectionClaims: Record<number, components["schemas"]["SectionClaim"][]> = {
   0: [
     {
@@ -960,7 +959,7 @@ export const mockSectionClaims: Record<number, components["schemas"]["SectionCla
 
 
 /**
- * The options-scoping baseline (task 044, deliverable 9) the mock serves as
+ * The options-scoping baseline the mock serves as
  * the scoping task's Result: the seven written sections in their fixed order,
  * one proposed section inserted after "What is contested", and the
  * code-rendered Sources section last. No key findings, no conclusions, no
@@ -1098,14 +1097,14 @@ export const mockCoverage: components["schemas"]["CoverageOut"] = {
       backend: "OpenAlex",
       results: 270,
       relevant: 30,
-      // `query_id` (round 12): the key `GET /evidence?query=` takes.
+      // `query_id`: the key `GET /evidence?query=` takes.
       queries: [
         { query: "childhood obesity school intervention UK", results: 34, query_id: 101 },
         { query: "primary school food environment obesity", results: 28, query_id: 102 },
         { query: "active travel school children obesity", results: 24, query_id: 103 },
       ],
-      // The live search's citations pass, worded for a finished search
-      // (round 11): the saved coverage names its passes in the order run.
+      // The live search's citations pass, worded for a finished search:
+      // the saved coverage names its passes in the order run.
       passes: [{ pass: "citations", query: "Followed citations from 50 sources", results: 184, query_id: 110 }],
     },
     {
@@ -1121,7 +1120,7 @@ export const mockCoverage: components["schemas"]["CoverageOut"] = {
   ],
 };
 
-// --- Chat conversations (task 029 phase G3 mock) ------------------------
+// --- Chat conversations ------------------------
 //
 // The chat citation carries a durable chunk id (not the artefact citation
 // table's id) — a distinct fixture id in the same 8-4-4-4-12 style, one
@@ -1198,7 +1197,7 @@ export const MOCK_LINK_ID = "70000000-0000-4000-8000-000000000001";
 export const MOCK_LINK_SOURCE_RUN_ID = "70000000-0000-4000-8000-000000000002";
 
 /**
- * A ready options-scoping plan (task 044, contract deliverable 5), one link
+ * A ready options-scoping plan, one link
  * and one of each constraint kind so every plan-document section has
  * something to render. Mirrors `mockPlanReady`'s role for the ES fixture:
  * the mock's task_agent turn transcript is scripted as already having
@@ -1420,7 +1419,7 @@ export function seedTaskAgentTurns(): components["schemas"]["TaskAgentTranscript
   ];
 }
 
-// --- The planner's scripted conversation (task 058, N10; annex scene 11) ---
+// --- The planner's scripted conversation ---
 
 /** One scripted planner turn: the reply the stream types out, plus the
  *  structured part, question and quick replies the finished turn carries. */
@@ -1500,7 +1499,7 @@ export function mockPlannerTurn(turnIndex: number): MockPlannerTurn {
   return { reply: "Noted — I'll keep that in mind for the analysis.", question: null, suggestions: [], part: null };
 }
 
-// --- The options read while the longlist builds (task 058, N22; scene 15) ---
+// --- The options read while the longlist builds ---
 
 type OptionProgress = components["schemas"]["OptionProgressOut"];
 
@@ -1740,7 +1739,7 @@ export function mockWalkLonglist(
 }
 
 /**
- * The finished longlist after a mock walk (task 058, round 10): the same
+ * The finished longlist after a mock walk: the same
  * options the build showed, themed, as working cards (a card per option, so
  * the verbs and Suggest more act on them). Built from the build's last read.
  */
@@ -1765,7 +1764,7 @@ export function mockWalkOptionCards(
   }));
 }
 
-// --- The options-scoping baseline gate (task 044, Phase 5.5) -------------
+// --- The options-scoping baseline gate -------------
 
 export const MOCK_BASELINE_CHECK_IN_ID = "4c1acbe7-c4a1-4e0b-8d5a-bb25ea2ef635";
 
@@ -1827,7 +1826,7 @@ export const mockBaselineGateCheckIn: components["schemas"]["CheckInOut"] = {
       where: "United Kingdom",
       outcomes: ["NEET rate at 6 months", "Sustained employment or training at 12 months"],
       depth: "standard",
-      // The label the user sees, as the server sends it (N19); the mock
+      // The label the user sees, as the server sends it; the mock
       // plan's appetite is `mostly_tried`.
       risk_appetite: "Balanced: mostly evaluated, plus one or two not yet evaluated",
     },
@@ -1917,7 +1916,6 @@ export function mockScopingDecisionTurn(
   };
 }
 
-// task 045 (6.2) -----------------------------------------------------------
 // The longlist's three surfaces (list view, reduced grid, option card): a
 // longlist walk on `mockScopingPlanReady`'s NEET/Tower Hamlets plan, two
 // themes and four options exercising every state the views must render —
@@ -1970,7 +1968,7 @@ function mockProfile(
       line("potential_impact", "Moderate if it works: it targets late referral, a main driver of the baseline; would apply to 16 to 24 year olds, tried on 18 to 24 year olds; the records describe proposals only."),
     ],
     settings,
-    // Whom it acts on directly, the setting call's words (round 12).
+    // Whom it acts on directly, the setting call's words.
     acts_on: actsOn,
   };
 }
@@ -2264,14 +2262,14 @@ export function toLonglistOptionSummary(option: OptionOutFixture): OptionSummary
   };
 }
 
-/** The shortlist's in-memory state (task 055, A17): the note, whether the
+/** The shortlist's in-memory state: the note, whether the
  *  proposal is stale against the plan's appetite, and the appetite the
  *  mock's plan holds. The shortlist routes in `api.ts` change it. */
 export const mockShortlistState: { note: string | null; stale: boolean; inputsChanged: boolean; placesAt: string[] } = {
   note: null,
   stale: false,
   inputsChanged: false,
-  // The places the note was written against (round 14): `note_stale` once
+  // The places the note was written against: `note_stale` once
   // the places now held differ.
   placesAt: [],
 };
@@ -2284,7 +2282,7 @@ export function mockCurrentPlaces(): string[] {
     .sort();
 }
 
-/** Whether the note was written against other places than these (round 14). */
+/** Whether the note was written against other places than these. */
 export function mockNoteStale(): boolean {
   if (mockShortlistState.note == null) return false;
   const now = mockCurrentPlaces();
@@ -2347,7 +2345,7 @@ export const mockLonglistExtraOptionIds: string[] = [];
 resetMockShortlist();
 
 /** Build one `OptionOut` for `POST /options` (the button's and the chat
- *  verb's shared path, D13): minted *added by you*, zero documents, not yet
+ *  verb's shared path): minted *added by you*, zero documents, not yet
  *  typed — an option search would fill it in, which the mock does not run. */
 export function buildMockAddedOption(text: string): OptionOutFixture {
   const name = text.trim().length > 0 ? text.trim() : "New option";
@@ -2401,8 +2399,8 @@ export function buildMockAddedOption(text: string): OptionOutFixture {
  *  option), built from `mockLonglistOptionCards` so the summary and the
  *  card never drift apart. Any option added since (`mockLonglistExtraOptionIds`)
  *  appends unthemed, like a real rebuild's new entrants. */
-/** A longlist theme's distinct documents across its options, each once
- *  (round 14), as the server counts them. */
+/** A longlist theme's distinct documents across its options, each once,
+ * as the server counts them. */
 export function mockThemeDocumentCount(optionIds: string[]): number {
   return new Set(
     optionIds.flatMap((optionId) =>
@@ -2469,7 +2467,7 @@ export function mockLonglist(): components["schemas"]["LonglistOut"] {
       { key: "regulate", definition: "set or change rules, standards, bans, licensing or planning requirements" },
       { key: "provide a service", definition: "deliver or fund a service or programme directly to people" },
     ],
-    // Every taxonomy version (task 046): mirrors backend lever_types.py's
+    // Every taxonomy version: mirrors backend lever_types.py's
     // LEVER_TYPES (v2, current) and LEVER_TYPES_V1 — update alongside it.
     lever_type_definitions_by_version: {
       lever_types_v2: [
@@ -2585,7 +2583,7 @@ const MOCK_SKETCH_LINKS: SketchLink[] = [
   [9, 10],
 ].map(([source, target], i) => ({ key: `l${i + 1}`, source: `b${source}`, target: `b${target}` }));
 
-/** Measured on Bedrock (task 054, S12, 2026-11-10): the first box after about
+/** Measured on Bedrock: the first box after about
  *  30 to 40 s of thinking, then a box every 1.3 s and a connection every 1.7 s. */
 export const MOCK_SKETCH_PACING_MS = { firstBox: 32_000, box: 1_300, link: 1_700 } as const;
 
@@ -2600,7 +2598,7 @@ function sketchFrame(boxes: SketchBox[], links: SketchLink[], at: number): TocSk
 }
 
 /**
- * A scripted live draft of the theory of change (`toc.sketch`, task 054, S12),
+ * A scripted live draft of the theory of change (`toc.sketch`),
  * as the server sends it: one frame per closed box, then one per closed
  * connection, each carrying the whole sketch so far (each replaces the one
  * before). With `redraw`, the first draft fails its checks once it is drawn:

@@ -37,7 +37,7 @@ type OptionSummaryOut = components["schemas"]["OptionSummaryOut"];
 /** The risk appetite as the app's dropdown over the three approved answers. It
  *  patches the plan directly (no chat seeding); the server re-proposes when
  *  a longlist exists. Shared by the shortlist page (in the field's skin, full
- *  width up to 32rem, the longest answer whole on a desktop, so it fits a phone: round 10, finding 4) and the plan
+ *  width up to 32rem, the longest answer whole on a desktop, so it fits a phone) and the plan
  *  document (compact, in its panel). */
 export function RiskAppetiteSelect({
   value,
@@ -56,7 +56,7 @@ export function RiskAppetiteSelect({
     value: key,
     label: RISK_APPETITE_LABELS[key],
   }));
-  // The shortlist page's field is 40 px; the plan document's compact one 32 px (round 12).
+  // The shortlist page's field is 40 px; the plan document's compact one 32 px.
   return (
     <Select
       id={id}
@@ -72,7 +72,7 @@ export function RiskAppetiteSelect({
 }
 
 /** A bold lead-in on a line Policy Atlas wrote ("Why:", "Not covered:"),
- *  in place of an uppercase label over it (round 10, C4). */
+ *  in place of an uppercase label over it. */
 function LeadIn({ children }: { children: string }) {
   return <strong className="font-bold text-navy">{children}</strong>;
 }
@@ -87,19 +87,18 @@ function numberOf(value: unknown): number | null {
 }
 
 /**
- * The Shortlist: its own Result view beside Baseline and Longlist (task 055,
- * item 8, as amended by the owner after the build). The question as the
+ * The Shortlist: its own Result view beside Baseline and Longlist. The question as the
  * title; the places in two groups, each with the option's description and,
  * for a pick, Policy Atlas's reason; the not-covered note at the foot of
  * the picks; the risk appetite over Suggest more, the two controls that
  * re-propose, with a way back to the longlist beside it; Assess as the
  * page's one primary at its end, its reason in words under it while it is
- * off (round 10, finding 4). Adding places happens on the longlist, where
+ * off. Adding places happens on the longlist, where
  * every row and card carries Add to shortlist.
  */
 export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: LonglistOut }) {
   const task = useTask(taskId);
-  // The public link reads the shortlist; it changes nothing (round 12). The
+  // The public link reads the shortlist; it changes nothing. The
   // plan and the runs are owner-only reads, so the public link never asks.
   const publicView = usePublicView();
   const plan = usePlan(publicView ? "" : taskId);
@@ -107,7 +106,7 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
   const suggest = useSuggestMore(taskId);
   const walkActive = isRunActive(task.data);
   const actions = useOptionActions(taskId, walkActive);
-  // A Result-tab switch opens the page at its top, focus on the title (round 13, owner).
+  // A Result-tab switch opens the page at its top, focus on the title.
   const titleRef = useRef<HTMLHeadingElement>(null);
   useOpenAtTop(titleRef, "shortlist");
 
@@ -146,7 +145,7 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
   const canSuggest = hasOpenOption || shortlist.stale;
   const suggestOff = walkActive ? "A walk is running." : !canSuggest ? "Nothing left to propose." : null;
   const hasNote = shortlist.note != null && shortlist.note !== "";
-  // The note kept current (owner, 2026-11-08): rewritten on opening when
+  // The note kept current: rewritten on opening when
   // stale, and once 3 s after the last change on the page if still stale.
   // ponytail: `note_stale` typed here until the generated types carry it.
   const noteStale = (shortlist as typeof shortlist & { note_stale?: boolean }).note_stale === true;
@@ -175,7 +174,7 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
           <div className="min-w-0 flex-1">
             <Link
               to={`/tasks/${taskId}/options/${option.option_id}`}
-              // The card's breadcrumb leads back here (round 15, owner).
+              // The card's breadcrumb leads back here.
               state={CARD_FROM_SHORTLIST}
               className="text-lead font-bold text-navy underline-offset-4 hover:underline max-md:text-body"
             >
@@ -228,7 +227,7 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
 
   return (
     <ReportPage>
-      {/* One header with the longlist's (round 10, lead): "Shortlist" as the
+      {/* One header with the longlist's: "Shortlist" as the
           title, the plan's question under it in Lead Grey, no label over it. */}
       <header>
         <h1 ref={titleRef} tabIndex={-1} className={cn(REPORT_TITLE_CLASS, "outline-none")}>
@@ -280,8 +279,8 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
           <div className="mt-4">
             {noteRefresh.isPending ? (
               // While the note is rewritten, the Task Agent's working line in
-              // its place: the turning fold mark and what it is doing (owner,
-              // 2026-11-08); the new note replaces it with the arrivals' fade.
+              // its place: the turning fold mark and what it is doing;
+              // the new note replaces it with the arrivals' fade.
               <ActionLine label={NOTE_REVIEWING_WORDS} live arrivalId={`shortlist-note-${taskId}`} />
             ) : (
               <p
@@ -305,8 +304,8 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
 
       {/* The two controls that re-propose, one block on the left edge: the
           risk appetite over Suggest more (a secondary: the page's one primary
-          is Assess), the way back to the longlist beside it (round 10,
-          finding 4). Stacked, it fits a 400 px screen. */}
+          is Assess), the way back to the longlist beside it.
+          Stacked, it fits a 400 px screen. */}
       {publicView ? (
         <div className="mt-8">
           <p className="text-meta font-semibold text-grey">Risk appetite</p>
@@ -362,7 +361,7 @@ export function ShortlistView({ taskId, longlist }: { taskId: string; longlist: 
       )}
 
       {/* The page's one primary; while it is off its reason is a line of
-          words under it, not a tooltip (round 10, finding 4). */}
+          words under it, not a tooltip. */}
       {!publicView && (
         <div className="mt-10 border-t border-line pt-6">
           <Button variant="primary" disabled aria-describedby="shortlist-assess-off">

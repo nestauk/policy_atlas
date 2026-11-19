@@ -1,4 +1,4 @@
-"""The longlist's PICO-shaped intent and its screening criteria (task 045; task 046).
+"""The longlist's PICO-shaped intent and its screening criteria.
 
 Both are compiled deterministically from the approved scoping plan:
 
@@ -7,13 +7,13 @@ Both are compiled deterministically from the approved scoping plan:
 - **I** — left open: any intervention;
 - **O** — the plan's outcomes.
 
-There is no C (no comparison before assessment) and **no setting** (task 046,
-S7, R19; reopens 045 D21): the screen's error is neither visible nor
+There is no C (no comparison before assessment) and **no setting**:
+the screen's error is neither visible nor
 reversible, so it judges wide, and a setting requirement is checked by
 constrain (:func:`setting_requirements`). A place in the plan's words is the
 user's place, not a criterion: the rule is words in every prompt
-(:func:`_place_sentence`; R74). The plan-text strip of S6 was deleted on the
-owner's ruling at the review (2026-10-12). Where is never a filter in the
+(:func:`_place_sentence`); no code strip of the plan text backs it.
+Where is never a filter in the
 longlist's retrieval chain; it is shown on the way out as *where tried* and
 returns at transferability (task 3).
 
@@ -36,7 +36,7 @@ def setting_requirements(plan: ScopingPlan) -> list[str]:
 
     A setting requirement is a ``boundary`` constraint the Task Agent
     marked ``setting=True`` (it names the delivery setting the options must
-    be delivered through). This is how code knows one exists (D21).
+    be delivered through). This is how code knows one exists.
 
     Args:
         plan: The validated scoping plan.
@@ -61,7 +61,7 @@ def screen_target_unit(plan: ScopingPlan) -> str:
 
     The plan's target unit as the plan holds it, with its trailing full
     stops removed. A place in it is the user's place, not a criterion
-    (:func:`_place_sentence`; R74).
+    (:func:`_place_sentence`).
 
     Args:
         plan: The validated scoping plan.
@@ -73,10 +73,10 @@ def screen_target_unit(plan: ScopingPlan) -> str:
 
 
 def _place_sentence(plan: ScopingPlan) -> str:
-    """The place rule in words, naming the user's place from the plan's Where (R74, 18P).
+    """The place rule in words, naming the user's place from the plan's Where (18P).
 
-    The plan's words reach the prompts with their place (the strip of S6 was deleted
-    on the owner's ruling at the review, 2026-10-12); this sentence is the rule the
+    The plan's words reach the prompts with their place (no code strip removes
+    it); this sentence is the rule the
     prompts carry. No list of names: the plan's Where field is the only text used.
 
     Args:
@@ -99,7 +99,7 @@ def compile_longlist_intent(plan: ScopingPlan) -> str:
 
     Deterministic: the same plan always gives the same intent. Contains the
     target unit as the plan holds it and the outcomes; never a setting or a
-    comparison; Where is named once, inside the place rule (task 046, S7; R74).
+    comparison; Where is named once, inside the place rule.
 
     Args:
         plan: The validated scoping plan.
@@ -121,10 +121,10 @@ def compile_longlist_intent(plan: ScopingPlan) -> str:
 def longlist_screening_criteria(plan: ScopingPlan) -> list[str]:
     """Compose the longlist screen's criteria from the plan, as data.
 
-    Exactly two criteria (task 046, S7): the wide target unit (a wider or
+    Exactly two criteria: the wide target unit (a wider or
     adjacent population passes) and the outcomes. No setting criterion; the
-    place rule in words (R74). The same criteria screen the longlist scope and the verb *add*'s
-    option search, whose intent is the option's design (AM1). The screen
+    place rule in words. The same criteria screen the longlist scope and the verb *add*'s
+    option search, whose intent is the option's design. The screen
     composes them with its intent under its 2,000-character ceiling and
     refuses (never truncates) an over-long list;
     ``scoping_plan.compose_longlist_screen_intent`` runs that check up front.
@@ -148,8 +148,8 @@ def longlist_plan_data(plan: ScopingPlan) -> dict[str, object]:
     """The plan fields the longlist's discovery and typing prompts read, as data.
 
     The question, the intended change, the target unit and the outcomes as
-    the plan holds them (task 046, items 1, 7, 9; the place rule is words in
-    the prompts, R74). Where itself is not included.
+    the plan holds them (the place rule is words in
+    the prompts). Where itself is not included.
 
     Args:
         plan: The validated scoping plan.
@@ -166,10 +166,10 @@ def longlist_plan_data(plan: ScopingPlan) -> dict[str, object]:
 
 
 def plan_tagging_context(plan: ScopingPlan) -> TaggingContext:
-    """Build the intervention profile's tagging context from the plan (task 046, S4).
+    """Build the intervention profile's tagging context from the plan.
 
     The target unit, the intended change and the outcomes as the plan holds
-    them (the place rule is words in the prompt, R74). Deterministic: the
+    them (the place rule is words in the prompt). Deterministic: the
     same plan always gives the same context, so the same ``context_hash``.
     Where itself never enters the context.
 
@@ -187,7 +187,7 @@ def plan_tagging_context(plan: ScopingPlan) -> TaggingContext:
 
 
 def who_decides_considerations(plan: ScopingPlan) -> list[str]:
-    """The texts of the plan's considerations on who decides, in plan order (R38).
+    """The texts of the plan's considerations on who decides, in plan order.
 
     Args:
         plan: The validated scoping plan.

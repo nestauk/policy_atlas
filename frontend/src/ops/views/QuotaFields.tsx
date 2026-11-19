@@ -62,7 +62,7 @@ export function valuesOf(draft: QuotaDraft): QuotaValues {
 }
 
 /**
- * The quota form's two fields (contract B12): "Tasks per year" and
+ * The quota form's two fields: "Tasks per year" and
  * "Simultaneous tasks", each empty to inherit. The second carries the
  * warning band (Yellow Tint, the word "Warning:" beside the colour) and is
  * editable all the same.

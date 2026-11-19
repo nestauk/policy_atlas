@@ -16,14 +16,12 @@ import { CloseButton } from "../brand/CloseButton";
 const SHEET_EXIT_MS = 200;
 
 /** The scrim a sheet lays over the page: Navy at 40%, fading in over 200 ms
- *  and out with the sheet. The plan document over a tab takes it too (owner,
- *  round 14). */
+ *  and out with the sheet. The plan document over a tab takes it too.*/
 export const SHEET_SCRIM_CLASS =
   "fixed inset-0 z-40 bg-navy/40 transition-opacity duration-200 ease-out starting:opacity-0 data-[state=closed]:animate-[scrim-out_200ms_ease-out_forwards]";
 
 /**
- * The sheet's root. It leaves the way it came (task 058, round 9; the
- * animation sweep's entry 10): asked to close, it plays its exit (200 ms on
+ * The sheet's root. It leaves the way it came: asked to close, it plays its exit (200 ms on
  * the drawer curve along its own edge, the scrim fading with it) before it
  * tells the caller, so a caller that unmounts it on close still sees it go.
  * Under reduced motion it closes at once.
@@ -63,11 +61,11 @@ export function SheetContent({
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
   title: string;
   /** A quiet control in the header before the close button (the source
-   *  sheet's "Back to the claim", owner round 13). */
+   *  sheet's "Back to the claim"). */
   headerAction?: ReactNode;
   description?: string;
   /** The description names the dialog for a screen reader but is not shown
-   *  (the provenance sheet's "Claim provenance"; task 058, round 10). */
+   *  (the provenance sheet's "Claim provenance"). */
   descriptionHidden?: boolean;
   side?: "right" | "left";
 }) {
@@ -82,7 +80,7 @@ export function SheetContent({
           // Slides in from its edge on the drawer curve; transform only.
           "transition-transform duration-[260ms] ease-drawer",
           side === "right" ? "right-0 border-l starting:translate-x-full" : "left-0 border-r starting:-translate-x-full",
-          // Leaves along the same edge, faster than it came (round 9).
+          // Leaves along the same edge, faster than it came.
           side === "right"
             ? "data-[state=closed]:animate-[sheet-out-right_200ms_var(--ease-drawer)_forwards]"
             : "data-[state=closed]:animate-[sheet-out-left_200ms_var(--ease-drawer)_forwards]",

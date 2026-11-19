@@ -4,7 +4,7 @@
 # * Security groups: backend containers
 # * DB security group ingress rule so backend can reach RDS (port 5432)
 # * Listener rule on the shared ALB for host-header routing
-# * The queued document-ingest worker (task 057): queue, dead-letter queue,
+# * The queued document-ingest worker: queue, dead-letter queue,
 #   Lambda function and its dead-letter alarm (components/ingest_worker.py)
 #
 # Pre-requisites (deployed separately):
@@ -40,7 +40,7 @@ from infra.components.shared_alb import import_shared_alb
 from infra.components.security_headers import SecurityHeaders
 from infra.components.waf import ApiFirewall
 
-# How the API reads documents' full text (task 057): "in_process" parses them
+# How the API reads documents' full text: "in_process" parses them
 # inside the API task as before; "queued" sends one message per document to
 # the ingest function. Set per environment in pa_config.json.
 INGEST_MODES = ("in_process", "queued")
@@ -77,7 +77,7 @@ class PolicyAtlasStack(Stack):
         shared_alb = shared_alb_imports.load_balancer
         shared_listener = shared_alb_imports.listener
 
-        # Task 064b: the firewall in front of the API (ADR 0047). Reads backend.waf
+        # The firewall in front of the API (ADR 0047). Reads backend.waf
         # from pa_config.json; nothing from it reaches the container.
         ApiFirewall(self, "ApiFirewall",
             load_balancer_arn=shared_alb.load_balancer_arn,
@@ -109,7 +109,7 @@ class PolicyAtlasStack(Stack):
         )
 
         # Which AI models the backend uses: a route name from the backend's
-        # committed file backend/src/policy_atlas/model_routes.toml (task 053).
+        # committed file backend/src/policy_atlas/model_routes.toml.
         # "openai-direct" calls OpenAI with OPENAI_API_KEY; a "bedrock-*" route
         # calls Amazon Bedrock with AWS_BEARER_TOKEN_BEDROCK. The Bedrock key is
         # only passed when a Bedrock route is chosen, because ECS refuses to start
@@ -117,7 +117,7 @@ class PolicyAtlasStack(Stack):
         # field to the app secret first, then switch the route in pa_config.json.
         model_route = be_config.get("model_route", "openai-direct")
         ingest_mode = be_config.get("ingest_mode")
-        # Task 054 (C15): the API creates theory-of-change tasks only where this
+        # The API creates theory-of-change tasks only where this
         # is "1". On in staging for colleagues to try; off in production until
         # the capability is complete.
         theory_of_change = "1" if be_config.get("theory_of_change") else "0"
@@ -196,9 +196,9 @@ class PolicyAtlasStack(Stack):
             model_route=model_route,
         )
 
-        # Files users give a task (task 054 increment 5; one bucket for every
-        # capability, owner 2026-11-03). Private, encrypted, HTTPS only, and kept
-        # if the stack is ever deleted: they are users' work. Only the backend
+        # Files users give a task (one bucket for every capability). Private,
+        # encrypted, HTTPS only, and kept if the stack is ever deleted: they are
+        # users' work. Only the backend
         # reads it; the browser never does.
         uploads_bucket = s3.Bucket(self, "UploadsBucket",
             bucket_name=be_config["upload_bucket_name"],
@@ -294,8 +294,8 @@ class PolicyAtlasStack(Stack):
             image=backend_image,
             # The login sync is idempotent and re-asserts the previous state on
             # failure, so it never fails the task after a committed migration:
-            # a public outage must not follow an ops-only step (review stack,
-            # 2026-11-17). deploy.sh checks the secret before starting ops.
+            # a public outage must not follow an ops-only step.
+            # deploy.sh checks the secret before starting ops.
             command=["sh", "-c", "alembic upgrade head && (python -m policy_atlas.ops.db_role sync || echo 'WARN: ops login sync failed; the ops service keeps its previous login')"],
             logging=ecs.LogDrivers.aws_logs(stream_prefix="Migrate",
                                             log_group=shared_log_group),
@@ -387,7 +387,7 @@ class PolicyAtlasStack(Stack):
                 "POLICY_ATLAS_SELF_SIGNUP_MAX_PER_HOUR": str(self_signup_config["max_per_hour"]),
                 "OPS_UI_DIR": "/app/ops-ui",
                 # The same limits as the API, so the ops pages' resolved
-                # limits agree with /me (review stack, 2026-11-17).
+                # limits agree with /me.
                 "RUNS_PER_USER": str(be_config["runs_per_user"]),
                 "TASK_QUOTA_PER_YEAR": str(be_config["task_quota_per_year"]),
                 "DB_POOL_SIZE": "5",
@@ -421,7 +421,7 @@ class PolicyAtlasStack(Stack):
             service_name="policy-atlas-v3-ops-service",
             # Template-pinned at zero like the API's: deploy.sh scales it to
             # ops.desired_count only after the migration, the login sync and
-            # the public service are done (review stack, 2026-11-17).
+            # the public service are done.
             desired_count=0,
             min_healthy_percent=0,
             max_healthy_percent=100,

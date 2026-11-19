@@ -62,7 +62,7 @@ import { DisclosureChevron } from "../../ui/brand/Disclosure";
 type OptionDocumentOut = components["schemas"]["OptionDocumentOut"];
 
 /** A sentence's runs, its takeaways in Semibold Navy and the joining words
- *  regular (round 12, owner): the profile sentence, the lever and the
+ *  regular: the profile sentence, the lever and the
  *  delivery setting. */
 function SentenceRuns({ parts }: { parts: readonly SentencePart[] }) {
   return (
@@ -80,7 +80,7 @@ function SentenceRuns({ parts }: { parts: readonly SentencePart[] }) {
   );
 }
 
-/** A heading inside a block (round 12, owner): the report's subheading,
+/** A heading inside a block: the report's subheading,
  *  the case study title's Lead Bold Navy, Body below `md`. */
 const BLOCK_SUBHEADING_CLASS = "text-lead font-bold text-navy max-md:text-body";
 
@@ -89,10 +89,10 @@ const DOCUMENT_GROUP_HEADING_CLASS = "font-semibold text-navy";
 
 /** Documents shown in a group before "Show all N". */
 const DOCUMENTS_SHOWN = 5;
-/** Design features shown on the card (R63; § 2.5). */
+/** Design features shown on the card (§ 2.5). */
 const FEATURES_SHOWN = 6;
 
-/** One document, two lines (round 12, owner): the reference in the
+/** One document, two lines: the reference in the
  *  References form (authors, year, the title as the link to its dossier,
  *  which opens over the card, the venue), then one Meta Grey
  *  line of its facts joined by the middot, nothing under it. */
@@ -106,15 +106,15 @@ function DocumentLine({
   document: OptionDocumentOut;
 }) {
   const linked = document.task_source_snapshot_id != null && taskId !== undefined;
-  // The dossier opens over the card, the reader staying on it (round 12,
-  // owner): the same path with `source` and `option`, which the card reads.
+  // The dossier opens over the card, the reader staying on it:
+  // the same path with `source` and `option`, which the card reads.
   const dossier = linked
     ? { search: `?${new URLSearchParams({ source: String(document.task_source_snapshot_id), option: optionId })}` }
     : null;
-  // The References form (round 12): authors, year, the title, the venue; a
+  // The References form: authors, year, the title, the venue; a
   // part the read lacks is left out, so the title alone still reads.
-  // The title first, the year in brackets after it, then the venue (round
-  // 13, owner: no authors on the card).
+  // The title first, the year in brackets after it, then the venue (no
+  // authors on the card).
   const { title, afterTitle, venue } = referenceParts({
     title: scrub(document.title),
     year: document.year ?? null,
@@ -134,8 +134,8 @@ function DocumentLine({
         {afterTitle}
         {venue !== null && <span className="text-grey"> {venue}</span>}
       </p>
-      {/* Its facts as a small labelled list, the dossier's facts pattern
-          (round 12, owner): the label at Meta Grey in a fixed column, the
+      {/* Its facts as a small labelled list, the dossier's facts pattern:
+          the label at Meta Grey in a fixed column, the
           value at Body Ink beside it; no middots. */}
       {facts.length > 0 && (
         <dl className="mt-1.5 space-y-1">
@@ -151,7 +151,7 @@ function DocumentLine({
   );
 }
 
-/** An excluded option's facts at the top of the card (round 15, owner). */
+/** An excluded option's facts at the top of the card. */
 function ExclusionBlock({
   facts,
   addReason,
@@ -193,7 +193,7 @@ function ExclusionBlock({
   );
 }
 
-/** The documents behind the option, closed by default (round 12, owner):
+/** The documents behind the option, closed by default:
  *  "Show 6 documents" / "Hide documents" after the chevron, the quiet
  *  control's look, the one disclosure language. */
 function DocumentsDisclosure({
@@ -241,12 +241,12 @@ function DocumentGroup({
   const shown = showAll ? documents : documents.slice(0, DOCUMENTS_SHOWN);
   return (
     <div className="space-y-3">
-      {/* A subheading, not a label (round 12, owner). */}
+      {/* A subheading, not a label. */}
       <h3 className={DOCUMENT_GROUP_HEADING_CLASS}>
         {heading} · {documents.length}
       </h3>
       {/* One size for the whole entry, 20 px between documents with one
-          hairline between them (round 12, owner: not dense). */}
+          hairline between them (not dense). */}
       <ul role="list" className="divide-y divide-line">
         {shown.map((document, index) => (
           <DocumentLine
@@ -268,9 +268,9 @@ function DocumentGroup({
 
 const PAGE_CLASS = `${LIFECYCLE_PAGE_CLASS} py-8`;
 
-/** The card's sections, in order (task 046, amendment 4, R78). */
+/** The card's sections, in order. */
 const SECTIONS = [
-  // Round 12 (owner): what it is, then Evidence, then What it could take.
+  // What it is, then Evidence, then What it could take.
   { id: "how-it-works", title: "How it works" },
   { id: "evidence-base", title: "Evidence" },
   { id: "what-it-would-take", title: "What it could take" },
@@ -278,18 +278,18 @@ const SECTIONS = [
 type SectionId = (typeof SECTIONS)[number]["id"];
 
 /** The sidebar lists the sections the card shows: "What it would take" is
- *  absent for an option with no profile (R37). */
+ *  absent for an option with no profile. */
 const sidebarEntries = (hasProfile: boolean): SidebarEntry[] =>
   SECTIONS.filter(({ id }) => hasProfile || id !== "what-it-would-take").map(({ id, title }) => ({ id, title }));
 
-/** The info glyph's name after "What it would take" (R37; round 12: the
- *  words left the heading for the glyph). */
+/** The info glyph's name after "What it would take" (the words sit on the
+ *  glyph, not in the heading). */
 const ESTIMATE_LABEL = "Policy Atlas's estimate";
-/** Its tooltip (round 12, owner). */
+/** Its tooltip. */
 const ESTIMATE_NOTE = "Policy Atlas's estimate from the abstracts. Not an assessment.";
 
 /**
- * The small "i" after a section's heading (round 12, owner), its tooltip
+ * The small "i" after a section's heading, its tooltip
  * saying what the block is. The heading is a disclosure button, and a
  * button cannot hold another, so the glyph's own button sits beside the
  * heading's, placed just after the title's last word: measured from the
@@ -350,7 +350,7 @@ function CardSection({
   summary?: string;
   children: ReactNode;
   defaultOpen?: boolean;
-  /** Only What it could take folds (round 12, owner); the short blocks are
+  /** Only What it could take folds; the short blocks are
    *  always open, with no Show / Hide. */
   collapsible?: boolean;
   /** An "i" after the heading: its name and its tooltip. */
@@ -358,8 +358,8 @@ function CardSection({
   summaryNode?: ReactNode;
 }) {
   const { title } = SECTIONS.find((section) => section.id === id) ?? { title: id };
-  // Each block under the one rule, its sentences at Body (round 11, item 4:
-  // no Lead on the card).
+  // Each block under the one rule, its sentences at Body (no Lead
+  // on the card).
   return (
     <div className="relative border-t border-line pt-6">
       <SectionDisclosure
@@ -376,9 +376,9 @@ function CardSection({
   );
 }
 
-/** The authority words beside "Who decides" (R70), in the column's one
- *  type: Navy Semibold, Grey when it is unclear who can act (round 10: no
- *  tint, as the level words). */
+/** The authority words beside "Who decides", in the column's one
+ *  type: Navy Semibold, Grey when it is unclear who can act (no tint,
+ *  as the level words). */
 const AUTHORITY_WORD_CLASS: Record<"within_your_power" | "needs_action_by" | "unclear", string> = {
   within_your_power: "font-semibold text-navy",
   needs_action_by: "font-semibold text-navy",
@@ -387,7 +387,7 @@ const AUTHORITY_WORD_CLASS: Record<"within_your_power" | "needs_action_by" | "un
 
 /** A line's level word in the one Navy look after a 6 px Navy square, the
  *  word saying the direction ("Quicker", "Higher"); "Middle" in Grey when the
- *  line has no mark (round 10, lead ruling on finding 7). */
+ *  line has no mark. */
 function LevelWord({ line, mark }: { line: keyof typeof LEVEL_WORDS; mark: "less" | "more" | null }) {
   return mark === null ? (
     <span className={LEVEL_MIDDLE_CLASS}>{MIDDLE_WORD}</span>
@@ -407,13 +407,13 @@ const NOTICE_WORD_CLASS = { red: "font-semibold text-red", navy: "font-semibold 
 /** The profile table's cells: three columns from `sm` up; stacked blocks below it, so the
  *  sentence keeps the full width at 390 px (22b, after the browser check). */
 // The line's name and its mark at the block's reading size, as the sentence
-// cells (round 13, owner: they read too small); the name in Grey.
+// cells (they read too small); the name in Grey.
 const PROFILE_NAME_CELL = "block pt-2.5 pr-4 align-top font-normal text-grey sm:w-48 sm:table-cell sm:py-2.5";
 const PROFILE_WORD_CELL = "block pr-4 align-top sm:w-40 sm:table-cell sm:py-2.5";
 const PROFILE_SENTENCE_CELL = "block pb-2.5 align-top sm:table-cell sm:py-2.5";
 
 /**
- * The option card (contract deliverable 9, D15) on the report's page chrome:
+ * The option card on the report's page chrome:
  * assembled from the discovery, evidence-profile and constrain passes — no
  * writer call, no summary prose beyond these templated sentences. The
  * documents render as the report's source cards (EB-modified: the
@@ -421,26 +421,26 @@ const PROFILE_SENTENCE_CELL = "block pb-2.5 align-top sm:table-cell sm:py-2.5";
  * "how sure" appear nowhere on this page (trust § Provenance labels; a
  * locked test).
  */
-/** The link state the Shortlist page's option links carry (round 15). */
+/** The link state the Shortlist page's option links carry. */
 export const CARD_FROM_SHORTLIST = { from: "shortlist" } as const;
 
 export function OptionCard() {
   const { taskId = "", optionId = "" } = useParams();
   // Opened from the Shortlist page, the breadcrumb leads back there; from
-  // the longlist, or on a direct load, to the Longlist (round 15, owner).
+  // the longlist, or on a direct load, to the Longlist.
   const from = (useLocation().state as { from?: string } | null)?.from === "shortlist" ? "shortlist" : "longlist";
   const titleRef = useRef<HTMLHeadingElement>(null);
-  // An option opens at its top with focus on its title (round 12, owner
-  // bug: it opened at the foot), once per option.
+  // An option opens at its top with focus on its title, not at its foot,
+  // once per option.
   useOpenAtTop(titleRef, optionId);
   const task = useTask(taskId);
   // The plan is an owner-only read; the public link never asks for it.
   const plan = usePlan(usePublicView() ? "" : taskId);
   const option = useOption(taskId, optionId);
   const who = useOwnerWord(taskId);
-  // Task 045 (F15): a refused exclude / include says so under the header.
+  // A refused exclude / include says so under the header.
   const actions = useOptionActions(taskId, isRunActive(task.data));
-  // A document's dossier, open over the card (round 12): Close or Back
+  // A document's dossier, open over the card: Close or Back
   // returns to the card and the URL stays on it.
   const [searchParams, setSearchParams] = useSearchParams();
   const dossierSource = searchParams.get("source");
@@ -489,23 +489,23 @@ export function OptionCard() {
 
   const item = option.data;
   const excluded = item.state === "excluded";
-  // The constraint callout (R78); a judgement on the constraint the option is already
+  // The constraint callout; a judgement on the constraint the option is already
   // excluded for is said once, by the exclusion line (30b).
   const excludedFor = item.state === "excluded" ? constraintLabel(item.exclusion?.constraint ?? "") : null;
   const notices = constraintNotices(item.judgements ?? [], item.guesses ?? []).filter(
     (notice) => excludedFor === null || notice.constraint !== excludedFor,
   );
-  // One entry per document, evaluated first then by quality (the read model, R67).
+  // One entry per document, evaluated first then by quality (the read model).
   const documents = item.documents ?? [];
   const evaluatedDocuments = documents.filter((document) => document.role === "evaluated");
   const describingDocuments = documents.filter((document) => document.role !== "evaluated");
   const placeSentences = item.place_sentences ?? [];
-  // The plan's outcomes and how the documents cover each (round 12, owner).
+  // The plan's outcomes and how the documents cover each.
   const coverage = outcomeCoverage(
     (item.evidence.outcome_counts?.by_outcome ?? []).map((entry) => entry.outcome),
     documents,
   );
-  // The plan's target first (round 12, owner).
+  // The plan's target first.
   const targetUnit = plan.data?.scoping?.target_unit?.text?.trim() ?? "";
   // The row is left out when no document's target is known.
   // The row is left out when no document's target is known.
@@ -515,7 +515,7 @@ export function OptionCard() {
   const profileLines = profile === null ? [] : PROFILE_LINE_KEYS.map((key) => ({ key, line: profile.lines.find((line) => line.key === key) }))
     // A profile written before the ninth line existed has eight; show no empty row.
     .filter(({ key, line }) => key !== "potential_impact" || line !== undefined);
-  // The open table's order (round 13, owner): ambition (its own row first),
+  // The open table's order: ambition (its own row first),
   // potential impact, the lines that compare, then those that do not.
   const compares = (key: (typeof profileLines)[number]["key"]) => LEVEL_WORDS[key].less !== null;
   const orderedProfileLines = [
@@ -535,7 +535,7 @@ export function OptionCard() {
   const ambitionMark = item.ambition ?? null;
   // One reason only: the none-fits reason says what the option does instead.
   const leverReason = (item.primary_lever_type == null ? (item.lever_none_fits_reason ?? item.lever_reason) : item.lever_reason) ?? "";
-  // Each thing said once (round 10, finding 7): the lever lives in How it
+  // Each thing said once: the lever lives in How it
   // works, the counts in the evidence line, so the grey line is where the
   // option came from and how it relates to others.
   const headerLine = [
@@ -549,7 +549,7 @@ export function OptionCard() {
     <ReportPage entries={sidebarEntries(item.profile != null)}>
       <header className="mb-8">
         {/* The breadcrumb names the page's kind, so no "Option" label sits
-            over the title (round 10, C4); the option's controls share its row. */}
+            over the title; the option's controls share its row. */}
         <div className="print-hide mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
           <nav aria-label="Breadcrumb" className="min-w-0 text-meta text-grey">
             <Link to={`/tasks/${taskId}/result?view=${from}`} className={LINK_CLASS}>
@@ -572,12 +572,12 @@ export function OptionCard() {
         <h1 ref={titleRef} tabIndex={-1} className={cn(REPORT_TITLE_CLASS, "outline-none", excluded && "text-grey")}>
           {scrub(item.name)}
         </h1>
-        {/* What it is (round 11, item 4): the description at Body, then one
+        {/* What it is: the description at Body, then one
             Meta Grey line of where it came from and how it relates. */}
         <p className={cn("mt-3 max-w-prose-measure", REPORT_BODY_CLASS)}>{scrub(item.description)}</p>
         <p className="mt-2 text-meta text-grey">{scrub(headerLine)}</p>
         {/* Why it is excluded, at the top of the card under the title and
-            its line, above How it works (round 15, owner), as the dossier's
+            its line, above How it works, as the dossier's
             labelled facts: who excluded it as the Red heading line, then
             Constraint and Why, labels in Meta Grey at a fixed width;
             "Add a reason" after the Why value while it invites one. */}
@@ -601,7 +601,7 @@ export function OptionCard() {
       </header>
 
       <CardSection id="how-it-works">
-        {/* One sentence, not an eyebrow over a value (round 12, owner). */}
+        {/* One sentence, not an eyebrow over a value. */}
         <div>
           <p>
             <SentenceRuns parts={leverLineParts(item.primary_lever_type, item.secondary_lever_types)} />
@@ -612,19 +612,19 @@ export function OptionCard() {
           <SentenceRuns parts={deliveredLeadInParts(profile?.settings, actsOnParts(profile?.acts_on))} />
         </p>
         {item.design.design_features.length > 0 && (
-          // The report's Electric Blue squares (round 12, owner).
+          // The report's Electric Blue squares.
           <BulletList items={item.design.design_features.slice(0, FEATURES_SHOWN).map((feature) => capitalise(scrub(feature)))} />
         )}
       </CardSection>
 
       {/* The counts are the header's evidence line; the section opens with
-          the evaluations' standing (round 10, C7: no opener repeating them). */}
+          the evaluations' standing (no opener repeating them). */}
       <CardSection id="evidence-base">
-        {/* Where it has been evaluated first, then the notices, then the
-            documents (round 12, owner: the Sources lines and Your outcomes
-            went; the counts are the row's and the collapsed summary's). */}
-        {/* Your target and outcomes, first in Evidence (round 13, owner),
-            then where it has been evaluated. Round 12: the report's
+        {/* Your target and outcomes, then where it has been evaluated, then
+            the notices, then the documents (the counts are the row's and the
+            collapsed summary's). */}
+        {/* Your target and outcomes, first in Evidence,
+            then where it has been evaluated. The report's
             method-table pattern, the plan's words left and their coverage
             right; the target first. Tabular figures are left off: under
             them the fallback face widens the spaces between the words, as
@@ -664,7 +664,7 @@ export function OptionCard() {
                           covered ? "text-navy" : "text-grey",
                         )}
                       >
-                        {/* One line each (round 13, owner). */}
+                        {/* One line each. */}
                         {outcomeCoverageLines(entry).map((line) => (
                           <span key={line} className="block">
                             {line}
@@ -678,8 +678,8 @@ export function OptionCard() {
             </table>
           </div>
         )}
-        {/* With no evaluation the subheading stays and says so (round 12,
-            owner), so the section never drops to the documents alone. */}
+        {/* With no evaluation the subheading stays and says so,
+            so the section never drops to the documents alone. */}
         {item.document_count > 0 && item.evaluated_count === 0 && (
           <div>
             <h3 className={BLOCK_SUBHEADING_CLASS}>Where it has been evaluated</h3>
@@ -697,7 +697,7 @@ export function OptionCard() {
                       className="grid gap-x-4 py-1.5 sm:grid-cols-[10rem_1fr]"
                     >
                       {/* The plan's own place leads the list; no mark of its
-                          own (round 12, owner). */}
+                          own. */}
                       <dt className="text-navy">{scrub(entry.place)}</dt>
                       <dd>{scrub(entry.sentence)}</dd>
                     </div>
@@ -705,9 +705,9 @@ export function OptionCard() {
                 </dl>
               </div>
           )}
-        {/* The notices (round 11, item 4): a flat
+        {/* The notices: a flat
             block with a hairline rule, each a word in its tone then its
-            sentence (round 10, finding 7: no card inside the sheet, no chips). */}
+            sentence (no card inside the sheet, no chips). */}
         {hasNotices && (
           <div className="max-w-prose-measure space-y-2 border-l border-line-2 pl-3">
             {item.no_in_scope_evidence && item.in_scope != null && (
@@ -739,7 +739,7 @@ export function OptionCard() {
                 documents={describingDocuments}
               />
               {/* The same documents in Sources, the table filtered by the
-                  option (round 12, owner). */}
+                  option. */}
               <p>
                 <Link className={PROSE_LINK_CLASS} to={`/tasks/${taskId}/sources/all?option=${item.option_id}`}>
                   {seeInSourcesWords(documents.length)}
@@ -756,7 +756,7 @@ export function OptionCard() {
           info={{ label: ESTIMATE_LABEL, note: ESTIMATE_NOTE }}
           summaryNode={
             // Shut: an intro line and the points, the report's square
-            // bullets (round 12, owner); open, the table of lines.
+            // bullets; open, the table of lines.
             <div className={cn("max-w-prose-measure space-y-2", REPORT_BODY_CLASS)}>
               <p>{PROFILE_POINTS_INTRO}</p>
               <BulletList items={profilePoints(ambitionMark, sentenceLines)} />

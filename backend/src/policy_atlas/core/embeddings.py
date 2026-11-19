@@ -1,12 +1,12 @@
-"""Embedding backends and unit-grain chunk vectorisation for task 009.
+"""Embedding backends and unit-grain chunk vectorisation.
 
 This module owns the first runtime-egress embedding seam. The defaultable stub is
 deterministic and zero-egress; the live backend is explicit and env-keyed. The
 embed pass is task-scoped through ``task_source_snapshot`` because chunks
 and snapshots are corpus-global, not task-owned.
 
-Task 057 (D6, plan P11): when the provider says "too many requests" (throttling),
-the live backends no longer wait and retry on their own; they raise
+When the provider says "too many requests" (throttling),
+the live backends do not wait and retry on their own; they raise
 :class:`Throttled`. :class:`AdaptivePool` owns both how many requests are in
 flight and the waiting: it halves the number in flight when throttled, waits,
 and adds one back after a run of clean batches, up to the route's ``pool_cap``.
@@ -62,7 +62,7 @@ DEFAULT_MAX_CHUNKS = 20_000
 EMBEDDING_RATE_LIMIT_BACKOFF_BASE_S = 2.0
 EMBEDDING_RATE_LIMIT_BACKOFF_CAP_S = 60.0
 EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS = 4
-#: The adaptive pool (task 057, D6): requests in flight at the start, clean
+#: The adaptive pool: requests in flight at the start, clean
 #: batches in a row before one more is allowed, and how many times one batch may
 #: be throttled before it is given up for this pass (its chunks stay pending).
 POOL_START_WIDTH = 6
@@ -70,11 +70,11 @@ POOL_CLEAN_RUN = 5
 POOL_MAX_THROTTLES_PER_BATCH = 8
 #: The longest wait a provider's ``Retry-After`` may ask the pool for.
 POOL_RETRY_AFTER_CAP_S = EMBEDDING_RATE_LIMIT_BACKOFF_CAP_S
-#: Seconds one OpenAI embedding request may take (the client-level value before
-#: task 057). Embeddings are not a route step, so the value lives here.
+#: Seconds one OpenAI embedding request may take. Embeddings are not a route
+#: step, so the value lives here.
 OPENAI_EMBEDDING_TIMEOUT_S = 30.0
 #: How the Bedrock clients (Cohere embeddings here, Claude search queries in
-#: ``search_generation``) wait and retry (task 057, D12): give up on a response
+#: ``search_generation``) wait and retry: give up on a response
 #: after 60 s, and let botocore make one attempt only, because the callers run
 #: their own throttling backoff.
 BEDROCK_CLIENT_CONFIG = Config(read_timeout=60, retries={"mode": "standard", "max_attempts": 1})
@@ -138,7 +138,7 @@ class _ChunkState:
     units: list[_UnitWork]
     vectors: dict[int, list[float]] = field(default_factory=dict)
     failed: bool = False
-    # task 057 review: code-review 5 - given up for throttling this pass (no
+    # Given up for throttling this pass (no
     # vector written; the next pass picks it up), kept apart from real failures.
     deferred: bool = False
     inserted: bool = False
@@ -231,8 +231,8 @@ class OpenAIEmbeddingBackend:
     mode = "live"
 
     def __init__(self, api_key: str | None = None) -> None:
-        # The client makes one HTTP attempt per create call (``max_retries=0``,
-        # task 057); the explicit 429 loop below is the only retry.
+        # The client makes one HTTP attempt per create call (``max_retries=0``);
+        # the explicit 429 loop below is the only retry.
         self._client = resolve_openai_client(api_key, backend_name="OpenAIEmbeddingBackend")
 
     def embed_texts(
@@ -276,12 +276,12 @@ class OpenAIEmbeddingBackend:
                     timeout=OPENAI_EMBEDDING_TIMEOUT_S,
                 )
             except RateLimitError as exc:
-                # "Too many requests" is the caller's to wait out (task 057, D6).
+                # "Too many requests" is the caller's to wait out.
                 raise Throttled(provider="openai", retry_after_s=_retry_after_s(exc)) from exc
             except (APITimeoutError, APIConnectionError, APIStatusError) as exc:
                 # Retry a timeout, a dropped connection and a server error (5xx)
                 # with the same backoff. The client no longer retries on its own
-                # (task 057), so this loop covers them.
+                # , so this loop covers them.
                 if isinstance(exc, APIStatusError) and exc.status_code < 500:
                     raise
                 if attempt == EMBEDDING_RATE_LIMIT_MAX_ATTEMPTS - 1:
@@ -402,7 +402,7 @@ class CohereEmbeddingBackend:
             )
         except ClientError as error:
             if _is_bedrock_throttle(error):
-                # Waiting is the caller's (task 057, D6): one attempt here.
+                # Waiting is the caller's: one attempt here.
                 raise Throttled(provider="cohere") from error
             raise
 
@@ -522,7 +522,7 @@ class AdaptivePool:
     The provider (Bedrock for Cohere Embed v4) limits tokens per minute, so a
     fixed number of requests in flight is either too few (slow) or too many
     (time lost to throttling). The pool adapts, like a driver easing off when
-    traffic bunches up (task 057, D6):
+    traffic bunches up:
 
     - it starts with ``start`` requests in flight;
     - when a request is throttled, it halves the number in flight (never below
@@ -613,7 +613,7 @@ class AdaptivePool:
                 throttled: list[Throttled] = []
                 requeue: list[tuple[int, T, int]] = []
                 results: list[PoolResult[R]] = []
-                # task 057 review: Codex 10 - a round that completed a throttle
+                # A round that completed a throttle
                 # grants no clean credit, so its successes cannot widen the pool
                 # again before the backoff sleep.
                 round_throttled = any(isinstance(f.exception(), Throttled) for f in done)
@@ -851,7 +851,7 @@ def _chunk_rows_for_insert(state: _ChunkState) -> list[dict[str, object]]:
             "unit_policy": UNIT_POLICY,
             "unit_index": unit.unit_index,
             "unit_locator": {"start": unit.start, "end": unit.end},
-            # Task 057: the floats go to pgvector's binary column as a
+            # The floats go to pgvector's binary column as a
             # ``'[...]'::vector`` text cast (schema.Vector), plus the unit's sorted
             # distinct words for the word-overlap score.
             "embedding": state.vectors[unit.unit_index],
@@ -978,7 +978,7 @@ def embed_pending_chunks(
     profile and unit policy is treated as already embedded, matching the
     result-table idempotency pattern.
 
-    The requests go through an :class:`AdaptivePool` (task 057, D6), several at
+    The requests go through an :class:`AdaptivePool`, several at
     a time; the database writes stay on the calling thread.
 
     Args:
@@ -992,7 +992,7 @@ def embed_pending_chunks(
         max_chunks: Maximum embedding units allowed for this pass.
         snapshot_ids: When given, only chunks of these snapshots (still within
             the task's snapshots) are considered; the full-text stage passes the
-            snapshots its documents link (task 057).
+            snapshots its documents link.
         pool: The pool to send the requests through (the full-text stage keeps
             one across its passes); None builds one for this pass.
         connect: Opens one short committed transaction; used when ``conn`` is
@@ -1089,7 +1089,7 @@ def embed_pending_chunks(
     for result in pool.run(batches, embed_batch):
         batch_units = batches[result.index]
         if result.value is None:
-            # task 057 review: code-review 5 - throttled too often: this pass
+            # Throttled too often: this pass
             # gives the batch up; its chunks stay pending and count as deferred.
             deferred_chunk_ids = {unit.chunk_id for unit in batch_units}
             for chunk_id in deferred_chunk_ids:

@@ -1,1 +1,1 @@
-"""Options scoping: suggest (task 045)."""
+"""Options scoping: suggest."""

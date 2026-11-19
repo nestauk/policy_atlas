@@ -6,7 +6,7 @@ import { Button } from "../Button";
 import { cn } from "../cn";
 
 /*
- * A list's foot (task 058, consolidation batch B): the one line under a list
+ * A list's foot (consolidation batch B): the one line under a list
  * or a table, "Show more" or the page controls at its left and what the page
  * keeps at its right (the archived toggle; the Sources table's page size,
  * range and pages). The Tasks and Projects lists, the Sources table and the
@@ -17,7 +17,7 @@ import { cn } from "../cn";
 const FOOT_BUTTON_CLASS = "h-10 py-0";
 
 /**
- * The list's foot row (round 10, round 11): its start at the list's left
+ * The list's foot row: its start at the list's left
  * edge, and at the right what the page puts there, alone when the other is
  * absent, the right end's items in one row. 40 px, 16 px under the frame;
  * nothing when both are absent.
@@ -44,7 +44,7 @@ export function ListFootRow({
 }
 
 /**
- * "Show more" (round 10): the outline button pagination uses. It holds its
+ * "Show more": the outline button pagination uses. It holds its
  * place, disabled, while the next page is on its way.
  *
  * Args:
@@ -68,7 +68,7 @@ export function ShowMore({ loading, onShowMore }: { loading: boolean; onShowMore
 /**
  * Previous and Next under a paged table (All sources, Findings): outline
  * buttons at the 40 px control height and "Page 1 of 2" between them at Meta
- * size in tabular figures (task 058, round 10). The caller moves the reader
+ * size in tabular figures. The caller moves the reader
  * to the top of the new page, and places it on the foot row.
  *
  * Args:

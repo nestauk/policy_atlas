@@ -64,9 +64,9 @@ router = APIRouter(
 
 _dispatch_lock = threading.Lock()
 _dispatching_tasks: set[uuid.UUID] = set()
-#: The reservations an *add*'s option search holds (task 045, A4): they fence
+#: The reservations an *add*'s option search holds: they fence
 #: their task like any reservation but occupy no executor worker (the search
-#: runs on the option-search pool), so capacity leaves them out (A12).
+#: runs on the option-search pool), so capacity leaves them out.
 _search_reservations: set[uuid.UUID] = set()
 
 
@@ -193,7 +193,7 @@ def _dispatch_run(
                 from policy_atlas.api.toc_start import start_scope
 
                 # Start drafts, or (a graph already on the canvas) checks it
-                # again in full: the S4 restart rule.
+                # again in full: the restart rule.
                 evidence_scope_id = start_scope(engine, task_id=task_id, plan_row=plan_row)
             outcome = run_plan(
                 engine,
@@ -205,12 +205,11 @@ def _dispatch_run(
                 ),
                 # The task row's capability, read on the request path and carried
                 # here rather than re-queried: it decides which model reads the
-                # payload (C9). Whatever that model is, the runner takes it —
+                # payload. Whatever that model is, the runner takes it —
                 # narrowing to the Evidence search plan here made a scoping walk
-                # impossible to start (task 044). A longlist walk (its own
-                # intent record passed in) runs unattended: it does not pause
-                # (task 045, D1).
-                # A theory-of-change plan is unattended by its model (C12).
+                # impossible to start. A longlist walk (its own
+                # intent record passed in) runs unattended: it does not pause.
+                # A theory-of-change plan is unattended by its model.
                 plan=(
                     unattended_plan(plan_row["payload"])  # type: ignore[arg-type]
                     if evidence_scope_id is not None and capability != THEORY_OF_CHANGE
@@ -225,7 +224,7 @@ def _dispatch_run(
                 capability_run_id=capability_run_id,
             )
             if outcome.follow_on == LONGLIST_PURPOSE:
-                # Unattended (task 045, A2): the baseline recorded its standing
+                # Unattended: the baseline recorded its standing
                 # default at the gate, so the longlist walk opens here, inline
                 # on this worker, the moment the baseline has ended.
                 _run_follow_on_longlist(
@@ -237,7 +236,7 @@ def _dispatch_run(
             if capability == THEORY_OF_CHANGE:
                 from policy_atlas.api.toc_start import run_toc_sequence
 
-                # Draft → check, inline on this worker (S4).
+                # Draft → check, inline on this worker.
                 run_toc_sequence(
                     engine, task_id=task_id, first_outcome=outcome, backends=backends
                 )
@@ -245,7 +244,7 @@ def _dispatch_run(
         log.exception("api.run_dispatch_failed", task_id=str(task_id))
         # Only the id this dispatch minted, never a lookup by task: the
         # reservation is dropped once the row exists, and another surface can
-        # start a walk on the task in that gap (task 064a, Q14).
+        # start a walk on the task in that gap.
         if capability_run_id is not None:
             continuation.mark_interrupted_best_effort(
                 engine, task_id=task_id, capability_run_id=capability_run_id
@@ -266,8 +265,8 @@ def _dispatch_run(
             if queued is None:
                 _dispatching_tasks.discard(task_id)
             else:
-                # This walk's reservation was given back when its row appeared
-                # (review stack, 2026-11-16); the chained check has its own
+                # This walk's reservation was given back when its row appeared;
+                # the chained check has its own
                 # pre-insert window, so reserve again and release on its row.
                 _dispatching_tasks.add(task_id)
     if queued is not None:
@@ -315,7 +314,7 @@ def _run_follow_on_longlist(
         engine,
         task_id=task_id,
         evidence_scope_id=admitted.evidence_scope_id,
-        # The longlist walk does not pause (task 045, D1).
+        # The longlist walk does not pause.
         plan=unattended_plan(admitted.plan_row["payload"]),
         plan_id=admitted.plan_row["plan_id"],
         plan_version=admitted.plan_row["version"],
@@ -374,7 +373,7 @@ def _await_new_run(
     """
     # 10s, not 2s: with both executor workers momentarily busy the submitted
     # dispatch can queue past 2s, turning a successful launch into a client 500
-    # (review finding I3, 2026-07-21). The walk still starts either way; the
+    # . The walk still starts either way; the
     # longer window keeps the response truthful for the transient case.
     deadline = time.monotonic() + 10.0
     while time.monotonic() < deadline:
@@ -427,11 +426,11 @@ def create_run(
             access = accessible_task(
                 conn, task_id=task_id, user_id=user.user_id, write=True, for_update=True
             )
-            # Parentless walks only (task 045, S15): a longlist walk's option
+            # Parentless walks only: a longlist walk's option
             # searches never fence a user action — their parent does. No
             # option search counts against the executor, whose workers they
             # do not occupy (they run on the option-search pool) — not even
-            # an *add*'s parentless one, which still fences its task (A12).
+            # an *add*'s parentless one, which still fences its task.
             if active_parentless_walk(conn, task_id) is not None or task_id in _dispatching_tasks:
                 raise ApiConflict("run_active", "the task already has an active run")
             if executor_full(conn, settings.run_executor_max):
@@ -455,7 +454,7 @@ def create_run(
                 .where(task_agent_transcript.c.status == "completed")
             ).scalar_one()
             # Once a theory of change has a graph, no turn changes its plan
-            # (task 054, S7), so a later turn does not make it stale.
+            # , so a later turn does not make it stale.
             if (
                 approved_plan.source_turn_index is not None
                 and latest_completed_turn is not None
@@ -679,6 +678,6 @@ def start_toc_check(
         )
     # Give the reservation back once the row exists, as the other start
     # surfaces do; held for the whole check it counted twice against both
-    # caps (review stack, 2026-11-16).
+    # caps.
     release_when_open(engine, task_id=task_id, capability_run_id=walk_id)
     return walk_id

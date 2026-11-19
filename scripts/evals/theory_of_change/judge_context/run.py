@@ -1,4 +1,4 @@
-"""Judge context experiment (task 054, lead). Variants of toc_judge on a labelled set."""
+"""Judge context experiment. Variants of toc_judge on a labelled set."""
 import json, re, sys, uuid, time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Literal

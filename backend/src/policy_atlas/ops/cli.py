@@ -28,8 +28,8 @@ Global options: ``--env`` (required), ``--database-url``, ``--expected-account``
 confirmation this CLI asks is the environment check's database leg, and that one
 is not skippable (:func:`_prompt`).
 
-**There is no ``--password`` and no ``--temporary-password``**, on any command
-(contract § 9). The absence is asserted structurally by
+**There is no ``--password`` and no ``--temporary-password``**, on any command.
+The absence is asserted structurally by
 ``tests/ops/test_ops_structure.py``, over the built parser rather than over the
 source, so a flag added through any route fails the test. ``--database-url``
 refuses a URL carrying a password for the same reason the make targets went:
@@ -46,7 +46,7 @@ did not land.
 
 **The admin trace is emitted here, after that commit**, from whatever
 :class:`~policy_atlas.ops.commands.AdminTrace` values the record carries
-(:func:`_trace`). Contract § 3a wants the line to be evidence, and a line
+(:func:`_trace`). The line must be evidence, and a line
 written inside the transaction is a durable claim about a write a failed commit
 then threw away. One mechanism serves every command that moves ``is_admin`` —
 ``admin grant``, ``admin revoke``, and the ``is_admin`` a ``user de-enrol`` or
@@ -399,7 +399,7 @@ def _run(
         )
         outcome = _dispatch(args, conn=conn, cognito=identity, target=target)
         if isinstance(outcome, commands.QuotaChange):
-            # A quota change is recorded wherever it is made (task 065, B12):
+            # A quota change is recorded wherever it is made:
             # the operator's verified AWS principal is the actor.
             commands.record_action(
                 conn,
@@ -421,7 +421,7 @@ def _database_url(args: argparse.Namespace) -> str:
     ``--database-url`` is a convenience for the tunnel's host and port. A
     password in it lands in the shell history and in the process table, which is
     exactly what the deleted ``cognito-user`` make target did with the Cognito
-    password and exactly why it went (contract § 9). ``DATABASE_URL`` is the
+    password and exactly why it went. ``DATABASE_URL`` is the
     credential path, and it is unchanged: an environment variable is not on argv.
 
     Raises:

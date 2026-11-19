@@ -46,8 +46,8 @@ def combine_reps(
 ) -> KeepDecision:
     """Apply the historical fixed-repetition majority rule to parsed replies.
 
-    This is ADR 0011's historical production rule, replaced in production by
-    task 051's adaptive vote.
+    This is ADR 0011's fixed-repetition rule; production uses the adaptive
+    vote instead.
 
     Args:
         reps: Replies that parsed and had a confidence between 0 and 1.

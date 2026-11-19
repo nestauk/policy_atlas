@@ -121,7 +121,7 @@ class CognitoAuth(Construct):
             user_pool=self.user_pool,
             generate_secret=False,
             # Review-stack hardening (026 step 7) + owner adjudication
-            # (2026-07-28): 30-day refresh kept — normal web-app session
+            # 30-day refresh kept — normal web-app session
             # expectations beat the shorter-exfiltration-window argument for
             # this audience. NB tokens live in sessionStorage, so a new tab
             # re-runs the hosted-UI round-trip regardless; 30 days mainly

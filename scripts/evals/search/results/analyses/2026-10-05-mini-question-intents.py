@@ -5,8 +5,8 @@ rebuilds every figure quoted in `history.md` and `verification.md` for that day,
 numbers can be re-derived rather than trusted:
 
 - ``mini-2026-10-05``: every arm and the pipeline over the fifteen reviews, title intents.
-- ``mini-q-2026-10-05``: the same after the four gap-map intents became questions
-  (contract D18). The baselines and rapid cover all fifteen; standard covers the four
+- ``mini-q-2026-10-05``: the same after the four gap-map intents became questions.
+  The baselines and rapid cover all fifteen; standard covers the four
   gap-map rows only, so its fifteen-row figure is **spliced**: the four re-run rows plus
   the eleven rows kept from the first label. The table says so.
 

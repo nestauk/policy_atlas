@@ -107,11 +107,11 @@ CountryGroupAuthorship = Literal["pinned-table", "planner-proposed", "user-amend
 #: What one Task Agent turn is. A `reply` plans; an `answer` answers from the
 #: paused walk's evidence (or, once a longlist exists, the longlist's and its
 #: option searches'); a `decision` records the option a gate turn chose; an
-#: `action` records a longlist verb the user confirmed (task 045). Absent on
-#: turns stored before task 044, which are all replies.
+#: `action` records a longlist verb the user confirmed. Absent on
+#: turns stored before turns recorded a kind, which are all replies.
 TaskAgentTurnKind = Literal["reply", "answer", "decision", "action"]
 
-#: The longlist verbs a confirmed turn applies (task 045, D13).
+#: The longlist verbs a confirmed turn applies.
 LonglistVerb = Literal["add", "exclude", "include_again"]
 
 
@@ -224,7 +224,7 @@ class PlanDraft(BaseModel):
     ready: bool = False
 
 
-# --- Options scoping (task 044) --------------------------------------------
+# --- Options scoping --------------------------------------------
 #
 # The second plan shape. It mirrors the runtime `ScopingPlan` field-by-field
 # the way `PlanDraft` mirrors `TaskPlan`, and — like it — this package imports
@@ -258,8 +258,8 @@ CheckedAt = Literal["longlist", "assessment", "retrieval"]
 #: Scoping depth. Mirrors `scoping_plan.ScopingPlan.depth`.
 ScopingDepth = Literal["rapid", "standard"]
 
-#: How far the shortlist may reach beyond options tried elsewhere (task 055,
-#: S2). Mirrors `scoping_plan.RiskAppetite`.
+#: How far the shortlist may reach beyond options tried elsewhere.
+#: Mirrors `scoping_plan.RiskAppetite`.
 ScopingRiskAppetite = Literal["tried_only", "mostly_tried", "open_to_untested"]
 
 #: One entry's kind in Your context. Mirrors `scoping_plan.YourContextEntry`.
@@ -442,7 +442,7 @@ class TocPlanDraft(BaseModel):
     intervention: str | None = None
     dosage: str | None = None
     existing_theory_text: str | None = None
-    #: The user's uploaded diagram behind the existing theory (increment 5).
+    #: The user's uploaded diagram behind the existing theory.
     upload_id: uuid.UUID | None = None
     where: str | None = None
     time_horizon: str | None = None
@@ -610,7 +610,7 @@ class TaskAgentTurnCreate(BaseModel):
 
     # Turns are durable and every prior message re-enters each task_agent call
     # (rehydration), so an unbounded message inflates storage AND every future
-    # turn's prompt forever (security review, 2026-07-29).
+    # turn's prompt forever (security review).
     message: str = Field(min_length=1, max_length=TASK_AGENT_MESSAGE_MAX)
     client_turn_id: uuid.UUID
 
@@ -834,7 +834,7 @@ class TaskAgentFailedEvent(BaseModel):
     turn_index: int
 
 
-#: One NDJSON line of ``POST /tasks/{id}/task-agent-turns`` (task 058, N9):
+#: One NDJSON line of ``POST /tasks/{id}/task-agent-turns``:
 #: progress and delta lines, then exactly one completed or failed line.
 TaskAgentStreamEvent = Annotated[
     TaskAgentProgressEvent | TaskAgentDeltaEvent | TaskAgentCompletedEvent | TaskAgentFailedEvent,

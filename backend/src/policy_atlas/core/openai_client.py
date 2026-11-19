@@ -27,7 +27,7 @@ from policy_atlas.core.usage import (
     usage_metadata,
 )
 
-#: How a call site uses the provider's prompt cache (task 056, contract D3).
+#: How a call site uses the provider's prompt cache.
 #:
 #: In plain terms, the provider can store the start (the "prefix") of a prompt and
 #: bill it far more cheaply when a later call starts with the same text:
@@ -80,12 +80,12 @@ def resolve_openai_client(api_key: str | None, *, backend_name: str) -> OpenAI:
     in the environment is never consulted.
 
     The client never retries on its own (``max_retries=0``) and carries no
-    timeout of its own (task 057, D12). Each request sends its step's timeout
+    timeout of its own. Each request sends its step's timeout
     (``openai_kwargs(..., timeout_s=route().timeout_for(step))``), and the retries
-    a model call gets (up to ``MODEL_CALL_ATTEMPTS`` attempts, three today; task 057
-    review: code-review 9) are made by :func:`policy_atlas.core.tracing.traced_attempts`,
-    so every attempt is its own Langfuse generation. Before task 057 the SDK
-    retried up to twice, silently and untraced.
+    a model call gets (up to ``MODEL_CALL_ATTEMPTS`` attempts, three today) are
+    made by :func:`policy_atlas.core.tracing.traced_attempts`, so every attempt
+    is its own Langfuse generation; the SDK's own retries would be silent and
+    untraced.
 
     Args:
         api_key: Explicit key, or ``None`` to read the variable the route names
@@ -111,8 +111,8 @@ def openai_kwargs(
 ) -> dict[str, Any]:
     """Request kwargs shared by every OpenAI chat-completions call site.
 
-    Every call site states its reasoning effort (task 056, D4) and its timeout
-    (task 057, D12): both come from the route file (``route().effort_for(step)``
+    Every call site states its reasoning effort and its timeout:
+    both come from the route file (``route().effort_for(step)``
     and ``route().timeout_for(step)``), never from a literal in code.
     ``"none"`` is sent as the string the provider expects.
 
@@ -281,7 +281,7 @@ def traced_parse[T: BaseModel](
 
     The call runs under :func:`policy_atlas.core.tracing.traced_attempts`: a
     timeout or a passing provider failure is tried again, up to
-    ``MODEL_CALL_ATTEMPTS`` attempts (three today; task 057 review: code-review 9),
+    ``MODEL_CALL_ATTEMPTS`` attempts (three today),
     and each attempt is its own generation carrying the step, the attempt number and a shared
     call id. The successful attempt's span records the messages, the parsed
     output, the model, the prompt version, any extra metadata and the token
@@ -382,7 +382,7 @@ class JsonStringFieldDecoder:
     or written inside another string, is ignored. An escape split across two
     pieces is held until it is complete, and a ``\\uXXXX`` surrogate pair
     becomes one character. Once the field's closing quote arrives, every later
-    piece returns ``""``. Task 058, N9.
+    piece returns ``""``.
 
     Args:
         field_name: The top-level key whose string value to follow.
@@ -514,8 +514,7 @@ class JsonArrayObjectDecoder:
     :class:`JsonStringFieldDecoder`: only a key of the outermost object
     counts, and braces, brackets and quotes inside strings (escaped quotes
     included) are text, not structure. The returned text is not checked; the
-    caller parses it and skips what does not parse. Task 058, owner
-    2026-11-05.
+    caller parses it and skips what does not parse.
 
     Args:
         field_name: The top-level key whose array of objects to follow.
@@ -621,7 +620,7 @@ class JsonArrayStringDecoder:
 
     In plain terms: the same idea as :class:`JsonArrayObjectDecoder`, for an
     array of plain strings (the theory-of-change report's
-    ``supporting_activities``, task 054). Feed each piece of the streamed JSON
+    ``supporting_activities``). Feed each piece of the streamed JSON
     text to :meth:`feed`; whenever one string inside the named array is
     complete, it is returned already decoded (``\\n`` becomes a line break,
     ``\\u00e9`` becomes ``é``). Only a key of the outermost object counts, and

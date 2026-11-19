@@ -12,17 +12,17 @@ than re-implementing the write it believes the CLI performs.
 **Three rules run through the whole module.**
 
 *The identity provider is asked first, and only about identity.* ``sub`` is the
-key (contract § 3b) and only Cognito can turn an address into one, so
+key and only Cognito can turn an address into one, so
 ``user create``, ``user enrol`` and ``user resync`` call ``ListUsers`` /
 ``AdminCreateUser``, and ``user reissue`` calls ``ListUsers`` /
 ``AdminSetUserPassword``. ``user deactivate`` and ``user reactivate`` are the
 commands that change an account's state in Cognito: ``ListUsers``, then
 ``AdminDisableUser`` and ``AdminUserGlobalSignOut``, or ``AdminEnableUser``
-(task 064a, ADR 0045 decision 5; task 066). ``admin grant``,
+(ADR 0045 decision 5). ``admin grant``,
 ``admin revoke``, ``user de-enrol`` and ``rows assign`` resolve entirely in the
 database and make no AWS call at all — which is also why operator IAM needs
 nothing beyond ``ListUsers``, ``AdminCreateUser``, ``AdminSetUserPassword``,
-``AdminDisableUser``, ``AdminUserGlobalSignOut`` and ``AdminEnableUser`` (contract § 9).
+``AdminDisableUser``, ``AdminUserGlobalSignOut`` and ``AdminEnableUser``.
 
 *Compare and refuse under the row lock.* Every write to ``app_user`` reads the
 row ``FOR UPDATE`` first and refuses when the state is not what the operator was
@@ -35,8 +35,8 @@ the grant lands and the de-enrolment clears the role. Neither order leaves an
 administrator behind.
 
 *Row moves are set operations, never walks.* ``UPDATE ... WHERE owner_user_id =
-:sub`` in one statement per table. Colleague assignment (owner ruling
-2026-08-27) means a project's members are no longer always owned by its
+:sub`` in one statement per table. Colleague assignment
+means a project's members are no longer always owned by its
 owner, so a move first **severs** every membership pairing the mover's rows
 with someone else's (:func:`_sever_cross_owner_memberships`) — after which one
 person's rows are again a closed set, and stamping the set leaves every
@@ -47,8 +47,7 @@ row by row through the cascade path would transiently violate it.
 :mod:`policy_atlas.ops.cli` *after* the transaction commits, from the
 :class:`AdminTrace` values a record carries. A ``log.info`` emitted inside the
 transaction is a durable claim about a write a failed commit then discarded,
-which is worse than no trace at all: contract § 3a wants the line to be
-evidence.
+which is worse than no trace at all: the line must be evidence.
 """
 
 from __future__ import annotations
@@ -91,7 +90,7 @@ if TYPE_CHECKING:
     from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
     from mypy_boto3_cognito_idp.type_defs import AttributeTypeTypeDef, UserTypeTypeDef
 
-#: The visibility every moved row arrives at. Owner call (j): **no operator
+#: The visibility every moved row arrives at. **No operator
 #: action can expose a row.** Enrolment and ``rows assign`` stamp the
 #: organisation *and* privatise, so the person opts each row into their
 #: organisation deliberately, and neither a re-enrolment nor an operator
@@ -102,7 +101,7 @@ _PRIVATE = "private"
 
 # --------------------------------------------------------------------------
 # Records. Each carries its own operator-facing sentence: the CLI's safety UX
-# is these strings (plan phase 9b), and keeping them beside the counts they
+# is these strings, and keeping them beside the counts they
 # describe is what stops a caller inventing a second wording for the same
 # outcome. Code words throughout ("task", "project") — they match the
 # flags the operator just typed, and the rename slice that follows 033 covers
@@ -190,12 +189,12 @@ class Enrolment(Record):
     created: bool
     tasks_moved: int
     projects_moved: int
-    #: Set only by `user create --invite manual` (owner amendment 2026-08-26).
+    #: Set only by `user create --invite manual`.
     #: Rendered ONCE in the summary for out-of-band handover; never logged —
     #: `summary()` output goes to the operator's stdout, not through structlog.
     temporary_password: str | None = None
     #: Cross-owner membership links cut because the rows moved organisation
-    #: (colleague assignment, owner ruling 2026-08-27).
+    #: (colleague assignment).
     memberships_severed: int = 0
     invitation_sent: bool = False
     #: The account was deactivated and this enrolment turned it back on (task 066).
@@ -267,7 +266,7 @@ class DeEnrolment(Record):
     admin_revoked: bool
     ops_revoked: bool = False
     #: Cross-owner membership links cut because the rows left the organisation
-    #: (colleague assignment, owner ruling 2026-08-27).
+    #: (colleague assignment).
     memberships_severed: int = 0
 
     def summary(self) -> str:
@@ -288,7 +287,7 @@ class DeEnrolment(Record):
     def admin_changes(self) -> Sequence[AdminTrace]:
         """A de-enrolment that cleared ``is_admin`` is a revoke, and traces as one.
 
-        Contract § 3a asks for a record of every privilege change, not of every
+        Every privilege change needs a record, not only every
         ``admin revoke`` invocation. De-enrolment is the *other* way the support
         role is taken away — and the one an investigation is most likely to be
         asking about.
@@ -642,8 +641,8 @@ def resolve_organisation(conn: Connection, token: str) -> Organisation:
 def _mint_temporary_password() -> str:
     """Mint a policy-compliant single-use temporary password.
 
-    Generated, never accepted: rubric 30's "no command accepts a password"
-    holds because this value originates here, not from an operator. 20
+    Generated, never accepted: no command accepts a password, because
+    this value originates here, not from an operator. 20
     characters with every Cognito-default class guaranteed (upper, lower,
     digit, symbol); the symbol set avoids quotes, backslashes and ``$`` so the
     printed value copies cleanly through a shell.
@@ -669,15 +668,15 @@ def create_user(
 ) -> Enrolment | CreatedAccount:
     """Create a Cognito account, and enrol it when an organisation is named.
 
-    **Cognito first, because its ``sub`` is the key** (contract § 9) — there is
+    **Cognito first, because its ``sub`` is the key** — there is
     nothing to write in the database until the account exists. That ordering
     creates the one failure this command has to handle explicitly: an account
     created and a database write that then fails. The account is **kept** and
-    the ``user enrol`` remediation printed. Deleting it is Out (owner call (h),
+    the ``user enrol`` remediation printed. Deleting it is out of scope (it is
     coupled to ownership transfer), and no path in this package calls
     ``AdminDeleteUser``.
 
-    Two invitation modes (owner amendment 2026-08-26 — the ``COGNITO_DEFAULT``
+    Two invitation modes (the ``COGNITO_DEFAULT``
     sender lands in spam; SES integration is the deferred fix):
 
     - ``email`` (default): ``DesiredDeliveryMediums=["EMAIL"]``, passed
@@ -697,7 +696,7 @@ def create_user(
         cognito: Client bound to the verified pool.
         pool_id: The verified user pool.
         email: The new account's address; also its sign-in identifier.
-        display_name: Required, and never the email (contract § 3b).
+        display_name: Required, and never the email.
         org: Where to enrol them. Omit it to leave them in no organisation.
         invite: ``email`` or ``manual`` (validated by the parser).
 
@@ -930,7 +929,7 @@ def _enrol_existing(
     if existing["org_id"] is None:
         # An account that exists keeps its stored name: the name offered here
         # may come from the public form (the sweep), and a stranger must not be
-        # able to rename a colleague (review stack, 2026-11-17).
+        # able to rename a colleague.
         return _enrol(
             conn, sub=sub, email=email, display_name=existing["display_name"], org=org
         )
@@ -1106,7 +1105,7 @@ def enrol_user(
 ) -> Enrolment:
     """Enrol an existing Cognito account, carrying its owner's work across.
 
-    Owner call (j): the ``app_user`` upsert **and** the row moves are one
+    The ``app_user`` upsert **and** the row moves are one
     transaction, so an interrupted enrolment leaves a person neither
     half-enrolled nor with half their work in a new organisation.
 
@@ -1124,7 +1123,7 @@ def enrol_user(
     Raises:
         OpsError: If the pool holds no such address, or the stored address for
             that subject is a different one (which means the operator is acting
-            on a stale view — contract § 3b's staleness rule; ``user resync``
+            on a stale view; ``user resync``
             is the way forward).
     """
     _require_filter_safe(email)
@@ -1154,7 +1153,7 @@ def _enrol(
             f"changed in Cognito, or this is the wrong person. Run "
             f"`user resync --email {email}` first if the address changed."
         )
-    # ON CONFLICT DO UPDATE: ops enrolment clobbers deliberately (contract § 2),
+    # ON CONFLICT DO UPDATE: ops enrolment clobbers deliberately,
     # unlike `/me`'s DO NOTHING. `is_admin` is deliberately NOT in the SET list —
     # enrolment is not a place to grant or drop the support role, and leaving it
     # out is also what keeps `user enrol` off the admin-resurrection path.
@@ -1256,8 +1255,8 @@ def de_enrol_user(
 
     Clears ``org_id`` and ``is_admin`` on ``app_user``, and ``org_id`` on every
     task and project the person owns — so the organisation they left loses
-    sight of their work (contract § 7; flagged there as an owner decision,
-    because the alternative needs ownership transfer, which is Out). The stored
+    sight of their work (the alternative needs ownership transfer, which is
+    out of scope). The stored
     address stays, so the person remains findable. The support role does not:
     :func:`set_admin` refuses a grant while ``org_id`` is null.
 
@@ -1313,7 +1312,7 @@ def deactivate_user(
     """Lock a person out: disable their login and mark them deactivated.
 
     This is what to run when someone leaves. They keep their organisation,
-    tasks, projects, cohorts and quotas (owner ruling B, 2026-11-19), so
+    tasks, projects, cohorts and quotas, so
     :func:`reactivate_user` is a clean undo.
 
     **The order, and why.**
@@ -1401,8 +1400,7 @@ def deactivate_user(
     if user is None:
         # The account was deleted from the pool earlier (by hand, or the pool
         # was replaced) but the row remains: nothing to disable, and the
-        # database half must still run or their public links stay live
-        # (review stack, 2026-11-16).
+        # database half must still run or their public links stay live.
         steps = ["no Cognito account in the pool (deleted earlier): nothing to disable"]
     else:
         username = user["Username"]
@@ -1522,8 +1520,8 @@ def set_admin(
 ) -> AdminChange:
     """Grant or revoke the support role.
 
-    Contract § 3a: "a privileged grant with no record of who made it is not
-    auditable". The record is :meth:`AdminChange.admin_changes`, emitted by the
+    A privileged grant with no record of who made it is not
+    auditable. The record is :meth:`AdminChange.admin_changes`, emitted by the
     CLI **after** the commit — this function does not log, for the reason the
     module docstring gives.
 
@@ -1714,7 +1712,7 @@ def set_quota(
         conn: Open connection inside the command transaction.
         user_id: User subject, mutually exclusive with ``org_id``.
         org_id: Organisation identifier; exactly one of the three is given.
-        cohort_id: Cohort identifier (owner, 2026-11-18).
+        cohort_id: Cohort identifier.
         task_quota_per_year: Task quota override; ``None`` inherits.
         runs_per_user: Simultaneous run override; ``None`` inherits.
 
@@ -1996,7 +1994,7 @@ def approve_request(
     conn.execute(
         update(waitlist_entry)
         .where(waitlist_entry.c.entry_id == entry_id)
-        # Approving a rejected request reverses the decision (owner, 2026-11-18).
+        # Approving a rejected request reverses the decision.
         .values(account_user_id=enrolment.user_id, account_created_at=now, rejected_at=None)
     )
     return Approval(entry_id=entry_id, enrolment=enrolment, created_at=now)
@@ -2060,7 +2058,7 @@ def assign_rows(
 ) -> Assignment:
     """Assign one row to an organisation, privately, moving a membership whole.
 
-    Contract § 9 sends this through § 6's invariant: a task carries its
+    The membership invariant applies: a task carries its
     project's ``org_id`` *and* ``visibility``. So there is no such thing as
     assigning half of a membership, and the command never offers to:
 
@@ -2073,7 +2071,7 @@ def assign_rows(
     - a **task with no project** is unconstrained and moves alone.
 
     **A move privatises, on exactly the enrolment rule** (:data:`_PRIVATE`,
-    owner call (j), ADR 0033 decision 7). Stamping ``org_id`` while preserving
+    ADR 0033 decision 7). Stamping ``org_id`` while preserving
     ``visibility`` is the one way an operator command can expose a row: the
     default visibility is ``org``, and a row whose ``org_id`` is NULL is
     reachable by its owner alone however it is marked — the org leg reads
@@ -2090,12 +2088,12 @@ def assign_rows(
     flipping their visibility would be a gratuitous edit to the owner's choices.
     In that case project visibility is left alone — a component may
     legitimately mix visibilities — and each member is recomputed to the
-    derived value: org-visible iff *any* project it is in is org-visible
-    (owner ruling 2026-08-27). That recompute is the ``i.4`` self-heal for a
+    derived value: org-visible iff *any* project it is in is org-visible.
+    That recompute is the ``i.4`` self-heal for a
     member that ever slipped out of step.
 
     ``updated_at`` is bumped on moved members, exactly as the API cascade bumps
-    it: unlike enrolment — where contract § 7 requires the person to see no
+    it: unlike enrolment — where the person must see no
     change — an assignment genuinely reshapes which organisation owns the row.
 
     Args:
@@ -2132,8 +2130,8 @@ def assign_rows(
         if not member_of:
             privatised = row.org_id != org.org_id
             moving = update(task).where(task.c.task_id == task_id)
-            # Two literal `.values()` calls rather than a built dict: rubric 24
-            # bars the blind splat on the API's patch, and the same discipline
+            # Two literal `.values()` calls rather than a built dict: the API
+            # bars the blind splat on its patch, and the same discipline
             # belongs on the operator writer of the same two columns.
             if privatised:
                 conn.execute(
@@ -2189,11 +2187,11 @@ def assign_rows(
     member_rows = task.c.task_id.in_(
         select(project_membership.c.task_id).where(project_membership.c.project_id.in_(component))
     )
-    # A cross-organisation move privatises everything it carries (owner call
-    # (j)). A same-organisation assignment moves nobody's audience, so the
+    # A cross-organisation move privatises everything it carries.
+    # A same-organisation assignment moves nobody's audience, so the
     # projects keep their visibility and each member is **recomputed** to
     # the derived value — org-visible iff any project it is in is
-    # org-visible (owner ruling 2026-08-27) — which is the i.4 self-heal for
+    # org-visible — which is the self-heal for
     # a member that ever slipped out of step.
     # No status filter on members: archived tasks follow too, for the
     # reason the API cascade documents — an archived task is still
@@ -2259,12 +2257,12 @@ def _stamp_owned_rows(
     the module docstring depends on.
 
     ``.values()`` names its columns literally rather than splatting a dict.
-    Rubric 24 bars the blind ``.values(**changes)`` splat on the API's project
+    The blind ``.values(**changes)`` splat is barred on the API's project
     patch; the same discipline belongs on the one other writer of these two
     columns, even though the values here are internal.
 
-    ``updated_at`` is left alone. Contract § 7 requires that an enrolled person
-    "sees no change", and bumping it would reorder their entire task list the
+    ``updated_at`` is left alone. An enrolled person must
+    see no change, and bumping it would reorder their entire task list the
     moment an operator enrolled them.
 
     Args:
@@ -2290,7 +2288,7 @@ def _stamp_owned_rows(
 def _sever_cross_owner_memberships(conn: Connection, *, sub: str) -> int:
     """Delete every membership pairing one of `sub`'s rows with someone else's.
 
-    Colleague assignment (owner ruling 2026-08-27) means a project's members
+    Colleague assignment means a project's members
     are no longer always owned by the project's owner — so "one person's
     rows are a closed set" (the module docstring's invariant argument) is only
     true after the cross-owner links are cut. Called by every membership move
@@ -2464,8 +2462,7 @@ def _require_mailable(email: str) -> None:
 
     Cognito substitutes ``{username}`` (the address) into the HTML invitation
     without escaping, and the public form's pattern admits ``<``, ``>`` and
-    ``&``. Such an address is not deliverable anyway, so refusing costs nothing
-    (review stack, 2026-11-17).
+    ``&``. Such an address is not deliverable anyway, so refusing costs nothing.
     """
     if any(character in email for character in "<>&") or any(c.isspace() for c in email):
         raise OpsError(f"refusing an address containing markup or whitespace: {email!r}")

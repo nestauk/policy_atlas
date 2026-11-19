@@ -21,7 +21,7 @@ import { TaskAgentPane } from "./workspace/TaskAgentPane";
 
 /**
  * The Agent tab: the Task's conversations in a sidebar, the selected one in
- * the main column (owner ruling 2026-09-05, contract 038 § V8).
+ * the main column.
  *
  * The Task Agent is the default and carries no `?chat=`; it keeps this tab's
  * original layout, the task_agent pane with its plan-document rail. Any other
@@ -40,7 +40,7 @@ export function WorkspaceView() {
   // A task_agent id in the URL (a deep link, or the overlay's own selection
   // carried over) reads as the Task Agent: the pane renders the Task's
   // task_agent thread, never one lineage on its own.
-  // Closed Task Agent conversations count too (round 12): a walk that ends
+  // Closed Task Agent conversations count too: a walk that ends
   // closes the open one, and the URL may still name it.
   const taskAgentRows = useConversations(taskId, { kind: "task_agent" }).data?.data ?? [];
   const onTaskAgent =
@@ -60,19 +60,19 @@ export function WorkspaceView() {
     setFooterOpen(false);
   }
   const hasRun = stream.run !== null;
-  // Shared with the card's "See plan" and the sidebar (task 058, N15): one
+  // Shared with the card's "See plan" and the sidebar: one
   // open state, and the side panel by default.
   const { open: planOpen, closing: planClosing, openPlan: showPlan, closePlan } = usePlanPanel();
   const [planPlacement, setPlanPlacement] = useState<"center" | "side">("side");
-  // Plan edits live in the store (task 058, N20): leaving the tab keeps them.
+  // Plan edits live in the store: leaving the tab keeps them.
   const [planOverlay, setPlanOverlay] = usePlanEdits(taskId);
   // With a chat open, the tab names it, following its title as the backend
-  // names it (round 14: the cached read carries the new title).
+  // names it (the cached read carries the new title).
   const openChatTitle = rows.find((row) => row.id === chatId)?.title ?? "";
   useDocumentTitle(task.data?.name, openChatTitle !== "" && chatId !== null && chatId !== DRAFT_CHAT_ID ? openChatTitle : LIFECYCLE_LABELS.agent);
 
   const runActive = stream.run?.status === "running" || stream.run?.status === "paused";
-  // Task 033 phase 10c (contract § 11 / rubric 37) — the Plan route (this
+  // The Plan route (this
   // view) hosts every owner-only mutation surface and is never gated by
   // `LifecycleRoute` (it's open at every run state), so `is_owner` is the
   // only line of defence against a non-owner reaching them by address.
@@ -90,10 +90,10 @@ export function WorkspaceView() {
       placement={planPlacement}
       runActive={runActive}
       closing={planClosing}
-      // The plan-start card (contract § 11 / rubric 37): folds `!isOwner`
+      // The plan-start card: folds `!isOwner`
       // into the same `readOnly` prop that already hides Edit/Start once a
       // run has consumed the plan — one mechanism, not a second gate.
-      // Task 044 (deliverable 5): a scoping plan is NOT consumed by its
+      // A scoping plan is NOT consumed by its
       // baseline walk. "Change the plan" deliberately leaves it `approved`
       // and editable, and the plan document's own start actions (Rebuild
       // baseline · Confirm plan and build longlist) live behind this flag —
@@ -112,7 +112,7 @@ export function WorkspaceView() {
     />
   );
 
-  // useTask (task 037 review fix) now throws a plain Error carrying
+  // useTask now throws a plain Error carrying
   // `status`, not the API's `{error:{code}}` envelope — read the status
   // directly rather than a `code` field that no longer exists.
   const taskErrorStatus = (task.error as { status?: number } | null)?.status;

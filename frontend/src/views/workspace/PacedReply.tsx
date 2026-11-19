@@ -22,7 +22,7 @@ function remember(id: string, shown: number): void {
 
 /**
  * A reply's text at a steady pace, shared by the Task Agent and the chats
- * (owner, round 14: the chats stream the same way): whole words at a steady
+ * (the chats stream the same way): whole words at a steady
  * rate catching up within 800 ms (`useRevealedText`). The history shows at
  * once; a streamed reply starts from nothing, and the stored turn that
  * replaces it carries on from where it was (keyed by the client turn id).
@@ -51,8 +51,7 @@ export function usePacedText(
 }
 
 /**
- * The Task Agent's reply at a steady pace (task 058, round 9; the animation
- * sweep's entry 6): the planner's deltas land in bursts, so the reply is
+ * The Task Agent's reply at a steady pace: the planner's deltas land in bursts, so the reply is
  * revealed the way the Result tab reveals the report (`useRevealedText`:
  * whole words at a steady rate, catching up within 800 ms), and the words
  * each frame reveals fade in over 150 ms, opacity only. A stored reply

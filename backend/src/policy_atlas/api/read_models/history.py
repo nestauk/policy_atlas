@@ -1,4 +1,4 @@
-"""The History sentences: one plain line per recorded act (task 058, round 10).
+"""The History sentences: one plain line per recorded act.
 
 The History tab is the record a reader audits, so each line says what
 happened, to what, and who did it: "Screening finished: 118 of 435
@@ -56,7 +56,7 @@ _SINGULAR = {
     "abstracts": "abstract",
     "places": "place",
     "queries": "query",
-    # Task 054: the theory of change's done counts.
+    # The theory of change's done counts.
     "boxes": "box",
     "connections": "connection",
     "pathways": "pathway",
@@ -217,8 +217,8 @@ def step_sentence(event_type: str, payload: Mapping[str, Any]) -> str:
     """One line for a step: started, finished with its counts, skipped, or failed.
 
     Args:
-        event_type: ``component.started`` (a theory of change's chat only,
-            task 054), ``component.completed``, ``component.skipped`` or
+        event_type: ``component.started`` (a theory of change's chat only),
+            ``component.completed``, ``component.skipped`` or
             ``component.failed``.
         payload: The event's payload.
 
@@ -308,7 +308,7 @@ def lifecycle_sentence(kind: str, payload: Mapping[str, Any], actor: Actor) -> s
         return f"{actor.subject} renamed the task."
     project_name = payload.get("project_name")
     if kind == "archived" and isinstance(project_name, str) and project_name.strip():
-        # Round 14: archived with its project, the task in no other one.
+        # Archived with its project, the task in no other one.
         return (
             f"{actor.subject} archived the project “{project_name.strip()}”, "
             "and this task with it."
@@ -335,7 +335,7 @@ def option_sentence(verb: str, name: str, reason: object, actor: Actor) -> str:
     """
     subject = actor.subject
     if verb == "gave a reason":
-        # A reason after the person's own exclusion (round 13): its own line.
+        # A reason after the person's own exclusion: its own line.
         words = str(reason or "").strip()
         return f"{subject} gave a reason for setting aside \u201c{name}\u201d: {words}"
     if verb == "shortlisted":

@@ -6,7 +6,7 @@ import { activeRun } from "./scopingActivity";
 import type { CheckStatus } from "./toc/types";
 
 /**
- * Browser alerts when a task's work finishes (owner, 2026-11-04): a theory
+ * Browser alerts when a task's work finishes: a theory
  * drafted, an evidence check finished, an evidence search ready, or a walk
  * waiting for an answer. They show while any Policy Atlas tab is open, when
  * that task is not the page in view. Uses the browser's own notifications;

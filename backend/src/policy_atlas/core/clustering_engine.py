@@ -203,12 +203,11 @@ class ClusteringPolicy:
         rejection_detail_max_len: Maximum length of one retained rejection detail.
         progress_key: ``ACTIVITY`` key (a ``"<stage>.batches"`` line) the
             first assignment round publishes as each batch finishes, or
-            ``None`` to publish nothing (task 058, N2).
+            ``None`` to publish nothing.
         on_labels: Called once with the discovered labels, in order, after
             discovery and before assignment (when there are any), or
             ``None``. The characterise stage publishes its themes this way,
-            so the page shows them while sources are assigned (task 058,
-            round 9).
+            so the page shows them while sources are assigned.
     """
 
     min_labels: int
@@ -536,7 +535,7 @@ def run_first_assignment_round(
     submitted: list[tuple[int, list[ClusterUnit], Future[Any]]] = []
     usage_totals = UsageAccumulator()
 
-    # Task 058, N2: one count per batch, on the pool's own future; repair
+    # One count per batch, on the pool's own future; repair
     # calls after this round never publish.
     done = 0
     lock = threading.Lock()

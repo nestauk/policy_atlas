@@ -1,8 +1,8 @@
 """Monorepo-hoist path audit (make audit-paths).
 
-Task 025 A.2 moved the Python project's tooling paths under `backend/`
+The Python project's tooling paths live under `backend/`
 (`pyproject.toml`, `uv.lock`, `src/`, `tests/`, `alembic/`, `alembic.ini`,
-`.env.example`) while keeping the `policy_atlas` import name untouched. This
+`.env.example`), while the import name stays `policy_atlas`. This
 gate catches any tracked file that still references one of those paths as
 repo-root-relative — a straggler that would silently break once tooling runs
 with CWD=`backend/`.

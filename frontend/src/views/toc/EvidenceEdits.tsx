@@ -17,11 +17,11 @@ const SUPPORTS: Support[] = ["strong", "weak", "mixed", "refutes", "not_about"];
 const SUPPORT_OPTIONS = SUPPORTS.map((value) => ({ value, label: SUPPORT_LABEL[value] }));
 const RELEVANCE_CHOICES = (["0", "1", "2", "3"] as const).map((key) => ({ key, label: key }));
 
-/** What the document controls do, on hover and focus (owner, 2026-11-09). */
+/** What the document controls do, on hover and focus. */
 const REMOVE_TOOLTIP = "Leave this document out of this connection's evidence.";
 const RESTORE_TOOLTIP = "Count this document in this connection's evidence again.";
 
-/** "Remove" or "Restore" on a document (owner, 2026-11-09): the colleague's
+/** "Remove" or "Restore" on a document: the colleague's
  *  words in the quiet control with the glyph before them, as the longlist's
  *  Exclude and Include again; grey, never red. */
 function DocumentToggle({ restore, disabled, onClick }: { restore: boolean; disabled: boolean; onClick: () => void }) {
@@ -35,7 +35,7 @@ function DocumentToggle({ restore, disabled, onClick }: { restore: boolean; disa
   );
 }
 
-/** A document's Change menu: the user's support and relevance, back to the judge's, or remove (C42). */
+/** A document's Change menu: the user's support and relevance, back to the judge's, or remove. */
 export function DocumentActions({ doc, editor }: { doc: TocDocument; editor: Editor }) {
   const [open, setOpen] = useState(false);
   const [support, setSupport] = useState<Support>(doc.support);
@@ -88,7 +88,7 @@ export function DocumentActions({ doc, editor }: { doc: TocDocument; editor: Edi
   );
 }
 
-/** Documents the user removed: listed greyed, with Restore (C42). */
+/** Documents the user removed: listed greyed, with Restore. */
 export function RemovedDocuments({ documents, editor }: { documents: TocDocument[]; editor: Editor | null }) {
   const removed = documents.filter((doc) => doc.removed_by != null);
   if (removed.length === 0) return null;
@@ -121,7 +121,7 @@ export function RemovedDocuments({ documents, editor }: { documents: TocDocument
   );
 }
 
-/** Add a study by its DOI: Policy Atlas fetches, judges and adds it (C42). */
+/** Add a study by its DOI: Policy Atlas fetches, judges and adds it. */
 export function AddStudy({ link, editor }: { link: TocLink; editor: Editor }) {
   const [value, setValue] = useState("");
   return (
@@ -151,7 +151,7 @@ export function AddStudy({ link, editor }: { link: TocLink; editor: Editor }) {
   );
 }
 
-/** After an edit: the evidence is from the earlier wording. Keep it or check again (C43). */
+/** After an edit: the evidence is from the earlier wording. Keep it or check again. */
 export function EditedEvidenceBlock({ link, graph, editor }: { link: TocLink; graph: TocGraph; editor: Editor | null }) {
   if (link.state === "kept") {
     return <p className="mt-2 text-body text-grey">Evidence kept for the new wording{link.edited_by != null ? ` by ${scrub(link.edited_by)}` : ""}.</p>;
@@ -173,7 +173,7 @@ export function EditedEvidenceBlock({ link, graph, editor }: { link: TocLink; gr
   );
 }
 
-/** New evidence from Find more evidence: nothing counts until accepted (C44). */
+/** New evidence from Find more evidence: nothing counts until accepted. */
 export function NewEvidenceBlock({ link, documents, editor }: { link: TocLink; documents: TocDocument[]; editor: Editor | null }) {
   const pending = documents.filter((doc) => doc.status === "pending");
   if (pending.length === 0) return null;
@@ -221,7 +221,7 @@ export function NewEvidenceBlock({ link, documents, editor }: { link: TocLink; d
   );
 }
 
-/** Find more evidence for some links (C44): the button at the bottom of a sidebar. */
+/** Find more evidence for some links: the button at the bottom of a sidebar. */
 export function FindMore({ links, graph, editor }: { links: TocLink[]; graph: TocGraph; editor: Editor }) {
   const ready = links.filter((link) => link.state !== "pending" && link.state !== "unchecked");
   const ids = ready.map((link) => link.link_id);

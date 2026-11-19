@@ -24,10 +24,10 @@ TaskStatus = Literal["active", "archived"]
 TASK_NAME_MAX = 200
 
 
-#: The kinds of work a task can do (task 044, ADR 0037 decision 1). Written at
+#: The kinds of work a task can do (ADR 0037 decision 1). Written at
 #: creation and never changed — turning one task into another is what a Link
-#: is for (D2). ``theory_of_change`` (task 054) is refused on create unless the
-#: server setting is on (C15).
+#: is for. ``theory_of_change`` is refused on create unless the
+#: server setting is on.
 Capability = Literal["evidence_search", "options_scoping", "theory_of_change"]
 
 
@@ -67,7 +67,7 @@ class TaskCreate(BaseModel):
     question: str | None = None
     capability: Capability = "evidence_search"
     project_ids: list[uuid.UUID] = Field(default_factory=list)
-    # ponytail: 10, an accident guard only (owner ruling 2026-09-18). Each
+    # ponytail: 10, an accident guard only. Each
     # linked source puts its plan, its report body and its coverage statement
     # into the Task Agent's context on every turn (up to ~60,000 characters
     # apiece); the prefix is prompt-cached after the first turns and the

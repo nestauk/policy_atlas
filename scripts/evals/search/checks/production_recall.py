@@ -11,7 +11,7 @@ about cost and gating are settled.) It records numbers. It does not pass or
 fail on them.
 
 How a depth is run (see ``engine.run_one_query``): one search pass, then one
-screening pass, at every depth (task 051, ADR 0038). The depths differ only in
+screening pass, at every depth (ADR 0038). The depths differ only in
 the two caps the pass cuts at (``papers_cap`` / ``policy_cap``: rapid 100 / 50,
 standard 200 / 100, deep 400 / 200). Search recall and screen recall are both
 scored at every depth.
@@ -129,7 +129,7 @@ def _run_depth(
 ) -> Any:
     """One dataset run: the chosen reviews at one depth, pipeline constants untouched."""
     constants = DEPTH_CONSTANTS[depth]
-    screen = True  # every depth screens once (task 051)
+    screen = True  # every depth screens once
     prompt_version, prompt_sha = _prompt_identity(GENERATION_BACKEND)
     # Flat and stringly: Langfuse coerces metadata values to strings anyway.
     meta = {

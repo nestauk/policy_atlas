@@ -74,7 +74,7 @@ class QuotaSet(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # Required, nullable: a body that leaves one out must not clear it by
-    # accident (review stack, 2026-11-17).
+    # accident.
     task_quota_per_year: int | None = Field(ge=0)
     runs_per_user: int | None = Field(ge=0)
 
@@ -256,7 +256,7 @@ class PersonCreatedOut(BaseModel):
 #: How one subject of a bulk action ended. ``ok`` means the command ran and
 #: its audit row is written; ``failed`` means this subject's savepoint was
 #: rolled back and a ``failed`` audit row written; ``too_soon`` is the resend
-#: cooldown (contract B4).
+#: cooldown.
 ActionOutcome = Literal["ok", "failed", "too_soon"]
 
 
@@ -307,7 +307,7 @@ class BulkQuota(BulkSubjects, QuotaSet):
     """Body of ``POST /api/v1/ops/people/quota``: the same two fields for every subject."""
 
 
-#: A waitlist row's state on the Requests page (contract C5). ``waiting``: no
+#: A waitlist row's state on the Requests page. ``waiting``: no
 #: account yet and no listed domain, so an operator approves it; ``invited``:
 #: stamped by the sweep or an approval; ``check``: the address already belongs
 #: to another organisation, left for a person to decide.

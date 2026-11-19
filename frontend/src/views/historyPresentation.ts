@@ -22,7 +22,7 @@ export type HistoryEntry = {
   failed: boolean;
   /** What the row opens to, when the source carries anything. */
   details?: HistoryDetail[];
-  /** A theory-of-change edit the reader may undo (task 054): its event id. */
+  /** A theory-of-change edit the reader may undo: its event id. */
   undoEventId?: string;
 };
 
@@ -51,7 +51,7 @@ export type HistoryDay = {
 /**
  * Who is reading, so the Task Agent turns say "You" only for the reader's own
  * words. The decision log's sentences arrive with their subject already
- * resolved for this reader by the server (round 10), and are shown as given.
+ * resolved for this reader by the server, and are shown as given.
  */
 export type HistoryViewer = {
   /** The reader owns the task: its Task Agent turns are theirs. */
@@ -62,7 +62,7 @@ export type HistoryViewer = {
   capability?: string;
 };
 
-/** One theory-of-change edit, as `GET .../toc/history` gives it (task 054). */
+/** One theory-of-change edit, as `GET .../toc/history` gives it. */
 type EditLike = {
   event_id: string;
   at: string;
@@ -145,7 +145,7 @@ function stringField(detail: DecisionLike["detail"], key: string): string | null
  * A Task Agent turn as a sentence. A part card's press carries a machine
  * marker on its last line (`[confirm part=… option=…]`, parsed by the part
  * card's own `confirmTarget`); it reads as the choice, and a scope edit as
- * its changes, one per line (lead ruling H3, wording P7).
+ * its changes, one per line.
  */
 /** The full stop after a closing quote, left out when the quoted words end
  *  their own sentence (no "“Why?”."). */
@@ -155,7 +155,7 @@ function stopAfter(quoted: string): string {
 
 function turnSentence(turn: TurnLike, subject: string): { sentence: string; lines?: string[] } {
   const message = turn.user_message.trim();
-  // A code-authored line has no user message (task 054, J3).
+  // A code-authored line has no user message.
   if (message === "") return { sentence: "The Task Agent posted an update." };
   const failed = turn.status === "failed" ? " This didn't send." : "";
   if (confirmTarget(message) !== null) {
@@ -184,7 +184,7 @@ function searchTerms(decision: DecisionLike): HistoryDetail[] {
 }
 
 /**
- * A run's one line: its outcome and its time (lead ruling H7, wording P10).
+ * A run's one line: its outcome and its time (wording P10).
  * The outcome is read from the run's own events: finished, stopped, a step
  * that failed, waiting at a check-in, or still running. The time is the time
  * the run worked: `pausedMs`, its waits at check-ins, is left out.
@@ -223,7 +223,7 @@ function runLine(
  * a reader most wants when auditing — the question that started it and the
  * negotiation that shaped the plan. Merging the Task Agent turns in by time
  * puts those first, where they happened. Each run folds to one line, its
- * steps under it (H7). The decision log's sentences come from the server with
+ * steps under it. The decision log's sentences come from the server with
  * who acted already in them; the turns name the owner, "You" only for the
  * owner (H6).
  *
@@ -238,7 +238,7 @@ function runLine(
  *   decisions: The task's decision log, any order.
  *   turns: The task's Task Agent turns, any order.
  *   viewer: Who is reading (defaults to the owner, unnamed).
- *   edits: A theory of change's edits, any order (task 054).
+ *   edits: A theory of change's edits, any order.
  *
  * Returns:
  *   The rows in the order they happened.
@@ -343,8 +343,8 @@ export function mergeHistory(
     });
   }
 
-  // A theory of change's edits to its boxes, connections and evidence (task
-  // 054): who changed what, with Undo where the server allows it.
+  // A theory of change's edits to its boxes, connections and evidence:
+  // who changed what, with Undo where the server allows it.
   for (const [index, edit] of edits.entries()) {
     rows.push({
       tiebreak: index,
@@ -366,7 +366,7 @@ export function mergeHistory(
 
 /**
  * The history grouped by the local day it happened on, oldest first, each
- * day under its heading (lead ruling H4).
+ * day under its heading.
  *
  * Args:
  *   items: The merged rows, in order.

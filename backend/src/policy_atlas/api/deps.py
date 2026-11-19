@@ -70,8 +70,8 @@ _LIVE_SEARCH_KEYS = ("OVERTON_API_KEY", "OPENALEX_API_KEY")
 def _live() -> bool:
     """Whether API seams compose live provider backends.
 
-    ``PA_BACKEND_MODE`` makes the posture explicit (review finding adv-M4,
-    2026-07-21): ``live`` demands the core key and fails loud without it,
+    ``PA_BACKEND_MODE`` makes the posture explicit: ``live`` demands the
+    core key and fails loud without it,
     ``stub`` pins stubs even on a keyed box (demos, load tests, scans),
     and the default ``auto`` preserves the key-presence switch that
     ``agent`` uses.
@@ -254,7 +254,7 @@ def get_agent_backend() -> AgentBackend:
 
 
 def get_title_backend() -> TitleWriter:
-    """Return the backend that writes task and chat titles (task 058, round 14).
+    """Return the backend that writes task and chat titles.
 
     Returns:
         The live OpenAI agent backend when the route's key is configured,

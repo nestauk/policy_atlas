@@ -9,19 +9,19 @@ result list, and then re-orders the same pool five ways:
 
 * ``baseline``  — production order.
 * ``reserve``   — the first 50 keyword results in their own order, then the rest in
-                  production order (deferred seam D6, "relevance reserve").
+                  production order ("relevance reserve").
 * ``hits``      — most distinct queries returning the paper first, then specificity.
 * ``rrf``       — reciprocal rank fusion over every keyword and semantic result list
                   (Cormack, Clarke and Buettcher 2009), then specificity for papers
                   no query returned.
-* ``mix``       — the production order since task 052 (``pool.rank_mix``): round-robin
+* ``mix``       — the production order (``pool.rank_mix``): round-robin
                   over three strata: relevant (rank fusion over every query list plus
                   the pool ordered by "cites the seeds", counted three times), seminal
                   (most cited by the seed set, then globally), novel (last five years,
                   fused ones first). Guarantees a mix at every cut. Called here so the
                   script checks the shipped code.
 * ``mix_q``     — the same with the "cites the seeds" order left out of the fusion
-                  (``coupling_lists=0``): what shipped first on 2026-10-12.
+                  (``coupling_lists=0``).
 * ``mix_f1``    — the same with that order counted once (``coupling_lists=1``).
 * ``mix_c``     — an earlier try: "cites the seeds" added to the relevant score
                   outside the fusion, each part scaled to 0..1. Kept for the record.

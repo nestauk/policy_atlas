@@ -19,10 +19,10 @@ from policy_atlas.core.prompt_fields import sanitize_prompt_field
 from policy_atlas.runtime.task_agent_scoping_prompt import _fence_safe
 
 TOC_PICK_PROMPT_VERSION = "toc_pick_v1"
-#: gpt-6-luna reasons before answering; a cap of 1,000 ran out (eval, 2026-10-27).
+#: gpt-6-luna reasons before answering; a cap of 1,000 ran out (eval).
 TOC_PICK_MAX_OUTPUT_TOKENS = 4_000
 
-#: Documents picked per link (Find more evidence asks for twice as many, C44),
+#: Documents picked per link (Find more evidence asks for twice as many),
 #: and the abstract length each candidate shows.
 PICK_N = 10
 PICK_ABSTRACT_CHARS = 400

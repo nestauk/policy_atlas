@@ -11,7 +11,7 @@ type CloseButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"
 };
 
 /**
- * The one close control (task 058 consistency pass; DESIGN.md § Buttons,
+ * The one close control (DESIGN.md § Buttons,
  * Close): the chrome icon button, a 16 px × in a 32 px square, Grey turning
  * Navy over Blue Wash, the 3% press and the house focus ring. Sheets, toasts,
  * the find dialog and the banner all close with it. Spreads its props onto

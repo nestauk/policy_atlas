@@ -1,6 +1,6 @@
-"""Opening theory-of-change walks and following draft with check (task 054, S4, S7).
+"""Opening theory-of-change walks and following draft with check.
 
-A theory of change runs two walks (C3), each under its own intent record with
+A theory of change runs two walks, each under its own intent record with
 ``purpose = 'toc'`` and ``context.toc_walk``:
 
 - the **draft walk** runs under the record ``persist_approved_plan`` wrote
@@ -15,10 +15,10 @@ Restart rule: Start on a task that already has a graph mints a full check
 walk instead of drafting again (:func:`start_scope`), so a check that failed
 or was cut off always has a way forward.
 
-The Task Agent speaks in code-authored lines with no model call (J5): when
+The Task Agent speaks in code-authored lines with no model call: when
 the check ends, and when an uploaded theory's read lands for the reader to
 review. When the check follows the draft by itself, the draft's landing is not
-announced: the two walks read as one run (task 054's 058 alignment, decision 13).
+announced: the two walks read as one run.
 """
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ from policy_atlas.theory_of_change.store import has_graph
 
 log = structlog.get_logger()
 
-#: J3: the Task Agent's line when a draft lands with no check after it (an
+#: The Task Agent's line when a draft lands with no check after it (an
 #: uploaded theory whose reading could not be found). Not posted when the
 #: check follows the draft by itself (decision 13).
 DRAFT_LANDED_MESSAGE = (
@@ -77,7 +77,7 @@ DRAFT_LANDED_MESSAGE = (
     "and policy documents; you can read it while the check runs."
 )
 
-#: J7: the line that ends the check's message.
+#: The line that ends the check's message.
 STRESS_TEST_MESSAGE = (
     "When you are ready, ask in the chat what would make the critical connection fail here."
 )
@@ -144,9 +144,9 @@ def mint_scope(
         toc_walk: ``draft`` or ``check``.
         links: The link ids a named-link check covers, or ``None``.
         draft_run_id: The draft walk a check follows, or ``None``.
-        mode: Why a named check runs (C40), or ``None`` for a full check.
+        mode: Why a named check runs, or ``None`` for a full check.
         started_by: The user who started a named check.
-        studies: Link id → the DOIs the user added to it (C42).
+        studies: Link id → the DOIs the user added to it.
 
     Returns:
         The new intent record's id.
@@ -310,7 +310,7 @@ def run_toc_sequence(
     """
     walk_id = first_outcome.capability_run_id
     if walk_id is not None and first_outcome.status == "aborted":
-        # The user's Stop (C48): say what stays and how to go on.
+        # The user's Stop: say what stays and how to go on.
         post_agent_message(engine, task_id=task_id, text=STOPPED_MESSAGE)
         return None
     if walk_id is not None and first_outcome.status in _ENDED_BADLY:
@@ -327,7 +327,7 @@ def run_toc_sequence(
     if kind != TOC_WALK_DRAFT:
         return None
     if context.get(TOC_REVIEW_FIRST_KEY):
-        # An uploaded theory (increment 5): the user checks the reading first.
+        # An uploaded theory: the user checks the reading first.
         post_agent_message(engine, task_id=task_id, text=_review_text(engine, task_id))
         return None
     with engine.connect() as conn:
@@ -345,7 +345,7 @@ def run_toc_sequence(
         engine,
         task_id=task_id,
         evidence_scope_id=admitted.evidence_scope_id,
-        # Validated through the registry: a ToC plan is always unattended (C12).
+        # Validated through the registry: a ToC plan is always unattended.
         plan=validate_plan(THEORY_OF_CHANGE, admitted.plan_row["payload"]),
         plan_id=admitted.plan_row["plan_id"],
         plan_version=admitted.plan_row["version"],
@@ -429,7 +429,7 @@ def post_agent_message(
         )
 
 
-#: A check asked for while another walk runs waits as this event (task 054, round 5).
+#: A check asked for while another walk runs waits as this event.
 TOC_CHECK_QUEUED_EVENT = "toc.check_queued"
 #: Which queued checks a walk took, or Stop cleared: ``{"sequences": [...]}``.
 TOC_CHECK_DEQUEUED_EVENT = "toc.check_dequeued"
@@ -546,7 +546,7 @@ def take_queued_check(
     return scope_id, dict(plan_row), user_id
 
 
-#: Posted when the user stops a check (C48).
+#: Posted when the user stops a check.
 STOPPED_MESSAGE = (
     "The check stopped. What it finished stays on the canvas. Connections it did not "
     "reach show Needs evidence: use Find evidence in the toolbar to check them."
@@ -562,7 +562,7 @@ def _and(items: list[str]) -> str:
 
 
 def _pending_found(conn: Connection, *, task_id: uuid.UUID, walk_id: uuid.UUID) -> str | None:
-    """The message for a named check (C40 to C45), or ``None`` for a full check.
+    """The message for a named check (a ``TOC_CHECK_MODE_KEY`` mode), or ``None`` for a full check.
 
     It says what the check searched, read and set aside, then one line per
     connection: how many documents test the step and the verdict now.
@@ -644,7 +644,7 @@ def failure_reason(error: str | None) -> str:
 
 
 def post_failure_message(engine: Engine, *, task_id: uuid.UUID, walk_id: uuid.UUID) -> None:
-    """Say a walk failed, why in plain words, and how to try again (owner, 2026-11-04)."""
+    """Say a walk failed, why in plain words, and how to try again."""
     with engine.connect() as conn:
         kind = walk_kind(conn, task_id=task_id, capability_run_id=walk_id)
         error = conn.execute(
@@ -674,8 +674,8 @@ def post_check_message(engine: Engine, *, task_id: uuid.UUID, walk_id: uuid.UUID
     """Post the check's end message: where the results are, then the stress-test suggestion.
 
     The verdict and the findings are on the Result tab; the chat only points
-    there (owner, 2026-11-04: the longer summary read as bitty). A Find more
-    evidence walk (C44) says instead how many new documents wait for the user,
+    there (the longer summary read as bitty). A Find more
+    evidence walk says instead how many new documents wait for the user,
     and where.
     """
     with engine.connect() as conn:

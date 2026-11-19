@@ -78,7 +78,7 @@ if TYPE_CHECKING:
 log = structlog.get_logger()
 
 #: The scoping Task Agent's model — the strongest tier ("frontier"), apart from the
-#: Evidence search Task Agent's. Model from the route file (task 053).
+#: Evidence search Task Agent's. Model from the route file.
 TASK_AGENT_SCOPING_MODEL = route().model_for("task_agent_scoping_turn")
 
 #: The code-authored line the prompt reads as data when nothing has run yet.
@@ -97,7 +97,7 @@ class ScopingInputs:
         linked_task_ids: The linked source task ids, in link order.
         baseline_state: The code-authored baseline-state line.
         previous: The latest approved scoping plan, or ``None`` before the
-            first; a new version is built against it (task 045, D19, D22).
+            first; a new version is built against it.
     """
 
     linked_context: list[LinkedTaskContext]
@@ -133,7 +133,7 @@ def latest_approved_scoping_plan(conn: Connection, task_id: uuid.UUID) -> Scopin
     """Return the latest approved scoping plan, or ``None`` before the first.
 
     The previous version a new one is built against: it carries the default
-    preference's state and the options' designs forward (task 045, D19, D22).
+    preference's state and the options' designs forward.
     """
     try:
         found = approved_scoping_plan(conn, task_id)
@@ -151,8 +151,8 @@ def read_baseline_state(conn: Connection, task_id: uuid.UUID) -> str:
     flag, because the prompt fences it as data alongside the transcript.
 
     A walk paused on the gate says so, so the Task Agent never proposes
-    starting a run that is already under way (task 044, S5). The longlist
-    states come first (task 045): a longlist walk under way ("a longlist is
+    starting a run that is already under way. The longlist
+    states come first: a longlist walk under way ("a longlist is
     being built"), then — after the gate — a built longlist ("a longlist
     exists, built from plan version N", N from the latest
     ``longlist_result``), then the baseline states unchanged.
@@ -205,14 +205,14 @@ def baseline_built_from(conn: Connection, task_id: uuid.UUID) -> int | None:
     """Return the plan version the latest existing baseline was built from.
 
     A baseline exists when a walk **wrote one**, which is what the artefact
-    row says (C5): ``succeeded`` (the gate confirmed), ``degraded``, or
+    row says: ``succeeded`` (the gate confirmed), ``degraded``, or
     ``aborted`` by "Change the plan" after synthesise — the artefact stays on
-    screen marked *built from plan version N* (C1), so a later edit is still
+    screen marked *built from plan version N*, so a later edit is still
     measured against it.
 
     The status alone is not enough. A walk aborted at an earlier floor pause —
     say after acquire — is also ``aborted`` and wrote nothing, and reading it
-    as a baseline told the Task Agent one existed and fired the S4 "this
+    as a baseline would tell the Task Agent one existed and fire the "this
     changed what the baseline was built from" sentence about a document the
     user has never seen. So the artefact is the evidence, and the status only
     excludes the walk that is still going.
@@ -237,7 +237,7 @@ def baseline_built_from(conn: Connection, task_id: uuid.UUID) -> int | None:
 def inputs_changed_sentence(
     conn: Connection, task_id: uuid.UUID, approved: ScopingPlan
 ) -> str | None:
-    """The deterministic "did the change touch the baseline's inputs" sentence (S4).
+    """The deterministic "did the change touch the baseline's inputs" sentence.
 
     Returns ``None`` when no baseline exists yet or the baseline's own plan
     version cannot be read.
@@ -289,7 +289,7 @@ def scoping_draft_from_wire(
     Fields the model has not filled stay absent; the three steps and the time
     band are code-owned, so they are supplied here exactly as
     ``build_scoping_plan`` supplies them to the plan — and so is the default
-    transferability preference (D22), so the draft shows the row the plan
+    transferability preference, so the draft shows the row the plan
     will carry, and the options' designs already proposed on ``previous``.
     A draft field the closed API vocabulary rejects (an origin tag the model
     invented, say) drops out of the projection rather than 500ing the turn —
@@ -368,10 +368,10 @@ def _after_approve(
 ) -> tuple[ScopingPlan, str | None]:
     """Propose designs for new options, then say whether the baseline's inputs moved.
 
-    A design is proposed back for each new or reworded option (D19) so one
+    A design is proposed back for each new or reworded option so one
     exists on the version the user confirms; then, after a baseline exists,
     the deterministic sentence says whether the change touched what it was
-    built from (S4, C1).
+    built from.
     """
     plan = ensure_option_designs(plan, agent, session_id=task_id)
     with engine.connect() as conn:
@@ -711,7 +711,7 @@ OPTIONS_SCOPING_TASK_AGENT = TaskAgentProfile(
     stub_turn=_stub_turn,
     # Closed per capability: a scoping card keyed 'thoroughness' would render
     # an Evidence search control on a plan that has no such dial. The last two
-    # ids are ones the planner proposes (task 058, N18).
+    # ids are ones the planner proposes.
     part_ids=frozenset(
         {
             "question",

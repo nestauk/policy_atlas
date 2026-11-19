@@ -45,7 +45,7 @@ function DeleteButton({ label, confirm, onDelete, busy }: { label: string; confi
   );
 }
 
-/** Edit a box in place: every field, Save or Cancel, and Delete (C41). */
+/** Edit a box in place: every field, Save or Cancel, and Delete. */
 export function BoxEditForm({ box, graph, editor, onDone }: { box: TocBox; graph: TocGraph; editor: Editor; onDone: () => void }) {
   // The text stays controlled: the warning about its connections follows it as it is typed.
   const [text, setText] = useState(box.text);
@@ -118,7 +118,7 @@ export function BoxEditForm({ box, graph, editor, onDone }: { box: TocBox; graph
   );
 }
 
-/** Edit a connection in place: title, if, for, then, because, conditions; Delete (C41). */
+/** Edit a connection in place: title, if, for, then, because, conditions; Delete. */
 export function LinkEditForm({ link, editor, onDone }: { link: TocLink; editor: Editor; onDone: () => void }) {
   return (
     <form
@@ -186,7 +186,7 @@ export function LinkEditForm({ link, editor, onDone }: { link: TocLink; editor: 
   );
 }
 
-/** "Needs evidence" with Find evidence, for connections no check has judged (C41, C40). */
+/** "Needs evidence" with Find evidence, for connections no check has judged. */
 export function NeedsEvidence({ links, graph, editor }: { links: TocLink[]; graph: TocGraph; editor: Editor | null }) {
   const unchecked = links.filter((link) => link.state === "unchecked");
   const ids = unchecked.map((link) => link.link_id);

@@ -1,4 +1,4 @@
-"""Title matching for the references and candidates that have no DOI (R&D, task 049).
+"""Title matching for the references and candidates that have no DOI (R&D).
 
 The recall evaluation scores on DOIs. A reference without a DOI (a government report,
 a working paper, a book chapter) can never be a hit, and a candidate without a DOI (most
@@ -183,7 +183,7 @@ def main() -> None:
         m_docs = match(no_doi, doc_titles, loose=args.loose)
         m_cited = match(no_doi, cited_nodoi, loose=args.loose)
         # DOI-less references against the DOI-less OpenAlex records only, as the
-        # write-up states (Codex review, 2026-10-08); the whole-pool match is kept too.
+        # write-up states (Codex review); the whole-pool match is kept too.
         m_oa = match(no_doi, oa_titles_nodoi, loose=args.loose)
         m_oa_any = match(no_doi, oa_titles, loose=args.loose)
         # Reverse gap: references WITH a DOI, found only by title on candidates WITHOUT one.

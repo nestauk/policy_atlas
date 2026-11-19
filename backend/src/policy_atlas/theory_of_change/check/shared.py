@@ -1,4 +1,4 @@
-"""Reads and helpers every check step uses (task 054).
+"""Reads and helpers every check step uses.
 
 The screened-in documents, the appraisals and judgements per link and the
 verdict they give, the links to check, the item texts the searches and the
@@ -56,11 +56,11 @@ from policy_atlas.theory_of_change.graph import (
 
 log = structlog.get_logger()
 
-#: Box origins that mean the user wrote the box (C29).
+#: Box origins that mean the user wrote the box.
 _USER_ORIGINS = frozenset({"user", "imported"})
 
 
-#: Classify's evidence type for a modelling study (W15).
+#: Classify's evidence type for a modelling study.
 MODELLING_TYPE = "Modelling & Simulation"
 
 
@@ -135,7 +135,7 @@ def appraisals_for(
     Returns:
         Document id → appraisal; an unscored document has ``score=None``. A
         web page (``backend`` ``web``) is trusted when its address's host is
-        on the trusted publisher list (C23).
+        on the trusted publisher list.
     """
     pairs = {(row.capability_run_id, row.task_source_snapshot_id) for row in evidence_rows}
     if not pairs:
@@ -203,7 +203,7 @@ def appraisals_for(
 
 
 def _judgements(conn: Connection, task_id: uuid.UUID, status: str) -> dict[str, list[Row[Any]]]:
-    """Each link's judgements of its counted hash (C19) with this status, not removed."""
+    """Each link's judgements of its counted hash with this status, not removed."""
     rows = conn.execute(
         select(toc_item_evidence)
         .join(
@@ -224,21 +224,21 @@ def _judgements(conn: Connection, task_id: uuid.UUID, status: str) -> dict[str, 
 
 
 def counted_judgements(conn: Connection, *, task_id: uuid.UUID) -> dict[str, list[Row[Any]]]:
-    """Each link's judgements that count: its counted hash (C19), accepted and not removed.
+    """Each link's judgements that count: its counted hash, accepted and not removed.
 
-    A judgement the user removed from the link (C42), or one still pending or
-    rejected (C44), does not count; the evidence list still shows it.
+    A judgement the user removed from the link, or one still pending or
+    rejected, does not count; the evidence list still shows it.
     """
     return _judgements(conn, task_id, "counted")
 
 
 def pending_judgements(conn: Connection, *, task_id: uuid.UUID) -> dict[str, list[Row[Any]]]:
-    """Each link's new evidence waiting for the user's Accept (C44), for its current count."""
+    """Each link's new evidence waiting for the user's Accept, for its current count."""
     return _judgements(conn, task_id, "pending")
 
 
 def row_judgement(row: Row[Any]) -> Judgement:
-    """A ``toc_item_evidence`` row as the verdict reads it: the user's scores win (C42)."""
+    """A ``toc_item_evidence`` row as the verdict reads it: the user's scores win."""
     support_override = getattr(row, "support_override", None)
     relevance_override = getattr(row, "relevance_override", None)
     return Judgement(
@@ -250,14 +250,14 @@ def row_judgement(row: Row[Any]) -> Judgement:
 
 
 def link_verdict_of(rows: list[Row[Any]], appraisals: dict[str, DocAppraisal]) -> LinkVerdict:
-    """One link's verdict from its counted judgements (C36)."""
+    """One link's verdict from its counted judgements."""
     return link_verdict([row_judgement(row) for row in rows], appraisals)
 
 
 def _kept_links_first(graph: Graph) -> list[str]:
     """Link keys: those on kept pathways first, in pathway order, then the rest.
 
-    A link that sits only on set-aside pathways is left out (C29); a link on
+    A link that sits only on set-aside pathways is left out; a link on
     no pathway stays, after the rest.
     """
     ordered: list[str] = []
@@ -273,7 +273,7 @@ def _kept_links_first(graph: Graph) -> list[str]:
 
 
 def links_to_check(graph: Graph, named: list[str] | None = None) -> tuple[list[str], int]:
-    """The links a check walk covers, kept pathways first, capped at 80 (C5, C29).
+    """The links a check walk covers, kept pathways first, capped at 80.
 
     Links only on set-aside pathways are not checked, unless the user named them
     (Search for more).
@@ -294,7 +294,7 @@ def links_to_check(graph: Graph, named: list[str] | None = None) -> tuple[list[s
     return ordered[:TOC_LINK_CAP], max(0, len(ordered) - TOC_LINK_CAP)
 
 
-#: The search and judgements on the whole programme (red team, 2026-11-03): one
+#: The search and judgements on the whole programme (red team): one
 #: more item search in a full check, its documents judged in the same pool as the
 #: connections' and stored as one event, never as a connection's evidence.
 PROGRAMME_KEY = "programme"
@@ -337,7 +337,7 @@ def item_search_intents(
         links: The links a named-link check covers, or ``None`` for all.
 
     Returns:
-        ``([(link_id, item_text)], left_out)`` under the 80-link cap (C5); a
+        ``([(link_id, item_text)], left_out)`` under the 80-link cap; a
         full check adds the whole programme's search (:data:`PROGRAMME_KEY`).
     """
     plan = expect_toc_plan(validate_plan(THEORY_OF_CHANGE, payload))
@@ -362,7 +362,7 @@ def _link_item_text(graph: Graph, key: str, plan: Any) -> str:
 
 
 def _flag_values(row: Row[Any], reason: str) -> dict[str, Any]:
-    """The T1 flag columns for a change to user work, or nothing."""
+    """The flag columns for a change to user work, or nothing."""
     if _user_written(row):
         return {
             "pa_changed": True,
@@ -387,7 +387,7 @@ def _map_traced[A, R](
     """Run ``fn`` over ``items`` in a thread pool, in order, each under the caller's context.
 
     The context carries the run's Langfuse trace and session (the task id), so
-    every model call in the pool is traced under the task's session (C30).
+    every model call in the pool is traced under the task's session.
 
     Args:
         fn: The work for one item.
@@ -395,7 +395,7 @@ def _map_traced[A, R](
         workers: Calls in flight at once.
         on_done: Called with each item and its result as it finishes, in the
             order they finish, on the calling thread (where the run's live
-            progress is bound; task 054, A4). An item whose work raised is
+            progress is bound). An item whose work raised is
             not passed to it.
 
     Returns:

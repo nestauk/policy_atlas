@@ -1,4 +1,4 @@
-"""Theory of change: the third capability (task 054, ADR 0042).
+"""Theory of change: the third capability (ADR 0042).
 
 A theory of change is a causal chain through the Magenta Book's layers
 (inputs and activities, outputs, short-term and long-term outcomes, impact).

@@ -42,7 +42,7 @@ export function fillYearRange(data: Record<string, number>): Array<{ label: stri
   });
 }
 
-/** Discovered themes, largest first (owner rule, 2026-07-29). */
+/** Discovered themes, largest first. */
 export function orderThemes<T extends { size: number }>(themes: T[]): T[] {
   return [...themes].sort((a, b) => b.size - a.size);
 }

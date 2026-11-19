@@ -15,7 +15,7 @@ export type SortOrder = "asc" | "desc";
 /**
  * The read-depth column's header ("Full text" / "Abstract only"), one
  * constant so its name changes in one place: the owner is choosing it
- * (round 10; the lead has proposed "Depth"). It names the header, the
+ * (the lead has proposed "Depth"). It names the header, the
  * phone's sort options and the sort button ("Sort by status").
  */
 export const STATUS_COLUMN_HEADER = "Status";
@@ -47,7 +47,7 @@ export const FILTER_CHIP_CLASS =
   "cursor-pointer border px-3 py-1.5 text-meta font-semibold max-md:px-2 max-md:py-1 max-md:text-caption";
 
 /** A filter toggle chip, on or off: one look on Sources, Findings and the
- *  longlist (task 058 consistency pass). On is the blue tint; off is Paper
+ *  longlist. On is the blue tint; off is Paper
  *  with a Line 2 border, its grey label turning Navy on hover. */
 export function filterChipClass(active: boolean): string {
   return `${FILTER_CHIP_CLASS} transition-colors ${
@@ -56,7 +56,7 @@ export function filterChipClass(active: boolean): string {
 }
 
 /**
- * The filter bar's controls (task 058, round 11): one row on one baseline,
+ * The filter bar's controls: one row on one baseline,
  * every control a 32 px outline box at Meta size. Idle, a control is the
  * outline button (Line 2 border, Navy Semibold, hover `hover-fill`); a filter
  * that narrows the view is a filled Navy chip with its ×; the screening
@@ -73,7 +73,7 @@ export function switchChoiceClass(chosen: boolean): string {
 
 /** Table header type: the Label style at Caption size (12 px Bold,
  *  uppercase, tracked), one line, so the headers label the columns without
- *  outweighing the rows (task 058, round 10, sources table entry 6). */
+ *  outweighing the rows (sources table entry 6). */
 export const TABLE_HEADER_TEXT_CLASS = `${CAPTION_LABEL_CLASS} whitespace-nowrap`;
 
 /**
@@ -99,7 +99,7 @@ const PHONE_SORTS: ReadonlyArray<{ label: string; sort: EvidenceSortField; order
 /** The phone's sort choices with their select values (`sort:order`). */
 export const PHONE_SORT_OPTIONS = PHONE_SORTS.map((option) => ({ ...option, value: `${option.sort}:${option.order}` }));
 
-/** The sources table's page sizes (round 12): 25 by default, 50 or 100 by
+/** The sources table's page sizes: 25 by default, 50 or 100 by
  *  choice. The server keeps its own default; the client always asks. */
 export const SOURCES_PAGE_SIZES = [25, 50, 100] as const;
 export type SourcesPageSize = (typeof SOURCES_PAGE_SIZES)[number];
@@ -112,7 +112,7 @@ export function sourcesPageSize(value: string | number | null | undefined): Sour
 }
 
 /**
- * The page size the reader last chose on a task (round 12), beside the
+ * The page size the reader last chose on a task, beside the
  * subtab memory, kept under `policy-atlas:sources-page-size:<taskId>`;
  * without a choice, or without storage, the default applies.
  */
@@ -122,7 +122,7 @@ export const sourcesPageSizeChoice = rememberedChoice<SourcesPageSize>("sources-
 });
 
 /** The evidence read's `country` value for the sources with no publisher
- *  country, the Landscape's "Not reported" (round 14, the backend's
+ *  country, the Landscape's "Not reported" (the backend's
  *  sentinel). */
 export const NO_COUNTRY = "none";
 
@@ -162,7 +162,7 @@ export function nextEvidenceSort(
 
 /** Fixed vocabularies for the facet filters (the server's literal params).
  *  "Uploaded" is deliberately not offered — document upload isn't a live
- *  feature yet (owner, 2026-08-05). */
+ *  feature yet. */
 export const ORIGIN_FILTER_OPTIONS = ["OpenAlex", "Overton"] as const;
 
 const STATUS_LABELS: Record<EvidenceItem["status"], string> = {
@@ -219,8 +219,7 @@ export function abstractSourceLabel(source: "provider" | "llm_description" | nul
 /**
  * The stages whose output lands on the Sources tab: while one runs, the
  * tab's views refetch every few seconds so a value replaces its placeholder
- * as it lands (task 058, owner round 8; before, they refreshed only when the
- * stage finished).
+ * as it lands.
  */
 const FEEDS_SOURCES = new Set([
   "acquire",
@@ -266,12 +265,12 @@ export function feedsSources(live: ReadonlySet<string>): boolean {
 export type CellPulses = { relevant: boolean; type: boolean; strength: boolean; status: boolean };
 
 /**
- * The cells of one source that show a pulsing placeholder (owner, round 8):
+ * The cells of one source that show a pulsing placeholder:
  * only where the value is absent, and only while the stage that fills it
  * runs. Screening fills Relevant for every source; classifying fills the
  * evidence type and strength of the relevant ones; collecting the full
  * texts settles the Status of the sources queued for it (the row's
- * `full_text_status` "queued", round 14). Once the stage ends
+ * `full_text_status` "queued"). Once the stage ends
  * nothing pulses, whatever the cell holds.
  *
  * Args:
@@ -292,7 +291,7 @@ export function cellPulses(
     type: classifying && relevant && !item.evidence_type,
     strength: classifying && relevant && !item.appraisal_tier,
     // A source whose full text is queued for collection reads "Collecting…"
-    // (lead, round 14: the row's own pending state), only while the stage
+    // (the row's own pending state), only while the stage
     // that collects it runs.
     status: live.has("ingest") && item.full_text_status === "queued" && !item.read_in_full,
   };
@@ -332,7 +331,7 @@ const NOTHING_LANDED: Landed = { rows: new Set(), cells: new Map() };
 
 /**
  * The rows and values that landed while a stage that feeds the table runs
- * (task 058, round 9; the animation sweep's entry 7): a row whose source was
+ * (the animation sweep's entry 7): a row whose source was
  * not on the page before, and a cell that pulsed on the last render and now
  * does not. They fade in once (opacity only: the table must not shift) and
  * keep their mark after, so a refetch never replays the fade. A change of

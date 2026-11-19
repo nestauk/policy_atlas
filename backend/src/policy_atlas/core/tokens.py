@@ -1,4 +1,4 @@
-"""The word tokeniser shared by chunk retrieval and the embedding writer (task 057).
+"""The word tokeniser shared by chunk retrieval and the embedding writer.
 
 Retrieval scores a passage partly by word overlap: the share of the query's words
 that also appear in the passage. This module holds the one rule that turns text

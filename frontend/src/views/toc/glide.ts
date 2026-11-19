@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
 /*
- * Boxes that glide to their new places while the first draft is drawn
- * (task 054, S12): the canvas lays the sketch out again with each box and
+ * Boxes that glide to their new places while the first draft is drawn:
+ * the canvas lays the sketch out again with each box and
  * connection, and a box that moves eases there instead of jumping. React
  * Flow draws a connection from its boxes' positions, so the positions
  * themselves are eased frame by frame and the lines follow the boxes; a CSS

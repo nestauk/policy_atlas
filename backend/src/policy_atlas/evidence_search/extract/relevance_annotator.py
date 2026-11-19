@@ -1,4 +1,4 @@
-"""Relevance-annotator backend seam — the B2′ sibling pass (024 / ADR 0023).
+"""Relevance-annotator backend seam — the sibling pass (ADR 0023).
 
 The verdict-fenced home of extraction relevance emphasis. Extraction and vetting
 run entirely unguided — user emphasis NEVER enters those prompts or the
@@ -44,7 +44,7 @@ from policy_atlas.evidence_search.extract.relevance_prompt import (
 )
 from policy_atlas.evidence_search.synthesis.cache_modes import cache_mode_for
 
-# Model from the route file (task 053); see core/model_routes.py.
+# Model from the route file; see core/model_routes.py.
 RELEVANCE_ANNOTATOR_MODEL = route().model_for("extract_annotate_relevance")
 # Effort per the vetter precedent (xhigh exhausts completion caps on 5.4-mini
 # judgment calls); the route file says high for this step.

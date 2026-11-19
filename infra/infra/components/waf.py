@@ -12,7 +12,7 @@ is the site domain for which WAF can issue that CAPTCHA token.
 from aws_cdk import ArnFormat, RemovalPolicy, Stack, aws_logs as logs, aws_wafv2 as wafv2
 from constructs import Construct
 
-# Pinned by the Phase 0 measurement (2026-11-17): the busiest 5-minute window in 14 days
+# Pinned by the measurement (2026-11-17): the busiest 5-minute window in 14 days
 # of the staging API log held 520 non-health requests from all clients together, so no
 # single address sent more; ten times that, rounded up to a thousand. Never below 3,000.
 GENERAL_RATE_LIMIT = 6000
@@ -125,7 +125,7 @@ def _rate_rule(
 
 # Request headers the firewall log never stores. A counted request is logged
 # with every header, so without this a signed-in person's bearer token would
-# sit in the log group for a month (064b security review).
+# sit in the log group for a month.
 REDACTED_HEADERS = ("authorization", "cookie", "x-aws-waf-token")
 
 
@@ -239,7 +239,7 @@ class ApiFirewall(Construct):
             ],
             # A plain dict with CloudFormation's own key names: this property is
             # typed `Any` in CDK 2.261, so a typed LoggingFilterProperty is
-            # serialised camelCase and CloudFormation rejects it (064b review).
+            # serialised camelCase and CloudFormation rejects it.
             logging_filter={
                 "DefaultBehavior": "DROP",
                 "Filters": [{

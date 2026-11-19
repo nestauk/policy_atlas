@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type H
 import { cn } from "../brand/cn";
 
 /**
- * Arrivals (task 058, round 9; the animation sweep's entry 2): in a view
+ * Arrivals (the animation sweep's entry 2): in a view
  * that grows as things arrive (the Task Agent thread), only a block that
  * appears after the view's first paint rises in. Opening the view, the
  * sidebar or a reload shows the history still, because motion on opening a

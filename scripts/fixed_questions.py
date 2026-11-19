@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Start the four task 056 fixed questions as fresh tasks on the local app.
+"""Start the four fixed cost questions as fresh tasks on the local app.
 
 What this does
 --------------
-Task 056 measures cost on four fixed questions (contract O5): three Evidence
+Cost is measured on four fixed questions: three Evidence
 search questions at standard analysis depth and one Options scoping question.
 Each measurement must start from a brand-new task, so this script creates a
 fresh task for every question each time it runs, exactly as the web app does:
@@ -65,7 +65,7 @@ FOLLOW_UP = (
 
 @dataclass(frozen=True)
 class FixedQuestion:
-    """One of the contract's fixed questions (task 056, O5)."""
+    """One of the contract's fixed questions."""
 
     key: str
     capability: str  # "evidence_search" or "options_scoping"

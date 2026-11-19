@@ -1,5 +1,5 @@
 /*
- * The reference line (task 058, round 12 consolidation): authors, year,
+ * The reference line: authors, year,
  * title, venue and address in the References' citation form, defined once
  * and imported by the report's References, the citation sheet, the source
  * dossier, the option card and the Markdown download.
@@ -7,8 +7,8 @@
 
 /** A source title that opens its dossier, as the report's References and
  *  most relevant sources show it: Navy, underlined in Line 2, the underline
- *  turning Navy on hover (round 10, finding 1). Shared with the option card
- *  (round 13): the References, the most relevant sources, the citation sheet and the option card. */
+ *  turning Navy on hover. Shared with the option card:
+ * the References, the most relevant sources, the citation sheet and the option card. */
 export const SOURCE_TITLE_LINK_CLASS =
   "text-navy underline decoration-line-2 underline-offset-[3px] transition-colors duration-150 hover:decoration-navy";
 
@@ -48,7 +48,7 @@ const ORGANISATION_WORDS = new Set([
 const SURNAME_PARTICLES = new Set(["van", "von", "der", "den", "de", "del", "della", "da", "di", "du", "la", "le", "ter", "ten"]);
 
 /**
- * One author as the reference list names them (round 10, C5): the surname,
+ * One author as the reference list names them: the surname,
  * then the initials of the given names, "Sampleton A" for "Alex Sampleton"
  * and "Sampleton AJ" for "Sampleton, Alex J.". An organisation, a single
  * name or a name the rule cannot read as a person's is kept as written.
@@ -88,7 +88,7 @@ export function referenceAuthorName(name: string): string {
 }
 
 /**
- * The reference list's authors (round 10, C5): up to three in the short form
+ * The reference list's authors: up to three in the short form
  * ("Sampleton A, Mockford C"), a longer list the first three and "et al.";
  * null with none, so the reference starts at its title.
  */
@@ -113,7 +113,7 @@ export function withFullStop(text: string): string {
   return /[.?!]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
-/** A reference as the report lists it (round 10, C5). */
+/** A reference as the report lists it. */
 export type ReferenceLike = {
   title: string;
   year?: number | null;
@@ -124,7 +124,7 @@ export type ReferenceLike = {
 
 /**
  * One reference's parts in the citation form "Sampleton A, Mockford C
- * (2022). Title. Venue. https://…" (round 10, C5), shared by the page and the
+ * (2022). Title. Venue. https://…", shared by the page and the
  * Markdown download: `lead` before the title (authors and year, or null with
  * no authors), `afterTitle` straight after it (" (2022)." when there are no
  * authors to carry the year, "." otherwise, nothing after a title that ends

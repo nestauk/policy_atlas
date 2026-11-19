@@ -29,9 +29,7 @@ log = structlog.get_logger()
 
 _PENDING_TTL = timedelta(minutes=10)
 #: How many pending chat turns one *acting user* may hold at once, across
-#: every conversation they created. Task 033 re-keyed the subject of this cap
-#: from the task owner to the acting user; the bound and the scope (per
-#: user, global across their tasks) are unchanged.
+#: every conversation they created.
 _USER_PENDING_CAP = 2
 _TURN_LOCKS_MAX = 256
 _turn_locks_guard = threading.Lock()
@@ -96,8 +94,8 @@ def _row_result(row: RowMapping, *, replayed: bool) -> ChatTurnResult:
 def _expire_stale_pending_turns(conn: Connection, *, user_id: str) -> None:
     """Mark the acting user's expired pending chat turns failed, in this transaction.
 
-    **Keyed to the conversation's creator, not the task owner** (task 033,
-    contract § 4). The sweep and the cap it feeds are one change, not two: the
+    **Keyed to the conversation's creator, not the task owner**.
+    The sweep and the cap it feeds are one change, not two: the
     cap counts an acting user's pending turns, so a sweep that still selected
     by ``task.owner_user_id`` would leave a colleague's dead turns pending
     for ever — rate-limiting them permanently, on every task, with no
@@ -143,8 +141,8 @@ def _phase_one_turn(
 ) -> ChatTurnResult | uuid.UUID:
     """Reserve one chat row, or replay a completed one, under the conversation lock.
 
-    **The lock is on the ``conversation`` row, not the task row** (task 033,
-    contract § 4). Three findings moved it:
+    **The lock is on the ``conversation`` row, not the task row**.
+    Three findings moved it:
 
     - *What the task lock was thought to protect, it did not.* The chat
       turn's ``run_active`` fence reads ``capability_run`` under the lock, but
@@ -159,8 +157,8 @@ def _phase_one_turn(
       Every one of those is scoped to a single conversation, which is the row
       now locked. Narrower **and** more precise: two chats in one task no
       longer serialise against each other at all.
-    - *A colleague may now reserve a turn*, and contract § 4 forbids their
-      path taking ``FOR UPDATE`` on the owner's task row — it would block
+    - *A colleague may now reserve a turn*, and their path must not take
+      ``FOR UPDATE`` on the owner's task row — it would block
       the owner's own rename, archive and run-start for the length of the
       colleague's transaction.
 
@@ -189,7 +187,7 @@ def _phase_one_turn(
         task_id: The conversation's task.
         conversation_id: Active chat conversation id.
         user_id: The acting user — the conversation's creator, or the task
-            owner for a legacy pre-033 row that records no creator.
+            owner for a row written before authors were recorded (no creator).
         message: Current user question.
         client_turn_id: Client-minted idempotency key.
         reserved_turn_id: The turn id the caller itself already reserved for
@@ -198,7 +196,7 @@ def _phase_one_turn(
             client_turn_id is only retried in place when it matches; any
             other caller racing the same client_turn_id gets a conflict
             instead of resetting — and possibly double-running — a turn that
-            is not its own (security review, 2026-08-11).
+            is not its own.
     """
     chat = (
         conn.execute(
@@ -309,8 +307,8 @@ def _phase_one_turn(
     ).scalar_one_or_none()
     if pending is not None:
         raise ApiConflict("chat_turn_in_progress", "a chat turn is already running")
-    # Re-keyed from the task owner to the acting user (task 033, contract
-    # § 4), in the same edit as the sweeper above — re-keying either alone is
+    # Re-keyed from the task owner to the acting user,
+    # in the same edit as the sweeper above — re-keying either alone is
     # the defect the contract names. Scope is deliberately unchanged: still
     # one bound over *all* of the counted subject's pending turns, across
     # every task, not a per-task or per-conversation allowance.
@@ -512,7 +510,7 @@ def run_chat_turn(
             )
             # The generation half — frame, scoped readers, tool loop, citation
             # floor and citation-source resolution — is the shared answer core
-            # (task 044): a Task Agent turn held at a scoping walk's baseline
+            # A Task Agent turn held at a scoping walk's baseline
             # gate answers the same way, over that walk's pinned scope. What
             # stays here is everything durable: the reservation, the
             # single-flight locks, the eligibility fences, the streamed
@@ -563,7 +561,7 @@ def run_chat_turn(
                         # in-process check but before this commit. Its partial
                         # is already persisted (the cancel path wrote it) — the
                         # terminal state stays cancelled, never overwritten to
-                        # completed (security review, 2026-08-11).
+                        # completed (security review).
                         return _row_result(row, replayed=False)
                     raise RuntimeError("chat turn was not open at terminal commit")
                 row = (
@@ -581,7 +579,7 @@ def run_chat_turn(
                 "chat_turn_failed", task_id=str(task_id), conversation_id=str(conversation_id)
             )
             with engine.begin() as conn:
-                # Narrowed to "pending" only (security review, 2026-08-11): a
+                # Narrowed to "pending" only (security review): a
                 # late failure must not overwrite a durable cancel that landed
                 # first; an already-failed row leaves this a no-op.
                 conn.execute(

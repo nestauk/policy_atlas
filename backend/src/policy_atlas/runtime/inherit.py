@@ -1,7 +1,7 @@
-"""Linked-task context for the Options scoping Task Agent (task 044, D4/S8).
+"""Linked-task context for the Options scoping Task Agent.
 
 An Options scoping task may start from one or more Evidence search tasks (a
-``task_link`` row, task 044 phase 2). :func:`linked_context` reads, for each
+``task_link`` row). :func:`linked_context` reads, for each
 link, exactly what the scoping Task Agent's prompt fences as data: the
 linked task's whole plan, its Result artefact rendered as markdown with
 citation markers and the reference list dropped, and its search coverage
@@ -13,8 +13,8 @@ that was finished when the link was written), never to "whatever the source
 task looks like now": a source task that runs again must not silently
 change what a scoping task already inherited.
 
-Task 045 adds the **document part** of inherit (S6, A3; ADR 0039 decision
-9): :func:`inherit_documents`, the longlist walk's first (non-spine) step,
+In the **document part** of inherit (ADR 0039 decision 9),
+:func:`inherit_documents`, the longlist walk's first (non-spine) step,
 gives the scoping task one ``task_source_snapshot`` row per screened-in
 document of each link's pinned walk, pointing at the same content-addressed
 snapshot with its origin unchanged — the row is inherited because the
@@ -297,7 +297,7 @@ def _compose_coverage_sentence(stop_condition: str, adequacy_verdict: str) -> st
     return f"{stop_sentence} {adequacy}"
 
 
-# --- The document part of inherit (task 045, S6) -------------------------------
+# --- The document part of inherit -------------------------------
 
 
 class InheritLinkError(Exception):
@@ -415,7 +415,7 @@ def _inherit_one_link(
                     "task_source_snapshot_id": uuid.uuid4(),
                     "task_id": task_id,
                     "source_snapshot_id": row.source_snapshot_id,
-                    # Origin unchanged (A3): the row is inherited because this
+                    # Origin unchanged: the row is inherited because this
                     # step created it, not because of an origin value.
                     "origin": row.origin,
                     "run_id": run_id,
@@ -461,7 +461,7 @@ def inherit_documents(
     screened-in documents (effective screening row ``relevant``) in the scope
     of the link's pinned walk; one ``task_source_snapshot`` row per document
     this task lacks, sharing the content-addressed ``source_snapshot_id``,
-    **origin unchanged** (A3), ``run_id`` = this inherit run, and the
+    **origin unchanged**, ``run_id`` = this inherit run, and the
     full-text attachment copied so ingest does not refetch. Idempotent on
     ``uq_task_source_snapshot``: a document the task already holds (from the
     baseline, an earlier inherit, or another link) is left alone.
@@ -469,8 +469,8 @@ def inherit_documents(
     A link that cannot be read (its pinned walk or scope missing, or any
     database error) is rolled back to its own savepoint, recorded and
     skipped; the other links' documents are kept. The caller completes the
-    step and the runner ends the walk ``degraded`` (owner: "inherit
-    non-spine" — the walk continues without the linked documents, the
+    step and the runner ends the walk ``degraded`` (inherit is
+    non-spine: the walk continues without the linked documents, the
     missing link named).
 
     Args:
@@ -495,8 +495,7 @@ def inherit_documents(
     for link in links:
         try:
             # A link grants no read (ADR 0037): the owner must still read the
-            # source at every build, not only when the link was made (owner,
-            # 2026-09-24, task 045 review S1: "Recheck access only").
+            # source at every build, not only when the link was made.
             if link.source_task_id not in readable:
                 raise InheritLinkError("source not readable by the task owner")
             with conn.begin_nested():
@@ -533,7 +532,7 @@ def inherit_documents(
 
 
 def linked_reports(conn: Connection, task_id: uuid.UUID) -> list[tuple[str, str]]:
-    """Return each linked task's report body, for the ``suggest`` step (A15).
+    """Return each linked task's report body, for the ``suggest`` step.
 
     Read-only, pinned to each link's walk like :func:`linked_context`. A link
     whose report cannot be read, or that has no report, is left out (logged):

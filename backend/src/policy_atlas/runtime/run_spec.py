@@ -23,7 +23,7 @@ COMPONENT_REGISTRY: dict[str, dict[str, list[str]]] = {
     # synthesise: all four run references optional — deepest-given resolves
     # the rest transitively at execution.
     "synthesise": {"requires": ["evidence_scope_id"]},
-    # Options scoping, task 045 (ADR 0039). Each reads the walk's intent
+    # Options scoping (ADR 0039). Each reads the walk's intent
     # record only: ``extract_interventions`` is the selection-free profile
     # (no ``selection_run_id`` — which is why it is a component and not a
     # directive on ``extract``).
@@ -31,12 +31,12 @@ COMPONENT_REGISTRY: dict[str, dict[str, list[str]]] = {
     "suggest": {"requires": ["evidence_scope_id"]},
     "extract_interventions": {"requires": ["evidence_scope_id"]},
     "longlist": {"requires": ["evidence_scope_id"]},
-    # Task 046 (R37): what is said about each option, after longlist.
+    # What is said about each option, after longlist.
     "option_profile": {"requires": ["evidence_scope_id"]},
     "constrain": {"requires": ["evidence_scope_id"]},
-    # Task 046 (R28): the included options grouped into themes, after constrain.
+    # The included options grouped into themes, after constrain.
     "theme": {"requires": ["evidence_scope_id"]},
-    # Theory of change, task 054 (ADR 0042). Each reads the walk's intent
+    # Theory of change (ADR 0042). Each reads the walk's intent
     # record and the task's graph.
     "toc_draft": {"requires": ["evidence_scope_id"]},
     "toc_select": {"requires": ["evidence_scope_id"]},

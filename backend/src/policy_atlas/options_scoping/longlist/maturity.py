@@ -1,4 +1,4 @@
-"""The maturity rung of an option (task 055, items 7; contract A3).
+"""The maturity rung of an option.
 
 How well tried an option is, read from its stored coverage alone: no model
 call, the same coverage always gives the same answer. The rung is display

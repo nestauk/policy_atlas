@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { cn } from "./cn";
 
 /*
- * The app's one icon module (task 058 consistency pass): every glyph on one
+ * The app's one icon module: every glyph on one
  * 16-unit grid, one 1.5 stroke, round joins, `currentColor`, drawn here (the
  * app carries no icon library). Two sizes, each in its own button box
  * (DESIGN.md § Buttons, Icon buttons):
@@ -69,7 +69,7 @@ export function MinusIcon(props: IconProps) {
 }
 
 /** Exclude: a circle with a diagonal bar, before the Exclude controls'
- *  words (round 13, owner). */
+ *  words. */
 export function ExcludeIcon(props: IconProps) {
   return (
     <Glyph {...props}>
@@ -165,8 +165,7 @@ export function ExpandIcon(props: IconProps) {
   );
 }
 
-/** Back: an arrow pointing left (the source sheet's Back to the claim,
- *  round 13). */
+/** Back: an arrow pointing left (the source sheet's Back to the claim). */
 export function ArrowLeftIcon(props: IconProps) {
   return (
     <Glyph {...props}>
@@ -184,7 +183,7 @@ export function ArrowDownIcon(props: IconProps) {
   );
 }
 
-/** Download: an arrow into a tray (the sources' Download CSV, round 12). */
+/** Download: an arrow into a tray (the sources' Download CSV). */
 export function DownloadIcon(props: IconProps) {
   return (
     <Glyph {...props}>
@@ -194,7 +193,7 @@ export function DownloadIcon(props: IconProps) {
   );
 }
 
-/** Shortlist: a circled check (round 13, owner), an outline circle when the
+/** Shortlist: a circled check, an outline circle when the
  *  option holds no place, a filled circle with a white check when it does;
  *  the fill eases over 150 ms (none under reduced motion). */
 export function CheckCircleIcon({ filled = false, ...props }: IconProps & { filled?: boolean }) {
@@ -221,8 +220,8 @@ export function CheckIcon(props: IconProps) {
   );
 }
 
-/** More: a list row's own menu (Rename, Add to project, Archive; owner,
- *  round 12). Three dots across the grid's middle, drawn as round-capped
+/** More: a list row's own menu (Rename, Add to project, Archive).
+ *  Three dots across the grid's middle, drawn as round-capped
  *  zero-length strokes so they take the module's stroke weight. */
 export function MoreIcon(props: IconProps) {
   return (
@@ -250,7 +249,7 @@ export function CloseIcon(props: IconProps) {
 }
 
 /** About: the "i" after a heading whose tooltip says what the block is
- *  (the option card's What it would take, round 12). */
+ *  (the option card's What it would take). */
 export function InfoIcon(props: IconProps) {
   return (
     <Glyph {...props}>
@@ -261,7 +260,7 @@ export function InfoIcon(props: IconProps) {
   );
 }
 
-/** Find: the list pages' "Find a task" / "Find a project" (round 11). */
+/** Find: the list pages' "Find a task" / "Find a project". */
 export function SearchIcon(props: IconProps) {
   return (
     <Glyph {...props}>

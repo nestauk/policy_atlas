@@ -4,7 +4,7 @@ import { Button } from "../Button";
 import { cn } from "../cn";
 
 /*
- * A list's frames (task 058, consolidation batch B): the empty, loading and
+ * A list's frames (consolidation batch B): the empty, loading and
  * failed states every list and table shows in its own frame, defined once
  * and used by the Tasks, Projects and History lists and the Sources table.
  * A surface passes only its frame (`frameClassName`): the lists' hairline
@@ -20,7 +20,7 @@ export const LIST_FRAME_CLASS = "border border-line-2 bg-paper";
 export const LIST_CONTROL_CLASS = "h-10 whitespace-nowrap px-3 py-0 text-meta";
 
 /**
- * The list loading: the list's own frame and row shape (lead ruling), so
+ * The list loading: the list's own frame and row shape, so
  * the rows arrive into it rather than replacing a different page. Five rows
  * of the real row's height, 56 px (84 px below md, two lines), each with
  * the system's placeholder bar where the name will sit. The bars breathe,
@@ -93,7 +93,7 @@ export function ListEmpty({
 
 /**
  * A list that failed to load: the list's frame, the sentence, and a 40 px
- * ghost that asks again (lead ruling, 2026-11-05).
+ * ghost that asks again.
  *
  * Args:
  *   children: The sentence that says what failed.

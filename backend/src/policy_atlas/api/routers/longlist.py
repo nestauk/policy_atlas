@@ -186,7 +186,7 @@ def post_option(
         raise http_error(exc) from None
     return OptionAddedOut(
         option=_card(engine, task_id, added.option_id),
-        # ``None`` while the search is still queued (A4): the card reads it
+        # ``None`` while the search is still queued: the card reads it
         # as search pending, and the run stream announces the walk.
         opened_run=(
             opened_run(engine, task_id=task_id, capability_run_id=added.capability_run_id)

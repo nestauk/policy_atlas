@@ -166,7 +166,7 @@ def sanitize_openalex_query(q: str) -> str:
         with a space, and whitespace collapsed. Commas are the OpenAlex
         ``filter`` clause separator — a comma surviving into the embedded
         ``title_and_abstract.search:`` value would open a new, injectable
-        filter clause (015 review finding, Codex + security lanes convergent).
+        filter clause (Codex + security lanes convergent).
     """
     stripped = _OPENALEX_WILDCARD_RE.sub("", q.replace(",", " "))
     return " ".join(stripped.split())
@@ -198,7 +198,7 @@ class _TransportMixin:
     def _init_transport(self, fetch: _Fetch | None) -> None:
         self.http_calls = 0
         self._last_request_at: float | None = None
-        # Paced admission (task 051, plan S13): one thread at a time sleeps
+        # Paced admission: one thread at a time sleeps
         # and stamps the last request time, so concurrent callers never send
         # two requests closer than the interval; the request itself runs
         # outside the lock so requests overlap in flight.
@@ -256,7 +256,7 @@ class _TransportMixin:
         with self._pace_lock:
             latest = self._last_request_at or 0.0
             # Pauses coalesce: eight threads refused at once pause once, not
-            # eight times over (review finding, 2026-10-09).
+            # eight times over.
             self._last_request_at = max(latest, _monotonic() + seconds - self._min_interval_s)
 
     def _request_json(
@@ -973,7 +973,7 @@ def _search_cache_key(url: str, params: dict[str, str]) -> _SearchCacheKey:
 
 
 def _search_cache_get(key: _SearchCacheKey, *, ttl_s: float) -> Any | None:
-    # Lock + pop: concurrent walks (task 025) can race the TTL check-then-delete;
+    # Lock + pop: concurrent walks can race the TTL check-then-delete;
     # an unlocked `del` here raised KeyError when two threads expired the same entry.
     with _SEARCH_CACHE_LOCK:
         cached = _SEARCH_CACHE.get(key)
@@ -1079,7 +1079,7 @@ def _validate_overton_next_page_url(next_page_url: str) -> str:
     return next_page_url
 
 
-# --- Crossref abstracts (task 054, C30) -------------------------------------------
+# --- Crossref abstracts -------------------------------------------
 # Many OpenAlex works carry a DOI but no abstract. Crossref often has the
 # publisher's abstract, marked up in JATS (an XML format publishers use). One
 # lookup per DOI, in parallel, with a short timeout; any failure means no

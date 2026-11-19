@@ -147,7 +147,7 @@ from policy_atlas.runtime.scoping_plan import TRANSFERABILITY_DEFAULT, ScopingPl
 
 log = structlog.get_logger()
 
-#: Constrain batches in flight at once (task 046, S13).
+#: Constrain batches in flight at once.
 CONSTRAIN_MAX_CONCURRENT = 4
 #: The reason recorded when a batch or the distinct call stays malformed.
 JUDGEMENT_UNAVAILABLE = "judgement unavailable"
@@ -158,15 +158,15 @@ DISTINCT_PASSES_REASON = "no other option on the longlist is the same kind of ac
 #: The *distinct* reason for a duplicate whose kept option left the list.
 DUPLICATE_KEPT_REASON = "the first of its duplicates on the longlist is kept"
 #: Origins a duplicate group keeps first, in this order: the user's, then
-#: Evidence search's own (components § 7, the merge rule of 2026-09-24).
+#: Evidence search's own (components § 7, the merge rule).
 _KEPT_FIRST_ORIGINS: tuple[str, ...] = ("added_by_you", "from_evidence_search")
 #: The ``judgements`` key of the deterministic in-scope record. Not
 #: ``"in_scope"``: that id is the *within scope* default screen's.
 IN_SCOPE_EVIDENCE_KEY = "in_scope_evidence"
-#: The ``judgements`` key of the authority label (task 046, S18). It holds no
+#: The ``judgements`` key of the authority label. It holds no
 #: verdict: nothing that reads the checks reads it.
 AUTHORITY_KEY = "authority"
-#: The consideration aspect the authority label answers (R38).
+#: The consideration aspect the authority label answers.
 WHO_DECIDES = "who_decides"
 #: Joins the considerations' texts in the stored ``consideration_text``.
 CONSIDERATION_JOIN = " · "
@@ -474,7 +474,7 @@ def _judge(
     requirement_ids = [r["id"] for r in requirements]
     batches = [list(batch) for batch in batched(options, CONSTRAIN_BATCH_SIZE)]
 
-    # Task 058, N2: one count per batch, on the pool's own future. A batch's
+    # One count per batch, on the pool's own future. A batch's
     # retries happen inside ``_judge_batch``, so they never move the count.
     done = 0
     lock = threading.Lock()
@@ -908,7 +908,7 @@ def constrain_scope(
         else:
             if kept is not None and merge_protected(row):
                 # A user's shortlist place is never the merged-away side: it
-                # stays as itself, and two protected options both stay (O1).
+                # stays as itself, and two protected options both stay.
                 # Its other verdicts still apply.
                 kept = None
                 verdicts[_DISTINCT] = _Verdict("passes", DUPLICATE_KEPT_REASON)
@@ -948,8 +948,7 @@ def constrain_scope(
             option_ids=sorted(set(merged_into.values()), key=str),
         ).coverage(
             plan_outcomes=[outcome.text for outcome in plan.outcomes],
-            # The list's folding maps, applied again to the merged members
-            # (task 046, amendment 3, S21).
+            # The list's folding maps, applied again to the merged members.
             folds=stored_folds(profile),
             where_country=where_country[1] if where_country is not None else None,
         )
@@ -958,8 +957,8 @@ def constrain_scope(
     )
     # The kept option's stored place sentences describe the documents before
     # the merge, so they do not ride through the recompute: the merged option
-    # reads template sentences until the profile runs again (rubric box 76;
-    # ADR 0040 decision 23; review of task 046, 2026-10-12).
+    # reads template sentences until the profile runs again (ADR 0040
+    # decision 23).
     in_scope = in_scope_evidence(
         conn,
         task_id=task_id,
@@ -1014,7 +1013,7 @@ def constrain_scope(
             states[state] += 1
             label = authority.labels.get(oid) if authority is not None else None
             if label is not None:
-                # No verdict: never a check, never an exclusion (S18).
+                # No verdict: never a check, never an exclusion.
                 record[AUTHORITY_KEY] = {**label, "consideration_text": consideration_text}
                 labelled[label["label"]] += 1
         judgements[oid] = {version: record}

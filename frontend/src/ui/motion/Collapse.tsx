@@ -14,7 +14,7 @@ function cuts(): boolean {
 }
 
 /**
- * A block that opens and closes by easing its height (task 058, round 9):
+ * A block that opens and closes by easing its height:
  * `grid-template-rows` from 0fr to 1fr and its opacity, on the strong
  * ease-out. While it closes it keeps its children, so they fold away rather
  * than vanish, and it unmounts them once closed. It clips only while it

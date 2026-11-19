@@ -7,8 +7,7 @@ import topology from "world-atlas/countries-110m.json";
 import { scrub } from "../lib/scrub";
 
 /* ---------------------------------------------------------------------------
- * Where sources were published, as a map (task 058, round 11; the owner
- * asked twice, the lead chose the dependencies). A choropleth of publisher
+ * Where sources were published, as a map. A choropleth of publisher
  * countries on the Natural Earth projection, Navy by count, countries with
  * none in Line 2. The list beside it stays the default and the keyboard's
  * path: the map is for the eye, so its countries take no focus.
@@ -122,7 +121,7 @@ const stepFill = (step: number) => `color-mix(in oklab, var(--color-navy) ${MAP_
 export type MapCountry = { country: string; count: number };
 
 /**
- * The publisher countries as a choropleth (round 11). A country with
+ * The publisher countries as a choropleth. A country with
  * sources is Navy by its count; one with none is Line 2. Under a fine
  * pointer a country with sources turns Electric Blue and a tooltip reads
  * "United Kingdom · 23"; a press opens All sources for it, as its row in

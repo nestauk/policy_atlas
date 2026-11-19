@@ -4,10 +4,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys, useApiClient } from "../../api/queries";
 
 /** How long the shortlist page waits after the last change before it asks
- *  for a fresh "Not covered" note (owner, 2026-11-08). */
+ *  for a fresh "Not covered" note. */
 export const NOTE_REFRESH_PAUSE_MS = 3000;
 
-/** The working line while the note is rewritten (owner, 2026-11-08). */
+/** The working line while the note is rewritten. */
 export const NOTE_REVIEWING_WORDS = "Reviewing the shortlist for gaps";
 
 type UntypedPost = (path: string, init: object) => Promise<{ error?: unknown; response: Response }>;
@@ -31,8 +31,8 @@ export function useRefreshShortlistNote(taskId: string) {
 }
 
 /**
- * Keep the shortlist's note current without a call per change (owner,
- * 2026-11-08): on opening, a stale note is rewritten once; after a change
+ * Keep the shortlist's note current without a call per change:
+ * on opening, a stale note is rewritten once; after a change
  * on the page, one timer waits `NOTE_REFRESH_PAUSE_MS` after the last change
  * and rewrites it once if it is still stale. Unmounting cancels the timer.
  * Off on the public link. The longlist never calls it.

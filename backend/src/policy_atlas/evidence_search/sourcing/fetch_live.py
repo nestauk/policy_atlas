@@ -51,7 +51,7 @@ RETRY_JITTER = 0.5
 # After a 429 or 503 the host gets a rest: later requests to it wait out the time it asked
 # for (never more than this), so a warm worker does not hit it again straight away.
 HOST_COOLDOWN_CAP_S = 10.0
-# Task 057 (N2): a 429 or 503 carrying ``Retry-After`` is retried after the delay the
+# A 429 or 503 carrying ``Retry-After`` is retried after the delay the
 # host asked for (seconds, or an HTTP date), never longer than this. A missing or
 # malformed header keeps the fixed RETRY_BACKOFF_S wait.
 RETRY_AFTER_CAP_S = 30.0
@@ -642,7 +642,7 @@ class LiveDocumentFetcher:
         deadline = FETCH_DEADLINE.get()
         try:
             for chunk in response.iter_bytes():
-                # task 057 review (security 2): a slow-drip body stops at the
+                # A slow-drip body stops at the
                 # per-document deadline, like a per-operation timeout.
                 if deadline is not None and self._clock() > deadline:
                     self._release_accounted_bytes(MAX_DOCUMENT_BYTES)

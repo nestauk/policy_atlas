@@ -23,8 +23,7 @@ from pydantic import BaseModel
 #: How widely a `task` or `project` row is shared. `org` means every
 #: enrolled member of the row's organisation may read it; `private` means its
 #: owner only. A row whose `org_id` is NULL is its owner's alone whatever this
-#: says — "org" is an inert default where there is no organisation
-#: (contract § 7).
+#: says — "org" is an inert default where there is no organisation.
 Visibility = Literal["org", "private"]
 
 

@@ -40,7 +40,7 @@ def vector_literal(value: Any) -> str:
     """Return pgvector's text form of a vector, ``'[a,b,...]'``.
 
     One formatter for the column's bind processor and for a query vector passed
-    as a literal (task 057 review, code-review 7), so the stored and the searched
+    as a literal, so the stored and the searched
     vectors are always written the same way.
     """
     return "[" + ",".join(repr(float(v)) for v in value) + "]"
@@ -50,8 +50,8 @@ class Vector(UserDefinedType[list[float]]):
     """The pgvector ``vector(n)`` column type, without the pgvector Python package.
 
     pgvector is a PostgreSQL extension that stores a list of numbers (an embedding)
-    in a compact binary form and compares them in SQL. Task 057 adds no Python
-    library for it (contract G3): a vector goes to the database as text such as
+    in a compact binary form and compares them in SQL. The app uses no Python
+    library for it: a vector goes to the database as text such as
     ``'[0.1,0.2]'``, cast to ``vector(n)`` in the SQL, and comes back as the same
     text form, which this type parses into a list of floats. The database keeps
     single-precision (float32) numbers, so a value read back can differ from the
@@ -97,7 +97,7 @@ class Vector(UserDefinedType[list[float]]):
 
         return process
 
-# Task 033 tenancy: an organisation sits above the entity hierarchy, and a row's
+# Tenancy: an organisation sits above the entity hierarchy, and a row's
 # `org_id` is NULL until its owner is enrolled. NULL never matches NULL — the org
 # leg is a SQL predicate everywhere, never a Python comparison of two loaded values.
 organisation = Table(
@@ -157,7 +157,7 @@ organisation_domain = Table(
     CheckConstraint("domain = lower(domain)", name="ck_organisation_domain_lower"),
 )
 
-# Named groups of people for pilots and research (task 065, owner 2026-11-18).
+# Named groups of people for pilots and research.
 # A label, separate from the organisation: one person may be in several.
 cohort = Table(
     "cohort",
@@ -221,7 +221,7 @@ project = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=True),
     Column("visibility", Text, nullable=False, server_default="private"),
-    # When the owner archived it; NULL while in use (task 058, round 11).
+    # When the owner archived it; NULL while in use.
     Column("archived_at", DateTime(timezone=True), nullable=True),
     CheckConstraint("visibility IN ('org', 'private')", name="ck_project_visibility"),
     Index("ix_project_org_visibility", "org_id", "visibility"),
@@ -260,10 +260,10 @@ task = Table(
     Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=True),
     Column("visibility", Text, nullable=False, server_default="private"),
     Column("is_public", Boolean, nullable=False, server_default=text("false")),
-    # The kind of work the task does (task 044, ADR 0037 decision 1). Written
+    # The kind of work the task does (ADR 0037 decision 1). Written
     # at creation and never changed — turning one task into another is what a
-    # ``task_link`` row is for. Every pre-044 row is an Evidence search, which
-    # is what the server default backfills.
+    # ``task_link`` row is for. Every row written before tasks recorded a
+    # capability is an Evidence search, which is what the server default backfills.
     Column("capability", Text, nullable=False, server_default="evidence_search"),
     CheckConstraint("status IN ('active', 'archived')", name="ck_task_status"),
     CheckConstraint(
@@ -313,8 +313,8 @@ conversation = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("closed_at", DateTime(timezone=True), nullable=True),
     Column("archived_at", DateTime(timezone=True), nullable=True),
-    # The author's `sub`. Nullable because rows predating task 033 have no
-    # recorded author — those belong to the task owner (the legacy disjunct).
+    # The author's `sub`. Nullable because rows written before authors were
+    # recorded have none — those belong to the task owner (the legacy disjunct).
     Column("created_by", Text, nullable=True),
     ForeignKeyConstraint(
         ["entry_artefact_id", "task_id"],
@@ -439,7 +439,7 @@ event_log = Table(
     UniqueConstraint("task_id", "sequence", name="uq_event_log_task_sequence"),
 )
 
-# --- Corpus / source model (task 003) ---
+# --- Corpus / source model ---
 
 source_snapshot = Table(
     "source_snapshot",
@@ -450,9 +450,10 @@ source_snapshot = Table(
     Column("source_locator", Text, nullable=False),
     Column("metadata", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
-    # Task 057 (D2): the document-store key. body_hash is the SHA-256 of the fetched
+    # The document-store key. body_hash is the SHA-256 of the fetched
     # bytes before parsing; null on envelope snapshots and on full-text snapshots
-    # made before task 057 (their bytes are gone, so they are never reused by key).
+    # made before the document store existed (their bytes are gone, so they are
+    # never reused by key).
     # parse_profile / segmentation_policy name the parser and the chunking rule.
     Column("body_hash", Text, nullable=True),
     Column("parse_profile", Text, nullable=True),
@@ -482,7 +483,7 @@ task_source_snapshot = Table(
     Column("origin", Text, nullable=False),        # "uploaded" | "acquired"
     Column("run_id", UUID(as_uuid=True), ForeignKey("runs.run_id"), nullable=True),
     Column("ingested_at", DateTime(timezone=True), nullable=False),
-    # Full-text attachment (task 008): the corpus document keeps its envelope snapshot
+    # Full-text attachment: the corpus document keeps its envelope snapshot
     # and gains a nullable link to its immutable full-text snapshot once ingested
     # (ADR 0003). full_text_status describes the fetch pipeline, not text availability
     # (that stays source_snapshot.text_basis); failure is never silent (ADR/contract
@@ -495,8 +496,8 @@ task_source_snapshot = Table(
     ),
     Column("full_text_status", Text, nullable=False, server_default="not_attempted"),
     Column("full_text_error", Text, nullable=True),
-    # Task 057 (N9, owner G2 addition): per-task breadcrumbs that used to sit in the
-    # shared full-text snapshot's metadata. The run that ingested this document for
+    # Per-task breadcrumbs that do not belong in the shared full-text snapshot's
+    # metadata. The run that ingested this document for
     # this task, and the address its bytes came from.
     Column("ingested_by_run_id", UUID(as_uuid=True), nullable=True),
     Column("fetched_from", Text, nullable=True),
@@ -504,7 +505,7 @@ task_source_snapshot = Table(
     # Composite unique target for source_screening_result FK
     UniqueConstraint("task_source_snapshot_id", "task_id", name="uq_tss_id_task"),
     CheckConstraint(
-        # 'queued' (task 057): handed to the ingest queue, no snapshot and no error yet.
+        # 'queued': handed to the ingest queue, no snapshot and no error yet.
         "full_text_status IN "
         "('not_attempted', 'queued', 'ingested', 'fetch_failed', 'parse_failed')",
         name="ck_tss_full_text_status",
@@ -526,8 +527,8 @@ def tss_owns_snapshot(snapshot_id: ColumnElement[uuid.UUID] | uuid.UUID) -> Colu
     True when ``snapshot_id`` is either the envelope (``source_snapshot_id``)
     or the full-text (``full_text_snapshot_id``) snapshot linked by a
     ``task_source_snapshot`` row — the "does this chunk/snapshot belong to
-    this task" predicate that was hand-written at five call sites across
-    the API layer (task 029 delta-review). ``snapshot_id`` may be a column
+    this task" predicate, written once for the API layer's call sites.
+    ``snapshot_id`` may be a column
     expression (e.g. ``chunk.c.source_snapshot_id``) or a bound scalar — both
     compare correctly against ``task_source_snapshot``'s two snapshot
     columns. Callers still add their own ``task_id`` scoping; this returns
@@ -581,7 +582,7 @@ citation = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
 
-# --- Screening model (task 004) ---
+# --- Screening model ---
 
 evidence_scope = Table(
     "evidence_scope",
@@ -591,11 +592,11 @@ evidence_scope = Table(
     Column("intent", Text, nullable=False),
     Column("context", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
-    # What this intent record is for (task 044, ADR 0037 decision 4). NULL on
-    # every pre-044 row and on every Evidence search record: a plan had exactly
-    # one scope before options scoping made several per plan.
+    # What this intent record is for (ADR 0037 decision 4). NULL on every row
+    # written before options scoping and on every Evidence search record: an
+    # Evidence search plan has exactly one scope; options scoping makes several.
     Column("purpose", Text, nullable=True),
-    # The plan VERSION this record belongs to (A16/C3: ``plan_version`` alone
+    # The plan VERSION this record belongs to (``plan_version`` alone
     # is a weak pointer, and ``plan.evidence_scope_id`` only says which record
     # the plan row points back at). Composite with ``task_id`` so a record can
     # never name a plan of a different task.
@@ -627,12 +628,12 @@ source_screening_result = Table(
     Column("status", Text, nullable=False),
     Column("screen_basis", Text, nullable=True),
     Column("screen_decision_confidence", Float, nullable=True),
-    # Stage provenance (task 014 decision 11): 1 = envelope screen, 2 = full-text
+    # Stage provenance: 1 = envelope screen, 2 = full-text
     # screen. Effective result = highest-stage non-failed row per (scope, source) —
     # a READ rule (the effective-screen helper), never a storage rule: stage-1 rows
     # are never mutated by a stage-2 pass.
     Column("screen_stage", Integer, nullable=False, server_default="1"),
-    # Generation supersession (task 024 decision 7b): criteria-changed re-screen
+    # Generation supersession: criteria-changed re-screen
     # writes fresh rows at generation = max+1; old rows are never mutated. The
     # effective-screen read rule orders generation DESC, stage DESC.
     Column("screen_generation", Integer, nullable=False, server_default="0"),
@@ -656,11 +657,9 @@ source_screening_result = Table(
         ["runs.run_id", "runs.task_id"],
         name="fk_ssr_run_task",
     ),
-    # Partial unique (task 014, replacing the uq_ssr_scope_source constraint;
-    # widened task 024 decision 7b to admit generation supersession): at most
+    # Partial unique: at most
     # one NON-FAILED row per (scope, source, stage, generation) — failed rows
-    # are attempt history and never block retry (the 011 extraction-memo
-    # precedent); a re-screen's fresh generation coexists with prior
+    # are attempt history and never block retry; a re-screen's fresh generation coexists with prior
     # generations rather than colliding with them.
     Index(
         "uq_ssr_scope_source_stage",
@@ -669,7 +668,7 @@ source_screening_result = Table(
         unique=True,
         postgresql_where=text("status != 'failed'"),
     ),
-    # 'excluded_retracted' (task 019 Phase D, owner decision): a retracted
+    # 'excluded_retracted': a retracted
     # document (OpenAlex is_retracted) is excluded at screening as policy, a
     # distinct terminal status never conflated with a 'not_relevant'
     # relevance verdict.
@@ -699,7 +698,7 @@ source_screening_result = Table(
         name="ck_ssr_null_when_failed",
     ),
     Index("ix_ssr_scope_status", "evidence_scope_id", "status"),
-    # Task 064a Q9: matches the effective-screen window's partition key, task
+    # Matches the effective-screen window's partition key, task
     # first, so a caller's task filter reads one task's rows (migration b1e7c3a9d5f2).
     Index(
         "ix_ssr_task_scope_snapshot",
@@ -707,7 +706,7 @@ source_screening_result = Table(
     ),
 )
 
-# --- Classification model (task 005) ---
+# --- Classification model ---
 
 EVIDENCE_TYPES: tuple[str, ...] = (
     "Systematic Review and Meta-Analysis",
@@ -755,7 +754,7 @@ source_classification_result = Table(
         "evidence_scope_id", "task_source_snapshot_id",
         name="uq_scr_scope_source",
     ),
-    # open_tags retired in task 009 (decision 10) — source_tag is the single tag home.
+    # source_tag is the single tag home.
     # Safe only because EVIDENCE_TYPES is a fixed, developer-controlled tuple (no user input,
     # no apostrophe-escaping) — never build a CHECK constraint this way from runtime data.
     CheckConstraint(
@@ -765,7 +764,7 @@ source_classification_result = Table(
     Index("ix_scr_scope_type", "evidence_scope_id", "primary_evidence_type"),
 )
 
-# --- Appraisal model (task 006) ---
+# --- Appraisal model ---
 
 source_appraisal_result = Table(
     "source_appraisal_result",
@@ -775,10 +774,10 @@ source_appraisal_result = Table(
     Column("task_source_snapshot_id", UUID(as_uuid=True), nullable=False),
     Column("task_id", UUID(as_uuid=True), nullable=False),
     Column("appraised_by_run_id", UUID(as_uuid=True), nullable=False),
-    # 1..5, 5 = strongest (v2 rating); NULL only on an Unrated row (task 056, D7).
+    # 1..5, 5 = strongest (v2 rating); NULL only on an Unrated row.
     Column("quality_score", SmallInteger, nullable=True),
     # True for a document the classifier typed Unknown or Other (Non-evidence): it is
-    # appraised as "Unrated", has no score, and is citable (task 056, D7).
+    # appraised as "Unrated", has no score, and is citable.
     Column("unrated", Boolean, nullable=False, server_default=text("false")),
     Column("rubric_version", Text, nullable=False),  # provenance travels with each appraisal
     Column("appraised_at", DateTime(timezone=True), nullable=False),
@@ -817,7 +816,7 @@ source_appraisal_result = Table(
     Index("ix_sar_scope_score", "evidence_scope_id", "quality_score"),
 )
 
-# --- Acquisition model (task 007) ---
+# --- Acquisition model ---
 
 search_coverage_record = Table(
     "search_coverage_record",
@@ -845,14 +844,14 @@ search_coverage_record = Table(
     ),
     UniqueConstraint("acquired_by_run_id", name="uq_scov_run"),  # one record per acquire run
     # 'saturated' deliberately absent — saturation-based stopping is a deferred seam (spec).
-    # Task 015 widened the vocabulary with the deep loop's stops (short_circuit =
+    # The deep loop's stops (short_circuit =
     # discovery-rate collapse within one run; budget_exhausted covers every budget
     # incl. the round cap; target_reached = confident-relevant target met).
-    # Task 019 Phase D widened it again with the honest stop-grain pair: 'completed'
-    # (a clean, unforced completion — acquire's new default, replacing the old
-    # breadth_truncated default) and 'wall_clock_exceeded' (the rapid/standard
-    # fan-out's own wall-clock breach). 'breadth_truncated' is retained in the
-    # vocabulary for historical rows only — acquire no longer writes it.
+    # The honest stop-grain pair: 'completed'
+    # (a clean, unforced completion — acquire's default) and 'wall_clock_exceeded'
+    # (the rapid/standard fan-out's own wall-clock breach). 'breadth_truncated' is
+    # retained only for rows written before 'completed' replaced it as acquire's
+    # default — acquire no longer writes it.
     CheckConstraint(
         "stop_condition IN ('breadth_truncated', 're_searched_still_thin', 'error',"
         " 'short_circuit', 'budget_exhausted', 'target_reached', 'completed',"
@@ -871,7 +870,7 @@ search_coverage_record = Table(
     CheckConstraint("jsonb_typeof(scope_filters) = 'object'", name="ck_scov_filters_object"),
 )
 
-# --- Characterise model (task 009) ---
+# --- Characterise model ---
 
 chunk_embedding = Table(
     "chunk_embedding",
@@ -882,7 +881,7 @@ chunk_embedding = Table(
     Column("unit_policy", Text, nullable=False),        # e.g. "embedding_unit_policy_v1"
     Column("unit_index", Integer, nullable=False),
     Column("unit_locator", JSONB, nullable=False),      # char offsets into the canonical chunk
-    # Task 057 (N8): the vector in pgvector's binary column (float32), validated in
+    # The vector in pgvector's binary column (float32), validated in
     # code before the write (list, 1,536 dims, finite floats), and the unit's
     # distinct words (core.tokens, sorted) for the word-overlap score. The JSON
     # ``vector`` column these replaced was dropped by revision 0914321f8de4, which
@@ -926,7 +925,7 @@ characterisation_result = Table(
     UniqueConstraint("evidence_scope_id", "run_id", name="uq_char_scope_run"),
 )
 
-# --- Select model (task 010) ---
+# --- Select model ---
 
 SELECTION_STRATEGIES: tuple[str, ...] = ("coverage_stratified_v1", "llm_rerank_v1")
 _SELECTION_STRATEGIES_SQL_LIST = ", ".join(f"'{s}'" for s in SELECTION_STRATEGIES)
@@ -975,7 +974,7 @@ selection_result = Table(
 
 # Tag types; writers import them via policy_atlas.core.tags.
 TOPIC_THEME = "topic_theme"
-# Classify's open methodological/structural tag proposals (task 014 decision 6).
+# Classify's open methodological/structural tag proposals.
 METHODOLOGICAL_STRUCTURAL = "methodological_structural"
 
 source_tag = Table(
@@ -1018,10 +1017,10 @@ source_tag = Table(
 
 # Shared bound for untrusted scope-context directive strings (select's selection
 # directive, group's grouping directive) — each parser fails closed above it.
-# Hoisted from select.py (012 review): the bound is cross-component, not select's.
+# Hoisted from select.py: the bound is cross-component, not select's.
 DIRECTIVE_STRING_MAX = 200
 
-# --- Extract / findings layer (task 011) ---
+# --- Extract / findings layer ---
 
 EXTRACTION_STATUSES: tuple[str, ...] = ("extracted", "no_findings", "extraction_failed")
 EXTRACTION_BASES: tuple[str, ...] = ("full_text", "abstract_only")
@@ -1065,7 +1064,7 @@ _SER_EVIDENCE_TYPES_SQL_LIST = ", ".join(
 )
 
 # The two memo (success) states — a failed attempt inserts freely as attempt
-# history and never satisfies or blocks the memo lookup (contract rev 1.5).
+# history and never satisfies or blocks the memo lookup.
 MEMO_STATUSES: tuple[str, ...] = ("extracted", "no_findings")
 _MEMO_WHERE_SQL = "status IN ('extracted', 'no_findings')"
 
@@ -1113,7 +1112,7 @@ source_extraction_record = Table(
     # (the uq_tss_id_task / uq_runs_run_task parent pattern).
     UniqueConstraint("extraction_record_id", "task_id", name="uq_ser_id_task"),
     # The memo key: partial unique over the two success states only, so a failed
-    # attempt never blocks its own retry (contract rev 1.5).
+    # attempt never blocks its own retry.
     Index(
         "uq_ser_memo",
         "task_id",
@@ -1145,7 +1144,7 @@ intervention_outcome_finding = Table(
     # Source-named references — never canonical entities (data-model findings layer).
     Column("intervention", Text, nullable=False),
     Column("outcome", Text, nullable=False),  # base measure only; qualifiers are stratum
-    # Who or what the intervention was delivered to (task 046, amendment 3, R71).
+    # Who or what the intervention was delivered to.
     Column("unit", Text, nullable=True),
     Column("setting", Text, nullable=True),
     Column("comparator", Text, nullable=True),
@@ -1153,7 +1152,7 @@ intervention_outcome_finding = Table(
     Column("estimate_level", Text, nullable=True),
     Column("study_design", Text, nullable=True),
     Column("study_geography", Text, nullable=True),
-    # Canonical sorted array of {type, value}; closed type vocabulary (contract rev 1.5).
+    # Canonical sorted array of {type, value}; closed type vocabulary.
     Column("stratum_qualifiers", JSONB, nullable=False),
     # Reported values only: effect size + type, CI/SE, p-value, N, k, I², τ².
     Column("statistics", JSONB, nullable=False),
@@ -1164,7 +1163,7 @@ intervention_outcome_finding = Table(
     # Per absent nullable field: not_extracted | unclear | not_applicable.
     Column("field_coverage", JSONB, nullable=False),
     # Anchors: chunk_id (NULL for abstract basis) · verbatim quote · match status ·
-    # raw char interval when verified (rev 1.3/1.4).
+    # raw char interval when verified.
     Column("grounding", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     ForeignKeyConstraint(
@@ -1245,14 +1244,14 @@ implementation_context_finding = Table(
     Index("ix_icf_record", "extraction_record_id"),
 )
 
-# --- The options-scoping intervention profile (task 045, ADR 0039 decision 6) ---
+# --- The options-scoping intervention profile (ADR 0039 decision 6) ---
 #
 # One row per intervention a document's abstract covers, with the role the
 # abstract gives it. Not a finding of effect: a mention is not support. The
 # shared reference columns match the IOF/ICF tables so the record joins
 # ``finding_reference_union`` as its third branch without NULL aliases.
 
-#: What an abstract does with an intervention (contract § Terms, "role").
+#: What an abstract does with an intervention.
 #: ``comparator`` records never count as option membership; role sorts and
 #: describes, it never excludes.
 INTERVENTION_ROLES: tuple[str, ...] = (
@@ -1264,14 +1263,14 @@ INTERVENTION_ROLES: tuple[str, ...] = (
 )
 _INTERVENTION_ROLES_SQL = ", ".join(f"'{r}'" for r in INTERVENTION_ROLES)
 
-#: How a record's unit stands to the plan's target unit (task 046, S5):
+#: How a record's unit stands to the plan's target unit:
 #: the target unit itself, a wider or adjacent unit, or neither. Null
 #: means "not tagged" (a record profiled before the tagging context existed).
 UNIT_TAGS: tuple[str, ...] = ("on_target", "adjacent", "other")
 _UNIT_TAGS_SQL = ", ".join(f"'{t}'" for t in UNIT_TAGS)
 
 #: Whether a record names the plan's object of change, an option, or neither
-#: (task 046, S5). Null means "not tagged".
+#: . Null means "not tagged".
 OBJECT_TAGS: tuple[str, ...] = ("plan_object", "option", "neither")
 _OBJECT_TAGS_SQL = ", ".join(f"'{t}'" for t in OBJECT_TAGS)
 
@@ -1294,13 +1293,13 @@ intervention_profile_record = Table(
     Column("setting", Text, nullable=True),
     Column("study_geography", Text, nullable=True),
     Column("study_design", Text, nullable=True),
-    # The programme's own name and the countries of the stated place (task 046,
-    # amendment 3, R71); null on a record written before that revision.
+    # The programme's own name and the countries of the stated place;
+    # null on a record written before that revision.
     Column("programme_name", Text, nullable=True),
     Column("study_country", Text, nullable=True),
     # Document level, carried on each record: the abstract covers no intervention.
     Column("covers_no_intervention", Boolean, nullable=False, server_default=text("false")),
-    # The plan-relative tags (task 046, S5): null is "not tagged".
+    # The plan-relative tags: null is "not tagged".
     # ``outcome_tag`` is free text — a plan outcome's text, or ``other``.
     Column("unit_tag", Text, nullable=True),
     Column("outcome_tag", Text, nullable=True),
@@ -1332,7 +1331,7 @@ intervention_profile_record = Table(
     Index("ix_ipr_record", "extraction_record_id"),
 )
 
-#: The union view of the three finding tables (task 045, S4): the alembic
+#: The union view of the three finding tables: the alembic
 #: revisions create it, each with its own frozen definition.
 finding_reference_union = Table(
     "finding_reference_union",
@@ -1356,7 +1355,7 @@ extraction_result = Table(
     Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
     Column("run_id", UUID(as_uuid=True), nullable=False),
-    # The executed reference. NULL on the selection-free path (task 045, D24):
+    # The executed reference. NULL on the selection-free path:
     # the intervention profile reads a scope's whole screened-in set, with no
     # select run. ``fk_exr_selection`` is MATCH SIMPLE, so a NULL passes it.
     Column("selection_run_id", UUID(as_uuid=True), nullable=True),
@@ -1391,7 +1390,7 @@ extraction_result = Table(
     UniqueConstraint("evidence_scope_id", "run_id", name="uq_exr_scope_run"),
 )
 
-# --- Group / facet-level theming (task 012) ---
+# --- Group / facet-level theming ---
 
 GROUPING_FACETS: tuple[str, ...] = (
     "intervention",
@@ -1413,7 +1412,7 @@ grouping_result = Table(
     # Required keys (test-asserted): prompt version, model, mode, facet + source,
     # call/repair counts, value cap, and the inherited extraction base —
     # fingerprint + profile, base-ladder counts, finding-set size + sha256,
-    # facet coverage breakdown (contract rev 1.3).
+    # facet coverage breakdown.
     Column("grouping_provenance", JSONB, nullable=False),
     # Per group: label, description, member values, member finding ids, size,
     # direction spread; plus the ungrouped and no_value residuals, each with its
@@ -1445,7 +1444,7 @@ grouping_result = Table(
     UniqueConstraint("evidence_scope_id", "run_id", name="uq_grr_scope_run"),
 )
 
-# --- Synthesise model (task 013) ---
+# --- Synthesise model ---
 
 synthesis_result = Table(
     "synthesis_result",
@@ -1454,7 +1453,7 @@ synthesis_result = Table(
     Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
     Column("run_id", UUID(as_uuid=True), nullable=False),
-    # Resolved references (all optional — substrate-conditional, contract decision 2).
+    # Resolved references (all optional — substrate-conditional).
     # NULL run ids skip the composite FK check (MATCH SIMPLE), so each guard binds
     # only when that substrate actually resolved.
     Column("characterisation_run_id", UUID(as_uuid=True), nullable=True),
@@ -1463,7 +1462,7 @@ synthesis_result = Table(
     Column("grouping_run_id", UUID(as_uuid=True), nullable=True),
     # The minted artefact — zero-substrate runs fail structurally and write no row,
     # so the link is NOT NULL. The 001 substrate stores the artefact itself; this
-    # table is the run-scoped execution roll-up (contract § Schema).
+    # table is the run-scoped execution roll-up.
     Column(
         "artefact_id",
         UUID(as_uuid=True),
@@ -1521,7 +1520,7 @@ synthesis_result = Table(
     UniqueConstraint("evidence_scope_id", "run_id", name="uq_synr_scope_run"),
 )
 
-# --- Task plan (task 017) ---
+# --- Task plan ---
 
 task_plan = Table(
     "plan",
@@ -1548,7 +1547,7 @@ task_plan = Table(
     ),
     # One plan lineage per task in v1 — amendments append new-version rows.
     UniqueConstraint("task_id", "version", name="uq_plan_task_version"),
-    # Composite-FK target for ``evidence_scope.plan_id`` (task 044): an intent
+    # Composite-FK target for ``evidence_scope.plan_id``: an intent
     # record may name a plan version only of its own task.
     UniqueConstraint("plan_id", "task_id", name="uq_plan_id_task"),
     CheckConstraint(
@@ -1558,7 +1557,7 @@ task_plan = Table(
     CheckConstraint("jsonb_typeof(payload) = 'object'", name="ck_plan_payload_object"),
 )
 
-# --- Durable task_agent transcript (task 027) ---
+# --- Durable task_agent transcript ---
 
 task_agent_transcript = Table(
     "task_agent_transcript",
@@ -1589,14 +1588,14 @@ task_agent_transcript = Table(
     CheckConstraint("jsonb_typeof(suggestions) = 'array'", name="ck_tat_suggestions_array"),
 )
 
-# --- Capability run (task 024) ---
+# --- Capability run ---
 #
-# The steering-surface walk entity (contract decision 2): one row per
+# The steering-surface walk entity: one row per
 # planned capability walk (v1: 'evidence_search' only), carrying the
 # approved plan identity at walk open and the walk's terminal status.
 # `runs.capability_run_id` (nullable, MATCH SIMPLE) attributes each
 # component run to the walk it executed within. Deliberately not modelled:
-# composition fields, artefact back-refs (derivable), turn tables (025).
+# composition fields, artefact back-refs (derivable), turn tables.
 
 capability_run = Table(
     "capability_run",
@@ -1616,7 +1615,7 @@ capability_run = Table(
     Column("session_id", UUID(as_uuid=True), nullable=True),
     Column("started_at", DateTime(timezone=True), nullable=False),
     Column("ended_at", DateTime(timezone=True), nullable=True),
-    # The walk that asked for this one (task 045, ADR 0039 decision 3): a
+    # The walk that asked for this one (ADR 0039 decision 3): a
     # longlist walk's option searches are its child walks. NULL for every
     # other walk, including an option search the Task Agent starts for the
     # chat verb *add*. Composite with ``task_id``: a parent is always a walk
@@ -1648,7 +1647,7 @@ capability_run = Table(
     Index("ix_capr_parent", "parent_capability_run_id"),
 )
 
-# --- Links between tasks (task 044, ADR 0037 decision 2) -------------------
+# --- Links between tasks (ADR 0037 decision 2) -------------------
 #
 # A Link says "this task starts from that one". Many-to-many, one row per
 # ordered pair, source never itself, and the source's contribution pinned to
@@ -1657,12 +1656,12 @@ capability_run = Table(
 #
 # Two rules are deliberately NOT columns. Both tasks must share a project when
 # the link is written, but a link whose tasks later stop sharing one is
-# **flagged on read, never deleted** (C12) — the check lives in
+# **flagged on read, never deleted** — the check lives in
 # `task_links_for`. And a link grants no access at all: reading the target
 # tells the caller nothing about the source they could not already read.
 #
-# The option id the data model declares arrived in task 045 with the option
-# table (044 D13): nullable, and guarded to an option of the TARGET task.
+# The option id the data model declares is
+# nullable, and guarded to an option of the TARGET task.
 
 task_link = Table(
     "task_link",
@@ -1673,7 +1672,7 @@ task_link = Table(
     Column("source_capability_run_id", UUID(as_uuid=True), nullable=False),
     Column("created_by", Text, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
-    # The option this link feeds (task 045). MATCH SIMPLE: NULL skips the guard.
+    # The option this link feeds. MATCH SIMPLE: NULL skips the guard.
     Column("option_id", UUID(as_uuid=True), nullable=True),
     ForeignKeyConstraint(
         ["option_id", "target_task_id"],
@@ -1697,14 +1696,14 @@ task_link = Table(
     Index("ix_task_link_target_task_id", "target_task_id"),
 )
 
-# --- Options scoping: the option records (task 045, ADR 0039 decision 7) -----
+# --- Options scoping: the option records (ADR 0039 decision 7) -----
 #
 # An option is a task-scoped row with a stable id and a versioned specified
 # design (concept ruling 44). Not a document, not a theme. Option-level
 # judgements are keyed ``(option_id, design_version)`` in ``longlist_result``,
 # so a changed design can never inherit them.
 
-#: Where an option came from (contract § Terms, "entrant").
+#: Where an option came from.
 OPTION_ORIGINS: tuple[str, ...] = (
     "clustered",
     "suggested",
@@ -1718,7 +1717,7 @@ OPTION_STATES: tuple[str, ...] = ("included", "excluded")
 OPTION_UNIT_KINDS: tuple[str, ...] = ("interventions", "iof", "icf")
 #: The relations between options. ``variant_of`` is reserved for task 3.
 OPTION_RELATION_KINDS: tuple[str, ...] = ("part_of", "variant_of")
-#: An option's place on the shortlist (task 055, contract S6–S10): a Policy
+#: An option's place on the shortlist: a Policy
 #: Atlas pick, a place the user added, or a pick the user removed. NULL on the
 #: row means the option holds no place.
 OPTION_SHORTLIST_STATES: tuple[str, ...] = ("proposed", "added_by_you", "set_aside")
@@ -1759,7 +1758,7 @@ option = Table(
     # The kept option a duplicate was folded into (constrain's *distinct*
     # merge): its documents moved there and it leaves the list. NULL otherwise.
     Column("merged_into_option_id", UUID(as_uuid=True), nullable=True),
-    # The option's place on the shortlist (task 055): one of
+    # The option's place on the shortlist: one of
     # ``OPTION_SHORTLIST_STATES``, or NULL for no place. ``shortlist_reason``
     # is the one-line reason for a Policy Atlas pick.
     Column("shortlist_state", Text, nullable=True),
@@ -1812,7 +1811,7 @@ option_membership = Table(
     Column("task_source_snapshot_id", UUID(as_uuid=True), nullable=True),
     Column("assignment_reason", Text, nullable=True),
     # The document covers the intervention but its abstract does not state the
-    # feature that defines this option (D11): counted and shown, never dropped.
+    # feature that defines this option: counted and shown, never dropped.
     Column("design_feature_not_stated", Boolean, nullable=False, server_default=text("false")),
     Column("assigned_by_run_id", UUID(as_uuid=True), nullable=False),
     ForeignKeyConstraint(
@@ -1865,7 +1864,7 @@ option_relation = Table(
 )
 
 # The run-keyed longlist roll-up — the characterise pattern. A longlist exists
-# when a row of this table exists (contract A6).
+# when a row of this table exists.
 longlist_result = Table(
     "longlist_result",
     metadata,
@@ -1873,7 +1872,7 @@ longlist_result = Table(
     Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
     Column("run_id", UUID(as_uuid=True), nullable=False),
-    # The plan version the longlist was built from (D14: "built from plan version N").
+    # The plan version the longlist was built from ("built from plan version N").
     Column("plan_version", Integer, nullable=False),
     Column("themes", JSONB, nullable=False),
     Column("coverage", JSONB, nullable=False),
@@ -1881,9 +1880,9 @@ longlist_result = Table(
     Column("judgements", JSONB, nullable=False),
     Column("guesses", JSONB, nullable=False),
     # Keyed ``[option_id][design_version]``: the eight lines (sentence, mark)
-    # and the setting (task 046, R45).
+    # and the setting.
     Column("option_profile", JSONB, nullable=False),
-    # The latest shortlist proposal: ``{note, provenance}`` (task 055). The
+    # The latest shortlist proposal: ``{note, provenance}``. The
     # server default stays: the longlist writer's insert does not name this
     # column, and a row with no proposal yet reads ``{}``.
     Column("shortlist", JSONB, nullable=False, server_default=text("'{}'::jsonb")),
@@ -1931,10 +1930,10 @@ chat_turn = Table(
     ),
 )
 
-# --- Theory of change (task 054, ADR 0042; contract § Schema, revision 1) ---
+# --- Theory of change (ADR 0042) ---
 #
-# One theory per task, edited in place (C1). Every row carries ``revision``,
-# raised on every write, so a stale edit is refused (C10). ``uq_<table>_id_task``
+# One theory per task, edited in place. Every row carries ``revision``,
+# raised on every write, so a stale edit is refused. ``uq_<table>_id_task``
 # is the cross-task guard: links, pathway steps and judgements name boxes and
 # links of their own task only.
 
@@ -1944,7 +1943,7 @@ _TOC_SUPPORTS_SQL = "'strong', 'weak', 'mixed', 'refutes', 'not_about'"
 
 
 def _toc_common() -> list[Column[Any]]:
-    """``created_at``, ``updated_at`` and ``revision`` (C10)."""
+    """``created_at``, ``updated_at`` and ``revision``."""
     return [
         Column("created_at", DateTime(timezone=True), nullable=False),
         Column("updated_at", DateTime(timezone=True), nullable=False),
@@ -1953,7 +1952,7 @@ def _toc_common() -> list[Column[Any]]:
 
 
 def _toc_flags() -> list[Column[Any]]:
-    """The changed-by-Policy-Atlas flag columns (T1, C9)."""
+    """The changed-by-Policy-Atlas flag columns."""
     return [
         Column("pa_changed", Boolean, nullable=False, server_default=text("false")),
         Column("pa_change_reason", Text, nullable=True),
@@ -1968,13 +1967,13 @@ toc_box = Table(
     Column("box_id", UUID(as_uuid=True), primary_key=True),
     Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("layer", Text, nullable=False),
-    # Short stable label, e.g. ``S3`` (C35); set by ``theory_of_change.store.insert``.
+    # Short stable label, e.g. ``S3``; set by ``theory_of_change.store.insert``.
     Column("code", Text, nullable=True),
     Column("text", Text, nullable=False),
     Column("dosage", Text, nullable=True),
     Column("result_criteria", JSONB, nullable=False),
     Column("indicator", Text, nullable=True),
-    # Written by summarise (C20); boxes are described, not graded (W4).
+    # Written by summarise; boxes are described, not graded.
     Column("description", Text, nullable=True),
     # Where the change has been seen, from its case studies, and the documents it cites.
     Column("seen_in", Text, nullable=True),
@@ -1982,7 +1981,7 @@ toc_box = Table(
     Column("origin", Text, nullable=False),
     *_toc_flags(),
     Column("position", JSONB, nullable=True),
-    # Who last edited the box and when (C41): a user id, resolved to a name on read.
+    # Who last edited the box and when: a user id, resolved to a name on read.
     Column("edited_by", Text, nullable=True),
     Column("edited_at", DateTime(timezone=True), nullable=True),
     *_toc_common(),
@@ -2003,33 +2002,34 @@ toc_link = Table(
     Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("source_box_id", UUID(as_uuid=True), nullable=False),
     Column("target_box_id", UUID(as_uuid=True), nullable=False),
-    # Short stable label, e.g. ``#5`` (C35); set by ``theory_of_change.store.insert``.
+    # Short stable label, e.g. ``#5``; set by ``theory_of_change.store.insert``.
     Column("code", Text, nullable=True),
     Column("if_text", Text, nullable=False),
     Column("for_text", Text, nullable=False),
     Column("then_text", Text, nullable=False),
     Column("because_text", Text, nullable=False),
-    # What must hold for the link to work here: the Magenta Book's assumptions (W14).
+    # What must hold for the link to work here: the Magenta Book's assumptions.
     Column("conditions", JSONB, nullable=False, server_default=text("'[]'::jsonb")),
     Column("sentence", Text, nullable=True),
     # A short title (at most 8 words), written by summarise.
     Column("title", Text, nullable=True),
-    # What the documents found and whether it holds here, one sentence (C36),
+    # What the documents found and whether it holds here, one sentence,
     # and the documents (task source snapshot ids) it cites.
     Column("evidence_sentence", Text, nullable=True),
     Column("evidence_cites", JSONB, nullable=True),
-    # The two sentences before C36; kept for old rows, no longer written.
+    # The two sentences written before the single evidence sentence; kept for
+    # old rows, no longer written.
     Column("elsewhere_sentence", Text, nullable=True),
     Column("here_sentence", Text, nullable=True),
     Column("critical", Boolean, nullable=False, server_default=text("false")),
-    # The edit-flag columns (C19): which item hash's judgements count, and the
+    # The edit-flag columns: which item hash's judgements count, and the
     # hash a user, a same-meaning check or choose kept them for.
     Column("counted_hash", Text, nullable=True),
     Column("kept_hash", Text, nullable=True),
     Column("kept_by", Text, nullable=True),
     Column("origin", Text, nullable=False),
     *_toc_flags(),
-    # Who last edited the link and when (C41).
+    # Who last edited the link and when.
     Column("edited_by", Text, nullable=True),
     Column("edited_at", DateTime(timezone=True), nullable=True),
     *_toc_common(),
@@ -2050,7 +2050,7 @@ toc_link = Table(
     CheckConstraint("source_box_id <> target_box_id", name="ck_toc_link_distinct"),
     CheckConstraint("kept_by IN ('user', 'check', 'choose')", name="ck_toc_link_kept_by"),
     CheckConstraint(f"origin IN ({_TOC_ORIGINS_SQL})", name="ck_toc_link_origin"),
-    # At most one critical connection per task (W10).
+    # At most one critical connection per task.
     Index("uq_toc_link_one_critical", "task_id", unique=True, postgresql_where=text("critical")),
 )
 
@@ -2089,7 +2089,7 @@ toc_pathway = Table(
 )
 
 # A pathway's links in order. A deleted link leaves a gap: the pathway reads
-# *broken* (contract § Schema).
+# *broken*.
 toc_pathway_link = Table(
     "toc_pathway_link",
     metadata,
@@ -2113,7 +2113,7 @@ toc_pathway_link = Table(
 )
 
 # One judgement: one link, one document, a stance and quote per question.
-# Insert-only, keyed by the item hash it judged (C10, C19).
+# Insert-only, keyed by the item hash it judged.
 toc_item_evidence = Table(
     "toc_item_evidence",
     metadata,
@@ -2123,12 +2123,13 @@ toc_item_evidence = Table(
     Column("case_box_id", UUID(as_uuid=True), nullable=True),
     Column("task_source_snapshot_id", UUID(as_uuid=True), nullable=False),
     Column("capability_run_id", UUID(as_uuid=True), nullable=False),
-    # One verdict per link (C36): the judge's support, its quote and relevance R 0-3.
+    # One verdict per link: the judge's support, its quote and relevance R 0-3.
     Column("support", Text, nullable=False),
     Column("quote", Text, nullable=True),
     Column("relevance", SmallInteger, nullable=False),
     Column("relevance_reason", Text, nullable=True),
-    # The two questions before C36; kept for old rows, no longer written.
+    # The two questions asked before one verdict per link; kept for old rows,
+    # no longer written.
     Column("stance_elsewhere", Text, nullable=True),
     Column("quote_elsewhere", Text, nullable=True),
     Column("stance_here", Text, nullable=True),
@@ -2138,9 +2139,9 @@ toc_item_evidence = Table(
     Column("indicator", Text, nullable=True),
     Column("robust_model", Boolean, nullable=True),
     Column("item_hash", Text, nullable=False),
-    # When the figures call for this judgement succeeded (C37): not asked again.
+    # When the figures call for this judgement succeeded: not asked again.
     Column("figures_checked_at", DateTime(timezone=True), nullable=True),
-    # The user's edits to the evidence (C42): removed from the link, their own
+    # The user's edits to the evidence: removed from the link, their own
     # scores in place of the judge's, a study they added. User ids, resolved on read.
     Column("excluded_by", Text, nullable=True),
     Column("excluded_at", DateTime(timezone=True), nullable=True),
@@ -2149,7 +2150,7 @@ toc_item_evidence = Table(
     Column("override_by", Text, nullable=True),
     Column("override_at", DateTime(timezone=True), nullable=True),
     Column("added_by", Text, nullable=True),
-    # Evidence found after the first check waits for the user (C44): only
+    # Evidence found after the first check waits for the user: only
     # ``counted`` rows count; ``decided_*`` say who accepted or rejected it.
     Column("status", Text, nullable=False, server_default=text("'counted'")),
     Column("decided_by", Text, nullable=True),
@@ -2211,7 +2212,7 @@ toc_item_evidence = Table(
 )
 
 #: Edits Policy Atlas suggests (the review after edits, the Task Agent's chat), each
-#: waiting for the user's Accept or Reject (task 054, C45, C46).
+#: waiting for the user's Accept or Reject.
 toc_proposal = Table(
     "toc_proposal",
     metadata,
@@ -2230,7 +2231,7 @@ toc_proposal = Table(
     Index("ix_toc_proposal_task", "task_id"),
 )
 
-#: One number a judged document reports about a link's cause or effect (C37).
+#: One number a judged document reports about a link's cause or effect.
 toc_figure = Table(
     "toc_figure",
     metadata,
@@ -2280,8 +2281,8 @@ toc_figure = Table(
     Index("ix_toc_figure_task_link", "task_id", "link_id"),
 )
 
-#: Files a user gives a task, for any capability (task 054 increment 5, C8; one
-#: table and one bucket for all, owner 2026-11-03). The file lives in the upload
+#: Files a user gives a task, for any capability (one table and one bucket for
+#: all). The file lives in the upload
 #: store (S3, or a local folder in development) under ``object_key``; this row
 #: says what it is, why it was uploaded (``purpose``) and who uploaded it.
 task_upload = Table(

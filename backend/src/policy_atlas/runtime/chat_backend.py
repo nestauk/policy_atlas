@@ -1,6 +1,6 @@
-"""The chat moment's backend seam and its deterministic stub (task 029).
+"""The chat moment's backend seam and its deterministic stub.
 
-The live OpenAI adapter arrives with the streaming phase (plan D1) behind the
+The live OpenAI adapter arrives with the streaming phase behind the
 provider-neutral wire pin; until then every test path runs on the stub. The
 loop mechanics live in the shared bounded tool-loop kernel
 (``run_tool_loop``) with ``emit_answer`` as the chat moment's final emitter.

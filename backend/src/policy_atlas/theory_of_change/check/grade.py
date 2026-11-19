@@ -1,4 +1,4 @@
-"""The evidence verdict of one link: simplified BEAM (task 054, C36; ADR 0042).
+"""The evidence verdict of one link: simplified BEAM (ADR 0042).
 
 This is the only place a verdict is decided. It is computed on read, never
 stored, so it cannot drift from the judgements it is made from, and the rule can
@@ -8,7 +8,7 @@ Each judged document gets a weight from two scores, each 0 to 3:
 
 - **Quality Q**, from the shared appraisal score (5 or 4 → 3, 3 → 2, 2 or 1 → 1,
   unscored → 1). A web page from a publisher not on the trusted list
-  (``trusted_publishers.toml``, C23) → 1. A modelling study (classify says so)
+  (``trusted_publishers.toml``) → 1. A modelling study (classify says so)
   → 2 when the judge called it robust, else 1.
 - **Relevance R**, from the judge: how well the finding carries over to this
   population and place.
@@ -26,9 +26,9 @@ counts strong +2, weak +1, mixed 0, refutes −2; *not about* is ignored. Per li
   **Leaning supports** when S̄ ≥ 0.5; **Evidence against** when
   S̄ ≤ −1; **Leaning against** when S̄ ≤ −0.5; else **Mixed**.
 
-Calibrated on 2026-10-30 over six runs (123 links): the leaning verdicts say
+Calibrated over six runs (123 links): the leaning verdicts say
 which way thin or uneven evidence points instead of "not sure", without letting
-one weak analogue study decide (owner, task 054). The keys ``not_sure_mixed``
+one weak analogue study decide. The keys ``not_sure_mixed``
 and ``not_sure_insufficient`` keep their names; only their labels changed.
 - **Close to the threshold** when S̄ is within 0.2 of a support threshold that
   applies, or W is within 0.25 of 1: one more document could change the verdict.
@@ -106,7 +106,7 @@ class DocAppraisal:
             document has none.
         web: Whether the document is a frozen web page.
         modelling: Whether classify marked it a modelling study.
-        trusted: Whether a web page's publisher is on the trusted list (C23).
+        trusted: Whether a web page's publisher is on the trusted list.
     """
 
     score: int | None
@@ -122,7 +122,7 @@ def _trusted_hosts() -> tuple[str, ...]:
 
 
 def trusted_publisher(url: str | None) -> bool:
-    """Whether a URL's host is on the trusted publisher list, or under one (C23).
+    """Whether a URL's host is on the trusted publisher list, or under one.
 
     Args:
         url: The document's address.
@@ -173,7 +173,7 @@ class LinkVerdict:
 
 
 def quality(appraisal: DocAppraisal | None, robust_model: bool | None) -> int:
-    """Quality Q, 1 to 3, of one document (C36).
+    """Quality Q, 1 to 3, of one document.
 
     Args:
         appraisal: The document's appraisal, or ``None`` when it has none.
@@ -209,7 +209,7 @@ def link_verdict(
 
     Args:
         judgements: The link's judgements whose item hash equals its counted
-            hash (the caller filters; C19).
+            hash (the caller filters).
         appraisals: Document id → its appraisal.
 
     Returns:

@@ -1,4 +1,4 @@
-"""The theory-of-change model seam (task 054): one backend for every ToC step.
+"""The theory-of-change model seam: one backend for every ToC step.
 
 Each method makes one call with its lead-authored prompt and returns the parsed
 wire with token usage; the step that calls it owns every semantic check (the
@@ -170,7 +170,7 @@ class TocBackend(Protocol):
         on_text: Callable[[str], None],
         first_content_s: float | None,
     ) -> UsageResult[DraftResponse]:
-        """Write the same draft as :meth:`draft`, streamed (task 054, S12).
+        """Write the same draft as :meth:`draft`, streamed.
 
         One call, never retried. Each piece of the answer's JSON text goes to
         ``on_text`` as it arrives; the whole text is then parsed into
@@ -277,7 +277,7 @@ class TocBackend(Protocol):
         on_text: Callable[[str], None],
         first_content_s: float | None,
     ) -> UsageResult[ReportResponse]:
-        """Write the same report as :meth:`report`, streamed (task 054's 058 alignment, S4).
+        """Write the same report as :meth:`report`, streamed.
 
         One call, never retried. Each piece of the answer's JSON text goes to
         ``on_text`` as it arrives; the whole text is then parsed into
@@ -299,7 +299,7 @@ class TocBackend(Protocol):
         edits: list[str],
         report: dict[str, object] | None,
     ) -> UsageResult[ReviewResponse]:
-        """Review the theory's shape after the user's edits (``toc_review_v1``, C45)."""
+        """Review the theory's shape after the user's edits (``toc_review_v1``)."""
         ...
 
     def sense_check(
@@ -315,7 +315,7 @@ class TocBackend(Protocol):
         ...
 
     def import_theory(self, *, pages: list[str]) -> UsageResult[ImportResponse]:
-        """Transcribe an uploaded diagram (``toc_import_v1``, increment 5)."""
+        """Transcribe an uploaded diagram (``toc_import_v1``)."""
         ...
 
 
@@ -390,7 +390,7 @@ class OpenAITocBackend:
         )
 
     def draft_stream_request(self, messages: list[ChatCompletionMessageParam]) -> dict[str, Any]:
-        """The streamed draft call's request: :meth:`draft`'s request, streamed (task 054, S12).
+        """The streamed draft call's request: :meth:`draft`'s request, streamed.
 
         Args:
             messages: The draft call's messages (:func:`build_draft_messages`).
@@ -620,7 +620,7 @@ class OpenAITocBackend:
     def report_stream_request(
         self, messages: list[ChatCompletionMessageParam]
     ) -> dict[str, Any]:
-        """The streamed report call's request: :meth:`report`'s request, streamed (A12).
+        """The streamed report call's request: :meth:`report`'s request, streamed.
 
         Args:
             messages: The report call's messages (:func:`build_report_messages`).

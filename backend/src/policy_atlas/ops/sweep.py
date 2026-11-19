@@ -22,7 +22,7 @@ log = structlog.get_logger()
 #: Outcomes that end a row's life on the sweep: the row stays unstamped and the
 #: Requests page shows it as "Check" for an operator. ``refused`` is a
 #: deterministic refusal (an address Cognito or the command rejects); retrying it
-#: every minute would only fill ``ops_action`` (review stack, 2026-11-17).
+#: every minute would only fill ``ops_action``.
 TERMINAL_OUTCOMES: tuple[str, ...] = ("enrolled_elsewhere", "refused", "deactivated")
 
 #: Cognito errors worth retrying next tick; any other ``ClientError`` is terminal.
@@ -95,7 +95,7 @@ def sweep_once(
                 select(waitlist_entry)
                 .where(
                     waitlist_entry.c.account_created_at.is_(None),
-                    # An operator rejected it: no email, ever (owner, 2026-11-18).
+                    # An operator rejected it: no email, ever.
                     waitlist_entry.c.rejected_at.is_(None),
                     func.lower(func.split_part(waitlist_entry.c.email, "@", 2)).in_(
                         bindparam("domains", expanding=True)

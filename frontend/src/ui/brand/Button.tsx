@@ -16,7 +16,7 @@ import { cn } from "./cn";
  * Focus: the house ring (2px Electric Blue, offset 2px) comes from the base
  * rule in index.css. The cut-corner variants cannot show it: their clip-path
  * clips anything drawn outside the box, outline included. So they draw the
- * ring inside, in white on the fill (task 058 consistency pass).
+ * ring inside, in white on the fill.
  */
 const CUT_FOCUS_RING = "focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-white";
 

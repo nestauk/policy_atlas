@@ -56,7 +56,7 @@ from policy_atlas.runtime.task_plan import (
 PauseBoundary = Literal["after_component", "before_component"]
 UnattendedAction = Literal["proceed_flag", "stop"]
 
-# Commit-layer components (task 024, 15c): their directive validates through
+# Commit-layer components (15c): their directive validates through
 # ``_validate_directive_delta`` but has NO TaskPlan field to round-trip
 # through (appraise's rubric, characterise's themes/guidance, synthesise's
 # sections/boosts). A pending adjustment for one of these is recorded on the plan
@@ -65,12 +65,12 @@ UnattendedAction = Literal["proceed_flag", "stop"]
 # exemption and the overlay both read.
 COMMIT_LAYER_COMPONENTS: frozenset[str] = frozenset({"appraise", "characterise", "synthesise"})
 
-# Mixed-grammar components (task 024, 15d): part of the directive maps to a plan
+# Mixed-grammar components (15d): part of the directive maps to a plan
 # field (extract ``profiles`` -> ``extract_profiles``; group ``facets`` ->
 # ``grouping_facets``; select ``budget`` -> ``analysis_depth``) and part is
-# commit-layer with NO plan field (extract ``refresh`` (D3) +
+# commit-layer with NO plan field (extract ``refresh`` +
 # ``relevance_emphasis`` (the B2' entry point); group ``granularity`` +
-# ``guidance``; select's D6 ``strata_scope`` / D7 ``exclude_ids`` and the rest of
+# ``guidance``; select's ``strata_scope`` / ``exclude_ids`` and the rest of
 # its rich grammar). A pending adjustment SPLITS: the plan-mappable part takes the
 # plan path, the commit-layer remainder folds into the overlay so it reaches the
 # component's executed directive at its run (FIX 3b — closes the P2 pending-select
@@ -99,7 +99,7 @@ def deep_merge_delta(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str,
 
     Nested objects merge recursively; a non-dict overlay value (list, scalar)
     replaces the base value wholesale. Used to fold a pending overlay into a
-    component's composed directive at execution time (task 024, 15c).
+    component's composed directive at execution time.
 
     Args:
         base: The component's composed directive delta.
@@ -124,7 +124,7 @@ def commit_layer_overlay(component: str, delta: dict[str, Any]) -> dict[str, Any
     A pure commit-layer component (:data:`COMMIT_LAYER_COMPONENTS`) overlays its
     whole delta. A mixed-grammar component (extract / group) overlays ONLY its
     commit-layer keys — the plan-mappable part (extract profiles, group facets)
-    takes the plan path (task 024, 15d). Returns ``None`` when there is nothing to
+    takes the plan path. Returns ``None`` when there is nothing to
     overlay.
 
     Args:
@@ -149,7 +149,7 @@ def commit_layer_overlay(component: str, delta: dict[str, Any]) -> dict[str, Any
     return {context_key: part} if part else None
 
 
-# --- The steer-point lattice (task 024 decision 5) -------------------------
+# --- The steer-point lattice ----------------------------------------------
 #
 # Four named steer points at fixed component boundaries:
 #   acquire ─P1─> ... ─P2─> select ─P3─> ... ─P4─> synthesise
@@ -157,27 +157,28 @@ def commit_layer_overlay(component: str, delta: dict[str, Any]) -> dict[str, Any
 # "evidence base" point) · P3 after select (deepening selection, the existing
 # point) · P4 before synthesise (the synthesis-shape point).
 SEARCH_REVIEW = "search_review"
-# Compatibility alias for callers compiled before the owner-ruled rename.
+# Compatibility alias for callers that still use the name from before the
+# point was renamed to ``SEARCH_REVIEW``.
 SEARCH_EXCEPTION = SEARCH_REVIEW
 EVIDENCE_SEARCH_COVERAGE = "evidence_search_coverage"
 DEEPENING_SELECTION = "deepening_selection"
 FINDING_GROUPS = "finding_groups"
 SYNTHESIS_SHAPE = "synthesis_shape"
 
-# Task 044's options-scoping gate. The NAME lives here beside the Evidence
+# The options-scoping gate. The NAME lives here beside the Evidence
 # search point names because :data:`_LATTICE_MODE_POLICY` is keyed by name; the
 # POINT itself is registered on the scoping lattice alone
 # (``capability_registry``), so :func:`lattice_policy` answers ``"off"`` for it
-# on an Evidence search walk however the mode table reads (A2).
+# on an Evidence search walk however the mode table reads.
 BASELINE_CONFIRM = "baseline_confirm"
 
 # Retained for callers/tests that name the existing P3 point directly.
 DEEPENING_SELECTION_STEER_POINT = DEEPENING_SELECTION
 
-# Per-point per-mode policy — the annex mode table:
+# Per-point per-mode policy:
 #   "always" pauses whenever the point is present in the chain; "fired" pauses
 #   only when that point's floor triggers fire (read at the boundary through
-#   Task 10 readers, never recomputed); "off" never pauses. Frequent adds a
+#   the floor-trigger readers, never recomputed); "off" never pauses. Frequent adds a
 #   generic-floor pause at every OTHER (non-lattice) component boundary.
 LatticePolicy = Literal["always", "fired", "off"]
 _LATTICE_MODE_POLICY: dict[SteeringMode, dict[str, LatticePolicy]] = {
@@ -188,7 +189,7 @@ _LATTICE_MODE_POLICY: dict[SteeringMode, dict[str, LatticePolicy]] = {
         FINDING_GROUPS: "always",
         SYNTHESIS_SHAPE: "always",
         # The baseline gate is structural, not a floor trigger: a scoping walk
-        # stops for the user before any option is generated (D11), so it is
+        # stops for the user before any option is generated, so it is
         # "always" in every attended mode and never "fired".
         BASELINE_CONFIRM: "always",
     },
@@ -253,7 +254,7 @@ def lattice_name_for(
 
     Args:
         point: A concrete component boundary.
-        lattice: The **capability's** lattice (A2), from
+        lattice: The **capability's** lattice, from
             ``capability_registry.lattice_for``. Defaults to the Evidence
             search table, which is the only lattice registered in this slice,
             so every existing caller is unchanged.
@@ -324,7 +325,7 @@ class Abort:
     """Steering response that cleanly stops the remaining run walk."""
 
 
-# The only shipped additive-re-entry segment this slice (contract decision 7a):
+# The only shipped additive-re-entry segment:
 # the walk jumps back to acquire and re-walks forward. Any other start component
 # fails closed ("segment not shipped").
 SHIPPED_SEGMENT_START = "acquire"
@@ -332,7 +333,7 @@ SHIPPED_SEGMENT_START = "acquire"
 
 @dataclass(frozen=True)
 class ReEnterSegment:
-    """Additive segment re-entry (contract decision 7a) — a bounded re-walk.
+    """Additive segment re-entry — a bounded re-walk.
 
     At an ``after_component`` boundary the walk jumps BACK to ``segment_start``
     with an amended directive, re-walks forward through every already-completed
@@ -360,9 +361,9 @@ class ReEnterSegment:
 
 @dataclass(frozen=True)
 class FreeText:
-    """Free-text steering prose typed at a pause (task 024, decision 3 — the router).
+    """Free-text steering prose typed at a pause (decision 3 — the router).
 
-    Returned by a pause-capable IO layer (the CLI, Task 17) when the user typed
+    Returned by a pause-capable IO layer (the CLI) when the user typed
     prose rather than picking a canonical option. The runner compiles it through
     the agent ``route`` backend into a deterministically-validated fan-out
     of bounded directive deltas, renders that fan-out for confirmation, and
@@ -452,10 +453,10 @@ def pause_points(
 
     This is the static pause set — the boundaries that pause unconditionally in
     ``mode``. ``"fired"`` lattice points are deliberately NOT here: the runner
-    evaluates their floor triggers at the boundary (Task 10 readers) and pauses
+    evaluates their floor triggers at the boundary (the floor-trigger readers) and pauses
     only when a trigger fired, so a static set cannot express them.
 
-    Frequent pauses after every component (the pre-024 behaviour), enriching the
+    Frequent pauses after every component, enriching the
     after-boundary lattice points (P1 after acquire, P3 after select), PLUS the
     before-boundary lattice points P2 (before select) and P4 (before synthesise)
     as additional enriched pauses — "walk me through everything" keeps the
@@ -467,7 +468,7 @@ def pause_points(
     Args:
         mode: Steering mode from the approved task plan.
         chain: Deterministically composed component chain.
-        lattice: The **capability's** lattice (A2), from
+        lattice: The **capability's** lattice, from
             ``capability_registry.lattice_for``. Defaults to the Evidence
             search table.
 
@@ -489,8 +490,8 @@ def pause_points(
     return points
 
 
-#: The question a check-in asks, by the component that just finished (task 058,
-#: N19): the card shows it as its title, so it is the server's copy, in the
+#: The question a check-in asks, by the component that just finished:
+#: the card shows it as its title, so it is the server's copy, in the
 #: plain voice. Components not named here ask the last one.
 CHECK_IN_QUESTIONS: dict[str, str] = {
     "acquire": "Does this look right before I assess the sources?",
@@ -508,7 +509,7 @@ CHECK_IN_QUESTION_DEFAULT = "Does this look right so far?"
 
 
 def check_in_question(component: str) -> str:
-    """Return the question a check-in after ``component`` asks (task 058, N19)."""
+    """Return the question a check-in after ``component`` asks."""
     return CHECK_IN_QUESTIONS.get(component, CHECK_IN_QUESTION_DEFAULT)
 
 
@@ -589,9 +590,9 @@ def render_collation(flagged_events: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-# Deepening-selection emphasis multipliers (plan-pinned, contract decision 6
-# rev 2.5): weight_emphasis values MULTIPLY the default signal weights — select
-# multiplies the defaults by these values and sums unnormalised (select.py:439,
+# Deepening-selection emphasis multipliers: weight_emphasis values MULTIPLY
+# the default signal weights — select multiplies the defaults by these values
+# and sums unnormalised (select.py:439,
 # 568), there is no renormalisation — so 2.0 doubles the quality weight and 2.5
 # lifts the screen-confidence weight to the closest as-built relevance proxy.
 STRONGEST_QUALITY_MULTIPLIER = 2.0
@@ -719,10 +720,10 @@ def build_steer_point_options(
 
 
 def baseline_confirm_options() -> list[dict[str, Any]]:
-    """Return the two options the options-scoping baseline gate offers (D12).
+    """Return the two options the options-scoping baseline gate offers.
 
     Both ids are deliberately distinct from the durable response vocabulary
-    (``continue | adjust | abort | mode_change``, X10): the id names the user's
+    (``continue | adjust | abort | mode_change``): the id names the user's
     decision, the response names what the walk then does. Neither option
     carries a delta — the gate does not amend the plan, it ends the walk one
     way or the other.
@@ -752,7 +753,7 @@ def baseline_confirm_options() -> list[dict[str, Any]]:
 
 
 def generic_floor_options() -> list[dict[str, Any]]:
-    """Return the generic non-lattice floor (finding M6).
+    """Return the generic non-lattice floor.
 
     At a Frequent-mode boundary that is not a lattice point the canonical menu is
     continue · change mode · abort — always present, the degrade target for a
@@ -847,7 +848,7 @@ def _p2_options() -> list[dict[str, Any]]:
     """P2 evidence_search_coverage floor (before select).
 
     ``search_more`` is ADDITIVE (segment re-entry back to acquire); the criteria
-    re-screen and re-characterise are REPLACEMENT re-runs (contract decision 7):
+    re-screen and re-characterise are REPLACEMENT re-runs:
     the criteria re-screen supersedes screen rows at document grain via the
     generation mechanism (Task 9), even though the walk mechanics are an
     acquire→assess re-walk. NOTE: a stage-2 toggle is deliberately OMITTED — the
@@ -1027,7 +1028,7 @@ def _p4_options() -> list[dict[str, Any]]:
 
     ``edit_sections``/``emphasis_boosts`` target the synthesis directive grammar
     (``context["synthesis"]``); ``regroup_*`` are REPLACEMENT re-runs of group.
-    Tag boosts are dropped (D4) — the boost floor speaks type/tier only.
+    Tag boosts are dropped — the boost floor speaks type/tier only.
     """
     return [
         {
@@ -1085,7 +1086,7 @@ def refuse_inexpressible(intent_text: str) -> str:
     return REFUSAL_MESSAGE_TEMPLATE.format(intent=intent_text)
 
 
-# --- The router fan-out (task 024, decision 3) -----------------------------
+# --- The router fan-out (decision 3) -----------------------------
 #
 # A user's free-text utterance at a pause is compiled by the agent
 # ``route`` backend into a fan-out of per-intent fragments. Every fragment the
@@ -1492,7 +1493,7 @@ def render_authored_replacement_confirmation(fragment: CompiledFragment) -> str:
     same plain-language mode declaration ("this will REDO selection, replacing the
     current one" / additive equivalent) plus the bounded delta render before it
     applies. The user's y/N on THIS render is the safety gate — nothing applies
-    unconfirmed (contract decision 3).
+    unconfirmed.
     """
     return "\n".join(
         [
@@ -1512,7 +1513,7 @@ def render_fanout_confirmation(fanout: FanOut) -> str:
     actual compiled delta as a bounded, deterministic JSON render (FIX A), so the
     user can SEE what the prose compiled to before confirming. Each refused
     fragment is named with its reason. Nothing here applies — the user's
-    confirmation of this render is the safety gate (contract decision 3).
+    confirmation of this render is the safety gate.
 
     Args:
         fanout: The validated fan-out from :func:`compile_fanout`.
@@ -1698,9 +1699,8 @@ def apply_adjustment(
     """
     # Local import: ``capability_registry`` reads this module's lattice, so a
     # module-level import here would close the cycle. Constant capability, not
-    # a lookup — ``plan`` is already typed ``TaskPlan``, and the steering
-    # router is untouched by task 044 (C1: a gate edit does not come through
-    # here). Routed through the registry so the single seam holds (C9).
+    # a lookup — ``plan`` is already typed ``TaskPlan``, and a gate edit
+    # never comes through the steering router. Routed through the registry so the single seam holds.
     from policy_atlas.runtime.capability_registry import (
         EVIDENCE_SEARCH,
         compose_plan,
@@ -1802,7 +1802,7 @@ def _persist_new_plan_version(
     return new_plan_id, new_version
 
 
-# Replacement re-run components (contract decision 7): reselect · re-characterise
+# Replacement re-run components: reselect · re-characterise
 # · re-group (same facet). Each maps its component name to the single fine-directive
 # context key its parser validates. The mode is "replacement" — old result rows
 # persist immutably; the walk's reference moves to the new run id.
@@ -1857,7 +1857,7 @@ def apply_replacement_rerun(
     """Persist a user-attributed plan version row for a replacement re-run.
 
     Generalises the deepening-selection reselect pattern to the three
-    reference-moving replacement re-runs (contract decision 7): reselect,
+    reference-moving replacement re-runs: reselect,
     re-characterise and re-group. Each fires at a steer point *after* its
     component has run, so the generic completed-component adjustment path
     (``apply_adjustment``) cannot amend it — it treats the component as
@@ -1907,7 +1907,7 @@ def apply_segment_reentry(
 ) -> tuple[uuid.UUID, int]:
     """Persist a user-attributed plan version row for an additive segment re-entry.
 
-    Additive segment re-entry (contract decision 7a) is a user decision, so it
+    Additive segment re-entry is a user decision, so it
     records a new plan version row the same way a replacement re-run does — but
     it is *additive*, not reference-moving: the plan payload carries forward
     unchanged and the amendment is a commit-layer directive the runner applies to
@@ -2061,8 +2061,7 @@ def _validate_directive_delta(
         except screen_module.ScreenDirectiveError as exc:
             # Map to the refusal path like every sibling branch — a malformed
             # router-compiled delta must refuse honestly, never crash the
-            # compile (live-check finding, 2026-07-21: this was the one
-            # unwrapped branch of seven).
+            # compile.
             raise SteeringAdjustmentError(str(exc)) from exc
         return
     if component == "select":
@@ -2162,8 +2161,8 @@ def _apply_component_delta_to_payload(
     elif component == "extract":
         _apply_extract_delta(payload, delta["extraction"])
     elif component == "group":
-        # Mixed grammar (task 024, 15d): ONLY facets map to the plan payload.
-        # D8 granularity and B3 guidance are commit-layer (folded into the
+        # Mixed grammar (15d): ONLY facets map to the plan payload.
+        # Granularity and guidance are commit-layer (folded into the
         # pending overlay). Write grouping_facets ONLY when the delta actually
         # names facets — a granularity-/guidance-only delta must NOT clobber the
         # plan's facet set back to the default.
@@ -2174,14 +2173,14 @@ def _apply_component_delta_to_payload(
             )
             payload["grouping_facets"] = facets
     elif component == "appraise":
-        # D1's appraisal rubric override is a commit-layer directive with no
+        # The appraisal rubric override is a commit-layer directive with no
         # TaskPlan field (apply_reselect's fine select directive is
         # the same precedent, documented on its docstring): there is nothing
         # to write into the plan payload, so the amended payload carries
         # appraisal forward unchanged, same as an untouched component.
         pass
     elif component == "characterise":
-        # B5/D9's characterise directive (themes bound + guidance) is a
+        # The characterise directive (themes bound + guidance) is a
         # commit-layer directive with no TaskPlan field (same
         # precedent as appraise): nothing to write into the plan payload;
         # characterise carries forward unchanged.
@@ -2256,9 +2255,9 @@ def _apply_screen_delta(
 
 
 def _apply_select_delta(payload: dict[str, Any], selection: Any) -> None:
-    # Mixed grammar (task 024, 15d / FIX 3b): ONLY ``budget`` maps to the plan
-    # payload (via ``analysis_depth``). The rest of select's grammar (D6
-    # strata_scope, D7 exclude_ids, weight_emphasis, boosts, must_include_ids,
+    # Mixed grammar (15d / FIX 3b): ONLY ``budget`` maps to the plan
+    # payload (via ``analysis_depth``). The rest of select's grammar
+    # (strata_scope, exclude_ids, weight_emphasis, boosts, must_include_ids,
     # priority_strata) is commit-layer — validated fail-closed at
     # ``_validate_directive_delta`` time and folded into the pending overlay so it
     # reaches select's executed directive at its run, never silently dropped. Only
@@ -2283,8 +2282,8 @@ def _apply_select_delta(payload: dict[str, Any], selection: Any) -> None:
 
 
 def _apply_extract_delta(payload: dict[str, Any], extraction: Any) -> None:
-    # Mixed grammar (task 024, 15d): ONLY ``profiles`` maps to the plan payload.
-    # ``refresh`` (D3) and ``relevance_emphasis`` (the B2' entry point) are
+    # Mixed grammar (15d): ONLY ``profiles`` maps to the plan payload.
+    # ``refresh`` and ``relevance_emphasis`` (the B2' entry point) are
     # commit-layer — validated here but folded into the pending overlay so they
     # reach the run, never silently dropped. Parse validates the whole directive
     # (incl. relevance_emphasis) fail-closed; profiles are written only when the
@@ -2326,7 +2325,7 @@ def _validate_delta_round_trip(
 ) -> None:
     amended_by_component = {step.component: step.directive_delta for step in amended_chain.steps}
     for component, requested_delta in directive_deltas.items():
-        # D1/B5/D9: appraise's appraisal-rubric delta and characterise's
+        # Appraise's appraisal-rubric delta and characterise's
         # themes/guidance delta are commit-layer directives with no
         # TaskPlan field by design (same exemption as
         # apply_reselect's fine select directive, which never re-enters this
@@ -2338,7 +2337,7 @@ def _validate_delta_round_trip(
         # (e.g. acquire's "depth", screen_full's "stage"), so the recompiled
         # delta is checked to *contain* the request, not to equal it — a
         # requested value the plan fields cannot express still fails closed.
-        # Mixed grammar (task 024, 15d): only the plan-mappable part round-trips.
+        # Mixed grammar (15d): only the plan-mappable part round-trips.
         # extract -> profiles; group -> facets. The commit-layer remainder
         # (extract refresh / relevance_emphasis; group granularity / guidance) is
         # validated at _validate_directive_delta time and consumed verbatim by the
@@ -2366,7 +2365,7 @@ def _validate_delta_round_trip(
             )
         if component == "select" and requested_delta:
             # Mixed grammar (FIX 3b): only ``budget`` round-trips (through
-            # analysis_depth); the commit-layer keys (D6 strata_scope, D7
+            # analysis_depth); the commit-layer keys (strata_scope,
             # exclude_ids, weight_emphasis, ...) have no plan field and reach
             # select's executed directive via the pending overlay, so they are
             # exempt here (never dropped) — exactly the extract/group pattern.

@@ -1,12 +1,12 @@
-"""Deterministic decision-point bundles (task 024, decision 3).
+"""Deterministic decision-point bundles.
 
 A bundle is the pre-fetched, versioned information picture attached to a lattice
-pause's ``steering.pause`` event — the durable record of what the user (and, in
-Phase 5, the watch) saw when deciding. Every builder here is a pure read over
+pause's ``steering.pause`` event — the durable record of what the user (and the
+watch) saw when deciding. Every builder here is a pure read over
 persisted state: SELECTs on result tables and ``event_log`` payload JSONB, no
 LLM, no recomputation of anything a component already computed. Renders are
 deterministic (stable sort orders) so two calls over the same rows are identical
-— the option-completeness rule's substrate (contract decision 3).
+— the option-completeness rule's substrate.
 
 ``bundle_version`` is stamped ``"v1"`` on every bundle so the eval slice and the
 history projection can condition on the render shape.
@@ -68,7 +68,7 @@ def p1_bundle(
 
     Counts and queries describe **one** acquire run — the round that just
     finished — so the card cannot pair a one-round headline with all-round
-    detail (task 031, defects 1a and 1b).
+    detail (defects 1a and 1b).
 
     The counts come from that run's ``component.completed`` payload. Acquire
     defines its headline ``acquired`` total as the sum of the same
@@ -301,7 +301,7 @@ def _executed_queries(
         run_id: When given, restrict the read to this one acquire run. ``None``
             (default) spans every round, which is what the P2 coverage picture
             wants; P1 passes a run id because its card describes one round
-            (task 031, defect 1b).
+            (defect 1b).
     """
     executed: list[dict[str, Any]] = []
     zero_result: list[dict[str, Any]] = []
@@ -618,7 +618,7 @@ def _doc_metadata(
         result[str(row.task_source_snapshot_id)] = {
             "title": title,
             "evidence_type": row.primary_evidence_type,
-            # "4", or "Unrated" for an appraisal with no score (task 056).
+            # "4", or "Unrated" for an appraisal with no score.
             "quality_tier": appraisal_tier(row.quality_score, unrated=bool(row.unrated)),
             "full_text_status": row.full_text_status,
         }
@@ -636,8 +636,7 @@ def _full_text_status_counts(
     if not tss_ids:
         return {}
     ids = [uuid.UUID(tss_id) for tss_id in tss_ids]
-    # task 057 review (Codex 9, deviation 10): not_ready / send_failed /
-    # worker_error rows are not access failures.
+    # not_ready / send_failed / worker_error rows are not access failures.
     status = case(
         (
             task_source_snapshot.c.full_text_error.in_(sorted(NOT_READ_YET_REASONS)),
@@ -668,7 +667,7 @@ def p4_bundle(
 ) -> dict[str, Any]:
     """Build the P4 synthesis-shape bundle (before synthesise).
 
-    Wires the read-only ``propose_synthesis_plan`` (022 F5) over the walk's real
+    Wires the read-only ``propose_synthesis_plan`` over the walk's real
     references (the ``SynthesiseContext`` the runner assembles), adds the group
     run's per-facet flags, and reserves the B2' priority-finding counts.
 

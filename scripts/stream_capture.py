@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Record a task's live event stream to a file, one line per thing received (task 058, N25).
+"""Record a task's live event stream to a file, one line per thing received.
 
 What this is for
 ----------------
 The web page learns what a run is doing from one long-lived HTTP response, the
 *event stream* (Server-Sent Events, SSE: a plain-text format where the server keeps
-the connection open and writes small blocks of text as things happen). Task 058
-measures how long the page goes without being told anything (a *silent gap*). To
+the connection open and writes small blocks of text as things happen). The aim
+is to measure how long the page goes without being told anything (a *silent gap*). To
 measure that, we need a timestamped record of everything the page would have
 received. This script is that record keeper: it connects to the task's stream the
 same way the browser does, and writes one JSON object per line to a file for

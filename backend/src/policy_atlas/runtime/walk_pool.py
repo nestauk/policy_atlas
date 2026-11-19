@@ -1,4 +1,4 @@
-"""The option-search pool and the two per-component slots (task 045, S2).
+"""The option-search pool and the two per-component slots.
 
 Two bounds, both process-wide (ADR 0039 decision 4):
 
@@ -8,10 +8,10 @@ Two bounds, both process-wide (ADR 0039 decision 4):
   walk occupies one of that executor's workers while it waits for its
   children, so children submitted to the same executor could wait forever
   behind their own parent.
-- **The per-component slots** close the fan-out seam task 044 recorded:
-  classify's provider fan-out and ingest's parse workers were bounded per run,
-  not across runs, so four children and a parent would each have taken their
-  own twelve classify threads and their own parse processes.
+- **The per-component slots** bound classify's provider fan-out and ingest's
+  parse workers across runs, not only per run; otherwise four children and a
+  parent would each take their own twelve classify threads and their own
+  parse processes.
   :data:`CLASSIFY_SLOTS` is taken around each classification provider call
   and :data:`INGEST_SLOTS` around each parse job, so every walk in the process
   shares one budget of each. For a single walk the budget equals the per-run
@@ -29,7 +29,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from policy_atlas.evidence_search.assess.classify import MAX_CONCURRENT_CLASSIFY
 
-# INGEST_SLOTS lives beside the parse worker it bounds (task 057: the cloud
+# INGEST_SLOTS lives beside the parse worker it bounds (the cloud
 # function's handler must not import the runtime); re-exported here.
 from policy_atlas.evidence_search.sourcing.ingest_full_text import INGEST_SLOTS as INGEST_SLOTS
 from policy_atlas.runtime.scoping_plan import OPTION_SEARCH_WIDTH
@@ -55,13 +55,13 @@ def option_search_pool() -> ThreadPoolExecutor:
     )
 
 
-#: Item searches in flight at once across a theory-of-change check walk (🟡, C2).
+#: Item searches in flight at once across a theory-of-change check walk (🟡).
 TOC_ITEM_WIDTH = 8
 
 
 @functools.cache
 def toc_item_pool() -> ThreadPoolExecutor:
-    """Return the process-wide pool for theory-of-change item searches (task 054, C2).
+    """Return the process-wide pool for theory-of-change item searches.
 
     Separate from the option-search pool, so a check walk's searches never
     queue behind a longlist's (or the reverse).
