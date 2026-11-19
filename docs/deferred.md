@@ -144,18 +144,6 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **Grey-lit category granularity** — splitting v2's coarse Policy-Guidance / Expert-Opinion
   primary types (classify component 3; needs policy-team input). `source_classification_result`
   and `primary_evidence_type` check constraint are durable; column split is additive when ready.
-- **LLM-based classify tool — DISCHARGED (task 014).** `OpenAIClassificationBackend`
-  (`classify_v1`, judgment-class model) classifies over the closed 9-value list with
-  provider priors as allowlisted data fields; the stub survives as the zero-egress default
-  behind the `ClassificationBackend` seam. Classify-consensus voting and threshold-gating
-  remain open (task-014 section below).
-- **Open tags → `source_tag`** (revised, task 009): the stub-empty
-  `source_classification_result.open_tags` column and its array CHECK were **retired** by
-  migration 9 — `source_tag` (item × tag, typed, assertion provenance in the unique key) is
-  the single tag home. **The seam opened in task 014**: classify writes bounded
-  `source_tag` rows directly (`asserted_by='classify'`,
-  `tag_type='methodological_structural'`; `ck_stag_tag_type` widened by migration 14; all
-  writes through `tags.insert_source_tags`). Nothing left to do here.
 - **`Unknown / Insufficient information` resolution** — sources landing `Unknown` are kept-and-eligible;
   full-text re-classification is a deferred seam mirroring the appraisal path (shares
   decision 11's windowing + staged-result pattern when it lands, task 014). The
@@ -175,17 +163,6 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   slice — needs its own spec refinement (`docs/specs/capabilities/evidence-search/components.md`
   currently describes classify as running on "the screened-in set" unconditionally) before any
   component is built against it.
-- **`characterise`+ EB components** — subsequent slices (screen, classify, appraise, acquire
-  and full-text ingestion landed: tasks 004–008). The task-007 note that retained provider URL
-  fields "for slice 008" is discharged: 008 consumed them with an **updated precedence** —
-  OpenAlex `best_oa_location.pdf_url` → `primary_location.pdf_url` → `open_access.oa_url` →
-  `primary_location.landing_page_url` (contract-stage adversarial finding 4 superseded v2's
-  `primary_location`-first order); Overton `pdf_url` → `document_url`. v2's **parse caps were
-  not carried** — truncation is abolished (full text or honest failure; `too_large`/`timeout`
-  fail loudly, contract decision 6) — and v2's fragilities (fetch errors swallowed at debug
-  level; thin landing-page text reported `ok`) are structurally closed (reason-coded
-  `full_text_status`/`full_text_error`, thin-text guard). Snapshot identity resolved as a
-  **new immutable `full_text` snapshot linked at the task-source link** (ADR 0003).
 - **`implementation_context_finding` — DISCHARGED (task 021, ADR 0017).** The second
   reusable finding schema (mechanisms, barriers, implementation conditions) shipped:
   the `implementation_context_finding` table + `eb_icf_base_v1` extraction profile (own
@@ -287,15 +264,6 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   in its original exec-summary/headings form is **superseded in practice** by task 014's
   stage-2 windowed full-text screen (decision 11); revisit only if windowing proves
   insufficient for poor-metadata grey lit.
-- **LLM-based screen tool — DISCHARGED (task 014).** `OpenAIScreeningBackend` (`screen_v1`,
-  mini ×3-rep consensus; `screen_fulltext_v1` stage-2 precision confirmation) replaced the
-  stub, which survives as the zero-egress default behind the `ScreeningBackend` seam.
-  Follow-on seams live in the task-014 section below.
-- **Thin-base re-search trigger — DISCHARGED (task 015).** The trigger dissolved into the
-  depth-graded loop's stopping rule (ADR 0012 decision 5): any non-target stop below the
-  confident-relevant target records `re_searched_still_thin` (the 007 vocabulary, finally
-  fired — observed live); rapid-thin runs escalate via `should_escalate` to one bounded
-  deep continuation.
 - **Re-screening of successful results** — superseding a `relevant`/`not_relevant` decision
   is still blocked by design: `uq_ssr_scope_source_stage` (task 014's partial unique) admits
   failed-row retries and one row per stage, never a second non-failed row per
@@ -311,92 +279,8 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 
 ## Search / acquisition (task 007 seams)
 
-- **Live `SearchBackend` implementations — DISCHARGED (task 015).** `search_live.py` ships
-  hardened first-party httpx transport for both backends (ADR 0012 decision 6): explicit
-  timeouts on every request, Overton 1.2 s limiter on every path including validated
-  `next_page_url` follows, retry cap 1 then honest failure, structural error redaction to
-  status+host, both sanitizers on the production path (commas fully excluded from the
-  OpenAlex wire — the v2 note's commas-in-quotes scope was widened at the 015 review:
-  commas are the filter-clause separator, an injection surface), per-depth per-provider
-  result caps *with per-call distribution quotas*, credit-responsible `select=`, no
-  citation floor, and a zero-progress page guard on pagination. The stub remains the
-  zero-egress default; the 007 guard now names `search_live.py` as the sole sanctioned
-  HTTP-import home. **Amended 2026-08-04:** the "per-call distribution quotas" clause no
-  longer holds — `_distribute_quota` was removed. Dividing a shared per-backend total
-  across the fan-out shrank as the fan-out widened (standard 75 ÷ 15 calls = 5 results
-  per query). `result_cap_per_backend` is now a flat **per-call** target sized against
-  provider page size (rapid 50 / standard 75 / deep 100). See the open seam below.
 
-- **Search total-volume ceiling — DISCHARGED (task 028, 2026-08-04).** The ceiling landed
-  at acquisition, not at search or at screening: `acquire_sources`'s
-  `record_cap_per_backend` (task 029 owner-set: rapid 50 / standard 100 / deep 200, per
-  backend per round) trims each backend's
-  search fan-out after a rank-interleaved merge and after dedup. Acquisition is the right
-  seam because persisting a record is what commits the spend — it is embedded on the spot
-  and screened at `SCREEN_REPS` calls afterwards — and because dedup-then-trim means a
-  capped round still yields a full cap of *new* documents rather than quietly doing less
-  work in later rounds. `dropped_over_cap` makes the trim visible per backend, and
-  `test_acquire_record_cap.py` bounds total volume, replacing the `results_returned == 45`
-  assertion that per-call semantics had removed. **Still provisional:** 200 is sized from
-  purpose (the deep loop's confident-relevant goal), not measured.
-  `scripts/evals/search/` (lives on a different branch) scores search recall against
-  published-review ground truth (baseline: mean 2.4%, max 9.1%, at rapid depth under the
-  divided quota) — after this branch and that one merge, re-run it and set the caps from
-  where recall stops improving. With rounds + arms live (task 029) that re-run is the
-  acceptance test for the whole change.
-  **Update (task 051, 2026-10-09):** `record_cap_per_backend` is gone. A scope is now two
-  caps set from the measured recall curve (experiment 1, 2026-10-09): `papers_cap`
-  100 / 200 / 400 and `policy_cap` 50 / 100 / 200, applied to two ranked pools built
-  before persistence. `dropped_over_cap` is still counted per backend.
 
-- **Multi-round search wired into the runner — DISCHARGED (task 029, 2026-08-06).** The
-  round loop found unwired on 2026-08-05 (orphaned since task 023's skeleton retirement,
-  `3304df4`) is now runner-orchestrated: after `screen_abstract` completes, a gate at the
-  walk's classify pop re-opens the acquire+screen pair until the depth's `round_cap`
-  (rapid 1 / standard 2 / deep 3) or a yield collapse (`short_circuit`, < 1 new
-  confident-relevant per 50 screened from round 2). Each round is an ordinary step —
-  fresh run rows, steering boundaries, check-ins, SSE frames. The gate recomputes every
-  input from persisted state (coverage rows, the screen run's own rows via
-  `new_confident_relevant_for_run`), so a run parked mid-loop resumes at the correct
-  round. `run_deep_rounds` and `should_escalate` were **deleted** (the runner owns the
-  loop; rapid→deep escalation stays unbuilt — a fresh decision if wanted). The loop-level
-  stop condition lands on the final round's coverage row via `finalise_deep_stop`, whose
-  thin-evidence overlay now keys on `THIN_CONFIDENT_RELEVANT` (8). Pinned by
-  `tests/runtime/test_search_rounds.py`.
-  **Update — the round loop is DELETED (task 051, 2026-10-09, ADR 0038).** One pass at
-  every scope replaced it (measured: 20.3% paper recall at Broad against 15.3% for the
-  three-round Broadest, at the same pool size). The runner gate, `evaluate_deep_stop`,
-  `finalise_deep_stop`, the four arms and `test_search_rounds.py` are gone; the restore
-  point is the tag `search-round-loop-last` (recipe in ADR 0038). The reformulation
-  contingency is parked below under task 051.
-  **Accepted blemishes — the per-round *counts* are DISCHARGED (task 031, 2026-08-13).**
-  The "Where I looked" pane now sums query hits across every acquire run that wrote a
-  coverage record for the task, so `results` and `relevant` are both cumulative. The
-  P1 check-in reports the counts and queries of the single acquire run that just
-  finished, taken from that run's `component.completed` payload rather than the coverage
-  record's never-written `backends[].count`. `successful_runs["acquire"]` is
-  last-write-wins, which is the *wanted* behaviour at P1 — but it is written only on the
-  success path, so P1 now gates on the boundary's own run id and shows honest absence
-  when the round it fired for failed (review stack, 2026-08-13).
-  **Still open:**
-  - `coverage_out` still reads only the **newest** coverage row for the pane's
-    `sentence`, `base` (stop condition, adequacy, verdict origin) and the `backends` name
-    list — only `backends_detail` went cumulative. A backend used in an earlier round but
-    absent from the latest row contributes no card, so its hits stay invisible.
-  - `backends_detail.relevant` remains **task-wide** per backend while `results` is now
-    one question's rounds (task 027 §C.1; `_acquire_run_ids` was scoped to the evidence
-    scope by the 031 review stack). This is deliberate — screening re-screens the whole
-    task pool per question, so task-wide relevance is the design
-    (`docs/knowledge/coverage-base-project-pool-wide.md`) — and the contract's invariant 3
-    requires only that the copy never imply one number contains the other, which it does
-    not. Revisit if the multi-question IA makes per-question relevance meaningful.
-  - The loop-level stop condition is written after the last screen boundary, so the
-    `re_searched_still_thin` P1 check-in **trigger** can only see it on a later boundary,
-    if at all — task 031 changed the P1 display bundle, not the trigger. **Discharged by
-    task 051:** the round loop and `re_searched_still_thin` are gone (ADR 0038).
-  - The frontend timeline still shows repeated "Searching sources"/"Screening" rows with
-    no round labels. **Discharged by task 051:** one acquire run and one screen run per
-    scope, so there are no rounds to label.
 
 - **Publisher-country charts truncate, so the drawn bars can sum below the population**
   (task 031, 2026-08-13). `landscape_out` guarantees the *payload* adds up (known
@@ -415,60 +299,8 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   dimension with no migration. Not started; needs a product decision on whether the
   question ("where are the authors based?") is one users want.
 
-- **`TARGET_CONFIDENT_RELEVANT` / `search.target` removed — DISCHARGED (task 029,
-  2026-08-06).** The round cap is the budget; there is no confident-relevant stop target.
-  `TARGET_CONFIDENT_RELEVANT`, `SEARCH_TARGET_MIN/MAX`, the parser's `target` key, the
-  agent-prompt line advertising it (stale 5–60 range) and the
-  `target_confident_relevant` payload echo are all deleted. Free text like "aim for 30
-  papers" now gets an honest parser refusal instead of compiling to a silent no-op (the
-  plan layer always discarded the value; nothing read the echo). `target_reached` stays
-  in the coverage CHECK constraint as a historical value — no migration. If a
-  "stop early at N" user feature is ever wanted, rebuild it at the runner's round gate,
-  not in the parser.
 
-- **Wall clock removed entirely — recorded (tasks 028–029).** Task 028 removed the
-  standard/deep clocks; task 029 removed rapid's 30 s clock and the whole `stop_all`
-  mechanism with it — no planned call is ever skipped at any depth, and acquire's stop
-  vocabulary is `completed`/`error` (`wall_clock_exceeded` stays in the CHECK constraint
-  as a historical value). Volume was bounded by `record_cap_per_backend` (since task 051: by the scope's `papers_cap` and `policy_cap` and the per-backend call budget)
-  (owner-set 2026-08-06: rapid 50 / standard 100 / deep 200, per backend per round);
-  nothing bounds latency anywhere — rapid's worst case is its ~21 sequential provider
-  calls plus retries. If a latency bound is ever needed it belongs at the runner as a
-  step timeout, not inside the fan-out where it truncates an ordered list of queries.
 
-- **`http_budget` counts logical calls, not HTTP requests — DISCHARGED (task 038, V10):**
-  renamed `call_budget` (the dict, the field, the reader and the comment), so the name says
-  what it counts. `_TransportMixin.http_calls` is still incremented and never read — a
-  note, not a seam. The original entry:
-  `http_calls_by_backend` increments once per `execute_call`, but backends paginate
-  internally to satisfy `max_results` (Overton page 50, OpenAlex 200). Holding per-call
-  targets near one page keeps the two roughly equal, which is why the current values are
-  sized that way — but the budget does not enforce that relationship, and
-  `_TransportMixin.http_calls` (the real per-request counter) is incremented and never
-  read. Either consult it, or rename the budget to say what it counts.
-- **Arm-B agentic search loop — DISCHARGED (task 015, ADR 0012).** The R&D direction landed
-  as the deep depth: query reformulation from judged exemplars (via the production screen —
-  the loop's judge IS `screen_v1`, no shadow relevance judgment), citation snowballing
-  (forward + backward through the decision-16 protocol verbs + `lookup_dois`),
-  LLM-suggested-paper grounding (ID/DOI-preferred, drop-and-count when ungrounded), honest
-  stop vocabulary (`target_reached` / `short_circuit` / `budget_exhausted` + the
-  `re_searched_still_thin` overlay). Deliberately NOT carried: Thompson-sampling adaptive
-  judging (fixed allocation won — a ≤3-round loop leaves a 3-arm bandit in permanent
-  cold-start; TS survives as an eval-gated seam that must beat round-robin, task-015
-  section) and blend ranking (screen / retrieval-rerank seams own relevance weighting).
-  v2's central lesson is structurally honoured: no single LLM query is load-bearing
-  (validated multi-query fan-out, all-zero → verbatim fallback).
-- **User-selectable backend scope — DISCHARGED (task 015).** `search_backend_scope`
-  (`academic_only` / `grey_lit_only` / `both`) compiles on Plan AND Config (unknown values
-  rejected on both), driving the 007 `search_backends` parameter; the harness resolves
-  defaults from compiled config.
-- **Per-backend query mode — DISCHARGED as built, exploration seams remain (task 015).**
-  Shipped per-idiom: Overton semantic (`squery` + `min_similarity=0.3` on every call) with
-  verbatim intent + ≤2 NL paraphrases; OpenAlex keyword-lexical multi-query fan-out with
-  SR/RCT variants. The richer filters shipped as the fail-closed `scope_filters` grammar
-  over wire-verified vocabularies (revs 3.3–3.4 pinning). Still open, now in the task-015
-  section: whether Overton's semantic mode is hybrid under the hood (unverified), and the
-  filter-vocabulary growth seams.
 - **Injection screening of acquired text** — posture recorded at task 007 (contract decision 9):
   acquired titles/abstracts/snippets are third-party text entering the corpus ("ingestion is not
   a tool"); v3.0's deterministic stubs never interpret them (security-review-confirmed), but the
@@ -477,40 +309,12 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   visibly (`abstract_source="llm_description"`; theme retained under `provider_fields`) and
   never mixed into document-own-words fields — when grounding lands, claims resting on
   `llm_description` text are flagged distinctly (flag-not-drop).
-- **Downstream consumers of the acquired envelope — largely DISCHARGED (tasks 014–015).**
-  Screen reads `abstract_source` and (015) `title_source`; classify consumes property
-  priors (`record_type`, source typing, `indexed_in`, `title_source`) plus the tag layer
-  as its uniform label-prior surface (`{tag, tag_type, asserted_by}` visible — ADR 0012
-  decision 8; OpenAlex keywords deliberately exited the prompt). `is_retracted`
-  retained-but-unread — **DISCHARGED (task 019):** retracted docs exclude at
-  stage-1 screening as the distinct `excluded_retracted` status (owner decision
-  2; visible, attributed, never conflated with relevance). Still open: the
-  appraisal-second-pass visible-flag reading, and non-English handling beyond
-  English-first title selection.
 
 ## Live search / depth-graded loop (task 015 seams)
 
-- **Country filter allowlists + deterministic country-group expansion —
-  DISCHARGED (task 019).** Fail-closed ISO-3166 + probed Overton
-  display-name allowlists (186 names, probe 2026-07-12); Tier-1 pinned
-  provenance-stamped group tables (OECD members/G7/G20/EU27/EEA + M49
-  continentals Europe/North America/Oceania, UK∈Europe); Tier-2
-  planner-proposed explicit lists persisted as `{label, countries,
-  authorship}`; Overton multi-country = deterministic post-filter + deeper
-  pagination with exclusion counts on coverage (owner decision 5); planner_v3
-  capability line. Note what did NOT ship: "developing"-specific support
-  (`is_global_south` DROPPED, owner de-scope) — see the filter-vocabulary
-  growth entry below.
 
 Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
-- **Retrieval-boost grammar v2 — SUBSUMED AND RETIRED (022 agenda A, owner, 2026-07-14).**
-  The multiplier half shipped as 022's screen-confidence directive boost (clamped
-  functional multiplier + product clamp + suppression, decision 7/11); the tag-scoping
-  half is delivered better by 022's call-level `search_chunks` scope filters (item 13).
-  ONE narrow seam survives: **directive-level tag-boost vocabulary on the
-  `context["synthesis"]` grammar** — trigger = observed steer-point demand for it (no
-  author exists today; the recorded steer examples compile against the existing grammar).
 - **Select-as-tool / shared purpose-fit-ranking tool** — the rev-3 spec-level seam:
   select's ranking machinery exposed as a tool other components (and the deep loop) could
   call, instead of each growing its own fitness heuristics.
@@ -532,10 +336,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   Also parked: OpenAlex `authorships.institutions.is_global_south:true`
   exists as a one-boolean native option (probed 2026-07-12, 40.8M works) if
   "developing"-shaped groups are ever wanted.
-- **Caching (cache-before-throttle) — DISCHARGED (task 019).** In-process
-  TTL+LRU response cache keyed by full non-credential request params, checked
-  before the rate limiter, 2xx-only, env-tunable
-  (`POLICY_ATLAS_SEARCH_CACHE_TTL_S`).
 - **Citation-floor knob** — no citation floor is the recall-first default (decision 12,
   user-approved); a steerable floor, if ever wanted, is a directive knob — never a silent
   transport filter (the V2 lesson).
@@ -573,37 +373,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   the screen's relevance-judge quality before trusting loop-steered "adequate" — ADR 0012
   names this the loop's single biggest un-eval'd dependency) · suggest-arm live yield
   (0 proposals in the one live deep run; machinery scripted-test-covered).
-- **Review-stack cleanup candidates — DISCHARGED (task 019, items 10a/10c/10d).**
-  `acquire_sources`' legacy no-executed-calls branch collapsed into the
-  executed-calls path; the two wire-validator families in `search_loop.py`
-  unified; the duplicated `oa_record`/scripted-generation test doubles hoisted
-  into `tests/helpers.py`.
 
 ## Full-text ingestion (task 008 seams)
 
-- **Live `DocumentFetcher` — DISCHARGED (task 016).** Every pre-registered requirement from
-  this entry shipped in `fetch_live.py` + the ingest pipeline, with one named exception kept
-  below: explicit timeouts · manual per-hop-validated redirects with the full SSRF guard set
-  (scheme allowlist, userinfo refusal, every A/AAAA answer classified with IPv4-mapped forms
-  unwrapped, pinned-IP connect at the httpcore NetworkBackend seam) · per-host politeness +
-  global bounded concurrency · retry/backoff (015 retry set, cap 1) · magic-byte content-type
-  sniffing (%PDF wins over any header) · charset handling (bytes pass to trafilatura
-  undecoded; UTF-8-replace only on the plain-text path) · landing-page PDF-link discovery +
-  DOI-URL fallback (the one constructed URL, validated + encoded + fully guarded) · the
-  access-failure ladder (401 → paywall; 403 → paywall only with corroboration, else
-  `blocked_by_host`; 200+markers → paywall) with the OA cross-check · per-link exception
-  isolation (an escaped raise becomes reason-coded `fetch_error`, never a component failure) ·
-  streaming size caps + reservation-based in-flight byte accounting (deadlock-impossible
-  backpressure) · bounded-parallel fetch feeding the parse pool. `make verify` stays
-  deterministic and egress-free (fixture default unchanged; the import guard sanctions
-  `fetch_live.py` alongside `search_live.py` and pins that `ingest_full_text.py` never
-  imports it). The `pip-audit` CI pre-registration also **discharged** (016 rev 2.2:
-  `make audit` + an independent CI job, ignore-list policy documented in the Makefile).
-  **Fixture-corpus relocation discharged** (016 decision 12, per the 2026-07-05 trigger):
-  corpus moved to `tests/data/fulltext` (out of the wheel, wheel-check test-pinned);
-  `FixtureFetcher` resolves via explicit root / `POLICY_ATLAS_FIXTURE_CORPUS` / repo-relative
-  default with a loud missing-corpus error; the ≤30 MB budget guard moved with it; a
-  live-flagged run never silently falls back to fixture replay (test-pinned).
 - **OS-level CI egress guard** (`unshare -n`-style) — the one 016 exception, **explicitly
   deferred with rationale** (016 rev 2.4, adversarial finding 8): the pre-registered
   test-level control exists as-built (the socket-deny guard covers parent + workers; the
@@ -635,28 +407,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   `search_live` duplicate the retryable-status set and retry-once/backoff shape; their
   control flows differ enough (status-outcome objects vs exception-only) that unification
   waits for a third live client to prove the seam.
-- **Concurrent-run write guard** — **DISCHARGED (task 025)**: the API enforces at most one
-  active run per task in Postgres at dispatch (`SELECT … FOR UPDATE` on the task row,
-  `policy_atlas.api.locks.task_lock`); the same primitive serialises check-in answers and
-  continuation claims. *Review amendment (2026-07-21):* the one residual same-task race —
-  the walk executor and a task-locked API mutation (rename) are two unserialized writer
-  families sharing the `max+1` event-sequence allocator — was found by the 025 review stack
-  and closed with a SAVEPOINT-retry in `events.append` (collision → re-read, never a failed
-  component commit; misordering remains impossible). Original note: eligibility selection takes no row locks and final writes
-  are unconditional, so two simultaneous ingest runs over **one scope** could interleave
-  (mirrors 007's concurrent-run dedup note; Codex adversarial finding, task 008). Scoped
-  precisely (user question, 2026-07-05): the load-bearing invariant is **at most one active
-  run per task**, not a single-process deployment. Everything the pipeline components
-  mutate is task-scoped (eligibility filters on `task_id`; updates hit
-  `task_source_snapshot`; result-table unique constraints are per-scope; the event-log
-  sequence is `(task_id, sequence)`), so a **multi-user web app with users on different
-  tasks is already safe** — the spec's "single active writer" is a per-task property.
-  The hazard is two writers on the *same* task (double-submit, retry racing the original,
-  two queue workers claiming one run). **Pre-registered requirement for the web-app /
-  durable-execution slice:** enforce one-active-run-per-task at run dispatch (Postgres
-  advisory lock on task id, or a partial unique index allowing one `running` run per
-  task) — or add row-level guards (`SELECT … FOR UPDATE` / status-guarded `UPDATE … WHERE`)
-  in the components.
 - **ML-layout parse escalation (docling)** — the quality tier for documents where pymupdf4llm's
   font-size heading heuristic fails. Observed at 008's /verify: four heading-light academic
   PDFs (Nature Comms ×2, Frontiers ASHP, PLOS) collapse into 2–3 very large chunks — content
@@ -699,45 +449,14 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **OCR for `no_text_layer` documents** — scanned-only PDFs are reason-coded and kept, never
   parsed; an OCR tier (with its own honesty label) is the follow-on. Text-layer detection is
   Unicode-aware (`\w`), so non-Latin scripts don't false-positive into this bucket.
-- **Vectorisation at the first vector reader — DISCHARGED ahead of the reader (task 009,
-  approved exception).** The eager-and-uniform discipline (EB components §4) now runs: every
-  chunk on all three ingestion paths gets unit-grain vectors (`embedding_unit_policy_v1`,
-  ~2000-char sentence-boundary units, ~200-char overlap, one vector per unit, offsets into
-  the untouched canonical chunk) via the `EmbeddingBackend` seam, live
-  `text-embedding-3-small` behind the runtime-egress gate. The *reader* (retrieve/pgvector)
-  is still the deferred piece — see the 009 section below. Token-budgeted re-chunking of
-  oversized heading-light sections remains at the embed/eval seam.
 - **Multi-PDF Overton assembly** — `grouped_pdf_ids_in_result` is retained; v3.0 ingests the
   primary `pdf_url` only.
 - **Injection-screening posture extended to fetched full text** — same posture as acquired
   abstracts (007 entry above): full-text chunks are third-party content-of-record; nothing in
   v3.0 interprets them; enforcement lands with the LLM seams that read them.
-- **Cross-task full-text snapshot reuse** — same shape as the acquired-envelope dedup entry
-  (Data model section): `source_snapshot` is task-free, so reuse is additive. Note: today
-  concurrent ingest of one document in two tasks merely duplicates snapshots (wasteful, not
-  corrupting); the reuse seam turns that into the system's first genuinely **cross**-task
-  write race (two tasks deduping onto one snapshot) — that slice inherits the concurrency
-  design, alongside the per-task run guard above.
 
 ## Characterise / embeddings / telemetry (task 009 seams)
 
-- **Langfuse trace grouping — first half DISCHARGED (task 019).**
-  `contextvars.copy_context` propagation via `tracing.submit_with_context` on
-  every traced/LLM executor fan-out closes the per-doc/window DETACHED-root-trace
-  wart (extract windows, screening fan-outs now nest under the component root
-  instead of minting separate traces). Second half stays open: planner turns
-  are deliberately separate traces (B2 record), session-correlated — consider
-  one conversation-root trace per agent process with turn spans, or
-  accept the session view as the grouping — **second half DISCHARGED (task 038, V9):**
-  the session view is the grouping, and one Task is one session: planning turns, run
-  start, steering continuation and chat turns all pass `session_id = task id`, with the
-  conversation id kept as trace metadata `conversation_id`. Bounded telemetry rider; the
-  capability-run entity (§ Select) — **DISCHARGED task 024** — is now the
-  structural home; the trace-grouping work itself (turn-span consolidation)
-  remains open — **settled 2026-09-18 (ADR 0037 decision 6):** one trace per
-  planning turn, chat turn or component run with the session as the grouping is
-  exactly the shape Langfuse's own guidance asks for, so no consolidation is
-  planned. The synthesise run span now also covers the post-commit summary pass.
 
 - **EB artefact composition — LANDED with revised ownership (task 013, ADRs 0009 + 0010).**
   Synthesise (not the agent) composes the one EB artefact at the run terminus —
@@ -746,30 +465,10 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   conventions beyond proposal-order binding; citation renumbering-by-first-appearance —
   the V2-autopsy composition-seam note) and supersede + lock-on-advance versioning
   (blocks ship at `version=1`).
-- **`retrieve` / pgvector / hybrid retrieval — first increment LANDED (task 013).**
-  The 009 vectors' first reader is synthesise's scoped `search_chunks` tool: in-memory
-  hybrid (cosine + lexical, RRF-fused) over JSONB vectors, guarded by a fail-closed
-  `RETRIEVAL_UNIT_CAP` (20k units — beyond it the component fails structurally naming
-  the cap, never a degraded sample), behind a swappable helper seam. Still deferred:
-  **corpus-scale retrieval** (beyond the cap, or over unscreened content) and the full
-  index-backed `retrieve` tool — pgvector-vs-alternatives, retrieval profiles,
-  storage migration, and the chunk-volume-bias controls (per-doc caps / MMR /
-  doc-grain grouping, 008 entry). Also at this seam: **judge-envelope widening +
-  re-gather repair** (the repair alternative that re-gathers targeted evidence needs
-  `retrieve`; v1 repair is reword-down over already-gathered evidence only).
-  **`_load_findings` batch loading — DISCHARGED (task 020).** The per-snapshot N+1
-  basis-query loop (013 review stack) is now one batched `IN (...)` query; the
-  surrounding corpus-scale retrieval seams above remain open.
 - **Contextual retrieval, late chunking, exact-token budgeting, semantic re-chunking** —
   retrieval-eval seams on the embedding-unit layer (contract decision 2, rev-8 research).
   The unit policy is versioned (`embedding_unit_policy_v1`) so any of these lands as a new
   co-existing policy, not a rewrite.
-- **Embed-pass live robustness — DISCHARGED (task 019)** for the two
-  pre-registered items: explicit 429 backoff outside the SDK's own retries,
-  and recursive split-on-failure isolation (one poisoned unit now fails only
-  its own chunk, not every chunk sharing its API batch). Remaining open
-  residual: concurrent multi-batch behaviour at n ≫ batch (review adjudication,
-  2026-07-06).
 - **Very-large-corpus grouping** — **NARROWED (task 022)**: the two-stage engine closed
   the one-call exhaustive-partition cliff for `group` (184 distinct values live-proven
   healthy; duplicate-id failure mode gone — facet-partition-value-list-scale-limit.md);
@@ -802,15 +501,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   layer** — the latter additionally aggravates the tag-fragmentation trigger recorded at
   the tag-consolidation entry (more open-vocabulary tag writers before consolidation
   exists); both enter via the eval seam.
-- **`group`-component inheritance — discharged (task 012)** — v2's theming lessons
-  transferred when `group` was built; each recorded defect closed structurally: dead
-  critique stage → no critique stage built (one schema-constrained partition + one
-  validated repair is the entire call surface); silent concept drops → code-enforced
-  exhaustiveness (counted `ungrouped`/`no_value` residuals, sum identities
-  test-enforced); "General Theme" collapse → exact forbidden-generic-label validation
-  rejects the response (prompt negative rule *and* code check); no scale guard →
-  fail-closed `FACET_VALUE_CAP`; unseeded runs → deterministic sorted value
-  ordering/ids (identical inputs yield identical prompts).
 - **Tag namespace consolidation** — pruning/merging accreted `source_tag` assertions
   (re-runs accrete by design; provenance classes never merge) — an agent-seam
   follow-on once real tag spaces emerge (contract decisions 5, 10). A third search backend
@@ -835,15 +525,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   component), so its `embed:batchN` observations mint their own root traces — resolves
   with the upload audit-event seam below, which gives uploads their own observability
   surface.
-- **Steering modes / landscape→synthesis steer-point pause — DISCHARGED (task 017 shipped
-  the modes; task 024, 2026-07-16 shipped this exact pause).** The payload this entry
-  flagged (the structured landscape summary in `component.completed`) was always going
-  to ship (contract decision 8); the pause built on it is now P4 in 024's steer-point
-  lattice ("the synthesis shape", post-group/pre-synthesise, which subsumes the
-  post-characterise/landscape crossing when characterise is composed) — see the
-  "Re-grouping / steering UX" entry (§ Group). The deepening-selection steer-point's
-  read surface followed in task 010, then the pause itself in 017, then full
-  enrichment in 024 (see the Select section).
 - **Dual-view coverage** — corpus-view vs evidence-view distributions need the
   source/evidence policy object (contract decision 9); v3.0 ships single-view with the
   explicit `base` ladder and **no absence claims** (test-asserted).
@@ -915,18 +596,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Select (task 010 seams)
 
-- **Deepening-selection steer-point pause — DISCHARGED (task 017; enriched task 024,
-  2026-07-16).** The mode-governed pause itself shipped in 017 as the *only* live
-  steer point in the system (the single-steer-point limitation this entry
-  originally described). 024's P3 ("deepening selection") enriches it in full:
-  the trigger set gains S0; the payload gains a **selection preview** (top
-  selected docs with strata/scores/reasons + notable exclusions); options gain
-  extraction profiles (ICF), re-extract refresh (D3), strata scoping (D6) and
-  doc exclusion (D7) alongside the five original options; combined free-text
-  asks compile through the router into one confirmed multi-lever delta. Original
-  read surface (bidirectional rationale + trigger flags — `large_stratum_excluded`,
-  `priority_stratum_excluded`, `must_include_conflict`, `thin_base`, `thin_full_text`,
-  as recorded at task 010) is unchanged and still the trigger substrate.
 - **Corpus-conditioned selection budget (owner, 2026-07-11, 018 review conversation)** —
   `ANALYSIS_DEPTH_TABLE`'s `selection_budget: 25` at deep is a plan-pinned cost CEILING
   (allocation fills up to it, capped by eligible capacity), not a quality judgment.
@@ -956,19 +625,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Cross-encoder relevance models (Cohere-class, available on Bedrock)** — they score
   query-relevance, not purpose-fit: recorded at the **`retrieve` seam** (retrieval's
   rerank upgrade), deliberately not select's.
-- **Capability-run entity — DISCHARGED (task 024, decision 2, 2026-07-16).** The
-  `capability_run` table shipped: `capability_run_id` · `project_id` ·
-  `evidence_scope_id` · `capability` · `plan_id`+`plan_version` at approval ·
-  `status` (running/succeeded/degraded/failed/aborted) · `session_id` (nullable,
-  the 025 anchor) · `started_at`/`ended_at`, plus nullable `runs.capability_run_id`
-  (composite FK). The runner opens/threads/closes the walk row across every
-  component execution in a run — the "one run = one component execution" gap
-  this entry described is closed. Deliberately not modelled: composition fields,
-  artefact back-refs (derivable), turn tables (still 025). The recorded Langfuse
-  detached-trace warts (009's executor threads; 010's `rank:batch` generation
-  spans) are unaffected by this entity alone — those need actual trace-grouping
-  work (§ Characterise, "Langfuse trace grouping") — both since closed by
-  `submit_with_context` (task 019); the rerank spans read `select:rerank` from 2026-09-18.
 - **Policy soft-prior tilt** — integration shape recorded, not deferred-blind: when the
   source/evidence policy object lands, it **compiles into directive boosts**
   (provenance-stamped as policy-sourced), becoming one more directive author beside the
@@ -979,25 +635,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   cluster-approximated and properly post-extraction.
 - **Second `select` strategies** — Transferability dependency-scoping et al. (other
   capabilities' problem); the strategy registry validates exactly the two built-ins.
-- **Suite-wide socket deny — DISCHARGED (task 019).** `pytest-socket` 0.8.0
-  deny-by-default with a loopback allowlist in `pyproject.toml` `addopts`;
-  per-test deny patterns retired. The 016 worker-process guard is deliberately
-  kept alongside it — `pytest-socket` is in-process only.
 
 ## Extract / findings layer (task 011 seams)
 
-- **Modelled vs observed effect basis at the finding grain — DISCHARGED (task 020,
-  ADR 0016).** `effect_basis` enum (`observed` | `modelled`, null if indeterminate)
-  landed on the IOF wire + row + `iof_rules_v2` coverage, its own dimension (never
-  folded into `causality_by_design` — causal identification and evidence basis are
-  different axes). Lands in the writer envelope (terse-adjacent) and is reachable at
-  the annotation layer via resolve-via-row (not embedded — owner call, purely additive
-  later). `extract_iof_v6` carries extraction guidance; `extract_finding_vetter_v3`
-  gains one guidance line so modelled/projected results aren't mis-flagged as
-  aspirations (payload itself unchanged — self-label bias risk). No backfill; v1 rows
-  stay null (`field_coverage` key-absence reads as "not recorded under v1", distinct
-  from a genuine v2 null). One candidate deliberately NOT riding, entered as its own
-  seam below.
 - **`effect_basis` as a judge-envelope candidate (task 020 sweep).** The grounding
   judge seeing the structured basis signal — prose asserting an effect while citing a
   modelled projection is a faithfulness question the judge cannot see today. Any
@@ -1018,10 +658,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   `DIRECTIVE_STRING_MAX = 200` precedent in `schema.py`) covers the whole class.
   Practical exposure is limited today (schema-constrained structured output + the
   document's own influence bound size); a `iof_rules` version bump when picked up.
-- **Finding-vetter per-doc calls run sequentially — DISCHARGED (task 019).**
-  Parallelized on the extract executor width with context propagation; workers
-  judge, the parent applies in input order; usage is accumulated in the
-  submitting thread.
 
 - **The extraction service + evidence dataset snapshots** — profile resolution against
   existing records, per-source task objects, capability commits declaring extraction
@@ -1087,12 +723,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Hybrid-indexing of `intervention`/`outcome`** — committed for v3.0; the mechanism is
   the `retrieve` adapter's second index target and lands with `retrieve`. Columns are
   filterable now.
-- **Mixed/unclear findings are first-class — requirement carried forward; test-pinned
-  (task 020).** V2 extracted `mixed`/`unclear` effect directions and then aggregation
-  silently zeroed them; flag-not-drop must survive the whole deep chain: `group` and
-  `synthesise` must carry these findings, never discard them at aggregation. Tests now
-  pin this behaviour end-to-end across the chain — already-correct, no drop existed to
-  fix.
 - **Intra-run shared-basis-snapshot memo** — two selected docs whose basis resolves to the
   *same* content-keyed snapshot (identical full text dedup'd across docs) would both
   fresh-extract and collide on the memo key (IntegrityError → honest loud failure).
@@ -1118,35 +748,12 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   budget"). Bounded today by `select`'s budget (the designed cost control) and the
   fixture corpus. If arbitrary corpora land, add an absolute window ceiling as a
   fingerprint component with a per-doc `window_cap_exceeded` failure reason.
-- **Prompt envelope fencing — DISCHARGED (task 020, ADR 0016 decision 6).** Title,
-  abstract AND `primary_evidence_type` now enter `extract_iof_v6` as one id-keyed JSON
-  data object (the same treatment the segment text already got), closing the
-  structural spoof-around-template seam identified here. Evidence type was
-  closed-vocabulary already but is fenced too, for a uniform envelope shape.
 - **`thin_extraction` roll-up flag** — named in the contract "where computed"; no
   definition was pinned and v1 deliberately does not compute it. Define (e.g. findings per
   extracted full-text doc below a floor) when a consumer needs it.
 
 ## Group / facet-level theming (task 012 seams)
 
-- **All-or-nothing partition validation — FIXED in the 013 PR** (root-caused
-  and fixed 2026-07-08, 013 step-7 trace replay). One group label over
-  `LABEL_MAX=80` made `validate_partition` (`facet_values.py`) reject the
-  ENTIRE partition; both live intervention-facet runs lost 16 coherent,
-  id-clean groups to a single 89–92-char label, twice each, landing 0 groups
-  (outcome runs survived at 78 chars — luck). Fixed as: label/description
-  rule violations reject at **group grain** (the violating group's members
-  join `missing_ids` for the repair); unknown/double-assigned ids stay
-  whole-response (id integrity); rejection reasons persist into
-  `grouping_provenance.rejection_reasons` + a `groups_rejected` flag
-  (previously the reason existed only in the Langfuse trace). Regression
-  tests replay the live shape (`test_validate_partition_one_long_label_keeps_other_groups`,
-  `test_one_bad_label_never_zeroes_the_run`).
-- **`query-findings` tool — DISCHARGED in full (task 013).** The scoped read tool landed
-  with its deliberative consumer exactly as recorded: agent-invoked in synthesise's
-  section loop (`make_findings_reader` behind the closed tool set), deterministic and
-  task/run-scoped. Group's deterministic read stands unchanged; the 012 deviation
-  from components §8's tool table is closed.
 - **Facet-grouping quality evals** — extends the 009 grouping-quality eval seam:
   partition coherence/usefulness on real reference sets, negative-rule adherence beyond
   the shipped unit tests, and **`FACET_VALUE_CAP` calibration** (150 is plan-pinned; the
@@ -1181,20 +788,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   (SectionSpec, 018 B) is the extension point — roles extend without schema change.
   Eval slice: judge composition quality across the 7 intent shapes with this
   boundary in mind.
-- **Cross-schema reference-mediated linkage — DISCHARGED (task 021, item 12):** the
-  membership bridge landed — `group`'s loader reads both finding tables via the shared
-  reference columns, `FindingFacetView` carries a `kind` tag with nullable
-  `effect_direction`, `direction_spread` stays IOF-members-only, and group payloads
-  carry per-kind member counts. The design property 012 shipped is now machinery.
-  What remains deferred rides the EB-internals ICF entry (ICF facets, UNION view —
-  Slice C).
-- **Re-grouping / steering UX — DISCHARGED (task 024, 2026-07-16).** A different facet
-  is still simply a new run with a different directive (shipped semantics,
-  unchanged). The mode-governed pause around grouping is now P4 ("the synthesis
-  shape", post-group/pre-synthesise): triggers from grouping per-facet flags;
-  options include only-these-themes / section edits, evidence-emphasis boosts,
-  re-group coarser/finer (D8 `grouping.granularity`), re-group with guidance
-  (B3 `grouping.guidance`), or as-proposed — routed through `propose_synthesis_plan`.
 - **Facet-theme promotion** (012 contract rev 1.2) — canonical/queryable facet groupings
   for downstream capability agents. The data-model's staged ladder: run-local (shipped —
   rung 1) → task-scoped persistent → graph datastore, gated on an
@@ -1202,19 +795,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   asserts cross-source identity, often question-relative — never trusted canonically
   before that bar exists). Options Assessment reads run-referenced groupings by
   `grouping_run_id` until then.
-- **Shared traced-call helper across OpenAI backends — DISCHARGED (task 013).** The
-  recorded trigger fired: `tracing.traced_call` factors the shape and all five OpenAI
-  backends (`extraction_backend.py`, `ranking.py`, `facet_grouping.py`,
-  `synthesis_backend.py`, `grounding_judge.py`) ride it, heterogeneous call-sites
-  preserved (ranking's in-span trace score via the `after` hook).
-- **Harness failure-event append dies inside an aborted transaction — DISCHARGED
-  (task 017).** The EB capability-runner's failure path rolls back the component
-  transaction first and appends `component.failed`/`run.failed` idempotently on a
-  fresh transaction against the pre-committed run row (`runner.py::
-  _record_failure_backstop`; contract rev 2.5 adversarial finding 7). Honestly
-  scoped: the fix lives at the runner layer (the product path); a component driven
-  directly through `run_harness` outside the runner (the zero-egress skeleton smoke)
-  retains the old behaviour — acceptable, the runner is the product path.
 
 ## Synthesise (task 013 seams)
 
@@ -1224,14 +804,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   investigation measured gather turns ≈ **43% of writer input tokens for ~4.7k output**,
   est. 20–30% run-cost saving. Deliberately post-eval: it is semi-neutral (a weaker
   gatherer can fetch worse evidence) and evals are its regression net.
-- **Old `group_facet_v1` partition machinery retirement — DISCHARGED (022 review
-  stack, simplification pass)** — deleted: the one-call partition prompt, backends
-  and their test file (`facet_grouping.py` 656→~80 lines; `test_facet_grouping.py`
-  removed). The module keeps only the live-imported constants (`FACET_VALUE_CAP`,
-  label bounds, `FORBIDDEN_GROUP_LABELS`) and the value/partition wire TypedDicts.
-- **Group assignment fan-out concurrency (022 build note)** — group's engine runs
-  assignment batches serially (`max_concurrent_batches=1`; characterise uses 4).
-  Acceptable at ≤5 batches/facet live; revisit if wall-time observations say otherwise.
 - **Unspanned-lane full decoupling (018 review stack, security lane MEDIUM)** — the
   unspanned-assertion judge scan rides the grounding-judge call, so a block whose final
   prose no judge call scanned (no judged-type claims; or a splice rebuilt the prose and
@@ -1247,21 +819,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   the three named counters, supersede-not-concatenate). **Eval re-baseline note:**
   `unspanned_assertions` counts before/after 022's item-17 fixes are NOT comparable —
   the eval slice must re-baseline that metric.
-- **Pre-synthesise steer point → `context["synthesis"]` directive (owner-confirmed seam,
-  2026-07-11, 018 review conversation)** — a check-in after grouping/characterise and
-  before synthesise (or at section-proposal time): show the proposed sections and
-  discovered themes/facet groups; the user prunes/boosts ("only these themes", "prefer
-  strongest evidence types"); the response compiles into the EXISTING fail-closed
-  `context["synthesis"]` directive (sections + `group_ids` + `retrieval_boosts`) — the
-  compile target below that nothing authors yet. Parameter authoring on built machinery,
-  zero re-plumbing; pairs with the `deepening_selection` steer point the same way select
-  pairs with extract. **BUILT (task 022, item 14)** as the side-effect-free surface pair:
-  `propose_synthesis_plan` (no artefact minted, no rows written) + the deterministic
-  fail-closed `compile_synthesis_directive` — an external caller collects the user's
-  response out-of-band and submits the compiled directive on a later invocation.
-  Remaining seam **mode-governed pause UX — DISCHARGED (task 024, 2026-07-16)**: this
-  is P4 in the 024 steer-point lattice, live in-run (Moderate always pauses here);
-  see the "Re-grouping / steering UX" entry above.
 - **Selection prior at standard depth — DISCHARGED (task 019, owner
   amendment).** Select now runs at standard (plan-pinned budget 15); synthesise
   references it via `deepest_successful_reference`; prior + origin accounting
@@ -1460,15 +1017,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Structured inclusion-criteria screening directive** (rev 1.2) — a plan-compile seam
   mirroring select's directive pattern: explicit inclusion/exclusion criteria compiled into
   the screening directive instead of free-text intent-as-data (the v3.0 surface).
-- **Screen-confidence retrieval boost** (user, 2026-07-08; contract rev 1.8) — in
-  no-selection runs `search_chunks` has no doc-level prior; `screen_decision_confidence`
-  (meaningful since 014) is the natural directive-expressible boost. **Grammar pre-decided:
-  clamped functional multiplier** — linear `lo + conf × (hi − lo)`, parameters bounded,
-  product clamped [0.1, 10]; banding rejected (threshold cliffs); steerable-never-baked →
-  directive column, never a standing prior; double-count guard where a selection reference
-  already prices confidence in; stage-provenance aware (never mix stage-1/stage-2
-  confidences in one multiplier without the `screen_stage` column). A **013-surface change —
-  lands via its own gate**, not as screen work.
 - **Concurrent-run hardening** — the stage-row insert's NOT-EXISTS + partial-unique-index
   pattern (contract M8) relies on v3.0's single-process/serial posture; concurrent screen
   runs of one scope could race it. Recorded, not hardened.
@@ -1495,18 +1043,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Classify-confidence threshold-gating** (rev 1.5, V2 `strength.py` precedent) —
   confidence is event-payload-only today; a gate that acts on it arrives with its first
   consumer.
-- **Stage-2 windowing scale efficiency — DISCHARGED (task 016, decision 11: the
-  pre-registered trigger fired).** `_load_stage2_docs` now hydrates only the chunk prefix the
-  first window can read (per-snapshot streamed query, stop at the budget-crossing chunk);
-  peak memory is bounded by window budgets + split-boundary slack, never corpus full-text
-  size. Behaviour-preserving, test-pinned (byte-identical first-window payload + the
-  prefix-hydration proof).
 
 ## Agent (task 017 seams)
 
-- **`_REGISTRY_COMPONENT_BY_STEP` simplification candidate — DISCHARGED
-  (task 019).** Collapsed to the `registry_component_for()` one-liner; the
-  startup parity assert is kept.
 
 - **The LLM EB-expert capability agent** — the JIT directive-authoring expert
   sub-agent (system-prompted as an evidence-review expert; reads upstream
@@ -1554,19 +1093,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   mid-run), which stays its own deferred surface (see "Free-text replanning" in
   the Steering surface section below). **Narration voice** and **mid-run mode
   *suppression* rules** are untouched and stay open.
-- **Runner-visible token-usage aggregate** — as-built, every LLM backend
-  discards `_usage` after Langfuse tracing, so 017's dev summary log
-  carries wall-clocks only; per-component tokens are read in Langfuse. A
-  runner-visible single-line usage aggregate needs a usage-return refactor —
-  arrives with that refactor or the component-progress protocol (contract
-  decision 11, rev 2.6). **Scheduled: 018 Phase A telemetry sweep** (usage-return
-  refactor + durable per-component wall-clock/counts) — **DISCHARGED:** every component
-  summary carries `usage_totals` (prompt/completion/total/cached) and synthesise adds
-  `summary_usage_totals`; the `component.completed` event is the runner-visible aggregate.
-  Since 2026-09-18 the same counts reach Langfuse as `usage_details`, so the two agree.
-- **Component-name rename `screen`→`screen_abstract` / `screen_stage2`→`screen_full`
-  — DISCHARGED (task 019).** Renamed, with a one-time data migration
-  `b7f3d9a2c5e1` (owner decision 3); no read-side alias.
 - **Direct plan editing on the plan pane** (user, 2026-07-10; **re-deferred past 025 —
   owner, 2026-07-20**) — editing the proposed plan directly (not only conversationally),
   with edits synced back to the planner conversation and a confirm-changes step before
@@ -1580,17 +1106,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **`supersedes` edge on `source_snapshot`** — human-asserted pointer from a corrected re-upload
   to its predecessor; deferred until the re-upload UX is scoped. The schema shape (content-addressed
   snapshots without task_id) already supports it; no data migration needed.
-- **Content-hash dedup for acquired cross-task snapshots** — the schema shape supports sharing
-  (no `task_id` on `source_snapshot`); task 007 built **task-scoped** dedup only (three
-  guards: `backend_record_id` · normalized DOI · content hash, preloaded in-memory per call).
-  Cross-task snapshot reuse, **fuzzy near-dup matching** (title similarity — DOI-only
-  cross-backend identity in v3.0), and **concurrent-run dedup hardening** (two simultaneous
-  acquire runs for one task could double-insert past the in-memory preload; a DB-level guard
-  is a gated schema change; v3.0 execution is single-process/serial — Codex adversarial finding,
-  task 007) are the follow-ons.
-- **LLM-as-judge grounding tier on `citation`** — `citation.verification_result` is set by the
-  deterministic verbatim quote-presence check only; the full grounding tier classification
-  (confident / uncertain / fabricated) is deferred to when a real inference provider lands.
 - **Boundary-spanning quote → `citation_chunk` join table** — task 013 pins the interim
   shape within the approved schema (contract rev 8 B2): a boundary-spanning verified quote
   writes **one citation row per spanned chunk** (same annotation, same quote; exact span
@@ -1632,38 +1147,7 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 ## Execution / collaboration / ops
 
-- **Langfuse costs ignore prompt-cache hits (found 2026-09-18 reading the 044 scoping
-  turns).** `costDetails.input` charges every prompt token at the full input rate: the NEET
-  scoping turns 5, 7 and 11 each carried 8,960 cached tokens of about 10,700 (OpenAI's
-  automatic prefix cache, reported in the observation metadata as `cached_tokens` by
-  `core/usage.py`) and Langfuse still priced them at about 5.8 cents each, the same as the
-  uncached turns 1 and 3. Every per-run and per-turn cost read from Langfuse (including the
-  time-window method in `docs/knowledge/langfuse-cost-by-time-window.md` and the 044 phase-8
-  "about $2.5") overstates the real spend wherever a prefix repeats — Task Agent turns, the
-  gate sort, the answer core, and the synthesise section writer's shared preamble. Fix
-  options: send `input_cached_tokens` as a separate usage type so Langfuse's model pricing
-  applies the cached rate (Langfuse supports per-usage-type prices), or compute cost in
-  `core/usage.py` from the provider's own totals. Until then treat Langfuse `totalCost` as an
-  upper bound.
-- **Per-lane test-DB partition (018 B2/C)** — concurrent `make verify` runs against the
-  one shared test DB flake (migration round-trip + steering tests, psycopg INERROR);
-  seen from worker lanes (B2/B4) and from a review-lane agent (step 7). Convention today:
-  one suite runner at a time, stated in reviewer/worker briefs. If parallel suite runs
-  become routine, give lanes separate DATABASE_URLs (disposable per-lane DBs) instead of
-  policing serialization.
 
-- **Harness failure-event write on an aborted transaction — DISCHARGED for the
-  product path (task 017)** (013 review stack, 2026-07-08) — every `run_harness`
-  node's exception handler appends the `component.failed` event on the same
-  connection; a DB-error exception (constraint violation, driver error) leaves
-  the transaction aborted, the event write itself fails, and no audit record
-  survives. 013's synthesise node avoids the known case with a pre-write guard.
-  Task 017's EB capability-runner closes the gap for the product path
-  (`runner.py::_record_failure_backstop`: rollback first, `component.failed` +
-  `run.failed` idempotently on a fresh transaction — same discharge as the
-  task-012 entry above). Residual: `run_harness` driven directly outside the
-  runner (the zero-egress `skeleton.py` smoke) retains the old behaviour; an
-  in-harness fix remains a harness slice if that path ever matters.
 - **Harness node generalisation** — `_run_scope_component`,
   `_run_characterise` and `_run_synthesise` share ~30 verbatim lines of
   started/lookup/not-found/completed bookkeeping, diverging only in the
@@ -1688,12 +1172,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   **Data accrual starts in 018** (durable per-component wall-clock + in/out counts on every
   run); the model itself is eval-slice-or-later work over that accrued telemetry.
 - **Forecast/prewarm extraction** — modelled only if built (no inert forecast object otherwise).
-- **`structlog.contextvars.bind_contextvars` for ambient run/task correlation —
-  DISCHARGED (task 019).** Bound once per component execution at `run_harness`
-  (`bound_contextvars` context manager), instead of threading `task_id`/`run_id`
-  kwargs through every call site. `exc_info` renderers (`dict_tracebacks` for JSON,
-  `format_exc_info` for console) were added to the processor chain so
-  `exc_info=True` now carries type/traceback.
 
 ## Codebase health (task 023 seams)
 
@@ -1717,8 +1195,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Test consolidations 3–5** (023 lane 4) — IOF record-factory twin beside
   `make_icf_wire_record` (~80–100 lines), shared fake-Langfuse (~50), `capturing_fetch`
   factory in test_search_live (~60). Separable; take with the next test-heavy slice.
-- **`synthesis_prompts_v6` deletion** — KEEP ruling holds only through the eval slice
-  (frozen cost baseline); delete in the first post-eval cleanup.
 - **`run_harness(provider=…)` kwarg** — zero component readers post-echo; removal ripples
   into every caller. Retire alongside the inference-seam decisions at Bedrock, when the
   routing seam is touched anyway.
@@ -1728,12 +1204,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   their phase modules (or invert via injection) in a slice that touches tracing. The
   2026-09-18 tracing chore deliberately left this alone (28 files already; the move is
   ~400 lines of `*_score_summary` plus `TracedThemeGroupingBackend`) — next tracing slice.
-- **Per-lane test-DB partition — RECURRENCE (023)** — the 018 entry above fired twice in
-  023's build: parallel lane done-checks and the agent smoke both left committed
-  rows that break migration-roundtrip downgrades across sessions. 023's mitigations:
-  serial gate re-runs + dropdb/createdb resets + the smoke recipe
-  (`docs/knowledge/orchestrate-stub-smoke.md`). If parallel lanes stay routine, promote
-  this to per-lane disposable DATABASE_URLs.
 - **`quote_verify` generic-matcher split (owner ruling, 2026-07-15: leave as-is, seam
   recorded)** — `extract/quote_verify.py` is one engine with two kinds of content: the
   generic `qv_v1` matcher substrate (`BasisText`/`QuoteMatcher`/`build_basis`) and the
@@ -1750,15 +1220,6 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   an HTML parser is a silent behaviour change on hostile input; (2) `FixtureFetcher`'s
   manifest-basename traversal guard is an `assert` (vanishes under `python -O`) —
   dev/test-only surface today, should become a `ValueError`.
-- **Monorepo hoist: `backend/` (owner layout intent, 2026-07-14; amended 2026-07-20:
-  `frontend/`, no dash — DISCHARGED, 025-web-app-foundation A.2, 2026-07-21).** The
-  frontend lands at `frontend/`, the CDK will land at `infra/` (the reason 023's
-  shared-layer package is `core/`, not `infra/` — ADR 0019). The whole Python project
-  (`backend/pyproject.toml`, `backend/src/`, `backend/tests/`, `backend/alembic/`,
-  `backend/Makefile`) has hoisted into `backend/` as a sibling of `frontend/` and
-  `infra/`. The `policy_atlas` import name is untouched — src-layout made the hoist
-  import-neutral; the cost was tooling paths only (CI working-directory, Docker
-  contexts, CDK references, doc links).
 - **Per-query source provenance (demo carry-back, 2026-07-15)** — the search fan-out is
   already fully audited at the query grain (`search.executed` events persist query text,
   backend, filters, origin and result count), but `source.acquired` /
@@ -1865,22 +1326,6 @@ first-class vocabulary. What follows is what it deliberately left out.
   push-only triage stays out — cost explodes for little value at routine-
   boundary volume. Insufficient-context escalations (bias-to-escalate after
   the cap) are the demand meter; a spike there is the trigger to reconsider.
-- **Transcript persistence / turn tables — re-homed to 025 (owner,
-  2026-07-16).** 024 ships the anchors only: `session_id` on `capability_run`
-  (nullable — **populated since task 038**, V9: `session_id = task id` from the API run
-  start), verbatim `user_text` on every steering event. Provider-side
-  conversation state (OpenAI Responses, Bedrock sessions) stays forbidden —
-  the record lives in our store (018 standing constraint; audit/FOI/
-  portability). 025's co-pilot Q&A needs persisted per-user sessions
-  ("multiple persisted sessions; browse previous ones") — the transcript
-  companion store (per-user/per-task turn table, session/`capability_run`
-  linkage, window-plus-recall context assembly) lands there. **DISCHARGED
-  (task 029, contract §1/§5):** the unified `conversation` + `chat_turn`
-  tables are that companion store — per-task chats (many, read-only),
-  `client_turn_id` idempotency, and a ceiling-windowed context assembler
-  (frame + verbatim turns, no recall-with-summarization yet — see "recall
-  beyond the window" below). Provider-side conversation state stays
-  forbidden, unchanged.
 - **Build-discovered seams (024 build, 2026-07-16)** — surfaced mid-build,
   not pre-registered in the annex:
   - **Live DB-backed read executors for watch deliberation** — the runner
@@ -2048,12 +1493,6 @@ first-class vocabulary. What follows is what it deliberately left out.
   **fixed in-slice**: on error the provider renders a "Sign in again" retry that
   strips consumed `code`/`state` params before stashing the return path; the shell
   never mounts. Only the router-navigate restoration above remains open.)
-- **Rename/archive controls in the UI** (025 live check) — **CORRECTED (task 038):** the
-  task settings menu has exposed rename and archive since task 032; the entry was stale.
-  The PATCH/archive mutations exist, are authz-tested and envelope-conformant. Ingest also
-  presents under the acquire stage label ("Searching sources" while reading documents) —
-  **CORRECTED (task 058):** ingest is its own row, "Collecting the full texts", with a
-  collected count; rename and archive sit in the name menu for tasks and projects.
 
 ## Infra deployment (task 026 seams)
 
@@ -2068,37 +1507,11 @@ first-class vocabulary. What follows is what it deliberately left out.
 
 ## Frontend uplift (task 027 seams)
 
-- **025 "draft conversation is lost on restart" pin — DISCHARGED** (027 strand 12,
-  2026-07-29): the planning conversation persists in `planning_transcript` (durable
-  idempotency, rehydration, restart-surviving thread — live-checked). No backfill:
-  pre-027 tasks have zero turn rows.
-- **Co-pilot Q&A UI seam** — multi-thread chat, Chats library, per-thread artifact
-  context (PR #35 adjudication): the transcript schema is deliberately single-table/
-  planning-only so the co-pilot slice brings its own thread/context model; the rail is
-  single-thread until then. Q&A needs a lead-authored prompt surface (own slice).
-  **DISCHARGED (task 029, contract §6):** the conversation-aware rail + Chats library
-  ships — switcher over planning conversations and chats, URL-addressable threads,
-  entry-context chip with "Whole project" zero-state, `chat_v1` as the lead-authored
-  prompt surface. Narrower seams this slice left open are recorded fresh under
-  "Co-pilot chat (task 029 seams)" below.
 - **Workspace-cluster IA seam** — artifact gallery / capability picker / multi-artifact
   IA / per-artifact "Cited in" (PR #35): needs run/artifact-scoped read models. 027's
   journey/evidence components are IA-agnostic and re-mount under it unchanged.
-- **Steering boundary re-pause under FREQUENT mode** (027 live check, 2026-07-29) —
-  **DISCHARGED same day** (owner-directed, commit 4c4a65d): continuation records the
-  parked pause's boundary+component and a continue/adjust/mode_change resume of a
-  decided before-boundary no longer re-presents it (live-path parity; parity tests in
-  test_continuation_parity.py). The original loop: answer → continuation → re-evaluate
-  → pause again, one orchestrator call per cycle (event seq 364–388, project
-  5e08e143…).
 - **Multi-instance turn lock** — the planning 409 primitive is a process-local lock
   registry by design (one-instance posture); LISTEN/NOTIFY stays the 025 scale-out seam.
-- **Live per-backend search counts** (D‑1 rev 2) — `search.executed` events commit with
-  the acquire component, so mid-stage per-backend counts genuinely cannot stream yet;
-  the journey shows tick-based activity until stage completion. **DISCHARGED (task 058):**
-  the ephemeral `search.query` frame shows each query out and back with its count, and the
-  acquire ticks carry the running total; the durable `search.executed` still commits with
-  the stage.
 - **Print/share/export CTA** — the report print stylesheet ships; the share/export
   product seam stays deferred and undischarged.
 - **Task-wide decision-log scoping** (read-model-additions.md rev 2 [D-2], recorded
@@ -2121,16 +1534,6 @@ first-class vocabulary. What follows is what it deliberately left out.
 
 ## UX refinement (task 028 seams)
 
-- **SSE client read-inactivity watchdog** (leg-B live finding, root-caused at the 028
-  review stack, 2026-08-05): `frontend/src/api/sse.ts`'s reconnect loop is sound, but
-  when an intermediary swallows the upstream close (dev Vite `http-proxy` does; prod
-  CloudFront can), `reader.read()` pends forever and the client stalls silently with
-  `connectionStatus` still "connected" — the server-side close is visible only as the
-  backend's `api.sse_closed` log. The server heartbeats every 15s (`: keep-alive`), so
-  the fix shape is bounded: abort the attempt after ~45s (3× heartbeat) without bytes
-  and fall into the existing backoff/reconnect at the cursor. **DISCHARGED (task 058, N15):**
-  `READ_INACTIVITY_MS` in `sse.ts` aborts a silent attempt and reconnects at the cursor;
-  the reconnecting line sits in the run status bar.
 - **`summary_status="pending"` is dead vocabulary** (028 review m3): migration CHECK and
   contract admit it, nothing writes it; the FE keys strictly on `"verified"` so nothing
   mislabels, but in-flight and never-summarised are indistinguishable to readers. Write
@@ -2145,10 +1548,6 @@ first-class vocabulary. What follows is what it deliberately left out.
   `source.classified` events (the dossier builds both whole-task maps for one
   source). Within the funnel_out materialisation precedent, but this is the append-only
   event log — payload-filtered SQL or a dossier-scoped variant when event logs grow.
-- **`planning_part_dropped` is a structlog warning, not a domain event** (028 review
-  F21): a dropped part card is invisible to the decision log / durable audit. Promote
-  to an `event_log` row (additive event type, own gate) if part-drop auditability is
-  ever needed.
 - **`CheckInOut.bundle` ships as `dict`** (028 review F13): the per-point projection is
   server-side allowlisted (`checkin_read.py`) but the contract type is open, so the
   generated client carries no shape and `CheckInBundle.tsx` hand-rolls fail-soft
@@ -2183,10 +1582,6 @@ citation floors, and async grounding-judge enrichment (contract
 `docs/tasks/029-copilot-chat/contract.md`). What follows is what it deliberately left
 out (Out-of-scope list plus seams named in the strands).
 
-- **Planning-turn streaming** — **DISCHARGED (task 058, N9):** the planner's reply streams
-  on the chat route's event shape (`POST /tasks/{id}/task-agent-turns` answers with the
-  stream; one terminal event; the turn completes if the client disconnects). The original
-  entry: planning turns stayed blocking and returned whole.
 - **Recall beyond the window, incl. cross-planning-conversation rationale carry** —
   chat context is the conversation's own turns under a ceiling-only window (no
   summarization/recall layer yet — window-first, honestly); a re-plan's rationale
@@ -2238,8 +1633,6 @@ out (Out-of-scope list plus seams named in the strands).
   `replace` delta on connect; the chat and planner turns still re-read.
 - **Thumbs-feedback → Langfuse scores** — named as the eval slice's gold-set seam;
   that slice decides the surface and scoring mechanics.
-- **LLM auto-titling** — v1 titles a chat from its first question by truncation;
-  async cheap-model titling is a noted, easy upgrade.
 - **Regenerate / edit / branching** — the turn-pair row (question + answer in one
   row) is the deliberate v1 grain; the named migration seam is the pair→per-message
   row split these features would need.
@@ -2254,17 +1647,6 @@ above tasks (contract `docs/tasks/032-task-lifecycle-ia/contract.md`; ADR 0031 f
 the portfolio layer). What follows is what it deliberately left out — seams, not
 omissions.
 
-- **Case studies** — **discharged in 034** (ADR 0034,
-  `synthesise_case_studies_v1`): a new synthesis pass emits programme-grain
-  case-study cards with cited claims, result-claim bolding, and per-card
-  appraisal/design/year metadata from the substrate. The 032 parked seam
-  is resolved.
-- **Ungated "why this source matters" prose** — **narrowed in 034** (2026-09-01):
-  Most relevant sources may carry a **grounded** one-liner
-  (`most_relevant_note_v1` on mini) restating only that source's cited claims/
-  quotes. Free-form importance theatre (the report inventing authority without
-  a seed) stays out. Paper authors on those cards also stay out until acquire
-  projects them (UI/API placeholder only in 034).
 - **Mobile and narrow-viewport navigation** — owner: later. Existing responsive
   behaviour was preserved and not regressed, but the lifecycle bar, the tasks list
   and the Sources tab strip have no narrow-viewport treatment of their own.
@@ -2276,28 +1658,6 @@ omissions.
   `plan.title`. So a task keeps its derived name until renamed by hand, even after
   planning settles on a better one. Writing it back is new behaviour (which write
   wins, and when) rather than a display fix.
-- **Project soft-delete** — **DISCHARGED (task 058, round 11; migration `c4e8a2f6d1b3`):**
-  `project.archived_at` and `POST /projects/{id}/archive`, owner only and idempotent;
-  archiving a project archives the caller's solo tasks that sit in no other active project
-  (round 14) and skips a task whose walk is running or paused (058 review). The original
-  entry: no `archived_at`, no archive route (ADR 0031 decision 3).
-- **Project membership beyond one** — **discharged in 033** (ADR 0032):
-  `project_membership` is many-to-many; a task in two projects counts in
-  both `task_count`s; `source_count` stays on the task.
-- **The code-word/screen-word split** (ADR 0031) — **DISCHARGED (task 038, ADR 0036):**
-  the rows are `task` and `project`, the API is `/api/v1/tasks/**` and `/api/v1/projects/**`,
-  the screen word and the code word are the same word; `frontend/src/lib/vocabulary.ts`
-  stays the one place screen copy is maintained (task 058 deleted the client's stage
-  vocabulary: stage labels, blurbs and verbs now come from the server's
-  `api/stage_vocabulary.py`; `vocabulary.ts` keeps the screen words only). The original entry: screen **Task** =
-  code `project`, screen **Project** = code `portfolio`. **Owner ruling 2026-08-24: this
-  gets its own rename slice, scheduled after 033-organisations** — `project` → `task`,
-  `portfolio` → `project`, mechanical, no behaviour change. It was not folded into 033
-  because a ~249-file rename would bury the ~200 lines of tenancy logic that 033's
-  security review has to read, and it must also cover the code 033 adds. It breaks
-  `/api/v1/projects/*` and every bookmarked URL; the frontend and the e2e specs are the
-  only consumers. Until it lands, `frontend/src/lib/vocabulary.ts` stays the single place
-  the mapping is written down.
 - **MFA on the Cognito pool** — the pool is `MfaConfiguration: None` and its password
   policy restates Cognito's defaults (8 characters, upper/lower/number/symbol; explicit
   since 2026-10-01, when temporary-password validity went to 30 days). That was proportionate while every account could read only
@@ -2364,18 +1724,12 @@ omissions.
   download control reuses the report print stylesheet that already
   ships; any other format says coming soon. The share/export product seam is
   unchanged from `docs/deferred.md` § Web app.
-- **The three unbuilt capabilities** — scoping policy options, theory of change and
-  map stakeholders are listed on the new-task page as coming soon, with no route and
-  no behaviour. Each is its own capability slice.
 - **Per-surface type-scale assertions** — the G15 mapping is verified by eye and at
   review, not by test. A test asserting class names per surface would be brittle and
   would not measure readability. What IS mechanically guarded is that the
   `index.css` token list and the tailwind-merge registration in `cn.ts` stay in sync
   (`src/ui/brand/typeScale.test.ts`), which is the failure that actually shipped in
   028.
-- **Portfolio surfaces in the mock API** — **discharged in 033**: mock
-  `/api/v1/portfolios` plus membership on the project so Share and the
-  projects list work under `VITE_MOCK=1`.
 
 ## Metabase staging (task 034 seams)
 
@@ -2391,12 +1745,6 @@ omissions.
 - **Production analytics** — `deploy_analytics` is fail-closed outside staging.
   Production capacity, availability, backup/restore rehearsal, access controls and
   operational ownership must be reviewed before a production config is added.
-- **Project surfaces in the mock API** — ~~`src/mock/api.ts` serves no
-  `/api/v1/portfolios`~~ **discharged by 033** (Phase 10a + ux-snags): the mock now
-  serves `/api/v1/me`, `GET /api/v1/projects`, `GET /api/v1/projects/{id}`,
-  `project_id` filtering on the tasks list, and membership on the task so
-  Share and the tasks list work under `VITE_MOCK=1`. Mock coverage of project
-  *mutations* beyond the visibility PATCH remains partial.
 
 ## Organisations (task 033 build seams)
 
@@ -2425,11 +1773,6 @@ omissions.
   stronger org-enrolment refusal.) The live check's "admin in neither org"
   is met by enrolling the admin into a third organisation. If a truly
   org-less admin is ever wanted, an org-less enrol mode is the only route.
-- **`ProjectOut` carries no last-task-updated timestamp**, so the Projects
-  overview derives "most recently active" from one global projects page raised to
-  the 200-row server cap — an approximation that can mis-order the overview beyond
-  200 active tasks. The fix is a derived field on the project read shape; the
-  detail view is already exact via the `project_id` filter.
 - **`admin_stream_read` volume** — an idle admin SSE stream emits one trace line per
   0.4 s poll (~2.5/s), which is § 3a's grain implemented as written. If CloudWatch
   cost bites, the lever is the poll interval (or batching), never dropping the grain.
@@ -2469,12 +1812,6 @@ omissions.
   email, and a `website` honeypot only. If real spam appears, add a
   CloudFront/WAF rate-based rule on that path — an infra change, no app
   code. Decided 2026-09-03 (036 review): no CAPTCHA, no in-app rate limiter.
-- **`RunPane`/`JourneyPane` are dead code — DISCHARGED (task 038, V10): deleted** with
-  their tests and the orphaned `anim-bar` utility (owner chose delete over re-wire;
-  `journey/presentation.ts` stays, `runProgress.ts` imports it). The original entry:
-  imported by no route; 033 Phase 10c gated and tested them anyway.
-- **The ops CLI reports in code words** — **DISCHARGED (task 038):** `rows assign
-  --task/--project`, Makefile `TASK`/`PROJECT`, "moved N task(s), M project(s)".
 
 ## Vocabulary (task 038 residue and seams)
 
@@ -2508,13 +1845,6 @@ deliberately left, each with its reason:
 - **Future direction from the definitions (not built):** re-running a Task or part of it
   from any chat; active chats reachable app-wide from the round Agent icon; any Tasks or
   Projects as chat context (meta-analysis); "chat more functional" as its own task.
-- **Open PRs #62 and #52** rebase with `scripts/rename_038.py --apply --phase {3,4}
-  --step all` on their own pre-038 branch before merging `dev` (owner fork F5); the
-  script refuses a tree that already looks swept. Never run it on a post-038 tree that
-  still carries its ledger (`scripts/.rename_038_state.json`, the build's own checkout):
-  a file edited since its sweep is re-swept whole, and the collision check sees symbols,
-  not senses — a file holding only Project vocabulary would be renamed on to Task. A
-  fresh clone has no ledger, so the guard fires (038 review stack, Codex).
 - **"Earlier plan" is unreachable in production (task 038 V8 build finding)** — closing a
   planning conversation sets `status = 'closed'` (`runtime/conversation_lifecycle.py`),
   and both library listings ask for `status=active|archived`, so older planning lineages
@@ -2628,39 +1958,16 @@ sweep, well under a day; after it lands, re-run `/impeccable document`. The Zosi
 Display usage question (page titles in Averta, error headings in Zosia) is **not**
 deferred here — the owner ruled the font is fine for now.
 
-- **Button sizes and the green tone live outside the Button component.** "New task"
-  (`views/listPageChrome.ts` `listNewButtonClass`), the New Task submit and "Start
-  search" (`views/workspace/planStart.ts` `START_SEARCH_CLASS`) each hand-build a larger
-  size (Body text, 24px × 14px) as class strings, and Start search overrides the colour the
-  same way. Hover colours are hard-coded hexes in three places (`#0000d6`, `#147a6c`,
-  `#f0f0f3`). Seam: a `size="lg"` variant and a green `tone` on `ui/brand/Button.tsx`;
-  delete the three class strings.
 - **Eyebrow labels drift.** `PaneHeading` is Extrabold; plan and check-in eyebrows
   (`PartCard`, `CheckInBundle`, `CheckInCard`) are Bold; the conversation list uses
   Caption size. Six files hard-code `tracking-[0.06em]` although the `--tracking-label`
   token (`tracking-label`) exists for it. Seam: one Label component or class.
-- **The report sheet carries the only neutral shadow.** `ArtefactView` uses Tailwind
-  `shadow-sm` (grey) plus `ring-1 ring-line`; every other surface uses the navy-tinted
-  card shadow. **DISCHARGED (task 058 consistency pass):** grey shadows 4 → 0.
-- **Check-in cards use two colours for one state.** `CheckInCard` has a 2px Orange left
-  rule, a Yellow "Waiting on your input" chip and the Yellow glow; Orange means *paused*
-  on `StatusDot`. **DISCHARGED (task 058, D15):** one Orange for "waiting on you"; the
-  chip and the glow are gone.
 
 ## Options scoping shell and baseline (task 044 seams)
 
-- **Per-field turn provenance** — resolved by owner ruling (C16, 2026-09-09):
-  provenance is at **version grain** (`source_turn_index` per plan version;
-  `your_context[].turn_index` because the trust rules use it); per-field
-  turn references are not built. plan-as-object § Plan vs config revised.
 - **"Search further" at the gate** (D10) — the gate offers Confirm and Change
   the plan; a request in words is refused honestly as not yet available.
   Task 2 or later.
-- **Inherited document rows** (D4, task 2) — the linked task's screened
-  documents and its report's interventions enter with the longlist; in this
-  slice inherit gives the Task Agent the linked plan, report body and
-  coverage statement only.
-- **`task_link.option_id`** (D13) — lands with the option table in task 2.
 - **Scoping deep depth** (D6) — not shown anywhere until scoping deep
   exists; the plan model admits `rapid | standard` only.
 - **Baseline latency levers not taken** (D7): starting the longlist's
@@ -2685,9 +1992,6 @@ deferred here — the owner ruled the font is fine for now.
   default is unattended ("check-ins are requested, not offered") while the
   execution contract names moderate; recorded, not fixed here (contract
   second-round amendment 2).
-- **Prompt-hash guard is name-based** — `scripts/prompt_hash_guard.py` pins
-  `*prompt*` modules; the inline prompts in `synthesis_backend.py` and
-  `finding_vetter.py` are outside it. Add an explicit include list.
 - **`?chat=planning` URL token** — renamed to `task_agent` with no alias
   (038 rule); a pre-deploy open tab shows a dead chat until the user clicks
   the Task Agent.
@@ -2773,9 +2077,6 @@ Recorded by the task 045 contract, plan and build (`docs/tasks/045-scoping-longl
   written summaries are not built before assessment.
 - **Starting retrieval during the baseline pause** (D18) — stays deferred; the longlist walk
   starts when the user confirms the plan.
-- **Open question 4 — CLOSED by task 046 (R1).** The longlist has a target size of 20 and a hard
-  ceiling of 25, seeds included; the unclustered records get one residual pass and are then a
-  number the user sees. The formula `clamp(ceil(N/4), 8, 40)` is removed.
 - **Open question 7 — update the longlist in place instead of rebuilding it (task 3; owner ruling
   2026-09-24).** 045 ships "Rebuild longlist": after a plan change it re-runs the whole chain,
   seeded with the existing options so ids, exclusions and additions survive. Owner: "I think a
@@ -2810,8 +2111,6 @@ Recorded by the task 045 contract, plan and build (`docs/tasks/045-scoping-longl
   to 32. A per-walk sequence would remove the contention.
 - **History lists every child walk's stage events** beside the user's actions — a presentation
   filter is wanted so the user's own actions stay readable.
-- ~~**The plan document finds the baseline walk in the first 200 runs**~~ — closed at the 045
-  review: `GET /runs?parentless=true`.
 - **Option-search queries carry the designs' institution words** (045 review F4, owner: "Accept,
   record it") — of 210 generated option-search queries on the three NEET tasks none names a
   country and none carries a geographic filter, but 27 (13 %) use UK institution words from the
@@ -2831,9 +2130,6 @@ Recorded by the task 045 contract, plan and build (`docs/tasks/045-scoping-longl
   worker process per environment until the reservation is a database row or a token.
 - **`archive_task_route` takes the dispatch lock and the task row in the reverse order** to the
   openers (045 deviation 39) — a latent deadlock, pre-existing.
-- **`api/continuation._with_plan` omits `parked_boundary` / `parked_component`** (found in 045
-  Phase 1) — `ContinuationState` requires them since 027, so the fan-out path with plan
-  adjustments would raise `TypeError`. Pre-existing, unfixed.
 - **A snapshot shared by a linked task and the scoping task needs custom teardown** (045
   deviation 41) — `delete_task_data` deletes snapshots the other task still references, so
   `test_longlist_routes` builds its add fixture without the link.
@@ -2910,13 +2206,6 @@ Recorded by the task 046 amendment 2 build (`amendment-2-final.md` § 4 and § 2
 Recorded by the task 046 amendment 3 build (`amendment-3-final.md` § 7.3; the round records
 `16R-record-prompt-loop.md`, `18P-place-rule-loop.md`, `20L-folding-loop.md`).
 
-- ~~**The place list's deletion is an owner decision.**~~ **Closed 2026-10-12.** With the rule
-  in words in every prompt the replays still showed one clear place-based screen rejection in
-  175 documents on the hardest list (refugees) after three rounds (R74). The owner accepted
-  that residual at the review ("We can delete the strip"): `strip_place` and the
-  `place_removed` provenance are gone; the name tables and `names_place` stay as amendment
-  4's place resolver and setting pass (R87). A later round on a stronger screen model is
-  the lever if a place-based rejection shows live.
 - **The folding calls' tail.** On the mini model, "the same word for the same kind" holds for
   the large kinds and fails in the tail (obesity's "BMI measures" beside the plan outcome;
   NEET's three employment kinds); a list with more than ~120 distinct unit words can collapse
@@ -2935,11 +2224,6 @@ Recorded by the task 046 amendment 3 build (`amendment-3-final.md` § 7.3; the r
   reader resolves (plans, groups, counts, flags, provenance, annotations, synthesis blocks);
   `synthesis_result.synthesis_provenance`, `counts.groups_unsectioned_by_facet` and
   `event_log` payloads keep `population` as history (R52).
-- **The screen's `not_relevant_naming_place` flag is a keyword.** It over-matches (OECD
-  country notes); reading whether place was the reason stays a hand read. A structured reason
-  code from the screen would make M4 a count.
-- **`OptionOut.where_label`** left the option read model; `LonglistOut.depth_label` stays for
-  the longlist header (R61 takes the chip off the card only).
 - **The constrain reason on the "Who decides" row** is served and not shown (22b: the row
   keeps the line's own sentence; "just enough text"); the owner may want it back.
 - **The old revision `c7e2a9f4b1d8` and the new one both freeze / import the union view's SQL**:
@@ -2987,11 +2271,6 @@ are the levers left for each. Seams left open:
 - **A theme heading's summary at 390 px** overflows when a list has no
   themes and every option sits under "No theme" (the clones; a live list's
   summaries are short). Pre-existing markup; one `min-w-0`/wrap away.
-- **`names_place` over the full ISO-3166 table** — closed by the review
-  (2026-10-12): the six country names that are common nouns or given names
-  (`AMBIGUOUS_COUNTRY_NAMES`: chad, guinea, jersey, jordan, niger, turkey)
-  match only when capitalised; the resolver still knows them. "Georgia" with
-  no context stays the country (a place either way).
 
 ### Review stack seams (2026-10-12)
 
@@ -3226,14 +2505,6 @@ Context: [ADR 0038](adr/0038-single-pass-search-and-adaptive-screen.md), contrac
 it cites. Fixed in passing, not a seam: Overton searches were sorted by date (no `sort`
 sent; found in task 049), now `sort=relevance` on every search, protected.
 
-- **Relevance reserve (D6, ✅ superseded 2026-10-12 by task 052).** The experiment
-  write-up proposed holding the first 50 keyword results in their own order before the
-  specificity-ranked pool. Tried offline on three questions
-  (`scripts/evals/search/experiments/manual/2026-10-12-rank-mix-*.md`): it carries a
-  broad query's off-topic results into the reserve. Replaced by the relevant / seminal /
-  novel round-robin (`pool.rank_mix`, ADR 0038 decision 4 as amended), measured on the
-  mini set on 2026-10-12: 15.3% / 19.7% / 25.3% search recall at the three scopes
-  against 12.9% / 17.8% / 22.3% before.
 - **Similarity damping of the policy ranking (D8, 🟡 leaning, agreed in principle
   2026-10-07).** `(specificity + 0.5) × (similarity + 0.2)` with the document's title and
   excerpt embedded against the question (`policy_rank.py --embed`): by eye it demotes
@@ -3258,18 +2529,6 @@ sent; found in task 049), now `sort=relevance` on every search, protected.
   records with no native and no translated title; a record whose title is a placeholder
   string ("Untitled", a file name) is kept and screened on that string. Decide whether
   to drop, keep or label them once a run shows how many there are.
-- **Run the two search legs, and the OpenAlex calls, in parallel — DISCHARGED (task 051 Phase 3c, 2026-10-09, owner's call the same day).** Built as plan S13: the legs side by side, the seed and resolve calls concurrent, paced admission under a per-backend lock, calls recorded in plan order. The original entry:
-  The live check measured a Focused search at about 2.5 minutes per review: the Overton
-  leg is 24 paced requests (about 30 s at 1.2 s each) and the OpenAlex leg 37 sequential
-  requests at 1 to 2 s of network time each (60 to 90 s); the screen of 150 documents
-  takes about 10 s. The legs are independent until the pools are ranked, and the 15
-  keyword and 8 semantic calls are independent of each other, so the search could run
-  in about 45 s. Needs: a lock on each backend's pacing (`_last_request_at` is not
-  thread-safe), a lock on the pass state that records calls, Langfuse context
-  propagation into the threads (`tracing.submit_with_context`), and the call-order
-  assertions in `test_search_single_pass.py` turned into set assertions; the
-  `search.executed` events would interleave the two backends. Measure with the recall
-  script's wall-clock column before and after.
 - **`source_country` as a plan option (D18, ⏸).** The directive
   `source_country_post_filter` exists and is applied to the searches and the landmarks;
   exposing it on the plan document is a plan-vocabulary change, not a search change.
@@ -3295,10 +2554,6 @@ Recorded by the task 055 contract, plan and build (`docs/tasks/055-scoping-short
 [ADR 0041](adr/0041-options-scoping-shortlist.md)). The owner's rulings are quoted in the contract
 (S1–S26); the items below stay open on purpose.
 
-- **Update-in-place of the longlist (S10; 045 open question 7).** Still deferred. 055 keeps Rebuild:
-  an appetite change bypasses it (a shortlist walk re-proposes at once) and the user's places survive
-  a Rebuild by option id. Owner, 2026-10-27: "What does that even mean to rebuild in place? Do we
-  really need to worry about this?" → no.
 - **Shortlist verbs by chat.** Add to shortlist, Remove and Suggest more are buttons only; the
   `longlist_turns` verbs stay add · exclude · include again. A chat verb needs the same opener and
   refusals as the routes.
@@ -3320,10 +2575,6 @@ Recorded by the task 055 contract, plan and build (`docs/tasks/055-scoping-short
   `theme` behaves the same way today. A per-step "no runner retry" flag would halve it.
 - **The note's footer needs `document_lines_total`.** Served since Phase 4; the frontend shows "Policy
   Atlas read N of M document lines" only when both counts exist.
-- **The baseline check-in card does not show the appetite.** Its settings summary comes from the
-  backend's check-in bundle (Who · Where · Outcomes · Depth); adding "Risk appetite" is one bundle
-  key and one label in `checkInPresentation.ts`. The plan document beside the card shows it.
-  **DISCHARGED (task 058):** `baseline_gate.py` carries the appetite.
 - **Potential impact length.** The ceiling is a code check (a `max_length` on the wire made the
   constrained decoder cut sentences mid-word at the limit): the prompt states a target (about 300,
   never more than 380), a line over 400 is kept with a warning, and only a line over the hard bound
@@ -3364,9 +2615,6 @@ Seams left by task 056 (GPT-6 on both routes, one route step per call site, prom
 Unrated appraisal, the ingest scheduler and the Europe PMC XML route) and by its review stack
 (2026-11-02). Each entry says what is true today and what the lever is.
 
-- **Timeout retries are billed but untraced** — *closed by task 057 (D12, 2026-11-03):*
-  `max_retries=0` on every client and one traced retry of our own (`tracing.traced_attempts`),
-  so each attempt is its own generation with `step`, `attempt` and a shared `logical_call_id`.
 - **The summary retry can oscillate** (review, trace lane). `_write_and_judge_summary` carries
   only the latest failed attempt; on scoping task 809fe75c attempt 3 repeated attempt 1 word for
   word and the block ended `failed` with no summary. Lever: carry every failed attempt
@@ -3470,15 +2718,6 @@ says what is true today and what the lever is. Experiment figures are from the g
 - **Three NAT instances.** The VPC runs one fck-nat instance per availability zone (three),
   not the single instance the network stack's comment and contract D5 describe; the NAT
   alarm takes the busiest. Lever: the owner's call on cost against zone resilience.
-- **A failed attempt's generation carries no input** (review, trace lane). `traced_attempts`
-  stamps a failed attempt with its step, attempt number, call id and the error; the messages,
-  model and parameters are recorded by the caller's `update`, which runs only on success. A
-  call cut on every attempt (round (g): one `synthesise_section_turn` three times at 23 s)
-  cannot be diagnosed from Langfuse: long output, long reasoning or a stall look the same.
-  Lever: a `before` hook on `traced_attempts` that records the input before the request goes
-  out (24 call sites take it). **DISCHARGED (task 058, N1):** `traced_attempts` and
-  `traced_parse` take a `before` hook; the stage's verb and the input are recorded before the
-  request goes out.
 - **The chat prose stream has no retry** (review, contract verifier). The streamed
   `chat:call` is exempt from the step timeouts (D12) and the SDK's two silent retries are
   gone with `max_retries=0`, so a connection error before the first token fails the turn
