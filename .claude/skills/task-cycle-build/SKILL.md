@@ -99,8 +99,7 @@ slice takes two polish passes on the live dev app, inside the same task and PR:
 2. **Owner pass.** The owner looks at the live app; the lead applies the notes. Rounds run
    until the owner signs off; the contract names the round budget.
 
-Each polish pass starts a new `frontend-designer` run; it does not resume the run of the
-pass before it. Each round commits on green `make verify-fast` and green
+Each round commits on green `make verify-fast` and green
 `make frontend-verify-fast` (frontend type check, lint and tests); its rulings go into the
 annex, not the contract; the owner's sign-off is a human 🛑 recorded in `verification.md`. The rubric
 carries one row: "polish passes complete, annex updated, owner sign-off recorded". Give
