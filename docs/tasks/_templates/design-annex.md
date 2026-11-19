@@ -9,9 +9,9 @@ app. Keep the voice: a short label, then one plain sentence; no mannered prose.
 
 ## Rules for this slice
 
-Standing rules the surfaces must honour (examples: no countdown or percent bar; nothing
-animates unless real data is arriving; no text changes without a visible transition;
-reduced motion honoured; counts only where the total is known before the loop).
+Standing rules the surfaces must honour (examples: no countdown or percent bar; no text
+changes without a visible transition; reduced motion honoured; counts only where the total
+is known before the loop).
 
 ## Fixed example data
 
