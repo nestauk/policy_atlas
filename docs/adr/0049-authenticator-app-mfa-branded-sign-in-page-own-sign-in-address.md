@@ -80,9 +80,8 @@ https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resou
 - The first deploy with `domain` set takes about eight minutes (certificate and the
   custom domain's CloudFront distribution).
 - Removing `domain` again was not tested; it is the last rollback step.
-- The DNS alias for the custom domain uses CDK's `UserPoolDomainTarget`, which adds a small
-  helper Lambda function and a role that may call `cognito-idp:DescribeUserPoolDomain` on any
-  domain (CDK's standard way to read the address's CloudFront name).
+- The DNS alias for the custom domain reads the address's CloudFront name from the Cognito
+  domain itself (`Fn::GetAtt CloudFrontDistribution`); no helper function is added.
 
 ## Alternatives rejected
 

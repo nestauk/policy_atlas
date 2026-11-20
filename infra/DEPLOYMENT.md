@@ -1132,7 +1132,7 @@ compares production's template with a saved copy).
 |---|---|---|
 | `mfa` | `"app"`, `"off"` | `"app"`: everyone must type a code from an authenticator app after the password (MFA, multi-factor authentication, by TOTP, a time-based one-time password). SMS and email codes are never used. Password reset by email stays as it is. |
 | `page` | `"managed"`, `"classic"` | `"managed"`: Cognito's newer sign-in page ("managed login") with our logo and colours from `infra/branding/`. `"classic"`: the plain AWS page, named explicitly so a rollback really goes back. |
-| `domain` | `"auth.<domain_name>"` | The sign-in page on our own address. Adds a certificate in us-east-1 (cert stack), the address in Cognito, a DNS record, and the address in the CSP. The authenticator app names the entry after it. The old `amazoncognito.com` address keeps working. CDK also adds a small helper Lambda function (with a role that may read Cognito domain settings) that looks up the address's CloudFront name for the DNS record. |
+| `domain` | `"auth.<domain_name>"` | The sign-in page on our own address. Adds a certificate in us-east-1 (cert stack), the address in Cognito, a DNS record, and the address in the CSP. The authenticator app names the entry after it. The old `amazoncognito.com` address keeps working. |
 
 **Before the first deploy in an environment.**
 
