@@ -1,4 +1,7 @@
 {
+  "env": {
+    "PONYTAIL_SUBAGENT_MATCHER": "^(deep-reasoner|fast-worker|builder|frontend-designer)$"
+  },
   "permissions": {
     "allow": [
       "Skill(langfuse)",
@@ -21,9 +24,6 @@
       "Edit(frontend/src/api/gen/types.ts)",
       "Edit(docs/specs/sources/**)"
     ]
-  },
-  "env": {
-    "PONYTAIL_SUBAGENT_MATCHER": "^(deep-reasoner|fast-worker|builder|frontend-designer)$"
   },
   "hooks": {
     "PreToolUse": [
