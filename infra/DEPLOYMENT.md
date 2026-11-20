@@ -503,6 +503,7 @@ database role.
 3. Grant the first ops role from your machine:
 
    ```bash
+   export PA_OPS_ACCOUNT_STAGING=<account id>   # operator-asserted, never derived
    make ops-grant ENV=staging EMAIL=<email>
    ```
 

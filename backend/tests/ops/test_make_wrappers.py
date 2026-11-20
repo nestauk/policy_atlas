@@ -86,6 +86,15 @@ def test_every_wrapper_assembles_argv_the_real_parser_accepts() -> None:
         assert args.env == variables["ENV"]
 
 
+def test_the_role_wrappers_reach_their_own_group_and_direction() -> None:
+    parser = build_parser()
+    for group in ("admin", "ops"):
+        for direction in ("grant", "revoke"):
+            argv = _dry_run(f"{group}-{direction}", ENV="staging", EMAIL="a@b.org")
+            args = parser.parse_args(argv)
+            assert (args.group, args.command) == (group, direction)
+
+
 def test_the_wrapper_argv_passes_through_the_parsers_own_normalisation() -> None:
     argv = _dry_run(
         "user-create", ENV="staging", EMAIL="Name@Example.org", NAME="A Name", ORG="Org"
