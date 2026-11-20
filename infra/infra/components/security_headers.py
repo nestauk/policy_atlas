@@ -44,22 +44,22 @@ def content_security_policy(
     # challenge.js from <id>.<id>.<region>.token.awswaf.com and a font stylesheet (and its
     # fonts) from static.captcha.awswaf.com; the audio puzzle plays a data: clip. Its calls
     # (problem, verify, inputs, mp_verify, telemetry, voucher) go to the captcha and token
-    # hosts. The web ACL is in the stack's region, which is also the Cognito region.
-    waf_captcha_host = f"https://*.{cognito_region}.captcha.awswaf.com"
-    waf_token_host = f"https://*.{cognito_region}.token.awswaf.com"
-    waf_script_source = (
-        f" https://*.{cognito_region}.captcha-sdk.awswaf.com {waf_captcha_host} {waf_token_host}"
+    # hosts; connect-src also lists captcha-sdk in case jsapi.js fetches from it.
+    # Every CAPTCHA host is in the stack's region (passed in as cognito_region).
+    waf_source = (
+        f" https://*.{cognito_region}.captcha-sdk.awswaf.com"
+        f" https://*.{cognito_region}.captcha.awswaf.com"
+        f" https://*.{cognito_region}.token.awswaf.com"
         if waf_captcha
         else ""
     )
     waf_static_source = " https://static.captcha.awswaf.com" if waf_captcha else ""
-    waf_source = f" {waf_captcha_host} {waf_token_host}" if waf_captcha else ""
     cognito_issuer = f"https://cognito-idp.{cognito_region}.amazonaws.com"
     hosted_domains = " ".join(cognito_hosted_domains)
     media = ("media-src 'self' data:",) if waf_captcha else ()
     return "; ".join((
         "default-src 'self'",
-        f"script-src 'self'{waf_script_source}",
+        f"script-src 'self'{waf_source}",
         f"style-src 'self' 'unsafe-inline'{waf_static_source}",
         "img-src 'self' data: blob:",
         f"font-src 'self'{waf_static_source}",

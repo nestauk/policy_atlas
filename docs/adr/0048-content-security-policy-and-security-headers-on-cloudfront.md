@@ -119,6 +119,8 @@ to the captcha and token hosts. When the CAPTCHA is on, the policy now has:
   https://*.<region>.token.awswaf.com`, pinned to the stack's region;
 - `https://static.captcha.awswaf.com` in `style-src` and `font-src`;
 - `media-src 'self' data:`;
-- `connect-src` narrowed from `https://*.awswaf.com` to the regional captcha and token hosts.
+- `connect-src` narrowed from `https://*.awswaf.com` to the same three regional hosts as
+  `script-src`.
 
-Production's CSP does not change (the CAPTCHA is off there). The decision itself stands.
+The staging CSP is now 814 characters. Production's CSP does not change (the CAPTCHA is off
+there). The decision itself stands.

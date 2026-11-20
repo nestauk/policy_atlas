@@ -103,7 +103,8 @@ the second because the first was already allowed. The network list (DevTools, fi
 Network list, waitlist with visual and audio puzzle and submit: the CAPTCHA calls go only to
 the captcha host (`problem`, `verify`) and the token host (`inputs`, `mp_verify`, `telemetry`,
 `voucher`). So `connect-src` is narrowed from `https://*.awswaf.com` to
-`https://*.eu-west-2.captcha.awswaf.com https://*.eu-west-2.token.awswaf.com`, and the
+the same three regional hosts as `script-src` (`captcha-sdk` too, in case `jsapi.js` fetches
+from its own address), and the
 `docs/deferred.md` seam for it is closed.
 
 Console pass 1 (2026-11-20, normal Chrome profile with extensions):
