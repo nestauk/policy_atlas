@@ -1590,7 +1590,8 @@ def reset_authenticator_app(
         raise OpsError(
             f"{who} was signed out everywhere, but removing their authenticator app "
             f"link failed ({code}). If they never linked an app, or it was already "
-            f"removed, there is nothing to reset; otherwise {rerun[0].lower()}{rerun[1:]} "
+            f"removed, there is nothing to reset; otherwise running "
+            f"`user reset-app --sub {user_id}` again is safe. "
             f"No audit row was written."
         ) from error
     return AppReset(user_id=user_id, email=row["email"] if row is not None else email)

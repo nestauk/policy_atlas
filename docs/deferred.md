@@ -1217,6 +1217,10 @@ sit in the last two sections. A code path with no top folder is under `backend/s
   text. Only a sign-in page built in our app could say "Sign in to your Policy Atlas account."; it
   would put password and code handling in our code and needs a new library. Condition: the owner
   decides the wording matters enough.
+- Ops commands that change Cognito (`user deactivate`, `user reactivate`, `user reset-app`) act in
+  Cognito first and write their database record after; if the database write fails, the Cognito
+  change stands with no audit row. Condition: an audit requirement that every operator action is
+  recorded even on failure; then write a pending row first and update it.
 - `user reset-app` (a lost authenticator phone) is a command-line tool only; the ops pages have no
   button for it. Condition: operators other than the engineering team handle sign-in support.
 - The `amazoncognito.com` sign-in address stays beside `auth.<domain_name>`. Condition: nothing
