@@ -355,9 +355,10 @@ synth-time context query and must not run before the VPC exists.
      takes **no password**: Cognito emails the invitation. The former
      `make staging-user` / `make prod-user` / `make cognito-user` targets are
      **deleted** — they suppressed the invitation, set a password from argv, and
-     left the account unenrolled. For prod, use `--env prod`, the
-     `PA_OPS_*_PROD` variables and prod-account credentials, not
-     `AWS_PROFILE=pa-dev`.
+     left the account unenrolled. For prod, use `ENV=prod` and
+     `PA_OPS_ACCOUNT_PROD` with the make wrappers (`--env prod` and the
+     `PA_OPS_*_PROD` variables with the direct form) and prod-account
+     credentials, not `AWS_PROFILE=pa-dev`.
 
      **When the invitation email does not arrive**, add `INVITE=manual` (CLI:
      `--invite manual`): the email is
@@ -378,9 +379,10 @@ synth-time context query and must not run before the VPC exists.
      the same action as "Deactivate…" on People.
 
      ```bash
-     uv run python -m policy_atlas.ops --env staging user deactivate --email <user-email>
-     # or: ... user deactivate --sub <cognito-subject>
-     # to undo: ... user reactivate --email <user-email>
+     export PA_OPS_ACCOUNT_STAGING=<account id>   # operator-asserted, never derived
+     make user-deactivate ENV=staging EMAIL=<user-email>
+     # or: make user-deactivate ENV=staging SUB=<cognito-subject>
+     # to undo: make user-reactivate ENV=staging EMAIL=<user-email>
      ```
 
      Deactivate runs these steps in this order and prints each one: (1) in Cognito,
@@ -503,7 +505,8 @@ database role.
 3. Grant the first ops role from your machine:
 
    ```bash
-   uv run python -m policy_atlas.ops --env staging ops grant --email <email>
+   export PA_OPS_ACCOUNT_STAGING=<account id>   # operator-asserted, never derived
+   make ops-grant ENV=staging EMAIL=<email>
    ```
 
    Only the CLI can grant `is_ops`; no web page can.
@@ -518,8 +521,9 @@ database role.
 Nesta organisation exists and has its domain:
 
 ```bash
-uv run python -m policy_atlas.ops --env staging org create --name Nesta
-uv run python -m policy_atlas.ops --env staging org domain add --domain nesta.org.uk --org Nesta
+export PA_OPS_ACCOUNT_STAGING=<account id>   # operator-asserted, never derived
+make org-create ENV=staging NAME=Nesta
+make org-domain-add ENV=staging DOMAIN=nesta.org.uk ORG=Nesta
 ```
 
 Then set `enabled` to true and deploy. On production, do this only after the
