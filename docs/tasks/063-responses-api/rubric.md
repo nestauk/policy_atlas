@@ -30,9 +30,9 @@ Slice-specific:
         before run beyond run-to-run noise, with both figures shown.
 14. [ ] **M7:** an answer cut at the output limit and a refusal each raise a named error;
         one test for each.
-15. [ ] **E2:** each step in the contract's § Efforts sends the effort ruled there, with its
-        before-and-after measure; the owner's pick for key findings and read of the options
-        scoping replays are recorded; every other step's effort is unchanged.
+15. [ ] **E2:** each step in the contract's § Efforts sends the effort ruled there (key
+        findings `medium`, the rest `low`), with its latency and cost before and after read
+        from the live runs; every other step's effort is unchanged.
 16. [ ] **E3:** the Sol tool-loop smoke passed on the `bedrock` route.
 17. [ ] **S1:** traced attempts carry the request id, and one id is shown to find its call in
         AWS's audit log.
@@ -44,6 +44,6 @@ Slice-specific:
 21. [ ] **M12:** `core/openai_client.py` is the only module in `backend/src` that calls the
         SDK, proven by a test; each call site kept its own stream handling, retry rule and
         fallback.
-22. [ ] **D2:** the account's zero-data-retention setting was read back for each Region
-        before the first deploy of the Responses code, and the reading is recorded.
+22. [ ] **D2:** `verification.md` states whether the account's zero-data-retention setting
+        was in place at the production deploy (an owner action; it does not block the task).
 23. [ ] **M13:** spec change 1 is applied, with its line in the specs `log.md`.

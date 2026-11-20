@@ -3,7 +3,7 @@
 One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); specs in
 [docs/specs/](../../specs/index.md).
 
-> **Status:** revision 2, 2026-11-20: the owner's rulings of that day are folded in
+> **Status:** revision 3, 2026-11-20: the owner's rulings of that day are folded in
 > (§ Owner items). Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ · ADR: due at step 4 (the model
 > interface changes) · Branch: `task/063-responses-api`.
@@ -74,7 +74,7 @@ starts.
 | Id | Change |
 |---|---|
 | **E1** | A step's route-file line can set any effort the model accepts, with tools attached. When effort is above `none` in a tool loop, the encrypted reasoning from one turn is passed back on the next turn, in memory only, never stored. |
-| **E2** | Nine steps or call sites that send `none` today get reasoning (owner rulings 2026-11-20; table in § Efforts). Each gets a higher output-token limit (reasoning tokens count against the limit: in the probe one call spent all 64 of its tokens on reasoning). Latency and cost are measured before and after for each. Every other step keeps its effort. |
+| **E2** | Nine steps or call sites that send `none` today get reasoning (owner rulings 2026-11-20; table in § Efforts). Each gets a higher output-token limit (reasoning tokens count against the limit: in the probe one call spent all 64 of its tokens on reasoning). Every other step keeps its effort. |
 | **E3** | A live tool loop on Sol passes (the section writer's tool turn with the route overlay naming `frontier`). No default route changes. This unblocks the 054 follow-up and task 059. |
 
 ### Part 3: diagnosis
@@ -92,7 +92,7 @@ tuning, or an AWS support case. The deployed apps show no fault to remedy.
 | Id | Change |
 |---|---|
 | **D1** | On Responses, Bedrock stores the input and output of a call for 30 days unless the call says `store=false`. With a `global.` profile the stored copy sits in the Region that served the call. Chat Completions has no such default. So M6 is a data-protection control, not a style choice. |
-| **D2** | AWS says `store=false` alone "does not guarantee zero data retention" and offers an account setting (retention mode `none`) for each Region. Owner ruling 2026-11-20: the production account is set to zero data retention, in every Region that can serve our calls, **before** the Responses code is deployed to staging or production. A person with that access makes the change (DevOps), not this task's code. The setting is read back and recorded in `verification.md`. |
+| **D2** | AWS says `store=false` alone "does not guarantee zero data retention" and offers an account setting (retention mode `none`) for each Region. Owner ruling 2026-11-20: the production account is set to zero data retention. This is an owner action on the AWS account, not this task's code. It does not block the build, the pull request or the merge; `store=false` on every call (M6) is the control this task ships. `verification.md` records whether the setting was in place at the time of the production deploy. |
 | **D3** | The owner updates the DPIA (Data Protection Impact Assessment) notes with: the Responses endpoint; the Regions that served our calls in the last 14 days (Luna in us-west-2, Terra and Sol in us-east-1, all 112,264 calls); and that traffic flagged by the provider's abuse checks can be kept for up to 30 days. |
 
 ## Efforts (E2): the 21 steps that send `none` today
@@ -109,7 +109,7 @@ Owner rulings, 2026-11-20:
 |---|---|---|---|
 | `synthesise_section_turn` | The section writer's gather turns (6 tools) and its repair turn. | **`low`** | Ruling 1. The writer picks evidence without reasoning today. |
 | `chat`, tool turn | Chooses among 3 read tools. Becomes its own route step, `chat_tool_turn`. | **`low`** | Ruling 1. The streamed reply stays at `none` so its first words are not delayed. |
-| `synthesise_write_key_findings` | One call. It receives the run's whole ledger of checked claims with their evidence and writes the key findings directly. No turn comes before it. | **`low` or `medium`: the owner picks** | Ruling 2. The build writes key findings at `none`, `low` and `medium` for three stored runs; the owner reads them side by side. Its first words arrive a few seconds later; the sections are already on the page by then. |
+| `synthesise_write_key_findings` | One call. It receives the run's whole ledger of checked claims with their evidence and writes the key findings directly. No turn comes before it. | **`medium`** | Ruling 2. Its first words arrive a few seconds later; the sections are already on the page by then. |
 | `task_agent_scoping_turn` | The planning conversation for options scoping. A streamed, structured reply. | **`low`** | Ruling 3. The Evidence search planning turn (`task_agent_turn`) already runs at `medium`. |
 | `longlist_constrain` | For each option: a judgement against the plan's requirements, two default screens, and a reasoned guess for each preference. | **`low`** | Ruling 4. A judgement. |
 | `longlist_distinct` | One call over the whole list: which options are the same action under two names. | **`low`** | Ruling 4. A comparison across the list. |
@@ -121,14 +121,17 @@ Owner rulings, 2026-11-20:
 | `synthesise_write_case_studies`, `synthesise_propose_sections`, `synthesise_write_block_summary`, `synthesise_write_artefact_summary`, `synthesise_judge_summary` | Writing and summary steps. | `none` | Not ruled. Revisit in synthesis refinement. |
 | `task_agent_toc`, `toc_discover`, `toc_judge`, `toc_summarise`, `toc_sense_check` | Theory of change. | `none` | A colleague's capability (O9). |
 
-The five options scoping steps were set to `none` by the owner on 2026-11-02 after reading
-replays (task 056), on Chat Completions. So for those five the build reruns the same
-replays at `low` and the owner reads the difference before the change stays. Task 059
-reworks this area and may change them again.
+The five options scoping steps were set to `none` by the owner on 2026-11-02 (task 056), on
+Chat Completions. The owner's ruling of 2026-11-20 replaces that. Task 059 reworks this
+area and may change them again.
 
-For every raised step the build records median latency, cost for each call and the
-cached-token share, before and after. A rise the owner would not expect from `low` (more
-than a few seconds for each call) is flagged before the change stays.
+**No replays and no owner reads** (owner ruling 2026-11-20): these are small changes, and
+more reasoning is expected to give equal or better results. The build does not run extra
+comparison runs for them. The lead of the build judges the outcome from the live checks
+the task runs in any case (§ Acceptance checks), and records for each raised step the
+median latency and the cost for each call, before and after. It stops and asks the owner
+only if something breaks: an answer cut at the output limit, a reply that fails its schema,
+or a step that takes far longer than `low` or `medium` should (tens of seconds, not a few).
 
 No prompt text changes. If a step needs different wording to use its reasoning well, that
 is flagged, not done here.
@@ -252,9 +255,9 @@ parsers.
 - **Runtime egress (gate, hit).** Project data goes to the same provider and host, on a new
   endpoint path with a different storage default. Approval of this contract approves the
   endpoint with `store=false` on every call (M6).
-- **Production config (gate, hit; approved by owner ruling O7).** The account retention mode
-  is an AWS setting, changed by a person with that access, not by this task's code. The
-  Responses code is not deployed until it is set.
+- **Production config (approved by owner ruling O7).** The account retention mode is an AWS
+  setting, changed by a person with that access, not by this task's code. It does not
+  block this task.
 - **Prompt hashes.** At least 3 pinned files change code and need a re-pin
   (`section_prompt.py`, `import_prompt.py`, `grounding_judge.py`); 4 more if
   `parse_structured`'s signature changes. The `ChatCompletionMessageParam` annotation on
@@ -292,10 +295,10 @@ All ruled on 2026-11-20 unless marked open.
 | **O1** | One task in three parts, or three tasks? | One task. If the E2 measures run long, E2 splits off; Parts 1 and 3 do not wait for it. |
 | **O2** | Keep a switch back to Chat Completions? | No. Replace and delete; roll back by reverting. |
 | **O3** | The legacy `openai-direct` route. | It keeps passing unit tests; no live measure. |
-| **O4** | Which `none` steps to raise. | § Efforts. **Open:** `low` or `medium` for key findings, after the owner reads the samples. |
+| **O4** | Which `none` steps to raise. | § Efforts: nine steps or call sites; key findings at `medium`, the rest at `low`. No replays; the build's lead judges from the live checks. |
 | **O5** | Fix the two defects found on the way (M7, M8)? | Yes. |
 | **O6** | Reuse stored extraction records made through Chat Completions? | Yes. |
-| **O7** | Data retention. | The account is set to zero data retention, and every call sends `store=false` as well (D1, D2). The owner updates the DPIA notes (D3). |
+| **O7** | Data retention. | The account is set to zero data retention (an owner action that does not block this task), and every call sends `store=false` as well (D1, D2). The owner updates the DPIA notes (D3). |
 | **O8** | Build no stall remedy and send no AWS support case, given § Stalls. | Treated as settled by the evidence; the owner did not object. |
 | **O9** | Theory of change: the endpoint moves; nothing else of the colleague's changes. | Agreed. The owner tells the colleague before the build. |
 | **O10** | Find why laptop connections stall. Outside this task. | Optional. |
@@ -339,11 +342,10 @@ Halt and escalate when:
     reports;
   - one options scoping run to the shortlist; one Theory of change draft and report (smoke
     only); one chat turn that uses a tool; one task agent turn.
-- **E2:** for each raised step: median latency, cost for each call and cached-token share,
-  before and after; the key-findings samples at three efforts and the owner's pick; the
-  options scoping replays at `low` and the owner's read.
+- **E2:** each raised step sends the effort in § Efforts (the golden request fixture shows it);
+  its median latency and cost for each call, before and after, are read from the live runs
+  above. No extra runs.
 - **M12:** one test fails if a module other than `core/openai_client.py` calls the SDK.
-- **D2:** the account retention setting, read back for each Region, before the first deploy.
 - **E3:** the Sol tool-loop smoke passes.
 - **S1:** a traced attempt in Langfuse shows the request id, and that id finds the call in
   AWS's audit log.
