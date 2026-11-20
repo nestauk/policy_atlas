@@ -4,7 +4,8 @@ One implementation slice. Boundaries are in [AGENTS.md](../../../AGENTS.md); spe
 [docs/specs/](../../specs/index.md).
 
 > **Status:** revision 4, 2026-11-20: the owner's rulings of that day are folded in
-> (§ Owner items). Contract approved (before planning): _pending_ ·
+> (§ Owner items). **Revision 4 approved (before planning): 2026-11-20 · owner.** Contract-stage
+> adversarial review: running ·
 > Plan approved (before implementation): _pending_ · ADR: due at step 4 (the model
 > interface changes) · Branch: `task/063-responses-api`.
 >
